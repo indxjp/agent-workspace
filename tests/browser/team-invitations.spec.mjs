@@ -236,10 +236,17 @@ function workspaceSwitcher(page) {
   return page.locator('button[aria-haspopup="menu"]');
 }
 
-/** Leave the workspace as the spec found it: a revoked row offers no action and joins nothing. */
+/**
+ * Leave the workspace as the spec found it: a revoked row offers no action and joins nothing.
+ *
+ * Every caller has a pending invitation for `email`, so the control is waited for, never counted:
+ * after a reload or a Back the section's heading paints before its client-side list fetch settles,
+ * and a one-shot `count()` taken in that gap read 0, skipped the click, and then failed when the row
+ * arrived — the mobile-chromium flake on main.
+ */
 async function revokeThrough(page, email) {
   const revoke = page.getByRole('button', { name: `Revoke the invitation for ${email}` });
-  if ((await revoke.count()) > 0) await revoke.click();
+  await revoke.click();
   await expect(revoke).toHaveCount(0);
 }
 
@@ -312,6 +319,9 @@ test('never re-reveals the link after a reload, a Back, or a dismiss', async ({
   // Reload: a fresh document, and the token was never stored anywhere that could rebuild it.
   await page.reload();
   await expect(invitationsHeading(page)).toBeVisible();
+  // Wait for the list itself, not just the heading: until the row is back, "no reveal" is only the
+  // claim that nothing has rendered yet.
+  await expect(invitationRow(page, email)).toContainText('Pending');
   await expect(revealElement(page)).toHaveCount(0);
   await expectNoTokenAnywhere(page, token, consoleMessages, 'a reload');
 
@@ -320,6 +330,7 @@ test('never re-reveals the link after a reload, a Back, or a dismiss', async ({
   await page.goto('/projects');
   await page.goBack();
   await expect(invitationsHeading(page)).toBeVisible();
+  await expect(invitationRow(page, email)).toContainText('Pending');
   await expect(revealElement(page)).toHaveCount(0);
   await expectNoTokenAnywhere(page, token, consoleMessages, 'a Back');
 

@@ -1,24 +1,18 @@
+import { captureLog } from '../telemetry/capture-log';
+import { log as webLogger } from '../telemetry/logger';
 import type { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-versions';
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from '../../app/mcp/projects/[name]/route';
-import {
-  clearEndpointClientsRuntime,
-  configureEndpointClientsRuntime,
-  type EndpointClientAuditEvent,
-  type EndpointClientsRuntime,
-} from '../endpoint-clients/runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
+import type { EndpointClientAuditEvent, EndpointClientsRuntime } from '../endpoint-clients/runtime';
 import { DomainError } from '../errors';
 import type { Ownership } from '../rbac/decide';
-import type { Principal } from '../runs/environment';
-import {
-  installToolEndpoint,
-  resetToolEndpoint,
-  type ToolEndpointEnvironment,
-  type ToolEndpointIdentity,
-} from './env';
+import type { RunPrincipal } from '../runs/environment';
+import type { ToolEndpointEnvironment, ToolEndpointIdentity } from './env';
 import { TOOL_ENDPOINT_MAX_BODY_BYTES, selectToolBundles, serveToolEndpoint } from './handler';
 import { TOOL_ENDPOINT_RATE_LIMITS, resetToolEndpointLimits } from './limits';
 
@@ -34,7 +28,7 @@ const GRANT = 'awg.grant-payload.grant-signature';
 const GATEWAY_URL = 'https://gateway.example/v1/tool-sandbox/endpoint/mcp';
 const URL_BASE = 'http://web/mcp/projects';
 
-function principal(overrides: Partial<Principal> = {}): Principal {
+function principal(overrides: Partial<RunPrincipal> = {}): RunPrincipal {
   return {
     principalId: '77777777-7777-4777-8777-777777777777',
     ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
@@ -47,7 +41,7 @@ function principal(overrides: Partial<Principal> = {}): Principal {
 }
 
 type Named = ToolEndpointIdentity;
-const identity = (p: Principal, via: Named['via'] = 'api-key', apiKeyId = KEY_ID): Named => ({
+const identity = (p: RunPrincipal, via: Named['via'] = 'api-key', apiKeyId = KEY_ID): Named => ({
   principal: p,
   via,
   apiKeyId: via === 'api-key' ? apiKeyId : null,
@@ -69,6 +63,10 @@ const IDENTITIES: Readonly<Record<string, Named>> = {
   oauth: oauthIdentity('https://aw.example/mcp/projects/support'),
   oauthOtherProject: oauthIdentity('https://aw.example/mcp/projects/billing'),
   oauthAgent: oauthIdentity('https://aw.example/api/a2a/agents/support'),
+  oauthBuilder: {
+    ...oauthIdentity('https://aw.example/mcp/builder'),
+    principal: principal({ scope: { kind: 'builder', id: CLIENT } }),
+  },
 };
 
 function oauthIdentity(audience: string): Named {
@@ -134,7 +132,7 @@ function installAll(): void {
       return Promise.resolve();
     },
   };
-  configureEndpointClientsRuntime(runtime as EndpointClientsRuntime);
+  installTestDomains({ endpointClients: runtime as EndpointClientsRuntime });
   const environment: ToolEndpointEnvironment = {
     identify: (request) =>
       Promise.resolve(IDENTITIES[request.headers.get('x-test-identity') ?? ''] ?? null),
@@ -157,7 +155,7 @@ function installAll(): void {
     },
     now: () => clock,
   };
-  installToolEndpoint(environment);
+  installTestDomains({ toolEndpoint: { kind: 'serving', environment } });
 }
 
 function call(
@@ -218,8 +216,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  resetToolEndpoint();
-  clearEndpointClientsRuntime();
+  clearApplicationContext();
+  clearApplicationContext();
   vi.restoreAllMocks();
 });
 
@@ -303,9 +301,18 @@ describe('POST /mcp/projects/:name credentials', () => {
   });
 
   it('answers 503 when the endpoint is not installed', async () => {
-    resetToolEndpoint();
+    clearApplicationContext();
     const response = await serveToolEndpoint(call('ping'), 'support');
     expect(response.status).toBe(503);
+    expect(await apiCodeOf(response)).toBe('tool_endpoint_not_configured');
+  });
+
+  it('answers the same 503 while the endpoint is disabled, before identifying the caller', async () => {
+    installTestDomains({ toolEndpoint: { kind: 'disabled' } });
+    const response = await serveToolEndpoint(call('ping'), 'support');
+    expect(response.status).toBe(503);
+    expect(await apiCodeOf(response)).toBe('tool_endpoint_not_configured');
+    expect(events).toEqual([]);
   });
 });
 
@@ -325,7 +332,7 @@ describe('POST /mcp/projects/:name OAuth access tokens (ADR-0134 part 3)', () =>
     expect(response.status).toBe(200);
   });
 
-  it.each(['oauthOtherProject', 'oauthAgent'])(
+  it.each(['oauthOtherProject', 'oauthAgent', 'oauthBuilder'])(
     'refuses a token issued for another URL (%s) with 401 invalid_token and a challenge',
     async (who) => {
       const response = await serveToolEndpoint(
@@ -472,6 +479,8 @@ describe('POST /mcp/projects/:name run permission', () => {
   });
 
   it('serves no tool to a key whose member may run no agent of the client', async () => {
+    // A Viewer that neither owns nor was granted either agent (a Viewer runs its own since ADR-0152).
+    ownership = () => 'other';
     const listed = await serveToolEndpoint(
       call('tools/list', undefined, { identity: 'viewer' }),
       'support',
@@ -691,7 +700,7 @@ describe('POST /mcp/projects/:name forwarding', () => {
 
   it('answers 500 and runs no tool when the audit row cannot be written', async () => {
     auditFails = new Error(`audit store down ${SECRET}`);
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const request = toolCall('lookup');
     const response = await POST(
       new NextRequest(request.url, {
@@ -731,14 +740,14 @@ describe('POST /mcp/projects/:name forwarding', () => {
 
   it('answers 503 without a secret, an address or the grant when the sandbox cannot be reached', async () => {
     routeFails = new Error(`cannot open ${SECRET} at http://10.0.0.7:4000`);
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = captureLog();
     const response = await serveToolEndpoint(toolCall('lookup'), 'support');
     expect(response.status).toBe(503);
     const text = await response.text();
     expect(text).not.toContain(SECRET);
     expect(text).not.toContain('10.0.0.7');
-    expect(JSON.stringify(logged.mock.calls)).not.toContain(SECRET);
-    expect(JSON.stringify(logged.mock.calls)).not.toContain('10.0.0.7');
+    expect(logged.text()).not.toContain(SECRET);
+    expect(logged.text()).not.toContain('10.0.0.7');
   });
 
   it.each(['code_tool_unbundled', 'code_tool_bundle_missing'])(
@@ -754,10 +763,10 @@ describe('POST /mcp/projects/:name forwarding', () => {
 
   it('answers 503 when the gateway call throws', async () => {
     upstream = () => Promise.reject(new Error(`ECONNREFUSED ${GRANT}`));
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = captureLog();
     const response = await serveToolEndpoint(call('tools/list'), 'support');
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain(GRANT);
-    expect(JSON.stringify(logged.mock.calls)).not.toContain(GRANT);
+    expect(logged.text()).not.toContain(GRANT);
   });
 });

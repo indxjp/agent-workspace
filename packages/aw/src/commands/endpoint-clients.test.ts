@@ -134,6 +134,25 @@ describe('aw endpoint-clients', () => {
     expect(sent(run, 'POST')).toBe(0);
   });
 
+  it('creates a builder client with an empty agent list, and refuses an --agent for it', async () => {
+    const created = await runCli(
+      ['endpoint-clients', 'create', '--kind', 'builder', '--name', 'x'],
+      { route },
+    );
+    expect(created.code).toBe(EXIT_CODE.ok);
+    expect(created.calls.find((call) => call.method === 'POST')?.json).toEqual({
+      name: 'x',
+      kind: 'builder',
+      agentIds: [],
+    });
+    const refused = await runCli(
+      ['endpoint-clients', 'create', '--kind', 'builder', '--name', 'x', '--agent', 'Summariser'],
+      { route },
+    );
+    expect(refused.code).toBe(EXIT_CODE.usage);
+    expect(sent(refused, 'POST')).toBe(0);
+  });
+
   it('updates only what was given, and refuses an empty update', async () => {
     const update = await runCli(['endpoint-clients', 'update', CLIENT_ID, '--tool', 'lookup'], {
       route,

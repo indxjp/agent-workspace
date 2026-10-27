@@ -160,7 +160,7 @@ function describe(value: unknown): string {
 }
 
 /** The longest `streamKey` or `blobKey` this store accepts. */
-export const MAX_SESSION_STATE_KEY_LENGTH = 512;
+const MAX_SESSION_STATE_KEY_LENGTH = 512;
 
 /**
  * A `streamKey` this store will accept.
@@ -170,7 +170,7 @@ export const MAX_SESSION_STATE_KEY_LENGTH = 512;
  * travels in a URL query and goes into a btree index, and neither a control character nor a
  * multi-byte sequence the two sides normalise differently is something a key may contain.
  */
-export const STREAM_KEY_PATTERN = /^[\x20-\x7E]+$/;
+const STREAM_KEY_PATTERN = /^[\x20-\x7E]+$/;
 
 /**
  * A `blobKey` this store will accept.
@@ -180,10 +180,10 @@ export const STREAM_KEY_PATTERN = /^[\x20-\x7E]+$/;
  * with a letter or a digit, so `..` is not a segment this grammar has — the traversal is refused by
  * the positive rule rather than by a second rule about `..` that has to be kept in step with it.
  */
-export const BLOB_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/;
+const BLOB_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*$/;
 
 /** The largest batch of entries this store accepts in one request. */
-export const MAX_SESSION_STATE_BATCH_ENTRIES = 5_000;
+const MAX_SESSION_STATE_BATCH_ENTRIES = 5_000;
 
 /** Parse an engine id against `@indx-workspace/contracts`' closed set. */
 export function parseEngineId(input: unknown): Parsed<EngineId> {
@@ -300,7 +300,7 @@ export function parsePageLimit(input: unknown): Parsed<number | undefined> {
  * object, plus that `entryKey` — the one field the platform *does* read, because it is the
  * idempotency key — is a bounded string when present.
  */
-export function parseSessionStateEntry(input: unknown): Parsed<SessionStateEntryPayload> {
+function parseSessionStateEntry(input: unknown): Parsed<SessionStateEntryPayload> {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
     return { ok: false, reason: `a state entry must be an object; got ${describe(input)}.` };
   }
@@ -374,7 +374,9 @@ export function parseSessionStateEntries(input: unknown): Parsed<SessionStateEnt
 }
 
 /**
- * The object-store key one blob's bytes are written at, relative to the workspace.
+ * storage-bridge(#1699): the object-store key a blob's bytes are written at where there is no
+ * shared storage root, relative to the workspace. Rows saved through the storage service carry an
+ * object ID instead.
  *
  * Derived here and never taken from a request. `blobKey` has already been through
  * {@link parseBlobKey}, and `sessionId` is a UUID the route resolved against `sessions`, so every

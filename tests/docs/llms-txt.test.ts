@@ -31,6 +31,7 @@ async function writeFixtureRepository(root: string, options: { readonly omit?: s
     'CLAUDE.md',
     'ENGINEERING_GUIDELINES.md',
     'docs/architecture.md',
+    'docs/testing-strategy.md',
     'docs/sdk/site/README.md',
     'docs/spec.md',
     'docs/sdk/README.md',

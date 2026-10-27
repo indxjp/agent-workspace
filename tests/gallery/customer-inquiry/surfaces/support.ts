@@ -16,7 +16,7 @@ export default defineSurface({
     ],
     disclaimer:
       'AIがお答えしています。返金・ご登録情報の変更・ご本人確認が必要なお手続きは、担当者におつなぎします。',
-    // The trace would show tool inputs, including the customer token: never show it to a visitor.
+    // The trace would show tool inputs, and the customer's records: never show them to a visitor.
     toolTrace: 'hidden',
     history: true,
     feedback: true,

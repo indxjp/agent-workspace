@@ -8,11 +8,11 @@ import {
   OPENAPI_CONNECTOR_REQUEST_BODY_MAX_BYTES,
 } from '@indx-workspace/contracts/connectors';
 
+import { applicationContext } from '../application-context';
 import { connectorKindOfBody } from './contract';
-import { problem, type ApiResult } from './handlers';
+import { problem, type ApiResult } from '../http/result';
 import type { WorkspaceConnectorsProbeSource, WorkspaceConnectorsStore } from './store';
-import { currentConnectorsRuntime } from './runtime';
-import { apiResultResponse, readRouteParam, readSizedJson } from '../http/json-transport';
+import { readRouteParam, readSizedJson } from '../http/json-transport';
 
 /**
  * Read and parse a connector JSON request body (C15): read up to the largest per-kind cap, then
@@ -42,11 +42,6 @@ export async function readConnectorBody(
   return { ok: true, value: read.value };
 }
 
-/** Turn a handler's answer into a `Response`. A `204` carries no body and no content type. */
-export function toResponse(result: ApiResult): Response {
-  return apiResultResponse(result);
-}
-
 export const connectorsRuntimeNotConfigured = (): ApiResult =>
   problem(
     503,
@@ -70,8 +65,9 @@ export async function withWorkspaceStore(
   ) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentConnectorsRuntime();
-  if (runtime === null) return connectorsRuntimeNotConfigured();
+  const connectors = applicationContext()?.connectors;
+  if (connectors?.kind !== 'serving') return connectorsRuntimeNotConfigured();
+  const runtime = connectors.runtime;
 
   if (authenticatedWorkspaceId !== undefined) {
     return run(runtime.connectors.forWorkspace(authenticatedWorkspaceId), {
@@ -111,8 +107,9 @@ export async function withWorkspaceProbeStore(
   run: (store: WorkspaceConnectorsStore & WorkspaceConnectorsProbeSource) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentConnectorsRuntime();
-  if (runtime === null) return connectorsRuntimeNotConfigured();
+  const connectors = applicationContext()?.connectors;
+  if (connectors?.kind !== 'serving') return connectorsRuntimeNotConfigured();
+  const runtime = connectors.runtime;
 
   if (authenticatedWorkspaceId !== undefined) {
     return run(runtime.connectors.forWorkspace(authenticatedWorkspaceId));

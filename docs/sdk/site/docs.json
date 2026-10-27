@@ -58,7 +58,9 @@
               "path/first-agent",
               "getting-started/installation",
               "getting-started/quickstart",
-              "cli/chat"
+              "getting-started/console-tour",
+              "cli/chat",
+              "getting-started/troubleshooting"
             ]
           },
           {
@@ -70,8 +72,12 @@
               "building/models-and-runtimes",
               "building/skills",
               "guides/tools-from-code",
+              "guides/caller-identity",
               "building/mcp-servers",
-              "resources/secrets"
+              "guides/build-an-agent-in-chat",
+              "guides/builder-tools-from-claude-code",
+              "resources/secrets",
+              "guides/storage-connections"
             ]
           },
           {
@@ -94,7 +100,8 @@
               "building/react",
               "building/backend",
               "building/http-api",
-              "guides/streaming"
+              "guides/streaming",
+              "guides/structured-output"
             ]
           },
           {
@@ -179,15 +186,18 @@
               "resources/connectors",
               "resources/engines",
               "resources/models",
-              "resources/runtimes"
+              "resources/runtimes",
+              "resources/triggers"
             ]
           },
           {
             "group": "CLI",
             "pages": [
               "cli/overview",
+              "cli/dev",
               "cli/configuration",
               "cli/output-and-exit-codes",
+              "cli/storage",
               "cli/cli-vs-sdk"
             ]
           },
@@ -226,7 +236,9 @@
               "reference/sdk/platforms",
               "reference/sdk/models",
               "reference/sdk/runtimes",
-              "reference/sdk/secrets"
+              "reference/sdk/secrets",
+              "reference/sdk/storage",
+              "reference/sdk/triggers"
             ]
           },
           {
@@ -237,6 +249,7 @@
               "reference/contracts/agent-versions",
               "reference/contracts/agents",
               "reference/contracts/api-keys",
+              "reference/contracts/builder",
               "reference/contracts/cli-auth",
               "reference/contracts/connectors",
               "reference/contracts/endpoint-clients",
@@ -244,6 +257,7 @@
               "reference/contracts/evaluations",
               "reference/contracts/feedback",
               "reference/contracts/files",
+              "reference/contracts/identity-assertion",
               "reference/contracts/invitations",
               "reference/contracts/local-runtime",
               "reference/contracts/models",
@@ -263,10 +277,14 @@
               "reference/contracts/setup",
               "reference/contracts/shares",
               "reference/contracts/skills",
+              "reference/contracts/storage-connections",
+              "reference/contracts/storage-settings",
+              "reference/contracts/storage-url",
               "reference/contracts/surfaces",
               "reference/contracts/team",
               "reference/contracts/tokens",
               "reference/contracts/tool-connectors",
+              "reference/contracts/triggers",
               "reference/contracts/workspaces"
             ]
           },

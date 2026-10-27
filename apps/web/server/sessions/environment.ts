@@ -1,25 +1,14 @@
 /**
- * The seam between the §20 session routes and the rest of the control plane.
- *
- * The shape is `apps/web/server/runs/environment.ts`'s, deliberately and line for line: an
- * interface the routes are written against, a `globalThis`-anchored registry, an installer a
- * composition root calls, and a refusal — not a stub — while nothing is installed. Everything
- * that file's header says about why applies here unchanged, including the measured reason the
- * registry is on `globalThis`: Next.js compiles `instrumentation.ts` and the route handlers into
- * separate module graphs, so a module-level `let` gives the two halves two registries
- * (`docs/adr/W1-CP-04-run-api-is-installed-not-imported.md`).
- *
- * ## The one thing this task cannot install
- *
- * `apps/web/instrumentation.ts` is the composition root, and it belongs to W2-DB-02. So this
- * task ships the seam, the store, the routes and the adapter, and **nothing installs them yet**:
- * every session route answers 503 in a deployment until one line is added there. That is not a
- * shortcut, it is the same 503 the run API answered for a whole wave, and it is declared on this
- * task's PR with the exact call the composition root has to make.
+ * What the §20 session routes are written against. The composition root builds it once
+ * (`composition/session-rbac.ts`) and installs it as `ApplicationContext.sessions`; with no context
+ * installed every session route refuses with a 503 — never a stub, and never an in-memory store
+ * (`docs/adr/W1-CP-04-run-api-is-installed-not-imported.md` for why it is installed, not imported).
  */
+import type { MembershipRoleName } from '@indx-workspace/contracts/team';
 import type { SessionStateStore } from './state';
 import type { TranscriptStore } from './transcript';
-import type { SessionRepositoryProvider, WorkspaceScopeResolver } from '@agent-workspace/core/db';
+import type { SessionsStoreProvider } from './store';
+import type { RetentionDriver } from './retention-cron';
 
 /**
  * Who is calling, already resolved to one workspace (spec §25).
@@ -29,7 +18,7 @@ import type { SessionRepositoryProvider, WorkspaceScopeResolver } from '@agent-w
  * a mirror and the key this API stores under are the same string by construction. The API checks
  * that they agree rather than assuming it — see `api.ts`.
  */
-export type SessionPrincipal =
+export type SessionApiPrincipal =
   | {
       readonly kind: 'user';
       readonly principalId: string;
@@ -42,7 +31,7 @@ export type SessionPrincipal =
       readonly ownerPrincipalId: string;
       readonly userId: string | null;
       readonly workspaceId: string;
-      readonly role: 'owner' | 'admin' | 'builder' | 'viewer';
+      readonly role: MembershipRoleName;
     }
   | {
       readonly kind: 'runner';
@@ -59,52 +48,31 @@ export interface SessionApiEnvironment {
    * credentials. An implementation that returns a default principal when it finds none has
    * turned this seam into an open endpoint.
    */
-  authenticate(request: Request): Promise<SessionPrincipal | null>;
+  authenticate(request: Request): Promise<SessionApiPrincipal | null>;
   /**
    * Positive ownership/RBAC assertion for one platform session. Implementations must allow a
    * browser user only for their own session (or owner/admin oversight), and a runner only for
    * the exact session in its signed per-run claim.
    */
-  canAccessSession(principal: SessionPrincipal, sessionId: string): Promise<boolean>;
+  canAccessSession(principal: SessionApiPrincipal, sessionId: string): Promise<boolean>;
+  /**
+   * The workspace file paths one run was granted (ADR-0147), snapshotted when it launched. `[]`
+   * for an unknown run or one with no files.
+   */
+  runFileGrants(workspaceId: string, runId: string): Promise<readonly string[]>;
   /** Where the Claude Agent SDK's transcript lives. Engine-shaped; see `./transcript.ts`. */
   readonly store: TranscriptStore;
-  /**
-   * The engine-scoped session store of ENG-06 (#305).
-   *
-   * Optional, and its absence is a 503 from the `/state-*` routes rather than a fallback: an engine
-   * whose state is silently not stored is spec §14.9's release blocker, and a store that answered
-   * "nothing here" for a session it simply was not asked to keep would make a resume start a fresh
-   * conversation with nothing saying so.
-   */
-  readonly stateStore?: SessionStateStore;
+  /** The engine-scoped session store of ENG-06 (#305). */
+  readonly stateStore: SessionStateStore;
   /** Complete control-plane session rows, separate from transcript storage. */
-  readonly sessions?: SessionRepositoryProvider;
-  readonly scopes?: WorkspaceScopeResolver;
-}
-
-interface SessionApiRegistry {
-  __agentWorkspaceSessionApiEnvironment__?: SessionApiEnvironment;
-}
-
-const registry = globalThis as typeof globalThis & SessionApiRegistry;
-
-/** Install the adapters. Called once by whoever composes the application. */
-export function installSessionApi(environment: SessionApiEnvironment): void {
-  registry.__agentWorkspaceSessionApiEnvironment__ = environment;
-}
-
-/** Remove them. For tests, and for a harness that must not leak into the next case. */
-export function resetSessionApi(): void {
-  delete registry.__agentWorkspaceSessionApiEnvironment__;
-}
-
-export function getSessionApi(): SessionApiEnvironment | null {
-  return registry.__agentWorkspaceSessionApiEnvironment__ ?? null;
+  readonly sessions: SessionsStoreProvider;
+  /** Which session-retention driver this process runs; the cron route serves only `cron`. */
+  readonly retention: RetentionDriver;
 }
 
 /** The 503 every session route returns while nothing is installed. */
 export const SESSION_API_NOT_CONFIGURED_MESSAGE =
-  'the session API has no environment installed: call installSessionApi() with an authenticator ' +
+  'the session API has no environment installed: the composition root installs an authenticator ' +
   'and a durable TranscriptStore. This server will not guess either, and it will not fall back ' +
   'to an in-memory store — a session that does not survive a restart is spec §14.9’s release ' +
   'blocker, not a degraded mode.';

@@ -6,10 +6,7 @@
  * ordinary HTTP is enough", and for three routes it is.
  */
 
-/** The one error body shape every run route returns. */
-export interface ApiErrorBody {
-  readonly error: { readonly code: string; readonly message: string };
-}
+import { problemBody } from '../http/result';
 
 export function json(body: unknown, status: number, headers?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -18,9 +15,13 @@ export function json(body: unknown, status: number, headers?: Record<string, str
   });
 }
 
-export function apiError(status: number, code: string, message: string): Response {
-  const body: ApiErrorBody = { error: { code, message } };
-  return json(body, status);
+export function apiError(
+  status: number,
+  code: string,
+  message: string,
+  details?: readonly string[],
+): Response {
+  return json(problemBody(code, message, details), status);
 }
 
 /**
@@ -42,9 +43,9 @@ export type JsonBodyResult =
 /**
  * The largest JSON request body a run route will read.
  *
- * Comfortably above `MAX_PROMPT_CHARS` worth of escaped UTF-8 and far below anything worth
- * buffering. An App Router route handler has no body limit of its own, so without this the prompt
- * cap in `api.ts` would only be enforced *after* the whole body had been read into memory — a cap
+ * Comfortably above `MAX_PROMPT_CHARS` (`service.ts`) worth of escaped UTF-8 and far below
+ * anything worth buffering. An App Router route handler has no body limit of its own, so without
+ * this the prompt cap `parseStartRunBody` applies would only be enforced *after* the whole body had been read into memory — a cap
  * that arrives too late to be one.
  */
 export const MAX_JSON_BODY_BYTES = 2_000_000;

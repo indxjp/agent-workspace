@@ -8,7 +8,7 @@ import {
 } from '../server/runs/sse';
 import { sseStreamResponse } from '../server/runs/sse';
 import { readResumeCursor } from '../server/runs/cursor';
-import { InMemoryRunStore } from '../server/runs/store';
+import { InMemoryRunStore } from '../server/runs/memory-store';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 
 const vectors = loadVectors('adversarial-runs-stream', 'attacks.json');

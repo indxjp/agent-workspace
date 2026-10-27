@@ -19,16 +19,24 @@
  * See docs/adr/W1-UI-04-the-instructions-field-does-not-spell-textarea.md.
  */
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { createElement, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  createElement,
+  Fragment,
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 import type { AgentPermissions } from '../../contracts/agents';
 
+import { browserClient } from '../../lib/browser-client';
+import { createAgent, loadNewAgentCatalogs } from './agent-requests-model';
 import {
   buildCreateAgentInput,
-  describeRequestFailure,
   isValidAgentName,
-  readAgentResourceOptions,
-  readRuntimeProfileOptions,
   type AgentResourceOptions,
   type RuntimeProfileOption,
   type RequestProblem,
@@ -43,13 +51,13 @@ import { ModelSelector, ModelUnavailableNotice, useModelCatalog } from '../model
 
 // ── Transcribed class strings ───────────────────────────────────────────────────────────────────
 
-const BTN =
+export const BTN =
   'inline-flex h-8 items-center justify-center gap-[7px] whitespace-nowrap rounded-(--radius-sm) border px-[13px] text-[13px] font-medium no-underline';
 /** `.btn`'s own (non-`.primary`) colours. */
-const BTN_DEFAULT = 'border-border-strong bg-surface text-text';
+export const BTN_DEFAULT = 'border-border-strong bg-surface text-text';
 const BTN_PRIMARY = 'border-accent bg-accent text-white dark:text-[#10131c]';
 const BTN_DISABLED = 'pointer-events-none opacity-[.45]';
-const CARD = 'rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
+export const CARD = 'rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
 const FIELD = 'mb-[18px]';
 const LABEL = 'mb-[5px] block text-[13px] font-semibold';
 const HELP = 'mt-[5px] text-[12.5px] text-muted';
@@ -57,6 +65,23 @@ const CONTROL =
   'w-full rounded-(--radius-sm) border border-border-strong bg-surface px-2.5 py-[7px] text-[13.5px] text-text focus:border-accent focus:outline-2 focus:-outline-offset-1 focus:outline-accent';
 const CALLOUT_DANGER =
   'mt-4 flex items-start gap-[11px] rounded-(--radius) border border-danger bg-danger-soft p-[14px] text-[13px] text-danger';
+
+/** The read-mode body every step shares: labelled values as text, never inputs. */
+function ReadList({
+  rows,
+  className = `${CARD} p-4`,
+}: Readonly<{ rows: readonly (readonly [label: string, value: string])[]; className?: string }>) {
+  return (
+    <dl className={`${className} grid gap-x-4 gap-y-1 text-[13px] sm:grid-cols-[max-content_1fr]`}>
+      {rows.map(([label, value]) => (
+        <Fragment key={label}>
+          <dt className="font-semibold">{label}</dt>
+          <dd className="min-w-0 break-words text-muted">{value}</dd>
+        </Fragment>
+      ))}
+    </dl>
+  );
+}
 
 /**
  * Step 2 — issue #130's reusable selector, first use. `models`/`unavailable` are the joined
@@ -67,11 +92,13 @@ export function ModelStep({
   unavailable,
   value,
   onSelect,
+  readOnly = false,
 }: Readonly<{
   models: readonly CatalogModel[];
   unavailable: readonly { readonly connectionName: string; readonly reason: string }[];
   value: ModelSelectionValue;
   onSelect: (value: ModelSelectionValue) => void;
+  readOnly?: boolean;
 }>) {
   const selected = findCatalogEntry(models, value);
   return (
@@ -79,7 +106,17 @@ export function ModelStep({
       <h2 id="model-heading" className="mb-3 text-[15px]">
         Which model should this agent use?
       </h2>
-      {models.length === 0 ? (
+      {readOnly ? (
+        <ReadList
+          rows={[
+            ['Model', selected?.displayName ?? (value?.model || 'Deployment default')],
+            [
+              'Connection',
+              selected?.connectionName ?? (value?.connectionId || 'Deployment default'),
+            ],
+          ]}
+        />
+      ) : models.length === 0 ? (
         <div className={`${CARD} p-4 text-[13px] text-muted`}>
           No model connections are configured. Add a provider on the Models screen before creating
           an agent.
@@ -95,8 +132,8 @@ export function ModelStep({
           />
         </div>
       )}
-      <ModelUnavailableNotice unavailable={unavailable} />
-      {selected !== undefined && !selected.capabilities.promptCaching ? (
+      {readOnly ? null : <ModelUnavailableNotice unavailable={unavailable} />}
+      {!readOnly && selected !== undefined && !selected.capabilities.promptCaching ? (
         <div
           role="alert"
           className="mt-3 whitespace-pre-line rounded-(--radius) border border-warn bg-warn-soft p-[14px] text-[13px] text-warn"
@@ -112,17 +149,23 @@ export function RuntimeProfileStep({
   profiles,
   selectedId,
   onSelect,
+  readOnly = false,
 }: Readonly<{
   profiles: readonly RuntimeProfileOption[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  readOnly?: boolean;
 }>) {
   return (
     <section className="mt-4" aria-labelledby="runtime-profile-heading">
       <h2 id="runtime-profile-heading" className="mb-3 text-[15px]">
         Step 5 · Runtime
       </h2>
-      {profiles.length === 0 ? (
+      {readOnly ? (
+        <ReadList
+          rows={[['Runtime profile', profiles.find((p) => p.id === selectedId)?.name ?? 'None']]}
+        />
+      ) : profiles.length === 0 ? (
         <div className={`${CARD} p-4 text-[13px] text-muted`}>
           No runtime profiles are configured. Create one on the Runtimes screen before creating an
           agent.
@@ -151,6 +194,10 @@ export function RuntimeProfileStep({
   );
 }
 
+function joinOrNone(labels: readonly string[]): string {
+  return labels.length === 0 ? 'None' : labels.join(', ');
+}
+
 export function ResourcesStep({
   options,
   fileAccess,
@@ -159,6 +206,7 @@ export function ResourcesStep({
   onFile,
   onSkill,
   onConnector,
+  readOnly = false,
 }: Readonly<{
   options: AgentResourceOptions;
   fileAccess: Readonly<Record<string, 'read' | 'read-write'>>;
@@ -167,7 +215,44 @@ export function ResourcesStep({
   onFile: (id: string, access: 'read' | 'read-write' | null) => void;
   onSkill: (id: string, selected: boolean) => void;
   onConnector: (id: string, selected: boolean) => void;
+  readOnly?: boolean;
 }>) {
+  if (readOnly) {
+    return (
+      <section aria-labelledby="resources-heading" className="mt-4">
+        <h2 className="mb-3 text-[15px]" id="resources-heading">
+          Step 3 · Resources
+        </h2>
+        <ReadList
+          rows={[
+            [
+              'Files and folders',
+              joinOrNone(
+                options.files
+                  .filter((row) => fileAccess[row.id] !== undefined)
+                  .map(
+                    (row) =>
+                      `${row.label} (${fileAccess[row.id] === 'read' ? 'read' : 'read/write'})`,
+                  ),
+              ),
+            ],
+            [
+              'Skills',
+              joinOrNone(
+                options.skills.filter((r) => selectedSkills.has(r.id)).map((r) => r.label),
+              ),
+            ],
+            [
+              'Connectors',
+              joinOrNone(
+                options.connectors.filter((r) => selectedConnectors.has(r.id)).map((r) => r.label),
+              ),
+            ],
+          ]}
+        />
+      </section>
+    );
+  }
   const group = (
     heading: string,
     rows: readonly { id: string; label: string }[],
@@ -237,30 +322,47 @@ export function ResourcesStep({
   );
 }
 
+export const PERMISSION_CHOICES: ReadonlyArray<[keyof AgentPermissions, string, string]> = [
+  ['readFiles', 'Read files', 'Read only the files and folders assigned above.'],
+  ['writeFiles', 'Write files', 'Modify only resources explicitly assigned read/write.'],
+  ['runCommands', 'Run commands', 'Execute commands inside the selected runtime.'],
+  [
+    'unrestrictedNetwork',
+    'Unrestricted network',
+    'Allow network destinations beyond the runtime policy.',
+  ],
+];
+
 export function PermissionsStep({
   permissions,
   onChange,
+  readOnly = false,
 }: Readonly<{
   permissions: AgentPermissions;
   onChange: (key: keyof AgentPermissions, enabled: boolean) => void;
+  readOnly?: boolean;
 }>) {
-  const choices: ReadonlyArray<[keyof AgentPermissions, string, string]> = [
-    ['readFiles', 'Read files', 'Read only the files and folders assigned above.'],
-    ['writeFiles', 'Write files', 'Modify only resources explicitly assigned read/write.'],
-    ['runCommands', 'Run commands', 'Execute commands inside the selected runtime.'],
-    [
-      'unrestrictedNetwork',
-      'Unrestricted network',
-      'Allow network destinations beyond the runtime policy.',
-    ],
-  ];
+  if (readOnly) {
+    return (
+      <fieldset className={`${CARD} mt-4 p-4`}>
+        <legend className="px-1 text-[15px] font-semibold">Step 4 · Permissions</legend>
+        <ReadList
+          className=""
+          rows={PERMISSION_CHOICES.map(([key, label]) => [
+            label,
+            permissions[key] ? 'Allowed' : 'Not allowed',
+          ])}
+        />
+      </fieldset>
+    );
+  }
   return (
     <fieldset className={`${CARD} mt-4 p-4`}>
       <legend className="px-1 text-[15px] font-semibold">Step 4 · Permissions</legend>
       <p className="mb-3 text-[12px] text-muted">
         Choose each capability explicitly. High-risk capabilities start disabled.
       </p>
-      {choices.map(([key, label, help]) => (
+      {PERMISSION_CHOICES.map(([key, label, help]) => (
         <label
           className="flex items-start gap-3 border-b border-border py-2 last:border-b-0"
           key={key}
@@ -281,8 +383,85 @@ export function PermissionsStep({
   );
 }
 
-export function NewAgentScreen() {
+export const AGENT_MODES = ['form', 'chat'] as const;
+export type AgentMode = (typeof AGENT_MODES)[number];
+const AGENT_MODE_LABELS: Readonly<Record<AgentMode, string>> = { form: 'Form', chat: 'Chat' };
+
+/** Whether this user may build an agent in chat. Slice 2 of #1849 replaces it with the `/api/me` `builder` feature. */
+export function builderChatEnabled(): boolean {
+  return false;
+}
+
+/** `?mode=chat` selects Chat only when the feature is on; anything else is the form. */
+export function parseAgentMode(param: string | null, chatEnabled: boolean): AgentMode {
+  return chatEnabled && param === 'chat' ? 'chat' : 'form';
+}
+
+const ARROW_STEPS: Readonly<Record<string, number>> = {
+  ArrowRight: 1,
+  ArrowDown: 1,
+  ArrowLeft: -1,
+  ArrowUp: -1,
+};
+
+/** The option an arrow, Home or End key moves to (wrapping), or `null` for any other key. */
+export function nextAgentMode(current: AgentMode, key: string): AgentMode | null {
+  if (key === 'Home') return AGENT_MODES[0];
+  if (key === 'End') return AGENT_MODES[AGENT_MODES.length - 1] ?? null;
+  const step = ARROW_STEPS[key];
+  if (step === undefined) return null;
+  const count = AGENT_MODES.length;
+  return AGENT_MODES[(AGENT_MODES.indexOf(current) + step + count) % count] ?? null;
+}
+
+export function AgentModeSwitch({
+  mode,
+  onChange,
+}: Readonly<{ mode: AgentMode; onChange: (mode: AgentMode) => void }>) {
+  function onKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: AgentMode) {
+    const next = nextAgentMode(current, event.key);
+    if (next === null) return;
+    event.preventDefault();
+    onChange(next);
+    document.getElementById(`agent-mode-${next}`)?.focus();
+  }
+  return (
+    <div
+      role="radiogroup"
+      aria-label="How to create this agent"
+      className="mb-4 inline-flex rounded-(--radius-sm) border border-border-strong p-0.5"
+    >
+      {AGENT_MODES.map((option) => (
+        <button
+          key={option}
+          id={`agent-mode-${option}`}
+          type="button"
+          role="radio"
+          aria-checked={option === mode}
+          tabIndex={option === mode ? 0 : -1}
+          onClick={() => onChange(option)}
+          onKeyDown={(event) => onKeyDown(event, option)}
+          className={`h-7 rounded-(--radius-sm) px-3 text-[13px] ${
+            option === mode ? 'bg-accent-soft font-semibold' : 'text-muted'
+          }`}
+        >
+          {AGENT_MODE_LABELS[option]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function NewAgentScreen({
+  chatEnabled = builderChatEnabled(),
+  chat,
+}: Readonly<{
+  chatEnabled?: boolean;
+  /** The chat screen, given the mode switch to place; the route supplies it so imports stay acyclic. */
+  chat?: (modeSwitch: ReactNode) => ReactNode;
+}> = {}) {
   const router = useRouter();
+  const mode = parseAgentMode(useSearchParams().get('mode'), chatEnabled);
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -307,33 +486,12 @@ export function NewAgentScreen() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([
-      fetch('/api/runtime-profiles', { headers: { accept: 'application/json' } }),
-      fetch('/api/files', { headers: { accept: 'application/json' } }),
-      fetch('/api/skills', { headers: { accept: 'application/json' } }),
-      fetch('/api/connectors', { headers: { accept: 'application/json' } }),
-    ])
-      .then(async ([profilesResponse, filesResponse, skillsResponse, connectorsResponse]) => {
-        if (!profilesResponse.ok)
-          throw new Error(`Runtime profiles request returned ${String(profilesResponse.status)}.`);
-        // Files, skills and connectors are optional subsystems: each answers 503 when it is not
-        // configured. An agent with no resources is a legitimate agent, so an unconfigured one
-        // contributes an empty group rather than making the whole editor unusable.
-        const optional = (response: Response, key: string): Promise<unknown> =>
-          response.ok ? (response.json() as Promise<unknown>) : Promise.resolve({ [key]: [] });
-        return Promise.all([
-          profilesResponse.json() as Promise<unknown>,
-          optional(filesResponse, 'files'),
-          optional(skillsResponse, 'skills'),
-          optional(connectorsResponse, 'connectors'),
-        ]);
-      })
-      .then(([profileBody, filesBody, skillsBody, connectorsBody]) => {
+    void loadNewAgentCatalogs(browserClient())
+      .then(({ runtimeProfiles: profiles, resources: options }) => {
         if (!active) return;
-        const profiles = readRuntimeProfileOptions(profileBody);
         setRuntimeProfiles(profiles);
         setSelectedRuntimeProfileId(profiles[0]?.id ?? null);
-        setResources(readAgentResourceOptions(filesBody, skillsBody, connectorsBody));
+        setResources(options);
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -373,50 +531,38 @@ export function NewAgentScreen() {
     setSubmitting(true);
     setProblem(null);
 
-    void (async () => {
-      let response: Response;
-      try {
-        response = await fetch('/api/agents', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify({
-            agent: buildCreateAgentInput(
-              name,
-              instructions,
-              selectedRuntimeProfileId,
-              selectedModel,
-              permissions,
-            ),
-            assignments: {
-              files: Object.entries(fileAccess).map(([fileId, access]) => ({ fileId, access })),
-              skillIds: [...selectedSkills],
-              connectorIds: [...selectedConnectors],
-            },
-          }),
-        });
-      } catch (error) {
+    void createAgent(
+      browserClient(),
+      buildCreateAgentInput(
+        name,
+        instructions,
+        selectedRuntimeProfileId,
+        selectedModel,
+        permissions,
+      ),
+      {
+        files: Object.entries(fileAccess).map(([fileId, access]) => ({ fileId, access })),
+        skillIds: [...selectedSkills],
+        connectorIds: [...selectedConnectors],
+      },
+    ).then((created) => {
+      if (!created.ok) {
         setSubmitting(false);
-        setProblem({
-          kind: 'transport',
-          reason: `The request to create this agent failed: ${error instanceof Error ? error.message : String(error)}`,
-        });
+        setProblem(created.problem);
         return;
       }
-      if (!response.ok) {
-        const failure = await describeRequestFailure(response, () => response.json());
-        setSubmitting(false);
-        setProblem(failure);
-        return;
-      }
-      const createdBody = (await response.json()) as { agent?: { id?: unknown } };
-      const agentId = createdBody.agent?.id;
-      if (typeof agentId !== 'string') {
-        setSubmitting(false);
-        setProblem({ kind: 'transport', reason: 'The created agent response had no id.' });
-        return;
-      }
-      router.push(`/agents/${agentId}`);
-    })();
+      router.push(`/agents/${created.value}`);
+    });
+  }
+
+  const modeSwitch = chatEnabled ? (
+    <AgentModeSwitch
+      mode={mode}
+      onChange={(next) => router.replace(next === 'chat' ? '/agents/new?mode=chat' : '/agents/new')}
+    />
+  ) : null;
+  if (mode === 'chat') {
+    return chat?.(modeSwitch) ?? null;
   }
 
   return (
@@ -424,6 +570,7 @@ export function NewAgentScreen() {
       <div className="mb-[22px]">
         <h1 className="text-[21px]">New Agent</h1>
       </div>
+      {modeSwitch}
 
       <form onSubmit={onSubmit}>
         <div className={CARD}>

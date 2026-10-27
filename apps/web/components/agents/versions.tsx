@@ -6,13 +6,16 @@
  * `aw promote` prints before it acts. It is a view over the pointers, versions and history the
  * server already keeps; every call goes through the SDK client, never `fetch`.
  */
-import { createClient, type AgentWorkspaceClient } from '@indx-workspace/sdk';
+import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
 import type {
   AgentVersionEvaluation,
   AgentVersionListResponse,
   AgentVersionResource,
+  AgentVersionVia,
 } from '@indx-workspace/contracts/agent-versions';
 import { useEffect, useState, type ReactNode } from 'react';
+
+import { browserClient } from '../../lib/browser-client';
 
 import {
   badgesFor,
@@ -39,9 +42,6 @@ import {
   type VersionsLocale,
   type VersionsStrings,
 } from './versions-messages';
-
-const sessionClient = (): AgentWorkspaceClient =>
-  createClient({ baseUrl: window.location.origin, auth: { kind: 'session' } });
 
 /** What a refused or failed move or dry run says, in the reader's language. */
 function checkText(check: Exclude<MoveCheck, { kind: 'ready' }>, strings: VersionsStrings): string {
@@ -89,7 +89,12 @@ export function VersionList({
   locale: VersionsLocale;
 }>) {
   if (items.length === 0) return <p className="text-[13px] text-muted">{strings.empty}</p>;
-  const viaLabel = { ui: strings.viaUi, 'aw-push': strings.viaAwPush, api: strings.viaApi };
+  const viaLabel: Readonly<Record<AgentVersionVia, string>> = {
+    ui: strings.viaUi,
+    'aw-push': strings.viaAwPush,
+    api: strings.viaApi,
+    builder: strings.viaBuilder,
+  };
   const newestFirst = [...items].sort((a, b) => b.number - a.number);
   return (
     <div className="overflow-x-auto rounded-(--radius) border border-border bg-surface">
@@ -452,7 +457,7 @@ export function AgentVersionsScreen({
 
   useEffect(() => {
     const controller = new AbortController();
-    loadRelease(sessionClient(), agentId, controller.signal).then(
+    loadRelease(browserClient(), agentId, controller.signal).then(
       (loaded) => {
         if (!controller.signal.aborted) setState({ kind: 'ready', ...loaded });
       },
@@ -468,7 +473,7 @@ export function AgentVersionsScreen({
   async function confirm(move: Move): Promise<void> {
     setBusy(true);
     setOutcome(null);
-    const pointers = sessionClient().agents.pointers;
+    const pointers = browserClient().agents.pointers;
     try {
       if (move === 'rollback' && state.kind === 'ready') {
         // A rollback names no version, so it would follow whatever history says now; refuse it

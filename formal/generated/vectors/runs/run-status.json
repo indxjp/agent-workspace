@@ -14,6 +14,12 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.Runs.run_status_json_round_trips",
     "AgentWorkspace.Theorems.WellFormed.Runs.is_terminal_iff_mem_terminal"],
+   "input": "awaiting_approval",
+   "id": "status/valid/awaiting_approval",
+   "expected": {"valid": true, "terminal": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.Runs.run_status_json_round_trips",
+    "AgentWorkspace.Theorems.WellFormed.Runs.is_terminal_iff_mem_terminal"],
    "input": "completed",
    "id": "status/valid/completed",
    "expected": {"valid": true, "terminal": true}},

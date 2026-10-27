@@ -39,13 +39,11 @@ function sharing() {
       getPublicSharingEnabled: vi.fn(),
       setPublicSharingEnabled: vi.fn(),
       revoke: vi.fn(),
-      setSuspended: vi.fn(),
       stop: vi.fn(),
       reserveVisitorMessage,
-      linkRun: vi.fn(),
     },
-    views: { record: vi.fn(), count: vi.fn(), countVisitorSince: vi.fn() },
-    audit: { write: auditWrite, count: vi.fn(), list: vi.fn() },
+    views: { record: vi.fn(), count: vi.fn() },
+    audit: { write: auditWrite },
   } satisfies WorkspaceSharing;
   return { ...repositories, reserveVisitorMessage, auditWrite };
 }

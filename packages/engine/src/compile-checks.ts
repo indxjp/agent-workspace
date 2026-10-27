@@ -121,6 +121,38 @@ export function forkRefusal(
 }
 
 /**
+ * `engine_capability_unsupported` for an output schema on an engine whose catalogue entry says
+ * `structuredOutput: false`, else `null` (ADR-0143: refused by name, never dropped).
+ */
+export function outputSchemaRefusal(
+  engine: string,
+  structuredOutput: boolean,
+  outputSchema: EngineRunRequest['outputSchema'],
+): EngineRefusal | null {
+  if (structuredOutput || outputSchema === undefined) return null;
+  return refuse(
+    'engine_capability_unsupported',
+    `${engine} declares structuredOutput: false, so the outputSchema cannot be honoured. Remove it or choose an engine with structured output.`,
+  );
+}
+
+/**
+ * `engine_capability_unsupported` for `requireApproval` rules on an engine whose catalogue entry
+ * says `approvals: false`, else `null` (ADR-0145 D5: refused by name, never run unapproved).
+ */
+export function approvalsRefusal(
+  engine: string,
+  approvals: boolean,
+  requireApproval: readonly string[],
+): EngineRefusal | null {
+  if (approvals || requireApproval.length === 0) return null;
+  return refuse(
+    'engine_capability_unsupported',
+    `${engine} declares approvals: false (ADR-0145 D5), so requireApproval ${requireApproval.map((rule) => JSON.stringify(rule)).join(', ')} cannot be honoured and the call would run unapproved. Remove it or choose an engine with approvals.`,
+  );
+}
+
+/**
  * `engine_capability_unsupported` naming each subagent for an engine whose capabilities say
  * `subagents: false`, else `null` (ADR-0133 D14: refused by name, never dropped or emulated).
  */

@@ -273,7 +273,7 @@ example :
         [.delta (some "t") .text "Hel", .delta (some "t") .text "lo",
          .message (some "t") .assistant [.text "Hello"]] ∧
       mapAll [] [.stepFinish, .error] = [.native "step-finish" .null, .result .error (some 1) none] := by
-  decide
+  decide +kernel
 
 /-! ## The step limit -/
 
@@ -314,7 +314,7 @@ example :
       stopReason 1 (some "tool-calls") (some 2) false false = .endTurn ∧
       stopReason 2 (some "tool-calls") (some 2) true true = .maxBudget ∧
       stopReason 2 (some "tool-calls") (some 2) false true = .cancelled := by
-  decide
+  decide +kernel
 
 /-- The adapter never takes more than `limits.maxTurns` steps. -/
 @[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
@@ -393,7 +393,7 @@ example :
       stepRun (some 2) 0 [false] = (1, .endTurn) ∧
       (step [] MapState.empty (.completed .maxTurns 2 none)).2 =
         [.result .maxTurns (some 2) none] := by
-  decide
+  decide +kernel
 
 /-! ## Memory -/
 
@@ -456,6 +456,6 @@ example :
       readThread "t" (journal "t" [m1, ⟨"x", "other", "y"⟩]) = none ∧
       readThread "t" [.message m1] = none ∧
       readThread "t" (journal "t" [m1] ++ [.foreign]) = none := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.Mastra

@@ -60,7 +60,7 @@ def RunRow.toErRow (row : RunRow) : AgentWorkspace.Er.Core.Row :=
     ("status", row.lifecycle.status.toWire), ("input_tokens", "0"), ("output_tokens", "0"),
     ("cache_read_input_tokens", "0"), ("cache_creation_input_tokens", "0"),
     ("cost_usd", "0"), ("cost_currency", "USD"), ("tool_calls", "0"),
-    ("accounting_state", "pending"), ("tool_connector_ids", "{}"), ("created_at", "1000"),
+    ("accounting_state", "pending"), ("tool_connector_ids", "{}"), ("file_grants", "{}"), ("approved_tool_calls", "[]"), ("consumed_tool_calls", "[]"), ("created_at", "1000"),
     ("updated_at", "1000")] ++
     (if row.lifecycle.status.isTerminal then
       [("started_at", "1000"), ("ended_at", "1001")] else [])⟩
@@ -269,7 +269,7 @@ def Reply.publicKeys (reply : Reply) : List String :=
 def runResourceKeys : List String :=
   ["id", "workspaceId", "agentId", "projectId", "initiatingUserId", "sessionId",
    "status", "createdAt", "startedAt", "endedAt", "durationMs", "model", "provider",
-   "modelConnectionId", "usage", "cost", "error", "accountingState", "accountingError"]
+   "modelConnectionId", "usage", "cost", "error", "output", "accountingState", "accountingError"]
 
 def Reply.allKeys (reply : Reply) : List String :=
   reply.publicKeys ++ (if ["start", "list", "run"].contains reply.bodyKind then

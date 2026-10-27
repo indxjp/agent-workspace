@@ -1,6 +1,6 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { ownerPrincipalIdOf } from '../../rbac/owner-principal';
-import type { CreateShareInput, ShareRecord } from '@agent-workspace/core/db';
+import type { CreateShareInput, ShareRecord } from '../store';
 import type { Role } from '../../rbac/roles';
 import { isPublicSharingEnabled } from '../policy/service';
 import type { WorkspaceSharing } from './runtime';

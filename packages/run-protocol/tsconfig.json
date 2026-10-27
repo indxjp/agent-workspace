@@ -1,0 +1,11 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. `node` supplies
+  // the globals the engine port's sources use (`TextEncoder`, `AbortController`) and the
+  // `node:fs` the golden-frame test reads its fixture with.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["src"]
+}

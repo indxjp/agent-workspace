@@ -15,7 +15,7 @@ records and frames use a stable message chosen by the outcome kind. -/
 def publicRuntimeOutcomeReason (cancelled : Bool) (_privateReason : String) : String :=
   if cancelled then "The run was interrupted." else "The runtime reported a run failure."
 
-def reservedNames : List String := serverControlNames ++ [runStatusEvent]
+def reservedNames : List String := serverControlNames ++ platformEventNames
 
 inductive NameVerdict where
   | ok (name : String)
@@ -31,7 +31,7 @@ def classifyEventName (name : String) : NameVerdict :=
 
 @[aw_spec (ts := "apps/web/server/runs/sse.ts#classifyPlatformEventName")]
 def classifyPlatformEventName (name : String) : NameVerdict :=
-  if name == runStatusEvent then .ok name else .rejected
+  if platformEventNames.contains name then .ok name else .rejected
 
 @[aw_spec (ts := "apps/web/server/runs/sse.ts#classifyStoredEventName")]
 def classifyStoredEventName (name : String) : NameVerdict :=
@@ -115,6 +115,8 @@ def comment (s : String) : String :=
 
 inductive Outcome where
   | succeeded
+  /-- The run stopped at `awaiting_approval` (ADR-0145): no failure, the stream just ends. -/
+  | paused
   | failed (status message : String)
   | indeterminate (reason : String)
   deriving DecidableEq, Repr
@@ -128,17 +130,19 @@ def classifyRunOutcome (runId : String) (status : Option Contracts.RunStatus)
   | some .failed => .failed "failed"
       (error.getD s!"run {runId} failed and recorded no message")
   | some .cancelled => .failed "cancelled" (error.getD s!"run {runId} was cancelled")
+  | some .awaitingApproval => .paused
   | some .queued => .indeterminate s!"the stream for run {runId} ended while the run was still queued; its outcome is unknown to this connection"
   | some .running => .indeterminate s!"the stream for run {runId} ended while the run was still running; its outcome is unknown to this connection"
 
 private def failure (status message : String) : JValue :=
   .obj [("status", .str status), ("message", .str message)]
 
-/-- `done` follows a known failure and an indeterminate outcome alike. A producer exception is a
+/-- A completed and a paused run end with `done` alone. `done` follows a known failure and an indeterminate outcome alike. A producer exception is a
 different path, with no `done`, so the client may reconnect. -/
 @[aw_spec (ts := "apps/web/server/runs/sse.ts#sseStreamResponse")]
 def outcomeFrames : Outcome → List String
   | .succeeded => [controlFrame "done" (.obj [])]
+  | .paused => [controlFrame "done" (.obj [])]
   | .failed status message =>
     [controlFrame "run-failed" (failure status message), controlFrame "done" (.obj [])]
   | .indeterminate reason =>

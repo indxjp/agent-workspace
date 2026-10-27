@@ -10,9 +10,11 @@ import { GET as LIST_CONNECTIONS, POST as CREATE } from '../../app/api/model-con
 import { GET as LIST } from '../../app/api/models/route';
 import { installModelsApi } from '../composition/services';
 import { createInMemoryModelsStoreProvider } from './memory-store';
-import { clearModelsRuntime, configureModelsRuntime, type ModelsAuditEvent } from './runtime';
+import type { ModelsAuditEvent } from './runtime';
 import type { Role } from '../rbac/roles';
 import { Principal } from '../rbac/principal';
+import { installTestDomains } from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const API_KEY = 'Provider-Key-Must-Never-Escape';
@@ -39,42 +41,47 @@ describe('model connections HTTP surface', () => {
   beforeEach(() => {
     audits.length = 0;
     logs.length = 0;
-    configureModelsRuntime({
-      resolveActor: () =>
-        Promise.resolve({
-          kind: 'workspace',
-          workspaceId: WORKSPACE_ID,
-          principalId: '99999999-9999-4999-8999-999999999999',
-          userId: '22222222-2222-4222-8222-222222222222',
-          userLabel: 'Operator',
-          role: 'owner',
-          scope: null,
-        }),
-      models: createInMemoryModelsStoreProvider([WORKSPACE_ID]),
-      probe: (resolved) => {
-        expect([API_KEY, ROTATED_KEY]).toContain(resolved.credential);
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          latencyMs: 1,
-          message: 'Connection succeeded.',
-        });
+    installTestDomains({
+      models: {
+        kind: 'serving',
+        runtime: {
+          resolveActor: () =>
+            Promise.resolve({
+              kind: 'workspace',
+              workspaceId: WORKSPACE_ID,
+              principalId: '99999999-9999-4999-8999-999999999999',
+              userId: '22222222-2222-4222-8222-222222222222',
+              userLabel: 'Operator',
+              role: 'owner',
+              scope: null,
+            }),
+          models: createInMemoryModelsStoreProvider([WORKSPACE_ID]),
+          probe: (resolved) => {
+            expect([API_KEY, ROTATED_KEY]).toContain(resolved.credential);
+            return Promise.resolve({
+              ok: true,
+              status: 200,
+              latencyMs: 1,
+              message: 'Connection succeeded.',
+            });
+          },
+          // This suite is about the connection CRUD surface, not discovery — `discovery.test.ts` owns
+          // that. A fixed, empty answer keeps `GET /api/models` from making a real network call.
+          discover: (resolved) => {
+            expect([API_KEY, ROTATED_KEY]).toContain(resolved.credential);
+            return Promise.resolve({ ok: true, models: [], stale: false });
+          },
+          audit: (event) => {
+            audits.push(event);
+            return Promise.resolve();
+          },
+          log: (message) => logs.push(message),
+        },
       },
-      // This suite is about the connection CRUD surface, not discovery — `discovery.test.ts` owns
-      // that. A fixed, empty answer keeps `GET /api/models` from making a real network call.
-      discover: (resolved) => {
-        expect([API_KEY, ROTATED_KEY]).toContain(resolved.credential);
-        return Promise.resolve({ ok: true, models: [], stale: false });
-      },
-      audit: (event) => {
-        audits.push(event);
-        return Promise.resolve();
-      },
-      log: (message) => logs.push(message),
     });
   });
 
-  afterEach(clearModelsRuntime);
+  afterEach(clearApplicationContext);
 
   it('never returns or records a provider key across create/list/get/update/test/rotate/delete', async () => {
     const responses: string[] = [];
@@ -237,7 +244,23 @@ describe('model connections HTTP surface', () => {
   });
 
   it('leaves the surface positively unavailable until the encrypted store is configured', async () => {
-    clearModelsRuntime();
+    clearApplicationContext();
+    const response = await LIST(request('http://web/api/models'));
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'models_runtime_not_configured' },
+    });
+  });
+
+  it('answers the same 503 when the models API was built without the encrypted store', async () => {
+    const built = await installModelsApi(
+      () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_ID }),
+      () => Promise.resolve(null),
+      {} as unknown as DatabaseRoot,
+      null,
+    );
+    expect(built).toEqual({ models: { kind: 'unavailable' }, modelsApi: null });
+    installTestDomains({ models: built.models });
     const response = await LIST(request('http://web/api/models'));
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
@@ -295,32 +318,42 @@ describe('model connections write authorisation — issue #149', () => {
   let connectionId = '';
 
   beforeEach(async () => {
-    configureModelsRuntime({
-      // Deliberately not a `resolveWorkspace` + `identifyActor` pair, unlike the composition
-      // root's real one: this suite is about what `withModelsRuntime` does with the role once it
-      // has one, not about how a role is discovered, and `agents/routes.test.ts`'s own fixture
-      // makes the same simplification for the same reason.
-      resolveActor: (request) => {
-        const role = request.headers.get(ROLE_HEADER);
-        if (role === null) {
-          return Promise.resolve({ kind: 'unauthenticated', reason: 'no test role header' });
-        }
-        return Promise.resolve({
-          kind: 'workspace',
-          workspaceId: request.headers.get(WORKSPACE_HEADER) ?? WORKSPACE_A,
-          principalId: '99999999-9999-4999-8999-999999999999',
-          userId: '44444444-4444-4444-8444-444444444444',
-          userLabel: 'Matrix operator',
-          role: role as Role,
-          scope: null,
-        });
+    installTestDomains({
+      models: {
+        kind: 'serving',
+        runtime: {
+          // Deliberately not a `resolveWorkspace` + `identifyActor` pair, unlike the composition
+          // root's real one: this suite is about what `withModelsRuntime` does with the role once it
+          // has one, not about how a role is discovered, and `agents/routes.test.ts`'s own fixture
+          // makes the same simplification for the same reason.
+          resolveActor: (request) => {
+            const role = request.headers.get(ROLE_HEADER);
+            if (role === null) {
+              return Promise.resolve({ kind: 'unauthenticated', reason: 'no test role header' });
+            }
+            return Promise.resolve({
+              kind: 'workspace',
+              workspaceId: request.headers.get(WORKSPACE_HEADER) ?? WORKSPACE_A,
+              principalId: '99999999-9999-4999-8999-999999999999',
+              userId: '44444444-4444-4444-8444-444444444444',
+              userLabel: 'Matrix operator',
+              role: role as Role,
+              scope: null,
+            });
+          },
+          models: createInMemoryModelsStoreProvider([WORKSPACE_A, WORKSPACE_B]),
+          probe: () =>
+            Promise.resolve({
+              ok: true,
+              status: 200,
+              latencyMs: 1,
+              message: 'Connection succeeded.',
+            }),
+          discover: () => Promise.resolve({ ok: true, models: [], stale: false }),
+          audit: () => Promise.resolve(),
+          log: () => undefined,
+        },
       },
-      models: createInMemoryModelsStoreProvider([WORKSPACE_A, WORKSPACE_B]),
-      probe: () =>
-        Promise.resolve({ ok: true, status: 200, latencyMs: 1, message: 'Connection succeeded.' }),
-      discover: () => Promise.resolve({ ok: true, models: [], stale: false }),
-      audit: () => Promise.resolve(),
-      log: () => undefined,
     });
     const created = await CREATE(
       roleRequest('http://web/api/model-connections', 'POST', 'owner', {
@@ -330,7 +363,7 @@ describe('model connections write authorisation — issue #149', () => {
     connectionId = ((await created.json()) as { id: string }).id;
   });
 
-  afterEach(clearModelsRuntime);
+  afterEach(clearApplicationContext);
 
   it.each(ROLES)(
     'POST /api/model-connections refuses %s unless the role manages the resource',
@@ -458,7 +491,7 @@ describe('model connections write authorisation — issue #149', () => {
 
 /**
  * Round 1 verification (finding 3): every test above drives the write gate through
- * `configureModelsRuntime` with its own `resolveActor` fixture, so a mutation hard-coding
+ * `installTestDomains` with its own `resolveActor` fixture, so a mutation hard-coding
  * `installModelsApi`'s `role: actor.role` (`server/composition/services.ts`) to `'owner'` — the
  * one line the composition root contributes to issue #149's fix — survived every suite in the
  * repository. This drives the real `installModelsApi`, with only `resolveWorkspace` and
@@ -466,7 +499,7 @@ describe('model connections write authorisation — issue #149', () => {
  * at `apps/web/server/composition/register.ts`), through the real `withModelsRuntime` write gate.
  */
 describe('installModelsApi composition root — issue #149', () => {
-  afterEach(clearModelsRuntime);
+  afterEach(clearApplicationContext);
 
   it.each(['viewer', 'builder'] as const satisfies readonly Role[])(
     "carries a %s membership's role into the write gate rather than a hard-coded one",
@@ -478,13 +511,14 @@ describe('installModelsApi composition root — issue #149', () => {
         workspaceId: '88888888-8888-4888-8888-888888888888',
         role,
       });
-      const installed = await installModelsApi(
+      const { models } = await installModelsApi(
         () => Promise.resolve({ kind: 'workspace', workspaceId: principal.workspaceId }),
         () => Promise.resolve(principal),
         {} as unknown as DatabaseRoot,
         {} as unknown as SecretsService,
       );
-      expect(installed).not.toBeNull();
+      expect(models.kind).toBe('serving');
+      installTestDomains({ models });
 
       const response = await CREATE(
         request('http://web/api/model-connections', 'POST', {

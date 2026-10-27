@@ -1,0 +1,2 @@
+ALTER TABLE "files" ADD COLUMN "target_path" text;--> statement-breakpoint
+ALTER TABLE "files" ADD CONSTRAINT "files_side_path_target" CHECK (("files"."target_path" is not null) = (split_part("files"."path", '/', 1) = '%aside') and ("files"."target_path" is null or "files"."status" <> 'ready'));

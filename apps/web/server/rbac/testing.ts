@@ -51,7 +51,8 @@ import {
 import { Principal } from './principal';
 import { presentedKeyText, readBearerApiKeyAttempt } from './api-key';
 import type { Role } from './roles';
-import { clearRbacRuntime, configureRbacRuntime } from './runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 /** A secret this test process invents. Long enough for `MIN_SESSION_SECRET_LENGTH`. */
 const TEST_SESSION_SECRET = 'a-test-session-secret-that-is-long-enough-32';
@@ -177,40 +178,47 @@ export function installRbacHarness(
     acceptInvitation: (id, token, identity) => directory.acceptInvitation(id, token, identity),
   };
 
-  configureRbacRuntime({
-    directory: recordingRoot,
-    identify: async (request: Request): Promise<Principal | null> => {
-      // An API key first, because a request carrying one carries no cookie (R-12 §2.3).
-      const bearer = readBearerApiKeyAttempt(request.headers.get('authorization'));
-      if (bearer.kind === 'invalid') return null;
-      if (bearer.kind === 'presented') {
-        const identity = await directory.authenticateApiKey(
-          presentedKeyText(bearer.key),
-          new Date(),
+  installTestDomains({
+    rbac: {
+      directory: recordingRoot,
+      identify: async (request: Request): Promise<Principal | null> => {
+        // An API key first, because a request carrying one carries no cookie (R-12 §2.3).
+        const bearer = readBearerApiKeyAttempt(request.headers.get('authorization'));
+        if (bearer.kind === 'invalid') return null;
+        if (bearer.kind === 'presented') {
+          const identity = await directory.authenticateApiKey(
+            presentedKeyText(bearer.key),
+            new Date(),
+          );
+          // The explicit else: an unusable key is no identity at all, never a downgraded one.
+          if (identity === null) return null;
+          return Principal.fromApiKey(identity);
+        }
+        const email = request.headers.get('x-test-caller');
+        if (email === null) return null;
+        const claims = await verifiedClaims(email, workspaceSlug);
+        const role: Role | null = await directory.resolveRole(email, workspaceId);
+        // The explicit else: no membership row means no identity, never a default role.
+        if (role === null) return null;
+        const membership = (await directory.forWorkspace(workspaceId).listMemberships()).find(
+          (candidate) => candidate.email.toLowerCase() === email.toLowerCase(),
         );
-        // The explicit else: an unusable key is no identity at all, never a downgraded one.
-        if (identity === null) return null;
-        return Principal.fromApiKey(identity);
-      }
-      const email = request.headers.get('x-test-caller');
-      if (email === null) return null;
-      const claims = await verifiedClaims(email, workspaceSlug);
-      const role: Role | null = await directory.resolveRole(email, workspaceId);
-      // The explicit else: no membership row means no identity, never a default role.
-      if (role === null) return null;
-      const membership = (await directory.forWorkspace(workspaceId).listMemberships()).find(
-        (candidate) => candidate.email.toLowerCase() === email.toLowerCase(),
-      );
-      if (membership === undefined) return null;
-      const built = Principal.fromSession(claims, { id: workspaceId, slug: workspaceSlug }, role, {
-        principalId: membership.principalId,
-        userId: membership.userId,
-        label: membership.name,
-      });
-      // And the explicit else for the workspace correspondence: a session whose tenant is not the
-      // one the role was read in produces no identity either.
-      if (!built.ok) return null;
-      return built.principal;
+        if (membership === undefined) return null;
+        const built = Principal.fromSession(
+          claims,
+          { id: workspaceId, slug: workspaceSlug },
+          role,
+          {
+            principalId: membership.principalId,
+            userId: membership.userId,
+            label: membership.name,
+          },
+        );
+        // And the explicit else for the workspace correspondence: a session whose tenant is not the
+        // one the role was read in produces no identity either.
+        if (!built.ok) return null;
+        return built.principal;
+      },
     },
   });
 
@@ -250,7 +258,7 @@ export function installRbacHarness(
       }
       return { status: response.status, body, text, headers: response.headers };
     },
-    teardown: clearRbacRuntime,
+    teardown: clearApplicationContext,
   };
 }
 
@@ -265,24 +273,26 @@ export const TEST_ROLE_HEADER = 'x-test-role';
  * the `403` — is production code, so a suite using this proves the role gate, not a stand-in.
  */
 export function installWorkspaceHeaderRbac(workspaceHeader: string): void {
-  configureRbacRuntime({
-    directory: createMemoryDirectory(),
-    identify: (request: Request): Promise<Principal | null> => {
-      const workspaceId = request.headers.get(workspaceHeader);
-      const raw = request.headers.get(TEST_ROLE_HEADER);
-      const role: Role = raw === 'admin' || raw === 'builder' || raw === 'viewer' ? raw : 'owner';
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-              workspaceId,
-              role,
-              label: 'Header-identified test key',
-              actsForPrincipalId: null,
-            }),
-      );
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory(),
+      identify: (request: Request): Promise<Principal | null> => {
+        const workspaceId = request.headers.get(workspaceHeader);
+        const raw = request.headers.get(TEST_ROLE_HEADER);
+        const role: Role = raw === 'admin' || raw === 'builder' || raw === 'viewer' ? raw : 'owner';
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                workspaceId,
+                role,
+                label: 'Header-identified test key',
+                actsForPrincipalId: null,
+              }),
+        );
+      },
     },
   });
 }

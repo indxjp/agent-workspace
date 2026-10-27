@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { CONTRACTS_VERSION, CONTRACTS_VERSION_HEADER } from '@indx-workspace/contracts';
+import { signIdentity } from '@indx-workspace/contracts/identity-assertion';
 
-import { ApiProblemError, createClient } from './index.js';
+import { ApiProblemError, createClient, verifyIdentity } from './index.js';
 import { fetchDouble, jsonResponse } from './testing.js';
 
 const agent = {
@@ -221,5 +222,43 @@ describe('createClient', () => {
     });
     await expect(aw.agents.get('../admin?x=1')).rejects.toBeInstanceOf(ApiProblemError);
     expect(api.calls[0]?.url.pathname).toBe('/api/agents/..%2Fadmin%3Fx%3D1');
+  });
+});
+
+describe('verifyIdentity (ADR-0142 D1)', () => {
+  const payload = {
+    sub: 'customer-17',
+    principalKind: 'api-key',
+    workspace: 'ws-1',
+    runId: 'run-1',
+    aud: 'connector-1',
+    exp: 2_000_000_000,
+  } as const;
+  const expected = { audience: 'connector-1', workspace: 'ws-1' };
+  const now = new Date((payload.exp - 60) * 1000);
+
+  it('accepts what the platform signs, with a rotated key list', async () => {
+    const header = await signIdentity(payload, 'k2');
+    expect(await verifyIdentity(header, ['k1', 'k2'], now, expected)).toStrictEqual({
+      ok: true,
+      payload,
+    });
+  });
+
+  it('refuses a tampered, foreign, wrong-key or expired assertion by code only', async () => {
+    const header = await signIdentity(payload, 'k1');
+    const [body = '', mac = ''] = header.split('.');
+    const forged = `${body.slice(0, -2)}AA.${mac}`;
+    const late = new Date((payload.exp + 31) * 1000);
+    const cases = [
+      [forged, 'k1', now, expected, 'identity_assertion_invalid'],
+      [header, 'other', now, expected, 'identity_assertion_invalid'],
+      [header, 'k1', late, expected, 'identity_assertion_expired'],
+      [header, 'k1', now, { ...expected, audience: 'x' }, 'identity_audience_mismatch'],
+      [header, 'k1', now, { ...expected, workspace: 'x' }, 'identity_workspace_mismatch'],
+    ] as const;
+    for (const [value, key, at, wanted, code] of cases) {
+      expect(await verifyIdentity(value, key, at, wanted)).toStrictEqual({ ok: false, code });
+    }
   });
 });

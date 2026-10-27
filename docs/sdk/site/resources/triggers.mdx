@@ -1,0 +1,328 @@
+---
+title: "Triggers"
+description: "Start a run of one agent from a webhook URL, without a person at the keyboard."
+---
+
+<Info>
+**Resource guide** · [the chapter map](/path/build)
+
+- **You will:** create a webhook trigger, call its URL, and rotate the secret when the URL may have leaked.
+- **You will learn:** why the secret is shown once, what `{{body}}` does, and the limits a firing is held to.
+- **You need:** an API key for the workspace with the Builder or Admin role.
+
+</Info>
+
+`aw.triggers` manages the triggers of a workspace. A trigger names one agent and a prompt
+template; when something calls the trigger's URL, a run of that agent starts with the request body
+in the prompt. It wraps `/api/triggers/**` (ADR-0144). Source:
+`packages/sdk/src/resources/triggers.ts`, contract: `packages/contracts/src/triggers.ts`.
+
+**What you can do**
+
+- [Create a trigger](#create) and keep the URL it returns once
+- [List and read triggers](#list), never with a secret
+- [Change a trigger](#update): name, prompt, enabled, output schema, subject, Zoom secret token
+- [Rotate the secret](#rotatesecret) when a URL may have leaked
+- [Remove a trigger](#remove)
+
+A trigger is a `TriggerResource`. It has `hasSecret` and `hasZoomSecretToken`, which say whether a
+credential is set; neither credential is ever returned.
+
+```ts title="illustrative" claim="illustrative"
+interface TriggerResource {
+  id: string;
+  name: string; // lower-case kebab, e.g. inbox-triage
+  kind: 'webhook' | 'schedule';
+  agentId: string;
+  prompt: string; // the template; {{body}} is its only substitution
+  cron: string | null; // schedule only
+  timezone: string | null; // schedule only
+  enabled: boolean;
+  outputSchema: Record<string, unknown> | null; // the JSON Schema its runs answer in
+  subject: string | null; // the caller its runs assert to a connector
+  ownerPrincipalId: string; // the run starts as this member
+  hasSecret: boolean;
+  hasZoomSecretToken: boolean;
+  lastFiredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+<Warning>
+  The URL secret is shown **once**, in the answer of `create` or `rotateSecret`. It travels in the
+  path (`firePath`) because Microsoft Graph and Zoom can only call a fixed URL, so a proxy or CDN in
+  front of the control plane can write it to an access log. Treat the URL like a password and rotate
+  it if it may have reached one.
+</Warning>
+
+## The prompt template
+
+`prompt` is a template. `{{body}}` is replaced by the request body, verbatim, and is the only
+substitution: any other `{{…}}` is refused when you create or update the trigger. The body is
+untrusted text that is put into the prompt and never interpreted.
+
+## A typed answer from every firing
+
+Give a trigger an `outputSchema` and every run it starts answers in that schema, exactly as
+[`runs.start`](/resources/runs) does with its own `outputSchema` (ADR-0143, ADR-0154). Pass a Zod
+type, which is sent as JSON Schema 2020-12, or a JSON Schema object. The limits are the same: the
+root is an object, local `$ref` only, at most 16 levels and 32 KiB, otherwise `400 invalid_field`.
+Read the firing's `{ run }` answer with `aw.runs.result(run.id)` to get the typed `output`.
+
+```ts title="illustrative" claim="illustrative"
+import { z } from 'zod';
+
+await aw.triggers.create({
+  kind: 'webhook',
+  name: 'inbox-triage',
+  agentId,
+  prompt: 'Triage this: {{body}}',
+  outputSchema: z.object({ urgent: z.boolean(), summary: z.string() }),
+});
+```
+
+An agent on an engine without structured output cannot honour the schema: a firing then answers
+`422 engine_capability_unsupported`, starts no run, and the `Idempotency-Key` can be retried once
+the engine is fixed.
+
+## A caller for every firing
+
+A run a trigger starts has no person behind it, so a connector that scopes by caller
+([caller identity](/guides/caller-identity)) would refuse it. Give the trigger a `subject`, 1 to 256
+characters, and every run it starts asserts that caller, as `runs.start` does with its own
+`subject` (ADR-0156). The firing body cannot set or override it. Pick an identity your connector
+scopes narrowly.
+
+Only a member who may create API keys (Owner, Admin) may set or change a `subject`, or change
+anything else on a trigger that has one; anyone else gets `403 trigger_subject_not_allowed`. Anyone
+who may edit the trigger may clear it with `subject: null`, and then edit the trigger as before.
+
+```ts title="illustrative" claim="illustrative"
+await aw.triggers.create({
+  kind: 'schedule',
+  name: 'monthly-branch-sales',
+  agentId,
+  prompt: 'Consolidate last month.',
+  cron: '0 9 1 * *',
+  timezone: 'Asia/Tokyo',
+  subject: 'planner-01', // your own id for the planner, as the connector knows it
+});
+```
+
+## Complete example
+
+```ts title="triggers-example.ts (illustrative)" claim="illustrative"
+import { createClient, ApiProblemError } from '@indx-workspace/sdk';
+
+const baseUrl = process.env.AGENT_WORKSPACE_URL;
+const apiKey = process.env.AGENT_WORKSPACE_API_KEY;
+if (baseUrl === undefined || apiKey === undefined) {
+  throw new Error('Set AGENT_WORKSPACE_URL and AGENT_WORKSPACE_API_KEY');
+}
+const aw = createClient({ baseUrl, auth: { kind: 'api-key', apiKey } });
+
+async function main(agentId: string): Promise<void> {
+  const created = await aw.triggers.create({
+    kind: 'webhook',
+    name: 'inbox-triage',
+    agentId,
+    prompt: 'Triage this message and reply with a one-line summary:\n\n{{body}}',
+  });
+  // The only time the secret exists outside the control plane: store firePath now.
+  if ('firePath' in created) console.log(`call ${baseUrl}${created.firePath}`);
+
+  console.log((await aw.triggers.list()).map((trigger) => trigger.name));
+
+  try {
+    await aw.triggers.update(created.trigger.id, { enabled: false });
+    await aw.triggers.remove(created.trigger.id);
+  } catch (error) {
+    if (error instanceof ApiProblemError) console.error(error.code);
+    else throw error;
+  }
+}
+
+const agentId = process.env.AGENT_ID;
+if (agentId === undefined) throw new Error('Set AGENT_ID');
+main(agentId).catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
+```
+
+## `list`
+
+Every trigger of the workspace. No item carries a secret.
+
+**Route:** `GET /api/triggers`
+
+```ts title="illustrative" claim="illustrative"
+const triggers = await aw.triggers.list();
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw triggers list
+aw triggers get <id>
+```
+
+</CodeGroup>
+
+`aw.triggers.get(id)` reads one (`GET /api/triggers/:id`, `404 trigger_not_found`). See
+[`triggers.list`](/reference/sdk/triggers#list).
+
+## `create`
+
+Create a trigger for an agent you may run. A `webhook` answers a `TriggerSecretResponse`:
+`{ trigger, secret, firePath, warning }`. Store `firePath`; it is not shown again. A `schedule`
+answers `{ trigger }` alone, so narrow with `'firePath' in answer` before reading the secret.
+
+**Route:** `POST /api/triggers` — `201`
+
+```ts title="illustrative" claim="illustrative"
+const answer = await aw.triggers.create({
+  kind: 'webhook',
+  name: 'inbox-triage',
+  agentId,
+  prompt: 'Triage this: {{body}}',
+});
+if ('firePath' in answer) console.log(answer.firePath);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw triggers create --name inbox-triage --kind webhook --agent <agent-id> \
+  --prompt 'Triage this: {{body}}'
+```
+
+</CodeGroup>
+
+`--agent` takes an agent id. `--file <json>` carries any body, and is the way to set `enabled`,
+`cron`, `timezone` and `outputSchema`. `--subject <caller>` sets the run subject. A Zoom app secret token is read from stdin, never from a flag:
+`printf '%s' "$ZOOM_SECRET_TOKEN" | aw triggers create … --value-stdin`.
+
+A `schedule` trigger (`cron` and `timezone`) answers `201 { trigger }` with no secret, because
+nothing calls it: the schedule pass fires it when it is due.
+
+## `update`
+
+Change `name`, `prompt`, `enabled`, `outputSchema`, `subject` or `zoomSecretToken`. `null` clears
+any of the last three, and leaving a field out keeps it. The secret and the agent do not change here.
+
+**Route:** `PATCH /api/triggers/:id`
+
+```ts title="illustrative" claim="illustrative"
+await aw.triggers.update(triggerId, { enabled: false });
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw triggers update <id> --prompt 'Triage this: {{body}}'
+echo '{"enabled": false}' | aw triggers update <id> --file -
+```
+
+</CodeGroup>
+
+## `rotateSecret`
+
+Replace the URL secret. The answer is a new `TriggerSecretResponse`, and the old URL stops
+working at once. A `schedule` trigger has no secret (`409 trigger_not_webhook`).
+
+**Route:** `POST /api/triggers/:id/secret` — `201`
+
+```ts title="illustrative" claim="illustrative"
+const { firePath } = await aw.triggers.rotateSecret(triggerId);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw triggers secret rotate <id>
+```
+
+</CodeGroup>
+
+## `remove`
+
+Delete the trigger and its delivery records. Its URL stops answering. The answer is the trigger as
+it was; the route is `DELETE /api/triggers/:id` with a `200` body, not a `204`.
+
+```ts title="illustrative" claim="illustrative"
+await aw.triggers.remove(triggerId);
+```
+
+<CodeGroup>
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw triggers remove <id>
+```
+
+</CodeGroup>
+
+## Firing a trigger
+
+The sender calls `firePath` with no API key: the URL secret is its only authentication, so there
+is no SDK method or `aw` command for it. The request body becomes `{{body}}`.
+
+```sh title="curl (illustrative)" claim="illustrative"
+curl -X POST "$AGENT_WORKSPACE_URL$FIRE_PATH" \
+  -H 'Idempotency-Key: msg-8841' \
+  --data-binary @message.txt
+```
+
+The answer is `202` with `{ run }`: a run of the trigger's agent, started as the trigger's owner in
+a new session. Follow it with [`aw.runs`](/resources/runs). A repeated `Idempotency-Key` answers
+with the run of the first delivery instead of starting another; it is optional and at most 255
+characters.
+
+Two provider handshakes are answered without starting a run:
+
+- **Microsoft Graph.** A `validationToken` query parameter is echoed back as `text/plain`.
+- **Zoom.** An `endpoint.url_validation` event is answered with its token and the HMAC-SHA256 of
+  it under the trigger's Zoom secret token. Set that token with `--value-stdin` on `create` or
+  `update`; without one the answer is `422 trigger_zoom_not_configured`.
+
+Every miss on this route (unknown id, wrong secret, disabled trigger) is the same
+`404 trigger_not_found`, so a caller cannot learn whether a trigger exists.
+
+## Limits
+
+| Limit                         | Value                              | Problem code                      |
+| ----------------------------- | ---------------------------------- | --------------------------------- |
+| `TRIGGER_MAX_BODY_BYTES`      | 262 144 bytes (256 KiB) per firing | `trigger_body_too_large` 413      |
+| `TRIGGER_RATE_PER_MINUTE`     | 30 firings per trigger and minute  | `trigger_rate_limited` 429        |
+| `TRIGGER_MAX_CONCURRENT_RUNS` | 3 unfinished runs per trigger      | `trigger_concurrency_limited` 429 |
+
+## Who can manage triggers
+
+An Owner or Admin manages every trigger. A Builder creates a trigger for an agent it may run, and edits,
+rotates or removes the triggers it owns. A Viewer has none. A firing runs as the trigger's owner,
+so the server refuses an agent the creator could not run itself.
+
+## Errors
+
+| Code                              | Status | Meaning                                                                  |
+| --------------------------------- | ------ | ------------------------------------------------------------------------ |
+| `trigger_not_found`               | 404    | No trigger with that id in this workspace, or a miss on the fire URL     |
+| `trigger_name_taken`              | 409    | The workspace already has a trigger with this name                       |
+| `trigger_agent_not_runnable`      | 403    | The caller may not run that agent                                        |
+| `trigger_owner_not_allowed`       | 403    | The trigger's owner is no longer a member                                |
+| `trigger_subject_not_allowed`     | 403    | Only a member who may create API keys may set or keep a `subject`        |
+| `trigger_not_webhook`             | 409    | The route needs a webhook trigger                                        |
+| `trigger_delivery_in_progress`    | 409    | A delivery with this `Idempotency-Key` is still starting                 |
+| `trigger_rate_limited`            | 429    | More than `TRIGGER_RATE_PER_MINUTE` firings in a minute                  |
+| `trigger_concurrency_limited`     | 429    | `TRIGGER_MAX_CONCURRENT_RUNS` unfinished runs                            |
+| `trigger_body_too_large`          | 413    | The body is over `TRIGGER_MAX_BODY_BYTES`                                |
+| `trigger_prompt_too_long`         | 413    | The rendered prompt is over the prompt limit                             |
+| `trigger_idempotency_key_invalid` | 400    | `Idempotency-Key` is empty or over 255 characters                        |
+| `trigger_zoom_not_configured`     | 422    | The trigger has no Zoom secret token, or the deployment cannot store one |
+
+## See also
+
+- [TriggersClient](/reference/sdk/triggers) — full method signatures.
+- [Runs](/resources/runs) — follow the run a firing starts.
+- [Errors](/guides/errors) — how a problem reaches your code.

@@ -32,7 +32,9 @@
  * Viewer key is refused with `403 forbidden`; the widget answers on an allowed origin and is
  * refused on another, and so is a cross-origin `<Chat baseUrl>` from `@indx-workspace/react`
  * (`origins.e2e.mjs`, issues #622 and #680); a thumbs-down in the widget becomes an eval case that
- * `aw eval` fails (`feedback.e2e.mjs`, issue #620); and `npm run dev` again, without `ANTHROPIC_*`,
+ * `aw eval` fails (`feedback.e2e.mjs`, issue #620); a file uploaded in Files and granted to the
+ * agent is read by a run started from the console, whose output Files lists without staging
+ * (`files.e2e.mjs`, issue #1687, fake model only); and `npm run dev` again, without `ANTHROPIC_*`,
  * keeps the versions and answers through the persisted model connection with the original key.
  *
  * Then the slice-2 exit test (S2-08, issue #550), in the same container. The fake model is
@@ -150,7 +152,7 @@ export const VERDACCIO_IMAGE =
  * `/ms-playwright`), pinned by digest. Its version is the root `@playwright/test` devDependency's.
  */
 export const PLAYWRIGHT_IMAGE =
-  'mcr.microsoft.com/playwright:v1.64.0-noble@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f';
+  'mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea';
 
 const PREPARE_BUDGET_MS = 10 * 60_000;
 const CHECKS_BUDGET_MS = 10 * 60_000;
@@ -189,6 +191,7 @@ const RELEASE_SPEC_FILE = 'release.e2e.mjs';
 const FEEDBACK_SPEC_FILE = 'feedback.e2e.mjs';
 const PINNED_SPEC_FILE = 'pinned.e2e.mjs';
 const ORIGINS_SPEC_FILE = 'origins.e2e.mjs';
+const FILES_SPEC_FILE = 'files.e2e.mjs';
 /** The stopwatch's exec cap: the spec's 10 min test timeout plus a minute (ci.yml's 25 min step). */
 const FIRST_HOUR_EXEC_MS = 11 * 60_000;
 const FIRST_HOUR_SPEC_FILE = 'first-hour.e2e.mjs';
@@ -649,6 +652,7 @@ async function prepareRunner(machine, work, deadline) {
     FEEDBACK_SPEC_FILE,
     PINNED_SPEC_FILE,
     ORIGINS_SPEC_FILE,
+    FILES_SPEC_FILE,
     FIRST_HOUR_SPEC_FILE,
     HARNESS_FILE,
   ]) {
@@ -1105,18 +1109,13 @@ async function checkMcpOnPi(machine, agent, limit) {
 }
 
 /**
- * A Viewer key cannot save: `aw check` with it is refused with `403 forbidden`. `viewer.e2e.mjs`
- * mints the key as a person does on the local runtime, signed in to the workspace in the browser
- * as the bootstrap admin, because `aw` holds the local runtime's own key, which may not mint one
- * (S1-21). The ready screen names the admin but never prints the password (BH061-011), so it is
- * read from `.agent-workspace/secrets/local-secrets.json` and reaches the spec through that one
- * `docker exec`'s environment.
+ * The bootstrap admin to sign in as: the email the first `npm run dev` named, and the password read
+ * from `.agent-workspace/secrets/local-secrets.json` (the ready screen never prints it, BH061-011),
+ * added to {@link SECRETS}.
  *
- * @param {string} machine @param {string} baseUrl
- * @param {string | null} email
- * @param {(capMs: number) => number} limit
+ * @param {string} machine @param {string | null} email @param {(capMs: number) => number} limit
  */
-async function checkViewerForbidden(machine, baseUrl, email, limit) {
+async function adminOf(machine, email, limit) {
   if (email === null) {
     throw new JourneyFailure('the first npm run dev named no bootstrap admin to sign in as');
   }
@@ -1137,7 +1136,23 @@ async function checkViewerForbidden(machine, baseUrl, email, limit) {
     );
   }
   SECRETS.add(password);
-  const admin = { email, password };
+  return { email, password };
+}
+
+/**
+ * A Viewer key cannot save: `aw check` with it is refused with `403 forbidden`. `viewer.e2e.mjs`
+ * mints the key as a person does on the local runtime, signed in to the workspace in the browser
+ * as the bootstrap admin, because `aw` holds the local runtime's own key, which may not mint one
+ * (S1-21). The ready screen names the admin but never prints the password (BH061-011), so it is
+ * read from `.agent-workspace/secrets/local-secrets.json` and reaches the spec through that one
+ * `docker exec`'s environment.
+ *
+ * @param {string} machine @param {string} baseUrl
+ * @param {string | null} email
+ * @param {(capMs: number) => number} limit
+ */
+async function checkViewerForbidden(machine, baseUrl, email, limit) {
+  const admin = await adminOf(machine, email, limit);
   await execOk(machine, ['npx', 'playwright', 'test', '--config', CONFIG_IN, VIEWER_SPEC_FILE], {
     workdir: RUNNER_IN,
     env: {
@@ -1260,6 +1275,52 @@ async function checkPinnedVersion(machine, baseUrl, limit) {
   say(
     'journey: an open conversation stayed on v1 after v2 was pushed, and aw eval v1 answered as v1',
   );
+}
+
+/**
+ * Issue #1687 (the storage design, §07 browser journey 2) through `files.e2e.mjs`: a file uploaded
+ * on the Files screen and granted to the demo agent is read by a run started from the console, and
+ * the run's output is listed in Files as `text/markdown` with no staging row. The spec puts the
+ * agent file back and waits for that save, so the restart's version comparison sees it.
+ *
+ * On failure the model turns the spec caused go to `files-model-turns.json` in the evidence: the
+ * tools each request offered, the tool use answered, and the start of each request body.
+ *
+ * @param {string} machine @param {string} baseUrl @param {string | null} email
+ * @param {(capMs: number) => number} limit
+ * @param {{ evidence: string, toolRequests: readonly unknown[], bodies: readonly string[] }} turns
+ */
+async function checkRunFiles(machine, baseUrl, email, limit, turns) {
+  const admin = await adminOf(machine, email, limit);
+  const from = { toolRequests: turns.toolRequests.length, bodies: turns.bodies.length };
+  try {
+    await execOk(machine, ['npx', 'playwright', 'test', '--config', CONFIG_IN, FILES_SPEC_FILE], {
+      workdir: RUNNER_IN,
+      env: {
+        JOURNEY_BASE_URL: baseUrl,
+        JOURNEY_DEMO_DIR: DEMO_IN,
+        JOURNEY_ADMIN_EMAIL: admin.email,
+        JOURNEY_ADMIN_PASSWORD: admin.password,
+        npm_config_cache: RUNNER_CACHE_IN,
+      },
+      timeoutMs: limit(300_000),
+    });
+  } catch (error) {
+    writeEvidence(
+      turns.evidence,
+      'files-model-turns.json',
+      JSON.stringify(
+        {
+          toolRequests: turns.toolRequests.slice(from.toolRequests),
+          bodies: turns.bodies.slice(from.bodies).map((body) => body.slice(0, 6_000)),
+        },
+        null,
+        2,
+      ),
+    );
+    throw error;
+  }
+  say('journey: a run read a granted file, and its output is listed in Files without staging');
 }
 
 /**
@@ -1483,6 +1544,14 @@ async function main() {
     await checkPromoteRollback(machine, limit);
     await checkFeedbackFails(machine, baseUrl, limit);
     await checkPinnedVersion(machine, baseUrl, limit);
+    // The fake answers e2e-files-<nonce> with a Read and a Write; a live model does not.
+    if (!mode.live) {
+      await checkRunFiles(machine, baseUrl, devs[0]?.state.adminEmail ?? null, limit, {
+        evidence,
+        toolRequests,
+        bodies,
+      });
+    }
 
     const agentList = await execOk(machine, ['npx', 'aw', 'agents', 'list', '--json'], {
       workdir: DEMO_IN,

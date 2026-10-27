@@ -106,23 +106,53 @@
  * junctions: see `!entry.isFile()` below), which is a filter about *kind*, not about naming, and
  * is declared as such on the PR.
  *
+ * A streamed `write` adds a third sibling, `<rootDir>/staging/`: bytes land there first, then
+ * `rename` (or `link`, for `ifNoneMatch`) moves them into `objects/`. It is a sibling so it shares
+ * the object tree's volume (the move stays atomic) and is never listed; a failed `write` removes
+ * its staging file.
+ *
  * This module never re-validates the string it builds itself: both paths are derived from an
  * already-validated key, below, not from a string handed back through the guard.
  */
-import type { Dirent } from 'node:fs';
-import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import type { BigIntStats, Dirent } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
+import {
+  copyFile,
+  link,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+  type FileHandle,
+} from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 
-import { OBJECT_METADATA_SUFFIX, toObjectKey, toObjectPrefix } from './key-safety.js';
+import {
+  addressableObjectName,
+  OBJECT_METADATA_SUFFIX,
+  toObjectKey,
+  toObjectPrefix,
+} from './key-safety.js';
+import { withKeyLock } from './key-lock.js';
 import {
   scopedObjectStoreProvider,
+  ObjectConflictError,
+  validatedWriteKey,
   type ObjectContent,
   type ObjectListEntry,
-  type ObjectStore,
-  type ObjectStoreProvider,
+  type ObjectMeta,
+  type ObjectStoreV2,
+  type ObjectStoreProviderV2,
   type PutObjectInput,
   compareEntryKeys,
 } from './object-store.js';
+import { listPageFrom, resolveRange, toNodeReadable, toWebStream } from './streams.js';
 
 /**
  * The subdirectory of `rootDir` every object key is resolved under. Callers address paths inside
@@ -144,6 +174,14 @@ const METADATA_TREE = 'metadata';
  * `reserved-name` rule — a reservation shared with every backend, not this backend's defence.)
  */
 const META_SUFFIX = OBJECT_METADATA_SUFFIX;
+
+/**
+ * The subdirectory of `rootDir` a streamed `write` stages its bytes in before moving them into
+ * {@link OBJECT_TREE}. A third sibling, for two reasons: it is on the same volume as the object
+ * tree, so `rename` and `link` stay atomic, and nothing lists it, so a half-written file is never
+ * an object. A failed `write` removes its staging file.
+ */
+const STAGING_TREE = 'staging';
 
 interface Sidecar {
   readonly contentType: string | null;
@@ -181,7 +219,7 @@ async function directoryContainsObject(directory: string): Promise<boolean> {
  * store's caller-relative key with its workspace prefix joined on — never a caller-facing
  * workspace-relative one; see this file's header for why it is validated again anyway.
  */
-export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
+export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2 {
   const resolvedRoot = path.resolve(rootDir);
   const objectRoot = path.join(resolvedRoot, OBJECT_TREE);
   const metadataRoot = path.join(resolvedRoot, METADATA_TREE);
@@ -222,10 +260,129 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
     }
   }
 
-  return {
+  /** ETag = size + nanosecond mtime + inode: a `write` renames a new file in, so it changes. */
+  async function metaFor(key: string): Promise<ObjectMeta | null> {
+    let stats: BigIntStats;
+    try {
+      stats = await stat(toFsPath(key), { bigint: true });
+    } catch (error) {
+      if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) return null;
+      throw error;
+    }
+    return stats.isFile() ? metaFromStats(key, stats) : null;
+  }
+
+  async function metaFromStats(key: string, stats: BigIntStats): Promise<ObjectMeta> {
+    return {
+      sizeBytes: Number(stats.size),
+      contentType: await readSidecar(toMetaPath(key)),
+      etag: `"${stats.size}-${stats.mtimeNs}-${stats.ino}"`,
+      lastModified: stats.mtime,
+    };
+  }
+
+  /** Best effort, as `put` explains below: a failed sidecar write costs only the content type. */
+  async function writeSidecar(key: string, contentType: string | null): Promise<void> {
+    const metaPath = toMetaPath(key);
+    const sidecar: Sidecar = { contentType };
+    try {
+      await mkdir(path.dirname(metaPath), { recursive: true });
+      await writeFile(metaPath, JSON.stringify(sidecar), 'utf8');
+    } catch {
+      await rm(metaPath, { force: true }).catch(() => undefined);
+    }
+  }
+
+  const backend: ObjectStoreV2 = {
+    // A file system cannot hold a file and a folder at one path.
+    capabilities: {
+      sign: false,
+      boundLengthSign: false,
+      range: true,
+      conditionalPut: true,
+      fileAndFolderShareKey: false,
+    },
+
+    head: (key) => metaFor(key),
+
+    async read(key, options) {
+      // One handle for meta and body, so a concurrent `write` renaming a new file into place
+      // cannot make `meta` describe a different inode than the bytes served.
+      let handle: FileHandle;
+      try {
+        handle = await open(toFsPath(key), 'r');
+      } catch (error) {
+        if (['ENOENT', 'ENOTDIR', 'EISDIR'].some((code) => hasErrnoCode(error, code))) return null;
+        throw error;
+      }
+      try {
+        const stats = await handle.stat({ bigint: true });
+        if (!stats.isFile()) {
+          await handle.close();
+          return null;
+        }
+        const meta = await metaFromStats(key, stats);
+        const range = resolveRange(options?.range, meta.sizeBytes);
+        const source = handle.createReadStream(
+          range === null ? {} : { start: range.start, end: range.end },
+        );
+        return { meta, range, body: toWebStream(source) };
+      } catch (error) {
+        await handle.close().catch((closeError: unknown) => {
+          throw new AggregateError(
+            [error, closeError],
+            'read failed and its file handle did not close',
+          );
+        });
+        throw error;
+      }
+    },
+
+    async write(key, body, options): Promise<ObjectMeta> {
+      const objectPath = await validatedWriteKey(body, options, () => toFsPath(key));
+      const stagingDir = path.join(resolvedRoot, STAGING_TREE);
+      const staged = path.join(stagingDir, randomUUID());
+      const source = toNodeReadable(body);
+      try {
+        await mkdir(stagingDir, { recursive: true });
+        await mkdir(path.dirname(objectPath), { recursive: true });
+        await pipeline(source, createWriteStream(staged));
+        // Commit, sidecar and the returned meta all happen under the key lock, so a concurrent
+        // `write` to the same key cannot interleave its bytes with this one's content type.
+        return await withKeyLock(objectPath, async () => {
+          if (options.ifNoneMatch === '*') {
+            // A hard link fails with EEXIST if the key is taken: atomic on disk.
+            try {
+              await link(staged, objectPath);
+            } catch (error) {
+              if (hasErrnoCode(error, 'EEXIST')) throw new ObjectConflictError();
+              throw error;
+            }
+          } else {
+            if (options.ifMatch !== undefined) {
+              // ponytail: ifMatch is atomic within one process only; Phase 3 row-first writes make it moot
+              if ((await metaFor(key))?.etag !== options.ifMatch) throw new ObjectConflictError();
+            }
+            await rename(staged, objectPath);
+          }
+          await writeSidecar(key, options.contentType ?? null);
+          const meta = await metaFor(key);
+          if (meta === null)
+            throw new Error('The object vanished immediately after it was written.');
+          return meta;
+        });
+      } finally {
+        // Cancels the source stream if it was not read to the end (a no-op once it has been).
+        source.destroy();
+        await rm(staged, { force: true });
+      }
+    },
+
+    // ponytail: pages an in-memory listing of one directory; fine for local disk
+    listPage: (prefix, options) => listPageFrom(backend, prefix, options),
+
     async put(key, input: PutObjectInput): Promise<void> {
       const objectPath = toFsPath(key);
-      const metaPath = toMetaPath(key);
       await mkdir(path.dirname(objectPath), { recursive: true });
       await writeFile(objectPath, input.body);
 
@@ -244,13 +401,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
       // way out, so a caller never sees new bytes described by an old content type; if that
       // removal fails too, the stale value survives and is the one declared residual of this path.
       // `put` still resolves, because the bytes are what it promised.
-      const sidecar: Sidecar = { contentType: input.contentType ?? null };
-      try {
-        await mkdir(path.dirname(metaPath), { recursive: true });
-        await writeFile(metaPath, JSON.stringify(sidecar), 'utf8');
-      } catch {
-        await rm(metaPath, { force: true }).catch(() => undefined);
-      }
+      await writeSidecar(key, input.contentType ?? null);
     },
 
     async get(key): Promise<ObjectContent | null> {
@@ -301,14 +452,16 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
       }
 
       const result: ObjectListEntry[] = [];
-      // Nothing is filtered out of this listing *by name*. The object tree contains objects and
-      // only objects — sidecars live in a sibling tree — so no name a caller can write is hidden
-      // from its own listing, which is the invisibility half of F3 (rounds 1-3). The one filter
-      // left is about *kind*, below: an entry that is neither a file nor a directory is skipped,
+      // Nothing a caller can write is filtered out of this listing *by name*. The object tree
+      // contains objects and only objects — sidecars live in a sibling tree — so no name a caller
+      // can write is hidden from its own listing, which is the invisibility half of F3 (rounds
+      // 1-3). A name the key guard refuses (put there by another tool) is skipped: no caller could
+      // address it. The other filter is about *kind*, below: an entry that is neither a file nor a directory is skipped,
       // so a junction or symlink planted here out of band is reachable through `get`/`list` while
       // being absent from its parent's listing. Declared on this task's PR, not repaired here.
       for (const entry of entries) {
         const key = safePrefix === '' ? entry.name : `${safePrefix}/${entry.name}`;
+        if (addressableObjectName(key) === null) continue; // a name another tool wrote
         if (entry.isDirectory()) {
           // S3 folders are prefixes, not durable directory entries. Ignore an empty physical
           // directory left after its last object (including an explicit-folder marker) is removed.
@@ -380,6 +533,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
             continue;
           }
           if (!entry.isFile()) continue; // symlinks and other special files: see `list()`'s comment
+          if (addressableObjectName(key) === null) continue; // a name another tool wrote
           const entryPath = path.join(dir, entry.name);
           const metaPath =
             path.join(metadataRoot, ...(keyPrefix === '' ? [] : keyPrefix.split('/')), entry.name) +
@@ -427,13 +581,14 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
       }
     },
   };
+  return backend;
 }
 
 /**
- * The local-filesystem {@link ObjectStoreProvider}: every workspace gets its own subtree of
+ * The local-filesystem {@link ObjectStoreProviderV2}: every workspace gets its own subtree of
  * `rootDir`, via {@link scopedObjectStoreProvider} — the same wrapper any future backend uses, so
  * "which workspace this key belongs to" is decided in exactly one place regardless of backend.
  */
-export function createLocalFilesystemObjectStoreProvider(rootDir: string): ObjectStoreProvider {
+export function createLocalFilesystemObjectStoreProvider(rootDir: string): ObjectStoreProviderV2 {
   return scopedObjectStoreProvider(createLocalFilesystemObjectStore(rootDir));
 }

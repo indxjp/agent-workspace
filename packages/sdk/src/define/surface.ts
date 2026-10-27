@@ -16,7 +16,7 @@ export type DefinedSurface = SurfaceDefinition & Branded<'surface'>;
  * where it may be embedded (`allowedOrigins`) with its `limits`.
  *
  * The input is exactly the contract's `SurfaceDefinitionSchema` (contract C3): the result parses
- * unchanged with it. Rung 2 is complete (ADR-0108 SD10); `audience` and attachments are refused.
+ * unchanged with it. Rung 2 is complete (ADR-0108 SD10), attachments included (`parts.attachments`, ADR-0146); `audience` is refused.
  *
  * @throws {DefinitionError} with every reason the input was refused.
  */

@@ -165,7 +165,7 @@ def budgetOnlyRunnable (r : Row) : Bool :=
 
 /-- The subject a share names exists in the share's own workspace: a row of the subject type's
 table with `id = subject_id` and the same `workspace_id`. -/
-@[aw_spec (ts := "apps/web/server/composition/register.ts#subjectOwnership")
+@[aw_spec (ts := "apps/web/server/composition/wiring/projects.ts#subjectOwnership")
   (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#beyond-one-workspace")]
 def subjectResolves (st : State) (r : Row) : Bool :=
   match (r.get "subject_type").bind (WireEnum.ofWire? (α := SubjectType)) with

@@ -163,6 +163,24 @@ test('pnpm install and pnpm start bring every service up healthy', async () => {
   const workspaceFile = path.join(PROJECT, 'pnpm-workspace.yaml');
   writeFileSync(workspaceFile, withTarballOverrides(readFileSync(workspaceFile, 'utf8'), TARBALLS));
   writeFakeProviderFixture(PROJECT, FAKE_SCRIPT);
+  // CI runs several jobs on one Docker host, so it may name free host ports. These are the `.env`
+  // settings a user changes to run beside another project (`agent-workspace start` names PORT
+  // when 3000 is taken; the SEAWEEDFS_PORT comment names the endpoint that moves with it).
+  const envFile = path.join(PROJECT, '.env');
+  let contents = readFileSync(envFile, 'utf8');
+  const webPort = process.env['GP_WEB_PORT'];
+  if (webPort !== undefined && webPort !== '') {
+    expect(contents).toMatch(/^PORT=127\.0\.0\.1:3000$/mu);
+    contents = contents.replace(/^PORT=.*$/mu, `PORT=127.0.0.1:${webPort}`);
+  }
+  const objectStorePort = process.env['GP_OBJECT_STORE_PORT'];
+  if (objectStorePort !== undefined && objectStorePort !== '') {
+    expect(contents).toMatch(/^SEAWEEDFS_PORT=8333$/mu);
+    contents = contents
+      .replace(/^SEAWEEDFS_PORT=.*$/mu, `SEAWEEDFS_PORT=${objectStorePort}`)
+      .replaceAll('localhost:8333', `localhost:${objectStorePort}`);
+  }
+  writeFileSync(envFile, contents);
   writeFileSync(
     path.join(PROJECT, 'compose.override.yaml'),
     composeOverride({ nodeImage: NODE_IMAGE, controlPort: CONTROL_PORT }),

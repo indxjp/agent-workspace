@@ -1,0 +1,236 @@
+---
+title: "Troubleshooting"
+description: "Fixes for the problems a first install can hit: a missing or rejected key, a busy port, an elevated Windows shell, Windows Node under WSL, the Docker sandbox, the widget on another origin, and the known issues of 0.6.9."
+---
+
+<Info>
+
+- **Read this when:** a step of the [Quickstart](/getting-started/quickstart) did not do what the page shows.
+- **You will learn:** the symptom, the cause and the fix for each problem a first install can hit.
+- **Used in:** [Chapter 1](/path/first-agent), [aw dev in depth](/cli/dev).
+
+</Info>
+
+Each problem below has the same layout: what you see, why, and what to do. Find yours by its
+symptom.
+
+## The key
+
+### aw dev says the model key is missing
+
+**Symptom.** On a terminal, `npm run dev` stops before the ready screen and offers a numbered
+choice; or `aw chat` fails with
+`error: no model key: export ANTHROPIC_API_KEY=sk-ant-…, then restart npm run dev (it will offer to open the console)`.
+
+**Cause.** `ANTHROPIC_API_KEY` is not set in the shell that runs `npm run dev`. Each terminal
+window has its own environment, and `aw dev` never reads the key from a file.
+
+**Fix.** Set it in that shell and start again (the line for your shell is in the
+[Quickstart](/getting-started/quickstart)). Or take the choice `aw dev` offers (Enter takes the
+first): open the provider's console to create a key (it opens your browser, or prints the link),
+paste a key (hidden), or skip. A pasted key is not written to the project, but the local runtime
+keeps it in its own database: a later `aw dev` without the variable runs on it, and the ready
+screen says `stored key checked`. On Windows, the line `aw dev` prints names both PowerShell
+`$env:NAME="…"` and cmd `set NAME=…`.
+
+### The provider rejects the key
+
+**Symptom.** The ready screen's `model` row is marked as failed instead of ending in
+`key checked`, and `aw dev` does not offer to open the chat.
+
+**Cause.** The key is mistyped, revoked, or for another provider.
+
+**Fix.** Check the key in the [Anthropic Console](https://console.anthropic.com/settings/keys),
+set the variable to a valid key, and restart `npm run dev`.
+
+## Starting
+
+### A port is busy
+
+**Symptom.** The ready screen has an extra row `✓ web       on :3001 (3000 was busy)` and every URL
+uses 3001; or nothing starts and `aw dev` prints:
+
+```text title="Example output (illustrative)" claim="illustrative"
+error: the local runtime cannot start; nothing was started. These ports are not free:
+  port 3000 (web) is already in use: stop the process that holds it, or set environments.local.port in agent-workspace.yaml to a free port below 49152
+```
+
+**Cause.** Another program holds 3000, 4000, 8080 or 25432. When the project sets no port,
+`aw dev` moves all four to the next free set and tells you (the first case). A port you set in
+`environments.local.port` is never moved, so it is refused (the second case).
+
+**Fix.** Use the URLs the ready screen prints, or stop the other program, or set a free port under
+`environments.local` in `agent-workspace.yaml`:
+
+```yaml title="agent-workspace.yaml (excerpt, illustrative)" claim="illustrative"
+environments:
+  local:
+    port: 3200
+```
+
+`port: 3200` also moves the gateway, runner and database to 4200, 8280 and 25632. The full rules
+and the ports table are in [aw dev in depth](/cli/dev#ports).
+
+### Windows: PostgreSQL refuses to start in an elevated shell
+
+**Symptom.** On Windows, `aw dev` stops before the ready screen and says PostgreSQL refused to
+start under an account with administrator rights.
+
+**Cause.** The terminal runs as administrator ("Run as administrator", or an elevated Windows
+Terminal tab). PostgreSQL does not run with administrator rights.
+
+**Fix.** Open a normal, non-elevated PowerShell, cmd or Git Bash window and run `npm run dev`
+there. WSL works too.
+
+### WSL: EPERM, or npx aw cannot determine the executable
+
+**Symptom.** Under WSL, the install fails with `EPERM … mkdir 'C:\Windows\my-agent'`, `npx aw`
+says it could not determine the executable, or `npm create` stops at once with
+`error: this is Windows Node.js running inside WSL`.
+
+**Cause.** `which node` or `which npm` points under `/mnt/c`: Windows Node is on the `PATH`, for
+example because nvm is not loaded in this shell. Windows `cmd.exe` cannot start in the WSL
+directory and falls back to `C:\Windows`.
+
+**Fix.** Install Node 24 inside the distribution (for example `nvm install 24 && nvm use 24`),
+check that `which node` is no longer under `/mnt/c`, and run the command again.
+
+### WSL: the install and the runtime are slow
+
+**Symptom.** Under WSL, `npm create` and `npm run dev` take several times longer than this
+documentation says, and `npm create` warns about the location.
+
+**Cause.** The project is on a Windows drive under `/mnt/c`.
+
+**Fix.** Create the project on the Linux filesystem, under `~/`.
+
+### The project landed somewhere else
+
+**Symptom.** After `npm create`, the `my-agent` directory is not where you ran the command.
+
+**Fix.** Pass an absolute path, for example `npm create @indx-workspace@latest "$PWD/my-agent"`,
+and `cd` where the output says it wrote the project (the `Created …` line).
+
+### aw dev status starts a second runtime
+
+**Symptom.** `npx aw dev status` prints PostgreSQL errors such as
+`FATAL:  lock file "postmaster.pid" already exists` and
+`initdb: error: directory "…/.agent-workspace/postgres" exists but is not empty`, then
+`error: the local runtime failed to start (Error)`, and exits 1.
+
+**Cause.** 0.6.9 has no `aw dev status` subcommand: the word is ignored and a second `aw dev`
+tries to start on the database the first one holds. The first `aw dev` keeps running.
+
+**Fix.** Look at the first terminal, or at `.aw/dev.out` when you started it in the background,
+for the ready screen. `aw dev status` and `aw dev stop` arrive in the next release
+([aw dev in depth](/cli/dev#start-it-in-the-background)).
+
+## Running agents
+
+### The Docker sandbox refuses to start or the run fails
+
+**Symptom.** `npx aw dev --sandbox docker` refuses to start, or it starts and an agent's run fails
+at its start.
+
+**Cause.** The Docker sandbox is an opt-in with known limits (issue #786). With
+`npx aw dev --sandbox docker` (or `runtime.default: docker` under `environments.local` in
+`agent-workspace.yaml`) the runtime makes a `docker` profile the default and runs every agent in a
+container, and it refuses to start when Docker or the runtime image (`RUNTIME_IMAGE`, by default
+`agent-workspace/runtime:dev`) is missing. No release ships the runtime image for this use. Only an
+agent with the `unrestrictedNetwork` permission runs there, because a sandbox reached on the host
+loopback cannot also be cut off from the network; any other agent's run fails at start.
+
+**Fix.** Start Docker, build the image from the Agent Workspace repository with
+`docker build -f runtime.Dockerfile -t agent-workspace/runtime:dev .`, and give the agent
+`unrestrictedNetwork`. Know what you get: the container's network is `open` and unproxied, so it
+can reach your LAN and the internet, unlike a deployment, whose egress goes through an allowlist
+proxy. Every container and network the sandbox starts carries the label
+`agent-workspace.compose-project=aw-dev-<folder>-<hash>`, so
+`docker ps --filter label=agent-workspace.compose-project` finds them; stopping `aw dev` removes
+them, along with any a killed session of the same project left behind. Without the sandbox, runs
+use the in-process `local` driver, with no isolation.
+
+### The widget does not load on my page
+
+**Symptom.** You pasted the ready screen's `embed` tag into a page served from another origin (for
+example `http://127.0.0.1:5500`), and the widget stays empty. The browser console says
+`Framing 'http://127.0.0.1:3000/' violates the following Content Security Policy directive: "frame-ancestors 'self'"`.
+
+**Cause.** A surface may be framed only by the origins it lists. A new surface lists none, so only
+the runtime's own pages (the try page) can show it.
+
+**Fix.** Add your page's origin to the surface and save:
+
+```ts title="surfaces/main.ts (excerpt, illustrative)" claim="illustrative"
+  allowedOrigins: ['http://127.0.0.1:5500'],
+```
+
+`aw dev` prints a `synced:` line, and the widget loads on the next page load. No promote is
+needed. See [Embed it in your product](/building/embedding).
+
+### The Runs screen shows an error
+
+**Symptom.** In the web console, **Runs** and a run's detail show
+`The server's answer did not look like a run list: runs[0] must contain exactly: …`.
+
+**Cause.** A 0.6.9 bug: the server sends two fields (`engine`, `engineVersion`) the 0.6.9 console
+screen does not expect. It is fixed for the next release.
+
+**Fix.** Read runs from the terminal: `npx aw runs list` lists them, and
+`npx aw runs trace <run-id>` shows a run's steps, tool calls, tokens and cost. See the
+[console tour](/getting-started/console-tour#runs).
+
+### The cost reads 0.000000 USD (accounting unavailable)
+
+**Symptom.** `npx aw runs trace` prints `cost=0.000000 USD (accounting unavailable)` on the run
+line.
+
+**Cause.** The local runtime does not compute run cost from a price table. The engine's own
+estimate is on the last line, for example `engine-cost=$0.1284 (estimate)`.
+
+**Fix.** Read the engine's estimate on the `result` line. More on runs and cost:
+[Observability](/resources/observability).
+
+### The try page shows Markdown symbols
+
+**Symptom.** An answer on the try page contains literal `**bold**`, `#` headings or code fences.
+
+**Cause.** The 0.6.9 try page shows the agent's text as plain text; it does not render Markdown.
+
+**Fix.** Nothing is wrong with the agent. [aw chat](/cli/chat) shows the same text, and the
+[React component](/building/frontend) renders it as you choose.
+
+### Uploading a file with a non-ASCII name fails
+
+**Symptom.** `npx aw files upload` of a file such as `契約書.docx` answers
+`error: unrecognised_error_body: the server answered 500 without the platform's error envelope`,
+and `.aw/logs/runtime.log` says
+`new row for relation "files" violates check constraint "files_path_shape"`.
+
+**Cause.** A known bug in 0.6.9: the stored path of a file must be ASCII.
+
+**Fix.** Rename the file to an ASCII name before you upload it, and use that name where the agent
+or a tutorial refers to it.
+
+## Cleaning up
+
+### I cannot delete the project directory
+
+**Symptom.** On macOS or Linux, `rm -rf my-agent` reports `Permission denied` under
+`.agent-workspace/`.
+
+**Cause.** The skill folders an agent's runs read are kept read-only.
+
+**Fix.** Stop `aw dev`, run `chmod -R u+w .agent-workspace` in the project, then delete it.
+
+### I lost the console password
+
+**Symptom.** The `Sign in at … with password …` line has scrolled away.
+
+**Fix.** The password is in the project: `.agent-workspace/local-secrets.json`, key
+`BOOTSTRAP_ADMIN_PASSWORD` (from the next release, `.agent-workspace/secrets/local-secrets.json`).
+The email is `admin@localhost.test`. The ready screen's `console` row names both.
+
+<Card title="Next: Chapter 2: Build your agent" icon="arrow-right" href="/path/build">
+  With a working install, give the agent its instructions, model, skills and tools as files.
+</Card>

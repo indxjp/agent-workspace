@@ -65,6 +65,20 @@ npm create @indx-workspace@latest demo -- --cloud local   # without a terminal, 
 cd demo && pnpm install --frozen-lockfile=false && pnpm start
 ```
 
+You should see the generator list the files it wrote, then `pnpm start` pull the published images,
+start the containers (web, runner, gateway and PostgreSQL; object storage too when you chose S3)
+and print the URL of the setup wizard. The end of a real run, on a machine where `PORT` in `.env`
+was set to `3300` because `3000` was taken (Docker's pull and create lines left out):
+
+```text title="Output"
+Checking the Docker socket group on the daemon…
+ Container my-agent-platform-web-1 Healthy
+Configured runtime: docker; effective runtime: docker
+Agent Workspace is up: http://127.0.0.1:3300/setup
+```
+
+On that machine the wizard was up about two minutes after `npm create`, image pulls included.
+
 Then open the URL `pnpm start` prints (`http://localhost:3000/setup` on a local Docker). `/setup` is
 the five-step wizard (**Provider**, **Credentials**, **Runtime**, **Administrator**, **First
 agent**), and it asks for the administrator password only at step 4. That password is the
@@ -73,6 +87,17 @@ agent**), and it asks for the administrator password only at step 4. That passwo
 take one your browser suggests. The wizard itself needs a working LLM provider key, which is checked
 when you click "Finish setup". Afterwards the deployment has a workspace, an Owner, a model
 connection, a runtime profile and one runnable agent.
+
+<Frame caption="The setup wizard at /setup, before the first step is filled in.">
+  <img src="/images/selfhost/01-wizard.png" alt="The Agent Workspace setup wizard showing the Provider step" />
+</Frame>
+
+You should see the wizard finish with a confirmation that the workspace, the Owner and the first
+agent exist.
+
+<Frame caption="The wizard after Finish setup: the deployment is ready to use.">
+  <img src="/images/selfhost/02-wizard-done.png" alt="The setup wizard showing that setup is complete" />
+</Frame>
 
 A runtime that runs in a provider's sandbox (`external` for E2B, `vercel-sandbox`,
 `cloudflare-sandbox`) needs that provider's key before setup can test it, and the wizard does not
@@ -278,7 +303,7 @@ means setting one such variable per engine.
   **Today:** the `@indx-workspace/{contracts,sdk,aw,cli,embedded,create,react,platforms}` packages
   are on npm in lock-step (`npm view @indx-workspace/aw version` prints the `@latest` release) and
   the platform images
-  (`ghcr.io/indxdev/agent-workspace/*`) are published, and the generator pins the images by
+  (`ghcr.io/indxjp/agent-workspace/*`) are published, and the generator pins the images by
   digest. `npm create @indx-workspace@latest my-company-ai` writes the `aw dev` project by
   default, and `-- --cloud local` writes the Compose project: `cd my-company-ai`,
   `pnpm install --frozen-lockfile=false && pnpm start`, then `http://localhost:3000` is the first
@@ -350,6 +375,40 @@ today](/concepts/data-plane#per-cloud-today).
 | `postgres` | PostgreSQL 17                | every durable row: workspaces, principals, agents, runs, events                                                        | private                           |
 | `storage`  | SeaweedFS, S3, or native GCS | workspace files, skills, transcripts                                                                                   | private                           |
 
+`AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES` sets the largest file a signed upload link may carry, in
+bytes. It defaults to 5 GiB, the largest single S3 upload, which is also the maximum. A link
+request for more answers `413 request_body_too_large` and creates nothing; a larger object that
+still reaches the store is deleted when the upload is completed. A value that is not a whole number
+from 1 to 5368709120 stops the web server from starting.
+
+```sh title="illustrative" claim="illustrative"
+AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES=1073741824  # 1 GiB for this deployment
+```
+
+A file above 64 MiB goes from the browser straight to the object store through that signed link, so
+the store needs two things the web server does not provide. Its endpoint must be reachable from the
+browser, not only from the web server. And the bucket must allow CORS for a `PUT` from the app's
+origin, with the `content-type` and `x-amz-meta-aw-content-type-known` request headers, and from no
+other origin: never `*`. The bundled SeaweedFS in `compose.yaml` sets the origin with
+`-s3.allowedOrigins`; on S3, GCS or Azure Blob, set the equivalent bucket CORS rule yourself. Where
+the deployment cannot sign uploads, or the file is over `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`, the Files
+screen says "This file is too large for this deployment." A store without that CORS rule, or one the
+browser cannot reach, fails the upload with a network error instead.
+
+The Files list and downloads read the file catalog. A file an older install wrote has no catalog
+row, so at start-up the server gives each one a row, in the background and without writing to the
+bucket; until that run finishes after an upgrade, such a file may be missing from the list. It is
+safe to repeat and to run on two instances. `AW_STORAGE_MIGRATE=off` turns it off; unset is the
+default, which runs it, and `adopt` says so explicitly.
+
+Once an hour a long-lived server runs the storage cleanup, one server at a time. `AW_STORAGE_CLEANUP`
+is `report` (the default: it counts what it would remove and removes nothing) or `delete`, which
+removes objects no file row points at; set `delete` only after reading one report. Files in the old
+naming are counted and never deleted in this release. Where `CRON_SECRET` is set (Vercel), no timer
+starts: the platform cron calls `GET /api/cron/storage-cleanup` with that secret instead. The generated
+Vercel config schedules it daily, because Vercel Hobby rejects crons that run more often; a Vercel Pro
+project may change the schedule to hourly.
+
 Sandboxes — the containers or processes an agent actually runs in — are created on demand by the
 runtime driver a profile names; they are not a sixth service. The specification's rule is that a
 sandbox reaches the gateway and nothing else unless its profile's network policy widens that; what
@@ -372,6 +431,8 @@ Each result is `pass`, `warn` or `fail`, with one line of advice:
 
 - **Profile:** `agent-workspace.yaml` validates; a missing `apiVersion` is a warning.
 - **Stores:** the stores answer the same probes `agent-workspace validate` runs.
+- **Storage layout:** how many objects each area still holds in the old per-area layout, counted up
+  to a cap. Any are a warning that names `AW_STORAGE_MIGRATE=adopt`. Only counts are printed.
 - **Prerequisites:** the tools the profile's target needs are on `PATH`, with their versions:
   Docker and Compose v2 for `local`, `kubectl` and `helm` for the chart, `terraform` for the gcp and
   azure modules. A tool the target does not need is not checked.
@@ -467,7 +528,7 @@ Four rules:
    it rather than pretending to enforce them (on the Kubernetes target an unproxied `open` reaches only the
    gateway), so choose the policy deliberately (see the table
    above and [Connect an MCP server](/building/mcp-servers)). The proxy image is published with the
-   release as `ghcr.io/indxdev/agent-workspace/egress-proxy`; point the runner's
+   release as `ghcr.io/indxjp/agent-workspace/egress-proxy`; point the runner's
    `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE` at it by digest. The repository's own `compose.yaml` points
    the runner at `agent-workspace/egress-proxy:dev`, built from `egress-proxy.Dockerfile`. A project
    from `--cloud local` runs without the proxy until you set `EGRESS_PROXY_IMAGE` in its `.env` to

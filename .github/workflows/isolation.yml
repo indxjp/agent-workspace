@@ -37,11 +37,11 @@ on:
       - gateway.Dockerfile
       - .github/workflows/isolation.yml
   schedule:
-    - cron: '17 3 * * *'
+    - cron: '17 3 * * 1'
   workflow_dispatch:
 
 concurrency:
-  group: isolation-${{ github.ref }}
+  group: isolation-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -54,7 +54,7 @@ env:
 jobs:
   docker:
     name: docker lane
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     timeout-minutes: 20
     env:
       ISOLATION_LANE: docker
@@ -69,10 +69,9 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
@@ -101,7 +100,11 @@ jobs:
 
   kind:
     name: kind lane
-    runs-on: ubuntu-latest
+    # COST: the pull request already ran this lane on the change; the push to main does not
+    # repeat it on Blacksmith. The weekly schedule still runs it on main.
+    if: github.event_name != 'push'
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): a kind cluster per lane for ~10 min.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 50
     env:
       ISOLATION_LANE: kind
@@ -118,14 +121,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # MS-A2 runs both kind lanes at once: each gets its own kubeconfig, not ~/.kube/config.
+      - name: Use a kubeconfig of the job's own
+        run: echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile --filter "@agent-workspace/runtime..."
@@ -155,6 +161,7 @@ jobs:
       - name: Create the cluster with Calico
         run: |
           set -euo pipefail
+          kind delete cluster --name "$KIND_CLUSTER" 2> /dev/null || true
           kind create cluster --name "$KIND_CLUSTER" --image "$KIND_NODE_IMAGE" --config infra/tests/isolation/kind-config.yaml --wait 0s
           curl --fail --silent --show-error --location --output calico.yaml "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
           echo "${CALICO_SHA256}  calico.yaml" | sha256sum --check -
@@ -173,10 +180,12 @@ jobs:
 
       # The kind node keeps running, so its image stays; the rest of the Docker cache goes.
       - name: Prune Docker after the isolation checks
+        if: ${{ !startsWith(runner.name, 'ito-MS-A2') }}
         run: docker system prune -af
 
       # The web image build does not fit next to the runner's preinstalled toolchains.
       - name: Free disk for the web image
+        if: ${{ !startsWith(runner.name, 'ito-MS-A2') }}
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h /
@@ -212,9 +221,19 @@ jobs:
           path: results/results-kind.json
           if-no-files-found: warn
 
+      # MS-A2 is not thrown away after the job, so the cluster would keep running.
+      - name: Delete the cluster
+        if: always()
+        run: |
+          kind delete cluster --name "$KIND_CLUSTER" || true
+
   kind-deploy:
     name: kind-deploy lane
-    runs-on: ubuntu-latest
+    # COST: the pull request already ran this lane on the change; the push to main does not
+    # repeat it on Blacksmith. The weekly schedule still runs it on main.
+    if: github.event_name != 'push'
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): a kind cluster per lane for ~10 min.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 90
     env:
       ISOLATION_LANE: kind-chart
@@ -234,18 +253,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # MS-A2 runs both kind lanes at once: each gets its own kubeconfig, not ~/.kube/config.
+      - name: Use a kubeconfig of the job's own
+        run: echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       # Four platform images, a derived runtime image and the egress proxy are built and held in a
       # registry on this disk next to the kind node.
       - name: Free disk
+        if: ${{ !startsWith(runner.name, 'ito-MS-A2') }}
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           df -h /
@@ -269,11 +292,14 @@ jobs:
           kind version
 
       - name: Start the image registry
-        run: docker run --detach --restart always --name kind-registry --publish 127.0.0.1:5001:5000 "$REGISTRY_IMAGE"
+        run: |
+          docker rm -f kind-registry > /dev/null 2>&1 || true
+          docker run --detach --restart always --name kind-registry --publish 127.0.0.1:5001:5000 "$REGISTRY_IMAGE"
 
       - name: Create the cluster with Calico
         run: |
           set -euo pipefail
+          kind delete cluster --name "$KIND_CLUSTER" 2> /dev/null || true
           kind create cluster --name "$KIND_CLUSTER" --image "$KIND_NODE_IMAGE" --config infra/tests/isolation/kind-config.yaml --wait 0s
           curl --fail --silent --show-error --location --output calico.yaml "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
           echo "${CALICO_SHA256}  calico.yaml" | sha256sum --check -
@@ -331,11 +357,18 @@ jobs:
           path: results/results-kind-chart.json
           if-no-files-found: warn
 
+      # MS-A2 is not thrown away after the job, so the cluster would keep running.
+      - name: Delete the cluster
+        if: always()
+        run: |
+          kind delete cluster --name "$KIND_CLUSTER" || true
+          docker rm -f kind-registry > /dev/null 2>&1 || true
+
   summary:
     name: summary
     needs: [docker, kind, kind-deploy]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -344,7 +377,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
 
@@ -361,7 +394,12 @@ jobs:
       - name: Table
         run: |
           set +e
-          node infra/tests/isolation/summary.mjs docker=results/results-docker.json kind=results/results-kind.json kind-chart=results/results-kind-chart.json > summary.md
+          lanes=(docker=results/results-docker.json)
+          # A push to main runs the docker lane only (the kind lanes ran on the pull request).
+          if [ "$GITHUB_EVENT_NAME" != push ]; then
+            lanes+=(kind=results/results-kind.json kind-chart=results/results-kind-chart.json)
+          fi
+          node infra/tests/isolation/summary.mjs "${lanes[@]}" > summary.md
           status=$?
           cat summary.md
           {

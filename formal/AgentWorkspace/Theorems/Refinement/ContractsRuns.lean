@@ -29,6 +29,6 @@ theorem current_accepts_non_decimal :
     runCost (.obj [("amount", .str "not-money"), ("currency", .str "X"),
       ("priceTableVersion", .null)]) = true ∧
     decimalCostTarget (.obj [("amount", .str "not-money"), ("currency", .str "X"),
-      ("priceTableVersion", .null)]) = false := by decide
+      ("priceTableVersion", .null)]) = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.ContractsRuns

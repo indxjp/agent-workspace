@@ -4,7 +4,6 @@ import path from 'node:path';
 import { TOOL_BUNDLE_TIMEOUT_MAX_MS } from '@indx-workspace/contracts/agent-versions';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { PROJECT_FILE_NAME } from '@indx-workspace/sdk/project';
 import { z } from 'zod';
 
@@ -75,7 +74,7 @@ async function callTool(context: LocalCommandContext): Promise<void> {
     await client.connect(
       new StreamableHTTPClientTransport(new URL(host.url), {
         requestInit: { headers: { 'x-aw-run-id': LOCAL_RUN_ID } },
-      }) as Transport,
+      }),
     );
     let result: z.infer<typeof ToolResultSchema>;
     try {

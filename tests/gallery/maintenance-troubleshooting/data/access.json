@@ -1,0 +1,9 @@
+{
+  "佐藤 翔太": { "areas": ["PR"], "notes": ["hydraulics"], "manuals": ["ap-200"] },
+  "小林 美咲": { "areas": ["IM"], "notes": ["hydraulics"], "manuals": ["js-350"] },
+  "山本 浩二": {
+    "areas": ["PR", "IM", "MC"],
+    "notes": ["hydraulics", "machining"],
+    "manuals": ["ap-200", "js-350"]
+  }
+}

@@ -2,34 +2,25 @@
  * The browser side of `POST /api/agents/:id/runs` and `GET /api/runs/:id/events` — spec §19, §34.
  *
  * This is what `home-chat.tsx` calls after **Send** to make W1-UI-05's run path real: start a run,
- * then read its event stream until the server's own `done` frame. Everything here is transport —
- * turning a `fetch` response into the primitives `@indx-workspace/react/run-model`'s pure functions turn into a
- * `Run` update. Nothing here decides what a frame *means*; that is the run model's job, so it stays
- * testable without a network.
- *
- * ## The wire-format parser is the SDK's
- *
- * Splitting the byte stream into frames and reading `event:`/`id:`/`data:` is
- * `@indx-workspace/sdk/events`' job now — the same parser an external consumer of this stream
- * uses — and it is re-exported here under the names this module has always had, so the
- * application is the SDK's first consumer rather than a second implementation of its format. The
- * reasoning for a hand-written parser over `EventSource` (every platform frame is named; there is
- * no wildcard listener; `Authorization` cannot travel) lives with that module.
+ * then follow its event stream until the server's own `done` frame. Everything here is transport —
+ * the SDK's `runs.start` and `runs.follow` — and nothing here decides what a frame *means*; that is
+ * the composer's fold over `@indx-workspace/react/run-model`, so it stays testable without a network.
  *
  * What stays here is the screen's own transport policy: how `home-chat.tsx` learns about a
  * dropped connection, and the project-session ordering a first run in a project has to respect.
  */
-import { parseSseFrame, splitSseFrames, type SseFrame } from '@indx-workspace/sdk/events';
+import {
+  ApiProblemError,
+  type AgentWorkspaceClient,
+  type RunEventFrame,
+} from '@indx-workspace/sdk';
 
-export { parseSseFrame, splitSseFrames };
-
-/** One parsed SSE frame: the `event:` name, its `id:` when the server sent one, and its payload. */
-type LiveFrame = SseFrame;
+import { browserClient } from '../../lib/browser-client';
 
 /** What this screen does with a live run's event stream. Called for every frame this module reads. */
 export interface RunEventStreamHandlers {
-  /** A frame that is not the stream's own `done` — a relayed event, or a control frame. */
-  onFrame(frame: LiveFrame): void;
+  /** A classified frame that is not the stream's own `done` — a relayed event, or a control frame. */
+  onFrame(frame: RunEventFrame): void;
   /** The server's `done` frame arrived: nothing further will be delivered. Read `sse.ts`'s own words
    *  for what `done` does and does not say about whether the run succeeded. */
   onDone(): void;
@@ -42,70 +33,41 @@ function describeError(error: unknown): string {
 }
 
 /**
- * Read `eventsUrl` (same-origin, so the session cookie travels with it exactly as it does for any
- * other `fetch` in this application) until `done` arrives or the connection fails.
+ * Follow run `runId`'s events through the SDK's `runs.follow` until `done` arrives or the
+ * connection fails.
+ *
+ * `maxReconnects: 0` keeps the composer's semantics: a dropped connection is reported as one
+ * transport error rather than resumed with `Last-Event-ID`. A resume can answer `stream-reset`,
+ * which would oblige this screen to discard and rebuild a transcript it only ever appends to.
  *
  * Returns a function that aborts the read — call it on unmount so a screen nobody is looking at
  * stops holding a connection open.
  */
-export function followRunEvents(eventsUrl: string, handlers: RunEventStreamHandlers): () => void {
+export function followRunEvents(
+  runId: string,
+  handlers: RunEventStreamHandlers,
+  client: AgentWorkspaceClient = browserClient(),
+): () => void {
   const controller = new AbortController();
 
   void (async (): Promise<void> => {
-    let response: Response;
     try {
-      response = await fetch(eventsUrl, {
-        headers: { accept: 'text/event-stream' },
+      for await (const frame of client.runs.follow(runId, {
         signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      handlers.onTransportError(
-        `the request for this run's events failed: ${describeError(error)}`,
-      );
-      return;
-    }
-
-    if (!response.ok || response.body === null) {
-      handlers.onTransportError(
-        `the events endpoint answered ${String(response.status)} instead of opening a stream`,
-      );
-      return;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const split = splitSseFrames(buffer);
-        buffer = split.rest;
-        for (const raw of split.frames) {
-          const frame = parseSseFrame(raw);
-          if (frame === null) continue;
-          if (frame.event === 'done') {
-            handlers.onDone();
-            return;
-          }
-          handlers.onFrame(frame);
-        }
+        maxReconnects: 0,
+      })) {
+        handlers.onFrame(frame);
       }
     } catch (error) {
       if (controller.signal.aborted) return;
       handlers.onTransportError(
-        `this run's event stream ended unexpectedly: ${describeError(error)}`,
+        error instanceof ApiProblemError
+          ? `the events endpoint answered ${String(error.status)} instead of opening a stream`
+          : `this run's event stream ended unexpectedly: ${describeError(error)}`,
       );
       return;
     }
-
-    // The body ended and no `done` frame was ever seen. `sse.ts` writes `done` from every exit
-    // path except a mid-stream throw — which the catch above already reports — so a clean end with
-    // no `done` is a connection closed from outside that contract (a proxy, a restart) and is
-    // reported rather than read as a quiet success.
-    handlers.onTransportError('this run\'s event stream ended before a "done" frame arrived');
+    handlers.onDone();
   })();
 
   return () => {
@@ -118,7 +80,7 @@ export type StartRunOutcome =
   | {
       readonly kind: 'started';
       readonly status: unknown;
-      readonly eventsUrl: string;
+      readonly runId: string;
       readonly sessionId: string | null;
     }
   | {
@@ -139,21 +101,22 @@ type StartProjectSessionOutcome =
     }
   | { readonly kind: 'transport-error'; readonly message: string };
 
-/** The `{ code, message }` inside this platform's one error envelope (`server/runs/http.ts`'s `ApiErrorBody`), read defensively — a body that does not match it is named as such, not guessed at. */
-function describeApiError(body: unknown): { readonly code: string; readonly message: string } {
-  if (typeof body === 'object' && body !== null) {
-    const error = (body as Record<string, unknown>)['error'];
-    if (typeof error === 'object' && error !== null) {
-      const record = error as Record<string, unknown>;
-      const code = record['code'];
-      const message = record['message'];
-      if (typeof code === 'string' && typeof message === 'string') return { code, message };
+/** A refusal as the server worded it, or any other failure as a transport problem `failed` names. */
+function failureOutcome(
+  error: unknown,
+  failed: string,
+):
+  | {
+      readonly kind: 'rejected';
+      readonly status: number;
+      readonly code: string;
+      readonly message: string;
     }
+  | { readonly kind: 'transport-error'; readonly message: string } {
+  if (error instanceof ApiProblemError) {
+    return { kind: 'rejected', status: error.status, code: error.code, message: error.message };
   }
-  return {
-    code: 'unrecognised_error_body',
-    message: 'the server did not explain why in the usual shape.',
-  };
+  return { kind: 'transport-error', message: `${failed}: ${describeError(error)}` };
 }
 
 /**
@@ -173,69 +136,24 @@ export async function startAgentRun(
   prompt: string,
   modelOverride: { readonly connectionId: string; readonly model: string } | null = null,
   sessionId: string | null = null,
+  client: AgentWorkspaceClient = browserClient(),
+  attachments: readonly string[] = [],
+  version: number | null = null,
 ): Promise<StartRunOutcome> {
-  let response: Response;
   try {
-    response = await fetch(`/api/agents/${encodeURIComponent(agentId)}/runs`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({
-        prompt,
-        sessionId,
-        modelConnectionId: modelOverride?.connectionId ?? null,
-        model: modelOverride?.model ?? null,
-      }),
+    const { run } = await client.runs.start(agentId, {
+      prompt,
+      sessionId,
+      ...(version === null ? {} : { version }),
+      ...(modelOverride === null ? {} : { modelOverride }),
+      ...(attachments.length === 0
+        ? {}
+        : { attachments: attachments.map((fileId) => ({ fileId })) }),
     });
+    return { kind: 'started', status: run.status, runId: run.id, sessionId: run.sessionId };
   } catch (error) {
-    return {
-      kind: 'transport-error',
-      message: `the request to start this run failed: ${describeError(error)}`,
-    };
+    return failureOutcome(error, 'the request to start this run failed');
   }
-
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = null;
-  }
-
-  if (!response.ok) {
-    const problem = describeApiError(body);
-    return {
-      kind: 'rejected',
-      status: response.status,
-      code: problem.code,
-      message: problem.message,
-    };
-  }
-
-  if (typeof body !== 'object' || body === null) {
-    return {
-      kind: 'transport-error',
-      message: 'the server accepted the run but its response body is not an object.',
-    };
-  }
-  const record = body as Record<string, unknown>;
-  const events = record['events'];
-  if (typeof events !== 'string' || events === '') {
-    return {
-      kind: 'transport-error',
-      message: 'the server accepted the run but named no events URL.',
-    };
-  }
-  const run = record['run'];
-  const status =
-    typeof run === 'object' && run !== null
-      ? (run as Record<string, unknown>)['status']
-      : undefined;
-  const returnedSessionId =
-    typeof run === 'object' &&
-    run !== null &&
-    typeof (run as Record<string, unknown>)['sessionId'] === 'string'
-      ? ((run as Record<string, unknown>)['sessionId'] as string)
-      : null;
-  return { kind: 'started', status, eventsUrl: events, sessionId: returnedSessionId };
 }
 
 /**
@@ -246,45 +164,14 @@ export async function startAgentRun(
 async function startProjectSession(
   projectId: string,
   agentId: string,
+  client: AgentWorkspaceClient,
 ): Promise<StartProjectSessionOutcome> {
-  let response: Response;
   try {
-    response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/sessions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ agentId }),
-    });
+    const { id } = await client.projects.startSession(projectId, { agentId });
+    return { kind: 'started', sessionId: id };
   } catch (error) {
-    return {
-      kind: 'transport-error',
-      message: `the request to start a session in this project failed: ${describeError(error)}`,
-    };
+    return failureOutcome(error, 'the request to start a session in this project failed');
   }
-
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = null;
-  }
-  if (!response.ok) {
-    const problem = describeApiError(body);
-    return { kind: 'rejected', status: response.status, ...problem };
-  }
-  if (typeof body !== 'object' || body === null) {
-    return {
-      kind: 'transport-error',
-      message: 'the server created a project session but its response body is not an object.',
-    };
-  }
-  const sessionId = (body as Record<string, unknown>)['id'];
-  if (typeof sessionId !== 'string' || sessionId === '') {
-    return {
-      kind: 'transport-error',
-      message: 'the server created a project session but returned no session id.',
-    };
-  }
-  return { kind: 'started', sessionId };
 }
 
 /** Start a first run, atomically preserving project attribution by opening its session first. */
@@ -293,22 +180,33 @@ export async function startAgentRunInProject(
   prompt: string,
   modelOverride: { readonly connectionId: string; readonly model: string } | null,
   projectId: string | null,
+  client: AgentWorkspaceClient = browserClient(),
+  version: number | null = null,
 ): Promise<StartRunOutcome> {
-  if (projectId === null) return startAgentRun(agentId, prompt, modelOverride, null);
-  const session = await startProjectSession(projectId, agentId);
+  if (projectId === null) {
+    return startAgentRun(agentId, prompt, modelOverride, null, client, [], version);
+  }
+  const session = await startProjectSession(projectId, agentId, client);
   if (session.kind !== 'started') return session;
-  return startAgentRun(agentId, prompt, modelOverride, session.sessionId);
+  return startAgentRun(agentId, prompt, modelOverride, session.sessionId, client, [], version);
 }
 
-/** Resume an existing session, or preserve project attribution while starting a replacement. */
+/**
+ * Resume an existing session, or preserve project attribution while starting a replacement. The
+ * `attachments` are file ids uploaded into the resumed session (issue #1680). `version` pins a new
+ * session only: a resumed one keeps the version it started on, so it is not sent.
+ */
 export function startAgentRunForSession(
   agentId: string,
   prompt: string,
   modelOverride: { readonly connectionId: string; readonly model: string } | null,
   sessionId: string | null,
   projectId: string | null,
+  client: AgentWorkspaceClient = browserClient(),
+  attachments: readonly string[] = [],
+  version: number | null = null,
 ): Promise<StartRunOutcome> {
   return sessionId === null
-    ? startAgentRunInProject(agentId, prompt, modelOverride, projectId)
-    : startAgentRun(agentId, prompt, modelOverride, sessionId);
+    ? startAgentRunInProject(agentId, prompt, modelOverride, projectId, client, version)
+    : startAgentRun(agentId, prompt, modelOverride, sessionId, client, attachments);
 }

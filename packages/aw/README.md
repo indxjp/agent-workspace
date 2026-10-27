@@ -124,6 +124,7 @@ echo '{"runtimeProfileId":"<profile-id>"}' | aw agents update <agent-id> --file 
 aw team members add --email ada@example.com --role admin
 aw skills import ./release-notes            # a directory holding SKILL.md
 aw skills export release-notes ./exported
+aw skills publish release-notes ./release-notes   # freeze the directory as the next revision
 aw files upload docs/readme.md ./README.md
 ```
 

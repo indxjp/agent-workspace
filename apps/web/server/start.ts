@@ -1,3 +1,4 @@
+import { log } from './telemetry/logger.ts';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 
@@ -56,6 +57,27 @@ function urlHost(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
+/**
+ * The `http` request listener around Next's handler. A handler that rejects answers 500 while the
+ * headers are unsent and otherwise drops the connection; neither is an unhandled rejection. Only
+ * the message is logged, never the request.
+ */
+export function serveRequest(
+  handler: (request: IncomingMessage, response: ServerResponse) => Promise<void>,
+): (request: IncomingMessage, response: ServerResponse) => void {
+  return (request, response) => {
+    handler(request, response).catch((error: unknown) => {
+      log.error('[web] request handler failed', { error });
+      if (response.headersSent) {
+        response.destroy();
+        return;
+      }
+      response.statusCode = 500;
+      response.end();
+    });
+  };
+}
+
 export async function startWeb(
   env: Readonly<Record<string, string | undefined>> = process.env,
   options: StartWebOptions = {},
@@ -80,9 +102,7 @@ export async function startWeb(
   });
   await app.prepare();
   const handler = app.getRequestHandler();
-  const server = createServer((request, response) => {
-    void handler(request, response);
-  });
+  const server = createServer(serveRequest(handler));
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {

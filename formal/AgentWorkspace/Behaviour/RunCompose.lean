@@ -195,14 +195,24 @@ def sandboxFor (workspaceRoot workspaceId sessionId : String) : Option (String �
     some (cwd, workspaceId, cwd ++ "/.claude")
   else none
 
+/-- Defaults the adapter puts under the caller's environment: `ENABLE_TOOL_SEARCH=false`, so
+every connector tool is sent up front rather than deferred behind ToolSearch (Agent SDK 0.3.304).
+A caller that names the variable itself keeps its own value. -/
+def defaultEnv : List (String × String) := [("ENABLE_TOOL_SEARCH", "false")]
+
+/-- The caller's environment with every default it does not name placed first. -/
+def withDefaults (source : List (String × String)) : List (String × String) :=
+  defaultEnv.filter (fun kv => !(source.map Prod.fst).contains kv.1) ++ source
+
 /-- The caller's environment is the whole subprocess environment, not a merge with the host.
-The four derived keys are appended last, overriding any earlier values of those exact names. -/
+The defaults go under it, and the four derived keys are appended last, overriding any earlier
+values of those exact names. -/
 def compiledEnvironment (source : List (String × String)) (runId sessionId projectKey configDir : String) :
     Option (List (String × String)) :=
   let derived := [("CLAUDE_CONFIG_DIR", configDir),
     ("CLAUDE_CODE_PROJECT_DIR_NAME", projectKey),
     ("AGENT_WORKSPACE_RUN_ID", runId), ("AGENT_WORKSPACE_SESSION_ID", sessionId)]
-  let env := source.filter (fun kv => !(derived.map Prod.fst).contains kv.1) ++ derived
+  let env := (withDefaults source).filter (fun kv => !(derived.map Prod.fst).contains kv.1) ++ derived
   if env.any (fun kv => AgentWorkspace.Contracts.Identifiers.lowerAscii kv.1 == "anthropic_api_key") then none
   else some env
 

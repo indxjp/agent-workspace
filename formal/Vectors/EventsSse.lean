@@ -31,7 +31,8 @@ private def nameVerdict : Sse.NameVerdict → Json
 def vocabularyVectors : List Vector :=
   [{ id := "names", input := .null,
      expected := Json.mkObj [("control", toJson controlFrameNames),
-       ("relayed", toJson relayedEventNames), ("status", runStatusEvent)],
+       ("relayed", toJson relayedEventNames), ("status", runStatusEvent),
+       ("warning", runWarningEvent), ("platform", toJson platformEventNames)],
      witnesses := [t0 "event_names_equal_phase_one"] },
    { id := "server-names", input := .null,
      expected := Json.mkObj [("control", toJson Sse.serverControlNames),
@@ -72,6 +73,17 @@ def schemaVectors : List Vector :=
     { id := "reset/" ++ id, input := Json.mkObj [("schema", "reset"), ("body", body.toJson)],
       expected := Json.mkObj [("valid", streamResetData body)],
       witnesses := [t0 "reset_schema_requires_nullable_resume"] }
+  let warning : List (String × JValue) :=
+    [("code", .obj [("code", .str "attachments_removed_shell")]),
+     ("message", .obj [("code", .str "c"), ("message", .str "m")]),
+     ("empty-code", .obj [("code", .str "")]),
+     ("missing-code", .obj [("message", .str "m")]),
+     ("message-null", .obj [("code", .str "c"), ("message", .null)]),
+     ("extra", .obj [("code", .str "c"), ("x", .bool true)])]
+  let warningVs := warning.map fun (id, body) =>
+    { id := "warning/" ++ id, input := Json.mkObj [("schema", "warning"), ("body", body.toJson)],
+      expected := Json.mkObj [("valid", runWarningData body)],
+      witnesses := [t0 "warning_schema_is_strict"] }
   let relay : List (String × JValue) :=
     [("minimal", .obj [("kind", .str "sdk-event")]),
      ("extras", .obj [("kind", .str "text"), ("content", .arr [.str "a"])]),
@@ -82,10 +94,10 @@ def schemaVectors : List Vector :=
     { id := "relay/" ++ id, input := Json.mkObj [("schema", "relay"), ("body", body.toJson)],
       expected := Json.mkObj [("valid", relayedEventData body)],
       witnesses := [t0 "relay_schema_requires_nonempty_kind"] }
-  status ++ failedVs ++ resetVs ++ relayVs
+  status ++ warningVs ++ failedVs ++ resetVs ++ relayVs
 
 def nameVectors : List Vector :=
-  let cases := ["system", "run.status", "done", "run-failed", "stream-reset", "error", "x", "",
+  let cases := ["system", "run.status", "run.warning", "done", "run-failed", "stream-reset", "error", "x", "",
     "a_b.c-9", "9first", "system\ndata: forged", "system\r\nevent: done",
     String.ofList ('a' :: List.replicate 63 'x'), String.ofList ('a' :: List.replicate 64 'x')]
   cases.map fun name =>
@@ -237,6 +249,7 @@ def logVectors : List Vector :=
 
 private def outcomeJson : Sse.Outcome → Json
   | .succeeded => Json.mkObj [("kind", "succeeded")]
+  | .paused => Json.mkObj [("kind", "paused")]
   | .failed status message => Json.mkObj [("kind", "failed"),
       ("status", status), ("message", message)]
   | .indeterminate reason => Json.mkObj [("kind", "indeterminate"), ("reason", reason)]
@@ -246,7 +259,8 @@ def outcomeVectors : List Vector :=
     [("missing", none, none), ("queued", some .queued, none),
      ("running", some .running, none), ("completed", some .completed, none),
      ("failed-default", some .failed, none), ("failed-message", some .failed, some "safe"),
-     ("cancelled", some .cancelled, none)]
+     ("cancelled", some .cancelled, none),
+     ("awaiting-approval", some .awaitingApproval, none)]
   cases.map fun (id, status, error) =>
     { id, input := Json.mkObj [("status", optionalString (status.map Contracts.RunStatus.toWire)),
         ("error", optionalString error)],
@@ -256,7 +270,7 @@ def outcomeVectors : List Vector :=
 
 def outcomeFrameVectors : List Vector :=
   let cases : List (String × Sse.Outcome) :=
-    [("succeeded", .succeeded), ("failed", .failed "failed" "safe"),
+    [("succeeded", .succeeded), ("paused", .paused), ("failed", .failed "failed" "safe"),
      ("indeterminate", .indeterminate "lost")]
   cases.map fun (id, outcome) =>
     { id, input := Json.str id, expected := toJson (Sse.outcomeFrames outcome),

@@ -47,11 +47,12 @@ import { GET as listAgentsRoute, POST as createAgentRoute } from '../../app/api/
 import { GET as runEventsRoute } from '../../app/api/runs/[id]/events/route';
 import { GET as readRunRoute } from '../../app/api/runs/[id]/route';
 import { proxy } from '../../proxy';
-import { currentModelsRuntime } from '../models/runtime';
+import { applicationContext } from '../application-context';
 import { mintApiKey } from '../rbac/api-key';
-import { getRunApi, installRunApi } from '../runs/environment';
+import { getRunApi } from '../runs/environment';
 
 import type { RegisteredComposition } from './register';
+import { installTestRunApi } from '../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -63,14 +64,12 @@ if (!hasDatabase) {
 }
 
 const CONTROLLED_ENV = [
-  'AW_FILE_STORAGE_ROOT',
+  'AW_STORAGE_URL',
   'AW_RUNTIME_VERIFICATION_FILE',
-  'AW_SKILL_STORAGE_ROOT',
   'DATABASE_URL',
   'GATEWAY_TOKEN_SECRET',
   'MASTER_ENCRYPTION_KEY',
   'NEXT_RUNTIME',
-  'OBJECT_STORAGE_BUCKET',
   'RUNNER_MANAGER_TOKEN',
   'RUNNER_MANAGER_URL',
   'RUNNER_URL',
@@ -260,12 +259,10 @@ describe.skipIf(!hasDatabase)('the SDK quickstart with an API key (issue #388)',
     process.env['MASTER_ENCRYPTION_KEY'] = crypto.randomBytes(32).toString('hex');
     process.env['RUNNER_URL'] = 'http://127.0.0.1:9';
     for (const name of [
-      'AW_FILE_STORAGE_ROOT',
+      'AW_STORAGE_URL',
       'AW_RUNTIME_VERIFICATION_FILE',
-      'AW_SKILL_STORAGE_ROOT',
       'GATEWAY_TOKEN_SECRET',
       'NEXT_RUNTIME',
-      'OBJECT_STORAGE_BUCKET',
       'RUNNER_MANAGER_TOKEN',
       'RUNNER_MANAGER_URL',
     ] as const) {
@@ -279,8 +276,9 @@ describe.skipIf(!hasDatabase)('the SDK quickstart with an API key (issue #388)',
     // and a ready model connection whose model list offers the agent's model.
     const modelList = await startModelListServer();
     modelListServer = modelList.server;
-    const modelsRuntime = currentModelsRuntime();
-    if (modelsRuntime === null) throw new Error('the composition installed no models API');
+    const models = applicationContext()?.models;
+    if (models?.kind !== 'serving') throw new Error('the composition installed no models API');
+    const modelsRuntime = models.runtime;
     const connection = await modelsRuntime.models.forWorkspace(workspaceId).create({
       name: 'quickstart-anthropic',
       provider: 'anthropic',
@@ -311,7 +309,7 @@ describe.skipIf(!hasDatabase)('the SDK quickstart with an API key (issue #388)',
     const installed = getRunApi();
     if (installed === null) throw new Error('the composition installed no run API');
     const { store } = installed;
-    installRunApi({
+    installTestRunApi({
       ...installed,
       launch: ({ run }) => {
         void (async () => {

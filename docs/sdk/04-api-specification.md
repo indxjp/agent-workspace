@@ -115,19 +115,22 @@ type TokenScope = { kind: 'run'; id: string } | { kind: 'session'; id: string };
 
 **Grammar — the routes each scope may reach, and nothing else:**
 
-| Scope     | Route                         | What it does                                                                                                                   |
-| --------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `run`     | `GET /api/runs/:id`           | Read that run, and only that run.                                                                                              |
-| `run`     | `GET /api/runs/:id/events`    | Follow that run's stream.                                                                                                      |
-| `session` | `GET /api/runs/:id`           | Read a run that belongs to that session.                                                                                       |
-| `session` | `GET /api/runs/:id/events`    | Follow the stream of a run in that session.                                                                                    |
-| `session` | `POST /api/agents/:id/runs`   | Start a run in that session (`sessionId` required in the body; a request that omits it, or names another session, is refused). |
-| `session` | `POST /api/runs/:id/feedback` | Rate a run that belongs to that session.                                                                                       |
+| Scope     | Route                                | What it does                                                                                                                                                                                                                                        |
+| --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run`     | `GET /api/runs/:id`                  | Read that run, and only that run.                                                                                                                                                                                                                   |
+| `run`     | `GET /api/runs/:id/events`           | Follow that run's stream.                                                                                                                                                                                                                           |
+| `session` | `GET /api/runs/:id`                  | Read a run that belongs to that session.                                                                                                                                                                                                            |
+| `session` | `GET /api/runs/:id/events`           | Follow the stream of a run in that session.                                                                                                                                                                                                         |
+| `session` | `POST /api/agents/:id/runs`          | Start a run in that session (`sessionId` required in the body; a request that omits it, or names another session, is refused).                                                                                                                      |
+| `session` | `POST /api/runs/:id/feedback`        | Rate a run that belongs to that session.                                                                                                                                                                                                            |
+| `session` | `POST /api/files/:id/download-urls`  | Mint a presigned `GET` for a file under that same prefix.                                                                                                                                                                                           |
+| `session` | `POST /api/sessions/:id/attachments` | Upload one file (raw body, `?name=`) to that session's `.attachments/<sessionId>/` prefix; answers `201 { fileId, path, size }`. A surface with `parts.attachments` only; at most 10 MiB a file, 20 files or 50 MiB a session, 10 uploads a minute. |
 
 Every route outside this table is refused for a browser-token caller. Most are stopped at the edge
 with `401 unauthenticated` before a handler runs — `apps/web/proxy.ts` admits the credential's shape
-only on `GET /api/runs/:id(/events)`, `POST /api/agents/:id/runs` and `POST /api/runs/:id/feedback`,
-and every other `/api/**` path
+only on `GET /api/runs/:id(/events)`, `POST /api/agents/:id/runs`, `POST /api/runs/:id/feedback`,
+`POST /api/files/:id/upload-urls`, `POST /api/files/:id/download-urls` and
+`POST /api/sessions/:id/attachments`, and every other `/api/**` path
 falls to the session-cookie gate — and that covers `GET /api/runs` (the workspace-wide list; a scope
 reads one row, never a collection) and `POST /api/tokens` itself (a browser token cannot mint
 another one: `tokens` is in no scope's grammar). A route inside the grammar's prefix but outside its
@@ -193,30 +196,33 @@ Four roles (spec §21). The SDK does not encode the table; it surfaces `403 forb
 is reproduced so an integrator can predict outcomes; it is `apps/web/server/rbac/permissions.ts`
 as of this document's date.
 
-| Resource                                                 | Owner                                                                 | Admin        | Builder                 | Viewer                    |
-| -------------------------------------------------------- | --------------------------------------------------------------------- | ------------ | ----------------------- | ------------------------- |
-| agents                                                   | all                                                                   | all          | read any, write/run own | read any, run _permitted_ |
-| skills, files                                            | all                                                                   | all          | read any, write own     | none                      |
-| connectors                                               | all                                                                   | manage       | read any, write own     | none                      |
-| model-connections, models, runtime-connections, runtimes | all                                                                   | manage       | none                    | none                      |
-| runtime-profiles                                         | all                                                                   | manage       | read                    | none                      |
-| secrets                                                  | all                                                                   | none         | none                    | none                      |
-| projects                                                 | all                                                                   | none         | own                     | none                      |
-| sessions                                                 | all                                                                   | own          | own                     | own (read)                |
-| runs                                                     | all                                                                   | read/run any | read/run own            | read/run own              |
-| memberships, users, invitations, api-keys                | all                                                                   | manage       | none                    | none                      |
-| tokens (mint only — issue #236)                          | all                                                                   | write any    | write own               | none                      |
-| shares                                                   | all                                                                   | manage       | own                     | own                       |
-| sharing-policies                                         | all                                                                   | read         | read                    | read                      |
-| metrics                                                  | all                                                                   | read         | read                    | read                      |
-| engines, platforms                                       | all                                                                   | read         | read                    | read                      |
-| audit-events                                             | all                                                                   | none         | none                    | none                      |
-| me                                                       | all                                                                   | read         | read                    | read                      |
-| setup                                                    | all                                                                   | none         | none                    | none                      |
-| workspaces                                               | member-scoped: read any membership, write only as Owner of the target |              |                         |
+| Resource                                                 | Owner                                                                 | Admin        | Builder                              | Viewer                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------- | ------------ | ------------------------------------ | ------------------------- |
+| agents                                                   | all                                                                   | all          | read any, write own, run _permitted_ | read any, run _permitted_ |
+| skills, files                                            | all                                                                   | all          | read any, write own                  | none                      |
+| connectors                                               | all                                                                   | all          | read any, write own                  | none                      |
+| model-connections, models, runtime-connections, runtimes | all                                                                   | manage       | none                                 | none                      |
+| runtime-profiles                                         | all                                                                   | manage       | read                                 | none                      |
+| secrets                                                  | all                                                                   | none         | none                                 | none                      |
+| projects                                                 | all                                                                   | manage       | own                                  | none                      |
+| sessions                                                 | all                                                                   | own          | own                                  | own (read)                |
+| runs                                                     | all                                                                   | read/run any | read/run own                         | read/run own              |
+| memberships, users, invitations, api-keys                | all                                                                   | manage       | none                                 | none                      |
+| tokens (mint only — issue #236)                          | all                                                                   | write any    | write own                            | none                      |
+| shares                                                   | all                                                                   | manage       | own                                  | own                       |
+| sharing-policies                                         | all                                                                   | read         | read                                 | read                      |
+| metrics                                                  | all                                                                   | read         | read                                 | read                      |
+| engines, platforms                                       | all                                                                   | read         | read                                 | read                      |
+| audit-events                                             | all                                                                   | none         | none                                 | none                      |
+| me                                                       | all                                                                   | read         | read                                 | read                      |
+| setup                                                    | all                                                                   | none         | none                                 | none                      |
+| workspaces                                               | member-scoped: read any membership, write only as Owner of the target |              |                                      |                           |
 
-"Permitted" for a Viewer means an explicit `agent_grants` row managed through
-`GET/PUT /api/agents/:id/grants`.
+"Permitted" means an agent the caller owns or an explicit `agent_grants` row names, managed
+through `GET/PUT /api/agents/:id/grants`.
+
+The roles are monotonic (ADR-0152): each role holds at least every grant of the roles below it, so
+a role may confer itself and any role below it, and an Admin may confer every role but Owner.
 
 ---
 
@@ -342,13 +348,13 @@ DiscoveredModel { connectionId, providerModelId, displayName,
   capabilities: { streaming, toolUse, thinking, promptCaching, structuredOutput, contextManagement, webSearch, tokenCounting } }
 ```
 
-| Operation                       | Route                         | SDK                                                                                                     | Status |
-| ------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------- | ------ |
-| List connections                | `GET /api/model-connections`  | `connections.list()` (the list key is `models`)                                                         | ✅     |
+| Operation                       | Route                         | SDK                                                                                                              | Status |
+| ------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------ |
+| List connections                | `GET /api/model-connections`  | `connections.list()` (the list key is `models`)                                                                  | ✅     |
 | Read / create / update / delete | `GET/POST/PATCH/DELETE …/:id` | `connections.get/create({ name, provider, apiKey, config? })/update(id, { name?, config?, apiKey? })/remove(id)` | ✅     |
-| Rotate credential (write-only)  | `POST …/:id/credential`       | `connections.rotateCredential(id, apiKey)` (204)                                                        | ✅     |
-| Test                            | `POST …/:id/test`             | `connections.test(id)` → `{ ok, status, latencyMs, message }` (200, or 502 with the same body)          | ✅     |
-| Discover models                 | `GET /api/models`             | `discover()` → `{ models, unavailable? }`                                                               | ✅     |
+| Rotate credential (write-only)  | `POST …/:id/credential`       | `connections.rotateCredential(id, apiKey)` (204)                                                                 | ✅     |
+| Test                            | `POST …/:id/test`             | `connections.test(id)` → `{ ok, status, latencyMs, message }` (200, or 502 with the same body)                   | ✅     |
+| Discover models                 | `GET /api/models`             | `discover()` → `{ models, unavailable? }`                                                                        | ✅     |
 
 Provider config rules are part of the contract (`MODEL_PROVIDER_CONFIG_RULES`: `anthropic`/
 `openai`: `baseUrl` optional; `openai-compatible`: `baseUrl` required; `azure-openai`: `baseUrl`,
@@ -433,15 +439,35 @@ never existed.
 
 `FileResource { id, path, kind: 'file'|'folder', sizeBytes|null, contentType|null, lastModified|null }`
 
-| Operation                         | Route                                       | SDK                                                                                                                | Status  |
-| --------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------- |
-| List (optionally a subtree)       | `GET /api/files?path=`                      | `list({ path? })`                                                                                                  | ✅      |
-| Upload a file                     | `POST /api/files` (raw body, `x-file-path`) | `upload(path, bytes                                                                                                | Blob    | ReadableStream, { contentType? })` | ✅  |
-| Create a folder                   | `POST /api/files` (`x-folder-path`)         | `createFolder(path)`                                                                                               | ✅      |
-| Download                          | `GET /api/files/:id`                        | `download(path)` → `{ kind: 'file', bytes, contentType, filename }` or `{ kind: 'folder', file }`                  | ✅      |
-| Metadata                          | —                                           | `stat(path)`                                                                                                       | ⬜ S-11 |
-| Rename / move (subtree)           | `PATCH /api/files/:id { newPath }`          | `move(path, newPath)` → `{ file }`, `{ status: 'ok', moved }` or `{ status: 'partial', moved, total, remaining? }` | ✅      |
-| Delete (folder needs `recursive`) | `DELETE /api/files/:id?recursive=true`      | `remove(path, { recursive? })` → `null` (204) or `{ status: 'ok' \| 'partial', deleted, remaining? }`              | ✅      |
+| Operation                         | Route                                       | SDK                                                                                                                    | Status  |
+| --------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------- |
+| List (optionally a subtree)       | `GET /api/files?path=`                      | `list({ path? })`                                                                                                      | ✅      |
+| Upload a file                     | `POST /api/files` (raw body, `x-file-path`) | `upload(path, bytes                                                                                                    | Blob    | ReadableStream, { contentType? })` | ✅  |
+| Create a folder                   | `POST /api/files` (`x-folder-path`)         | `createFolder(path)`                                                                                                   | ✅      |
+| Download                          | `GET /api/files/:id`                        | `download(path)` → `{ kind: 'file', bytes, contentType, filename }` or `{ kind: 'folder', file }`                      | ✅      |
+| Metadata                          | —                                           | `stat(path)`                                                                                                           | ⬜ S-11 |
+| Rename / move (subtree)           | `PATCH /api/files/:id { newPath }`          | `move(path, newPath)` → `{ file }`, `{ status: 'ok', moved }` or `{ status: 'partial', moved, total, remaining? }`     | ✅      |
+| Delete (folder needs `recursive`) | `DELETE /api/files/:id?recursive=true`      | `remove(path, { recursive? })` → `null` (204) or `{ status: 'ok' \| 'partial', deleted, remaining? }`                  | ✅      |
+| Presigned upload                  | `POST /api/files/:id/upload-urls`           | `createUploadUrl(path, { sizeBytes, contentType?, ttlSeconds? })` → `{ url, method: 'PUT', headers, expiresAt, path }` | ✅      |
+| Presigned download                | `POST /api/files/:id/download-urls`         | `createDownloadUrl(path, { ttlSeconds? })` → `{ url, method: 'GET', headers, expiresAt, path }`                        | ✅      |
+
+**Presigned transfer.** The two `*-urls` routes sign a short-lived URL on the object store, so the
+bytes of a browser upload or download never pass through the control plane. `ttlSeconds` is 60 to
+900 (default 300) and is independent of the browser token's own lifetime. An upload URL signs the
+exact `sizeBytes` on S3 and GCS, and the `contentType` when given (an Azure Blob SAS cannot carry a
+length, so it does not enforce it); send the returned `headers` with the `PUT`.
+A download URL serves the file as the same inert attachment `download` returns. A browser token of
+`session` scope reaches `download-urls` only for paths under `.attachments/<sessionId>/` (any other
+path, including another session's, is concealed as `404 file_not_found`) and is refused
+`upload-urls` with `403 token_out_of_scope` on every store (§3.1.1; issue #1574): a visitor uploads
+through `POST /api/sessions/:id/attachments`, whose attachment flag, name, rate and quota rules a
+presigned `PUT` would skip. A `run` scope reaches neither route. An API key or a session is held to its ordinary §21 grant: Viewer has no files grant,
+Builder is limited to files it owns, and the reserved prefixes stay refused (`400 reserved_path`).
+The route performs no object-store I/O, so a minted URL does not prove the object exists
+(`download-urls` answers `404 file_not_found` for a missing file or a folder). A store that cannot
+sign (the local-filesystem and in-memory backends) answers `501 direct_transfer_unsupported`; use
+`upload`. S3 (SigV4), GCS (V4) and Azure Blob (user-delegation SAS) sign natively. The browser's
+`PUT` is cross-origin, so the bucket needs a CORS rule for the embedding origin.
 
 Paths are workspace-relative, forward-slash, no `..`, no reserved prefixes (`400 reserved_path`).
 A file is **addressed by `path`**; `FileResource.id` is opaque (the catalog's UUID when a catalog
@@ -456,7 +482,8 @@ streaming request bodies are not portable. Uploads are bounded at 64 MiB
 until RF-304 makes storage operations durable. Problem codes: `400 invalid_path`,
 `400 missing_file_path`, `400 unsupported_path_encoding`, `400 invalid_path_encoding`,
 `404 file_not_found` (also for an unminted id), `409 name_conflict`, `409 self_descendant`,
-`500 store_inconsistent`, `500 rename_inconsistent`, `503 files_runtime_not_configured`.
+`409 upload_in_progress`, `500 store_inconsistent`, `500 rename_inconsistent`,
+`501 direct_transfer_unsupported`, `503 files_runtime_not_configured`.
 
 ### 5.7 Skills — `aw.skills`
 
@@ -473,7 +500,12 @@ SkillFile { path, contentBase64 }
 | Read                      | `GET /api/skills/:name`             | `get(name)`                                        | ✅     |
 | Export                    | `GET /api/skills/:name?export=true` | `export(name)` → `{ name, files: SkillFile[] }`    | ✅     |
 | Edit / enable / disable   | `PATCH /api/skills/:name`           | `update(name, { enabled?, files?, removeFiles? })` | ✅     |
+| Publish revision          | `POST /api/skills/:name/revisions`  | `publish(name, { files })` → `SkillRevision`       | ✅     |
 | Delete                    | `DELETE /api/skills/:name`          | `remove(name)`                                     | ✅     |
+
+```ts
+SkillRevision { number, fileCount, publishedAt }   // SkillDetail also carries revisions?: SkillRevision[], newest first
+```
 
 A skill is the Claude Agent SDK's native representation (a directory with `SKILL.md`
 frontmatter). §6 keeps it provider-native on purpose: the SDK does not invent a portable skill
@@ -495,6 +527,19 @@ assignment check) and then the skill's stored files and record; it is refused wi
 delete first writes a pending-delete marker that records the owner: until the delete finishes, no
 list or read re-creates the catalog row or makes the reader its owner, and a retried `DELETE` —
 by the owning Builder too — finishes an interrupted one (ADR-0077 D3).
+
+A revision is an immutable, numbered (1, 2, 3 …) copy of a whole skill directory.
+`POST /api/skills/:name/revisions` takes the same `{ files }` an import takes, replaces the skill's
+current files with them and freezes them as revision _n_+1 (`201 { revision }`); `PATCH` keeps
+editing only the current files, which are what `latest` means. The bytes are written once under
+`skill-revisions/<name>/<n>/` and never rewritten, so a published revision cannot change under an
+agent that pins it. An agent pins revisions in `skillRevisions` (skill id → number, on
+`PUT /api/agents/:id/resources` and in a create's `assignments`; a pin must name an assigned skill);
+a skill without a pin runs its current files. A pin naming a revision that does not exist is refused
+(`422 agent_definition_references_missing`, `details` naming it `skill:<name>@<n>`; a malformed pin,
+or one on a skill that is not assigned, is `400 invalid_assignments`). Publishing uses the skill's update grant (an Admin any skill, a
+Builder one it owns) and deleting the skill deletes its revisions; `404 skill_not_found` for an
+unknown skill.
 
 ### 5.8 Connectors (MCP servers) — `aw.connectors`
 
@@ -672,17 +717,17 @@ RunResource { id, workspaceId, agentId, projectId|null, initiatingUserId|null, s
 StartRunRequest { prompt (≤100 000 chars, non-blank), sessionId?, modelConnectionId?+model? (together) }
 ```
 
-| Operation                           | Route                                                                                                                      | SDK                                                      | Status |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------ |
-| Start (202)                         | `POST /api/agents/:id/runs`                                                                                                | `start(agentId, { prompt, sessionId?, modelOverride? })` | ✅     |
-| Read                                | `GET /api/runs/:id`                                                                                                        | `get(id)`                                                | ✅     |
-| List (filters, cursor)              | `GET /api/runs`                                                                                                            | `list(query)`                                            | ✅     |
-| Stream, one connection              | `GET /api/runs/:id/events`                                                                                                 | `events(id, { after? })`                                 | ✅     |
-| Stream with resume                  | (same)                                                                                                                     | `follow(id, { maxReconnects?, reconnectDelayMs? })`      | ✅     |
-| Wait for the settled record         | (same + `GET /api/runs/:id`)                                                                                               | `waitForOutcome(id)`                                     | ✅     |
-| Interrupt                           | `POST /api/runs/:id/interrupt`                                                                                             | `interrupt(id)`                                          | ✅     |
-| Revoke gateway tokens (Owner/Admin) | `POST /api/runs/:id/revoke-tokens` (`POST /api/runs/:id` kept, **deprecated**, until the next major release (ADR-0078 D7)) | `revokeTokens(id, { tokenId? })`                         | ✅     |
-| Feedback (204)                      | `POST /api/runs/:id/feedback`                                                                                              | — (posted by the surface page)                           | ✅     |
+| Operation                           | Route                                                                                                                      | SDK                                                                  | Status |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------ |
+| Start (202)                         | `POST /api/agents/:id/runs`                                                                                                | `start(agentId, { prompt, sessionId?, modelOverride?, fileScope? })` | ✅     |
+| Read                                | `GET /api/runs/:id`                                                                                                        | `get(id)`                                                            | ✅     |
+| List (filters, cursor)              | `GET /api/runs`                                                                                                            | `list(query)`                                                        | ✅     |
+| Stream, one connection              | `GET /api/runs/:id/events`                                                                                                 | `events(id, { after? })`                                             | ✅     |
+| Stream with resume                  | (same)                                                                                                                     | `follow(id, { maxReconnects?, reconnectDelayMs? })`                  | ✅     |
+| Wait for the settled record         | (same + `GET /api/runs/:id`)                                                                                               | `waitForOutcome(id)`                                                 | ✅     |
+| Interrupt                           | `POST /api/runs/:id/interrupt`                                                                                             | `interrupt(id)`                                                      | ✅     |
+| Revoke gateway tokens (Owner/Admin) | `POST /api/runs/:id/revoke-tokens` (`POST /api/runs/:id` kept, **deprecated**, until the next major release (ADR-0078 D7)) | `revokeTokens(id, { tokenId? })`                                     | ✅     |
+| Feedback (204)                      | `POST /api/runs/:id/feedback`                                                                                              | — (posted by the surface page)                                       | ✅     |
 
 Stream frames, classified by the SDK (`RunEventFrame`): `run-status` and `runtime` carry a
 resume id; `run-failed`, `stream-reset`, `done` do not. A `runtime` frame's `name` is one of §6.3's
@@ -754,7 +799,7 @@ not durable, not newest-first) and `costUsd` is a JSON number (§4). The audit l
 of the raw rows, newest first: there is no `subjectType`, no `details`, and the timestamp is
 `createdAt`; `limit` is 1–500 (default 100) and anything else is `400 invalid_limit`, a `cursor`
 that is not this list's `nextCursor` for the caller's workspace is `400 invalid_cursor`, both in the
-standard envelope (§4), as are its `401 unauthenticated` and `503 audit_runtime_not_configured`. The audit route goes
+standard envelope (§4), as are its `401 unauthenticated` and `503 rbac_runtime_not_configured`. The audit route goes
 through `authorise` (`audit-events` permission, ADR-0075): only an Owner reads the trail, and every
 other role answers `403 forbidden`.
 
@@ -875,7 +920,8 @@ not a problem). A policy the source never stored (`GET …/policy` answers `sour
 additive field of `AgentPolicyResponseSchema`) is not `PUT`: it stays compiled in the destination.
 Run grants are not carried (they name principals of one workspace). Bundling skill
 directories into the file is deliberately absent: a skill moves by `skills.export`/`import`, and
-revision pinning is unit 19's (N-1). [ADR-0076](../adr/0076-the-agent-definition-is-a-versioned-name-keyed-file-with-no-secrets.md)
+a revision pin travels as `resources.skillRevisions` (skill name → revision number; absent means
+latest, and a pin is dropped with its skill under `onMissing: 'skip'`). [ADR-0076](../adr/0076-the-agent-definition-is-a-versioned-name-keyed-file-with-no-secrets.md)
 records the format. This is the unit a customer moves between workspaces or environments, the
 per-resource file workspace-as-code (developer-platform Phase 2) builds on, and the same shape
 share publication (§5.13) snapshots server-side after RF-103.
@@ -1184,7 +1230,7 @@ aw runtimes profiles list|get|create|update|remove
 aw runtimes connections list|create
 aw runtimes detect|test <driver>                                   # S-9, S-4
 aw secrets list|create|replace|remove
-aw files list|upload|mkdir|download|move|remove
+aw files list|upload [--direct]|mkdir|download|move|remove          # --direct: presigned PUT, bytes go to the object store
 aw skills list|get|import <dir>|export <name> <dir>|update|enable|disable|remove
 aw connectors list|get|create|update|remove|rotate-credential|test|test-draft
 aw engines list                                                                    # issue #319; read-only, an engine is installed by deploying an adapter

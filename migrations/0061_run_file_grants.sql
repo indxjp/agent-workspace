@@ -1,0 +1,1 @@
+ALTER TABLE "runs" ADD COLUMN "file_grants" text[] DEFAULT '{}'::text[] NOT NULL;

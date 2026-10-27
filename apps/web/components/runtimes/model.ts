@@ -1,11 +1,14 @@
+import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+
 import {
-  RuntimeConnectionListResponseSchema,
+  RUNTIME_DRIVERS,
   defaultRuntimeNetworkPolicy,
+  type RuntimeDriver,
   type RuntimeNetworkPolicy,
 } from '../../contracts/runtimes';
 
 export type RuntimeOption = Readonly<{
-  id: string;
+  id: RuntimeDriver;
   label: string;
   description: string;
   side?: string;
@@ -146,16 +149,11 @@ function problemMessage(body: unknown): string | undefined {
  * server ignores the connection for any other driver. With several, the first listed is used.
  */
 export async function runtimeConnectionIdFor(
-  request: typeof fetch,
+  client: AgentWorkspaceClient,
   driverId: string,
 ): Promise<string | undefined> {
-  const response = await request('/api/runtime-connections', { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Loading runtime connections failed with HTTP ${String(response.status)}.`);
-  }
-  const parsed = RuntimeConnectionListResponseSchema.safeParse(await response.json());
-  if (!parsed.success) throw new Error('Loading runtime connections returned an invalid list.');
-  return parsed.data.runtimeConnections.find((connection) => connection.driver === driverId)?.id;
+  const connections = await client.runtimes.connections.list();
+  return connections.find((connection) => connection.driver === driverId)?.id;
 }
 
 /**
@@ -164,13 +162,18 @@ export async function runtimeConnectionIdFor(
  * server's own `runtime_connection_missing` refusal.
  */
 export async function testSelectedRuntime(
+  client: AgentWorkspaceClient,
   request: typeof fetch,
   driverId: string,
 ): Promise<RuntimeTestResponse> {
-  const connectionId = await runtimeConnectionIdFor(request, driverId).catch(() => undefined);
+  const connectionId = await runtimeConnectionIdFor(client, driverId).catch(() => undefined);
   return testRuntime(request, driverId, connectionId);
 }
 
+/**
+ * `POST /api/runtimes/test` stays a raw request until S-4 gives it the standard envelope and the
+ * SDK a method for it (docs/sdk/07-structure-map.md, unit 9).
+ */
 export async function testRuntime(
   request: typeof fetch,
   driverId: string,
@@ -207,7 +210,7 @@ export type RuntimeProfileDraft = Readonly<{
   filesystem: 'read-only' | 'read-write';
 }>;
 
-export type SavedRuntimeProfile = RuntimeProfileDraft & Readonly<{ id: string }>;
+export type SavedRuntimeProfile = Readonly<{ id: string; name: string }>;
 
 /**
  * The policy the Save draft asks for: what the registry entry reports this runtime can actually
@@ -244,57 +247,21 @@ export function runtimeProfileDraftFor(
   };
 }
 
-function asProfiles(value: unknown): SavedRuntimeProfile[] {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return [];
-  const rows = (value as Record<string, unknown>)['runtimeProfiles'];
-  if (!Array.isArray(rows)) return [];
-  return rows.filter((row): row is SavedRuntimeProfile => {
-    if (typeof row !== 'object' || row === null || Array.isArray(row)) return false;
-    const record = row as Record<string, unknown>;
-    return (
-      typeof record['id'] === 'string' &&
-      typeof record['name'] === 'string' &&
-      typeof record['driver'] === 'string' &&
-      typeof record['networkPolicy'] === 'string' &&
-      typeof record['filesystem'] === 'string'
-    );
-  });
-}
-
+/**
+ * Save the draft: update the workspace's profile for the driver, or create the first one. The
+ * server's own sentence for a refusal (for example `network_policy_not_enforceable`) rejects.
+ */
 export async function saveRuntimeProfile(
-  request: typeof fetch,
+  client: AgentWorkspaceClient,
   draft: RuntimeProfileDraft,
 ): Promise<SavedRuntimeProfile> {
-  const listed = await request('/api/runtime-profiles', { cache: 'no-store' });
-  if (!listed.ok) {
-    throw new Error(`Loading runtime profiles failed with HTTP ${String(listed.status)}.`);
-  }
-  const existing = asProfiles(await listed.json()).find(
-    (profile) => profile.driver === draft.driver,
+  const driver = RUNTIME_DRIVERS.find((known) => known === draft.driver);
+  if (driver === undefined) throw new Error(`Unknown runtime driver ${draft.driver}.`);
+  const body = { ...draft, driver };
+  const existing = (await client.runtimes.profiles.list()).find(
+    (profile) => profile.driver === driver,
   );
-  const response = await request(
-    existing === undefined ? '/api/runtime-profiles' : `/api/runtime-profiles/${existing.id}`,
-    {
-      method: existing === undefined ? 'POST' : 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(draft),
-    },
-  );
-  const body = (await response.json()) as unknown;
-  if (!response.ok) {
-    const detail =
-      typeof body === 'object' && body !== null && !Array.isArray(body)
-        ? (body as { error?: { message?: unknown } }).error?.message
-        : undefined;
-    throw new Error(
-      typeof detail === 'string'
-        ? detail
-        : `Saving the runtime profile failed with HTTP ${String(response.status)}.`,
-    );
-  }
-  const profiles = asProfiles({ runtimeProfiles: [body] });
-  const saved = profiles[0];
-  if (saved === undefined)
-    throw new Error('Saving the runtime profile returned an invalid resource.');
-  return saved;
+  return existing === undefined
+    ? client.runtimes.profiles.create(body)
+    : client.runtimes.profiles.update(existing.id, body);
 }

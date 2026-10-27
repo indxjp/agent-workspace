@@ -14,11 +14,7 @@ import { POST as promote } from './route';
 import { POST as rollback } from '../rollback/route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import type { AgentRecord } from '../../../../../server/agents/contract';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
 import {
@@ -26,19 +22,15 @@ import {
   type InMemoryAgentVersionStoreProvider,
 } from '../../../../../server/agent-versions/memory-store';
 import { setAgentPointer } from '../../../../../server/agent-versions/pointers';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import type { WorkspaceAgentVersionStore } from '../../../../../server/agent-versions/store';
-import { createLocalFilesystemObjectStoreProvider } from '../../../../../server/skills/object-store-bridge';
-import { clearSkillsRuntime, configureSkillsRuntime } from '../../../../../server/skills/runtime';
-import { createRepositorySkillsStoreProvider } from '../../../../../server/skills/store';
+import { createLocalFilesystemObjectStoreProvider } from '@agent-workspace/core/storage';
+import { createRepositorySkillsStoreProvider } from '../../../../../server/storage/store';
 import { uploadToolBundle } from '../../../../../server/tool-bundles/handlers';
 import type { CeilingFor } from '../../../../../server/policy-ceiling/ceiling';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 
 /**
  * `POST /api/agents/:id/promote` and `POST /api/agents/:id/rollback` (issue #615) on the memory
@@ -97,40 +89,42 @@ beforeEach(async () => {
     if (saved.status !== 201) throw new Error('the fixture version saves');
   }
 
-  configureAgentsRuntime({
-    agents,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
+  installTestDomains({
+    agents: {
+      agents,
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : { kind: 'workspace', workspaceId },
+        );
+      },
     },
   });
-  configureAgentVersionsRuntime({ versions });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
-      return Promise.resolve(
-        Principal.fromApiKey({
-          ...ACTORS[actor],
-          apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
-          workspaceId,
-          label: `${actor} release key`,
-        }),
-      );
+  installTestDomains({ agentVersions: { versions } });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
+        return Promise.resolve(
+          Principal.fromApiKey({
+            ...ACTORS[actor],
+            apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
+            workspaceId,
+            label: `${actor} release key`,
+          }),
+        );
+      },
     },
   });
 });
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 function post(
@@ -253,7 +247,7 @@ describe('POST /api/agents/:id/promote: the promotion gate (issue #619)', () => 
   });
 
   beforeEach(() => {
-    configureAgentVersionsRuntime({ versions, ceilingFor });
+    installTestDomains({ agentVersions: { versions, ceiling: { kind: 'enforced', ceilingFor } } });
   });
 
   async function idOf(number: number): Promise<string> {
@@ -446,9 +440,14 @@ describe('POST /api/agents/:id/promote: code tools (ADR-0118 TS8)', () => {
       store: createLocalFilesystemObjectStoreProvider(skillsRoot),
       scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
     });
-    configureSkillsRuntime({
-      store: skills,
-      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+    installTestDomains({
+      skills: {
+        kind: 'serving',
+        runtime: {
+          store: skills,
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+        },
+      },
     });
     const uploaded = await uploadToolBundle(skills.forWorkspace(WORKSPACE), {
       contentBase64: BUNDLE.toString('base64'),
@@ -483,7 +482,6 @@ describe('POST /api/agents/:id/promote: code tools (ADR-0118 TS8)', () => {
   });
 
   afterEach(async () => {
-    clearSkillsRuntime();
     await rm(skillsRoot, { recursive: true, force: true });
   });
 
@@ -493,7 +491,7 @@ describe('POST /api/agents/:id/promote: code tools (ADR-0118 TS8)', () => {
     expect(await codeOf(refused)).toBe('code_tool_needs_host');
     expect(await pointers()).toEqual([['local', 3]]);
 
-    configureAgentVersionsRuntime({ versions, toolHost: true });
+    installTestDomains({ agentVersions: { versions, toolHost: true } });
     await expect(moved(await post(promote, { body: {} }))).resolves.toMatchObject({
       environment: 'production',
       to: 3,

@@ -690,6 +690,8 @@ const INERT_BASENAMES = new Set([
   '.gitattributes',
   '.gitkeep',
   '.gitmodules',
+  // gitleaks reads fingerprints from it; it is a list of ignored findings, never loaded as code.
+  '.gitleaksignore',
   '.npmrc',
   '.nvmrc',
   '.dockerignore',

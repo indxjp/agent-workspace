@@ -9,10 +9,15 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
-import { createInMemoryObjectStoreProvider } from './memory-store.js';
+import {
+  defineObjectStoreContract,
+  defineObjectStoreV2Contract,
+  type ObjectStoreV2ContractFixture,
+} from './contract.js';
+import { UnsafeObjectKeyError } from './key-safety.js';
+import { createInMemoryObjectStore, createInMemoryObjectStoreProvider } from './memory-store.js';
 
-function setup(): Promise<ObjectStoreContractFixture> {
+function setup(): Promise<ObjectStoreV2ContractFixture> {
   return Promise.resolve({
     provider: createInMemoryObjectStoreProvider(),
     // Nothing outlives the provider: the map it closes over is unreachable once it is dropped.
@@ -21,9 +26,27 @@ function setup(): Promise<ObjectStoreContractFixture> {
 }
 
 defineObjectStoreContract('in-memory reference', setup);
+defineObjectStoreV2Contract('in-memory reference', setup);
 
 describe('in-memory ObjectStore — backend-specific proof', () => {
   const WORKSPACE_ID = '55555555-5555-4555-8555-555555555555';
+
+  it('raw write cancels the body on an unsafe key', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(8));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+
+    await expect(createInMemoryObjectStore().write('../x', body, {})).rejects.toThrow(
+      UnsafeObjectKeyError,
+    );
+    expect(cancelled).toBe(true);
+  });
 
   it('copies bytes in and out, so a caller cannot mutate stored content through its own array', async () => {
     // The local-filesystem backend gets this from the filesystem; a Map does not, and the

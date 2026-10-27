@@ -7,6 +7,7 @@ import {
   AGENT_VERSION_PROBLEM_CODES,
   AGENT_VERSION_SURFACES_MAX,
   AGENT_VERSION_VIAS,
+  CLIENT_AGENT_VERSION_VIAS,
   AgentPointerMoveResponseSchema,
   AgentVersionBodySchema,
   AgentVersionCheckResponseSchema,
@@ -391,6 +392,16 @@ describe('AgentVersionDraftSchema and CreateAgentVersionRequestSchema', () => {
     ]);
   });
 
+  it("refuses via 'builder' in a draft and a request: only the Builder itself may save it", () => {
+    expect(issuePaths(AgentVersionDraftSchema.safeParse({ ...draft, via: 'builder' }))).toEqual([
+      'via',
+    ]);
+    expect(
+      issuePaths(CreateAgentVersionRequestSchema.safeParse({ ...draft, via: 'builder' })),
+    ).toEqual(['via']);
+    expect(CLIENT_AGENT_VERSION_VIAS).toEqual(['ui', 'aw-push', 'api']);
+  });
+
   it('refuses a summary of 0 or 201 characters', () => {
     expect(issuePaths(AgentVersionDraftSchema.safeParse({ ...draft, summary: '' }))).toEqual([
       'summary',
@@ -440,6 +451,41 @@ describe('pointers', () => {
     ).toEqual(['version']);
   });
 
+  it.each([undefined, null, 3, AGENT_VERSION_NUMBER_MAX])(
+    'accepts expectedVersion %s (#1847)',
+    (expectedVersion) => {
+      const request = {
+        environment: 'local',
+        version: 2,
+        ...(expectedVersion === undefined ? {} : { expectedVersion }),
+      };
+      expect(SetAgentPointerRequestSchema.parse(request)).toEqual(request);
+    },
+  );
+
+  it.each([0, -1, 1.5, 2_147_483_648, '3', true])('refuses expectedVersion %s (#1847)', (value) => {
+    expect(
+      issuePaths(
+        SetAgentPointerRequestSchema.safeParse({
+          environment: 'local',
+          version: 2,
+          expectedVersion: value,
+        }),
+      ),
+    ).toEqual(['expectedVersion']);
+  });
+
+  it('refuses an unknown key beside expectedVersion', () => {
+    expect(
+      SetAgentPointerRequestSchema.safeParse({
+        environment: 'local',
+        version: 2,
+        expectedVersion: 1,
+        expected: 1,
+      }).success,
+    ).toBe(false);
+  });
+
   it('round-trips the pointer response', () => {
     const response = {
       agent,
@@ -460,6 +506,16 @@ describe('CreateAgentFromVersionRequestSchema', () => {
     expect(
       issuePaths(CreateAgentFromVersionRequestSchema.safeParse({ version, dryRun: false })),
     ).toEqual(['dryRun']);
+  });
+
+  it("refuses via 'builder' in the nested version", () => {
+    expect(
+      issuePaths(
+        CreateAgentFromVersionRequestSchema.safeParse({
+          version: { ...version, via: 'builder' },
+        }),
+      ),
+    ).toEqual(['version.via']);
   });
 
   it('refuses the legacy name and instructions keys', () => {
@@ -660,7 +716,7 @@ describe('promote and rollback (#615)', () => {
 
 describe('constants', () => {
   it('exports the ADR-0101 lists', () => {
-    expect(AGENT_VERSION_VIAS).toEqual(['ui', 'aw-push', 'api']);
+    expect(AGENT_VERSION_VIAS).toEqual(['ui', 'aw-push', 'api', 'builder']);
     expect(AGENT_ENVIRONMENTS).toEqual(['local', 'production']);
     expect(AGENT_VERSION_SURFACES_MAX).toBe(16);
   });
@@ -676,8 +732,10 @@ describe('AGENT_VERSION_PROBLEM_CODES', () => {
       agent_not_found: 404,
       agent_policy_not_configured: 503,
       agent_version_not_found: 404,
+      agent_version_number_taken: 409,
       no_pointer: 409,
       nothing_to_roll_back: 409,
+      pointer_moved: 409,
       promotion_not_evaluated: 409,
       promotion_gate_failed: 409,
       code_tool_needs_host: 422,
@@ -693,6 +751,12 @@ describe('AGENT_VERSION_PROBLEM_CODES', () => {
       policy_cannot_widen: 403,
       surface_name_taken: 409,
       agent_name_conflict: 409,
+      unknown_file: 400,
+      unknown_skill: 400,
+      skill_deleting: 409,
+      unknown_connector: 400,
+      storage_connection_prefix_not_allowed: 403,
+      storage_connection_write_not_allowed: 403,
     });
   });
 

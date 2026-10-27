@@ -122,7 +122,13 @@ const RUNTIME_ALLOW_BUILDS: readonly (readonly [string, boolean])[] = [
  * `install-scripts.test.ts` fails when a root override that reaches the runtime tree is missing.
  */
 const RUNTIME_OVERRIDES: readonly (readonly [string, string])[] = [
-  ['undici@>=7.0.0 <7.29.1', '^7.29.1'],
+  ['undici@>=7.0.0 <7.30.1', '^7.30.1'],
+  ['undici@>=8.0.0 <8.12.2', '^8.12.2'],
+  ['body-parser@>=2.0.0 <2.4.0', '^2.4.0'],
+  ['@azure/msal-node@>=5.0.0-beta.0 <7.1.0', '^7.1.0'],
+  ['@modelcontextprotocol/server@>=2.0.0 <2.3.0', '^2.3.0'],
+  ['@modelcontextprotocol/client@>=2.0.0 <2.3.0', '^2.3.0'],
+  ['@modelcontextprotocol/core@>=2.0.0 <2.3.0', '^2.3.0'],
 ];
 
 const ProjectNameSchema = z

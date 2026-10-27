@@ -49,6 +49,7 @@
       "@indx-workspace/contracts/agent-versions": ["./packages/contracts/src/agent-versions.ts"],
       "@indx-workspace/contracts/agents": ["./packages/contracts/src/agents.ts"],
       "@indx-workspace/contracts/api-keys": ["./packages/contracts/src/api-keys.ts"],
+      "@indx-workspace/contracts/builder": ["./packages/contracts/src/builder.ts"],
       "@indx-workspace/contracts/cli-auth": ["./packages/contracts/src/cli-auth.ts"],
       "@indx-workspace/contracts/connectors": ["./packages/contracts/src/connectors.ts"],
       "@indx-workspace/contracts/endpoint-clients": [
@@ -58,6 +59,9 @@
       "@indx-workspace/contracts/evaluations": ["./packages/contracts/src/evaluations.ts"],
       "@indx-workspace/contracts/feedback": ["./packages/contracts/src/feedback.ts"],
       "@indx-workspace/contracts/files": ["./packages/contracts/src/files.ts"],
+      "@indx-workspace/contracts/identity-assertion": [
+        "./packages/contracts/src/identity-assertion.ts"
+      ],
       "@indx-workspace/contracts/invitations": ["./packages/contracts/src/invitations.ts"],
       "@indx-workspace/contracts/local-runtime": ["./packages/contracts/src/local-runtime.ts"],
       "@indx-workspace/contracts/models": ["./packages/contracts/src/models.ts"],
@@ -79,29 +83,51 @@
       "@indx-workspace/contracts/setup": ["./packages/contracts/src/setup.ts"],
       "@indx-workspace/contracts/shares": ["./packages/contracts/src/shares.ts"],
       "@indx-workspace/contracts/skills": ["./packages/contracts/src/skills.ts"],
+      "@indx-workspace/contracts/storage-connections": [
+        "./packages/contracts/src/storage-connections.ts"
+      ],
+      "@indx-workspace/contracts/storage-settings": [
+        "./packages/contracts/src/storage-settings.ts"
+      ],
+      "@indx-workspace/contracts/storage-url": ["./packages/contracts/src/storage-url.ts"],
       "@indx-workspace/contracts/surfaces": ["./packages/contracts/src/surfaces.ts"],
       "@indx-workspace/contracts/team": ["./packages/contracts/src/team.ts"],
       "@indx-workspace/contracts/tokens": ["./packages/contracts/src/tokens.ts"],
       "@indx-workspace/contracts/tool-connectors": ["./packages/contracts/src/tool-connectors.ts"],
+      "@indx-workspace/contracts/triggers": ["./packages/contracts/src/triggers.ts"],
       "@indx-workspace/contracts/workspaces": ["./packages/contracts/src/workspaces.ts"],
       "@agent-workspace/core": ["./packages/core/src/index.ts"],
-      "@agent-workspace/core/audit": ["./packages/core/src/audit/index.ts"],
       "@agent-workspace/core/auth": ["./packages/core/src/auth/index.ts"],
       "@agent-workspace/core/db": ["./packages/core/src/db/index.ts"],
       "@agent-workspace/core/db/unscoped": ["./packages/core/src/db/repositories/unscoped.ts"],
       "@agent-workspace/core/posture": ["./packages/core/src/posture.ts"],
       "@agent-workspace/core/secrets": ["./packages/core/src/secrets/index.ts"],
       "@agent-workspace/core/storage": ["./packages/core/src/storage/index.ts"],
+      "@agent-workspace/core/storage/keys": ["./packages/core/src/storage/key-safety.ts"],
+      "@agent-workspace/core/storage/content-type": ["./packages/core/src/storage/content-type.ts"],
+      "@agent-workspace/core/storage/object-name": ["./packages/core/src/storage/object-name.ts"],
+      "@agent-workspace/core/storage/streams": ["./packages/core/src/storage/streams.ts"],
+      "@agent-workspace/core/storage/key-lock": ["./packages/core/src/storage/key-lock.ts"],
+      "@agent-workspace/core/storage/backends": ["./packages/core/src/storage/backends.ts"],
       "@agent-workspace/core/telemetry": ["./packages/core/src/telemetry/index.ts"],
+      "@agent-workspace/core/tracing": ["./packages/core/src/telemetry/tracing.ts"],
       "@agent-workspace/egress-proxy": ["./packages/egress-proxy/src/index.ts"],
       "@agent-workspace/engine": ["./packages/engine/src/index.ts"],
       "@agent-workspace/engine/testing": ["./packages/engine/src/testing/index.ts"],
       "@agent-workspace/engine-claude-agent-sdk": [
         "./packages/engine-claude-agent-sdk/src/index.ts"
       ],
+      "@agent-workspace/engine-claude-agent-sdk/testing": [
+        "./packages/engine-claude-agent-sdk/src/testing.ts"
+      ],
       "@agent-workspace/engine-mastra": ["./packages/engine-mastra/src/index.ts"],
+      "@agent-workspace/engine-mastra/testing": ["./packages/engine-mastra/src/testing.ts"],
       "@agent-workspace/engine-openai-agents": ["./packages/engine-openai-agents/src/index.ts"],
+      "@agent-workspace/engine-openai-agents/testing": [
+        "./packages/engine-openai-agents/src/testing.ts"
+      ],
       "@agent-workspace/engine-pi": ["./packages/engine-pi/src/index.ts"],
+      "@agent-workspace/engine-pi/testing": ["./packages/engine-pi/src/testing.ts"],
       "@agent-workspace/gateway": ["./packages/gateway/src/index.ts"],
       "@agent-workspace/gateway/providers/registry": [
         "./packages/gateway/src/providers/registry.ts"
@@ -111,7 +137,22 @@
       "@agent-workspace/runner": ["./apps/runner/src/index.ts"],
       "@agent-workspace/runner/start": ["./apps/runner/src/start.ts"],
       "@agent-workspace/runner/manager-start": ["./apps/runner/src/manager-start.ts"],
-      "@agent-workspace/runtime": ["./packages/runtime/src/index.ts"],
+      "@agent-workspace/run-protocol": ["./packages/run-protocol/src/index.ts"],
+      "@agent-workspace/runtime/driver": ["./packages/runtime/src/index.ts"],
+      "@agent-workspace/runtime/driver/local": ["./packages/runtime/src/local.ts"],
+      "@agent-workspace/runtime/driver/docker": ["./packages/runtime/src/docker.ts"],
+      "@agent-workspace/runtime/driver/kubernetes": ["./packages/runtime/src/kubernetes.ts"],
+      "@agent-workspace/runtime/driver/cloud-run": ["./packages/runtime/src/cloud-run.ts"],
+      "@agent-workspace/runtime/driver/external": ["./packages/runtime/src/external/index.ts"],
+      "@agent-workspace/runtime/driver/vercel-sandbox": [
+        "./packages/runtime/src/vercel-sandbox.ts"
+      ],
+      "@agent-workspace/runtime/driver/cloudflare-sandbox": [
+        "./packages/runtime/src/cloudflare-sandbox.ts"
+      ],
+      "@agent-workspace/runtime/driver/aca-sessions": ["./packages/runtime/src/aca-sessions.ts"],
+      "@agent-workspace/runtime/engine-images": ["./packages/runtime/src/engine-images.ts"],
+      "@agent-workspace/runtime/transfer": ["./packages/runtime/src/transfer.ts"],
       "@agent-workspace/schemas/agent-workspace.schema.json": [
         "./packages/schemas/agent-workspace.schema.json"
       ],
@@ -126,6 +167,19 @@
       "@indx-workspace/sdk/portable": ["./packages/sdk/src/portable/index.ts"],
       "@indx-workspace/sdk/project": ["./packages/sdk/src/project/index.ts"],
       "@indx-workspace/sdk/testing": ["./packages/sdk/src/testing.ts"],
+      "@agent-workspace/skills-office": ["./packages/skills-office/src/index.d.mts"],
+      "@agent-workspace/skills-office/office-reader/scripts/dxf.mjs": [
+        "./packages/skills-office/office-reader/scripts/dxf.d.mts"
+      ],
+      "@agent-workspace/skills-office/office-reader/scripts/ooxml.mjs": [
+        "./packages/skills-office/office-reader/scripts/ooxml.d.mts"
+      ],
+      "@agent-workspace/skills-office/office-reader/scripts/pdf.mjs": [
+        "./packages/skills-office/office-reader/scripts/pdf.d.mts"
+      ],
+      "@agent-workspace/skills-office/office-reader/scripts/dxf.mjs": [
+        "./packages/skills-office/office-reader/scripts/dxf.d.mts"
+      ],
       "@agent-workspace/tool-host": ["./packages/tool-host/src/index.ts"],
       "@agent-workspace/web/server/cli-auth/local-credential": [
         "./apps/web/server/cli-auth/local-credential.ts"

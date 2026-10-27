@@ -22,10 +22,11 @@
  * missing, unreadable, or not the shape it claims is an error, not a skipped assertion — an
  * absent input is not an absent risk.
  *
- * **Contributor rule (R-15 §3, and it applies to this repository's stacked branches):** if
- * `migrations/meta/_journal.json` changed on your base branch, delete your generated migration
- * and re-run `pnpm db:generate`. A migration whose `when` predates one already applied is lost
- * silently.
+ * **Contributor rule (R-15 §3):** a migration whose `when` predates one already applied is lost
+ * silently. When main gained a migration since your branch generated one, run
+ * `pnpm migrations:renumber` during `git merge origin/main`: it moves your migrations after
+ * main's with a strictly later `when` (scripts/migrations.mjs). `pnpm migrations:check` in
+ * fast-checks rejects a journal that would skip one.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

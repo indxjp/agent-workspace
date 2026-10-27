@@ -568,7 +568,8 @@ describe('regression: the workflow that runs the journey', () => {
     // One line, or wrapped by Prettier once the list passes the print width.
     const needs = /^ {4}needs:\s*\[([^\]]*)\]$/mu.exec(jobBlock('ci-success'))?.[1] ?? '';
     expect(needs.split(',').map((job) => job.trim())).toContain('journey-e2e');
-    expect(workflow).not.toMatch(/^ {4}if:/mu);
+    // Only the heavy-tier condition (ci.yml, COST) may skip the job.
+    expect(workflow).not.toMatch(/^ {4}if:(?! >-\r?\n {6}github\.event_name == 'schedule')/mu);
     expect(workflow).toContain('name: developer journey · ${{ matrix.part }}');
   });
 

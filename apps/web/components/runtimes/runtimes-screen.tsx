@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import type { RuntimeNetworkPolicy } from '../../contracts/runtimes';
+import { browserClient } from '../../lib/browser-client';
 import {
   RUNTIME_OPTIONS,
   SWITCH_COMPARISON,
@@ -166,7 +167,7 @@ export function RuntimesScreen({ entries }: Readonly<{ entries: readonly Runtime
             }
             onClick={() => {
               setTestState({ kind: 'running' });
-              void testSelectedRuntime(fetch, selected)
+              void testSelectedRuntime(browserClient(), fetch, selected)
                 .then((result) =>
                   setTestState({
                     kind: 'done',
@@ -195,7 +196,7 @@ export function RuntimesScreen({ entries }: Readonly<{ entries: readonly Runtime
             onClick={() => {
               setSaveState({ kind: 'saving' });
               void saveRuntimeProfile(
-                fetch,
+                browserClient(),
                 runtimeProfileDraftFor(selectedEntry ?? { id: selected, networkPolicies: null }),
               )
                 .then((profile) =>

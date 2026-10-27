@@ -4,6 +4,7 @@
  * resumes, and that every refusal writes nothing. `surface-sessions.integration.test.ts` proves
  * the same against PostgreSQL through `register()`.
  */
+import { log as webLogger } from '../../telemetry/logger';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createInMemoryWorkspaceScopeResolver, type SessionRecord } from '@agent-workspace/core/db';
@@ -20,6 +21,7 @@ import { hashApiKeySecret } from '../../rbac/api-key';
 import {
   createSurfaceSessionsRuntime,
   pickSurfaceVersion,
+  resolveDeploymentScope,
   withDeploymentOrigin,
 } from './composition';
 import { mayOpenSession } from './conditions';
@@ -91,6 +93,8 @@ async function fixture(): Promise<Fixture> {
   const keys = new Map<string, KeyRow>();
   const preflights: Fixture['preflights'] = [];
   const writes: string[] = [];
+  // Read while the runtime is built (it checks `WORKSPACE_SLUG` once), before `state` exists.
+  let environment: Readonly<Record<string, string>> = {};
 
   const state: Fixture = {
     resolved: {
@@ -116,9 +120,14 @@ async function fixture(): Promise<Fixture> {
     refusePreflight: false,
     archiveOnPreflight: null,
     productionSurface: false,
-    env: {},
+    get env() {
+      return environment;
+    },
+    set env(value) {
+      environment = value;
+    },
     runtime: createSurfaceSessionsRuntime({
-      env: () => state.env,
+      env: () => environment,
       scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_ID, slug: 'default' }]),
       agentVersions: {
         forScope: () => ({
@@ -593,6 +602,57 @@ describe('createSurfaceSessionsRuntime().servedSurfaces (issue #680)', () => {
     await expect(state.runtime.resolve('main', 'public')).resolves.toBeNull();
   });
 
+  describe('an unusable WORKSPACE_SLUG (issue #1263)', () => {
+    const construct = (env: Record<string, string>) =>
+      createSurfaceSessionsRuntime({ env: () => env } as unknown as Parameters<
+        typeof createSurfaceSessionsRuntime
+      >[0]);
+
+    it('warns once at construction, naming the variable', () => {
+      const warn = vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
+      try {
+        construct({ WORKSPACE_SLUG: 'Bad Slug' });
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(String(warn.mock.calls[0]?.[0])).toContain('WORKSPACE_SLUG');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('stays quiet for a usable slug and for the default', () => {
+      const warn = vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
+      try {
+        construct({ WORKSPACE_SLUG: 'default' });
+        construct({});
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('resolveDeploymentScope', () => {
+    const scopes = createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_ID, slug: 'default' }]);
+
+    it('resolves the deployment workspace, by default and by WORKSPACE_SLUG', async () => {
+      await expect(resolveDeploymentScope({}, scopes)).resolves.toMatchObject({
+        workspaceId: WORKSPACE_ID,
+      });
+      await expect(
+        resolveDeploymentScope({ WORKSPACE_SLUG: 'default' }, scopes),
+      ).resolves.toMatchObject({ workspaceId: WORKSPACE_ID });
+      await expect(resolveDeploymentScope({ WORKSPACE_SLUG: 'other' }, scopes)).resolves.toBeNull();
+    });
+
+    it('answers null for an unusable slug without asking the resolver', async () => {
+      const forWorkspaceSlug = vi.fn(() => Promise.resolve(null));
+      await expect(
+        resolveDeploymentScope({ WORKSPACE_SLUG: 'Bad Slug' }, { forWorkspaceSlug }),
+      ).resolves.toBeNull();
+      expect(forWorkspaceSlug).not.toHaveBeenCalled();
+    });
+  });
+
   describe('the deployment frontend origin (ADR-0128)', () => {
     const withEnv = (origin: string | undefined) => {
       state.env = {
@@ -639,7 +699,7 @@ describe('createSurfaceSessionsRuntime().servedSurfaces (issue #680)', () => {
       ['a path', 'https://agents-web.vercel.app/app'],
       ['garbage', 'not a url'],
     ])('ignores %s with one warning', async (_name, value) => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const warn = vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
       promote();
       withEnv(value);
       await expect(state.runtime.servedSurfaces()).resolves.toEqual([
@@ -685,7 +745,7 @@ describe('withDeploymentOrigin (ADR-0128, ADR-0129)', () => {
     ['two origins', `${FRONTEND},https://other.example.com`],
     ['not a URL', 'acme-ai-web'],
   ])('adds nothing when the value is %s', (_label, value) => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
     try {
       expect(withDeploymentOrigin(BARE, 'production', { AW_FRONTEND_ORIGIN: value })).toBe(BARE);
     } finally {
@@ -694,7 +754,7 @@ describe('withDeploymentOrigin (ADR-0128, ADR-0129)', () => {
   });
 
   it('leaves a full list as it is rather than refusing the surface', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const warn = vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
     try {
       const full = {
         ...BARE,

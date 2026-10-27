@@ -6,9 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { validatePackageExports } from '../../scripts/check-package-exports.mjs';
 import { validateWorkflowDocuments } from '../../scripts/check-workflows.mjs';
-
-/** The `runs-on` of ci.yml's bottleneck jobs: CI_BOTTLENECK_RUNNER, `ubuntu-latest` when unset. */
-const BOTTLENECK_RUNS_ON = "${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}";
+import { citationFailures } from '../../scripts/formal/generate.mjs';
 
 const temporaryRoots: string[] = [];
 
@@ -101,6 +99,31 @@ describe('package export validator', () => {
     );
   });
 
+  it('resolves a built CSS export to its source file before any build', async () => {
+    const root = await packageFixture();
+    const manifestPath = path.join(root, 'packages/library/package.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+      exports: Record<string, unknown>;
+    };
+    manifest.exports['./styles.css'] = { default: './dist/styles.css' };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    const aliasPath = path.join(root, 'tsconfig.architecture.json');
+    const aliases = JSON.parse(await readFile(aliasPath, 'utf8')) as {
+      compilerOptions: { paths: Record<string, string[]> };
+    };
+    aliases.compilerOptions.paths['@agent-workspace/library/styles.css'] = [];
+    await writeFile(aliasPath, JSON.stringify(aliases));
+
+    const missing = await validatePackageExports({ repositoryRoot: root, mode: 'source' });
+    expect(missing.errors).toContainEqual(
+      expect.stringContaining('does not resolve to source: ./dist/styles.css'),
+    );
+
+    await writeFile(path.join(root, 'packages/library/src/styles.css'), 'a {}');
+    const present = await validatePackageExports({ repositoryRoot: root, mode: 'source' });
+    expect(present.errors).toEqual([]);
+  });
+
   it('imports present JavaScript entrypoints and rejects a broken module graph', async () => {
     const root = await packageFixture();
     await mkdir(path.join(root, 'packages/library/dist'), { recursive: true });
@@ -159,6 +182,160 @@ describe('workflow validator', () => {
     ]);
   });
 
+  it('rejects a push workflow whose concurrency cancels main runs', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+    const cancel = "cancel-in-progress: ${{ github.event_name == 'pull_request' }}";
+    expect(ci).toContain(cancel);
+    workflows.set('.github/workflows/ci.yml', ci.replace(cancel, 'cancel-in-progress: true'));
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining(
+        'cancel-in-progress must not be true on a workflow that runs on push',
+      ),
+    );
+  });
+
+  // A PR body edit re-runs only the fast checks; sharing a cancel-in-progress group with the code
+  // run let that edit cancel the real tests while CI success still reported green.
+  it('rejects a workflow whose edited runs share a cancel-in-progress group with code runs', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+    const edited = (failures: string[]) =>
+      failures.filter((failure) => failure.includes('an `edited` run'));
+    expect(edited(validateWorkflowDocuments(workflows, template))).toEqual([]);
+
+    const sharedGroup = ci.replace(/^( {2}group: .*?)-\$\{\{ github\.event\.action[^\n]*$/mu, '$1');
+    expect(sharedGroup).not.toBe(ci);
+    workflows.set('.github/workflows/ci.yml', sharedGroup);
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('.github/workflows/ci.yml: an `edited` run'),
+    );
+
+    // `types:` below another key, or as a block list, is still read rather than taken as empty.
+    const typesBelowBranches = sharedGroup.replace(
+      /^( {2}pull_request:\r?\n)/mu,
+      '$1    branches: [main]\n',
+    );
+    expect(typesBelowBranches).not.toBe(sharedGroup);
+    workflows.set('.github/workflows/ci.yml', typesBelowBranches);
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('.github/workflows/ci.yml: an `edited` run'),
+    );
+    const blockList = sharedGroup.replace(
+      /^ {4}types: \[opened, synchronize, reopened, edited\]$/mu,
+      '    types:\n      - synchronize\n      - edited',
+    );
+    expect(blockList).not.toBe(sharedGroup);
+    workflows.set('.github/workflows/ci.yml', blockList);
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('.github/workflows/ci.yml: an `edited` run'),
+    );
+
+    // A `types` value the check cannot read fails closed instead of passing as an empty set.
+    workflows.set(
+      '.github/workflows/ci.yml',
+      ci.replace(/^( {4}types:) \[[^\]]*\]$/mu, '$1 ${{ fromJSON(vars.TYPES) }}'),
+    );
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('.github/workflows/ci.yml: on.pull_request.types must be'),
+    );
+  });
+
+  it.each(['Secret scan (gitleaks)', 'Dependency vulnerability scan (osv-scanner)'])(
+    'rejects fast-checks without the %s step',
+    async (step) => {
+      const workflows = await repositoryWorkflowDocuments();
+      const ci = workflows.get('.github/workflows/ci.yml');
+      if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+      expect(ci).toContain(step);
+      workflows.set('.github/workflows/ci.yml', ci.replaceAll(step, 'renamed'));
+      const template = await readFile(
+        path.join(process.cwd(), '.github/pull_request_template.md'),
+        'utf8',
+      );
+
+      expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+        expect.stringContaining(`fast-checks must include ${step}`),
+      );
+    },
+  );
+
+  // Owner decision D6 (docs/adr/0149, Amendment 2026-10-19): main merges through a merge queue,
+  // and a required check whose workflow does not run on merge_group never reports there, so every
+  // queued pull request would wait forever.
+  it('rejects ci.yml when CI success does not run on merge_group', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+    const trigger = '  merge_group:\n    types: [checks_requested]\n';
+    expect(ci).toContain(trigger);
+    workflows.set('.github/workflows/ci.yml', ci.replace(trigger, ''));
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining(
+        'ci.yml: produces the required check "CI success" and must run on merge_group',
+      ),
+    );
+  });
+
+  it('rejects any workflow producing a required check without merge_group', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const job = `jobs:\n  dry-run:\n    name: OSS export · dry run\n    runs-on: ubuntu-latest\n`;
+    const head = 'name: required\non:\n  pull_request:\n';
+    workflows.set(
+      '.github/workflows/required.yml',
+      `${head}permissions:\n  contents: read\n${job}`,
+    );
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+    const own = (failures: string[]) => failures.filter((f) => f.includes('required.yml'));
+
+    expect(own(validateWorkflowDocuments(workflows, template))).toEqual([
+      expect.stringContaining(
+        'required.yml: produces the required check "OSS export · dry run" and must run on merge_group',
+      ),
+    ]);
+    workflows.set(
+      '.github/workflows/required.yml',
+      `${head}  merge_group:\n    types: [checks_requested]\npermissions:\n  contents: read\n${job}`,
+    );
+    expect(own(validateWorkflowDocuments(workflows, template))).toEqual([]);
+  });
+
+  it('rejects a security workflow whose GHAS jobs skip without a warning', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const security = workflows.get('.github/workflows/security.yml');
+    if (security === undefined) throw new Error('.github/workflows/security.yml is missing');
+    expect(security).toContain('::warning');
+    workflows.set('.github/workflows/security.yml', security.replaceAll('::warning', '::notice'));
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('security.yml: skipped GHAS jobs must emit a ::warning'),
+    );
+  });
+
   it('rejects a packing job that does not restore the embedded build', async () => {
     const workflows = await repositoryWorkflowDocuments();
     const ci = workflows.get('.github/workflows/ci.yml');
@@ -204,29 +381,102 @@ describe('workflow validator', () => {
     );
   });
 
-  // The first `runs-on: ubuntu-latest` is fast-checks', the first bottleneck one is formal's.
+  // The first MS-A2 runs-on is fast-checks'. Each job names its INDXDev runner and the
+  // GitHub-hosted fallback the public export and forks run on (ADR-0053, Amendment 2026-10-26).
+  const msA2 = `\${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}`;
+  const offloaded = `\${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}`;
+  const refusal = 'every Linux CI job runs on the MS-A2 pool here and GitHub-hosted elsewhere';
+
   it.each([
-    ['ubuntu-latest', '[self-hosted, dgx]', 'never schedules CI onto a self-hosted runner'],
+    ['[self-hosted, ms-a2]'],
+    ['[self-hosted, dgx]'],
+    ['ubuntu-latest'],
+    ['blacksmith-8vcpu-ubuntu-2404'],
+    ["${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}"],
     [
-      'ubuntu-latest',
-      'blacksmith-4vcpu-ubuntu-2404',
-      'never schedules CI onto a self-hosted runner',
+      `\${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'blacksmith-4vcpu-ubuntu-2404' }}`,
     ],
-    ['ubuntu-latest', BOTTLENECK_RUNS_ON, 'job fast-checks reads CI_BOTTLENECK_RUNNER'],
-    [BOTTLENECK_RUNS_ON, 'blacksmith-4vcpu-ubuntu-2404', 'never schedules CI onto a self-hosted'],
-  ])('refuses runs-on: %s replaced by %s', async (from, label, failure) => {
+    [
+      `\${{ github.repository_owner != 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}`,
+    ],
+  ])('refuses the MS-A2 runs-on replaced by %s', async (label) => {
     const workflows = await repositoryWorkflowDocuments();
     const ci = workflows.get('.github/workflows/ci.yml');
     expect(ci).toBeDefined();
-    expect(ci).toContain(`runs-on: ${from}`);
-    workflows.set('.github/workflows/ci.yml', ci!.replace(`runs-on: ${from}`, `runs-on: ${label}`));
+    expect(ci).toContain(`runs-on: ${msA2}`);
+    workflows.set('.github/workflows/ci.yml', ci!.replace(`runs-on: ${msA2}`, `runs-on: ${label}`));
     const template = await readFile(
       path.join(process.cwd(), '.github/pull_request_template.md'),
       'utf8',
     );
 
     expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
-      expect.stringContaining(failure),
+      expect.stringContaining(refusal),
+    );
+  });
+
+  it('allows the Blacksmith label on the offloaded jobs only, and only that size', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+    expect(ci).toContain(`runs-on: ${offloaded}`);
+    expect(validateWorkflowDocuments(workflows, template)).not.toContainEqual(
+      expect.stringContaining(refusal),
+    );
+
+    workflows.set(
+      '.github/workflows/ci.yml',
+      ci!.replace(`runs-on: ${offloaded}`, `runs-on: ${offloaded.replace('8vcpu', '16vcpu')}`),
+    );
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining(refusal),
+    );
+  });
+
+  it.each([
+    ["    if: github.repository == 'indxjp/agent-workspace'\n", '', 'a release job must have'],
+    [
+      '    runs-on: ubuntu-latest\n',
+      '    runs-on: [self-hosted, ms-a2]\n',
+      'a release job runs on ubuntu-latest',
+    ],
+  ])(
+    'refuses a release job that could run outside the public repository (%#)',
+    async (from, to, failure) => {
+      const workflows = await repositoryWorkflowDocuments();
+      const images = workflows.get('.github/workflows/images.yml');
+      const template = await readFile(
+        path.join(process.cwd(), '.github/pull_request_template.md'),
+        'utf8',
+      );
+      expect(images).toContain(from);
+      workflows.set('.github/workflows/images.yml', images!.replace(from, to));
+
+      expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+        expect.stringContaining(failure),
+      );
+    },
+  );
+
+  it('refuses an internal-only job that a fork or the public repository could start', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const live = workflows.get('.github/workflows/providers-live.yml');
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+    expect(validateWorkflowDocuments(workflows, template)).not.toContainEqual(
+      expect.stringContaining('an internal-only job'),
+    );
+    const guard = "    if: github.repository_owner == 'INDXDev'\n";
+    expect(live).toContain(guard);
+    workflows.set('.github/workflows/providers-live.yml', live!.replace(guard, ''));
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('providers-live.yml#e2b: an internal-only job'),
     );
   });
 
@@ -274,6 +524,23 @@ describe('workflow validator', () => {
     );
   });
 
+  it('rejects fast-checks without the lockfile dedupe step', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    expect(ci).toBeDefined();
+    const step = '      - name: Lockfile is deduplicated\n        run: pnpm dedupe --check\n\n';
+    expect(ci).toContain(step);
+    workflows.set('.github/workflows/ci.yml', ci!.replace(step, ''));
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('fast-checks must include pnpm dedupe --check'),
+    );
+  });
+
   it('rejects fast-checks that wait for the build', async () => {
     const workflows = await repositoryWorkflowDocuments();
     const ci = workflows.get('.github/workflows/ci.yml');
@@ -297,10 +564,7 @@ describe('workflow validator', () => {
     expect(ci).toBeDefined();
     workflows.set(
       '.github/workflows/ci.yml',
-      ci!.replace(
-        '  heavy-checks:\n    name: tests · ${{ matrix.shard }}\n    needs: build\n',
-        '  heavy-checks:\n    name: tests · ${{ matrix.shard }}\n    needs: fast-checks\n',
-      ),
+      ci!.replace(/(\n {2}heavy-checks:\n(?: {4}.*\n)*? {4}needs: )build\n/u, '$1fast-checks\n'),
     );
     const template = await readFile(
       path.join(process.cwd(), '.github/pull_request_template.md'),
@@ -326,6 +590,8 @@ describe('workflow validator', () => {
     'journey-e2e',
     'docs-claims',
     'tool-sandbox-e2e',
+    'coverage',
+    'browser',
   ];
 
   /** ci.yml with ci-success's needs list replaced by `needs`, on one line. */
@@ -368,7 +634,7 @@ describe('workflow validator', () => {
 
     expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
       expect.stringContaining(
-        'need fast-checks, build, build-embedded, typecheck-lint, heavy-checks, release-checks, release-images, formal, image-scan, generated-project-e2e, journey-e2e, docs-claims and tool-sandbox-e2e',
+        'need fast-checks, build, build-embedded, typecheck-lint, heavy-checks, release-checks, release-images, formal, image-scan, generated-project-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage and browser',
       ),
     );
   });
@@ -396,6 +662,30 @@ describe('workflow validator', () => {
       expect.stringContaining('formal must not be skipped at job level'),
     );
     expect(failures).toContainEqual(expect.stringContaining('formal must include sha256sum -c'));
+  });
+
+  // ADR-0053, Amendment 2026-10-24: the heavy tier runs nightly and as the release gate, not in the
+  // merge queue; only `formal` keeps the queue in its gate.
+  it('rejects an end-to-end job gated back into the merge queue', async () => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    expect(ci).toBeDefined();
+    const journey = ci!.indexOf('  journey-e2e:\n');
+    const gate = "      github.event_name == 'schedule'";
+    const at = ci!.indexOf(gate, journey);
+    expect(at).toBeGreaterThan(journey);
+    workflows.set(
+      '.github/workflows/ci.yml',
+      `${ci!.slice(0, at)}      github.event_name == 'merge_group' || ${ci!.slice(at + 6)}`,
+    );
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
+
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining('journey-e2e must not be skipped at job level'),
+    );
   });
 
   it('rejects a generated-project E2E that is skipped at job level or runs nothing', async () => {
@@ -488,7 +778,7 @@ describe('workflow validator', () => {
     ['formal', 'pnpm formal:build'],
     ['generated-project-e2e', 'node tests/generated-project/run.mjs'],
     ['journey-e2e', 'node tests/journey/run.mjs'],
-    ['docs-claims', 'node tests/docs-claims/run.mjs --shard ${{ matrix.shard }}/3'],
+    ['docs-claims', 'node tests/docs-claims/run.mjs'],
     ['tool-sandbox-e2e', 'node tests/e2e/tool-sandbox.e2e.mjs'],
   ] as const;
 
@@ -542,13 +832,13 @@ describe('workflow validator', () => {
       (jobId, command) => `${jobId} must include run: ${command} as a whole step`,
     ],
     [
-      'a scope step that answers false off pull requests',
+      'a scope step that answers false without a diff base',
       (job) =>
         job.replace(
           'echo "applies=true" >> "$GITHUB_OUTPUT"\n            exit 0',
           'echo "applies=false" >> "$GITHUB_OUTPUT"\n            exit 0',
         ),
-      (jobId) => `${jobId} scope step must answer applies=true for every event but pull_request`,
+      (jobId) => `${jobId} scope step must answer applies=true for every event without a diff base`,
     ],
     [
       // #514 review: grep -q exits at the first match, git dies of SIGPIPE on a long diff, and
@@ -556,8 +846,8 @@ describe('workflow validator', () => {
       'a scope step that pipes git diff into grep -q',
       (job) =>
         job.replace(
-          'changed="$(git diff --name-only origin/main...HEAD)"\n          if grep -Eq "$pattern" <<<"$changed"; then',
-          'if git diff --name-only origin/main...HEAD | grep -Eq "$pattern"; then',
+          'changed="$(git diff --name-only "$DIFF_BASE...HEAD")"\n          if grep -Eq "$pattern" <<<"$changed"; then',
+          'if git diff --name-only "$DIFF_BASE...HEAD" | grep -Eq "$pattern"; then',
         ),
       (jobId) => `${jobId} scope step must not pipe into grep -q`,
     ],
@@ -599,5 +889,79 @@ describe('workflow validator', () => {
     expect(validateWorkflowDocuments(workflows, template)).toEqual([]);
     workflows.set('.github/workflows/ci.yml', ci.replaceAll('\n', '\r\n'));
     expect(validateWorkflowDocuments(workflows, template)).toEqual([]);
+  });
+});
+
+describe('formal citation check', () => {
+  const entry = (...ts: string[]) => [
+    {
+      name: 'Spec.thing',
+      module: 'Spec',
+      kind: 'theorem',
+      tier: null,
+      doc: [],
+      ts,
+      docstring: '',
+      statement: '',
+    },
+  ];
+  const failuresFor = (fragment: string, source: string, file = 'planted.ts') =>
+    citationFailures(entry(`${file}#${fragment}`), () => source);
+
+  it('rejects a symbol that only a comment, an import or a plain use mentions', () => {
+    const message = 'symbol not declared in the file';
+    expect(failuresFor('Thing', '// Thing\n/** Thing */\nexport const other = 1;\n')).toEqual([
+      expect.stringContaining(message),
+    ]);
+    expect(failuresFor('Thing', "import { Thing } from './elsewhere';\n")).toEqual([
+      expect.stringContaining(message),
+    ]);
+    expect(failuresFor('Thing', "import { Thing } from './elsewhere';\nuse(Thing);\n")).toEqual([
+      expect.stringContaining(message),
+    ]);
+    expect(failuresFor('Thing', "export { Thing } from './elsewhere';\n")).toEqual([]);
+  });
+
+  it.each([
+    ['an exported const', 'export const Thing = 1;'],
+    ['a destructured const', 'const { a: [Thing] } = source;'],
+    ['a function', 'function Thing() {}'],
+    ['a class', 'class Thing {}'],
+    ['a class member', 'class Box { Thing = 1; }'],
+    ['an interface', 'interface Thing {}'],
+    ['an interface member', 'interface Box { readonly Thing: string }'],
+    ['a type alias', 'type Thing = string;'],
+    ['a type literal member', 'type Box = { Thing(): void };'],
+    ['an enum', 'enum Thing { A }'],
+    ['an enum member', 'enum Box { Thing }'],
+    ['a renamed export', 'const a = 1; export { a as Thing };'],
+    ['an object literal property', 'export const wiring = { Thing: async () => 1 };'],
+    [
+      'a named database object',
+      "const t = table(check('Thing', sql`1`));".replace('table(check', 'pgTable(check'),
+    ],
+  ])('accepts %s', (_label, source) => {
+    expect(failuresFor('Thing', source)).toEqual([]);
+  });
+
+  it('resolves a non-identifier citation against a string literal and not a comment', () => {
+    expect(failuresFor('runs wait', "program.command('runs wait');")).toEqual([]);
+    expect(failuresFor('runs wait', '// runs wait\n')).toEqual([
+      expect.stringContaining('symbol not declared in the file'),
+    ]);
+  });
+
+  it('reads a data file as text', () => {
+    expect(failuresFor('agents', 'ALTER TABLE agents ADD COLUMN x int;', 'planted.sql')).toEqual(
+      [],
+    );
+  });
+
+  it('resolves every citation of the committed catalogue', async () => {
+    const catalogue = JSON.parse(
+      await readFile(path.join(process.cwd(), 'formal/generated/catalogue.json'), 'utf8'),
+    ) as { entries: Parameters<typeof citationFailures>[0] };
+
+    expect(citationFailures(catalogue.entries)).toEqual([]);
   });
 });

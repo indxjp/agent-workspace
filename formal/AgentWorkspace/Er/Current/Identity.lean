@@ -543,7 +543,8 @@ def fkOf (t : TableName) (n : String) : ForeignKey := ((catalogue t).foreignKey?
 two rows that agree on `cols` agree on that key. -/
 def coversKey (t : TableName) (cols : List String) : Bool :=
   (catalogue t).primaryKey.all cols.contains ||
-    (catalogue t).uniques.any fun u => u.partialNullColumns.isEmpty && u.columns.all cols.contains
+    (catalogue t).uniques.any fun u =>
+      u.partialNullColumns.isEmpty && u.partialNotNullColumns.isEmpty && u.columns.all cols.contains
 
 /-- The first row of `t` that references a row of the foreign key's target in state `st`, with
 that parent row. -/
@@ -613,7 +614,7 @@ theorem unique_of_covers {st : State} (hc : Er.Core.consistent catalogue st = tr
   simp only [tableConsistent, Bool.and_eq_true, List.all_eq_true] at h
   simp only [coversKey, Bool.or_eq_true, List.all_eq_true, List.any_eq_true, Bool.and_eq_true,
     List.isEmpty_iff, List.contains_iff_mem] at hk
-  rcases hk with hpk | ⟨u, hu, hpn, hcols⟩
+  rcases hk with hpk | ⟨u, hu, ⟨hpn, -⟩, hcols⟩
   · exact key_holds_elim h.1.1.1.2 h1 h2 (present_of_subset hpk hp) (project_eq_of_subset hpk he)
   · have hkey := h.1.1.2 u hu
     rw [hpn] at hkey

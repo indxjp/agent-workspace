@@ -10,6 +10,7 @@ import { FIXTURE_PERMISSIONS, FIXTURE_POLICY, versionRequest, type FixtureEdits 
 import { createAgentVersion } from './handlers';
 import { createInMemoryAgentVersionStoreProvider } from './memory-store';
 import { setAgentPointer } from './pointers';
+import type { StorageConnectionLookup } from './storage-grants';
 import {
   createRunAgentReader,
   engineOfVersion,
@@ -31,9 +32,10 @@ const ROW_ASSIGNMENTS: AgentResourceAssignments = {
   files: [],
   skillIds: ['row-skill'],
   connectorIds: [],
+  storageGrants: [],
 };
 
-async function harness() {
+async function harness(storageConnections: StorageConnectionLookup | null = null) {
   const agentProvider = createInMemoryAgentStoreProvider();
   const agents = agentProvider.forWorkspace(WORKSPACE);
   const provider = createInMemoryAgentVersionStoreProvider({
@@ -75,7 +77,7 @@ async function harness() {
       versionRequest({ name: row.name, ...edits }),
       row as Parameters<typeof createAgentVersion>[1],
       OWNER,
-      { store },
+      { store, storageConnections },
     );
     if (saved.status !== 201) throw new Error(`the version saves: ${JSON.stringify(saved)}`);
     for (const environment of environments) {
@@ -83,7 +85,7 @@ async function harness() {
         { environment, version: number },
         row as Parameters<typeof setAgentPointer>[1],
         ACTOR,
-        { store },
+        { store, storageConnections },
       );
       if (moved.status !== 200) throw new Error(`the pointer moves: ${JSON.stringify(moved)}`);
     }
@@ -99,10 +101,16 @@ async function harness() {
     return pushTo(row, number, edits);
   };
 
+  // The row's assignments, with the storage grants the last materialisation stored (#1840).
   const assignments: AgentResourceStoreProvider = {
     forWorkspace: (workspaceId) => ({
-      get: (id) =>
-        Promise.resolve(workspaceId === WORKSPACE && id === agentId ? ROW_ASSIGNMENTS : null),
+      get: (id) => {
+        if (workspaceId !== WORKSPACE || id !== agentId) return Promise.resolve(null);
+        const storageGrants = provider.assignmentsOf(agentId)?.storageGrants ?? [];
+        return Promise.resolve(
+          storageGrants.length === 0 ? ROW_ASSIGNMENTS : { ...ROW_ASSIGNMENTS, storageGrants },
+        );
+      },
       replace: () => Promise.reject(new Error('unused')),
     }),
   };
@@ -119,6 +127,7 @@ async function harness() {
         resolveDefinition: (references) => versions.resolveDefinition(references),
         list: (id) => versions.list(id),
         agentsByName: (names) => versions.agentsByName(names),
+        storageGrantsOf: (versionId) => versions.storageGrantsOf(versionId),
       };
     },
   });
@@ -152,9 +161,7 @@ async function harness() {
       { environment: 'production', version: number },
       row,
       ACTOR,
-      {
-        store,
-      },
+      { store, storageConnections },
     );
     if (moved.status !== 200) throw new Error(`the pointer moves: ${JSON.stringify(moved)}`);
   };
@@ -200,6 +207,121 @@ describe('versionToPin', () => {
   });
 });
 
+describe('createRunAgentReader storage grants', () => {
+  /** The workspace's connections by id; the deploy resolves names against them as they are. */
+  function connectionTable() {
+    const rows = new Map([['connection-1', { name: 'acme-data' }]]);
+    const lookup: StorageConnectionLookup = (names) =>
+      Promise.resolve(
+        new Map(
+          [...rows]
+            .filter(([, row]) => names.includes(row.name))
+            .map(([id, row]) => [
+              row.name,
+              { id, allowedPrefixes: ['reports', 'raw'], writeAllowed: true },
+            ]),
+        ),
+      );
+    return { rows, lookup };
+  }
+  const reports = {
+    resources: { files: [{ path: 'storage://acme-data/reports', access: 'read' as const }] },
+  };
+
+  it('[US-STO-12][unit][run] a pinned version delivers its stored storage grants, narrowed by the ceiling', async () => {
+    const h = await harness(connectionTable().lookup);
+    const files = [
+      { path: 'storage://acme-data/reports', access: 'read-write' as const },
+      { path: 'storage://acme-data/raw', access: 'read' as const },
+    ];
+    const v1 = await h.push(1, { resources: { files } });
+
+    const pinned = await h.read(WORKSPACE, h.agentId, v1);
+
+    expect(pinned.assignments.files).toEqual([]);
+    expect(pinned.assignments.storageGrants).toEqual(
+      expect.arrayContaining([
+        {
+          connectionId: 'connection-1',
+          prefix: 'reports',
+          access: pinned.agent.permissions.writeFiles ? 'read-write' : 'read',
+        },
+        { connectionId: 'connection-1', prefix: 'raw', access: 'read' },
+      ]),
+    );
+  });
+
+  it('[US-STO-12][unit][run] a renamed connection keeps the stored id, so the version still runs', async () => {
+    const { rows, lookup } = connectionTable();
+    const h = await harness(lookup);
+    const v1 = await h.push(1, reports);
+    rows.set('connection-1', { name: 'acme-archive' });
+
+    const pinned = await h.read(WORKSPACE, h.agentId, v1);
+
+    expect(pinned.assignments.storageGrants).toEqual([
+      { connectionId: 'connection-1', prefix: 'reports', access: 'read' },
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] a connection deleted and recreated under the same name is not bound to the version', async () => {
+    const { rows, lookup } = connectionTable();
+    const h = await harness(lookup);
+    const v1 = await h.push(1, reports);
+    rows.delete('connection-1');
+    rows.set('connection-2', { name: 'acme-data' });
+
+    const pinned = await h.read(WORKSPACE, h.agentId, v1);
+
+    // The loader reads `connection-1` in the run's workspace, finds none, and refuses the run.
+    expect(pinned.assignments.storageGrants).toEqual([
+      { connectionId: 'connection-1', prefix: 'reports', access: 'read' },
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] a production version that lags local delivers its own folder, not local’s', async () => {
+    const h = await harness(connectionTable().lookup);
+    const v1 = await h.push(1, reports);
+    await h.promote(1);
+    const archive = {
+      resources: { files: [{ path: 'storage://acme-data/raw', access: 'read' as const }] },
+    };
+    const v2 = await h.push(2, { ...archive, instructions: 'Version two.' });
+
+    const production = await h.read(WORKSPACE, h.agentId, v1);
+    const local = await h.read(WORKSPACE, h.agentId, v2);
+
+    expect(production.assignments.storageGrants).toEqual([
+      { connectionId: 'connection-1', prefix: 'reports', access: 'read' },
+    ]);
+    expect(local.assignments.storageGrants).toEqual([
+      { connectionId: 'connection-1', prefix: 'raw', access: 'read' },
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] a version deployed before grants were recorded per version refuses the run, without telling it to deploy to local', async () => {
+    const h = await harness(connectionTable().lookup);
+    const old = await h.store.create(h.agentId, {
+      summary: 'old',
+      via: 'api',
+      body: versionRequest(reports).body,
+      createdByPrincipalId: OWNER,
+    });
+    if (old.kind !== 'created') throw new Error('the version saves');
+    await h.push(2, { ...reports, instructions: 'Version two.' });
+
+    const refused = await h
+      .read(WORKSPACE, h.agentId, old.version.id)
+      .catch((error: unknown) => error);
+
+    expect(refused).toMatchObject({ code: 'run_storage_grant_unavailable' });
+    expect((refused as DomainError).publicMessage).toContain(
+      'grants a storage folder whose connection no longer exists',
+    );
+    expect((refused as DomainError).publicMessage).not.toContain('deploy it to local');
+  });
+});
+
 describe('createRunAgentReader', () => {
   it('composes a session pinned to v1 from v1 after local moved to v2 and rewrote the row', async () => {
     const h = await harness();
@@ -218,7 +340,12 @@ describe('createRunAgentReader', () => {
       permissions: FIXTURE_PERMISSIONS,
       policy: FIXTURE_POLICY,
     });
-    expect(pinned.assignments).toEqual({ files: [], skillIds: ['skill-triage'], connectorIds: [] });
+    expect(pinned.assignments).toEqual({
+      files: [],
+      skillIds: ['skill-triage'],
+      connectorIds: [],
+      storageGrants: [],
+    });
   });
 
   it('composes a legacy session (no pin) from the row and its assignments', async () => {
@@ -253,6 +380,7 @@ describe('createRunAgentReader', () => {
             }),
           list: () => Promise.resolve(null),
           agentsByName: () => Promise.resolve(new Map()),
+          storageGrantsOf: () => Promise.resolve([]),
         }),
     })(WORKSPACE, h.agentId, v1).catch((error: unknown) => error);
     expect(refusal).toBeInstanceOf(DomainError);

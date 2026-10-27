@@ -45,11 +45,11 @@ The platform report that came with this project gives every field a verdict and 
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "4.0.78",
-    "@indx-workspace/sdk": "0.6.9",
-    "@openai/agents": "0.20.0",
-    "@openai/agents-extensions": "0.20.0",
-    "zod": "4.6.6"
+    "@ai-sdk/anthropic": "4.0.85",
+    "@indx-workspace/sdk": "0.6.11",
+    "@openai/agents": "0.21.0",
+    "@openai/agents-extensions": "0.21.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "26.6.5",

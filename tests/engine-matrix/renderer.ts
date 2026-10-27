@@ -26,34 +26,40 @@ import {
   type EngineConformanceSubject,
 } from '@agent-workspace/engine/testing';
 import {
-  CLAUDE_AGENT_SDK_ENGINE_ADAPTER,
+  createClaudeAgentSdkEngine,
   CLAUDE_AGENT_SDK_ENGINE_ID,
   claudeGatewayEnv,
   claudeOptionsAllowPermission,
   claudeOptionsAllowWrite,
   type CompiledSdkOptions,
-} from '@agent-workspace/engine-claude-agent-sdk';
+} from '@agent-workspace/engine-claude-agent-sdk/testing';
 import {
-  MASTRA_ENGINE_ADAPTER,
+  createMastraEngine,
   MASTRA_ENGINE_ID,
   mastraPlanAllowsPermission,
   mastraWriteAllowed,
   type MastraCompiled,
-} from '@agent-workspace/engine-mastra';
+} from '@agent-workspace/engine-mastra/testing';
 import {
-  OPENAI_AGENTS_ENGINE_ADAPTER,
+  createOpenAiAgentsEngine,
   OPENAI_AGENTS_ENGINE_ID,
   openAiAgentsPlanAllowsPermission,
   workspaceWriteAllowed,
   type OpenAiAgentsCompiled,
-} from '@agent-workspace/engine-openai-agents';
+} from '@agent-workspace/engine-openai-agents/testing';
 import {
-  PI_ENGINE_ADAPTER,
+  createPiEngine,
   PI_ENGINE_ID,
   piPlanAllowsPermission,
   workspaceWriteAllowed as piWorkspaceWriteAllowed,
   type PiCompiled,
-} from '@agent-workspace/engine-pi';
+} from '@agent-workspace/engine-pi/testing';
+
+// Each adapter package exports a factory, not a built adapter (W3-8): build one here.
+const CLAUDE_AGENT_SDK_ENGINE_ADAPTER = createClaudeAgentSdkEngine();
+const MASTRA_ENGINE_ADAPTER = createMastraEngine();
+const OPENAI_AGENTS_ENGINE_ADAPTER = createOpenAiAgentsEngine();
+const PI_ENGINE_ADAPTER = createPiEngine();
 
 /** One boolean capability the matrix shows, with the human name it shows it under. */
 type CapabilityRow = {

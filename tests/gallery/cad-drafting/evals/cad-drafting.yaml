@@ -25,3 +25,33 @@ cases:
       judge: >
         回答が BRK-1004 の外形は矩形でないため伸縮での流用作図はできないと説明し、
         手での作図か別の候補を勧めていること。
+  - name: 変更セットの外形が要件どおり
+    input: >
+      ブラケット 140×90、SUS304 t2.0、φ9 の取付穴4か所（左下から 15,15 / 125,15 / 15,75 / 125,75）、
+      新図番 BRK-1101。BRK-1003 を元に作図して。
+    outputSchema:
+      type: object
+      required: [base, drawingNo, width, height]
+      properties:
+        base: { type: string }
+        drawingNo: { type: string }
+        width: { type: number }
+        height: { type: number }
+        material: { type: string }
+        thickness: { type: number }
+        partName: { type: string }
+        holes:
+          type: array
+          items:
+            type: object
+            required: [x, y, diameter]
+            properties:
+              x: { type: number }
+              y: { type: number }
+              diameter: { type: number }
+    expect:
+      output:
+        base: BRK-1003
+        drawingNo: BRK-1101
+        width: 140
+        height: 90

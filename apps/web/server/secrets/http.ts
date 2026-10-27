@@ -3,11 +3,11 @@
  * file's header for why route files stay this thin (a Next.js route file cannot be imported by a
  * test without dragging the framework's routing conventions in).
  */
+import { applicationContext } from '../application-context';
 import { SECRET_VALUE_MAX_LENGTH } from './contract';
-import { problem, type ApiResult } from './handlers';
+import { problem, type ApiResult } from '../http/result';
 import type { WorkspaceSecretsStore } from './store';
-import { currentSecretsRuntime } from './runtime';
-import { apiResultResponse, readBoundedJson, readRouteParam } from '../http/json-transport';
+import { readBoundedJson, readRouteParam } from '../http/json-transport';
 
 const JSON_WORST_CASE_BYTES_PER_CODE_UNIT = 6;
 /** Room for the object braces, field names and whitespace around the bounded `value` field. */
@@ -29,11 +29,6 @@ export async function readJsonBody(
   return readBoundedJson(request, { maxBytes: MAX_REQUEST_BODY_BYTES, problem });
 }
 
-/** Turn a handler's answer into a `Response`. A `204` carries no body and no content type. */
-export function toResponse(result: ApiResult): Response {
-  return apiResultResponse(result);
-}
-
 /**
  * Resolve the caller's workspace, hand the matching store to `run`, and return its answer. See
  * `apps/web/server/agents/http.ts`'s `withWorkspaceStore` for the full reasoning — this is the
@@ -44,8 +39,8 @@ export async function withWorkspaceStore(
   run: (store: WorkspaceSecretsStore) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentSecretsRuntime();
-  if (runtime === null) {
+  const secrets = applicationContext()?.secrets;
+  if (secrets?.kind !== 'serving') {
     return problem(
       503,
       'secrets_runtime_not_configured',
@@ -53,6 +48,7 @@ export async function withWorkspaceStore(
         'serve secrets requests; it is not that the request was rejected.',
     );
   }
+  const runtime = secrets.runtime;
   // A route that already passed `requireResourceAccess` hands its verified principal's workspace
   // in, so the request is not resolved a second time against a possibly different answer.
   if (authenticatedWorkspaceId !== undefined) {

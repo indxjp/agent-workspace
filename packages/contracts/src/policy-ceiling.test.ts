@@ -4,12 +4,14 @@ import { z } from 'zod';
 import {
   AGENT_DEFINITION_MAX_REFERENCES,
   AGENT_MODEL_MAX_LENGTH,
+  AGENT_NAME_MAX_LENGTH,
   AGENT_PERMISSION_KEYS,
   type AgentPermissions,
   type AgentPolicyLimits,
 } from './agents.js';
 import { CONNECTOR_NAME_MAX_LENGTH } from './connectors.js';
 import {
+  builderAllows,
   type EffectivePolicyConfiguration,
   meetPolicyCeiling,
   networkPolicyFloor,
@@ -89,7 +91,6 @@ describe('ProjectPolicySchema (ADR-0102 SD6, issue #524)', () => {
   });
 
   it.each([
-    ['maxCostPerDayUsd', { maxCostPerDayUsd: 5 }],
     ['network', { network: { allow: ['example.com'] } }],
     ['approval', { approval: 'always' }],
   ])('refuses %s at its own path as not built yet', (key, value) => {
@@ -157,6 +158,86 @@ describe('ProjectPolicySchema (ADR-0102 SD6, issue #524)', () => {
 
   it('emits a JSON Schema', () => {
     expect(() => z.toJSONSchema(ProjectPolicySchema)).not.toThrow();
+  });
+});
+
+describe('ProjectPolicySchema maxCostPerDayUsd (issue #1851)', () => {
+  it('accepts a positive cap up to 100000', () => {
+    for (const maxCostPerDayUsd of [0.01, 5, 100_000]) {
+      expect(ProjectPolicySchema.parse({ maxCostPerDayUsd })).toEqual({ maxCostPerDayUsd });
+    }
+  });
+
+  it('refuses zero, a negative, a cap above 100000, a string and a non-finite number', () => {
+    for (const maxCostPerDayUsd of [0, -1, 100_001, '5', Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(refusedPaths({ maxCostPerDayUsd })).toEqual([['maxCostPerDayUsd']]);
+    }
+  });
+
+  it('is read by neither policyWidenings nor meetPolicyCeiling', () => {
+    const ceiling: ProjectPolicy = { limits: { maxTurns: 5 }, tools: ['orders'] };
+    const capped: ProjectPolicy = { ...ceiling, maxCostPerDayUsd: 5 };
+    expect(policyWidenings(effective, capped)).toEqual(policyWidenings(effective, ceiling));
+    expect(meetPolicyCeiling(effective, capped)).toEqual(meetPolicyCeiling(effective, ceiling));
+  });
+});
+
+describe('ProjectPolicySchema builder (issue #1851)', () => {
+  it('a policy with builder.allow parses, and a missing builder key allows no agent', () => {
+    const allowed = ['hr-onboarding-coordinator', 'Support triage'];
+    const policy = ProjectPolicySchema.parse({ builder: { allow: allowed } });
+    expect(policy.builder?.allow).toEqual(allowed);
+
+    const missing = ProjectPolicySchema.parse({});
+    expect('builder' in missing).toBe(false);
+    expect(builderAllows(missing, 'x')).toBe(false);
+    expect(builderAllows(null, 'x')).toBe(false);
+    expect(builderAllows(policy, 'hr-onboarding-coordinator')).toBe(true);
+    expect(builderAllows(policy, 'other')).toBe(false);
+    expect(ProjectPolicySchema.parse({ builder: { allow: [] } }).builder?.allow).toEqual([]);
+  });
+
+  it('allows nothing for an empty list, a case-different name or a padded name', () => {
+    const listed = ProjectPolicySchema.parse({ builder: { allow: ['hr-onboarding-coordinator'] } });
+    const empty = ProjectPolicySchema.parse({ builder: { allow: [] } });
+    expect(builderAllows(empty, 'hr-onboarding-coordinator')).toBe(false);
+    expect(builderAllows(listed, 'HR-Onboarding-Coordinator')).toBe(false);
+    expect(builderAllows(listed, ' hr-onboarding-coordinator')).toBe(false);
+    expect(builderAllows(listed, 'hr-onboarding-coordinator ')).toBe(false);
+  });
+
+  it('refuses a duplicate name, naming the repeated entry', () => {
+    const result = ProjectPolicySchema.safeParse({ builder: { allow: ['a', 'b', 'a'] } });
+    expect(result.error?.issues.map((issue) => [issue.path, issue.message])).toEqual([
+      [['builder', 'allow'], 'must not name a value twice'],
+    ]);
+  });
+
+  it('refuses a name the agent-name rule refuses', () => {
+    const tooLong = 'a'.repeat(AGENT_NAME_MAX_LENGTH + 1);
+    for (const name of ['', ' ', ' padded', 'padded ', 'two\nlines', tooLong, 7, null]) {
+      expect(refusedPaths({ builder: { allow: [name] } })).toEqual([['builder', 'allow', 0]]);
+    }
+  });
+
+  it('refuses more than AGENT_DEFINITION_MAX_REFERENCES names, an unknown key and a non-list', () => {
+    const tooMany = Array.from(
+      { length: AGENT_DEFINITION_MAX_REFERENCES + 1 },
+      (_, i) => `agent-${String(i)}`,
+    );
+    expect(refusedPaths({ builder: { allow: tooMany } })).toEqual([['builder', 'allow']]);
+    expect(refusedPaths({ builder: { allow: ['a'], deny: ['b'] } })).toEqual([['builder', 'deny']]);
+    expect(refusedPaths({ builder: { allow: 'a' } })).toEqual([['builder', 'allow']]);
+    expect(refusedPaths({ builder: {} })).toEqual([['builder', 'allow']]);
+  });
+
+  it('is read by neither policyWidenings nor meetPolicyCeiling', () => {
+    const ceiling: ProjectPolicy = { limits: { maxTurns: 5 }, tools: ['orders'] };
+    const withBuilder: ProjectPolicy = { ...ceiling, builder: { allow: ['a'] } };
+    expect(policyWidenings(effective, withBuilder)).toEqual(policyWidenings(effective, ceiling));
+    expect(meetPolicyCeiling(effective, withBuilder)).toEqual(
+      meetPolicyCeiling(effective, ceiling),
+    );
   });
 });
 

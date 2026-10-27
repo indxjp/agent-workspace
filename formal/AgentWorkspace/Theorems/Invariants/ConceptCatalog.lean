@@ -64,7 +64,7 @@ private theorem exact_key_unique {S : Schema} {st : State} (hc : Er.Core.consist
   simp only [tableConsistent, Bool.and_eq_true, List.all_eq_true] at h
   simp only [targetIsExactKey, Bool.or_eq_true, beq_iff_eq, List.any_eq_true, Bool.and_eq_true,
     List.isEmpty_iff] at hk
-  rcases hk with hpk | ⟨u, hu, hpn, hcols⟩
+  rcases hk with hpk | ⟨u, hu, ⟨hpn, -⟩, hcols⟩
   · have hkey := h.1.1.1.2
     rw [hpk] at hkey
     exact key_rows_equal hkey h1 h2 hp he
@@ -223,7 +223,7 @@ elab "aw_catalog_key_theorems" : command => do
       theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : AgentWorkspace.Er.Current.Catalog.consistent st = true) {r r' : AgentWorkspace.Er.Core.Row}
           (href : References catalogue st $tIdent (fk $tIdent $nameLit) r r') :
           tenantOf catalogue $tIdent r = tenantOf catalogue (fk $tIdent $nameLit).refTable r' :=
-        no_cross_tenant_reference catalogue (by decide) st (core_of hc) (by decide) href))
+        no_cross_tenant_reference catalogue (by decide +kernel) st (core_of hc) (by decide +kernel) href))
     elabCommand (← `(command|
       example : tenantOf catalogue $tIdent (Sample.child $tIdent (fk $tIdent $nameLit)) =
           tenantOf catalogue (fk $tIdent $nameLit).refTable
@@ -243,8 +243,8 @@ elab "aw_catalog_key_theorems" : command => do
               ∀ r'' ∈ st (fk $tIdent $nameLit).refTable,
                 r''.project (fk $tIdent $nameLit).refColumns =
                   r.project (fk $tIdent $nameLit).columns → r'' = r' :=
-          reference_names_one_parent catalogue st (core_of hc) (by decide) (by decide) hr
-            (mandatory_reference_is_set catalogue st (core_of hc) _ _ (by decide) hr)))
+          reference_names_one_parent catalogue st (core_of hc) (by decide +kernel) (by decide +kernel) hr
+            (mandatory_reference_is_set catalogue st (core_of hc) _ _ (by decide +kernel) hr)))
       elabCommand (← `(command|
         example : ∃ r' ∈ Sample.state (fk $tIdent $nameLit).refTable,
             r'.project (fk $tIdent $nameLit).refColumns =
@@ -268,7 +268,7 @@ elab "aw_catalog_key_theorems" : command => do
               ∀ r'' ∈ st (fk $tIdent $nameLit).refTable,
                 r''.project (fk $tIdent $nameLit).refColumns =
                   r.project (fk $tIdent $nameLit).columns → r'' = r' :=
-          reference_names_one_parent catalogue st (core_of hc) (by decide) (by decide) hr hp))
+          reference_names_one_parent catalogue st (core_of hc) (by decide +kernel) (by decide +kernel) hr hp))
       elabCommand (← `(command|
         example : ∃ r' ∈ Sample.state (fk $tIdent $nameLit).refTable,
             r'.project (fk $tIdent $nameLit).refColumns =
@@ -285,6 +285,8 @@ elab "aw_catalog_key_theorems" : command => do
     let tIdent := mkIdent (``TableName ++ ctorName sql)
     let path := "packages/core/src/db/schema/" ++ s.source
     for u in s.uniques do
+      -- A partial key identifies a row only within its filter.
+      if !u.partialNullColumns.isEmpty || !u.partialNotNullColumns.isEmpty then continue
       let thm := mkIdent (Name.mkSimple s!"{u.name}_identifies_one_row")
       let cols := ", ".intercalate u.columns
       let (sentence, docCite?) := (uniqueSentence u.name).getD
@@ -305,7 +307,7 @@ elab "aw_catalog_key_theorems" : command => do
             (h1 : r1 ∈ st $tIdent) (h2 : r2 ∈ st $tIdent) (hp : r1.present $colsTerm = true)
             (he : r1.project $colsTerm = r2.project $colsTerm) : r1 = r2 :=
           unique_key_identifies_row catalogue st (core_of hc)
-            (u := ((catalogue $tIdent).unique? $nameLit).getD default) (by decide) (by decide)
+            (u := ((catalogue $tIdent).unique? $nameLit).getD default) (by decide +kernel) (by decide +kernel)
             h1 h2 hp he))
       -- the negative witness: a second, different row agreeing on the key makes the state
       -- inconsistent
@@ -752,51 +754,51 @@ private def answer (w : Bool) : Assignments :=
   ⟨[⟨"f1", .read⟩, ⟨"f2", if w then .readWrite else .read⟩], ["k1", "k2"], ["c1"]⟩
 
 /- The request lists `f2` before `f1` and `k2` before `k1`; the answer is in id order. -/
-example : replace (some (perms false)) cat req = .updated (answer false) := by decide
-example : replace (some (perms true)) cat req = .updated (answer true) := by decide
-example : (answer false).files.map (·.file) ≠ req.files.map (·.file) := by decide
+example : replace (some (perms false)) cat req = .updated (answer false) := by decide +kernel
+example : replace (some (perms true)) cat req = .updated (answer true) := by decide +kernel
+example : (answer false).files.map (·.file) ≠ req.files.map (·.file) := by decide +kernel
 example : (∀ f ∈ (answer false).files, f.file ∈ cat.files) :=
-  (replace_assigns_only_catalogued_resources (perms false) cat req _ (by decide)).1
+  (replace_assigns_only_catalogued_resources (perms false) cat req _ (by decide +kernel)).1
 example : ∀ f ∈ (answer false).files, ∃ g ∈ req.files,
     g.file = f.file ∧ f.access.le g.access = true ∧
       ((perms false).writeFiles = false → f.access = .read) :=
-  replace_never_widens_past_write_files (perms false) cat req _ (by decide)
+  replace_never_widens_past_write_files (perms false) cat req _ (by decide +kernel)
 example : ((answer true).files.map (·.file)).Nodup ∧ (answer true).skills.Nodup ∧
     (answer true).connectors.Nodup :=
-  replace_writes_each_resource_once (perms true) cat req _ (by decide)
+  replace_writes_each_resource_once (perms true) cat req _ (by decide +kernel)
 example : (∀ k, k ∈ (answer true).skills ↔ k ∈ req.skills) ∧
     (∀ c, c ∈ (answer true).connectors ↔ c ∈ req.connectors) ∧
     ((answer true).files.map (·.file)).Perm (req.files.map (·.file)) :=
-  replace_keeps_every_requested_id (perms true) cat req _ (by decide)
+  replace_keeps_every_requested_id (perms true) cat req _ (by decide +kernel)
 example : (answer true).files.Pairwise (fun f g => f.file ≤ g.file) ∧
     (answer true).skills.Pairwise (· ≤ ·) ∧ (answer true).connectors.Pairwise (· ≤ ·) :=
-  replace_answers_in_id_order (perms true) cat req _ (by decide)
+  replace_answers_in_id_order (perms true) cat req _ (by decide +kernel)
 
 /- A request with an unknown file `f9`, an unknown skill `k9` and an unknown connector `c9`:
 the file is reported; with the file fixed, the skill; with the skill fixed too, the connector. -/
 private def allUnknown : Assignments := ⟨[⟨"f1", .read⟩, ⟨"f9", .read⟩], ["k9"], ["c9"]⟩
 example : replace (some (perms true)) cat allUnknown = .unknownFile "f9" :=
-  replace_reports_the_first_uncatalogued_file _ _ _ ["f1"] [] "f9" rfl (by decide) (by decide)
-    (by decide)
+  replace_reports_the_first_uncatalogued_file _ _ _ ["f1"] [] "f9" rfl (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)
 example : replace (some (perms true)) cat { allUnknown with files := [⟨"f1", .read⟩] } =
     .unknownSkill "k9" :=
-  replace_reports_the_first_uncatalogued_skill _ _ _ [] [] "k9" (by decide) (by decide) rfl
-    (by decide) (by decide)
+  replace_reports_the_first_uncatalogued_skill _ _ _ [] [] "k9" (by decide +kernel) (by decide +kernel) rfl
+    (by decide +kernel) (by decide +kernel)
 example : replace (some (perms true)) cat
     { allUnknown with files := [⟨"f1", .read⟩], skills := ["k1", "k1"] } =
       .unknownConnector "c9" :=
-  replace_reports_the_first_uncatalogued_connector _ _ _ [] [] "c9" (by decide) (by decide)
-    (by decide) rfl (by decide) (by decide)
+  replace_reports_the_first_uncatalogued_connector _ _ _ [] [] "c9" (by decide +kernel) (by decide +kernel)
+    (by decide +kernel) rfl (by decide +kernel) (by decide +kernel)
 example : ([(⟨"f1", .read⟩ : FileEntry)].map (·.file)).Nodup ∧
     (∀ f ∈ [(⟨"f1", .read⟩ : FileEntry)], f.file ∈ cat.files) ∧
     "k9" ∈ ["k9"] ∧ "k9" ∉ cat.skills :=
   (replace_checks_files_then_skills_then_connectors (perms true) cat
-    { allUnknown with files := [⟨"f1", .read⟩] } "k9").1 (by decide)
+    { allUnknown with files := [⟨"f1", .read⟩] } "k9").1 (by decide +kernel)
 example : ([(⟨"f1", .read⟩ : FileEntry)].map (·.file)).Nodup ∧
     (∀ f ∈ [(⟨"f1", .read⟩ : FileEntry)], f.file ∈ cat.files) ∧
     (∀ k ∈ ["k1"], k ∈ cat.skills) ∧ "c9" ∈ ["c9"] ∧ "c9" ∉ cat.connectors :=
   (replace_checks_files_then_skills_then_connectors (perms true) cat
-    { allUnknown with files := [⟨"f1", .read⟩], skills := ["k1"] } "c9").2 (by decide)
+    { allUnknown with files := [⟨"f1", .read⟩], skills := ["k1"] } "c9").2 (by decide +kernel)
 example : ∀ f ∈ (effective (perms false) ⟨[⟨"f1", .readWrite⟩], [], []⟩).files,
     f.access = .read :=
   read_narrows_stale_write_access _ _ rfl
@@ -887,7 +889,7 @@ private def principals : List PrincipalView :=
   [pv "p1" (some "u1") false, pv "p2" (some "u2") false, pv "k1" none false]
 
 example : ∀ x, x ∈ grantsRead principals [⟨"u2"⟩] ↔ x ∈ [(⟨"p2"⟩ : PrincipalId)] :=
-  grants_round_trip principals [⟨"p2"⟩] [⟨"u2"⟩] (by decide) (by decide)
+  grants_round_trip principals [⟨"p2"⟩] [⟨"u2"⟩] (by decide +kernel) (by decide +kernel)
 example : ∀ x ∈ grantsRead principals [⟨"u2"⟩], ∃ p ∈ principals, p.id = x ∧
     p.user.isSome = true ∧ p.revoked = false :=
   grants_read_names_only_active_members _ _
@@ -1011,25 +1013,25 @@ example : ∃ f' ∈ File.putFile ⟨"w1"⟩ ⟨"f9"⟩ upload [fileA, fileB], f
   put_file_never_transfers_owner _ _ _ _ fileA (by simp) rfl
 example : ∃ f' ∈ File.putFile ⟨"w1"⟩ ⟨"f9"⟩ { upload with path := "new.md" } [fileA, fileB],
     f'.id = ⟨"f9"⟩ ∧ f'.owner = upload.owner ∧ f'.workspace = ⟨"w1"⟩ ∧ f'.path = "new.md" :=
-  put_file_at_a_new_path_is_owned_by_the_caller _ _ _ _ (by decide)
+  put_file_at_a_new_path_is_owned_by_the_caller _ _ _ _ (by decide +kernel)
 example : ∃ s' ∈ Skill.putSkill ⟨"w1"⟩ ⟨"k9"⟩ ⟨"notes", "# v2", true, none, ⟨"p9"⟩⟩
       [⟨⟨"k1"⟩, ⟨"w1"⟩, "notes", "# v1", true, some ⟨"u1"⟩, ⟨"p1"⟩⟩],
     s'.id = ⟨"k1"⟩ ∧ s'.owner = ⟨"p1"⟩ ∧ s'.createdBy = some ⟨"u1"⟩ ∧ s'.skillMd = "# v2" :=
   put_skill_never_transfers_owner _ _ _ _ _ (List.mem_singleton_self _) rfl
 example : fileB ∈ File.renameByPrefix "docs" "archive" [fileA, fileB] :=
-  rename_by_prefix_leaves_other_rows_alone _ _ _ _ (by simp) (by decide)
+  rename_by_prefix_leaves_other_rows_alone _ _ _ _ (by simp) (by decide +kernel)
 private def keyedA : File.File :=
   ⟨⟨"f1"⟩, ⟨"w1"⟩, "docs/a.md", .file, some "docs/a.md", 3, none, none, ⟨"p1"⟩⟩
 private def keyedDir : File.File :=
   ⟨⟨"f3"⟩, ⟨"w1"⟩, "docs", .folder, none, 0, none, none, ⟨"p1"⟩⟩
 example : ∀ g ∈ File.renameByPrefix "docs" "archive" [keyedA, keyedDir],
     g.storageKey = if g.kind = .file then some g.path else none :=
-  rename_by_prefix_keeps_the_key_at_the_path _ _ _ (by decide)
+  rename_by_prefix_keeps_the_key_at_the_path _ _ _ (by decide +kernel)
 example : File.renameByPrefix "docs" "archive" [keyedA] =
-    [{ keyedA with path := "archive/a.md", storageKey := some "archive/a.md" }] := by decide
+    [{ keyedA with path := "archive/a.md", storageKey := some "archive/a.md" }] := by decide +kernel
 example : ∃ g ∈ File.renameByPrefix "docs" "archive" [keyedA, keyedDir], g.id = keyedA.id ∧
     g.path = "archive/a.md" :=
-  rename_by_prefix_moves_the_rows_under_it _ _ _ keyedA (by simp) (by decide)
+  rename_by_prefix_moves_the_rows_under_it _ _ _ keyedA (by simp) (by decide +kernel)
 example : fileB ∈ File.deleteByPrefix "docs" [fileA, fileB] ↔
     fileB ∈ [fileA, fileB] ∧ File.underPrefix "docs" fileB.path = false :=
   delete_by_prefix_keeps_exactly_the_other_rows _ _ _
@@ -1049,7 +1051,7 @@ private theorem notBlank_of_trim {s : String} (h : Connector.jsTrimIsEmpty s = f
   simp only [bne_iff_ne, ne_eq]
   intro heq
   subst heq
-  exact hw (by decide)
+  exact hw (by decide +kernel)
 
 section Parser
 open Connector
@@ -1289,22 +1291,22 @@ example : ∃ f ∈ [fileDocsA, fileOther], f.path = "docs/a.md" ∧ renamedA.id
     renamedA.createdBy = f.createdBy ∧ renamedA.path = toC.path ∧
     renamedA ∈ [renamedA, fileOther] :=
   rename_file_keeps_the_rows_identity "docs/a.md" toC [fileDocsA, fileOther] [renamedA, fileOther]
-    renamedA (by decide)
+    renamedA (by decide +kernel)
 example : File.renameFile "nowhere.md" toC [fileDocsA, fileOther] = .missing :=
-  (rename_file_is_missing_iff_no_row _ _ _).mpr (by decide)
+  (rename_file_is_missing_iff_no_row _ _ _).mpr (by decide +kernel)
 /- Renaming onto an occupied path is the unique-key violation, not a rename. -/
 example : File.renameFile "docs/a.md" { toC with path := "b.md" } [fileDocsA, fileOther] =
-    .conflict := by decide
+    .conflict := by decide +kernel
 example : toC.path = "docs/a.md" ∨ ∀ g ∈ [fileDocsA, fileOther], g.path ≠ toC.path :=
   rename_file_never_takes_an_occupied_path "docs/a.md" toC [fileDocsA, fileOther]
-    [renamedA, fileOther] renamedA (by decide)
+    [renamedA, fileOther] renamedA (by decide +kernel)
 example : fileOther ∈ [renamedA, fileOther] :=
   rename_file_leaves_other_rows_alone "docs/a.md" toC [fileDocsA, fileOther]
-    [renamedA, fileOther] renamedA fileOther (by decide) (by simp) (by decide)
+    [renamedA, fileOther] renamedA fileOther (by decide +kernel) (by simp) (by decide +kernel)
 /- Deleting the folder row keeps the file under it; the subtree delete removes both. -/
 example : fileDocsA ∈ File.deleteFile "docs" [dirDocs, fileDocsA] :=
   (delete_file_removes_exactly_that_path _ _ _).mpr ⟨by simp, by decide⟩
-example : File.deleteByPrefix "docs" [dirDocs, fileDocsA] = [] := by decide
+example : File.deleteByPrefix "docs" [dirDocs, fileDocsA] = [] := by decide +kernel
 example : (⟨⟨"k2"⟩, ⟨"w1"⟩, "b", "# b", true, none, ⟨"p1"⟩⟩ : Skill.Skill) ∈
     Skill.deleteSkill "a" [⟨⟨"k1"⟩, ⟨"w1"⟩, "a", "# a", true, none, ⟨"p1"⟩⟩,
       ⟨⟨"k2"⟩, ⟨"w1"⟩, "b", "# b", true, none, ⟨"p1"⟩⟩] :=
@@ -1338,10 +1340,10 @@ private theorem not_blank_of_visible {s : String}
   rintro rfl
   simp [Connector.isJsWhitespace] at hw
 
-/-- Every name `parseAgentName` accepts passes the `agents_name_not_blank` check and the HTTP
+/-- Every name `AgentNameRequestSchema` accepts passes the `agents_name_not_blank` check and the HTTP
 bound, so an agent row carrying it is valid: the route's parser is at least as strict as the
 table. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/agents/contract.ts#parseAgentName")
+@[aw_spec (tier := T2) (ts := "packages/contracts/src/agents/resource.ts#AgentNameRequestSchema")
   (ts := "packages/core/src/db/schema/agents.ts#agents")]
 theorem accepted_agent_name_passes_the_table_check (r : Agent.RawField) (n : String)
     (h : Agent.parseName r = .ok n) :
@@ -1364,9 +1366,9 @@ theorem accepted_agent_name_passes_the_table_check (r : Agent.RawField) (n : Str
   | null => simp [Agent.parseName] at h
   | nonString d => simp [Agent.parseName] at h
 
-/-- Every model id `parseAgentModel` accepts is `null` (the workspace default) or a trimmed,
+/-- Every model id `AgentModelRequestSchema` accepts is `null` (the workspace default) or a trimmed,
 non-blank string within `AGENT_MODEL_MAX_LENGTH`. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/agents/contract.ts#parseAgentModel")
+@[aw_spec (tier := T2) (ts := "packages/contracts/src/agents/resource.ts#AgentModelRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_MODEL_MAX_LENGTH")]
 theorem accepted_agent_model_is_default_or_visible (r : Agent.RawField) (m : Option String)
     (h : Agent.parseModel r = .ok m) :
@@ -1389,9 +1391,9 @@ theorem accepted_agent_model_is_default_or_visible (r : Agent.RawField) (m : Opt
           by simpa [Agent.bounds] using hlen⟩
   | nonString d => simp [Agent.parseModel] at h
 
-/-- Every instruction block `parseAgentInstructions` accepts is the string sent, unchanged, and
+/-- Every instruction block `AgentInstructionsRequestSchema` accepts is the string sent, unchanged, and
 within `AGENT_INSTRUCTIONS_MAX_LENGTH`. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/agents/contract.ts#parseAgentInstructions")
+@[aw_spec (tier := T2) (ts := "packages/contracts/src/agents/resource.ts#AgentInstructionsRequestSchema")
   (ts := "packages/contracts/src/agents.ts#AGENT_INSTRUCTIONS_MAX_LENGTH")]
 theorem accepted_instructions_are_the_string_sent (r : Agent.RawField) (i : String)
     (h : Agent.parseInstructions r = .ok i) :
@@ -1471,11 +1473,11 @@ example : (Agent.RawField.str "  keep  " = .str "  keep  ") ∧
   accepted_instructions_are_the_string_sent _ _ rfl
 
 private def dupBody : Grant.RawAssignments :=
-  ⟨[⟨"f1", "read"⟩, ⟨"f1", "read-write"⟩], ["k1"], [], []⟩
+  ⟨[⟨"f1", "read"⟩, ⟨"f1", "read-write"⟩], ["k1"], [], [], []⟩
 
 /- The schema accepts a body whose file ids repeat; `replace` then refuses it. -/
 example : Grant.assignmentsBody dupBody =
-    some ⟨[⟨"f1", .read⟩, ⟨"f1", .readWrite⟩], ["k1"], []⟩ := by decide
+    some ⟨[⟨"f1", .read⟩, ⟨"f1", .readWrite⟩], ["k1"], []⟩ := by decide +kernel
 example : dupBody.extra = [] ∧
     (∀ e ∈ dupBody.files, e.fileId ≠ "" ∧ (e.access = "read" ∨ e.access = "read-write")) ∧
     (∀ k ∈ dupBody.skillIds, k ≠ "") ∧ (∀ c ∈ dupBody.connectorIds, c ≠ "") ∧
@@ -1483,10 +1485,10 @@ example : dupBody.extra = [] ∧
       dupBody.files.map (·.fileId) ∧
     ["k1"] = dupBody.skillIds ∧ ([] : List String) = dupBody.connectorIds :=
   accepted_assignment_body_keeps_every_id dupBody ⟨[⟨"f1", .read⟩, ⟨"f1", .readWrite⟩], ["k1"], []⟩
-    (by decide)
-example : Grant.assignmentsBody { dupBody with files := [⟨"f1", "write"⟩] } = none := by decide
-example : Grant.assignmentsBody { dupBody with skillIds := [""] } = none := by decide
-example : Grant.assignmentsBody { dupBody with extra := ["policy"] } = none := by decide
+    (by decide +kernel)
+example : Grant.assignmentsBody { dupBody with files := [⟨"f1", "write"⟩] } = none := by decide +kernel
+example : Grant.assignmentsBody { dupBody with skillIds := [""] } = none := by decide +kernel
+example : Grant.assignmentsBody { dupBody with extra := ["policy"] } = none := by decide +kernel
 
 end ParserWitnesses
 

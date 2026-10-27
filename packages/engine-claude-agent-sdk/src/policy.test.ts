@@ -53,3 +53,41 @@ describe('ClaudeRunPolicy parses its tools arm with the contracts grammar', () =
     ]);
   });
 });
+
+describe('ClaudeRunPolicy handoff (ADR-0145 D4)', () => {
+  it('defaults to off and accepts the opt-in', () => {
+    expect(ClaudeRunPolicy.parse({ tools: null }).handoff).toBe(false);
+    expect(ClaudeRunPolicy.parse({ tools: null, handoff: true }).handoff).toBe(true);
+    expect(ClaudeRunPolicy.safeParse({ tools: null, handoff: 'yes' }).success).toBe(false);
+  });
+});
+
+describe('ClaudeRunPolicy approval fields (ADR-0145)', () => {
+  it('defaults both to empty', () => {
+    const parsed = ClaudeRunPolicy.parse({ tools: null });
+    expect(parsed.requireApproval).toEqual([]);
+    expect(parsed.approvedToolCalls).toEqual([]);
+  });
+
+  it('accepts whole-tool rules and approved call texts', () => {
+    expect(
+      ClaudeRunPolicy.safeParse({
+        tools: null,
+        requireApproval: ['Write', 'mcp__gh__push'],
+        approvedToolCalls: ['{"input":{},"name":"Write"}'],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('refuses a scoped rule, because approval is decided by tool name', () => {
+    const issues = issuesOf({ tools: null, requireApproval: ['Bash(git push *)'] });
+    expect(issues?.map((issue) => issue.path)).toEqual(['requireApproval.0']);
+    expect(issues?.[0]?.message).toContain('name the whole tool');
+  });
+
+  it('refuses an empty approved call text', () => {
+    expect(issuesOf({ tools: null, approvedToolCalls: [''] })?.[0]?.path).toBe(
+      'approvedToolCalls.0',
+    );
+  });
+});

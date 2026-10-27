@@ -3,7 +3,7 @@
  * (formal/AgentWorkspace/Concepts/{Agent,Skill,File,Connector,Grant}.lean and
  * formal/AgentWorkspace/Er/Current/Catalog.lean) replayed against the REAL code:
  *
- *   - the fourteen tables against the live Drizzle table objects (read with Drizzle's own
+ *   - the eighteen tables against the live Drizzle table objects (read with Drizzle's own
  *     `getTableConfig`, through the declared test escape `@agent-workspace/core/db/unscoped`),
  *     the SQL of every modelled check against the model's snapshot (`MODEL_SNAPSHOT`);
  *   - the concept enumerations against the schema constants and the contracts constants, and the
@@ -307,24 +307,28 @@ function isExactKey(fk: ForeignKeyShape): boolean {
 
 // ---------------------------------------------------------------------------------------------
 
-describe('concept-catalog: the fourteen tables against the live Drizzle schema', () => {
+describe('concept-catalog: the eighteen tables against the live Drizzle schema', () => {
   const tables = tableVectors.filter((v) => v.id.startsWith('table/'));
 
-  it('covers exactly the fourteen tables of the cluster', () => {
+  it('covers exactly the eighteen tables of the cluster', () => {
     expect(tables.map((v) => asString(field(v.input, 'table', v.id), v.id)).sort()).toEqual([
       'agent_files',
       'agent_grants',
       'agent_mcp_servers',
       'agent_pointer_moves',
       'agent_skills',
+      'agent_storage_grants',
       'agent_version_evaluations',
       'agent_version_pointers',
+      'agent_version_storage_grants',
       'agent_versions',
       'agents',
+      'file_texts',
       'files',
       'mcp_servers',
       'project_files',
       'project_mcp_servers',
+      'skill_revisions',
       'skills',
     ]);
   });

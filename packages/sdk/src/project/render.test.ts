@@ -644,8 +644,8 @@ describe('renderProjectShell', () => {
     "@indx-workspace/aw": "0.3.0",
     "@indx-workspace/embedded": "0.3.0",
     "@indx-workspace/sdk": "0.3.0",
-    "@anthropic-ai/claude-agent-sdk": "0.3.296",
-    "@anthropic-ai/sdk": "0.133.0"
+    "@anthropic-ai/claude-agent-sdk": "0.3.310",
+    "@anthropic-ai/sdk": "0.137.0"
   },
   "devDependencies": {
     "@indx-workspace/cli": "0.3.0"
@@ -664,7 +664,13 @@ describe('renderProjectShell', () => {
     "protobufjs": false
   },
   "overrides": {
-    "undici@>=7.0.0 <7.29.1": "^7.29.1"
+    "undici@>=7.0.0 <7.30.1": "^7.30.1",
+    "undici@>=8.0.0 <8.12.2": "^8.12.2",
+    "body-parser@>=2.0.0 <2.4.0": "^2.4.0",
+    "@azure/msal-node@>=5.0.0-beta.0 <7.1.0": "^7.1.0",
+    "@modelcontextprotocol/server@>=2.0.0 <2.3.0": "^2.3.0",
+    "@modelcontextprotocol/client@>=2.0.0 <2.3.0": "^2.3.0",
+    "@modelcontextprotocol/core@>=2.0.0 <2.3.0": "^2.3.0"
   }
 }
 `,
@@ -687,7 +693,13 @@ allowBuilds:
   'protobufjs': false
 # Security overrides of the runtime tree, also copied from the repository root.
 overrides:
-  'undici@>=7.0.0 <7.29.1': '^7.29.1'
+  'undici@>=7.0.0 <7.30.1': '^7.30.1'
+  'undici@>=8.0.0 <8.12.2': '^8.12.2'
+  'body-parser@>=2.0.0 <2.4.0': '^2.4.0'
+  '@azure/msal-node@>=5.0.0-beta.0 <7.1.0': '^7.1.0'
+  '@modelcontextprotocol/server@>=2.0.0 <2.3.0': '^2.3.0'
+  '@modelcontextprotocol/client@>=2.0.0 <2.3.0': '^2.3.0'
+  '@modelcontextprotocol/core@>=2.0.0 <2.3.0': '^2.3.0'
 `,
     );
     expect(contentsOf(files, '.gitignore')).toBe('node_modules/\n.agent-workspace/\n.aw/\n.env\n');

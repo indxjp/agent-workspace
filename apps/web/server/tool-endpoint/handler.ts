@@ -5,17 +5,18 @@
  * code never runs here; the call is forwarded through the gateway, the only caller of a tool
  * sandbox (ADR-0118 TS3), under a 60-second grant the control plane signs.
  */
+import { log } from '../telemetry/logger';
 import type { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-versions';
 import { NAME_KEY_PATTERN } from '@indx-workspace/contracts/project-file';
 import { z } from 'zod';
 
-import { currentEndpointClientsRuntime } from '../endpoint-clients/runtime';
+import { applicationContext } from '../application-context';
 import { endpointCredentialKey, readCappedBody } from '../endpoints/request';
 import { DomainError } from '../errors';
 import { bearerChallenge, mcpResourcePath, resourceUrl } from '../oauth/resource';
 import { requireRunPermission } from '../runs/api';
 import { apiError } from '../runs/http';
-import { getToolEndpoint, type ToolEndpointEnvironment, type ToolEndpointIdentity } from './env';
+import type { ToolEndpointEnvironment, ToolEndpointIdentity } from './env';
 import { admitToolEndpointCall } from './limits';
 
 const NOT_FOUND = (): Response =>
@@ -53,6 +54,9 @@ function wrongAudience(name: string): Response {
   response.headers.set('WWW-Authenticate', bearerChallenge(mcpResourcePath(name), 'invalid_token'));
   return response;
 }
+
+/** The longest method name a -32601 answer echoes back, in characters. */
+const MAX_ECHOED_METHOD_LENGTH = 128;
 
 function rpcError(
   status: number,
@@ -136,7 +140,7 @@ export function selectToolBundles(
   return { bundles: [...chosen.values()] };
 }
 
-function toolCallName(params: unknown): string | null {
+export function toolCallName(params: unknown): string | null {
   const name = (params as { name?: unknown } | null | undefined)?.name;
   return typeof name === 'string' && name.length > 0 ? name : null;
 }
@@ -150,11 +154,12 @@ export async function serveToolEndpoint(request: Request, name: string): Promise
   if (request.headers.get('Authorization') === null && request.headers.get('Cookie') === null) {
     return unauthenticated(name);
   }
-  const env = getToolEndpoint();
-  const clients = currentEndpointClientsRuntime();
-  if (env === null || clients === null) {
+  const context = applicationContext();
+  if (context === null || context.toolEndpoint.kind !== 'serving') {
     return apiError(503, 'tool_endpoint_not_configured', 'the tool endpoint is not configured.');
   }
+  const env = context.toolEndpoint.environment;
+  const clients = context.endpointClients;
 
   const identity: ToolEndpointIdentity | null = await env.identify(request);
   if (identity === null) return unauthenticated(name);
@@ -246,7 +251,7 @@ export async function serveToolEndpoint(request: Request, name: string): Promise
 }
 
 /** The body, capped at 1 MiB, as one JSON-RPC message in a protocol version this endpoint speaks. */
-async function readCall(
+export async function readCall(
   request: Request,
 ): Promise<(Envelope & { readonly body: unknown }) | Response> {
   const body = await readCappedJson(request, TOOL_ENDPOINT_MAX_BODY_BYTES);
@@ -277,7 +282,7 @@ async function readCall(
  * Notifications, `ping`, `initialize` and unsupported methods, answered here so connecting a
  * client never starts a sandbox; `null` for a method the sandbox answers.
  */
-function answerLocally(call: Envelope): Response | null {
+export function answerLocally(call: Envelope): Response | null {
   if (call.notification) return new Response(null, { status: 202 });
   if (call.method === 'ping') {
     return Response.json({ jsonrpc: '2.0', id: call.id ?? null, result: {} });
@@ -300,7 +305,12 @@ function answerLocally(call: Envelope): Response | null {
   }
   return FORWARDED_METHODS.has(call.method)
     ? null
-    : rpcError(200, call.id, -32601, `the method ${call.method} is not supported.`);
+    : rpcError(
+        200,
+        call.id,
+        -32601,
+        `the method ${call.method.slice(0, MAX_ECHOED_METHOD_LENGTH)} is not supported.`,
+      );
 }
 
 /**
@@ -348,7 +358,7 @@ async function forwardToGateway(
     });
     const accept = request.headers.get('Accept');
     const protocol = request.headers.get('MCP-Protocol-Version');
-    const upstream = await (env.fetch ?? fetch)(route.url, {
+    const upstream = await env.fetch(route.url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${route.grant}`,
@@ -376,9 +386,9 @@ async function forwardToGateway(
       });
     }
     // Only the error's class is logged: its text may name the sandbox's address or a secret name.
-    console.error(
-      `[tool-endpoint] the tool sandbox call failed (${error instanceof Error ? error.name : 'unknown'})`,
-    );
+    log.error('[tool-endpoint] the tool sandbox call failed', {
+      errorName: error instanceof Error ? error.name : 'unknown',
+    });
     return apiError(503, 'tool_endpoint_unavailable', 'the tool sandbox did not answer.');
   }
 }

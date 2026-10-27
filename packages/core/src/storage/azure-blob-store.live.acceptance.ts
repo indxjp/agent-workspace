@@ -3,7 +3,11 @@ import { DefaultAzureCredential } from '@azure/identity';
 import { BlobServiceClient } from '@azure/storage-blob';
 import { describe, expect, it } from 'vitest';
 
-import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
+import {
+  defineObjectStoreContract,
+  defineObjectStoreV2Contract,
+  type ObjectStoreV2ContractFixture,
+} from './contract.js';
 import {
   createAzureBlobObjectStoreProvider,
   createAzureSdkBlobContainer,
@@ -20,7 +24,7 @@ function requiredServiceUrl(): string {
 const serviceUrl = requiredServiceUrl();
 const service = new BlobServiceClient(serviceUrl, new DefaultAzureCredential());
 
-async function setup(): Promise<ObjectStoreContractFixture> {
+async function setup(): Promise<ObjectStoreV2ContractFixture> {
   const name = `aw-sdk16-${randomUUID().replaceAll('-', '').slice(0, 24)}`;
   const container = service.getContainerClient(name);
   await container.create();
@@ -33,6 +37,7 @@ async function setup(): Promise<ObjectStoreContractFixture> {
 }
 
 defineObjectStoreContract('Azure Blob (live)', setup);
+defineObjectStoreV2Contract('Azure Blob (live)', setup);
 
 describe('Azure Blob live storage proof', () => {
   it('round-trips files and skills prefixes through a temporary real container', async () => {

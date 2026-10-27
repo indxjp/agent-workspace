@@ -34,6 +34,7 @@ function repository(
     update,
     archive: () => Promise.reject(new Error('unused')),
     restore: () => Promise.reject(new Error('unused')),
+    discardIfUnused: () => Promise.resolve(false),
   };
 }
 

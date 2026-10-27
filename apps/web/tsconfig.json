@@ -12,7 +12,8 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@indx-workspace/aw": ["../../packages/aw/dist/index.d.ts"]
     }
   },
   // Tests are included, not excluded. This config emits nothing - `next build`

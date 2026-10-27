@@ -47,25 +47,7 @@ import {
   type EngineSessionStore,
   type EngineTranscriptEntry,
 } from '@agent-workspace/engine';
-
-/**
- * Which field of an entry an engine uses as its idempotency key.
- *
- * The Agent SDK's is `uuid` (R-01 §7: *"retries can redeliver, so `append()` must upsert on
- * `entry.uuid`"*); pi's is `id`; Mastra's is `key`. An engine absent from this table gets **no**
- * key, which means append-only semantics for it — the honest default, because inventing a key from
- * a field that happens to look like an id would make the store claim an idempotency the engine
- * never promised.
- */
-const ENTRY_KEY_FIELD: Readonly<Record<string, string>> = {
-  'claude-agent-sdk': 'uuid',
-  // pi's JSONL lines each carry an `id`, unique within the session (its header's is the session
-  // id), and `packages/engine-pi` mirrors each line once (ENG-08, #307).
-  pi: 'id',
-  // `packages/engine-mastra` journals a Mastra thread as one entry per record, keyed `thread` or
-  // `message:<id>`, so a message Mastra updates replaces its entry in place (ENG-10, #309).
-  mastra: 'key',
-};
+import { ENGINE_CATALOGUE, isEngineId } from '@indx-workspace/contracts/engines';
 
 /** What {@link createHttpEngineSessionStore} needs. `fetch` is a parameter so a test can supply one. */
 export interface EngineSessionStoreDeps {
@@ -177,7 +159,10 @@ export function createHttpEngineSessionStore(deps: EngineSessionStoreDeps): Engi
   const timeoutMs = deps.timeoutMs ?? DEFAULT_STATE_TIMEOUT_MS;
   const doFetch = deps.fetch ?? globalThis.fetch;
   const engine = deps.engine;
-  const entryKeyField = ENTRY_KEY_FIELD[engine];
+  // An id the catalogue does not list gets append-only semantics.
+  const entryKeyField = isEngineId(engine)
+    ? (ENGINE_CATALOGUE[engine].sessionEntryKey ?? undefined)
+    : undefined;
   const failures: string[] = [];
 
   const call = async (

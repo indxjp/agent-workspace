@@ -108,17 +108,27 @@ inductive ParsedOperation where
   deriving DecidableEq, Repr
 
 /-- The sub-resources whose `POST` is §21's `run` verb. -/
-def runSubs : List String := ["runs", "messages", "interrupt", "feedback"]
+def runSubs : List String := ["runs", "messages", "interrupt", "feedback", "approval"]
 
 /-- `parseOperation`: a method and a sub-resource, as an operation. -/
 @[aw_spec (ts := "apps/web/server/rbac/decide.ts#parseOperation")
   (doc := "docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md#decision")]
 def parseOperation (method : String) (sub : Option String) : ParsedOperation :=
   if method = "POST" ∧ (sub.map runSubs.contains).getD false = true then .ok .run
+  else if method = "POST" ∧ sub = some "download-urls" then .ok .read
   else if method = "GET" ∨ method = "HEAD" then .ok .read
   else if method = "POST" ∨ method = "PUT" ∨ method = "PATCH" ∨ method = "DELETE" then .ok .write
   else if method = "OPTIONS" then .refused .options
   else .refused .unknownMethod
+
+/-- `parseOperation` as `decide()` calls it, with the resource: `POST` on a storage connection's
+`test` lists one page of an allowed folder and changes nothing, so it is a read (issue #1690).
+Model connections' `test` spends a provider call and stays a write. The resource is tested first,
+so for every other resource this reduces to `parseOperation`. -/
+def parseOperationFor (method : String) (resource : Resource) (sub : Option String) :
+    ParsedOperation :=
+  if resource = .storageConnections ∧ method = "POST" ∧ sub = some "test" then .ok .read
+  else parseOperation method sub
 
 /-- Whether any path can reach `op` on `resource`: `read` and `write` always (`GET`, `POST`, …),
 `run` only through a `POST` on one of the resource's run sub-resources. -/
@@ -135,13 +145,15 @@ def agreeOnReachable (resource : Resource) (a b : Grants) : Bool :=
 /-- `applyGrant`: whether a grant of this width admits a row of this ownership. -/
 @[aw_spec (ts := "apps/web/server/rbac/decide.ts#applyGrant")
   (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
-  (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")]
+  (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")
+  (doc := "docs/adr/0152-roles-are-monotonic.md#decision")]
 def applyGrant : Grant → Ownership → Bool
   | .any, _ => true
   | .own, .own => true
   | .own, .notApplicable => true
   | .own, _ => false
   | .permitted, .permitted => true
+  | .permitted, .own => true
   | .permitted, _ => false
   | .none, _ => false
 
@@ -240,7 +252,7 @@ def decideOrdinary (q : Query) : Decision :=
     | .api =>
       match parsePath q.path with
       | .ok resource sub id =>
-        match parseOperation q.method sub with
+        match parseOperationFor q.method resource sub with
         | .refused m => .refuse (.method m)
         | .ok op => decideClassified role q resource sub id op
       | p => .refuse (.path p)
@@ -277,7 +289,7 @@ def revokeTokensRoleGate (role : RoleInput) : Bool := role == "owner" || role ==
 
 `tests/route-declarations/*.ts` is the union every route handler must be declared in
 (ADR-0025); `authorisation-matrix.test.ts` crosses it with the four roles and the five ownership
-answers and fails on any `refuse`, except for the fourteen pre-authentication routes and the nine
+answers and fails on any `refuse`, except for the eighteen pre-authentication routes and the nine
 identity-only routes it exempts by name. The union is transcribed here, file by file in
 `git ls-files` order; the conformance suite checks the transcription against the live union in
 both directions. -/
@@ -289,11 +301,14 @@ structure DeclaredRoute where
   path : String
   deriving DecidableEq, Repr
 
-/-- The declared route union (155 routes). -/
+/-- The declared route union (184 routes). -/
 @[aw_spec (ts := "tests/inventory-support.ts#readDeclarationFiles")
   (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#declaredRoutes")]
 def declaredRoutes : List DeclaredRoute :=
-  [ ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", "POST", "/api/agents/:id/promote"⟩,
+  [ ⟨"BLD-3-BUILDER-MCP-1846", "POST", "/api/builder/mcp"⟩,
+    ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "POST", "/mcp/builder"⟩,
+    ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "GET", "/.well-known/oauth-protected-resource/mcp/builder"⟩,
+    ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", "POST", "/api/agents/:id/promote"⟩,
     ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", "POST", "/api/agents/:id/rollback"⟩,
     ⟨"DJ-80-11-EVALUATIONS-618", "POST", "/api/agents/:id/evaluations"⟩,
     ⟨"DJ-80-11-EVALUATIONS-618", "GET", "/api/agents/:id/evaluation-runs"⟩,
@@ -319,12 +334,17 @@ def declaredRoutes : List DeclaredRoute :=
     ⟨"ENG-06-SESSION-STATE-305", "GET", "/api/sessions/:engineSessionId/state-streams"⟩,
     ⟨"ENG-06-SESSION-STATE-305", "GET", "/api/sessions/:engineSessionId/state-blobs"⟩,
     ⟨"ENG-06-SESSION-STATE-305", "PUT", "/api/sessions/:engineSessionId/state-blobs"⟩,
+    ⟨"ENG-D9-READINESS-1562", "GET", "/api/readyz"⟩,
+    ⟨"P7-2-SURFACE-ATTACHMENTS-1308", "POST", "/api/sessions/:engineSessionId/attachments"⟩,
+    ⟨"P8-4-FILE-SEARCH-1314", "GET", "/api/files/search"⟩,
+    ⟨"P8-4-FILE-SEARCH-1314", "GET", "/api/sessions/:engineSessionId/file-search"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", "GET", "/api/endpoint-clients"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", "POST", "/api/endpoint-clients"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", "GET", "/api/endpoint-clients/:id"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", "PATCH", "/api/endpoint-clients/:id"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", "DELETE", "/api/endpoint-clients/:id"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", "POST", "/api/endpoint-clients/:id/keys"⟩,
+    ⟨"P5-4-RUN-APPROVAL-1301", "POST", "/api/runs/:id/approval"⟩,
     ⟨"PT-G1-A2A", "POST", "/api/a2a/agents/:agentName"⟩,
     ⟨"PT-G1-A2A", "GET", "/api/a2a/agents/:agentName/.well-known/agent-card.json"⟩,
     ⟨"PT-T1B-TOOL-ENDPOINT", "POST", "/mcp/projects/:name"⟩,
@@ -336,6 +356,14 @@ def declaredRoutes : List DeclaredRoute :=
     ⟨"PT-T1C-OAUTH", "POST", "/oauth/authorize"⟩,
     ⟨"PT-T1C-OAUTH", "POST", "/oauth/token"⟩,
     ⟨"PT-T1C-OAUTH", "POST", "/oauth/revoke"⟩,
+    ⟨"PT-TRIGGERS-1293", "GET", "/api/triggers"⟩,
+    ⟨"PT-TRIGGERS-1293", "POST", "/api/triggers"⟩,
+    ⟨"PT-TRIGGERS-1293", "GET", "/api/triggers/:id"⟩,
+    ⟨"PT-TRIGGERS-1293", "PATCH", "/api/triggers/:id"⟩,
+    ⟨"PT-TRIGGERS-1293", "DELETE", "/api/triggers/:id"⟩,
+    ⟨"PT-TRIGGERS-1293", "POST", "/api/triggers/:id/secret"⟩,
+    ⟨"PT-TRIGGERS-1293", "POST", "/api/triggers/:id/fire/:secret"⟩,
+    ⟨"PT-TRIGGERS-1293", "GET", "/api/cron/triggers"⟩,
     ⟨"PT-U5-PLATFORMS-968", "GET", "/api/platforms"⟩,
     ⟨"PT-U5-PLATFORMS-968", "POST", "/api/agents/:id/platform-exports"⟩,
     ⟨"PT-U5-PLATFORMS-968", "POST", "/api/agents/:id/platform-archives"⟩,
@@ -354,6 +382,19 @@ def declaredRoutes : List DeclaredRoute :=
     ⟨"SDK-10-CLI-AUTH-242", "POST", "/api/auth/cli-token"⟩,
     ⟨"SDK-10-CLI-AUTH-242", "DELETE", "/api/auth/cli-token"⟩,
     ⟨"SDK-10-CLI-AUTH-242", "POST", "/api/auth/cli-workspace"⟩,
+    ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/upload-urls"⟩,
+    ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/upload-complete"⟩,
+    ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/download-urls"⟩,
+    ⟨"SDK-19-SKILL-REVISIONS-251", "POST", "/api/skills/:name/revisions"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "GET", "/api/storage-connections"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "POST", "/api/storage-connections"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "GET", "/api/storage-connections/:id"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "PATCH", "/api/storage-connections/:id"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "PUT", "/api/storage-connections/:id/credential"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "DELETE", "/api/storage-connections/:id"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "POST", "/api/storage-connections/:id/test"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", "GET", "/api/storage-connections/:id/browse"⟩,
+    ⟨"STO-CLEANUP-1674", "GET", "/api/cron/storage-cleanup"⟩,
     ⟨"W1-CP-04", "POST", "/api/agents/:id/runs"⟩,
     ⟨"W1-CP-04", "GET", "/api/runs/:id"⟩,
     ⟨"W1-CP-04", "POST", "/api/runs/:id"⟩,
@@ -457,8 +498,10 @@ def matrixPublicRoutes : List (String × String) :=
     ("POST", "/api/auth/cli-device"), ("GET", "/api/auth/cli-verify"), ("POST", "/api/auth/cli-token"),
     ("GET", "/api/cron/retention"), ("GET", "/.well-known/oauth-authorization-server"),
     ("GET", "/.well-known/oauth-protected-resource/mcp/projects/:name"),
+    ("GET", "/.well-known/oauth-protected-resource/mcp/builder"),
     ("GET", "/.well-known/oauth-protected-resource/api/a2a/agents/:agentName"),
-    ("POST", "/oauth/token"), ("POST", "/oauth/revoke")]
+    ("POST", "/oauth/token"), ("POST", "/oauth/revoke"), ("POST", "/api/triggers/:id/fire/:secret"),
+    ("GET", "/api/cron/triggers"), ("GET", "/api/cron/storage-cleanup"), ("GET", "/api/readyz")]
 
 /-- `IDENTITY_ONLY_ROUTES`: the identity-proof route the matrix exempts. -/
 @[aw_spec (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#IDENTITY_ONLY_ROUTES")]
@@ -467,7 +510,8 @@ def matrixIdentityOnlyRoutes : List (String × String) :=
     ("DELETE", "/api/auth/cli-token"), ("POST", "/api/auth/cli-workspace"),
     ("POST", "/api/a2a/agents/:agentName"),
     ("GET", "/api/a2a/agents/:agentName/.well-known/agent-card.json"),
-    ("POST", "/mcp/projects/:name"), ("GET", "/oauth/authorize"), ("POST", "/oauth/authorize")]
+    ("POST", "/mcp/projects/:name"), ("GET", "/oauth/authorize"), ("POST", "/oauth/authorize"),
+    ("POST", "/api/builder/mcp"), ("POST", "/mcp/builder")]
 
 /-- The routes the matrix decides: the union minus the exempt ones. -/
 def matrixRoutes : List DeclaredRoute :=

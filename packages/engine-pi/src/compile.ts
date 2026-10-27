@@ -86,7 +86,7 @@ export type PiWireProtocol = (typeof PI_WIRE_PROTOCOLS)[number];
 
 /**
  * The model a run names none of: pi's own default for its Anthropic provider
- * (`defaultModelPerProvider.anthropic` in `@earendil-works/pi-coding-agent` 1.1.0). Restated
+ * (`defaultModelPerProvider.anthropic` in `@earendil-works/pi-coding-agent` 1.4.0). Restated
  * because pi does not export it; `boundary.test.ts` holds the two equal.
  */
 export const PI_DEFAULT_ANTHROPIC_MODEL = 'claude-opus-4-8';

@@ -5,7 +5,7 @@
  */
 import type { MembershipSummary } from './directory';
 import type { Principal } from './principal';
-import { currentRbacRuntime } from './runtime';
+import { applicationContext } from '../application-context';
 
 function normalise(email: string): string {
   return email.trim().toLowerCase();
@@ -36,7 +36,7 @@ export async function resolveSessionActorUserIdForWorkspace(
   workspaceId: string,
   principal: Principal,
 ): Promise<string | null> {
-  const runtime = currentRbacRuntime();
+  const runtime = applicationContext()?.rbac ?? null;
   if (
     runtime === null ||
     principal.workspaceId !== workspaceId ||

@@ -1,3 +1,4 @@
+import { log as webLogger } from '../../server/telemetry/logger';
 import { createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
 import { isValidElement, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,18 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeChat } from '../../components/composer/home-chat';
 import type { ComposerAgent } from '../../components/composer/model';
 import { createInMemoryAgentStoreProvider } from '../../server/agents/memory-store';
-import { clearAgentsRuntime, configureAgentsRuntime } from '../../server/agents/runtime';
 import { createInMemoryConnectorsStoreProvider } from '../../server/connectors/memory-store';
-import {
-  clearConnectorsRuntime,
-  configureConnectorsRuntime,
-} from '../../server/connectors/runtime';
-import { clearFilesRuntime, configureFilesRuntime } from '../../server/files/runtime';
 import { createInMemoryModelsStoreProvider } from '../../server/models/memory-store';
-import { clearModelsRuntime, configureModelsRuntime } from '../../server/models/runtime';
-import { InMemoryRunStore } from '../../server/runs/store';
-import { installRunApi, resetRunApi } from '../../server/runs/environment';
+import { createInMemoryCatalogStore } from '../../server/resources/catalog-store.memory';
+import { InMemoryRunStore } from '../../server/runs/memory-store';
 import HomePage from './page';
+import {
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../../server/application-context-fixtures';
+import { clearApplicationContext } from '../../server/application-context';
 
 vi.mock('next/headers', () => ({
   cookies: () => Promise.resolve({ toString: () => '__Host-aw_session=fixture' }),
@@ -29,23 +29,20 @@ vi.mock('../../server/auth', () => ({
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const AGENT = '22222222-2222-4222-8222-222222222222';
 const CREATOR = '33333333-3333-4333-8333-333333333333';
-const ASSIGNED_FILE = '44444444-4444-4444-8444-444444444444';
-const UNASSIGNED_FILE = '55555555-5555-4555-8555-555555555555';
 const ASSIGNED_CONNECTOR = '66666666-6666-4666-8666-666666666666';
 const UNASSIGNED_CONNECTOR = '77777777-7777-4777-8777-777777777777';
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearFilesRuntime();
-  clearConnectorsRuntime();
-  clearModelsRuntime();
-  resetRunApi();
+  clearApplicationContext();
+  resetTestRunApi();
   vi.restoreAllMocks();
 });
 
 async function configuredProjection(): Promise<{
   readonly agent: ComposerAgent;
   readonly readAssignments: ReturnType<typeof vi.fn>;
+  readonly assignedFileId: string;
+  readonly unassignedFileId: string;
 }> {
   const agents = createInMemoryAgentStoreProvider({ newId: () => AGENT });
   const created = await agents.forWorkspace(WORKSPACE).create(
@@ -65,60 +62,61 @@ async function configuredProjection(): Promise<{
   );
   if (created.kind !== 'created') throw new Error(`agent fixture failed: ${created.kind}`);
 
+  const catalog = createInMemoryCatalogStore();
+  const seeded: string[] = [];
+  for (const [path, sizeBytes] of [
+    ['assigned/brief.md', 42],
+    ['private/notes.md', 99],
+  ] as const) {
+    const row = await catalog.forWorkspaceSync(WORKSPACE).putFile({
+      path,
+      kind: 'file',
+      storageKey: path,
+      sizeBytes,
+      contentType: 'text/markdown',
+      ownerPrincipalId: CREATOR,
+      createdBy: CREATOR,
+    });
+    seeded.push(row.id);
+  }
+  const [assignedFileId, unassignedFileId] = seeded;
+  if (assignedFileId === undefined || unassignedFileId === undefined) {
+    throw new Error('file fixture failed');
+  }
+
   const readAssignments = vi.fn(() =>
     Promise.resolve({
-      files: [{ fileId: ASSIGNED_FILE, access: 'read' as const }],
+      files: [{ fileId: assignedFileId, access: 'read' as const }],
       skillIds: [],
       connectorIds: [ASSIGNED_CONNECTOR],
+      storageGrants: [],
     }),
   );
-  configureAgentsRuntime({
-    agents,
-    resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
-    agentResources: {
-      forWorkspace: () => ({
-        get: readAssignments,
-        replace: (_agentId, assignments) => Promise.resolve({ kind: 'updated', assignments }),
-      }),
+  installTestDomains({
+    agents: {
+      agents,
+      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+      agentResources: {
+        forWorkspace: () => ({
+          get: readAssignments,
+          replace: (_agentId, assignments) =>
+            Promise.resolve({
+              kind: 'updated',
+              assignments: { ...assignments, storageGrants: assignments.storageGrants ?? [] },
+            }),
+        }),
+      },
     },
   });
 
-  configureFilesRuntime({
-    resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
-    store: createInMemoryObjectStoreProvider(),
-    catalog: {
-      forWorkspace: () =>
-        Promise.resolve({
-          listFiles: () =>
-            Promise.resolve([
-              {
-                id: ASSIGNED_FILE,
-                path: 'assigned/brief.md',
-                kind: 'file' as const,
-                storageKey: 'assigned/brief.md',
-                sizeBytes: 42,
-                contentType: 'text/markdown',
-                ownerPrincipalId: CREATOR,
-                createdBy: CREATOR,
-              },
-              {
-                id: UNASSIGNED_FILE,
-                path: 'private/notes.md',
-                kind: 'file' as const,
-                storageKey: 'private/notes.md',
-                sizeBytes: 99,
-                contentType: 'text/markdown',
-                ownerPrincipalId: CREATOR,
-                createdBy: CREATOR,
-              },
-            ]),
-          putFile: () => Promise.reject(new Error('unused fixture operation')),
-          renameFile: () => Promise.reject(new Error('unused fixture operation')),
-          deleteFile: () => Promise.reject(new Error('unused fixture operation')),
-          listSkills: () => Promise.resolve([]),
-          putSkill: () => Promise.reject(new Error('unused fixture operation')),
-          deleteSkill: () => Promise.reject(new Error('unused fixture operation')),
-        }),
+  installTestDomains({
+    files: {
+      kind: 'serving',
+      runtime: {
+        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+        store: createInMemoryObjectStoreProvider(),
+        catalog,
+      },
     },
   });
 
@@ -147,14 +145,20 @@ async function configuredProjection(): Promise<{
     );
     if (outcome.kind !== 'created') throw new Error(`connector fixture failed: ${outcome.kind}`);
   }
-  configureConnectorsRuntime({
-    connectors,
-    resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
-    identifyActor: () => Promise.resolve({ principalId: CREATOR, userId: CREATOR }),
-    recordAudit: () => Promise.resolve(),
+  installTestDomains({
+    connectors: {
+      kind: 'serving',
+      runtime: {
+        connectors,
+        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+        identifyActor: () => Promise.resolve({ principalId: CREATOR, userId: CREATOR }),
+        recordAudit: () => Promise.resolve(),
+      },
+    },
+    models: { kind: 'unavailable' },
   });
 
-  const home = await HomePage();
+  const home = await HomePage({ searchParams: Promise.resolve({}) });
   if (!isValidElement<ComponentProps<typeof HomeChat>>(home)) {
     throw new Error('HomePage did not return the HomeChat boundary');
   }
@@ -162,7 +166,7 @@ async function configuredProjection(): Promise<{
   if (projection.kind !== 'agents') throw new Error(projection.reason);
   const agent = projection.agents[0];
   if (agent.id !== AGENT) throw new Error('HomePage did not project the configured agent');
-  return { agent, readAssignments };
+  return { agent, readAssignments, assignedFileId, unassignedFileId };
 }
 
 describe('composer projection characterization', () => {
@@ -183,11 +187,11 @@ describe('composer projection characterization', () => {
     it.fails(
       'RF-502 projects only the persisted File and Connector assignments into HomeChat (expected failure until RF-502)',
       () => {
-        expect(fixture.agent.files.map(({ id }) => id)).toEqual([ASSIGNED_FILE]);
+        expect(fixture.agent.files.map(({ id }) => id)).toEqual([fixture.assignedFileId]);
         expect(fixture.agent.connectors.map(({ id, name }) => ({ id, name }))).toEqual([
           { id: ASSIGNED_CONNECTOR, name: 'Assigned Search' },
         ]);
-        expect(JSON.stringify(fixture.agent)).not.toContain(UNASSIGNED_FILE);
+        expect(JSON.stringify(fixture.agent)).not.toContain(fixture.unassignedFileId);
         expect(JSON.stringify(fixture.agent)).not.toContain(UNASSIGNED_CONNECTOR);
       },
     );
@@ -202,26 +206,31 @@ describe('composer projection characterization', () => {
       fixture = await configuredProjection();
       const models = createInMemoryModelsStoreProvider([WORKSPACE]).forWorkspace(WORKSPACE);
       list = vi.spyOn(models, 'list');
-      configureModelsRuntime({
-        resolveActor: () =>
-          Promise.resolve({
-            kind: 'workspace',
-            workspaceId: WORKSPACE,
-            principalId: CREATOR,
-            userId: CREATOR,
-            userLabel: 'creator@example.test',
-            role: 'owner',
-            scope: null,
-          }),
-        models: { forWorkspace: () => models },
-        probe: () =>
-          Promise.resolve({ ok: false, status: null, latencyMs: 0, message: 'unused fixture' }),
-        discover: () => Promise.resolve({ ok: true, models: [], stale: false }),
-        audit: () => Promise.resolve(),
-        log: () => undefined,
+      installTestDomains({
+        models: {
+          kind: 'serving',
+          runtime: {
+            resolveActor: () =>
+              Promise.resolve({
+                kind: 'workspace',
+                workspaceId: WORKSPACE,
+                principalId: CREATOR,
+                userId: CREATOR,
+                userLabel: 'creator@example.test',
+                role: 'owner',
+                scope: null,
+              }),
+            models: { forWorkspace: () => models },
+            probe: () =>
+              Promise.resolve({ ok: false, status: null, latencyMs: 0, message: 'unused fixture' }),
+            discover: () => Promise.resolve({ ok: true, models: [], stale: false }),
+            audit: () => Promise.resolve(),
+            log: () => undefined,
+          },
+        },
       });
 
-      const home = await HomePage();
+      const home = await HomePage({ searchParams: Promise.resolve({}) });
       if (!isValidElement<ComponentProps<typeof HomeChat>>(home)) {
         throw new Error('HomePage did not return the HomeChat boundary');
       }
@@ -241,6 +250,37 @@ describe('composer projection characterization', () => {
         expect(list).not.toHaveBeenCalled();
       },
     );
+  });
+});
+
+describe('version pin', () => {
+  async function homePropsFor(
+    params: Readonly<Record<string, string>>,
+  ): Promise<ComponentProps<typeof HomeChat>> {
+    await configuredProjection();
+    const home = await HomePage({ searchParams: Promise.resolve(params) });
+    if (!isValidElement<ComponentProps<typeof HomeChat>>(home)) {
+      throw new Error('HomePage did not return the HomeChat boundary');
+    }
+    return home.props;
+  }
+
+  it('pins HomeChat to ?agent and ?version', async () => {
+    const props = await homePropsFor({ agent: AGENT, version: '2' });
+    expect(props.agent).toEqual({ id: AGENT, locked: true });
+    expect(props.version).toBe(2);
+  });
+
+  it('passes neither prop for an invalid pin', async () => {
+    const props = await homePropsFor({ agent: AGENT, version: '0' });
+    expect(props).not.toHaveProperty('agent');
+    expect(props).not.toHaveProperty('version');
+  });
+
+  it('passes neither prop for an agent that is not a uuid', async () => {
+    const props = await homePropsFor({ agent: 'not-a-uuid', version: '2' });
+    expect(props).not.toHaveProperty('agent');
+    expect(props).not.toHaveProperty('version');
   });
 });
 
@@ -275,11 +315,15 @@ describe('run-target description failure', () => {
       );
       if (created.kind !== 'created') throw new Error(`agent fixture failed: ${created.kind}`);
     }
-    configureAgentsRuntime({
-      agents,
-      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+    installTestDomains({
+      agents: {
+        agents,
+        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+      },
+      // The home page reads the model connections best-effort; none are wired here.
+      models: { kind: 'unavailable' },
     });
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(null),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),
@@ -302,9 +346,9 @@ describe('run-target description failure', () => {
               byProject: new Map(),
             }),
     });
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     try {
-      const home = await HomePage();
+      const home = await HomePage({ searchParams: Promise.resolve({}) });
       if (!isValidElement<ComponentProps<typeof HomeChat>>(home)) {
         throw new Error('HomePage did not return the HomeChat boundary');
       }

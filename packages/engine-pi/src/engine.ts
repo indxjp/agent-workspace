@@ -3,7 +3,7 @@
  *
  * The third adapter. `compile` is `./compile.ts`, events are `./frames.ts`, the session is
  * `./session.ts`, the tool guard is `./workspace.ts` and `./guard.ts`, and the only SDK import is
- * `./boundary.ts`. The runner reaches it through {@link PI_ENGINE_ADAPTER} and nothing else.
+ * `./boundary.ts`. The runner reaches it through {@link createPiEngine} and nothing else.
  *
  * ## The session identity
  *
@@ -46,7 +46,7 @@ export const PI_ADAPTER_VERSION = `0.0.0+${PI_CODING_AGENT_VERSION}`;
  */
 export const PI_CAPABILITIES = ENGINE_CATALOGUE.pi.capabilities;
 
-/** Build the adapter. {@link PI_ENGINE_ADAPTER} is this with the real pi. */
+/** Build the adapter — the package root's only export (W3-8). With no arguments it runs the real pi. */
 export function createPiEngine(runStarter: PiRunStarter = startPiRun): AgentEngine<PiCompiled> {
   return createEngineAdapter<PiCompiled, PiEvent>({
     id: PI_ENGINE_ID,
@@ -93,6 +93,3 @@ export function createPiEngine(runStarter: PiRunStarter = startPiRun): AgentEngi
     },
   });
 }
-
-/** The adapter the runner's registry loads. */
-export const PI_ENGINE_ADAPTER: AgentEngine<PiCompiled> = createPiEngine();

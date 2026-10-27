@@ -1,0 +1,2 @@
+ALTER TABLE "files" ADD COLUMN "upload_mode" text;--> statement-breakpoint
+ALTER TABLE "files" ADD CONSTRAINT "files_upload_mode_valid" CHECK ("files"."upload_mode" is null or "files"."upload_mode" in ('relay', 'signed'));

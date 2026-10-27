@@ -6,7 +6,7 @@ description: "Optional: take the agent you built to a hosted agent platform, swi
 
 **Where you are:** after [Chapter 6: Run it for your team](/path/operate). This chapter is optional,
 and it is an alternative to [Chapter 5: Ship it to your servers](/path/ship) for production: Chapter 5
-runs the agent on infrastructure you own, this chapter runs it on someone else's platform.
+runs the agent on infrastructure you own, this chapter runs it on someone else's platform. The next stop is the [tutorials](/tutorials).
 
 ## What you will have at the end
 
@@ -23,7 +23,7 @@ An agent is one portable definition. From it you can change the loop it runs on,
 code, or hand it to a hosted platform.
 
 ```mermaid
-flowchart LR
+flowchart TD
   A["Your agent: agents/assistant.ts"] --> B{"What do you want?"}
   B -- "same platform, other agent loop" --> C["Switch the engine"]
   B -- "plain code, no platform" --> D["Eject to a TypeScript project"]
@@ -99,6 +99,6 @@ The [platform compatibility matrix](/platforms/matrix) puts every platform side 
 - Code written for Mastra or the OpenAI Agents SDK cannot be imported back
   ([Export an agent](/platforms/overview#import-an-agent-from-a-platform)).
 
-<Card title="Back to the start of the path" icon="arrow-left" href="/path/first-agent">
-  Chapter 1: Run your first agent.
+<Card title="Next: the tutorials" icon="arrow-right" href="/tutorials">
+  Build a complete agent for a real job, step by step.
 </Card>

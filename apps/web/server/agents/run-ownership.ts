@@ -21,11 +21,13 @@
  * half degrades to "not granted" rather than a 503 when `agentGrants` is not wired (this task's
  * declared gap for that composition line, same ADR).
  */
+import { applicationContext } from '../application-context';
+import type { AgentRecord } from './contract';
+import { isBuilderAgent } from '../builder/agent/is-builder-agent';
 import { ownerPrincipalIdOf } from '../rbac/owner-principal';
 import type { Ownership } from '../rbac/decide';
-import { currentAgentsRuntime } from './runtime';
 
-/** The facts `runs/environment.ts`'s own `Principal` already carries that this needs. */
+/** The facts `runs/environment.ts`'s own `RunPrincipal` already carries that this needs. */
 export interface RunOwnershipPrincipal {
   readonly workspaceId: string;
   readonly principalId: string;
@@ -35,7 +37,8 @@ export interface RunOwnershipPrincipal {
 }
 
 /**
- * `own` when `principal` created the agent, `permitted` when an `agent_grants` row names them,
+ * `own` when `principal` created the agent, `permitted` when an `agent_grants` row names them (or
+ * the agent is a built-in and they are a person),
  * `other` when the agent exists but neither holds, and `unknown` when the agent cannot be read at
  * all (absent, or the agents runtime is not configured) — `decide()` treats `unknown` as "deny for
  * every grant narrower than `any`", the safe direction, and `startRun`'s own subsequent
@@ -45,7 +48,7 @@ export async function resolveAgentRunOwnership(
   principal: RunOwnershipPrincipal,
   agentId: string,
 ): Promise<Ownership> {
-  const runtime = currentAgentsRuntime();
+  const runtime = applicationContext()?.agents ?? null;
   if (runtime === null) return 'unknown';
   const agent = await runtime.agents.forWorkspace(principal.workspaceId).get(agentId);
   return ownershipOf(principal, agent, runtime.agentGrants?.forWorkspace(principal.workspaceId));
@@ -58,11 +61,15 @@ export async function resolveAgentRunOwnership(
  */
 export async function ownershipOf(
   principal: RunOwnershipPrincipal,
-  agent: { readonly id: string; readonly ownerPrincipalId: string } | null,
+  agent: Pick<AgentRecord, 'id' | 'ownerPrincipalId' | 'builtin'> | null,
   grants: { hasGrant(agentId: string, userId: string): Promise<boolean> } | undefined,
 ): Promise<Ownership> {
   if (agent === null) return 'unknown';
   if (agent.ownerPrincipalId === ownerPrincipalIdOf(principal)) return 'own';
+  // #1848: every human member may run the built-in Builder, members who join later included, so no
+  // grant rows are written. A future built-in is not runnable by everyone without a decision. `permitted` widens `agents.run` only (`decide()`'s `permitted` width);
+  // edits stay refused by RBAC and `builtin_agent_read_only`.
+  if (isBuilderAgent(agent) && principal.userId !== null) return 'permitted';
   if (grants === undefined || principal.userId === null) return 'other';
   return (await grants.hasGrant(agent.id, principal.userId)) ? 'permitted' : 'other';
 }

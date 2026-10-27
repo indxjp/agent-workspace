@@ -70,6 +70,8 @@ import {
   CONNECTOR_AUTH_TYPES,
   CONNECTOR_KINDS,
   CONNECTOR_TRANSPORTS,
+  CREDENTIALED_CONNECTOR_AUTH_TYPES,
+  REMOTE_CONNECTOR_TRANSPORTS,
 } from '@indx-workspace/contracts/connectors';
 import { TOOL_CONNECTOR_KINDS } from '@indx-workspace/contracts/tool-connectors';
 
@@ -124,14 +126,14 @@ export const mcpTransports = CONNECTOR_TRANSPORTS;
 export type McpTransport = (typeof mcpTransports)[number];
 
 /** The transports that are reached over a URL rather than by launching a process. */
-export const remoteMcpTransports = ['http', 'sse'] as const;
+export const remoteMcpTransports = REMOTE_CONNECTOR_TRANSPORTS;
 
 /** §8's Authentication radio group: None / API Key / Bearer Token / OAuth. The contracts' `CONNECTOR_AUTH_TYPES` itself. */
 export const mcpAuthTypes = CONNECTOR_AUTH_TYPES;
 export type McpAuthType = (typeof mcpAuthTypes)[number];
 
 /** The authentication choices that need a stored credential. Every one except `none`. */
-export const credentialedMcpAuthTypes = ['api-key', 'bearer', 'oauth'] as const;
+export const credentialedMcpAuthTypes = CREDENTIALED_CONNECTOR_AUTH_TYPES;
 
 /**
  * `args` for a stdio server — §8's `["-y", "@modelcontextprotocol/server-filesystem",
@@ -196,6 +198,12 @@ export const mcpServers = pgTable(
      * that silently stops authenticating.
      */
     credentialSecretId: uuid('credential_secret_id'),
+    /**
+     * Opt-in to the signed identity assertion (ADR-0142 D1): the NAME of the workspace secret that
+     * signs it, resolved at use so a rotation applies. NULL means no opt-in. Allowed only on an
+     * `http`/`sse` MCP connector or an `openapi` connector (`mcp_servers_identity_transport`).
+     */
+    identitySecretName: text('identity_secret_name'),
     /** Whether this connector is offered to agents at all. */
     enabled: boolean('enabled').notNull().default(true),
     /**
@@ -297,6 +305,11 @@ export const mcpServers = pgTable(
       sql`${table.kind} <> 'mcp' or ((${table.authType} in ${sql.raw(renderValueList(credentialedMcpAuthTypes))}) = (${table.credentialSecretId} is not null))`,
     ),
     check('mcp_servers_name_not_blank', sql`length(btrim(${table.name})) > 0`),
+    // A stdio server sets no request header and a postgres connector has no request to sign.
+    check(
+      'mcp_servers_identity_transport',
+      sql`${table.identitySecretName} is null or (length(btrim(${table.identitySecretName})) > 0 and (${table.kind} = 'openapi' or (${table.kind} = 'mcp' and ${table.transport} in ${sql.raw(renderValueList(remoteMcpTransports))})))`,
+    ),
   ],
 );
 

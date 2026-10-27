@@ -33,6 +33,11 @@ test('GCP Compose publishes only the proxy and scopes component secrets', async 
   assert.match(compose, /gateway\.env/u);
   assert.match(compose, /runner\.env/u);
   assert.match(compose, /postgres\.env/u);
+  assert.match(compose, /AW_STORAGE_URL: file:\/\/\/var\/lib\/agent-workspace\n/u);
+  assert.doesNotMatch(
+    compose,
+    /AW_FILE_STORAGE_ROOT|AW_SKILL_STORAGE_ROOT|AW_SESSION_TRANSCRIPT_ROOT/u,
+  );
 });
 
 test('Terraform includes rebuild, least privilege, backup, snapshot, and monitoring resources', async () => {
@@ -55,7 +60,12 @@ test('GCP Cloud Run uses native GCS identity and a CMEK-wrapped Secret Manager m
   const terraform = await read('infra/terraform/gcp-cloudrun/main.tf');
   const variables = await read('infra/terraform/gcp-cloudrun/variables.tf');
 
-  assert.match(terraform, /name\s*=\s*"OBJECT_STORAGE_BACKEND"[\s\S]{0,100}value\s*=\s*"gcs"/u);
+  assert.match(terraform, /name\s*=\s*"AW_STORAGE_URL"[\s\S]{0,100}value\s*=\s*"gcs:\/\//u);
+  assert.match(terraform, /name\s*=\s*"AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES"/u);
+  assert.doesNotMatch(
+    terraform,
+    /"(OBJECT_STORAGE_BACKEND|OBJECT_STORAGE_BUCKET|AW_FILE_STORAGE_ROOT|AW_SKILL_STORAGE_ROOT|AW_SESSION_TRANSCRIPT_ROOT)"/u,
+  );
   assert.match(
     terraform,
     /resource "google_storage_bucket_iam_member" "web_objects"[\s\S]*?google_service_account\.web\.member/u,
@@ -93,6 +103,80 @@ test('GCP Cloud Run uses native GCS identity and a CMEK-wrapped Secret Manager m
   assert.doesNotMatch(terraform, /prevent_destroy\s*=\s*true/u);
 });
 
+// Project-level IAM resources that give the web service account a Cloud Storage role.
+function projectWideWebStorageGrants(terraform) {
+  const blocks = terraform.match(/^resource "[^"]+" "[^"]+" \{[\s\S]*?^\}/gmu) ?? [];
+  return blocks.filter(
+    (block) =>
+      /^resource "google_project_iam_(member|binding)"/u.test(block) &&
+      /roles\/storage\./u.test(block) &&
+      /google_service_account\.web\b/u.test(block),
+  );
+}
+
+test('[US-STO-10][contract][cli] web storage access is bucket-scoped, never project-wide', async () => {
+  const planted = `resource "google_project_iam_member" "web_objects_project" {
+  project = var.project_id
+  role    = "roles/storage.objectAdmin"
+  member  = google_service_account.web.member
+}
+`;
+  assert.equal(
+    projectWideWebStorageGrants(planted).length,
+    1,
+    'a planted project-level role is rejected',
+  );
+
+  for (const file of [
+    'infra/terraform/gcp-cloudrun/main.tf',
+    'packages/cli/modules/gcp-cloudrun/main.tf',
+  ]) {
+    const terraform = await read(file);
+    assert.deepEqual(
+      projectWideWebStorageGrants(terraform),
+      [],
+      `${file} grants web no project-wide storage role`,
+    );
+    for (const name of ['web_objects', 'web_state']) {
+      assert.match(
+        terraform,
+        new RegExp(
+          String.raw`resource "google_storage_bucket_iam_member" "${name}" \{[^}]*roles/storage\.objectAdmin[^}]*google_service_account\.web\.member`,
+          'u',
+        ),
+        `${file} keeps ${name} bucket-level`,
+      );
+    }
+  }
+});
+
+test('Terraform gives the gateway the web origin without a dependency cycle (#1846)', async () => {
+  // The gateway section only: from its resource to the next resource.
+  const gatewayOf = (terraform, type) =>
+    terraform.split(`resource "${type}" "gateway"`)[1]?.split(/^resource /mu)[0] ?? '';
+  for (const file of [
+    'infra/terraform/gcp-cloudrun/main.tf',
+    'packages/cli/modules/gcp-cloudrun/main.tf',
+  ]) {
+    const gateway = gatewayOf(await read(file), 'google_cloud_run_v2_service');
+    assert.match(
+      gateway,
+      /name\s*=\s*"GATEWAY_CONTROL_PLANE_ORIGIN"\n\s*value\s*=\s*"https:\/\/\$\{var\.name\}-web-\$\{data\.google_project\.current\.number\}\.\$\{var\.region\}\.run\.app"/u,
+      file,
+    );
+    assert.doesNotMatch(gateway, /google_cloud_run_v2_service\.web/u, file);
+  }
+  const azure = gatewayOf(
+    await read('infra/terraform/azure-container-apps/apps.tf'),
+    'azurerm_container_app',
+  );
+  assert.match(
+    azure,
+    /name\s*=\s*"GATEWAY_CONTROL_PLANE_ORIGIN"\n\s*value\s*=\s*local\.web_base_url/u,
+  );
+  assert.doesNotMatch(azure, /azurerm_container_app\.web/u);
+});
+
 test('Azure preview keeps control-plane scale-to-zero and sandboxes separately isolated', async () => {
   const apps = await read('infra/terraform/azure-container-apps/apps.tf');
   const sessions = await read('infra/terraform/azure-container-apps/sessions.tf');
@@ -114,6 +198,12 @@ test('Azure preview keeps control-plane scale-to-zero and sandboxes separately i
   assert.match(apps, /key_vault_secret_id/u);
   assert.match(secrets, /role_definition_name\s*=\s*"Key Vault Secrets User"/u);
   assert.match(storage, /public_network_access_enabled\s*=\s*false/u);
+  assert.match(apps, /name\s*=\s*"AW_STORAGE_URL"[\s\S]{0,200}value\s*=\s*"azblob:\/\//u);
+  assert.match(apps, /name\s*=\s*"AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES"/u);
+  assert.doesNotMatch(
+    apps,
+    /"(OBJECT_STORAGE_BACKEND|OBJECT_STORAGE_BUCKET|OBJECT_STORAGE_ENDPOINT|AW_SESSION_TRANSCRIPT_ROOT)"/u,
+  );
   assert.match(workflow, /uses: azure\/login@[0-9a-f]{40} # v3\./u);
   assert.doesNotMatch(workflow, /client-secret:/u);
 });
@@ -368,6 +458,20 @@ test('every control-plane Deployment translates the object-store credential to t
     assert.match(await golden(cloud, 'env'), /^OBJECT_STORAGE_ACCESS_KEY_ID=/mu);
     assert.match(await golden(cloud, 'env'), /^OBJECT_STORAGE_SECRET_ACCESS_KEY=/mu);
   }
+
+  // The location and the upload limit ride in the same Secret through `envFrom`, so the chart
+  // carries no value of its own for either and cannot disagree with the Secret.
+  assert.match(
+    deployments,
+    /envFrom:[\s\S]*?secretRef: \{ name: \{\{ \$\.Values\.external\.objectStoreSecret \| quote \}\} \}/u,
+  );
+  assert.doesNotMatch(
+    deployments,
+    /AW_STORAGE_URL\s*[,:]|name: AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES|OBJECT_STORAGE_(BACKEND|BUCKET|ENDPOINT)/u,
+  );
+  for (const cloud of ['aws', 'gcp']) {
+    assert.match(await golden(cloud, 'env'), /^AW_STORAGE_URL=\S+$/mu);
+  }
 });
 
 test('web and gateway use the annotatable workload-identity ServiceAccount', async () => {
@@ -526,7 +630,8 @@ test('the chart migrates in a pre-install/pre-upgrade Job that reads only the da
 test('compose starts web only after the one-shot migrate service has completed', async () => {
   const compose = await read('compose.yaml');
   const service = (name) =>
-    compose.split(new RegExp(`^ {2}${name}:\\n`, 'mu'))[1]?.split(/^ {2}[a-z][a-z-]*:\n/mu)[0] ?? '';
+    compose.split(new RegExp(`^ {2}${name}:\\n`, 'mu'))[1]?.split(/^ {2}[a-z][a-z-]*:\n/mu)[0] ??
+    '';
 
   const migrate = service('migrate');
   assert.match(migrate, /restart: 'no'/u);
@@ -542,6 +647,18 @@ test('compose starts web only after the one-shot migrate service has completed',
   assert.match(migrate, /target: web/u);
 
   assert.match(service('web'), /migrate:\n {8}condition: service_completed_successfully/u);
+});
+
+test('every compose file gives the gateway web as its control-plane origin (#1846)', async () => {
+  for (const file of [
+    'compose.yaml',
+    'infra/terraform/gcp-small/templates/compose.yaml',
+    'packages/cli/templates/compose.yaml',
+  ]) {
+    const compose = await read(file);
+    const gateway = compose.split(/^ {2}gateway:\n/mu)[1]?.split(/^ {2}[a-z][a-z-]*:\n/mu)[0] ?? '';
+    assert.match(gateway, /^ {6}GATEWAY_CONTROL_PLANE_ORIGIN: http:\/\/web:3000$/mu, file);
+  }
 });
 
 /**
@@ -578,7 +695,10 @@ test('the chart opens DNS and PostgreSQL egress by pod label under the default d
   assert.match(dns, /matchLabels: \{\{ toJson \.Values\.dns\.podSelector \}\}/u);
   assert.match(dns, /protocol: UDP, port: 53/u);
   assert.match(dns, /protocol: TCP, port: 53/u);
-  assert.match(base, /^dns:\n {2}namespace: kube-system\n {2}podSelector:\n {4}k8s-app: kube-dns$/mu);
+  assert.match(
+    base,
+    /^dns:\n {2}namespace: kube-system\n {2}podSelector:\n {4}k8s-app: kube-dns$/mu,
+  );
 
   const database = policy('agent-workspace-database');
   assert.deepEqual(selectedPods(database), [
@@ -594,8 +714,14 @@ test('the chart opens DNS and PostgreSQL egress by pod label under the default d
   const helpers = await read('infra/helm/agent-workspace/templates/_helpers.tpl');
   assert.match(helpers, /"ipBlock" \$block/u);
   assert.match(helpers, /"podSelector" \(dict "matchLabels" \./u);
-  assert.match(helpers, /with \$\.namespace \}\}\n.*set \$peer "namespaceSelector" \(dict "matchLabels" \(dict "kubernetes\.io\/metadata\.name" \.\)\)/u);
-  assert.match(base, /^database:\n {2}port: 5432\n {2}cidr: ''\n {2}podSelector: \{\}\n {2}namespace: ''$/mu);
+  assert.match(
+    helpers,
+    /with \$\.namespace \}\}\n.*set \$peer "namespaceSelector" \(dict "matchLabels" \(dict "kubernetes\.io\/metadata\.name" \.\)\)/u,
+  );
+  assert.match(
+    base,
+    /^database:\n {2}port: 5432\n {2}cidr: ''\n {2}podSelector: \{\}\n {2}namespace: ''$/mu,
+  );
   assert.deepEqual(schema.properties.database.properties.namespace, { type: 'string' });
   assert.equal(schema.properties.database.additionalProperties, false);
   assert.equal(schema.properties.database.properties.port.maximum, 65535);
@@ -609,18 +735,54 @@ test('the chart pairs every pod-to-pod egress allowance with an ingress allowanc
 
   const gatewayIn = policy('gateway-from-runner');
   assert.match(gatewayIn, /policyTypes: \[Ingress\]/u);
-  assert.match(gatewayIn, /podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-gateway \} \}/u);
-  assert.match(gatewayIn, /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-runner-manager/u);
+  assert.match(
+    gatewayIn,
+    /podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-gateway \} \}/u,
+  );
+  assert.match(
+    gatewayIn,
+    /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-runner-manager/u,
+  );
   assert.match(gatewayIn, /port: 4000/u);
   assert.match(policy('runner-to-gateway'), /port: 4000/u);
 
   const runnerIn = policy('runner-manager-from-web');
   assert.match(runnerIn, /policyTypes: \[Ingress\]/u);
-  assert.match(runnerIn, /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-web/u);
+  assert.match(
+    runnerIn,
+    /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-web/u,
+  );
   assert.match(runnerIn, /port: 8080/u);
   const webOut = policy('web-to-runner-manager');
   assert.match(webOut, /policyTypes: \[Egress\]/u);
   assert.match(webOut, /port: 8080/u);
+
+  // #1846: the gateway forwards aw-control calls to web's Service: gateway pods to web pods on
+  // TCP 3000, and nothing wider (no namespace, no address block, no sandbox).
+  const pod = (name) =>
+    `\\{ podSelector: \\{ matchLabels: \\{ app\\.kubernetes\\.io\\/name: ${name} \\} \\} \\}`;
+  const only3000 = '\\n {6}ports: \\[\\{ protocol: TCP, port: 3000 \\}\\]\\n$';
+  const gatewayOut = policy('gateway-to-web');
+  assert.match(gatewayOut, /policyTypes: \[Egress\]/u);
+  assert.match(
+    gatewayOut,
+    /spec:\n {2}podSelector: \{ matchLabels: \{ [^}]+agent-workspace-gateway \} \}/u,
+  );
+  assert.match(gatewayOut, new RegExp(`- to: \\[${pod('agent-workspace-web')}\\]${only3000}`, 'u'));
+  const webIn = policy('web-from-gateway');
+  assert.match(webIn, /policyTypes: \[Ingress\]/u);
+  assert.match(
+    webIn,
+    new RegExp(`- from: \\[${pod('agent-workspace-gateway')}\\]${only3000}`, 'u'),
+  );
+  for (const block of [gatewayOut, webIn]) {
+    assert.doesNotMatch(block, /namespaceSelector|ipBlock|agent-runtime/u);
+  }
+  const deployments = await read('infra/helm/agent-workspace/templates/deployments.yaml');
+  assert.match(
+    deployments,
+    /if eq \$name "gateway" \}\}\n(?: *#.*\n)* *- \{ name: GATEWAY_CONTROL_PLANE_ORIGIN, value: \{\{ printf "http:\/\/agent-workspace-web:%v" \(index \$ports "web"\) \| quote \}\} \}/u,
+  );
 });
 
 test('the chart opens the object store, the model providers and the Kubernetes API, and no more', async () => {
@@ -637,7 +799,10 @@ test('the chart opens the object store, the model providers and the Kubernetes A
   assert.deepEqual(selectedPods(providers), ['agent-workspace-web', 'agent-workspace-gateway']);
   assert.match(providers, /port: \{\{ \.Values\.providers\.port \}\}/u);
   assert.match(providers, /include "agent-workspace\.egressTo" \.Values\.providers/u);
-  assert.match(base, /^providers:\n {2}port: 443\n {2}cidr: 0\.0\.0\.0\/0\n {2}except: \[10\.0\.0\.0\/8, 172\.16\.0\.0\/12, 192\.168\.0\.0\/16, 169\.254\.0\.0\/16\]$/mu);
+  assert.match(
+    base,
+    /^providers:\n {2}port: 443\n {2}cidr: 0\.0\.0\.0\/0\n {2}except: \[10\.0\.0\.0\/8, 172\.16\.0\.0\/12, 192\.168\.0\.0\/16, 169\.254\.0\.0\/16\]$/mu,
+  );
 
   const api = policy('runner-manager-to-kubernetes-api');
   assert.match(api, /app\.kubernetes\.io\/name: agent-workspace-runner-manager \}/u);
@@ -663,28 +828,36 @@ test('the chart lets the runner manager reach the sandboxes it creates, and only
 
   const sandboxIn = policy('agent-runtime-from-runner-manager');
   assert.match(sandboxIn, /policyTypes: \[Ingress\]/u);
-  assert.match(sandboxIn, /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-runner-manager/u);
+  assert.match(
+    sandboxIn,
+    /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-workspace-runner-manager/u,
+  );
   assert.match(sandboxIn, /port: 8080/u);
 
   const gatewayIn = policy('gateway-from-agent-runtime');
   assert.match(gatewayIn, /policyTypes: \[Ingress\]/u);
-  assert.match(gatewayIn, /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-runtime/u);
+  assert.match(
+    gatewayIn,
+    /from: \[\{ podSelector: \{ matchLabels: \{ app\.kubernetes\.io\/name: agent-runtime/u,
+  );
   assert.match(gatewayIn, /port: 4000/u);
 });
 
 test('the runner manager creates sandbox Pods under a namespaced Role and runs one replica', async () => {
   const serviceAccounts = await read('infra/helm/agent-workspace/templates/serviceaccount.yaml');
   const deployments = await read('infra/helm/agent-workspace/templates/deployments.yaml');
-  const autoscalers = await read('infra/helm/agent-workspace/templates/horizontalpodautoscalers.yaml');
+  const autoscalers = await read(
+    'infra/helm/agent-workspace/templates/horizontalpodautoscalers.yaml',
+  );
   const base = await read('infra/helm/agent-workspace/values.yaml');
   const schema = JSON.parse(await read('infra/helm/agent-workspace/values.schema.json'));
 
   // Namespaced, never cluster-wide: the sandboxes live in the release namespace.
   assert.doesNotMatch(serviceAccounts, /ClusterRole/u);
   // Exactly what the shared-namespace driver uses: no `serviceaccounts` or `pods/log`.
-  const rules = [...serviceAccounts.matchAll(/resources: (\[[^\]]*\])\n(?:\s*#.*\n)*\s+verbs: (\[[^\]]*\])/gu)].map(
-    ([, resources, verbs]) => [JSON.parse(resources), JSON.parse(verbs)],
-  );
+  const rules = [
+    ...serviceAccounts.matchAll(/resources: (\[[^\]]*\])\n(?:\s*#.*\n)*\s+verbs: (\[[^\]]*\])/gu),
+  ].map(([, resources, verbs]) => [JSON.parse(resources), JSON.parse(verbs)]);
   assert.deepEqual(rules, [
     [['pods'], ['get', 'list', 'watch', 'create', 'delete']],
     [['services'], ['get', 'create', 'delete']],
@@ -694,11 +867,18 @@ test('the runner manager creates sandbox Pods under a namespaced Role and runs o
   // The sandbox identity holds no Role and no token.
   assert.match(serviceAccounts, /name: agent-runtime\nautomountServiceAccountToken: false/u);
 
-  for (const name of ['RUNTIME_KUBERNETES_NAMESPACE', 'RUNTIME_GATEWAY_SERVICE', 'AGENT_WORKSPACE_EGRESS_PROXY_IMAGE']) {
+  for (const name of [
+    'RUNTIME_KUBERNETES_NAMESPACE',
+    'RUNTIME_GATEWAY_SERVICE',
+    'AGENT_WORKSPACE_EGRESS_PROXY_IMAGE',
+  ]) {
     assert.match(deployments, new RegExp(name, 'u'), name);
   }
   assert.match(deployments, /fieldPath: metadata\.namespace/u);
-  assert.match(deployments, /RUNTIME_DRIVER, value: \{\{ \$\.Values\.runtime\.driver \| quote \}\}/u);
+  assert.match(
+    deployments,
+    /RUNTIME_DRIVER, value: \{\{ \$\.Values\.runtime\.driver \| quote \}\}/u,
+  );
   assert.match(base, /^runtime:\n {2}driver: kubernetes\n {2}egressProxyImage: ''$/mu);
   assert.match(base, /^ {2}runnerManager: 1$/mu);
   assert.equal(schema.properties.runtime.additionalProperties, false);
@@ -706,7 +886,10 @@ test('the runner manager creates sandbox Pods under a namespaced Role and runs o
   // The allocation registry is process-local, so the manager is neither autoscaled nor given more
   // than the replicas the values state.
   assert.match(autoscalers, /range \$name := list "web" "gateway"/u);
-  assert.match(deployments, /or \(not \$\.Values\.autoscaling\.enabled\) \(eq \$name "runner-manager"\)/u);
+  assert.match(
+    deployments,
+    /or \(not \$\.Values\.autoscaling\.enabled\) \(eq \$name "runner-manager"\)/u,
+  );
 });
 
 test('the chart renders an Ingress with cert-manager TLS only when asked, and carries the policy', async () => {
@@ -718,7 +901,10 @@ test('the chart renders an Ingress with cert-manager TLS only when asked, and ca
 
   assert.match(ingress, /^\{\{- if \.Values\.ingress\.enabled \}\}/u);
   assert.match(ingress, /required "ingress\.host is required when ingress\.enabled"/u);
-  assert.match(ingress, /cert-manager\.io\/cluster-issuer: \{\{ \.Values\.ingress\.tls\.clusterIssuer \| quote \}\}/u);
+  assert.match(
+    ingress,
+    /cert-manager\.io\/cluster-issuer: \{\{ \.Values\.ingress\.tls\.clusterIssuer \| quote \}\}/u,
+  );
   assert.match(ingress, /secretName: agent-workspace-tls/u);
   assert.match(ingress, /service: \{ name: agent-workspace-web, port: \{ number: 3000 \} \}/u);
   assert.match(base, /^ingress:\n {2}enabled: false$/mu);

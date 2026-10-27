@@ -56,7 +56,7 @@ theorem no_protocol_forwards_on_a_revoked_token (protocol : WireProtocol)
     (family : ConnectionFamily) :
     ingressDecision { clean protocol family with resolution := .revoked } =
       .answered 401 "token_revoked" := by
-  cases protocol <;> cases family <;> decide
+  cases protocol <;> cases family <;> decide +kernel
 
 /-- A token minted for one run never reaches another run's connection, whatever the protocol: the
 expected-run check happens before the resolver is consulted at all. -/
@@ -75,7 +75,7 @@ theorem no_unauthenticated_cell_forwards :
       (WireEnum.all (α := WireProtocol)).all fun protocol =>
         ConnectionFamily.all.all fun family =>
           !(ingressDecision { clean protocol family with
-            resolution := resolution }).forwardedUpstream) = true := by decide
+            resolution := resolution }).forwardedUpstream) = true := by decide +kernel
 
 /-! ## The token only ever reaches its own connection -/
 
@@ -166,7 +166,7 @@ theorem no_relayed_client_header_carries_the_run_token (runToken : String)
   simp only [List.mem_filter] at hmem
   have hname := hbearer h hmem.1 hv
   rw [hname] at hmem
-  exact absurd hmem.2 (by decide)
+  exact absurd hmem.2 (by decide +kernel)
 
 /-- The `authorization` header a caller sent is dropped rather than relayed, so an
 `Authorization: Bearer <run token>` cannot reach the upstream even by accident. The list is closed by
@@ -176,7 +176,7 @@ which account on the stored credential serves and is billed for the turn (ADR-00
 theorem the_callers_authorization_header_is_dropped :
     travelsUpstream "authorization" = false ∧ travelsUpstream "cookie" = false ∧
       travelsUpstream "x-api-key" = false ∧ travelsUpstream "openai-organization" = false ∧
-      travelsUpstream "openai-project" = false ∧ travelsUpstream "openai-beta" = true := by decide
+      travelsUpstream "openai-project" = false ∧ travelsUpstream "openai-beta" = true := by decide +kernel
 
 /-- The client-visible response never carries the stored credential, because it is rebuilt from a
 name allowlist that contains no credential-bearing header. -/
@@ -197,7 +197,7 @@ theorem the_client_response_never_carries_the_credential (upstream : List Header
 @[aw_spec (tier := T3) (ts := "packages/gateway/src/providers/passthrough.ts#CLIENT_RESPONSE_HEADERS")]
 theorem the_client_allowlist_holds_no_credential_header :
     (["set-cookie", "authorization", "api-key", "x-api-key", "openai-organization",
-      "openai-project"]).all (fun name => !clientVisibleHeaders.contains name) = true := by decide
+      "openai-project"]).all (fun name => !clientVisibleHeaders.contains name) = true := by decide +kernel
 
 /-- A refusal sends nothing upstream at all, so neither allowlist is even reached: the hosted-tool
 and wrong-protocol rules are decided before any network call. -/
@@ -214,7 +214,7 @@ theorem a_refused_request_reaches_no_upstream :
       vendorState := true }).forwardedUpstream = false ∧
     (ingressDecision (clean .openaiResponses .anthropic)).forwardedUpstream = false ∧
     (ingressDecision { clean .openaiResponses .openai with
-      resolution := .revoked }).forwardedUpstream = false := by decide
+      resolution := .revoked }).forwardedUpstream = false := by decide +kernel
 
 /-! ## The tool routes (ADR-0113 C16, ADR-0118 TS3) -/
 
@@ -240,7 +240,7 @@ theorem ingress_paths_are_the_spec_contract :
     Ingress.all.map Ingress.path =
       ["/v1/messages", "/v1/messages/count_tokens", "/v1/responses", "/v1/chat/completions",
         "/v1/models", "/health", "/v1/tools/:connectorId/mcp", "/v1/tool-sandbox/mcp",
-        "/v1/tool-sandbox/endpoint/mcp"] := by decide
+        "/v1/tool-sandbox/endpoint/mcp"] := by decide +kernel
 
 /-- The model classes embed `Route` unchanged: same path, same metering, in the same order. -/
 @[aw_spec (tier := T3) (ts := "packages/gateway/src/index.ts#GATEWAY_ROUTES")]

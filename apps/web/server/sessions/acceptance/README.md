@@ -43,7 +43,7 @@ at the config directory that already works and isolates itself inside it with a 
   │ http server on 127.0.0.1:0   │◀──HTTP───────── startLocalAgent ─────  startLocalAgent
   │  → the REAL route handlers   │   the mirror    + sessionStore         + sessionStore
   │    (server/sessions/api.ts)  │                 → claude.ts            → claude.ts
-  │  → FileTranscriptStore       │                 → query()              → query({ resume })
+  │  → InMemoryTranscriptStore   │                 → query()              → query({ resume })
   └──────────────────────────────┘                 → a real model         → a real model
 ```
 
@@ -101,11 +101,11 @@ Proven, by executed output:
 
 **Not** proven, and not claimed anywhere:
 
-* **PostgreSQL.** The backend here is `FileTranscriptStore`. §20 prefers PostgreSQL and the adapter is
+* **PostgreSQL.** The backend here is `InMemoryTranscriptStore`. §20 prefers PostgreSQL and the adapter is
   a declared gap — [`W2-CP-07-session-state-has-no-table-in-section-27.md`](../../../../../docs/adr/W2-CP-07-session-state-has-no-table-in-section-27.md).
-* **A deployment.** Nothing calls `installSessionApi()` in `apps/web/instrumentation.ts` and nothing
-  passes `{ sessionStore }` in `apps/runner/src/index.ts`; both files belong to other tasks. In a
-  real deployment today these routes answer 503 and no run mirrors anything.
+* **A deployment.** This run installs the session API itself, as a test domain of the application
+  context; it does not boot the composition root (`apps/web/server/composition/session-rbac.ts`) or
+  the runner's (`apps/runner/src/index.ts`).
 * **Next.js.** The handlers are driven through a plain `node:http` server that makes the same calls
   the App Router files make. The route files themselves are covered by `../routes.test.ts` and by
   `tests/route-inventory.test.ts`, not by this run.

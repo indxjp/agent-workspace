@@ -26,6 +26,18 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.ConceptWork.run_row_has_ended_at_iff_terminal",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.run_invariants_are_the_row_checks"],
+   "input": {"status": "awaiting_approval", "endedAt": true, "check": "runs_ended_at_iff_terminal"},
+   "id": "row/runs_ended_at_iff_terminal/awaiting_approval/true",
+   "expected": {"holds": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.run_row_has_ended_at_iff_terminal",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.run_invariants_are_the_row_checks"],
+   "input": {"status": "awaiting_approval", "endedAt": false, "check": "runs_ended_at_iff_terminal"},
+   "id": "row/runs_ended_at_iff_terminal/awaiting_approval/false",
+   "expected": {"holds": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.ConceptWork.run_row_has_ended_at_iff_terminal",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.run_invariants_are_the_row_checks"],
    "input": {"status": "completed", "endedAt": true, "check": "runs_ended_at_iff_terminal"},
    "id": "row/runs_ended_at_iff_terminal/completed/true",
    "expected": {"holds": true}},

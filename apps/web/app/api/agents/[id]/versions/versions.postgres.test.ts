@@ -26,16 +26,10 @@ import {
 
 import { POST } from './route';
 import { createRepositoryAgentStoreProvider } from '../../../../../server/agents/store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { FIXTURE_POLICY, versionRequest } from '../../../../../server/agent-versions/fixtures';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { createRepositoryAgentVersionStoreProvider } from '../../../../../server/agent-versions/store';
 import {
   clearEnginesRegisteredForTests,
@@ -43,7 +37,6 @@ import {
 } from '../../../../../server/engines/registry';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';
@@ -113,33 +106,39 @@ describe.skipIf(!hasDatabase)('POST /api/agents/:id/versions on PostgreSQL', () 
     });
 
     const scopes = createDatabaseWorkspaceScopeResolver(isolated.db);
-    configureAgentsRuntime({
-      agents: createRepositoryAgentStoreProvider({
-        repositories: createDatabaseAgentRepositoryProvider(isolated.db),
-        scopes,
-      }),
-      resolveWorkspace: (): Promise<WorkspaceResolution> =>
-        Promise.resolve({ kind: 'workspace', workspaceId }),
+    installTestDomains({
+      agents: {
+        agents: createRepositoryAgentStoreProvider({
+          repositories: createDatabaseAgentRepositoryProvider(isolated.db),
+          scopes,
+        }),
+        resolveWorkspace: (): Promise<WorkspaceResolution> =>
+          Promise.resolve({ kind: 'workspace', workspaceId }),
+      },
     });
-    configureAgentVersionsRuntime({
-      versions: createRepositoryAgentVersionStoreProvider({
-        repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
-        evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
-        scopes,
-      }),
+    installTestDomains({
+      agentVersions: {
+        versions: createRepositoryAgentVersionStoreProvider({
+          repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
+          evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
+          scopes,
+        }),
+      },
     });
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ users: [] }),
-      identify: () =>
-        Promise.resolve(
-          Principal.fromApiKey({
-            principalId: caller.principalId,
-            apiKeyId: crypto.randomUUID(),
-            workspaceId,
-            role: caller.role,
-            label: `versions ${caller.role} key`,
-          }),
-        ),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ users: [] }),
+        identify: () =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: caller.principalId,
+              apiKeyId: crypto.randomUUID(),
+              workspaceId,
+              role: caller.role,
+              label: `versions ${caller.role} key`,
+            }),
+          ),
+      },
     });
   }, 180_000);
 
@@ -149,9 +148,7 @@ describe.skipIf(!hasDatabase)('POST /api/agents/:id/versions on PostgreSQL', () 
   });
 
   afterAll(async () => {
-    clearAgentsRuntime();
-    clearAgentVersionsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
     await isolated.close();
   });
 

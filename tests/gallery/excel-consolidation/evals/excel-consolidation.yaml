@@ -1,14 +1,19 @@
-# An eval case is one prompt in a fresh session, so these pin turn 1 (the plan). Turn 2 continues
-# a session with a confirmed plan; the backend's recompute and number guard check it instead.
+# An eval case is one prompt in a fresh session, so these pin the plan: each case ends where the agent
+# stops at the `Write` of `outputs/plan.json` for approval, and is scored at that pause
+# (`awaitsApproval`). The eval never approves; the runner cancels the paused run. What follows the
+# approval is a continuation; the backend's recompute and number guard check that instead.
 cases:
-  - name: 1回目は集計せずにマッピング計画を出す
+  - name: 集計せずに、計画を Write して承認を待つ
     input: 今月（2025年5月）の拠点別売上を集計して、前月からの増減を説明して
     expect:
-      contains: ['```json', '"layouts"', '"unit"']
+      awaitsApproval: true
+      tool: Write
+      toolInput: { file_path: outputs/plan.json }
       notContains: ['"comparison"']
   - name: 単位が千円の拠点を明示する
     input: 2025年5月と4月の拠点別売上を集計する計画を出して
     expect:
+      awaitsApproval: true
       contains: ['千円']
       judge: >
         計画が東京・名古屋・札幌の金額を千円単位として扱い（unit が 千円）、
@@ -16,4 +21,5 @@ cases:
   - name: テンプレートは理由つきで除外する
     input: 5月分の拠点別売上の集計計画を作って
     expect:
-      contains: ['"excluded"', '売上報告テンプレート']
+      awaitsApproval: true
+      contains: ['売上報告テンプレート']

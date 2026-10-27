@@ -24,7 +24,7 @@
  * The derived string is byte-identical to the one compose used to send, which is what keeps
  * `CLAUDE_CONFIG_DIR` — and therefore which transcript file a resume finds — unchanged.
  */
-import { validateTenantSessionScope, type TenantSessionScope } from '@agent-workspace/core';
+import { validateTenantSessionScope, type TenantSessionScope } from '@agent-workspace/run-protocol';
 
 /**
  * The directory, relative to `cwd`, the Claude Agent SDK keeps its own configuration in.

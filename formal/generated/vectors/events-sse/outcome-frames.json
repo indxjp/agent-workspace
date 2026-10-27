@@ -4,6 +4,10 @@
    "id": "succeeded",
    "expected": ["event: done\ndata: {}\n\n"]},
   {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.outcome_frame_order"],
+   "input": "paused",
+   "id": "paused",
+   "expected": ["event: done\ndata: {}\n\n"]},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.outcome_frame_order"],
    "input": "failed",
    "id": "failed",
    "expected":

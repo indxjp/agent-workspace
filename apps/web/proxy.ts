@@ -56,7 +56,9 @@ function isAuthExemptPage(pathname: string): boolean {
  * Issue #236 (SDK-04, S-1): a browser token's credential shape only, scoped by prefix AND by the
  * exact path shapes §3.1's grammar admits — reading a run or its events, and starting a run in a
  * session. Issue #539 (S2-05c) adds a third shape, rating a run (`POST /api/runs/:id/feedback`),
- * whose session row identity the handler checks. This is not the authorisation decision:
+ * whose session row identity the handler checks. Issue #251 adds the two presign shapes
+ * (`POST /api/files/:id/(upload|download)-urls`), whose `.attachments/<sessionId>/` prefix the
+ * handler checks. This is not the authorisation decision:
  * `decide()`'s scope grammar (`apps/web/server/rbac/decide.ts`) still refuses a token whose scope
  * does not reach the row a matched path names, and the route still verifies the bearer itself. A
  * too-wide match here would let an unverified bearer past the edge for a shape `decide()` was never
@@ -77,7 +79,11 @@ function visitorRouteMethod(pathname: string): 'GET' | 'POST' | null {
   if (/^\/api\/runs\/[^/]+(\/events)?$/u.test(pathname)) return 'GET';
   if (
     /^\/api\/agents\/[^/]+\/runs$/u.test(pathname) ||
-    /^\/api\/runs\/[^/]+\/feedback$/u.test(pathname)
+    /^\/api\/runs\/[^/]+\/feedback$/u.test(pathname) ||
+    // Issue #251 (SDK-19, N-4): a session token mints presigned URLs for its own session's files.
+    /^\/api\/files\/[^/]+\/(upload|download)-urls$/u.test(pathname) ||
+    // Issue #1308 (P7-2): a session token uploads one file into its own session.
+    /^\/api\/sessions\/[^/]+\/attachments$/u.test(pathname)
   ) {
     return 'POST';
   }
@@ -110,6 +116,36 @@ function isCliTokenRoute(request: NextRequest, authorization: string | null): bo
   const bearer = authorization === null ? null : /^Bearer[ ]([^ ]+)$/iu.exec(authorization.trim());
   if (!bearer?.[1]?.startsWith('awu_live_')) return false;
   return isCliTokenRoutePath(request.nextUrl.pathname);
+}
+
+/**
+ * ADR-0144: Microsoft Graph and Zoom call a fixed URL with no session and no header, so the secret
+ * in the path is the whole authentication, checked by the route. Exact by method and shape.
+ */
+function isTriggerFire(request: NextRequest): boolean {
+  return (
+    request.method === 'POST' &&
+    /^\/api\/triggers\/[^/]+\/fire\/[^/]+$/u.test(request.nextUrl.pathname)
+  );
+}
+
+/**
+ * Issue #1846: the `aw-control` door takes a run token, which no other route does. It verifies the
+ * token itself and refuses a cookie or an API key, so the edge lets exactly this method and path by.
+ */
+function isBuilderMcpRoute({ method, nextUrl }: NextRequest): boolean {
+  return method === 'POST' && nextUrl.pathname === '/api/builder/mcp';
+}
+
+/** The routes that carry their own credential and check it themselves, so they need no session. */
+function authenticatesItself(request: NextRequest): boolean {
+  const { method, nextUrl } = request;
+  return (
+    isBuilderMcpRoute(request) ||
+    isAgentEndpointRoute(method, nextUrl.pathname) ||
+    isOAuthRoute(method, nextUrl.pathname) ||
+    isTriggerFire(request)
+  );
 }
 
 /**
@@ -166,13 +202,14 @@ function gateApiKey(request: NextRequest, authorization: string | null): NextRes
   return null;
 }
 
-async function gateRequest(request: NextRequest): Promise<NextResponse> {
+/** The routes reached before any session or credential exists, each exact by method and path. */
+function isPreAuthenticationRoute(request: NextRequest): boolean {
   // Setup detection and submission are the only pre-authentication control-plane endpoints.
   if (
     (request.method === 'GET' && request.nextUrl.pathname === '/api/setup/runtime-detect') ||
     (request.method === 'POST' && request.nextUrl.pathname === '/api/setup')
   ) {
-    return NextResponse.next();
+    return true;
   }
   // Issue #118's OIDC sign-in exchange. Reaching any of these three is the point of not having a
   // session yet — `/api/auth/login` starts a transaction, `/api/auth/callback` is the identity
@@ -189,7 +226,7 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
       (request.nextUrl.pathname === '/api/auth/callback' ||
         request.nextUrl.pathname === '/api/auth/workspace'))
   ) {
-    return NextResponse.next();
+    return true;
   }
   // Issue #121's one pre-membership operation. This exemption is exact by method and path: the
   // acceptance handler verifies the dedicated invitation-identity cookie and same-origin request
@@ -198,20 +235,66 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
     request.method === 'POST' &&
     /^\/api\/invitations\/[^/]+\/accept$/u.test(request.nextUrl.pathname)
   ) {
-    return NextResponse.next();
+    return true;
   }
+  return false;
+}
+
+// The page surface is never denied (W1-CP-06), but an unauthenticated visit to it is not sent
+// straight through either, now that `/signin` exists: a session is checked here too, and a
+// missing or invalid one redirects to the sign-in screen instead of rendering a shell whose
+// every `/api/**` fetch would then 401 one at a time. `/signin` and `/setup` are exempt because
+// they are exactly the pages a session-less visitor must be able to reach.
+async function signInRedirect(request: NextRequest): Promise<NextResponse | null> {
+  if (isAuthExemptPage(request.nextUrl.pathname)) return null;
+  const pageSecret = readSessionSecret(process.env);
+  const pageSession = pageSecret.ok
+    ? await verifySessionToken(request.cookies.get(sessionCookieName())?.value, pageSecret.secret)
+    : { ok: false as const };
+  if (!pageSession.ok) {
+    // The absolute argument is required here and does NOT reach the client as written, which is
+    // why this site is not repaired the way the three in `app/api/auth/callback/route.ts` were
+    // (issue #201, and
+    // `docs/adr/W9-R9b-relative-location-closes-the-class-and-the-proxy-site-is-owned-by-next.md`).
+    //
+    // A proxy response is post-processed by Next before it is sent. In `next@16.3.4`,
+    // `dist/server/web/adapter.js:394-396` replaces this `Location` with
+    // `getRelativeURL(redirectURL, requestURL)` — the URL minus its origin — whenever the two
+    // hosts match, and they match *by construction*: the adapter builds `requestURL` from the
+    // same `request.url` this line does. So the header on the wire is already `/signin`, with no
+    // origin for a client to resolve against the wrong one. That rewrite is itself inside the
+    // `!process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard at `:393`, so the relative wire
+    // header holds only while that flag is unset — nothing here sets it, and no test covers it.
+    //
+    // Setting a relative `Location` here instead would not survive: the same adapter passes it to
+    // `new NextURL(location, { forceLocale, headers, nextConfig })` at `:384`, whose second
+    // argument has no `pathname` key and is therefore read as options, not as a base — so
+    // `dist/server/web/next-url.js:16-22` evaluates `new URL('/signin', undefined)` and throws.
+    // That is a 500 on every unauthenticated page visit, the most-travelled path in the
+    // application, and `:384` sits above the `__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard, so no
+    // flag avoids it. Both halves are pinned by tests rather than by this comment — the wire
+    // header by `tests/auth.test.ts`'s live `next dev` probe of an unauthenticated `GET /`, and
+    // the `NextURL` contract by `apps/web/proxy.test.ts` — so a Next upgrade that changes either
+    // fails a check instead of a user's session.
+    //
+    // Deriving the target from `Host` / `X-Forwarded-Host` is refused for the same reason it is
+    // in the callback route: both are caller-supplied, and that trades this defect for an open
+    // redirect.
+    return NextResponse.redirect(new URL('/signin', request.url));
+  }
+  return null;
+}
+
+async function gateRequest(request: NextRequest): Promise<NextResponse> {
+  if (isPreAuthenticationRoute(request)) return NextResponse.next();
   const authorization = request.headers.get('authorization');
   if (isRunnerSessionRoute(request, authorization)) {
     return NextResponse.next();
   }
   // ADR-0135: a published agent's A2A endpoint authenticates its own caller (an API key only).
-  if (isAgentEndpointRoute(request.method, request.nextUrl.pathname)) {
-    return NextResponse.next();
-  }
   // ADR-0134 part 3: the OAuth server's token, revoke, authorize and metadata routes.
-  if (isOAuthRoute(request.method, request.nextUrl.pathname)) {
-    return NextResponse.next();
-  }
+  // ADR-0144: a trigger's fire URL, whose secret the route checks.
+  if (authenticatesItself(request)) return NextResponse.next();
   const apiKeyAnswer = gateApiKey(request, authorization);
   if (apiKeyAnswer !== null) return apiKeyAnswer;
   if (isBrowserTokenExemptRoute(request, authorization)) {
@@ -222,57 +305,26 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
   }
   // ADR-0120 clause 7: Vercel Cron sends no session, only `Authorization: Bearer $CRON_SECRET`, which
   // the route checks itself and which answers 404 where `CRON_SECRET` is unset. Exact by method and path.
-  if (request.method === 'GET' && request.nextUrl.pathname === '/api/cron/retention') {
+  // ADR-0144 D5: the schedule pass is called the same way, and so is the storage cleanup (#1674).
+  if (
+    request.method === 'GET' &&
+    (request.nextUrl.pathname === '/api/cron/retention' ||
+      request.nextUrl.pathname === '/api/cron/triggers' ||
+      request.nextUrl.pathname === '/api/cron/storage-cleanup')
+  ) {
+    return NextResponse.next();
+  }
+  // Issue #1562: the readiness probe. A kubelet sends no credential; the route reveals only whether
+  // the deployment is ready and, if not, which variable is wrong. Exact by method and path.
+  if (request.method === 'GET' && request.nextUrl.pathname === '/api/readyz') {
     return NextResponse.next();
   }
   const verdict = classifyPath(request.nextUrl.pathname);
   const enforcement = enforcementFor(verdict.surface);
 
-  // The page surface is never denied (W1-CP-06), but an unauthenticated visit to it is not sent
-  // straight through either, now that `/signin` exists: a session is checked here too, and a
-  // missing or invalid one redirects to the sign-in screen instead of rendering a shell whose
-  // every `/api/**` fetch would then 401 one at a time. `/signin` and `/setup` are exempt because
-  // they are exactly the pages a session-less visitor must be able to reach.
-  if (
-    enforcement === 'allow' &&
-    verdict.surface === 'page' &&
-    !isAuthExemptPage(request.nextUrl.pathname)
-  ) {
-    const pageSecret = readSessionSecret(process.env);
-    const pageSession = pageSecret.ok
-      ? await verifySessionToken(request.cookies.get(sessionCookieName())?.value, pageSecret.secret)
-      : { ok: false as const };
-    if (!pageSession.ok) {
-      // The absolute argument is required here and does NOT reach the client as written, which is
-      // why this site is not repaired the way the three in `app/api/auth/callback/route.ts` were
-      // (issue #201, and
-      // `docs/adr/W9-R9b-relative-location-closes-the-class-and-the-proxy-site-is-owned-by-next.md`).
-      //
-      // A proxy response is post-processed by Next before it is sent. In `next@16.3.4`,
-      // `dist/server/web/adapter.js:394-396` replaces this `Location` with
-      // `getRelativeURL(redirectURL, requestURL)` — the URL minus its origin — whenever the two
-      // hosts match, and they match *by construction*: the adapter builds `requestURL` from the
-      // same `request.url` this line does. So the header on the wire is already `/signin`, with no
-      // origin for a client to resolve against the wrong one. That rewrite is itself inside the
-      // `!process.env.__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard at `:393`, so the relative wire
-      // header holds only while that flag is unset — nothing here sets it, and no test covers it.
-      //
-      // Setting a relative `Location` here instead would not survive: the same adapter passes it to
-      // `new NextURL(location, { forceLocale, headers, nextConfig })` at `:384`, whose second
-      // argument has no `pathname` key and is therefore read as options, not as a base — so
-      // `dist/server/web/next-url.js:16-22` evaluates `new URL('/signin', undefined)` and throws.
-      // That is a 500 on every unauthenticated page visit, the most-travelled path in the
-      // application, and `:384` sits above the `__NEXT_NO_MIDDLEWARE_URL_NORMALIZE` guard, so no
-      // flag avoids it. Both halves are pinned by tests rather than by this comment — the wire
-      // header by `tests/auth.test.ts`'s live `next dev` probe of an unauthenticated `GET /`, and
-      // the `NextURL` contract by `apps/web/proxy.test.ts` — so a Next upgrade that changes either
-      // fails a check instead of a user's session.
-      //
-      // Deriving the target from `Host` / `X-Forwarded-Host` is refused for the same reason it is
-      // in the callback route: both are caller-supplied, and that trades this defect for an open
-      // redirect.
-      return NextResponse.redirect(new URL('/signin', request.url));
-    }
+  if (enforcement === 'allow' && verdict.surface === 'page') {
+    const redirect = await signInRedirect(request);
+    if (redirect !== null) return redirect;
   }
 
   if (enforcement === 'allow') return NextResponse.next();

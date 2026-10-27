@@ -16,22 +16,21 @@ DATABASE_URL=
 # Object store: s3://acme-ai-files
 SEAWEEDFS_ACCESS_KEY_ID=
 SEAWEEDFS_SECRET_ACCESS_KEY=
+# The loopback host port SeaweedFS is published on. Change it to run beside another project
+# that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.
+SEAWEEDFS_PORT=
 COMPOSE_PROFILES=
-OBJECT_STORAGE_BACKEND=s3
-# Leave blank: the control plane deploy (a later release) sets it to
-# https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com. Set it here to override.
-OBJECT_STORAGE_ENDPOINT=
-OBJECT_STORAGE_BUCKET=acme-ai-files
+# Where files, skills and session transcripts live, in one URL. No key or password belongs in
+# it: the credential lines below, or the workload identity, supply those.
+AW_STORAGE_URL=s3://acme-ai-files?region=auto
+# Largest signed upload in bytes. Blank keeps the server default, 5 GiB.
+AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES=
 # R2 is reached through the S3 adapter with an R2 API token's access key pair (R2 > Manage
 # API tokens); fill both. Region is `auto` (https://developers.cloudflare.com/r2/api/s3/api/,
 # checked 2026-10-08).
 OBJECT_STORAGE_ACCESS_KEY_ID=
 OBJECT_STORAGE_SECRET_ACCESS_KEY=
-OBJECT_STORAGE_FORCE_PATH_STYLE=false
 AWS_REGION=auto
-AW_FILE_STORAGE_ROOT=/var/lib/agent-workspace/files
-AW_SKILL_STORAGE_ROOT=/var/lib/agent-workspace/skills
-AW_SESSION_TRANSCRIPT_ROOT=/var/lib/agent-workspace/sessions
 # Runtime: external
 RUNTIME_DRIVER=external
 EXTERNAL_PROVIDER=e2b

@@ -14,6 +14,10 @@ surface's chat: a one-tag widget, or `<Chat/>` in your React app. Your backend c
 run of the same agent from its own code with an API key, wait for the answer or relay its live
 stream, and map failures onto your own API's errors.
 
+<Frame caption="The one-tag widget on a plain HTML page, answering a visitor.">
+  <img src="/images/embed/01-widget.png" alt="The Agent Workspace chat widget open on a plain HTML page" />
+</Frame>
+
 ## Where will users talk to the agent?
 
 ```mermaid
@@ -126,11 +130,11 @@ flowchart TD
   surface's chat is admitted cross-origin ([Build a frontend](/building/frontend#pick-the-credential-your-page-can-use)).
 - No webhook tells your backend a run finished; follow the stream or poll `runs.get`
   ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)).
-- `runs.start` is not idempotent and takes no `Idempotency-Key`
+- `runs.start` is idempotent only when you pass an `idempotencyKey`
   ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
-- File bytes for a canvas pass through your backend; no presigned URLs
-  ([N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers)).
+- File bytes for a canvas pass through your backend; only a session's `.attachments/` downloads can
+  come straight from the object store ([Files](/resources/files#createdownloadurl)).
 
-<Card title="Chapter 5: Ship it to your servers" href="/path/ship">
+<Card title="Next: Chapter 5, Ship it to your servers" icon="arrow-right" href="/path/ship">
   Run the agent in production on your own VM, Cloud Run or Kubernetes.
 </Card>

@@ -48,7 +48,7 @@ theorem additive_top_level_field_loses_the_code (b : ApiProblemBody) (k : String
 
 example : normaliseCurrent (.obj [("error", encodeBody ⟨"forbidden", "No.", none, none⟩),
     ("requestId", .str "r-1")]) = none :=
-  additive_top_level_field_loses_the_code _ "requestId" _ (by decide)
+  additive_top_level_field_loses_the_code _ "requestId" _ (by decide +kernel)
 
 /-- Adding any field outside `code`, `message`, `details` and the deprecated `detail` inside a valid standard envelope's
 `error` object makes every strict envelope refuse the body (`readProblem` keeps the code only by
@@ -70,7 +70,7 @@ theorem additive_inner_field_loses_the_code (code message : String) (k : String)
     simp [Obj.strict, Obj.onlyKeys, obj?, Obj.req, lookup, bodyCodec, hinner]
   have hdb : decodeDetailBody (.obj [("code", .str code), ("message", .str message), (k, v)]) =
       none :=
-    Obj.strict_unknown_key _ _ _ "message" (.str message) (by simp) (by decide)
+    Obj.strict_unknown_key _ _ _ "message" (.str message) (by simp) (by decide +kernel)
   have hd : apiProblemDetailCodec.decode
       (.obj [("error", .obj [("code", .str code), ("message", .str message), (k, v)])]) = none := by
     rw [apiProblemDetailCodec_decode_eq]
@@ -84,6 +84,6 @@ theorem additive_inner_field_loses_the_code (code message : String) (k : String)
 
 example : normaliseCurrent (.obj [("error", .obj [("code", .str "x"), ("message", .str "y"),
     ("status", .num 400 0)])]) = none :=
-  additive_inner_field_loses_the_code "x" "y" "status" _ (by decide)
+  additive_inner_field_loses_the_code "x" "y" "status" _ (by decide +kernel)
 
 end AgentWorkspace.Theorems.Meta.ContractsFoundation

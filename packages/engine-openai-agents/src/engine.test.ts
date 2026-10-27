@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import type { EngineRunRequest } from '@agent-workspace/engine';
 import {
   CONFORMANCE_SCENARIOS,
@@ -152,6 +153,7 @@ function subject(
       ),
     connectorsCompiled: (compiled) => compiled.mcpServers.map((server) => server.name),
     subagentsCompiled: (compiled) => compiled.subagents.map((subagent) => subagent.name),
+    outputSchemaCompiled: (compiled) => compiled.outputSchema ?? undefined,
   };
 }
 
@@ -209,6 +211,10 @@ describe('the OpenAI Agents adapter', () => {
       maxBudget: 'adapter',
       wireProtocols: ['openai-responses', 'openai-chat-completions', 'anthropic-messages'],
     });
+  });
+
+  it('declares structured output in the catalogue', () => {
+    expect(ENGINE_CATALOGUE['openai-agents'].structuredOutput).toBe(true);
   });
 
   it.each(['openai-responses', 'openai-chat-completions'] as const)(

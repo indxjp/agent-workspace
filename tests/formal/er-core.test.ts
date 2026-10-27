@@ -210,6 +210,7 @@ const snapshot: unknown = JSON.parse(readFileSync(path.join(REPO_ROOT, MODEL_SNA
 interface SnapshotTable extends TableShape {
   readonly oneOf: ReadonlyMap<string, { readonly column: string; readonly values: string[] }>;
   readonly partialNullColumns: ReadonlyMap<string, string[]>;
+  readonly partialNotNullColumns: ReadonlyMap<string, string[]>;
 }
 
 const ONE_OF =
@@ -236,6 +237,7 @@ function readSnapshotTable(raw: unknown): SnapshotTable {
     inline: false,
   }));
   const partialNullColumns = new Map<string, string[]>();
+  const partialNotNullColumns = new Map<string, string[]>();
   const uniques: UniqueShape[] = [
     ...Object.values(asRecord(field(raw, 'uniqueConstraints', name), name)).map(
       (u): UniqueShape => ({
@@ -251,10 +253,19 @@ function readSnapshotTable(raw: unknown): SnapshotTable {
         const indexName = asString(field(index, 'name', name), name);
         const where = field(index, 'where', indexName);
         if (typeof where === 'string') {
-          partialNullColumns.set(
-            indexName,
-            [...where.matchAll(/"[a-z_]+"\."([a-z_]+)" is null/gu)].map((m) => m[1] ?? ''),
-          );
+          const nulls = [...where.matchAll(/"[a-z_]+"\."([a-z_]+)" is null/gu)];
+          const notNulls = [...where.matchAll(/"[a-z_]+"\."([a-z_]+)" is not null/gu)];
+          if (nulls.length > 0)
+            partialNullColumns.set(
+              indexName,
+              nulls.map((m) => m[1] ?? ''),
+            );
+          if (notNulls.length > 0) {
+            partialNotNullColumns.set(
+              indexName,
+              notNulls.map((m) => m[1] ?? ''),
+            );
+          }
         }
         return {
           name: indexName,
@@ -291,6 +302,7 @@ function readSnapshotTable(raw: unknown): SnapshotTable {
     checks: [...checks].sort(),
     oneOf,
     partialNullColumns,
+    partialNotNullColumns,
   };
 }
 
@@ -314,6 +326,7 @@ interface ModelTable extends TableShape {
   readonly tsExport: string;
   readonly foreignKeys: readonly ModelForeignKey[];
   readonly partialNullColumns: ReadonlyMap<string, string[]>;
+  readonly partialNotNullColumns: ReadonlyMap<string, string[]>;
   readonly oneOf: ReadonlyMap<string, { readonly column: string; readonly values: string[] }>;
 }
 
@@ -321,18 +334,21 @@ function readModelTable(vector: FormalVector): ModelTable {
   const e = asRecord(vector.expected, vector.id);
   const name = asString(field(vector.input, 'table', vector.id), vector.id);
   const partialNullColumns = new Map<string, string[]>();
+  const partialNotNullColumns = new Map<string, string[]>();
   const oneOf = new Map<string, { column: string; values: string[] }>();
   const uniques = asArray(e['uniques'], name).map((u): UniqueShape => {
     const uniqueName = asString(field(u, 'name', name), name);
     const partial = asStrings(field(u, 'partialNullColumns', name), name);
     if (partial.length > 0) partialNullColumns.set(uniqueName, partial);
+    const partialNotNull = asStrings(field(u, 'partialNotNullColumns', name), name);
+    if (partialNotNull.length > 0) partialNotNullColumns.set(uniqueName, partialNotNull);
     const kind = asString(field(u, 'kind', name), name);
     if (kind !== 'constraint' && kind !== 'index') throw new Error(`${name}: unique kind ${kind}`);
     return {
       name: uniqueName,
       columns: asStrings(field(u, 'columns', name), name),
       kind,
-      partial: partial.length > 0,
+      partial: partial.length > 0 || partialNotNull.length > 0,
     };
   });
   const checks = asArray(e['checks'], name).map((c) => {
@@ -372,6 +388,7 @@ function readModelTable(vector: FormalVector): ModelTable {
     uniques: byName(uniques),
     checks: [...checks].sort(),
     partialNullColumns,
+    partialNotNullColumns,
     oneOf,
   };
 }
@@ -462,6 +479,9 @@ describe.each(tableVectors.map((v) => [v.id, v] as const))('er-core %s', (_id, v
     expect(Object.fromEntries(snap?.oneOf ?? [])).toEqual(Object.fromEntries(model.oneOf));
     expect(Object.fromEntries(snap?.partialNullColumns ?? [])).toEqual(
       Object.fromEntries(model.partialNullColumns),
+    );
+    expect(Object.fromEntries(snap?.partialNotNullColumns ?? [])).toEqual(
+      Object.fromEntries(model.partialNotNullColumns),
     );
   });
 

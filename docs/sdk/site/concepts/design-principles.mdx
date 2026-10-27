@@ -186,25 +186,26 @@ still your own `docker compose up -d`, `helm upgrade --install` or `terraform ap
 
 ```ts title="target: the whole lifecycle (illustrative)" claim="illustrative"
 const me = await aw.me();
-const v2 = await aw.skills.publish('release-notes', { files }); // N-1
+const v2 = await aw.skills.publish('release-notes', { files });
 await aw.skills.remove('old-skill');
 const meta = await aw.files.stat('handbook/release-process.md'); // S-11
 await aw.connectors.update(github.id, { url: newUrl });
 const agent = await aw.agents.create(input, {
   assignments: {
     files: [{ fileId: handbook.id, access: 'read' }],
-    skills: [{ name: 'release-notes', revision: 'latest' }],
+    skillIds: [releaseNotes.id],
+    skillRevisions: { [releaseNotes.id]: v2.number },
     connectorIds: [github.id],
   },
-}); // N-1 (revision-pinned skills); the compound create itself is real
+});
 await aw.agents.replaceGrants(agent.id, [viewer.principalId]);
 const definition = await aw.agents.export(agent.id);
 await staging.agents.import(definition);
 ```
 
-**Today:** `agents.create(input, { assignments })`, `agents.replaceGrants` and `me()` are real;
-`agents.export`/`import` are real; every other line above is still target shape — no publish,
-remove, stat or field update. See
+**Today:** `skills.publish`, `skills.remove`, `agents.create(input, { assignments })` with
+`skillRevisions`, `agents.replaceGrants`, `agents.export`/`import` and `me()` are real; the
+remaining lines — stat and field update — are still target shape. See
 [Time to first agent: one
 script](/concepts/what-is-agent-workspace#time-to-first-agent-one-script).
 
@@ -228,10 +229,10 @@ agent in your product](/building/embedding).
 
 | Principle                                 | What exists today                                                                                                                                                | Roadmap                                                                                                                                                                                                   |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. The developer never sees a store       | files, skills and connectors are already typed resources; their bytes still pass through the control plane                                                       | [N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers)                                                                                                                                         |
+| 1. The developer never sees a store       | files, skills and connectors are already typed resources; a browser moves a session's file bytes straight to the object store through presigned URLs         | —                                                                                                                                                                                                         |
 | 2. Placement configured once, as profiles | one validated `agent-workspace.yaml` names storage, runtime and identity, and the installer renders `.env`, Compose, Helm values and Terraform variables from it | —                                                                                                                                                                                                         |
 | 3. Native, and verified, per cloud        | PostgreSQL and OIDC accept any implementation; object storage is S3-only; most managed-cloud sandbox drivers are unverified                                      | [D-2](/concepts/roadmap#d-2-object-storage-on-every-cloud-natively), [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud), [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud) |
-| 4. Durable, owned, addressable, portable  | skills have no revisions; a file has no metadata-only read; agents already move by name with `agents.export`/`import`                                            | [N-1](/concepts/roadmap#n-1-skill-revisions), [S-11](/concepts/roadmap#s-11-file-metadata)                                                                                                                |
+| 4. Durable, owned, addressable, portable  | a file has no metadata-only read; agents already move by name with `agents.export`/`import`                                            | [S-11](/concepts/roadmap#s-11-file-metadata)                                                                                                                |
 | 5. Reach: catalog → assignment → grant    | catalog, assignment and Viewer grants are SDK-addressable; sharing stops at the workspace boundary                                                               | [N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces)                                                                                                                                     |
 | 6. Credentials cross the boundary once    | already write-only everywhere; the key that protects them sits in an environment variable, not the cloud's key service                                           | [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud)                                                                                                                                               |
 | 7. The API is the product                 | no webhooks; an OpenAPI 3.1 document is generated from the contracts; a browser credential exists (browser tokens)                                               | [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)                                                                                                                                                    |

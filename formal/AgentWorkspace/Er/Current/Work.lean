@@ -10,7 +10,8 @@ import AgentWorkspace.Concepts.Usage
 
 The work cluster of the current schema: `projects`, `sessions`, `session_transcripts`,
 `session_messages`, the three ENG-06 `session_state_*` tables, `runs`, `run_events`, `run_feedback`,
-`run_tokens`, `run_usage_records`, `audit_events` and `surface_session_keys`.
+`run_tokens`, `run_usage_records`, `audit_events`, `surface_session_keys`, and the ADR-0144
+`triggers` and `trigger_deliveries` that start runs without a person at the keyboard.
 Their columns, keys, foreign keys, unique keys and closed-set checks are already transcribed, and
 pinned to the latest snapshot (`Er.Snapshot.file`), in `Er.Core.catalogue`; this module does not copy
 them. It adds what the cluster needs on top:
@@ -33,19 +34,21 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Contracts
 open AgentWorkspace.Concepts.Project AgentWorkspace.Concepts.Session AgentWorkspace.Concepts.Run
 open AgentWorkspace.Concepts.RunEvent AgentWorkspace.Concepts.Usage
 
-/-- The fourteen tables of the work cluster.
+/-- The sixteen tables of the work cluster.
 
 ENG-06 (#305) added the last three: `session_state_streams`, `session_state_entries` and
 `session_state_blobs` are the engine-scoped generalisation of `session_transcripts` and
 `session_messages`, and they belong to the same cluster because they are the same fact about a
 session told for every engine rather than for one. The Claude pair stays until the contract step of
-the expand/contract migration (ADR-0071). -/
+the expand/contract migration (ADR-0071). ADR-0144 (#1292) added the last two: a trigger starts
+runs of one agent, and a delivery is the claimed slot of one firing, naming the run it started. -/
 @[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (ts := "packages/core/src/db/schema/index.ts")]
 def workTables : List TableName :=
   [.projects, .sessions, .sessionTranscripts, .sessionMessages, .sessionStateStreams,
     .sessionStateEntries, .sessionStateBlobs, .runs, .runEvents, .runFeedback, .runTokens,
-    .runUsageRecords, .auditEvents, .surfaceSessionKeys]
+    .runUsageRecords, .auditEvents, .surfaceSessionKeys, .triggers, .triggerDeliveries,
+    .storageMigrationRuns, .builderToolCalls]
 
 /-! ## Audit events -/
 
@@ -54,13 +57,16 @@ records. -/
 @[aw_spec (ts := "packages/contracts/src/observability.ts#AUDIT_ACTIONS")
   (ts := "packages/core/src/db/schema/audit-events.ts#auditActions")]
 inductive AuditAction where
-  | userCreated | userDeleted | agentChanged | providerCredentialChanged | apiKeyCreated
-  | apiKeyRevoked | connectorChanged | permissionChanged | runtimeProfileChanged | projectCreated
-  | projectDeleted | projectArchived | projectRestored | sessionPublished | publicLinkRevoked
-  | runnableLinkStopped | publicSharingPolicyChanged | invitationCreated | invitationResent
+  | userCreated | userDeleted | agentChanged | agentCreated | providerCredentialChanged
+  | apiKeyCreated | apiKeyRevoked | connectorChanged | permissionChanged | runtimeProfileChanged
+  | projectCreated | projectDeleted | projectArchived | projectRestored | sessionPublished
+  | publicLinkRevoked | runnableLinkStopped | publicSharingPolicyChanged | invitationCreated | invitationResent
   | invitationRevoked | invitationAccepted | endpointClientCreated | endpointClientChanged
   | endpointClientRevoked | endpointToolCalled | oauthClientSecretRotated | oauthGrantIssued
-  | oauthGrantRevoked
+  | oauthGrantRevoked | fileUploaded | fileDownloaded | fileLinkCreated | fileMoved | fileDeleted
+  | storageConnectionCreated | storageConnectionUpdated | storageConnectionDeleted
+  | storageConnectionCredentialChanged | storageConnectionTested | storageConnectionWritten
+  | storageGrantChanged
   deriving DecidableEq, Repr, Inhabited
 
 namespace AuditAction
@@ -70,6 +76,7 @@ def toWire : AuditAction → String
   | userCreated => "user-created"
   | userDeleted => "user-deleted"
   | agentChanged => "agent-changed"
+  | agentCreated => "agent-created"
   | providerCredentialChanged => "provider-credential-changed"
   | apiKeyCreated => "api-key-created"
   | apiKeyRevoked => "api-key-revoked"
@@ -95,15 +102,30 @@ def toWire : AuditAction → String
   | oauthClientSecretRotated => "oauth-client-secret-rotated"
   | oauthGrantIssued => "oauth-grant-issued"
   | oauthGrantRevoked => "oauth-grant-revoked"
+  | fileUploaded => "file-uploaded"
+  | fileDownloaded => "file-downloaded"
+  | fileLinkCreated => "file-link-created"
+  | fileMoved => "file-moved"
+  | fileDeleted => "file-deleted"
+  | storageConnectionCreated => "storage-connection-created"
+  | storageConnectionUpdated => "storage-connection-updated"
+  | storageConnectionDeleted => "storage-connection-deleted"
+  | storageConnectionCredentialChanged => "storage-connection-credential-changed"
+  | storageConnectionTested => "storage-connection-tested"
+  | storageConnectionWritten => "storage-connection-written"
+  | storageGrantChanged => "storage-grant-changed"
 
 instance : WireEnum AuditAction where
-  all := [userCreated, userDeleted, agentChanged, providerCredentialChanged, apiKeyCreated,
-    apiKeyRevoked, connectorChanged, permissionChanged, runtimeProfileChanged, projectCreated,
-    projectDeleted, projectArchived, projectRestored, sessionPublished, publicLinkRevoked,
-    runnableLinkStopped, publicSharingPolicyChanged, invitationCreated, invitationResent,
+  all := [userCreated, userDeleted, agentChanged, agentCreated, providerCredentialChanged,
+    apiKeyCreated, apiKeyRevoked, connectorChanged, permissionChanged, runtimeProfileChanged,
+    projectCreated, projectDeleted, projectArchived, projectRestored, sessionPublished,
+    publicLinkRevoked, runnableLinkStopped, publicSharingPolicyChanged, invitationCreated, invitationResent,
     invitationRevoked, invitationAccepted, endpointClientCreated, endpointClientChanged,
     endpointClientRevoked, endpointToolCalled, oauthClientSecretRotated, oauthGrantIssued,
-    oauthGrantRevoked]
+    oauthGrantRevoked, fileUploaded, fileDownloaded, fileLinkCreated, fileMoved, fileDeleted,
+    storageConnectionCreated, storageConnectionUpdated, storageConnectionDeleted,
+    storageConnectionCredentialChanged, storageConnectionTested, storageConnectionWritten,
+    storageGrantChanged]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -195,6 +217,12 @@ def runCells (r : Run) : List (String × Option String) :=
     -- `Concepts/Run.lean` does not carry the tool connector snapshot yet (ADR-0113 C16), so a
     -- run concept renders the empty set, the column default.
     ("tool_connector_ids", some "{}"),
+    -- Nor the files a run was granted (`runs.file_grants`): the column default.
+    ("file_grants", some "{}"),
+    -- Nor a continuation's approved calls (ADR-0145 D2.1): the column default.
+    ("approved_tool_calls", some "[]"),
+    -- Nor the approved calls the gateway has executed (ADR-0145 D2.1): the column default.
+    ("consumed_tool_calls", some "[]"),
     ("started_at", r.startedAt.map instant), ("ended_at", r.endedAt.map instant),
     ("input_tokens", some (toString r.counters.inputTokens)),
     ("output_tokens", some (toString r.counters.outputTokens)),
@@ -205,7 +233,8 @@ def runCells (r : Run) : List (String × Option String) :=
     ("tool_calls", some (toString r.counters.toolCalls)), ("error", r.error),
     ("accounting_state", some (WireEnum.toWire r.accountingState)),
     ("accounting_error", r.accountingError), ("created_at", some (instant r.createdAt)),
-    ("updated_at", some (instant r.updatedAt))]
+    ("updated_at", some (instant r.updatedAt)), ("pending_approval", r.pendingApproval),
+    ("approval_deadline_at", r.approvalDeadlineAt.map instant)]
 
 /-- The cells of a `run_events` row. -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]
@@ -252,6 +281,11 @@ def auditCells (e : AuditEvent) : List (String × Option String) :=
 @[aw_spec (ts := "packages/core/src/db/schema/runs.ts#terminalRunStatuses")]
 def terminalWires : List String := RunStatus.terminal.map WireEnum.toWire
 
+/-- The wire spellings of the statuses at which a run has stopped: the terminal ones and
+`awaiting_approval`, as `stoppedRunStatuses` renders them into `runs_ended_at_iff_terminal`. -/
+@[aw_spec (ts := "packages/core/src/db/schema/runs.ts#stoppedRunStatuses")]
+def stoppedWires : List String := terminalWires ++ ["awaiting_approval"]
+
 /-- The accounting states with priced usage, as `runs_price_version_matches_accounting_state`
 and `runs_unpriced_cost_zero` spell them. -/
 def pricedWires : List String := ["complete", "partial"]
@@ -285,6 +319,23 @@ def countersNonNegative (r : Row) : Bool :=
   counterColumns.all (fun c => (r.get c).all fun v => (parseNat? v).isSome) &&
     (r.get "cost_usd").all isNonNegDecimal
 
+/-- `~ '^[0-9a-f]{64}$'`: exactly 64 lower-case hexadecimal digits, a SHA-256 digest in hex. -/
+def isSha256Hex (s : String) : Bool :=
+  s.length == 64 && s.toList.all fun c => ('0' ≤ c && c ≤ '9') || ('a' ≤ c && c ≤ 'f')
+
+/-- `triggers_kind_shape` under SQL's three-valued logic: a `webhook` carries a secret hash and
+no schedule, a `schedule` carries a cron expression and a time zone and no secret. With `kind`
+`NULL` each disjunct is `NULL` or `FALSE`, so the check passes exactly when one of the column
+shapes holds. -/
+def triggerKindShape (r : Row) : Bool :=
+  let webhook := (r.get "secret_hash").isSome && (r.get "cron").isNone &&
+    (r.get "timezone").isNone
+  let schedule := (r.get "secret_hash").isNone && (r.get "cron").isSome &&
+    (r.get "timezone").isSome
+  match r.get "kind" with
+  | some k => (k == "webhook" && webhook) || (k == "schedule" && schedule)
+  | none => webhook || schedule
+
 /-- The semantics of each check of the work tables that is not a closed set, by constraint name,
 reading a row under SQL's three-valued logic: a comparison with a `NULL` operand is `NULL`, and a
 check passes unless it is `false`. -/
@@ -293,13 +344,19 @@ check passes unless it is `false`. -/
   (ts := "packages/core/src/db/schema/run-tokens.ts#runTokens")
   (ts := "packages/core/src/db/schema/run-usage-records.ts#runUsageRecords")
   (ts := "packages/core/src/db/schema/run-feedback.ts#runFeedback")
-  (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")]
+  (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")
+  (ts := "packages/core/src/db/schema/triggers.ts#triggers")
+  (ts := "packages/core/src/db/schema/trigger-deliveries.ts#triggerDeliveries")]
 def workCheck : String → Option (Row → Bool)
   | "projects_name_not_blank" => some fun r => (r.get "name").all hasNonSpace
   | "projects_default_model_pair" => some fun r =>
     (r.get "default_model_connection_id").isNone == (r.get "default_model").isNone
   | "runs_ended_at_iff_terminal" => some fun r =>
-    (r.get "status").all fun s => terminalWires.contains s == (r.get "ended_at").isSome
+    (r.get "status").all fun s => stoppedWires.contains s == (r.get "ended_at").isSome
+  | "runs_awaiting_approval_has_pending" => some fun r =>
+    (r.get "status").all fun s => s != "awaiting_approval" || (r.get "pending_approval").isSome
+  | "runs_awaiting_approval_has_deadline" => some fun r =>
+    (r.get "status").all fun s => s != "awaiting_approval" || (r.get "approval_deadline_at").isSome
   | "runs_ended_after_started" => some fun r => notBefore r "ended_at" "started_at"
   | "runs_counters_non_negative" => some countersNonNegative
   | "runs_cost_currency_usd" => some fun r => (r.get "cost_currency").all (· == "USD")
@@ -311,6 +368,12 @@ def workCheck : String → Option (Row → Bool)
     | some a, some c => pricedWires.contains a || isZeroDecimal c
     | some _, none => true
     | none, _ => true
+  | "runs_output_only_when_completed" => some fun r =>
+    (r.get "output").isNone || (r.get "status").all (· == "completed")
+  | "runs_consumed_approvals_never_queued" => some fun r =>
+    (r.get "approvals_consumed_at").isNone || (r.get "status").all (· != "queued")
+  | "runs_idempotency_key_has_hash" => some fun r =>
+    (r.get "idempotency_key").isNone == (r.get "idempotency_request_hash").isNone
   -- `char_length` counts code points, as `String.length` does.
   | "run_feedback_comment_length" => some fun r => (r.get "comment").all (·.length ≤ 1000)
   | "run_tokens_expiry_after_created" => some fun r =>
@@ -323,10 +386,16 @@ def workCheck : String → Option (Row → Bool)
   | "run_tokens_revoked_after_created" => some fun r => notBefore r "revoked_at" "created_at"
   | "run_usage_records_counters_non_negative" => some countersNonNegative
   | "run_usage_records_currency_usd" => some fun r => (r.get "cost_currency").all (· == "USD")
+  | "audit_events_details_only_agent_created" => some fun r =>
+    (r.get "details").isNone || (r.get "action").all (· == "agent-created")
   | "audit_events_actor_label_not_blank" => some fun r => (r.get "actor_label").all hasNonSpace
   | "audit_events_subject_label_not_blank" => some fun r =>
     (r.get "subject_label").all hasNonSpace
   | "audit_events_subject_id_shape" => some fun r => (r.get "subject_id").all Uuid.isCanonical
+  | "triggers_secret_hash_sha256_hex" => some fun r => (r.get "secret_hash").all isSha256Hex
+  | "triggers_kind_shape" => some triggerKindShape
+  | "trigger_deliveries_key_length" => some fun r =>
+    (r.get "delivery_key").all fun k => 1 ≤ k.length && k.length ≤ 255
   | _ => none
 
 /-- A check of a work table holds on a row: its semantics, or vacuously for a check this module
@@ -346,7 +415,11 @@ def workCheckSql : List (String × String) :=
     ("projects_default_model_pair",
       "(\"projects\".\"default_model_connection_id\" is null) = (\"projects\".\"default_model\" is null)"),
     ("runs_ended_at_iff_terminal",
-      "(\"runs\".\"status\" in ('completed', 'failed', 'cancelled')) = (\"runs\".\"ended_at\" is not null)"),
+      "(\"runs\".\"status\" in ('completed', 'failed', 'cancelled', 'awaiting_approval')) = (\"runs\".\"ended_at\" is not null)"),
+    ("runs_awaiting_approval_has_pending",
+      "\"runs\".\"status\" <> 'awaiting_approval' or \"runs\".\"pending_approval\" is not null"),
+    ("runs_awaiting_approval_has_deadline",
+      "\"runs\".\"status\" <> 'awaiting_approval' or \"runs\".\"approval_deadline_at\" is not null"),
     ("runs_ended_after_started",
       "\"runs\".\"ended_at\" is null or \"runs\".\"started_at\" is null or \"runs\".\"ended_at\" >= \"runs\".\"started_at\""),
     ("runs_counters_non_negative",
@@ -356,6 +429,12 @@ def workCheckSql : List (String × String) :=
       "(\"runs\".\"accounting_state\" in ('complete', 'partial')) = (\"runs\".\"price_table_version\" is not null)"),
     ("runs_unpriced_cost_zero",
       "\"runs\".\"accounting_state\" in ('complete', 'partial') or \"runs\".\"cost_usd\" = 0"),
+    ("runs_output_only_when_completed",
+      "\"runs\".\"output\" is null or \"runs\".\"status\" = 'completed'"),
+    ("runs_consumed_approvals_never_queued",
+      "\"runs\".\"approvals_consumed_at\" is null or \"runs\".\"status\" <> 'queued'"),
+    ("runs_idempotency_key_has_hash",
+      "(\"runs\".\"idempotency_key\" is null) = (\"runs\".\"idempotency_request_hash\" is null)"),
     ("run_feedback_comment_length",
       "\"run_feedback\".\"comment\" is null or char_length(\"run_feedback\".\"comment\") <= 1000"),
     ("run_tokens_expiry_after_created",
@@ -365,11 +444,19 @@ def workCheckSql : List (String × String) :=
     ("run_usage_records_counters_non_negative",
       "\"run_usage_records\".\"input_tokens\" >= 0 and \"run_usage_records\".\"output_tokens\" >= 0 and \"run_usage_records\".\"cache_read_input_tokens\" >= 0 and \"run_usage_records\".\"cache_creation_input_tokens\" >= 0 and \"run_usage_records\".\"tool_calls\" >= 0 and \"run_usage_records\".\"cost_usd\" >= 0"),
     ("run_usage_records_currency_usd", "\"run_usage_records\".\"cost_currency\" = 'USD'"),
+    ("audit_events_details_only_agent_created",
+      "\"audit_events\".\"details\" is null or \"audit_events\".\"action\" = 'agent-created'"),
     ("audit_events_actor_label_not_blank", "length(btrim(\"audit_events\".\"actor_label\")) > 0"),
     ("audit_events_subject_label_not_blank",
       "length(btrim(\"audit_events\".\"subject_label\")) > 0"),
     ("audit_events_subject_id_shape",
-      "\"audit_events\".\"subject_id\" is null or \"audit_events\".\"subject_id\" ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'")]
+      "\"audit_events\".\"subject_id\" is null or \"audit_events\".\"subject_id\" ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"),
+    ("triggers_secret_hash_sha256_hex",
+      "\"triggers\".\"secret_hash\" is null or \"triggers\".\"secret_hash\" ~ '^[0-9a-f]{64}$'"),
+    ("triggers_kind_shape",
+      "(\"triggers\".\"kind\" = 'webhook' and \"triggers\".\"secret_hash\" is not null and \"triggers\".\"cron\" is null and \"triggers\".\"timezone\" is null)\n        or (\"triggers\".\"kind\" = 'schedule' and \"triggers\".\"secret_hash\" is null and \"triggers\".\"cron\" is not null and \"triggers\".\"timezone\" is not null)"),
+    ("trigger_deliveries_key_length",
+      "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255")]
 
 /-- The names of the other checks of table `t`. -/
 def otherChecks (t : TableName) : List String :=

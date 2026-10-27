@@ -91,6 +91,7 @@ export function createMemoryWorkspaceRepository(
   }
 
   return {
+    ownerPrincipalId: () => Promise.resolve(null),
     listForUser(userId) {
       const out: (WorkspaceRow & { role: Role })[] = [];
       for (const row of rows.values()) {

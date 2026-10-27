@@ -17,6 +17,16 @@ describe('Helm production controls', () => {
     for (const route of ['"/"', '"/health"', '"/healthz"']) expect(deployment).toContain(route);
   });
 
+  it('gates web readiness, and only readiness, on GET /api/readyz (issue #1562)', () => {
+    // A malformed MASTER_ENCRYPTION_KEY fails readiness so a rollout stops; liveness and startup
+    // stay on "/" so the same misconfiguration never becomes a restart loop.
+    const deployment = read('infra/helm/agent-workspace/templates/deployments.yaml');
+    expect(deployment).toMatch(/\$readinessPaths := dict "web" "\/api\/readyz"/u);
+    expect(deployment).toMatch(/readinessProbe:\s+httpGet: \{ path: \{\{ index \$readinessPaths /u);
+    expect(deployment).toMatch(/livenessProbe:\s+httpGet: \{ path: \{\{ index \$healthPaths /u);
+    expect(deployment).toMatch(/startupProbe:\s+httpGet: \{ path: \{\{ index \$healthPaths /u);
+  });
+
   it('ships disruption budgets and opt-in CPU autoscaling', () => {
     const pdb = read('infra/helm/agent-workspace/templates/poddisruptionbudgets.yaml');
     const hpa = read('infra/helm/agent-workspace/templates/horizontalpodautoscalers.yaml');

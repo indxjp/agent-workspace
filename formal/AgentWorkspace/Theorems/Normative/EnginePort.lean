@@ -58,12 +58,12 @@ theorem claude_reaches_every_provider :
     composeAccepts claudeAgentSdkCapabilities.wireProtocols "openai" = true ∧
     composeAccepts claudeAgentSdkCapabilities.wireProtocols "azure-openai" = true ∧
     composeAccepts claudeAgentSdkCapabilities.wireProtocols "openai-compatible" = true := by
-  decide
+  decide +kernel
 
 /-- The negative witness, which is the case the check exists for: a Responses-only engine pointed
 at an Anthropic connection the gateway will not forward an OpenAI body to. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/engines/protocol.ts#resolveWireProtocol")]
 theorem responses_only_engine_cannot_reach_anthropic :
-    composeAccepts ["openai-responses"] "anthropic" = false := by decide
+    composeAccepts ["openai-responses"] "anthropic" = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Normative.EnginePort

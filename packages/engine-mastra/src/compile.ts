@@ -44,6 +44,11 @@
  * it rather than trust it.
  */
 import type { MastraToolName } from '@indx-workspace/contracts/agents';
+import {
+  McpHttpServerConfigSchema,
+  McpSseServerConfigSchema,
+  McpStdioServerConfigSchema,
+} from '@indx-workspace/contracts';
 import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import {
   forkRefusal,
@@ -209,6 +214,8 @@ export type MastraCompiled = {
   };
   /** Always off. Stated so a replay can assert it (ADR-0084 D4). */
   readonly observability: { readonly telemetry: false; readonly exporters: readonly [] };
+  /** The caller's `outputSchema`, verbatim (ADR-0143), or `null` when the run asks for none. */
+  readonly outputSchema: Readonly<Record<string, unknown>> | null;
 };
 
 /**
@@ -293,40 +300,11 @@ export function mastraProviderSpec(connection: MastraModelConnection): MastraPro
   }
 }
 
-/** A connector tool's approval policy, as `packages/core`'s `McpServerConfig` stores it. */
-const ConnectorToolPolicy = z
-  .object({
-    name: z.string().min(1),
-    permission_policy: z.enum(['always_allow', 'always_ask', 'always_deny']).optional(),
-    org_max_permission: z.enum(['allow', 'ask', 'blocked']).optional(),
-  })
-  .strict();
-
 /**
- * The connector records this adapter reads: `packages/core`'s `McpServerConfig`, restated as a
- * parse because an adapter may not depend on `packages/core`. Mastra's `MCPClient` speaks stdio
- * and Streamable HTTP (with an SSE fallback on the same URL), so `sse` is read as `http`.
+ * The remote connector records this adapter reads. Mastra's `MCPClient` speaks stdio and
+ * Streamable HTTP (with an SSE fallback on the same URL), so `sse` is read as `http`.
  */
-const RemoteConnector = z
-  .object({
-    type: z.enum(['http', 'sse']),
-    url: z.url(),
-    headers: z.record(z.string().min(1), z.string()).optional(),
-    tools: z.array(ConnectorToolPolicy).optional(),
-    timeout: z.number().int().min(1000).optional(),
-    alwaysLoad: z.boolean().optional(),
-  })
-  .strict();
-const LocalConnector = z
-  .object({
-    type: z.literal('stdio').optional(),
-    command: z.string().min(1),
-    args: z.array(z.string()).optional(),
-    env: z.record(z.string().min(1), z.string()).optional(),
-    timeout: z.number().int().min(1000).optional(),
-    alwaysLoad: z.boolean().optional(),
-  })
-  .strict();
+const RemoteConnectorSchema = z.union([McpHttpServerConfigSchema, McpSseServerConfigSchema]);
 
 type ConnectorsVerdict = { readonly ok: true; readonly servers: MastraMcpServer[] } | EngineRefusal;
 
@@ -335,7 +313,7 @@ function compileConnector(
   record: unknown,
   env: Readonly<Record<string, string>>,
 ): MastraMcpServer | EngineRefusal {
-  const local = LocalConnector.safeParse(record);
+  const local = McpStdioServerConfigSchema.safeParse(record);
   if (local.success) {
     const { command, args, timeout } = local.data;
     return {
@@ -348,7 +326,7 @@ function compileConnector(
       blockedTools: [],
     };
   }
-  const remote = RemoteConnector.safeParse(record);
+  const remote = RemoteConnectorSchema.safeParse(record);
   if (!remote.success) {
     return refuse(
       'engine_policy_invalid',
@@ -514,6 +492,7 @@ export function compileMastraRun(request: EngineRunRequest): EngineCompileResult
       env,
       memory,
       observability: { telemetry: false, exporters: [] },
+      outputSchema: request.outputSchema ?? null,
     },
   };
 }

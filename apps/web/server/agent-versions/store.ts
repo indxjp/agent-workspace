@@ -6,32 +6,96 @@
  * The port speaks core's own record and outcome types, imported as types, so the two halves cannot
  * drift in what a `create` or a `resolveDefinition` can answer. Like `../agents/store.ts`, no method
  * takes a workspace id: the store is bound to one when it is handed out.
+ *
+ * This is the one module of `apps/web/server/agent-versions` that names `@agent-workspace/core/db`
+ * (F-08, W3-5): the rest of the domain reads core's records, and the pure definition helpers it
+ * shares with the repository, through the re-exports below.
  */
-import type {
-  AgentPointerMoveRecord,
-  AgentSubagentCandidate,
-  AgentVersionEvaluationRepositoryProvider,
-  AgentVersionEnvironment,
-  AgentVersionListing,
-  AgentVersionRecord,
-  AgentVersionRepositoryProvider,
-  ApplyAndPointInput,
-  ApplyAndPointOutcome,
-  CreateAgentVersionInput,
-  CreateAgentVersionOutcome,
-  CreateAgentWithFirstVersionInput,
-  CreateAgentWithFirstVersionOutcome,
-  DefinitionReferences,
-  PointedSurface,
-  ReferenceIds,
-  ReferenceNames,
-  ResolveDefinitionOutcome,
-  WorkspaceScopeResolver,
+import {
+  appliedRuntimeProfileId,
+  bodyDeclaresSubagents,
+  bodyHasDescription,
+  bodySubagentNames,
+  narrowFileGrants,
+  narrowStorageGrants,
+  resolveFromRows,
+  storageGrantChange,
+  type AgentDefinitionReferenceKind,
+  type AgentPointerAudit,
+  type AgentPointerMoveReason,
+  type AgentPointerMoveRecord,
+  type AgentSubagentCandidate,
+  type AgentVersionEvaluationRepositoryProvider,
+  type AgentVersionEnvironment,
+  type AgentVersionListing,
+  type AgentVersionPointerRecord,
+  type AgentVersionRecord,
+  type AgentVersionRepository,
+  type AgentVersionRepositoryProvider,
+  type ApplyAndPointInput,
+  type ApplyAndPointOutcome,
+  type CreateAgentVersionInput,
+  type CreateAgentVersionOutcome,
+  type CreateAgentWithFirstVersionInput,
+  type CreateAgentWithFirstVersionOutcome,
+  type DefinitionReferences,
+  type FileGrant,
+  type MaterialisedAgent,
+  type PointedSurface,
+  type ReferenceIds,
+  type ReferenceNames,
+  type ResolveDefinitionOutcome,
+  type ResolvedReferences,
+  type StorageGrantRef,
+  type WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import { EvaluationCaseResultSchema } from '@indx-workspace/contracts/evaluations';
 import { z } from 'zod';
 
 import type { LatestEvaluation } from './release';
+
+/** Core's version records and outcomes, as the domain names them. */
+export type {
+  AgentDefinitionReferenceKind,
+  AgentPointerAudit,
+  AgentPointerMoveReason,
+  AgentPointerMoveRecord,
+  AgentSubagentCandidate,
+  AgentVersionEnvironment,
+  AgentVersionListing,
+  AgentVersionPointerRecord,
+  AgentVersionRecord,
+  ApplyAndPointOutcome,
+  CreateAgentVersionInput,
+  CreateAgentVersionOutcome,
+  CreateAgentWithFirstVersionOutcome,
+  DefinitionReferences,
+  FileGrant,
+  MaterialisedAgent,
+  PointedSurface,
+  ReferenceNames,
+  ResolveDefinitionOutcome,
+  ResolvedReferences,
+  StorageGrantRef,
+};
+
+/** Core's pure definition helpers, shared so the in-memory store resolves exactly as PostgreSQL. */
+export {
+  appliedRuntimeProfileId,
+  bodyDeclaresSubagents,
+  bodyHasDescription,
+  bodySubagentNames,
+  narrowFileGrants,
+  narrowStorageGrants,
+  resolveFromRows,
+  storageGrantChange,
+};
+
+/** The version reads a run composes from (`session-version.ts`), as the repository answers them. */
+export type AgentVersionRows = Pick<
+  AgentVersionRepository,
+  'findById' | 'resolveDefinition' | 'list' | 'agentsByName' | 'storageGrantsOf'
+>;
 
 /**
  * One workspace's agent versions: the operations the version routes (S1-05) and the pointer and
@@ -48,6 +112,10 @@ export interface WorkspaceAgentVersionStore {
   namesOf(ids: ReferenceIds): Promise<ReferenceNames>;
   /** Which of the connector `names` are `stdio` MCP connectors of this workspace, sorted (issue #793). */
   stdioConnectorNames(names: readonly string[]): Promise<readonly string[]>;
+  /** Whether any agent version of this workspace still grants storage connection `connectionId`. */
+  isConnectionGranted(connectionId: string): Promise<boolean>;
+  /** The storage folders version `versionId` was deployed with, by connection id; never the agent's current grants. */
+  storageGrantsOf(versionId: string): Promise<readonly StorageGrantRef[]>;
   /** The id of each of this workspace's MCP connectors named one of `names`, by name (#1109). */
   mcpConnectorIdsByName(names: readonly string[]): Promise<ReadonlyMap<string, string>>;
   /**
@@ -73,6 +141,8 @@ export interface WorkspaceAgentVersionStore {
   createAgentWithFirstVersion(
     input: CreateAgentWithFirstVersionInput,
   ): Promise<CreateAgentWithFirstVersionOutcome>;
+  /** How many agents this workspace created at or after `since`, whoever made them (the Builder's daily quota). */
+  agentsCreatedSince(since: Date): Promise<number>;
   /**
    * The last `limit` pointer moves of `agentId`, newest first: of `environment`, or of every
    * environment when it is `null` (issue #615). Another workspace's agent has none.
@@ -122,12 +192,15 @@ export function createRepositoryAgentVersionStoreProvider(
         resolveDefinition: (references) => repository.resolveDefinition(references),
         namesOf: (ids) => repository.namesOf(ids),
         stdioConnectorNames: (names) => repository.stdioConnectorNames(names),
+        isConnectionGranted: (connectionId) => repository.isConnectionGranted(connectionId),
+        storageGrantsOf: (versionId) => repository.storageGrantsOf(versionId),
         mcpConnectorIdsByName: (names) => repository.mcpConnectorIdsByName(names),
         agentsByName: (names) => repository.agentsByName(names),
         subagentParents: (name, excludeAgentId) => repository.subagentParents(name, excludeAgentId),
         find: (agentId, number) => repository.find(agentId, number),
         applyAndPoint: (agentId, input) => repository.applyAndPoint(agentId, input),
         createAgentWithFirstVersion: (input) => repository.createAgentWithFirstVersion(input),
+        agentsCreatedSince: (since) => repository.agentsCreatedSince(since),
         listMoves: (agentId, environment, limit) =>
           repository.listMoves(agentId, environment, limit),
         findPointedSurface: (environment, name) => repository.findPointedSurface(environment, name),

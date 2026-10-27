@@ -11,12 +11,12 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
+import { builtinSkillFiles } from '@agent-workspace/skills-office';
 import type { AgentVersionBody } from '@indx-workspace/contracts/agent-versions';
 import type { EvalCaseFile } from '@indx-workspace/contracts/evaluations';
 import type { ProjectDocument } from '@indx-workspace/contracts/project-file';
-import type { ImportSkillInput } from '@indx-workspace/contracts/skills';
+import { isBuiltinSkillName, type ImportSkillInput } from '@indx-workspace/contracts/skills';
 import {
   isDefinedAgent,
   isDefinedSurface,
@@ -25,13 +25,6 @@ import {
   type DefinedSurface,
 } from '@indx-workspace/sdk/define';
 import { parseProjectFile, readEvalCaseFile } from '@indx-workspace/sdk/project';
-
-const SHARED_SKILLS_DIR = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'shared',
-  'skills',
-);
 
 export interface GalleryAgent {
   readonly file: string;
@@ -48,8 +41,7 @@ export interface GalleryProject {
   readonly surfaces: readonly DefinedSurface[];
   /**
    * Every skill the agents use, as the body `aw.skills.import` sends: the project's own under
-   * `skills/`, then any shared one under `tests/gallery/shared/skills/` (such as `office-reader`,
-   * which two use cases import once into the same workspace).
+   * `skills/`, then any built-in one (`office-reader`) from `@agent-workspace/skills-office`.
    */
   readonly skills: readonly ImportSkillInput[];
 }
@@ -178,7 +170,8 @@ export async function loadGalleryProject(
   );
   for (const name of used) {
     if (skills.some((skill) => skill.name === name)) continue;
-    skills.push(await readSkill(path.join(SHARED_SKILLS_DIR, name)));
+    if (!isBuiltinSkillName(name)) throw new Error(`${dir}: skill ${name} is not under skills/`);
+    skills.push({ name, files: [...builtinSkillFiles(name)] });
   }
   return { dir, project, agents, surfaces, skills };
 }

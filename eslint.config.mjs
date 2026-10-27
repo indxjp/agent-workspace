@@ -2,6 +2,47 @@ import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
+const TEST_FILES = [
+  '**/*.test.{ts,tsx}',
+  '**/*.spec.{ts,tsx}',
+  '**/acceptance/**',
+  '**/*.acceptance.ts',
+];
+
+// A call whose name says it releases something: a failed one must reach a caller or a sink.
+const CLEANUP_CALL =
+  '/^(destroy|delete|remove|close|dispose|stop|kill|rm|rmdir|unlink|cleanup|teardown|release|shutdown)$/';
+const DISCARDING_HANDLER =
+  ":matches(ArrowFunctionExpression[body.type='BlockStatement'][body.body.length=0], ArrowFunctionExpression[body.type='Identifier'][body.name='undefined'], ArrowFunctionExpression[body.type='Literal'], ArrowFunctionExpression[body.type='UnaryExpression'][body.operator='void'], FunctionExpression[body.body.length=0], Identifier[name='noop'])";
+const CLEANUP_MESSAGE =
+  'A failed cleanup must reach the caller (AggregateError / cause) or an injected sink, not be discarded (F-06).';
+const cleanupSyntax = [
+  {
+    selector: `CallExpression[callee.property.name='catch']:matches([callee.object.callee.property.name=${CLEANUP_CALL}], [callee.object.callee.name=${CLEANUP_CALL}]) > ${DISCARDING_HANDLER}`,
+    message: CLEANUP_MESSAGE,
+  },
+  {
+    selector: `TryStatement[handler.body.body.length=0] > BlockStatement CallExpression:matches([callee.property.name=${CLEANUP_CALL}], [callee.name=${CLEANUP_CALL}])`,
+    message: CLEANUP_MESSAGE,
+  },
+];
+const RAW_FETCH_MESSAGE =
+  'The browser reaches the API through @indx-workspace/sdk, not a raw fetch (F-07).';
+const rawFetchSyntax = [
+  {
+    selector:
+      "CallExpression[callee.name='fetch'][arguments.0.type='Literal'][arguments.0.value=/^\\/api/]",
+    message: RAW_FETCH_MESSAGE,
+  },
+  {
+    selector:
+      "CallExpression[callee.name='fetch'][arguments.0.type='TemplateLiteral'][arguments.0.quasis.0.value.raw=/^\\/api/]",
+    message: RAW_FETCH_MESSAGE,
+  },
+];
+const slotMessage =
+  'Declare module-graph state with defineSlot in apps/web/server/runtime-slot.ts.';
+
 export default tseslint.config(
   {
     ignores: [
@@ -65,11 +106,87 @@ export default tseslint.config(
     files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'],
     ignores: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/acceptance/**'],
     rules: {
-      // Review tripwires set at today's reduced production maximum. Lower this ratchet whenever
-      // the current hotspot is simplified; do not raise it for new code.
-      complexity: ['error', { max: 33 }],
+      // Review tripwires set at today's production maximum; do not raise them for new code.
+      // `complexity` equals the measured maximum: scripts/check-complexity-ceiling.mjs fails
+      // until it is lowered after a hotspot is simplified (F-15).
+      complexity: ['error', { max: 32 }],
       'max-depth': ['error', 5],
     },
+  },
+  {
+    // F-06: cleanup failures are retained, never discarded. Baseline: eslint-suppressions.json.
+    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.{ts,tsx}'],
+    ignores: TEST_FILES,
+    rules: { 'no-restricted-syntax': ['error', ...cleanupSyntax] },
+  },
+  {
+    // F-04: production code logs through a telemetry port, not console. Baseline: eslint-suppressions.json.
+    files: [
+      'apps/web/server/**/*.ts',
+      'apps/web/app/**/*.{ts,tsx}',
+      'apps/runner/src/**/*.ts',
+      'packages/gateway/src/**/*.ts',
+      'packages/core/src/storage/**/*.ts',
+    ],
+    ignores: TEST_FILES,
+    rules: { 'no-console': 'error' },
+  },
+  {
+    // F-23: the environment is read once, in a composition root or entry point, and injected.
+    // Baseline: eslint-suppressions.json.
+    files: [
+      'apps/web/server/**/*.ts',
+      'apps/web/app/**/*.{ts,tsx}',
+      'apps/runner/src/**/*.ts',
+      'packages/gateway/src/**/*.ts',
+      'packages/core/src/**/*.ts',
+    ],
+    ignores: [
+      ...TEST_FILES,
+      'apps/web/server/composition/**',
+      'apps/web/server/start.ts',
+      'apps/runner/src/{index,start,server,environment,manager-start,manager-function}.ts',
+      'packages/gateway/src/{index,vercel-function}.ts',
+    ],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message: 'Read the environment in a composition root and inject it (F-23).',
+        },
+      ],
+    },
+  },
+  {
+    // #1260: Next compiles instrumentation and route handlers into separate module graphs, so
+    // module-graph state lives on `globalThis`. `defineSlot` (runtime-slot.ts) is the one way to
+    // declare it; a hand-anchored `__agentWorkspace*__` property is the second way this refuses.
+    files: ['apps/web/server/**/*.ts'],
+    ignores: ['apps/web/server/runtime-slot.ts', '**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...[
+          'TSPropertySignature > Identifier.key[name=/^__agentWorkspace\\w*__$/]',
+          'MemberExpression > Identifier.property[name=/^__agentWorkspace\\w*__$/]',
+          "TSIntersectionType > TSTypeQuery[exprName.name='globalThis']",
+          "CallExpression[callee.object.name='Reflect'][arguments.0.name='globalThis']",
+        ].map((selector) => ({ selector, message: slotMessage })),
+        ...cleanupSyntax,
+      ],
+    },
+  },
+  {
+    // F-07: browser components use the SDK. Baseline: eslint-suppressions.json.
+    files: [
+      'apps/web/components/**/*.{ts,tsx}',
+      'apps/web/app/**/*.tsx',
+      'apps/web/lib/**/*.{ts,tsx}',
+    ],
+    ignores: TEST_FILES,
+    rules: { 'no-restricted-syntax': ['error', ...cleanupSyntax, ...rawFetchSyntax] },
   },
   {
     // The conformance kit and the tests of packages/platforms are outside its production
@@ -135,7 +252,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['scripts/check-workflows.mjs'],
+    files: ['scripts/check-workflows.mjs', 'scripts/check-lint-baseline.mjs'],
     languageOptions: {
       globals: {
         console: 'readonly',

@@ -1,17 +1,18 @@
-# Per-PR quality gates: typecheck (including no-new-suppressions), lint, test, file-ownership,
+# Per-PR quality gates: typecheck (including no-new-suppressions), lint, test,
 # licence and sdk-surface. The sdk-surface gate is not a step of its own: it is
 # `tests/sdk-surface.test.ts`, which `pnpm test` collects through the `tests` entry in
 # vitest.config.ts's `projects`.
 #
-# RUNNERS AND THE TASK GRAPH. Every job runs on an ephemeral VM, one job per machine — never on a
-# self-hosted runner; this repository owns none and must not grow one. Every job runs on GitHub's
-# own `ubuntu-latest`, except the four that set how long a run takes (formal, generated-project-e2e,
-# journey-e2e, tool-sandbox-e2e: 12-18 minutes there, the rest done 2-3 minutes sooner). Those read
-# the repository variable CI_BOTTLENECK_RUNNER (a Blacksmith label) and fall back to `ubuntu-latest`
-# when it is unset (docs/adr/0053, Amendment 2026-10-16, second): if the vendor stops picking jobs
-# up again, deleting the variable moves them back without a pull request. scripts/check-workflows.mjs
-# holds every other job to `ubuntu-latest`, so the paid runner never spreads past the bottleneck.
-# `ubuntu-latest` is fast enough elsewhere because no work is done twice and the long jobs are split. So the run is shaped around that: the `build` job builds every
+# RUNNERS AND THE TASK GRAPH. A job runs on the organisation's self-hosted MS-A2 pool,
+# `[self-hosted, ms-a2]`: eight runners on one host, so several jobs share its Docker daemon and its
+# disk, and nothing is thrown away after a job (docs/adr/0053, Amendment 2026-10-23). A job therefore
+# publishes its services on random host ports, names its containers per runner and removes them when
+# it ends. scripts/check-workflows.mjs holds every job to `[self-hosted, ms-a2]` except the few it
+# lists in OFFLOADED_JOBS, which run on `blacksmith-8vcpu-ubuntu-2404`: typecheck and lint, the test
+# shards, formal, the Docker E2Es and browser (ADR-0053, Amendments 2026-10-23 and 2026-10-25).
+# Each runs-on is an expression on github.repository_owner: those runners in INDXDev, a free
+# GitHub-hosted runner in the public export and in any fork (ADR-0053, Amendment 2026-10-26).
+# The run is shaped so no work is done twice: the `build` job builds every
 # workspace ONCE and hands the outputs to the other jobs as an artifact
 # (.github/actions/workspace-build); typecheck and lint, the test projects and the image scan are
 # each spread over parallel jobs; and the jobs that build Docker images first delete the SDKs the
@@ -34,21 +35,61 @@
 # fast-checks (static gates) needs nothing and runs beside `build`, so a malformed PR body still
 # fails in seconds; everything that needs built packages starts when `build` is done.
 # `ci-success` is the single check branch protection should require.
+# COST (docs/adr/0053, Amendments 2026-10-19 and 2026-10-24). A change used to be tested three
+# times in full: on the pull request, in the merge queue and again on the push to main. Now four
+# tiers. The pull request runs the inner loop (fast checks, build, typecheck and lint, tests). The
+# merge queue runs the same inner loop on the merged commit, plus `formal` and `image-scan` when the
+# diff reaches what they read (their `scope` steps). The heavy tier (release checks and images,
+# generated-project-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser, and formal
+# and image-scan unscoped) runs nightly on main (`schedule`), on a dispatch, on a pull request
+# labelled `ci:full` before its next push (never on its `edited` runs, which skip `build`), and as
+# the release gate: publish-packages.yml and images.yml call this workflow with `full: true` on the
+# tagged commit before they publish. A failed nightly opens or updates one issue
+# (nightly-alarm.yml). The push to main only builds,
+# which writes the remote cache. A body or title edit re-runs the fast checks only (the PR-body
+# gates). `ci-success` accepts a skipped job on a pull request, a push and in the queue, never on
+# the nightly, a dispatch or the release gate.
 name: CI
 
 on:
   workflow_dispatch:
   pull_request:
-    # `edited` is here on purpose: the ownership gate reads the PR *body*, so without it an
-    # author could pass the gate and then edit the Ownership section away. Body and title
+    # `edited` is here on purpose: the PR-size gate reads the PR *body*, so without it an
+    # author could pass the gate and then edit the justification away. Body and title
     # edits re-run the gate. The other three are the defaults for this event.
     types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
+  # The release gate: publish-packages.yml and images.yml call this workflow on the tagged commit
+  # with `full: true`, which runs every tier. The call arrives as the caller's `push` event.
+  workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: false
+  # The merge queue (owner decision D6, docs/adr/0149 Amendment 2026-10-19): main's ruleset
+  # requires `CI success`, so this workflow must run on the queue's merge_group event or a queued
+  # pull request waits for a check that never starts. A group run tests the queued pull request(s)
+  # merged onto the latest main (or onto the group ahead of it), affected and path-scoped against
+  # `merge_group.base_sha` (DIFF_BASE below), never against origin/main.
+  merge_group:
+    types: [checks_requested]
+  # The nightly full run of main (02:37 JST): the heavy tier left the queue, and the image scan is
+  # otherwise skipped for a diff that changes no image input, so a new CVE would go unseen
+  # (ADR-0053, Amendments 2026-10-19 and 2026-10-24).
+  schedule:
+    - cron: '37 17 * * *'
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event.action == 'edited' && 'edited' || 'code' }}
+  # A body or title edit (`edited`) runs only the fast checks, so it has a group of its own: sharing
+  # the code run's group let an edit cancel the real tests while CI success still reported green.
+  # scripts/check-workflows.mjs enforces this split.
+  # Only a pull request supersedes its own earlier run. A push to main has its own group (the SHA), so
+  # pushes never cancel or replace each other and every main commit gets a CI result (audit F-02).
+  # A merge-queue group is keyed by its own head SHA too and never cancels: the queue itself
+  # discards a group it no longer needs, and a cancelled run would read as a failed check.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -56,15 +97,22 @@ permissions:
 env:
   # THE remote-cache plan for this run, computed once and read by every Nx job's
   # nx-remote-cache step: `off` when the kill switch is not 'true' or no server is configured,
-  # `write` for a push to `main`, `read` for everything else (pull requests, dispatches).
+  # `write` for a push to `main`, `read` for everything else (pull requests, merge-queue groups,
+  # dispatches). A merge_group run is read-only: its commit is not on main yet and the queue may
+  # still drop it, and the server refuses write for its gh-readonly-queue/* ref anyway.
   # The server applies the same rule independently from the job's signed OIDC claims and can
   # only ever grant LESS than this; the action fails the job if it is granted more.
   NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'write' || 'read' }}
+  # The base of every affected (nx affected) and path-scoped (`id: scope`) decision. A pull request
+  # compares with origin/main; a merge-queue group with `merge_group.base_sha`, the commit the
+  # group was built on (main's tip, or the head of the group ahead of it, which is not on main).
+  # Empty for a push or a dispatch: those run the complete graph and every scoped job.
+  DIFF_BASE: ${{ github.event_name == 'pull_request' && 'origin/main' || github.event_name == 'merge_group' && github.event.merge_group.base_sha || '' }}
 
 jobs:
   fast-checks:
     name: fast checks · PR contract · workflow policy
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     # id-token: the job's GitHub OIDC token is its only remote-cache credential (see the header).
     permissions:
       contents: read
@@ -86,36 +134,38 @@ jobs:
       - name: Nx remote-cache config guard
         run: node scripts/ci/check-nx-cache-config.mjs
 
-      - name: Ownership checker self-test
-        run: node scripts/check-file-ownership.mjs --self-test
-
-      - name: File-ownership gate
-        if: github.event_name == 'pull_request'
-        env:
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
-        run: |
-          set -euo pipefail
-          body="$(node -e '
-            const fs = require("fs");
-            const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
-            const text = event && event.pull_request && event.pull_request.body;
-            if (typeof text !== "string") {
-              console.error("the pull_request payload carries no body string");
-              process.exit(1);
-            }
-            process.stdout.write(text);
-          ')"
-          if printf '%s' "$body" | grep -qE '^[[:space:]]*Merged[[:space:]]+[^:]+:'; then
-            node scripts/check-file-ownership.mjs --integration
-          else
-            node scripts/check-file-ownership.mjs --pr
-          fi
-
-      - name: No new type or lint suppressions in the diff
+      # The PR-body gates (PR size, changelog fragment) read the pull request's
+      # body or branch name, which a merge_group run does not have. They stay pull_request-only:
+      # the queue only accepts a pull request whose own run passed them, and a group changes no
+      # file of that diff. The changelog gate would even be wrong there: it exempts a release/*
+      # head branch, and a group's branch is gh-readonly-queue/*.
+      # More than 3000 changed lines (generated files excluded) needs a "Large PR justification:"
+      # line in the PR body. The body is untrusted: it reaches the script only through env.
+      - name: PR size gate
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          node --test scripts/ci/check-pr-size.test.mjs
+          node scripts/ci/check-pr-size.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+
+      # PRs add changes/<slug>.md fragments; only a release/* branch edits a CHANGELOG.md
+      # (changes/README.md). Node built-ins only, so it runs before the install.
+      - name: Changelog fragment gate
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/release/changes.mjs --pr --base "$BASE_SHA" --head "$HEAD_SHA" --head-ref "$HEAD_REF"
+
+      - name: No new type or lint suppressions in the diff
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
         run: |
           set -euo pipefail
           sources=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- \
@@ -142,40 +192,140 @@ jobs:
           fi
           echo "No new suppressions in any TS/JS file outside .github/ and .claude/."
 
+      # ESLint refuses new violations and stale entries; this refuses a regenerated, larger baseline.
+      - name: Lint baseline does not grow
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$BASE_SHA:eslint-suppressions.json" 2>/dev/null; then
+            git show "$BASE_SHA:eslint-suppressions.json" > "$RUNNER_TEMP/base-suppressions.json"
+            node scripts/check-lint-baseline.mjs "$RUNNER_TEMP/base-suppressions.json" eslint-suppressions.json
+          else
+            echo "The base has no eslint-suppressions.json; this PR introduces it."
+          fi
+
       - name: Diff gates do not run on push
         if: github.event_name != 'pull_request'
         run: |
-          echo "::notice title=Reduced gate set::event_name=${{ github.event_name }}. The diff-based suppression and ownership gates require pull-request context and are skipped."
+          if [ "${{ github.event_name }}" = merge_group ]; then
+            echo "::notice title=Reduced gate set::event_name=merge_group. The PR-body gates (PR size, changelog fragment) passed on the queued pull request's own run and are skipped; the content diff gates ran against merge_group.base_sha."
+          else
+            echo "::notice title=Reduced gate set::event_name=${{ github.event_name }}. The diff-based suppression gates require pull-request context and are skipped."
+          fi
 
       - name: Generated blocks are current
+        run: node scripts/check-adrs.mjs
+
+      # Secrets and dependencies, with no Advanced Security needed (audit F-03). Release binaries
+      # pinned by version and SHA-256 (from the project's published checksums); no marketplace
+      # action, because gitleaks-action needs a paid licence for organisation repositories.
+      # Scans the commits this run adds, not history; findings are redacted in the log.
+      - name: Secret scan (gitleaks)
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
         run: |
           set -euo pipefail
-          if [ ! -f docs/adr/regenerate-index.sh ]; then
-            echo "docs/adr/regenerate-index.sh is not present on this branch; skipping."
-            exit 0
+          version=8.30.1
+          sha256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          dir="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/gitleaks.tar.gz"             "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
+          echo "$sha256  $dir/gitleaks.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks
+          # A new branch or a manual run has no usable base: scan just the head commit. A pull request
+          # or a merge-queue group must have one (fail closed).
+          if [ -n "${BASE_SHA:-}" ] && [ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]             && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            range="$BASE_SHA..$HEAD_SHA"
+          elif [ "${{ github.event_name }}" = pull_request ] || [ "${{ github.event_name }}" = merge_group ]; then
+            echo "::error title=Secret scan::base commit $BASE_SHA is missing; refusing to scan only the head commit"
+            exit 1
+          else
+            range="-1 $HEAD_SHA"
           fi
-          sh docs/adr/regenerate-index.sh --check
+          "$dir/gitleaks" git --log-opts="$range" --config .gitleaks.toml --redact --no-banner --exit-code 1
+
+      - name: Dependency vulnerability scan (osv-scanner)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        run: |
+          set -euo pipefail
+          # Strict (fails the job) on push and on a PR that changes the lockfile or the baseline.
+          # Any other PR only gets warnings: a new advisory, a stale baseline entry or an osv.dev
+          # outage is outside state and must not block every open PR at once. A merge-queue group
+          # is judged like a PR for the same reason: it must not stall the whole queue.
+          strict=1
+          if { [ "$EVENT_NAME" = pull_request ] || [ "$EVENT_NAME" = merge_group ]; }             && ! git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -qxE 'pnpm-lock.yaml|.osv-baseline.json'; then
+            strict=0
+          fi
+          fail() {
+            if [ "$strict" = 1 ]; then echo "::error title=osv-scanner::$1"; exit 1; fi
+            echo "::warning title=osv-scanner did not run::$1"; exit 0
+          }
+          version=2.7.0
+          sha256=160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+          dir="$RUNNER_TEMP/osv-scanner"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/osv-scanner"             "https://github.com/google/osv-scanner/releases/download/v${version}/osv-scanner_linux_amd64"             || fail "could not download osv-scanner"
+          echo "$sha256  $dir/osv-scanner" | sha256sum --check --strict - || fail "osv-scanner checksum mismatch"
+          chmod +x "$dir/osv-scanner"
+          # Exit 1 means "vulnerabilities found" and is judged against the baseline below; any
+          # other non-zero exit is a scanner failure.
+          status=0
+          "$dir/osv-scanner" scan source --lockfile pnpm-lock.yaml --format json             --output-file "$dir/osv.json" || status=$?
+          if [ "$status" -gt 1 ]; then fail "osv-scanner exited with code $status"; fi
+          [ -f "$dir/osv.json" ] || echo '{"results":[]}' > "$dir/osv.json"
+          if [ "$strict" = 1 ]; then
+            node scripts/ci/check-osv-baseline.mjs "$dir/osv.json" .osv-baseline.json
+          else
+            node scripts/ci/check-osv-baseline.mjs "$dir/osv.json" .osv-baseline.json --warn-only
+          fi
 
       - name: Set up pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Lockfile is deduplicated
+        run: pnpm dedupe --check
+
       - name: Formatting
         run: pnpm format:check
 
-      # Reads packages/{contracts,sdk,aw}/src directly (no dist), so it sits after the
-      # two-second format check and before the Nx graph, matching check:fast's order of cheap
-      # deterministic gates first. Also checks llms.txt against the documents it indexes.
+      # Two branches that each add migration N collide on migrations/meta; a hand-merged journal
+      # can then reuse an idx or carry a `when` the migrator silently skips. Fails with the fix.
+      - name: Migration journal is consistent
+        run: pnpm migrations:check
+
+      # Forward-only migrations: new ones may not drop, rename or tighten without a `-- safe:` reason.
+      - name: New migrations are expand-only
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: node scripts/migrations.mjs lint --base "$BASE_SHA"
+
+      # Reads packages/{contracts,sdk,aw}/src directly and builds only the contracts' dist (for the
+      # profile-schema generator), so it sits after the two-second format check and before the Nx
+      # graph, matching check:fast's order of cheap deterministic gates first. Also checks llms.txt against the documents it indexes.
       - name: Generated SDK reference and llms.txt are current
         run: pnpm docs:check
+
+      # Design §07: gaps print, a malformed story tag fails, and a cell covered at the base that is
+      # uncovered here fails. #1703 will require zero gaps.
+      - name: Storage story coverage
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: pnpm stories:check --base "${BASE_SHA:-origin/main}"
 
       - name: Licence gate
         run: |
@@ -192,7 +342,9 @@ jobs:
   # that pack the published set wait for it.
   build:
     name: build · every workspace but embedded
-    runs-on: ubuntu-latest
+    if: >-
+      github.event.action != 'edited'
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -205,18 +357,17 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
       - name: Assert pull_request runs cannot select remote-cache write
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
             exit 1
           fi
 
@@ -352,6 +503,19 @@ jobs:
           tar --zstd --exclude=apps/web/.next/cache -cf "$RUNNER_TEMP/workspace-build.tar.zst" "${outputs[@]}"
           ls -lh "$RUNNER_TEMP/workspace-build.tar.zst"
 
+      # On the MS-A2 host every runner shares one disk, so the archive is also handed over through
+      # $AW_CI_HANDOFF_DIR (set in each runner's .env) and the jobs there read it instead of
+      # downloading it (.github/actions/workspace-build). The artifact is still uploaded for the jobs
+      # that run on Blacksmith (ADR-0053, Amendment 2026-10-23b) and for any other runner.
+      - name: Hand the workspace build over on this host
+        run: |
+          set -euo pipefail
+          if [ -z "${AW_CI_HANDOFF_DIR:-}" ]; then exit 0; fi
+          dir="$AW_CI_HANDOFF_DIR/$GITHUB_RUN_ID"
+          mkdir -p "$dir"
+          cp "$RUNNER_TEMP/workspace-build.tar.zst" "$dir/.workspace-build.tar.zst.$GITHUB_RUN_ATTEMPT"
+          mv "$dir/.workspace-build.tar.zst.$GITHUB_RUN_ATTEMPT" "$dir/workspace-build.tar.zst"
+
       - name: Upload the workspace build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -370,7 +534,9 @@ jobs:
   # cache between runs was measured and not adopted: 1.4 GB for 283 s -> 251 s after a web change.
   build-embedded:
     name: build · embedded and its tests
-    runs-on: ubuntu-latest
+    if: >-
+      github.event.action != 'edited'
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -383,18 +549,17 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
       - name: Assert pull_request runs cannot select remote-cache write
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
             exit 1
           fi
 
@@ -420,6 +585,19 @@ jobs:
           tar --zstd -cf "$RUNNER_TEMP/embedded-build.tar.zst" packages/embedded/dist packages/embedded/publish
           ls -lh "$RUNNER_TEMP/embedded-build.tar.zst"
 
+      # On the MS-A2 host every runner shares one disk, so the archive is also handed over through
+      # $AW_CI_HANDOFF_DIR (set in each runner's .env) and the jobs there read it instead of
+      # downloading it (.github/actions/workspace-build). The artifact is still uploaded for the jobs
+      # that run on Blacksmith (ADR-0053, Amendment 2026-10-23b) and for any other runner.
+      - name: Hand the embedded build over on this host
+        run: |
+          set -euo pipefail
+          if [ -z "${AW_CI_HANDOFF_DIR:-}" ]; then exit 0; fi
+          dir="$AW_CI_HANDOFF_DIR/$GITHUB_RUN_ID"
+          mkdir -p "$dir"
+          cp "$RUNNER_TEMP/embedded-build.tar.zst" "$dir/.embedded-build.tar.zst.$GITHUB_RUN_ATTEMPT"
+          mv "$dir/.embedded-build.tar.zst.$GITHUB_RUN_ATTEMPT" "$dir/embedded-build.tar.zst"
+
       - name: Upload the embedded build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -430,9 +608,37 @@ jobs:
           if-no-files-found: error
 
       # Embedded's tests read its build output, so they run here rather than in a heavy-checks
-      # shard, which would then wait for this build. They use no database or S3 service.
+      # shard, which would then wait for this build. They use no database or S3 service. Their
+      # project directories, and so every embedded PostgreSQL data directory, are made under this
+      # job's own temp directory, which the step after the tests sweeps.
+      - name: Make the embedded tests' temp directory
+        run: mkdir -p "$RUNNER_TEMP/embedded-test"
+
       - name: Test embedded
+        env:
+          TMPDIR: ${{ runner.temp }}/embedded-test
         run: scripts/ci/nx.sh run @indx-workspace/embedded:test --excludeTaskDependencies --output-style=static
+
+      # A cancelled or timed-out run ends the tests before they stop their runtimes, and the
+      # postmaster leads a process group of its own (ADR-0112), so nothing else stops it. MS-A2 is
+      # not thrown away after the job: a postmaster a cancelled run left held its port for good.
+      - name: Stop any embedded PostgreSQL the tests left
+        if: always()
+        run: |
+          set -euo pipefail
+          shopt -s nullglob globstar dotglob
+          for pidfile in "$RUNNER_TEMP"/embedded-test/**/postmaster.pid; do
+            pid=$(head -n 1 "$pidfile")
+            if [ "$(ps -o comm= -p "$pid" 2> /dev/null || true)" != postgres ]; then continue; fi
+            echo "Stopping the postmaster $pid of $(dirname "$pidfile")"
+            kill -TERM "$pid" 2> /dev/null || true
+            for _ in $(seq 1 30); do
+              kill -0 "$pid" 2> /dev/null || break
+              sleep 1
+            done
+            kill -KILL "$pid" 2> /dev/null || true
+          done
+          rm -rf "$RUNNER_TEMP/embedded-test"
 
       # The same no-skip gate as the heavy-checks shards; see there.
       - name: No test in the run was skipped
@@ -446,8 +652,12 @@ jobs:
   # built packages run once, on the typecheck runner.
   typecheck-lint:
     name: ${{ matrix.target }} · Nx task graph
+    if: >-
+      (github.event_name != 'push' || inputs.full) && github.event.action != 'edited'
     needs: build
-    runs-on: ubuntu-latest
+    # Blacksmith, not the pool (ADR-0053, Amendment 2026-10-25): with `tests` these are the jobs every
+    # pull request and queue group waits on after `build`, and on the pool they waited longest for a slot.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -467,18 +677,17 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
       - name: Assert pull_request runs cannot select remote-cache write
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
             exit 1
           fi
 
@@ -494,11 +703,15 @@ jobs:
       - name: Typecheck or lint through the Nx task graph
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            scripts/ci/nx.sh affected -t ${{ matrix.target }} --base=origin/main --head=HEAD --excludeTaskDependencies --parallel=2 --output-style=static
+          if [ -n "$DIFF_BASE" ]; then
+            scripts/ci/nx.sh affected -t ${{ matrix.target }} --base="$DIFF_BASE" --head=HEAD --excludeTaskDependencies --parallel=2 --output-style=static
           else
             scripts/ci/nx.sh run-many -t ${{ matrix.target }} --excludeTaskDependencies --parallel=2 --output-style=static
           fi
+
+      - name: Complexity ceiling equals the measured maximum
+        if: matrix.target == 'lint'
+        run: pnpm complexity:check
 
       - name: Architecture boundaries
         if: matrix.target == 'typecheck'
@@ -514,6 +727,8 @@ jobs:
 
   heavy-checks:
     name: tests · ${{ matrix.shard }}
+    if: >-
+      (github.event_name != 'push' || inputs.full) && github.event.action != 'edited'
     needs: build
     # The Vitest projects, spread over four runners by measured time (main, 2026-10-15, seconds
     # on a 16-vCPU runner): the root `tests` project is serial by design (tests/vitest.config.ts,
@@ -532,7 +747,9 @@ jobs:
             projects: '@agent-workspace/web @agent-workspace/core'
           - shard: rest
             projects: ''
-    runs-on: ubuntu-latest
+    # Blacksmith, not the pool (ADR-0053, Amendment 2026-10-25): the four shards held more MS-A2
+    # runner-minutes than any other job of a pull request or a queue group.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
 
     # A REAL PostgreSQL 17, for the whole job. Before this existed, `pnpm test` reported
     # `150 passed | 14 skipped` and a green tick: W1-DB-01's migration, its seed, the "exactly
@@ -559,8 +776,9 @@ jobs:
           POSTGRES_DB: agent_workspace_test
         ports:
           # The job's steps run on the runner host, not inside a container, so the service is
-          # reached on localhost through this published port — not by its service name.
-          - 5432:5432
+          # reached on localhost through this published port — not by its service name. The host
+          # port is random: MS-A2 runs several jobs at once (step "Point the job at its PostgreSQL port").
+          - 5432
         # A health check, not a sleep. GitHub holds every step until the container reports
         # healthy, so a slow start delays the job rather than failing it in a way that looks
         # like a test failure.
@@ -591,15 +809,20 @@ jobs:
       actions: read
       id-token: write
 
-    env:
-      # Read by packages/core/src/db/seed.test.ts. This database is created, migrated,
-      # truncated and written to by the suite; it is a throwaway container, never a
-      # development database. Set at job level so the assertion step below and the test step
-      # read the identical value — two spellings of one connection string is how this kind of
-      # gate ends up asserting against a database the tests never touched.
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/agent_workspace_test
-
     steps:
+      # TEST_DATABASE_URL is read by packages/core/src/db/seed.test.ts. This database is created,
+      # migrated, truncated and written to by the suite; it is a throwaway container, never a
+      # development database. Set once, in $GITHUB_ENV, so the assertion step below and the test
+      # step read the identical value — two spellings of one connection string is how this kind of
+      # gate ends up asserting against a database the tests never touched. It is not job-level
+      # `env:` because the service's host port is random (MS-A2 runs several jobs at once) and only
+      # known once the job starts.
+      - name: Point the job at its PostgreSQL port
+        run: |
+          {
+            echo "TEST_DATABASE_URL=postgres://postgres:postgres@localhost:${{ job.services.postgres.ports['5432'] }}/agent_workspace_test"
+          } >> "$GITHUB_ENV"
+
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -610,10 +833,9 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -630,26 +852,64 @@ jobs:
       - name: Start the S3 test server for the object-store contract suite
         run: |
           set -euo pipefail
-          docker run --rm -d --name aw-ci-s3 \
+          # MS-A2 runs several jobs at once: the container is named per runner and gets a free port.
+          name="aw-ci-s3-$RUNNER_NAME"
+          docker rm -f "$name" > /dev/null 2>&1 || true
+          docker run --rm -d --name "$name" \
             -e AWS_ACCESS_KEY_ID=agent_workspace -e AWS_SECRET_ACCESS_KEY=agent_workspace \
-            -p 127.0.0.1:9000:8333 \
+            -p 127.0.0.1::8333 \
             chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882 \
             mini
+          port="$(docker port "$name" 8333/tcp | head -1 | sed 's/.*://')"
           for _ in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:9000/healthz > /dev/null 2>&1; then break; fi
+            if curl -fsS "http://127.0.0.1:$port/healthz" > /dev/null 2>&1; then break; fi
             sleep 1
           done
-          curl -fsS http://127.0.0.1:9000/healthz > /dev/null
+          curl -fsS "http://127.0.0.1:$port/healthz" > /dev/null
           {
-            echo "TEST_S3_ENDPOINT=http://127.0.0.1:9000"
+            echo "TEST_S3_ENDPOINT=http://127.0.0.1:$port"
             echo "TEST_S3_ACCESS_KEY_ID=agent_workspace"
             echo "TEST_S3_SECRET_ACCESS_KEY=agent_workspace"
           } >> "$GITHUB_ENV"
 
+      # Azurite (blob service) and fake-gcs-server for the Azure and GCS contract suites
+      # (TEST_AZURITE_URL, TEST_GCS_ENDPOINT) and the load step below. Only the two shards that test
+      # those files start them: web-core (packages/core) and tests (tests/load). Pinned by image
+      # index digest, the same digests as scripts/test-services/pins.mjs; tests/test-services.test.ts
+      # fails while the two disagree. Azurite's account is its public development account, which the
+      # tests read from the SDK. fake-gcs-server keeps objects in memory: its filesystem backend
+      # cannot hold a file and a folder of one name, which the contract requires.
+      - name: Start the Azure and GCS emulators for the object-store suites
+        if: matrix.shard == 'web-core' || matrix.shard == 'tests'
+        run: |
+          set -euo pipefail
+          # Named per runner, on free ports (MS-A2 runs several jobs at once). fake-gcs-server
+          # listens on the same port it publishes, because its -external-url must match it.
+          docker rm -f "aw-ci-azurite-$RUNNER_NAME" "aw-ci-gcs-$RUNNER_NAME" > /dev/null 2>&1 || true
+          docker run --rm -d --name "aw-ci-azurite-$RUNNER_NAME" -p 127.0.0.1::10000 \
+            mcr.microsoft.com/azure-storage/azurite@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5 \
+            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+          azurite="$(docker port "aw-ci-azurite-$RUNNER_NAME" 10000/tcp | head -1 | sed 's/.*://')"
+          gcs="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+          docker run --rm -d --name "aw-ci-gcs-$RUNNER_NAME" -p "127.0.0.1:$gcs:$gcs" \
+            fsouza/fake-gcs-server@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef \
+            -scheme http -backend memory -port "$gcs" -external-url "http://127.0.0.1:$gcs"
+          # Azurite answers an unauthenticated request with an HTTP status, so any answer means up.
+          for _ in $(seq 1 60); do
+            if curl -sS -o /dev/null "http://127.0.0.1:$azurite/" && curl -fsS -o /dev/null "http://127.0.0.1:$gcs/storage/v1/b?project=aw"; then break; fi
+            sleep 1
+          done
+          curl -sS -o /dev/null "http://127.0.0.1:$azurite/"
+          curl -fsS -o /dev/null "http://127.0.0.1:$gcs/storage/v1/b?project=aw"
+          {
+            echo "TEST_AZURITE_URL=http://127.0.0.1:$azurite/devstoreaccount1"
+            echo "TEST_GCS_ENDPOINT=http://127.0.0.1:$gcs"
+          } >> "$GITHUB_ENV"
+
       - name: Assert pull_request runs cannot select remote-cache write
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
-            echo "::error::pull_request event resolved to remote-cache kind 'write'"
+          if { [ "${{ github.event_name }}" = "pull_request" ] || [ "${{ github.event_name }}" = "merge_group" ]; } && [ "$NX_REMOTE_CACHE_KIND" = "write" ]; then
+            echo "::error::${{ github.event_name }} event resolved to remote-cache kind 'write'"
             exit 1
           fi
 
@@ -733,8 +993,8 @@ jobs:
           ELSEWHERE_PROJECTS: '@indx-workspace/embedded'
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            candidates="$(pnpm exec nx show projects --with-target test --affected --base=origin/main --head=HEAD)"
+          if [ -n "$DIFF_BASE" ]; then
+            candidates="$(pnpm exec nx show projects --with-target test --affected --base="$DIFF_BASE" --head=HEAD)"
           else
             candidates="$(pnpm exec nx show projects --with-target test)"
           fi
@@ -779,16 +1039,68 @@ jobs:
         if: steps.test.outputs.ran == 'true'
         run: node scripts/ci/vitest-no-skip.mjs
 
-      # §2.3 — the diff must be a subset of the Owns globs declared in the PR body.
-      # Diff gate: pull_request only, for the reason given above the suppression step.
+      # The storage design, §07 "Load test": a 1 GiB file round-trips with flat memory (RSS growth
+      # < 64 MiB) on local disk, SeaweedFS, Azurite and fake-gcs-server. One serial run of about
+      # 4 GiB, so only on a diff that reaches the storage code or the load harness, and always when
+      # there is no diff base (the nightly run, a manual dispatch). It asserts that all four cases
+      # passed by title, so a backend whose variable went missing fails instead of vanishing.
+      - name: Decide whether the diff reaches the storage load test
+        id: load-scope
+        if: matrix.shard == 'tests'
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Read the whole list before matching: grep -q under pipefail dies of SIGPIPE on a long diff.
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq '^(packages/core/src/storage/|tests/load/)' <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Storage load test not applicable::the diff touches neither packages/core/src/storage nor tests/load; the nightly run covers it."
+          fi
+
+      - name: Storage load test — 1 GiB on four backends
+        if: steps.load-scope.outputs.applies == 'true'
+        env:
+          AW_LOAD_TESTS: '1'
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/load-report.json"
+          # --silent=false: each case prints its peak RSS growth, and the log must show it.
+          pnpm exec vitest run --project tests tests/load/object-store-round-trip.test.ts \
+            --silent=false --reporter=default --reporter=json --outputFile="$report"
+          node -e '
+            const report = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+            const passed = new Set(report.testResults.flatMap((file) =>
+              file.assertionResults.filter((t) => t.status === "passed").map((t) => t.title)));
+            const missing = [
+              "local filesystem",
+              "S3 (SeaweedFS)",
+              "Azure Blob (Azurite)",
+              "Google Cloud Storage (fake-gcs-server)",
+            ].map((label) => `[load] ${label}: 1 GiB round-trips with flat memory`)
+              .filter((title) => !passed.has(title));
+            for (const title of missing) console.error(`did not pass: ${title}`);
+            process.exit(missing.length === 0 ? 0 : 1);
+          ' "$report"
+
+      # MS-A2 is not thrown away after the job, so the emulators would keep running.
+      - name: Stop the object-store emulators
+        if: always()
+        run: docker rm -f "aw-ci-s3-$RUNNER_NAME" "aw-ci-azurite-$RUNNER_NAME" "aw-ci-gcs-$RUNNER_NAME" > /dev/null 2>&1 || true
 
   # The release checks that used to follow the tests in heavy-checks: none of them reads the
   # PostgreSQL or S3 service, so they run on their own runner beside the test shards. The image
   # builds are in `release-images`, which needs neither build.
   release-checks:
     name: release · packages and declarations
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
       # .github/actions/workspace-build waits for the build artifacts through the run's API.
@@ -801,10 +1113,9 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -859,35 +1170,62 @@ jobs:
   # other job and start at once, beside `build`.
   release-images:
     name: release · runtime, gateway and egress-proxy images
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     permissions:
       contents: read
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches an image input
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pattern='^(packages/|apps/runner/|migrations/|infra/(release|images)/|(.+\.)?Dockerfile$|\.dockerignore$|pnpm-lock\.yaml$|(^|/)package\.json$|pnpm-workspace\.yaml$|scripts/(engine-images|check-licenses)\.mjs$|\.github/workflows/ci\.yml$)'
+          # Read the whole list before matching: grep -q under pipefail dies of SIGPIPE on a long diff.
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Image build checks not applicable::the diff touches nothing the runtime, gateway or egress-proxy images are built from."
+          fi
 
       - name: Start freeing disk for the Docker builds
+        if: steps.scope.outputs.applies == 'true'
         uses: ./.github/actions/free-disk
 
       - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       # check-licenses.mjs --engine reads the installed production tree.
       - name: Install
+        if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
         uses: ./.github/actions/free-disk
         with:
           wait: 'true'
 
       - name: Runtime image per engine
+        if: steps.scope.outputs.applies == 'true'
         run: |
           set -euo pipefail
           node scripts/engine-images.mjs > "$RUNNER_TEMP/engines"
@@ -904,12 +1242,14 @@ jobs:
       # infra/release/images.mjs and builds one image of it for the runner's platform, pushing
       # nothing; images.yml runs the same script for every image, amd64 and arm64, signed.
       - name: Image release dry run (one image, one platform, no push)
+        if: steps.scope.outputs.applies == 'true'
         run: sh infra/release/build-and-push.sh --dry-run --security skip --platform linux/amd64 --image gateway --image egress-proxy
 
       # docs/adr/0117: the egress proxy image must run as a non-root user on a read-only root file
       # system with every capability dropped, because the sandbox network depends on it. The
       # dry run above builds into the build cache only, so this builds a loadable image and starts it.
       - name: Egress proxy image runs non-root on a read-only root file system
+        if: steps.scope.outputs.applies == 'true'
         run: |
           set -euo pipefail
           docker build --file egress-proxy.Dockerfile --target egress-proxy --tag agent-workspace/egress-proxy:ci .
@@ -942,8 +1282,13 @@ jobs:
   # dependencies by commit in formal/lake-manifest.json.
   formal:
     name: formal · Lean specification
+    if: >-
+      github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
     needs: build
-    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): the longest queue-tier job there
+    # (10 min against 5.5 here) for the least Blacksmith money. scripts/check-workflows.mjs
+    # allows this label on this job only.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     permissions:
       contents: read
       # .github/actions/workspace-build waits for the build artifacts through the run's API.
@@ -961,17 +1306,17 @@ jobs:
         id: scope
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ -z "$DIFF_BASE" ]; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # The model's sources (contracts, SDK, aw, the server domains and the core, gateway, runtime
           # and runner code it mirrors), the conformance suite, the generators, and the documents
           # the model cites.
-          pattern='^(formal/|packages/(contracts|sdk|aw|core|gateway|runtime)/src/|apps/web/server/|apps/runner/src/|apps/(web|runner)/formal/|tests/formal/|scripts/formal/|docs/formal/|docs/sdk/|docs/adr/|docs/spec\.md$|docs/architecture\.md$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)'
+          pattern='^(formal/|packages/(contracts|sdk|aw|core|gateway|runtime)/src/|packages/engine[^/]*/src/|migrations/|apps/web/server/|apps/runner/src/|apps/(web|runner)/formal/|tests/formal/|scripts/formal/|docs/formal/|docs/sdk/|docs/adr/|docs/spec\.md$|docs/architecture\.md$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)'
           # Read the whole list before matching. Piping git diff into grep -q fails open under
           # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
-          changed="$(git diff --name-only origin/main...HEAD)"
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
           if grep -Eq "$pattern" <<<"$changed"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
@@ -995,9 +1340,12 @@ jobs:
           "$RUNNER_TEMP/elan-init" -y --no-modify-path --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
+      # Restore only. A cache saved here would sit on this run's gh-readonly-queue/* ref, which no
+      # later run can read, so every group rebuilt the same stale delta (~220 of 463 Lake jobs,
+      # 5 min) and left 1 GiB behind. `formal-cache` saves on main, which every group reads.
       - name: Restore the Lean toolchain and build cache
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.elan/toolchains
@@ -1012,10 +1360,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         if: steps.scope.outputs.applies == 'true'
@@ -1032,8 +1379,10 @@ jobs:
         with:
           wait: 'true'
 
+      # MS-A2 has its own swap; the file is for a fresh VM. Blacksmith also reports
+      # runner.environment 'self-hosted', so the runner name tells the two apart.
       - name: Add swap for the Lean build
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && !startsWith(runner.name, 'ito-MS-A2')
         run: |
           set -euo pipefail
           sudo fallocate -l 8G /formal.swap
@@ -1065,6 +1414,71 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm vitest run tests/formal apps/web/formal apps/runner/formal --reporter=verbose
 
+  # COST: keeps main's Lean build cache current, the only one a merge-queue group can restore
+  # (`formal` restores, never saves). A push whose Lean sources already have a main entry stops
+  # after the lookup; otherwise it builds incrementally from the newest main entry and saves.
+  # Not required by ci-success: a miss only makes the next group's `formal` slower. Blacksmith,
+  # like `formal`, because Blacksmith runners read Blacksmith's cache, not the MS-A2 pool's.
+  formal-cache:
+    name: formal · warm the Lean cache on main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      ELAN_VERSION: v4.2.4
+      ELAN_SHA256: 42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Look up this commit's Lean cache
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          lookup-only: true
+          path: |
+            ~/.elan/toolchains
+            formal/.lake
+          key: formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-${{ hashFiles('formal/**/*.lean') }}
+
+      - name: Install elan from a checksum-verified release
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          archive="elan-x86_64-unknown-linux-gnu.tar.gz"
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/leanprover/elan/releases/download/${ELAN_VERSION}/${archive}"
+          echo "${ELAN_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" -y --no-modify-path --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Restore the newest Lean cache on main
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.elan/toolchains
+            formal/.lake
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          restore-keys: |
+            formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-
+
+      # The same targets as `pnpm formal:build`; lake.mjs needs only Node, no install.
+      - name: Build the Lean model and its tools
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: node scripts/formal/lake.mjs build AgentWorkspace catalogue axioms imports vectors
+
+      - name: Save the Lean cache for main
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.elan/toolchains
+            formal/.lake
+          key: ${{ steps.lookup.outputs.cache-primary-key }}
+
   # #373 (docs/adr/0087): the release vulnerability gate, on every pull request. It builds each
   # image of the release plan (infra/release/images.mjs) for linux/amd64 and runs
   # infra/release/trivy-gate.sh on it: the same script, and so the same flags and the same
@@ -1074,7 +1488,9 @@ jobs:
   # Its own job, beside the other gates, because it builds seven images; ci-success requires it.
   image-scan:
     name: release images · trivy gate · ${{ matrix.shard }}/3
-    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     # Nine images, three per runner: scan-images.sh --shard takes every third image of the plan,
     # so a new image lands in a shard without this list naming it.
     strategy:
@@ -1084,26 +1500,51 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches an image input
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pattern='^((.+\.)?Dockerfile$|\.dockerignore$|pnpm-lock\.yaml$|(^|/)package\.json$|pnpm-workspace\.yaml$|\.npmrc$|infra/(release|images)/|scripts/engine-images\.mjs$|\.trivyignore\.yaml$|\.osv-baseline\.json$|\.github/workflows/ci\.yml$)'
+          # Read the whole list before matching: grep -q under pipefail dies of SIGPIPE on a long diff.
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Image scan not applicable::the diff touches nothing the images are built from or scanned against (Dockerfiles, dependencies, release tooling); the nightly run covers new CVEs."
+          fi
 
       - name: Start freeing disk for the Docker builds
+        if: steps.scope.outputs.applies == 'true'
         uses: ./.github/actions/free-disk
 
       # The release tooling uses Node built-ins only, so nothing is installed.
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
 
       - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        if: steps.scope.outputs.applies == 'true'
         with:
-          version: v0.74.0
+          version: v0.76.1
 
       - name: Wait for the freed disk
+        if: steps.scope.outputs.applies == 'true'
         uses: ./.github/actions/free-disk
         with:
           wait: 'true'
 
       - name: Build every release image for linux/amd64 and run the release trivy gate
+        if: steps.scope.outputs.applies == 'true'
         run: sh infra/release/scan-images.sh --platform linux/amd64 --shard ${{ matrix.shard }}/3
 
   # #398: the generated project, end to end, as a new user meets it, against this change's own
@@ -1122,8 +1563,10 @@ jobs:
   # wall time of heavy-checks, beside it, and a docs-only change does not pay for it.
   generated-project-e2e:
     name: generated project · create, start, chat (API, CLI, browser), teardown
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
     needs: build
-    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     # A cold build of the four images took about 16 minutes locally, the suite about 3 (the first
     # CI run took 4 minutes in all). The budget leaves each cap room to report its own failure:
     # about 5 minutes of setup and install, at most 30 to pack, install and build the images
@@ -1145,7 +1588,7 @@ jobs:
         id: scope
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ -z "$DIFF_BASE" ]; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -1157,7 +1600,7 @@ jobs:
           pattern='^(packages/|apps/(web|runner)/|migrations/|infra/(images|release)/|tests/generated-project/|scripts/release/|scripts/engine-images\.mjs$|(gateway\.|runtime\.)?Dockerfile$|\.dockerignore$|\.npmrc$|tsconfig[^/]*\.json$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|playwright\.generated-project\.config\.mjs$|\.github/workflows/ci\.yml$)'
           # Read the whole list before matching. Piping git diff into grep -q fails open under
           # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
-          changed="$(git diff --name-only origin/main...HEAD)"
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
           if grep -Eq "$pattern" <<<"$changed"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
@@ -1175,10 +1618,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         if: steps.scope.outputs.applies == 'true'
@@ -1194,8 +1636,6 @@ jobs:
         with:
           wait: 'true'
 
-      # The four pinned images do not read the workspace build: built here (~7 min) while
-      # build-embedded still runs, they make run.mjs's own builds cache hits.
       - name: Build the pinned images ahead of the packages
         if: steps.scope.outputs.applies == 'true'
         run: node tests/generated-project/images.mjs --warm
@@ -1206,6 +1646,12 @@ jobs:
         uses: ./.github/actions/workspace-build
         with:
           embedded: 'true'
+
+      # MS-A2 runs several jobs on one Docker daemon, so the project publishes on free ports, not
+      # 3000 and 8333.
+      - name: Pick free host ports
+        if: steps.scope.outputs.applies == 'true'
+        run: node scripts/ci/free-ports.mjs GP_WEB_PORT GP_OBJECT_STORE_PORT >> "$GITHUB_ENV"
 
       - name: Run the generated project end to end
         if: steps.scope.outputs.applies == 'true'
@@ -1266,8 +1712,14 @@ jobs:
   # `main` and a dispatch always run it, and the latest `main` commit's run records the timings.
   journey-e2e:
     name: developer journey · ${{ matrix.part }}
-    needs: build
-    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    # build-embedded too, though the restore step could wait for it: on a paid Blacksmith runner
+    # that wait (~100 s per leg) is billed. formal still ends after this job, so the run is no longer.
+    needs: [build, build-embedded]
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): it publishes registry and Compose ports
+    # and removes containers on its daemon, which collided with other jobs on the shared one.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     # The journey and the first-hour stopwatch share nothing but the packages, so they run on two
     # runners; each leg runs only its own steps.
     strategy:
@@ -1299,7 +1751,7 @@ jobs:
         id: scope
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ -z "$DIFF_BASE" ]; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -1310,7 +1762,7 @@ jobs:
           pattern='^(packages/|apps/(web|runner)/|migrations/|scripts/release/|tests/journey/|tests/generated-project/(fake-anthropic|project|run|images)\.mjs$|infra/release/images\.mjs$|scripts/engine-images\.mjs$|\.github/actions/(nx-remote-cache|workspace-build|free-disk)/|scripts/ci/nx\.sh$|nx\.json$|tsconfig[^/]*\.json$|playwright\.journey\.config\.mjs$|docs/sdk/site/getting-started/quickstart\.mdx$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)'
           # Read the whole list before matching. Piping git diff into grep -q fails open under
           # pipefail: grep exits at the first match and git then dies of SIGPIPE on a long diff.
-          changed="$(git diff --name-only origin/main...HEAD)"
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
           if grep -Eq "$pattern" <<<"$changed"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
@@ -1328,10 +1780,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         timeout-minutes: 8
@@ -1406,17 +1857,20 @@ jobs:
   # they copy. An unmarked block fails the extractor. The table of one row per claim goes to the job
   # summary and the logs to the docs-claims artifact. No secret is used. Required by ci-success, with
   # the path filter inside the job as in journey-e2e, because ci-success treats a skipped job as a
-  # failure.
+  # failure. The pages whose only block is quickstart.mdx's install block (README, the landing page)
+  # are not run again here: journey-e2e's first-hour leg runs that block on the same container,
+  # Verdaccio and fake model, and their rows say so.
   docs-claims:
-    name: docs claims · ${{ matrix.shard }}/3
-    needs: build
-    runs-on: ubuntu-latest
-    # The run claims' pages are split over three runners (run.mjs --shard); the first also checks
-    # the static rows, the last the `aw` and compile rows. Each shard writes its own report.
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
+    name: docs claims
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    # As journey-e2e: start after build-embedded instead of paying a Blacksmith runner to wait.
+    needs: [build, build-embedded]
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): it publishes registry and Compose ports
+    # and removes containers on its daemon, which collided with other jobs on the shared one.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    # One runner: setup (checkout, install, the build restore, Verdaccio) took about 2.5 of each
+    # shard's 3.5 to 4 minutes, so three shards paid it three times for about 3 minutes of claims.
     # Checkout and setup (~2 min), install (8), build (10), the runner (50: JOURNEY_PREPARE_TIMEOUT_MS
     # 10, then every command under DOCS_CLAIMS_COMMAND_TIMEOUT_MS, 5) and the upload (~2).
     timeout-minutes: 75
@@ -1436,7 +1890,7 @@ jobs:
         id: scope
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ -z "$DIFF_BASE" ]; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -1445,7 +1899,7 @@ jobs:
           # what this job builds with.
           pattern='^(packages/|docs/sdk/site/|sites/|README\.md$|tests/docs-claims/|tests/gallery/|tests/journey/|tests/generated-project/(fake-anthropic|project|run|images)\.mjs$|apps/(web|runner)/|migrations/|scripts/release/|infra/release/images\.mjs$|scripts/engine-images\.mjs$|\.github/actions/(nx-remote-cache|workspace-build|free-disk)/|scripts/ci/nx\.sh$|nx\.json$|tsconfig[^/]*\.json$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)'
           # Read the whole list before matching: see journey-e2e.
-          changed="$(git diff --name-only origin/main...HEAD)"
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
           if grep -Eq "$pattern" <<<"$changed"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
@@ -1463,10 +1917,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         timeout-minutes: 8
@@ -1492,13 +1945,13 @@ jobs:
         env:
           DOCS_CLAIMS_WORK_DIR: ${{ runner.temp }}/docs-claims
           JOURNEY_PREPARE_TIMEOUT_MS: '600000'
-        run: node tests/docs-claims/run.mjs --shard ${{ matrix.shard }}/3
+        run: node tests/docs-claims/run.mjs
 
       - name: Keep the claims table and logs
         if: always() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: docs-claims-${{ matrix.shard }}
+          name: docs-claims
           path: |
             ${{ runner.temp }}/docs-claims/summary.md
             ${{ runner.temp }}/docs-claims/results.json
@@ -1516,7 +1969,11 @@ jobs:
   # the checkout.
   tool-sandbox-e2e:
     name: code tools · push, run and promote on compose with the tool sandbox
-    runs-on: ${{ vars.CI_BOTTLENECK_RUNNER || 'ubuntu-latest' }}
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): it publishes registry and Compose ports
+    # and removes containers on its daemon, which collided with other jobs on the shared one.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -1534,14 +1991,14 @@ jobs:
         id: scope
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
+          if [ -z "$DIFF_BASE" ]; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # The services compose.yaml runs and the images it builds or expects, what `aw push`
           # and `aw promote` send, the tool host, the E2E and the fakes it imports.
           pattern='^(packages/(aw|contracts|sdk|cli|core|gateway|runtime|tool-host)/|apps/(web|runner)/|migrations/|compose\.yaml$|([a-z-]+\.)?Dockerfile$|tests/e2e/tool-sandbox|tests/journey/fake-anthropic-tools\.mjs$|tests/generated-project/(fake-anthropic|project|run|stack-api)\.mjs$|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$)'
-          changed="$(git diff --name-only origin/main...HEAD)"
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
           if grep -Eq "$pattern" <<<"$changed"; then
             echo "applies=true" >> "$GITHUB_OUTPUT"
           else
@@ -1559,10 +2016,9 @@ jobs:
 
       - name: Set up Node
         if: steps.scope.outputs.applies == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         timeout-minutes: 8
@@ -1575,8 +2031,6 @@ jobs:
         with:
           wait: 'true'
 
-      # The Compose stack's images do not read the workspace build: built here while `build`
-      # still runs, they make the E2E's `docker build` and `compose up --build` cache hits.
       - name: Build the stack's images ahead of the workspace build
         if: steps.scope.outputs.applies == 'true'
         run: node tests/e2e/tool-sandbox-images.mjs --warm
@@ -1585,6 +2039,12 @@ jobs:
       - name: Restore the workspace build
         if: steps.scope.outputs.applies == 'true'
         uses: ./.github/actions/workspace-build
+
+      # MS-A2 runs several jobs on one Docker daemon, so the stack publishes on free ports, not
+      # 3000 and 18082.
+      - name: Pick free host ports
+        if: steps.scope.outputs.applies == 'true'
+        run: node scripts/ci/free-ports.mjs TS_WEB_PORT TS_CONTROL_PORT >> "$GITHUB_ENV"
 
       - name: Run the tool sandbox E2E
         timeout-minutes: 40
@@ -1596,11 +2056,23 @@ jobs:
   # steps, so this job remains honestly red until that declared Wave 8 gap is closed.
   full-e2e:
     name: on-demand Docker Compose E2E
-    if: github.event_name == 'workflow_dispatch'
+    # It drives a real model on the Owner's key, so it never runs outside INDXDev (ADR-0053,
+    # Amendment 2026-10-26).
+    if: github.repository_owner == 'INDXDev' && github.event_name == 'workflow_dispatch'
     needs: [fast-checks, heavy-checks]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    # compose.yaml fixes the project name, its network names, port 8333 and the image tags, so two
+    # dispatches on one daemon would share one stack; they queue instead of overlapping.
+    concurrency:
+      group: full-e2e-${{ github.repository }}
+      cancel-in-progress: false
     permissions:
       contents: read
+    env:
+      # The sandbox images compose.yaml expects but does not build, under this run's own tags: the
+      # daemon is shared, so a `:dev` copy may be gone or another checkout's.
+      RUN_RUNTIME_IMAGE: agent-workspace/runtime-claude-agent-sdk:e2e-${{ github.run_id }}-${{ github.run_attempt }}
+      RUN_EGRESS_PROXY_IMAGE: agent-workspace/egress-proxy:e2e-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -1612,10 +2084,9 @@ jobs:
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -1626,19 +2097,75 @@ jobs:
           sed -i 's/^MASTER_ENCRYPTION_KEY=.*/MASTER_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/' .env
           sed -i 's/^SESSION_SECRET=.*/SESSION_SECRET=wave8-ci-session-secret-000000000000/' .env
           sed -i 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=wave8-ci-bootstrap-password/' .env
+          # docker-compose.yml requires the runner-manager token for runner and web; a fresh one per run.
+          sed -i "s/^RUNNER_MANAGER_TOKEN=.*/RUNNER_MANAGER_TOKEN=$(openssl rand -hex 24)/" .env
+          {
+            # The runner drives the host Docker daemon, so it joins the socket's group, as tool-sandbox.e2e.mjs does.
+            echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)"
+            echo "RUNTIME_IMAGE=$RUN_RUNTIME_IMAGE"
+            echo "EGRESS_PROXY_IMAGE=$RUN_EGRESS_PROXY_IMAGE"
+          } >> .env
 
       - name: Wait for the freed disk
         uses: ./.github/actions/free-disk
         with:
           wait: 'true'
 
-      - name: Build and start the five-service stack
-        run: docker compose up -d --build
+      # As "Runtime image per engine" builds and verifies it, for the one engine compose.yaml wires.
+      # The harness's agent has unrestricted network, so its sessions start the egress proxy too.
+      - name: Build this run's runtime and egress proxy images
+        run: |
+          set -euo pipefail
+          read -r engine _ engine_version < <(node scripts/engine-images.mjs | grep '^claude-agent-sdk ')
+          docker build --file runtime.Dockerfile --target runtime \
+            --build-arg "ENGINE=$engine" \
+            --build-arg "ENGINE_VERSION=$engine_version" \
+            --tag "$RUN_RUNTIME_IMAGE" .
+          node scripts/engine-images.mjs --verify-image "$RUN_RUNTIME_IMAGE" "$engine" "$engine_version"
+          docker build --file egress-proxy.Dockerfile --target egress-proxy --tag "$RUN_EGRESS_PROXY_IMAGE" .
 
+      # `migrate` shares web's tag, and one `up --build` exporting a tag twice fails on the containerd
+      # image store ("already exists"), so the services build first and the stack starts without
+      # --build, as tests/e2e/tool-sandbox.e2e.mjs does.
+      - name: Build and start the five-service stack
+        run: |
+          set -euo pipefail
+          read -ra services < <(node --input-type=module -e 'import { composeBuildServices } from "./tests/e2e/tool-sandbox-images.mjs"; console.log(composeBuildServices().join(" "));')
+          docker compose build "${services[@]}"
+          docker compose up -d
+
+      # The steps the deterministic MCP fixture serves (E2E_MCP_URL), on the stack's private network,
+      # as live-e2e.yml does.
+      - name: Start the MCP fixture on the application network
+        run: |
+          set -euo pipefail
+          network="$(docker inspect "$(docker compose ps -q web)" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}')"
+          docker run --detach --rm --name "aw-e2e-mcp-$RUNNER_NAME" --network-alias aw-e2e-mcp --network "$network"             --volume "$PWD:/workspace:ro" --workdir /workspace             --env E2E_MCP_HOST=0.0.0.0 node:24-alpine node tests/e2e/mcp-fixture.mjs
+          for attempt in $(seq 1 30); do
+            docker exec "aw-e2e-mcp-$RUNNER_NAME" wget -qO- http://127.0.0.1:4319/healthz && exit 0
+            sleep 1
+          done
+          docker logs "aw-e2e-mcp-$RUNNER_NAME"
+          exit 1
+
+      # The harness drives a real model: the repository secret ANTHROPIC_API_KEY reaches this step
+      # and the evidence check below only, and the gateway settles the runs unpriced (.env.example).
       - name: Run the spec-derived eleven-step harness
         id: full_flow
         continue-on-error: true
-        run: pnpm e2e
+        env:
+          E2E_PROVIDER: anthropic
+          E2E_PROVIDER_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          E2E_MODEL: claude-haiku-5-5
+          E2E_RUNTIME: docker
+          E2E_MCP_URL: http://aw-e2e-mcp:4319/mcp
+        run: |
+          set -euo pipefail
+          if [ -z "${E2E_PROVIDER_API_KEY//[[:space:]]/}" ]; then
+            echo "::error title=Missing secret ANTHROPIC_API_KEY::the on-demand Compose E2E needs the repository secret ANTHROPIC_API_KEY."
+            exit 1
+          fi
+          pnpm e2e
 
       - name: Require exactly eleven persisted results
         if: always()
@@ -1656,8 +2183,24 @@ jobs:
               console.error(`Expected exactly 11 flow entries, got ${document.steps?.length ?? "none"}`);
               process.exit(1);
             }
+            const key = process.env.E2E_PROVIDER_API_KEY;
+            if (key && JSON.stringify(document).includes(key)) {
+              console.error("flow.json contains the provider key; its steps are not printed");
+              process.exit(1);
+            }
+            for (const step of document.steps) console.log(`${step.status}  ${step.id}: ${step.detail}`);
             console.log("flow.json contains exactly 11 entries");
           '
+        env:
+          E2E_PROVIDER_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      # The web and runner logs, with the provider key masked, so a failed step can be read here.
+      - name: Print the service logs
+        if: always() && steps.full_flow.outcome != 'success'
+        env:
+          E2E_PROVIDER_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          docker compose logs --no-color --tail 200 web runner gateway 2>&1             | node --input-type=module -e 'let t = ""; process.stdin.on("data", (c) => (t += c)).on("end", () => { const k = process.env.E2E_PROVIDER_API_KEY; process.stdout.write(k ? t.replaceAll(k, "[REDACTED]") : t); });'
 
       - name: Preserve the harness verdict
         if: always() && steps.full_flow.outcome != 'success'
@@ -1667,14 +2210,267 @@ jobs:
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: |
+          docker rm --force "aw-e2e-mcp-$RUNNER_NAME" || true
+          # This run's sandboxes and proxies, found by their run-unique images, then the images.
+          for image in "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE"; do
+            docker ps --all --quiet --filter "ancestor=$image" | xargs --no-run-if-empty docker rm --force
+          done
+          docker compose down -v
+          docker image rm "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE" || true
+
+  # Moved from quality.yml (audit F-14): a floor or a browser lane outside `ci-success` is advisory.
+  coverage:
+    name: Coverage floor · ${{ matrix.suite.name }}
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    needs: build
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    strategy:
+      # One suite's floor failing must not cancel the others: every floor's verdict belongs in
+      # a single run.
+      fail-fast: false
+      matrix:
+        suite:
+          - {
+              name: critical packages,
+              script: 'test:coverage',
+              config: vitest.coverage.config.ts,
+              summary: coverage/coverage-summary.json,
+              s3: true,
+            }
+          - {
+              name: apps,
+              script: 'test:coverage:apps',
+              config: vitest.apps.coverage.config.ts,
+              summary: coverage/apps/coverage-summary.json,
+              s3: true,
+            }
+          - {
+              name: ui-cli,
+              script: 'test:coverage:ui-cli',
+              config: vitest.ui-cli.coverage.config.ts,
+              summary: coverage/ui-cli/coverage-summary.json,
+            }
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_workspace_test
+        ports: ['5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_workspace_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      # MS-A2 runs several jobs at once, so the service gets a random host port, not 5432.
+      - name: Point the job at its PostgreSQL port
+        run: |
+          {
+            echo "TEST_DATABASE_URL=postgres://postgres:postgres@localhost:${{ job.services.postgres.ports['5432'] }}/agent_workspace_test"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - name: Restore the workspace build
+        uses: ./.github/actions/workspace-build
+      # packages/core's connection-store suite (critical packages) and apps/web's run storage
+      # write-back tests (apps) need the S3 test server and fail without it, as they do under
+      # `pnpm test`. Same step as heavy-checks: same image digest (tests/
+      # test-services.test.ts fails while any SeaweedFS digest in this file differs from the pin),
+      # credentials and health probe.
+      - name: Start the S3 test server for the object-store contract suite
+        if: matrix.suite.s3
+        run: |
+          set -euo pipefail
+          # MS-A2 runs several jobs at once: the container is named per runner and gets a free port.
+          name="aw-ci-s3-$RUNNER_NAME"
+          docker rm -f "$name" > /dev/null 2>&1 || true
+          docker run --rm -d --name "$name" \
+            -e AWS_ACCESS_KEY_ID=agent_workspace -e AWS_SECRET_ACCESS_KEY=agent_workspace \
+            -p 127.0.0.1::8333 \
+            chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882 \
+            mini
+          port="$(docker port "$name" 8333/tcp | head -1 | sed 's/.*://')"
+          for _ in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:$port/healthz" > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:$port/healthz" > /dev/null
+          {
+            echo "TEST_S3_ENDPOINT=http://127.0.0.1:$port"
+            echo "TEST_S3_ACCESS_KEY_ID=agent_workspace"
+            echo "TEST_S3_SECRET_ACCESS_KEY=agent_workspace"
+          } >> "$GITHUB_ENV"
+      # Blacksmith gave this job 8 vCPUs. On the 32-thread MS-A2, Vitest's default pool (one worker
+      # per thread) ran out of PostgreSQL lock slots (`out of shared memory`) and timed tests out.
+      # None of these configs holds the serial `tests` project, so the cap changes no file order.
+      - run: pnpm ${{ matrix.suite.script }}
+        env:
+          VITEST_MAX_WORKERS: '8'
+      # Floors only go up (W4-4): on a pull request, no floor may be lower than on its base; a floor
+      # trailing the measured value by more than 5 points is a warning, never a failure.
+      - name: Coverage floors only go up
+        env:
+          # The pull request's base branch, or the commit a merge-queue group was built on.
+          BASE_REF: ${{ github.base_ref || github.event.merge_group.base_sha }}
+          CONFIG: ${{ matrix.suite.config }}
+          SUMMARY: ${{ matrix.suite.summary }}
+        run: |
+          set -euo pipefail
+          if [ -n "$BASE_REF" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            export COVERAGE_BASE_REV=FETCH_HEAD
+          fi
+          node scripts/check-coverage-ratchet.mjs "$CONFIG" "$SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: coverage-summary-${{ strategy.job-index }}
+          path: ${{ matrix.suite.summary }}
+          if-no-files-found: error
+      # MS-A2 is not thrown away after the job, so the S3 test server would keep running.
+      - name: Stop the S3 test server
+        if: always() && matrix.suite.s3
+        run: docker rm -f "aw-ci-s3-$RUNNER_NAME" > /dev/null 2>&1 || true
+
+  browser:
+    name: Browser keyboard and accessibility smoke
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    needs: build
+    # Off the MS-A2 pool (ADR-0053, Amendment 2026-10-23b): Chromium aborts a navigation with
+    # net::ERR_NETWORK_CHANGED whenever another job on the shared host adds or removes a Docker network.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      actions: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: agent_workspace_browser
+        ports: ['5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_workspace_browser"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      MASTER_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      SESSION_SECRET: browser-check-session-secret-32-characters
+      AW_SESSION_MIRROR_TOKEN: browser-check-mirror-secret-32-characters
+      BOOTSTRAP_ADMIN: browser@example.invalid
+      BOOTSTRAP_ADMIN_PASSWORD: browser-check-password
+      AW_STORAGE_URL: file:///tmp/agent-workspace-browser
+      RUNTIME_DRIVER: local
+    steps:
+      # MS-A2 runs several jobs at once, so the service gets a random host port, not 5432.
+      - name: Point the job at its PostgreSQL port
+        run: |
+          {
+            echo "DATABASE_URL=postgres://postgres:postgres@localhost:${{ job.services.postgres.ports['5432'] }}/agent_workspace_browser"
+            echo "TEST_DATABASE_URL=postgres://postgres:postgres@localhost:${{ job.services.postgres.ports['5432'] }}/agent_workspace_browser"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      # The Chromium binary is ~150 MB and changes only with the pinned @playwright/test
+      # version, so it is cached by that version (a lockfile-hash key missed on every queue run);
+      # the OS libraries `--with-deps` installs are not cacheable and cost a few seconds of apt.
+      - name: Read the Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm db:migrate
+      - run: pnpm db:seed
+      - name: Restore the workspace build
+        uses: ./.github/actions/workspace-build
+      # `next start` cannot serve the restored `.next`: Turbopack's hashed server externals
+      # (`.next/node_modules/pg-<hash>`) do not resolve once the output is moved to another
+      # checkout (ERR_MODULE_NOT_FOUND). The dist/ of every dependency is restored, so only the web
+      # app is built here, beside the server that serves it. `--skip-nx-cache`: a cache replay
+      # restores `.next` without those links too (Nx does not keep symlinks), which failed this job
+      # in merge-queue run 39891334244.
+      - name: Build the web app where it is served
+        run: scripts/ci/nx.sh run @agent-workspace/web:build --excludeTaskDependencies --skip-nx-cache --output-style=static
+      - run: pnpm test:browser
+      # A skipped or flaky browser test passes Playwright but not this (audit F-14).
+      - name: No browser test was skipped or flaky
+        run: node scripts/ci/playwright-no-skip.mjs
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # COST: the first failed gate ends the run. fast-checks fails in about a minute and `build` in a
+  # few; without this the other jobs (the Docker and end-to-end tier above all) ran on to the end of
+  # a run that could no longer pass. Separate jobs, not a step in the gate: a cancel from inside a job
+  # would turn that job's own red into "cancelled". The red job stays red and `CI success` reads
+  # cancelled, which also blocks the merge.
+  cancel-on-fast-failure:
+    name: end the run when fast checks fail
+    needs: fast-checks
+    if: failure()
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel the run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+
+  cancel-on-build-failure:
+    name: end the run when a build fails
+    needs: [build, build-embedded]
+    if: failure()
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel the run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
 
   # The one status check to require. fast-checks and heavy-checks run side by side, so a
   # branch rule pointing at either would see the other's result only by accident; this job
   # fails if any required job (the two gate jobs, `formal`, `image-scan`,
   # `generated-project-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
   # or a cancellation is a failure here, not a pass, because a gate that did not run has not
-  # passed. full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
+  # passed, except where the COST note skips a tier on purpose. full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
   # over the `needs` context on the smallest runner size.
   ci-success:
     name: CI success
@@ -1694,8 +2490,10 @@ jobs:
         journey-e2e,
         docs-claims,
         tool-sandbox-e2e,
+        coverage,
+        browser,
       ]
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
     steps:
       - name: Every required job succeeded
         env:
@@ -1703,7 +2501,12 @@ jobs:
         run: |
           set -euo pipefail
           echo "$NEEDS_JSON" | jq .
-          failed=$(echo "$NEEDS_JSON" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"')
+          # A skipped job passes only where the trigger skips it on purpose (the COST note at the
+          # top of this file): a pull request, a push to main and the merge queue. The nightly, a
+          # dispatch and the release gate (`full`, which arrives as a push) need every job to succeed.
+          case "${{ github.event_name }}" in pull_request|push|merge_group) skip_ok=true ;; *) skip_ok=false ;; esac
+          if [ "${{ inputs.full }}" = true ]; then skip_ok=false; fi
+          failed=$(echo "$NEEDS_JSON" | jq -r --argjson skip_ok "$skip_ok" 'to_entries[] | select(.value.result != "success" and (.value.result != "skipped" or ($skip_ok | not))) | "\(.key): \(.value.result)"')
           if [ -n "$failed" ]; then
             echo "One or more required jobs did not succeed:"
             echo "$failed"

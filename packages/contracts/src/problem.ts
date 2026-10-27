@@ -91,7 +91,12 @@ export type CommonProblemCode = keyof typeof COMMON_PROBLEM_CODES;
  * What can hold a reference that keeps a resource from being deleted. A delete of a referenced
  * resource is refused, never cascaded, and never left to orphan the referrer (ADR-0077).
  */
-export const IN_USE_REFERRER_KINDS = ['agent', 'connector', 'model-connection'] as const;
+export const IN_USE_REFERRER_KINDS = [
+  'agent',
+  'connector',
+  'model-connection',
+  'storage-connection',
+] as const;
 export type InUseReferrerKind = (typeof IN_USE_REFERRER_KINDS)[number];
 
 /** One referrer, as the `details` of a `409 <resource>_in_use` problem carries it. */
@@ -100,7 +105,8 @@ export interface InUseReferrer {
   readonly id: string;
 }
 
-const IN_USE_REFERRER_PATTERN = /^(agent|connector|model-connection):([0-9a-f-]{36})$/u;
+const IN_USE_REFERRER_PATTERN =
+  /^(agent|connector|model-connection|storage-connection):([0-9a-f-]{36})$/u;
 
 /**
  * The one naming rule for "refused while referenced": the code is `<resource>_in_use`, the status

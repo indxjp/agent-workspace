@@ -16,7 +16,7 @@ import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import { createConnector } from '../connectors/handlers';
 import { createInMemoryConnectorsStoreProvider } from '../connectors/memory-store';
 import type { WorkspaceAgentVersionStore } from '../agent-versions/store';
-import type { ApiResult } from '../agents/handlers';
+import type { ApiResult } from '../http/result';
 import { exportAgentVersion, exportFileBytes } from './export';
 import {
   buildPortableProject,

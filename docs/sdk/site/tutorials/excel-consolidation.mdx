@@ -1,16 +1,25 @@
 ---
 title: "6. Excel consolidation & analysis agent"
-description: "An agent that finds each branch's sales workbook, reads five incompatible layouts, proposes a column mapping a person confirms, consolidates with a script that keeps every value's file!sheet!cell, and explains the month-over-month change. The backend refuses an explanation that quotes a number the script did not compute."
+description: "An agent that finds each branch's sales workbook with search_files, reads five incompatible layouts, proposes a column mapping a person confirms, consolidates with a script that keeps every value's file!sheet!cell, and explains the month-over-month change. The backend refuses an explanation that quotes a number the script did not compute."
 ---
 
 <Info>
 **You will build:** an agent that finds every branch's sales workbook, proposes a column mapping a person confirms, consolidates with a script that keeps each value's source cell, and explains the month-over-month change.
 
-**You will learn:** file search as your own MCP server ([MCP servers](/building/mcp-servers)), two skills with scripts, one shared with other use cases ([Skills](/building/skills)), the stored policy that lets a run use Bash ([Design an agent](/building/agents)), a person's confirmation between two turns of one session ([Integrate a backend](/building/backend)), a full-page surface ([Embed an agent](/building/embedding)), and evals for the planning turn ([Evaluations](/guides/evaluations)).
+**You will learn:** the platform's `search_files`, narrowed per caller with `fileScope` ([Integrate a backend](/building/backend)), two skills with scripts, one shared with other use cases ([Skills](/building/skills)), the stored policy that lets a run use `run_skill_script` ([Design an agent](/building/agents)), a person's approval of the plan before the run goes on ([Integrate a backend](/building/backend)), a full-page surface ([Embed an agent](/building/embedding)), and evals for the planning turn ([Evaluations](/guides/evaluations)).
 
-**Time and prerequisites:** about 45 minutes to read; the tests behind it run offline with no API key. To run it on your own workspace, finish [chapter 1](/path/first-agent) first (a project answering under `aw dev`), and have a model key and Node to start the file-finder server. Advanced.
+**Time and prerequisites:** about 45 minutes to read; the tests behind it run offline with no API key. To run it on your own workspace, finish [chapter 1](/path/first-agent) first (a project answering under `aw dev`), and have a model key; then allow time to upload the workbooks, run `aw push` and run `aw eval`. Advanced.
 
 </Info>
+
+## The result
+
+<Frame caption="Planning asks 「今月の拠点別売上を集計して、前月からの増減を説明して」 and the agent answers with a mapping plan for a person to confirm.">
+  <img
+    src="/images/tutorials/excel-consolidation/01-result.png"
+    alt="The planning page showing the request for this month's branch sales and the agent's mapping plan for each branch workbook"
+  />
+</Frame>
 
 **Excel集約・分析エージェント.** Corporate planning asks 「今月の拠点別売上を集計して、前月からの増減を説明して」.
 Five branches send five workbooks, each laid out by whoever built it years ago: a merged title
@@ -20,6 +29,8 @@ month. The agent finds the files, reads every sheet, and proposes how to read ea
 confirms the plan. A script then does the arithmetic, every value keeps its source cell, and the
 agent explains the change in Japanese using only the numbers the script printed.
 
+## Why it is worth building
+
 The need is well documented. In a survey of 372 DX leaders by アイアットOEC (April 2026), 88.7% say
 their company still runs on Excel, 44.6% name data entry and aggregation as a major time sink,
 and 43.6% say scattered copies of files leave the numbers inconsistent ([PR TIMES,
@@ -27,114 +38,144 @@ and 43.6% say scattered copies of files leave the numbers inconsistent ([PR TIME
 named company that runs this end to end with an agent in production. The demand is clear;
 public evidence of deployments is not. This page shows what it takes to build one today.
 
-Every test behind this page runs offline, with no API key. How the gallery
-tests a use case is on the [gallery overview](/tutorials).
-
-## How the agent works
+## How it works
 
 From the request to the person who decides, with the tools, skills and checks in between:
 
 ```mermaid
 flowchart TD
-  Q["Planning asks for this month's totals"] --> F["find_files: every branch workbook"]
-  F --> I["office-reader and consolidate.mjs inspect each sheet"]
-  I --> P["Turn 1 ends with a mapping plan"]
+  Q["Planning asks for this month's totals"] --> F["search_files: the branch workbooks this person may see"]
+  F --> I["consolidate.mjs inspects each sheet"]
+  I --> P["The agent Writes the mapping plan: the run pauses"]
   P --> V["Backend validates the plan"]
-  V --> H["A person confirms or corrects it"]
-  H --> T2["Turn 2, same session: apply and compare"]
+  V --> H["A person approves it, or rejects it with a comment"]
+  H --> T2["The continuation applies and compares"]
   T2 --> G["Backend: totals recomputed, every number grounded?"]
   G --> R["Report with a source cell for every value"]
 ```
 
-## What you build
+The pieces you will write, and the SDK feature behind each:
 
 ```mermaid
-flowchart LR
-  U["Planning page<br/>surface planning"] --> A["Agent excel-consolidation<br/>readFiles + runCommands"]
-  B["Your backend<br/>proposePlan / runConfirmedPlan"] -- "turn 1, turn 2 (same sessionId)" --> A
-  A -- "mcp('file-finder')" --> F["Your MCP server<br/>find_files"]
-  A -- "skill" --> O["office-reader<br/>ooxml.mjs: xlsx → JSON"]
-  A -- "skill" --> C["excel-consolidate<br/>consolidate.mjs: inspect · apply · compare"]
+flowchart TD
+  U["Planning page<br/>surface planning"] --> A["Agent excel-consolidation<br/>readFiles + writeFiles + runCommands"]
+  B["Your backend<br/>proposePlan / approvePlan / rejectPlan"] -- "runs.start (subject, fileScope), runs.approve, runs.reject" --> A
+  A -- "built-in tool" --> F["search_files<br/>over the granted branch folders"]
+  A -- "skill, run_skill_script" --> C["excel-consolidate<br/>consolidate.mjs: inspect · apply · compare"]
+  A -- "skill, run_skill_script" --> O["office-reader<br/>ooxml.mjs: write the workbook"]
   B -- "validate plan · recompute · number guard" --> R["Report shown to planning"]
 ```
 
-| Piece | File | SDK |
-| --- | --- | --- |
-| The agent | `agents/excel-consolidation.ts`, `agents/excel-consolidation.md` | `defineAgent`, `mcp`, `skill` |
-| File search | `mcp/file-finder.mjs` | an `http` connector in `agent-workspace.yaml` |
-| Reading xlsx | `../shared/skills/office-reader/` | `skill('office-reader')`, shared with other use cases |
-| Mapping and arithmetic | `skills/excel-consolidate/SKILL.md`, `scripts/consolidate.mjs` | `skill('excel-consolidate')`, `runCommands` |
-| The workbooks | `data/branch-workbooks.ts`, `data/mapping-plan.json` | the layouts, and the `.xlsx` files written from them with the shared xlsx writer |
-| The page | `surfaces/planning.ts` | `defineSurface` |
-| The two turns and the guards | `backend/consolidate.ts` | `runs.start` with `sessionId`, `runs.follow` |
+| Piece                                | File                                                                               | SDK                                                                                     |
+| ------------------------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| The agent                            | `agents/excel-consolidation.ts`, `agents/excel-consolidation.md`                   | `defineAgent`, `files`, `skill`                                                         |
+| File search                          | the branch folders under `data/`, `data/access.json`                               | `aw files upload`, the built-in `search_files`, `runs.start({ fileScope })`             |
+| Writing the workbook                 | the built-in `office-reader` skill (`packages/skills-office/`)                     | `builtinSkill('office-reader')`; the platform installs it on first use                  |
+| Reading xlsx, mapping and arithmetic | `skills/excel-consolidate/SKILL.md`, `scripts/consolidate.mjs`, `scripts/xlsx.mjs` | `skill('excel-consolidate')`, `runCommands`, `run_skill_script`                         |
+| The workbooks                        | `data/branch-workbooks.ts`, `data/mapping-plan.json`                               | the layouts, and the `.xlsx` files written from them with the office-reader xlsx writer |
+| The page                             | `surfaces/planning.ts`                                                             | `defineSurface`                                                                         |
+| The approval and the guards          | `backend/consolidate.ts`                                                           | `runs.start`, `runs.approve`, `runs.reject`, `runs.follow`                              |
 
-## 1. The workbooks, as they arrive
+## Before you start
+
+Before you read on, check that:
+
+- you finished [chapter 1](/path/first-agent), so a project answers under `aw dev`
+- you have a model key, to run the agent
+- optionally, you read [how the gallery tests a use case](/tutorials)
+
+**Getting the code.** The files below are the use case's project folder, `tests/gallery/excel-consolidation/`, in the Agent Workspace repository. Paths in the tables and code titles are relative to that folder, and a code block that names a file there is an exact copy of it. You can follow the tutorial by reading alone, or by running its offline tests; to run the agent yourself, copy the folder's files into the project you created in chapter 1.
+
+Every test behind this page runs offline, with no API key. How the gallery
+tests a use case is on the [gallery overview](/tutorials).
+
+## Build it
+
+<Steps>
+<Step title="1. Look at the workbooks as they arrive">
 
 `data/` holds ten workbooks (five branches, April and May 2025) plus a blank template and an
 expense sheet that a careless search would pick up. They are written from
 `data/branch-workbooks.ts`, where the layouts are, and a test checks that they still match it:
 
-| Branch | Sheet | Header | Date | Unit | Trap |
-| --- | --- | --- | --- | --- | --- |
-| 東京 | 売上明細 | rows 3–4, merged | 令和7年4月3日 | 千円, in the header | 小計 row, ※ note row |
-| 大阪 | Sheet1 | row 1 | 2025/04/08 | 円 | 合計 row |
-| 名古屋 | 名古屋営業所 | row 2 | Excel serial | 千円 | category before date; a ※ remark on a real sale |
-| 福岡 | R7.4, R7.5 | row 3 | 令和7年4月7日 | 円, on a 単位 row above the header | sheet renamed every month, （参考） row |
-| 札幌 | 実績, after a 表紙 sheet | row 4 | R7.4.4 | 千円, on a 単位 row above the header | 合計 row |
+| Branch | Sheet                    | Header           | Date          | Unit                                 | Trap                                            |
+| ------ | ------------------------ | ---------------- | ------------- | ------------------------------------ | ----------------------------------------------- |
+| 東京   | 売上明細                 | rows 3–4, merged | 令和7年4月3日 | 千円, in the header                  | 小計 row, ※ note row                            |
+| 大阪   | Sheet1                   | row 1            | 2025/04/08    | 円                                   | 合計 row                                        |
+| 名古屋 | 名古屋営業所             | row 2            | Excel serial  | 千円                                 | category before date; a ※ remark on a real sale |
+| 福岡   | R7.4, R7.5               | row 3            | 令和7年4月7日 | 円, on a 単位 row above the header   | sheet renamed every month, （参考） row         |
+| 札幌   | 実績, after a 表紙 sheet | row 4            | R7.4.4        | 千円, on a 単位 row above the header | 合計 row                                        |
 
 Two of the five state their unit outside the header. That is why the plan must state every unit
 explicitly, and why the backend refuses a plan that does not.
 
-## 2. Find the files with your own MCP server
+**Check:** you can say, for each branch, its sheet, header rows, unit and date format, and which two branches (福岡, 札幌) state the unit outside the header.
 
-The files live on SharePoint, Box or a file server, not in the workspace. Agent Workspace has no
-search, so `find_files` is your server, standing in for the search your company already has:
+</Step>
+<Step title="2. Find the files with search_files, narrowed per person">
 
-```js title="mcp/file-finder.mjs (excerpt)" file="tests/gallery/excel-consolidation/mcp/file-finder.mjs#excerpt"
-function insideRoot(folder) {
-  const candidate = path.resolve(ROOT, folder);
-  let real;
-  try {
-    real = realpathSync(candidate);
-  } catch {
-    refuse(`no folder named ${folder}`);
-  }
-  const relative = path.relative(ROOT, real);
-  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
-    refuse('folder must be inside the file root');
-  return real;
+The workbooks are uploaded once into one folder per branch (`aw files upload`, the command is in
+`agent-workspace.yaml`), and the agent holds a read grant on each folder. The platform's
+`search_files` finds a workbook by the text inside it (sheet names, headers, categories), not by its
+name, and returns `[{path, page, snippet}]` for the files that hold every term of the query. 札幌
+calls its file 月次報告, not 売上, so the instructions start with two searches on what a sales sheet
+holds (`機器 保守` and `日付 区分`), in the same turn, and add others for a branch that is missing.
+The `path` it returns is relative to the working directory, and it is what the mapping plan names
+and what the scripts open. There is no connector and no server of ours.
+
+Search covers every folder the agent is granted, which is all five branches and the shared one. A
+branch manager should see only their own branch, so the backend narrows each run with
+`runs.start({ fileScope })`: a subset of the agent's file grants. `data/access.json` maps the
+signed-in person to the top-level folders they may see:
+
+```json title="data/access.json" file="tests/gallery/excel-consolidation/data/access.json"
+{
+  "田村 恵": {
+    "folders": ["共通", "東京支店", "大阪支店", "名古屋営業所", "札幌営業所", "福岡支店"]
+  },
+  "佐々木 誠": { "folders": ["共通", "札幌営業所"] }
 }
 ```
 
-It returns `path`, `localPath`, `size` and `modified` for every file whose path holds all the query's terms
-(NFKC-normalised, so full-width input works). The test checks that `..`, an absolute path and a
-symbolic link out of the root are all refused. 札幌 calls its file 月次報告, not 売上, so the
-instructions tell the agent to search more than once.
-
-`path` is relative to the root and is what the mapping plan names; the backend checks every plan
-file against what `find_files` returned. `localPath` is the same file's absolute path on the
-machine running the server, which the agent's shell opens. That works only where the server and the
-run share a filesystem, as they do under `aw dev`. Under a deployed runtime, the run cannot see it.
-
-In production, a sync job copies the found workbooks into the folder the run reads; how the bytes
-reach the run is your connector's business. Each file the workspace stores is opaque bytes, up to
-64 MiB (`MAX_UPLOAD_BYTES` in the contracts package).
-
-## 3. Parse and consolidate with skill scripts
-
-The platform parses nothing, so the agent runs two dependency-free Node scripts. The shared
-`office-reader` skill turns an xlsx into JSON (merged cells filled, addresses kept). This use
-case's own skill applies the plan. A skill is uploaded as its own directory, so
-`consolidate.mjs` imports nothing from `office-reader`; it reads that script's JSON output:
-
-```sh title="illustrative" claim="illustrative"
-for f in "<localPath of each xlsx>"…; do node ooxml.mjs xlsx "$f" > "/tmp/$(basename "$f").json"; done
-node consolidate.mjs inspect /tmp/*.xlsx.json   # per file and sheet: first rows, lettered, and its unit
-node consolidate.mjs apply plan.json /tmp/*.xlsx.json > /tmp/applied.json
-node consolidate.mjs compare /tmp/applied.json 2025-04 2025-05 > /tmp/report.json
+```ts title="backend/consolidate.ts (excerpt)" file="tests/gallery/excel-consolidation/backend/consolidate.ts#excerpt"
+export function fileScopeFor(subject: string, access: AccessList): string[] {
+  const folders = access[subject]?.folders ?? [];
+  if (folders.length === 0) throw new NoAccessibleFiles(subject);
+  return [...folders];
+}
 ```
 
-`inspect` takes every workbook in one call, so the first turn is a handful of tool calls rather than
+`search_files` and the files the run opens then cover those folders only: 佐々木 誠's run does not
+find the 東京 workbooks, and a plan cannot name them. A scope wider than the agent's grants fails the
+run with 403 `run_file_scope_not_granted`, and an empty scope is invalid, which is why a person with
+no folder gets no run at all. The person comes from the backend's own session, never from the
+prompt. What the agent writes is still granted per agent (P2-4).
+
+**Check:** the two opening searches (`機器 保守`, `日付 区分`) return the ten branch workbooks and the shared template, not the expense sheet or the note, and a person with no folder is refused before any run starts.
+
+</Step>
+<Step title="3. Parse and consolidate with skill scripts">
+
+The platform parses nothing, and a run has no shell, so the agent calls the skills' dependency-free
+Node scripts with `run_skill_script` (a skill, a script and its `args`; no pipes, no redirects).
+The skill's `consolidate.mjs` reads the `.xlsx` files itself (merged cells filled, addresses kept)
+with `scripts/xlsx.mjs`, a copy of the built-in `office-reader` reader: a skill is uploaded as its own
+directory, so it cannot import from another skill, and a test pins the copy to the original. A result
+goes to stdout and, with `--out`, to a file under `outputs/`, the one folder a run may write, for the
+next call to read:
+
+```json title="run_skill_script calls (illustrative)" claim="illustrative"
+{ "skill": "excel-consolidate", "script": "consolidate.mjs", "args": ["inspect", "<path>", "…"] }
+{ "skill": "excel-consolidate", "script": "consolidate.mjs", "args": ["apply", "outputs/plan.json", "<path>", "…", "--out", "outputs/applied.json"] }
+{ "skill": "excel-consolidate", "script": "consolidate.mjs", "args": ["compare", "outputs/applied.json", "2025-04", "2025-05", "--out", "outputs/report.json"] }
+{ "skill": "excel-consolidate", "script": "consolidate.mjs", "args": ["sheet", "outputs/report.json", "--out", "outputs/book.json"] }
+{ "skill": "office-reader", "script": "ooxml.mjs", "args": ["write", "outputs/book.json", "outputs/consolidated-2025-05.xlsx"] }
+```
+
+Each `<path>` is a `path` that `search_files` returned. The last two calls turn the report into the
+consolidated workbook, which `office-reader` writes.
+
+`inspect` takes every workbook in one call, so reaching the plan is a handful of tool calls rather than
 one pair per file. For each sheet it also reports the unit it states (`unit`, with the cell it came
 from in `unitFrom`): a header label such as `金額（千円）` (東京) or a `単位：` row above the header
 (福岡 円, 札幌 千円). The plan's `unit` is copied from it, so the proposal always names 千円 for 東京, 名古屋
@@ -146,8 +187,12 @@ its sources:
 
 ```json title="one row of report.json (illustrative)" claim="illustrative"
 {
-  "branch": "東京", "date": "2025-05-08", "month": "2025-05", "category": "機器",
-  "amount": 1500000, "raw": { "amount": 1500, "unit": "千円" },
+  "branch": "東京",
+  "date": "2025-05-08",
+  "month": "2025-05",
+  "category": "機器",
+  "amount": 1500000,
+  "raw": { "amount": 1500, "unit": "千円" },
   "@src": {
     "date": "東京支店/東京_売上報告_2025年5月.xlsx!売上明細!A5",
     "category": "東京支店/東京_売上報告_2025年5月.xlsx!売上明細!B5",
@@ -173,50 +218,97 @@ Subtotal and note markers (`skip`) are matched in the date and category columns 
 exact result: April 7,410,500円, May 7,920,000円, +509,500円 (+6.9%), 22 rows, 10 rows skipped
 with their reasons.
 
-## 4. Define the agent
+**Check:** the unit tests give April 7,410,500円, May 7,920,000円 and +509,500円 (+6.9%) over 22 rows, with 10 rows skipped for stated reasons.
+
+</Step>
+<Step title="4. Define the agent">
 
 ```ts title="agents/excel-consolidation.ts" file="tests/gallery/excel-consolidation/agents/excel-consolidation.ts#excerpt"
 export default defineAgent({
   name: 'excel-consolidation',
   instructions: { file: './excel-consolidation.md' },
   model: 'default',
-  // A run is unattended: without autoApprove the SDK refuses the skill script's Bash call.
-  engine: { id: 'claude-agent-sdk', autoApprove: ['Bash'] },
-  permissions: { readFiles: true, runCommands: true },
-  tools: [mcp('file-finder')],
-  skills: [skill('office-reader'), skill('excel-consolidate')],
+  // A run is unattended: without autoApprove the SDK refuses the search and the skill scripts. The
+  // read-only grants below make the platform deny Bash, so scripts run through `run_skill_script`.
+  // The only thing a person decides is the mapping plan: the agent saves it with `Write`, and the
+  // run waits there for an approval (ADR-0145) before it applies the plan.
+  engine: {
+    id: 'claude-agent-sdk',
+    autoApprove: ['mcp__agent-workspace__run_skill_script', 'mcp__agent-workspace__search_files'],
+    requireApproval: ['Write'],
+  },
+  permissions: { readFiles: true, writeFiles: true, runCommands: true },
+  skills: [builtinSkill('office-reader'), skill('excel-consolidate')],
+  files: [
+    files('共通', 'read'),
+    files('東京支店', 'read'),
+    files('大阪支店', 'read'),
+    files('名古屋営業所', 'read'),
+    files('札幌営業所', 'read'),
+    files('福岡支店', 'read'),
+  ],
   limits: { maxTurns: 30, maxBudgetUsd: 1 },
 });
 ```
 
-The instructions split the work into two turns: the first ends with a plan and a question, and
-the second runs only the plan it was sent. `writeFiles` is off, which removes the Write and Edit
-tools but not shell redirection; the scripts print JSON, and the report travels back in the
-answer.
+The instructions split the work at the plan: the agent saves its mapping plan with `Write`, which
+`requireApproval: ['Write']` holds until a person approves it, and after the approval it runs only
+that plan. `runCommands` offers `run_skill_script`, and `writeFiles` lets the agent save the plan
+and the consolidated workbook to `outputs/`, the one folder the sandbox lets it write; the backend
+collects the workbook with `runs.outputs`, and the report still travels back in the answer. The
+branch folders are read-only grants, so `Bash` stays denied.
 
-## 5. The two-turn flow in the backend
+**Check:** the agent grants `readFiles`, `writeFiles` and `runCommands`, a read grant on each branch folder, declares `autoApprove` for `run_skill_script` and `search_files`, and holds `Write` for approval.
 
-A run cannot pause for a person's approval, so the confirmation is two runs in one session.
+</Step>
+<Step title="5. Put it on the planning page">
 
-```ts title="backend/consolidate.ts (excerpt) (illustrative)" claim="illustrative"
-// Turn 1: ask for a plan, and validate it before anyone is asked to confirm it.
-const reading = await runAndRead(aw, agentId, { prompt: request });
-const found = /* every .xlsx path find_files returned in this run */;
-const { text, json } = splitJsonBlock(reading.answer);
-const { plan, problems } = validatePlan(json, found);
-
-// Turn 2: same session, the confirmed plan as the prompt.
-const reading2 = await runAndRead(aw, agentId, { prompt, sessionId: proposal.sessionId });
-const mismatches = recompute(report, plan);
-const ungrounded = ungroundedNumbers(text, report);
+```ts title="surfaces/planning.ts (excerpt) (illustrative)" claim="illustrative"
+export default defineSurface({
+  name: 'planning',
+  agent: 'excel-consolidation',
+  title: '拠点別売上の集計',
+  layout: 'page',
+  parts: { toolTrace: 'collapsed', history: true, feedback: true /* … */ },
+});
 ```
 
-`validatePlan` refuses a plan in which any workbook the agent found is neither mapped nor
-excluded with a reason, any mapped file was never found, a required field (`date`, `category`,
-`amount`) has no column, or a unit or date format is missing. The person sees `lines`, one row per
-file with its sheet, header rows, columns and unit, and confirms or corrects it.
+**Check:** after `aw push`, the planning page opens as a full page with the tool trace collapsed and the history kept.
 
-After turn 2 the backend checks the agent's work rather than trusting it:
+</Step>
+<Step title="6. Approve the plan in the backend and check the work">
+
+The run stops at the agent's `Write` of `outputs/plan.json`, so the person decides on the plan the
+run is paused on. `proposePlan(aw, agentId, request, subject, access)` starts the run for the
+signed-in person with the `fileScope` from `access` and returns the plan read from that paused
+call; `approvePlan` approves it, and `rejectPlan` sends the person's comment, after which the agent
+writes a revised plan and the run pauses again. The approval admits exactly the plan that was
+shown, and the continuation keeps the paused run's file grants.
+
+```ts title="backend/consolidate.ts (excerpt) (illustrative)" claim="illustrative"
+// Ask for a plan within this person's folders: the run stops at its Write, and the backend
+// validates what is about to be written.
+const fileScope = fileScopeFor(subject, access);
+const paused = await untilApproval(
+  runAndRead(aw, agentId, { prompt: request, subject, fileScope }, ReportAnswerSchema));
+const { plan, problems } = readPlan(paused, found);   // the Write's content, validated
+
+// The person approves: the continuation applies the plan and explains.
+const { run } = await aw.runs.approve(proposal.runId);
+const { explanation, report } = (await readRun(aw, run.id, ReportAnswerSchema)).output;
+const mismatches = recompute(report, plan);
+const ungrounded = ungroundedNumbers(explanation, report);
+```
+
+The schemas settle the shape: every layout has its branch, sheet, files, header rows and a column
+for `date`, `category` and `amount`, and the report comes back typed, so a run whose answer does
+not fit fails instead of reaching the backend. A unit or date format the agent cannot state is
+`null`, never a guess. `validatePlan` refuses a plan in which any workbook the agent found is
+neither mapped nor excluded with a reason, any mapped file was never returned by `search_files`, or a unit or date format
+is `null`. The person sees `lines`, one row per file with its sheet, header rows, columns and unit,
+and approves it or rejects it with a reason.
+
+After the approval the backend checks the agent's work rather than trusting it:
 
 - **`recompute`** adds up the report's own rows by month and branch, recomputes every difference
   and percentage, and checks each row's `@src` points into a planned file and sheet. A report
@@ -230,62 +322,67 @@ expect(result.status).toBe('refused');
 expect(result.ungrounded).toStrictEqual(['25.0%', '290万']);
 ```
 
-## 6. The page
+**Check:** a report whose explanation quotes 「+25.0%」 comes back `refused`, with the ungrounded numbers listed.
 
-```ts title="surfaces/planning.ts (excerpt) (illustrative)" claim="illustrative"
-export default defineSurface({
-  name: 'planning',
-  agent: 'excel-consolidation',
-  title: '拠点別売上の集計',
-  layout: 'page',
-  parts: { toolTrace: 'collapsed', history: true, feedback: true /* … */ },
-});
-```
+</Step>
+<Step title="7. Say what good means with evals">
 
-<Warning>
-  The surface sets no `toolResults`. The widget matches a key against the tool name exactly,
-  and a Claude run names an MCP tool `mcp__file-finder__find_files`, or
-  `mcp__connector-<uuid>__find_files` when the connector's name is not a usable slug. A bare
-  `find_files` key passes the contract and never renders; the UUID form is different in every
-  workspace, so it cannot be committed (probe `surface-mcp-tool-results`).
-</Warning>
-
-## 7. Evals
-
-```yaml title="evals/excel-consolidation.yaml (excerpt)" file="tests/gallery/excel-consolidation/evals/excel-consolidation.yaml#excerpt"
+````yaml title="evals/excel-consolidation.yaml (excerpt)" file="tests/gallery/excel-consolidation/evals/excel-consolidation.yaml#excerpt"
 cases:
-  - name: 1回目は集計せずにマッピング計画を出す
+  - name: 集計せずに、計画を Write して承認を待つ
     input: 今月（2025年5月）の拠点別売上を集計して、前月からの増減を説明して
     expect:
-      contains: ['```json', '"layouts"', '"unit"']
+      awaitsApproval: true
+      tool: Write
+      toolInput: { file_path: outputs/plan.json }
       notContains: ['"comparison"']
-```
+````
 
-Three cases pin the plan: units stated, the template excluded, no totals before confirmation. An
-eval case is one prompt in a fresh session, so turn 2 cannot be an eval; the backend's guards
-cover it.
+Three cases pin the plan: the `Write` of `outputs/plan.json`, units stated, the template excluded,
+no totals before approval. Each case is scored at the approval pause (`awaitsApproval: true`); the
+eval never approves, and the eval runner cancels the paused run. An eval case is one prompt in a
+fresh session, so what follows the approval cannot be an eval; the backend's guards cover it.
 
-## 8. Run it
+**Check:** three cases pin the plan: the plan is written for approval, units stated, the template excluded, no totals before approval.
+
+</Step>
+</Steps>
+
+## Run it
 
 <Steps>
   <Step title="Offline, in the test suite">
-    Checks the shipped workbooks, drives the real file-finder server, runs both skill scripts as the
-    agent's shell would, and runs both turns of the backend against a scripted workspace. Ten
-    tests, no API key.
+    Checks the shipped workbooks, drives the platform's `search_files` over the granted folders,
+    runs the skill scripts as `run_skill_script` would, and runs the plan, its approval or rejection, and the checks of the
+    backend against a scripted workspace, including each person's `fileScope`. Nineteen tests, no API
+    key.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    cp -r ../shared/skills/office-reader skills/   # a skill is imported from this project's skills/
-    FILE_ROOT=/srv/branch-reports MCP_TRANSPORT=http PORT=8788 node mcp/file-finder.mjs &
-    aw dev          # keeps the connector and both skills in step
+    for f in data/*/*; do aw files upload "$f" "${f#data/}"; done    # each branch's workbooks, into its folder
+    aw dev          # keeps the agent and both skills in step
     aw push --yes
     ```
-    A run is unattended, so the skill scripts' shell commands need the `autoApprove: ['Bash']`
-    that the agent declares in its `engine` setting; `aw push` stores it in the policy.
-    Then `aw eval excel-consolidation`, and call `proposePlan` / `runConfirmedPlan` from your
-    backend. Start the monthly run from your own scheduler: nothing in the platform does.
+
+    A run is unattended, so the platform's tools need the `autoApprove` that the agent declares in
+    its `engine` setting (`run_skill_script` and `search_files`), and the plan's `Write` waits on the
+    `requireApproval: ['Write']` next to it; `aw push` stores both in the policy. Then
+    `aw eval excel-consolidation`, and call `proposePlan`, then `approvePlan` or `rejectPlan`, from
+    your backend for the signed-in planner. `MONTHLY_TRIGGER` starts the run on schedule and names
+    the planner as its `subject` (an Owner or Admin creates it, since only they may set a subject). A
+    trigger cannot carry a `fileScope`, so its run searches every granted branch folder; read the
+    paused run with `proposePlanFromRun`, which refuses a plan naming a file outside that planner's
+    folders.
+
   </Step>
 </Steps>
+
+<Frame caption="The excel-consolidation agent in the console after aw push, with its two skills.">
+  <img
+    src="/images/tutorials/excel-consolidation/02-agent.png"
+    alt="The excel-consolidation agent's page in the console listing the office-reader and excel-consolidate skills"
+  />
+</Frame>
 
 ## Where the SDK stands
 
@@ -293,34 +390,35 @@ This table is generated from the use case's benchmark and checked by the gallery
 
 {/* benchmark:start */}
 
-Score: **50 / 100** (✅ = 1, 🟡 = 0.5, ❌ = 0, over the capabilities this use case needs).
+Score: **100 / 100** (✅ = 1, 🟡 = 0.5, ❌ = 0, over the capabilities this use case needs).
 
 | Capability | Today | Evidence | What it means for you |
 | --- | --- | --- | --- |
-| Agent as code | ✅ | contract | defineAgent with two skills (one shared), an MCP tool and a surface passes the server contract offline; the policy ceiling allows commands but not the Write tool. |
-| Grounded search | 🟡 | contract | Finding workbooks on SharePoint, Box or a file server is your MCP server (about 80 lines here, with the path-traversal check); the platform searches nothing. |
-| Document parsing | 🟡 | contract | Files are bytes (up to 64 MiB each); the skill scripts parse xlsx and apply the plan, and the agent declares `autoApprove: ['Bash']` in `defineAgent` so an unattended run can call them. |
-| Structured output | ❌ | probe | The plan and the report come back as a fenced JSON block inside the answer text; the backend parses and validates both. |
-| Human approval | 🟡 | contract | A run cannot pause for approval (probe `run-approval`), so the confirmation is two runs in one session: plan, then the confirmed plan as the next prompt. |
-| Write to systems | ❌ | source | A consolidated workbook the agent writes is not returned to the file store (persistPaths collects the wrong directory); the report travels in the answer instead. |
-| Triggers | ❌ | probe | Nothing starts the monthly run on a schedule or when the last branch uploads; your own cron calls the backend. |
-| Per-user scope | 🟡 | source | Grants are per agent, not per person: a branch manager using this agent sees every branch, unless your file server filters by caller. |
-| Embedded UI | 🟡 | probe | defineSurface publishes the planning page, but the file list cannot render as a table: `toolResults` must name the run’s tool exactly, and that name carries a per-workspace connector id. |
-| Evals | ✅ | contract | Three cases pin the plan (units, the excluded template, no premature totals); an eval is one prompt, so turn 2 is checked by the backend, not by evals. |
+| Agent as code | ✅ | contract | defineAgent with two skills (one shared), read grants on the branch folders and a surface passes the server contract offline; the policy ceiling allows `run_skill_script` and writing the workbook to `outputs/`. |
+| Grounded search | ✅ | contract | The built-in `search_files` finds the workbooks by the text inside them (sheet names, headers, categories) over the granted branch folders, narrowed per caller with `runs.start({ fileScope })`; no connector and no index server of ours. |
+| Document parsing | ✅ | contract | The skill script `consolidate.mjs` reads the workbooks itself with `scripts/xlsx.mjs`, a copy of the built-in office-reader reader that a test pins to the original, and applies the confirmed plan (units, 和暦, Excel serials). The agent runs it through `run_skill_script`, pre-approved in `autoApprove`, beside the read-only grants (no shell); office-reader writes the workbook to `outputs/`. |
+| Structured output | ✅ | contract | The report comes back typed (`runs.result` with a Zod schema) and the plan is read from the `Write` the run is paused on; your backend only checks the plan against the workbooks found, recomputes every total and refuses numbers the script did not produce. |
+| Human approval | ✅ | contract | The agent saves its mapping plan with `Write`, which `requireApproval: ['Write']` holds: the run is `awaiting_approval` until a person approves (`runs.approve`) or rejects with a comment (`runs.reject`, and the revised plan pauses again). The approval admits exactly the plan that was shown. |
+| Write to systems | ✅ | contract | The agent’s consolidated workbook comes back with the run (`runs.outputs`); the backend checks it against the report that adds up and builds no workbook itself. |
+| Triggers | ✅ | contract | A schedule trigger starts the monthly run on time, asks it for the report as its `outputSchema`, and names the planner as its `subject` (ADR-0156). A trigger cannot carry a `fileScope`, so the run searches every granted branch folder; the backend reads the plan from the run paused on its `Write` (`proposePlanFromRun`), refuses a plan naming a file outside the planner’s folders, and validates it before anyone approves it. |
+| Per-user scope | ✅ | contract | The planning desk starts each run with `subject: <signed-in person>` and a `fileScope` of the branch folders that person may see (from `data/access.json`), so `search_files` and the hydrated workbooks cover only those paths; a person with no folder is refused before any run starts. The files the agent writes are still granted per agent, not per person (P2-4). |
+| Embedded UI | ✅ | contract | defineSurface publishes the planning page, and the plan is confirmed in the page. |
+| Evals | ✅ | contract | Three cases pin the plan (units, the excluded template, no premature totals) and score at the approval pause (`awaitsApproval`); the eval never approves, and the runner cancels the paused run. What follows the approval is checked by the backend. |
 | Audit and cost | ✅ | source | Every run records tokens and cost; every consolidated value also carries its `file!sheet!cell`. |
 
 {/* benchmark:end */}
 
 **Verdict: buildable, with real work around the gaps.** The agent part is small: instructions,
-two skills and a search tool. Most of the code is the work around it: about 320 lines of script
-for the mapping and arithmetic (yours in any design), and about 400 lines of backend to carry a
-plan and a report through answer text, check them, and stage a human confirmation as two runs.
+two skills and the platform's search. Most of the code is the work around it: about 400 lines of
+script for the mapping and arithmetic (yours in any design), and about 480 lines of backend to carry
+a plan and a report and check them; the human confirmation itself is the platform's approval of one
+`Write`.
 What would remove code from this page:
 
-- **Structured run output** would replace the fenced-JSON parsing and shape checks for the plan
-  and the report (probe `run-output-schema`).
-- **A run that pauses for approval** would make the confirmation one run instead of two, with the
-  plan kept by the platform (probe `run-approval`).
-- **Files written in a run returned to the file store** would let the agent hand back a
-  consolidated workbook instead of a JSON report in its answer.
-- **Triggers** would start the monthly run when the last branch uploads (probe `inbound-trigger`).
+- **A `fileScope` on a trigger** would let the monthly schedule trigger's run be for the planner's
+  folders: today it names the planner as its `subject` but searches every granted branch folder, so
+  the backend checks the plan against that planner's folders.
+
+<Card title="Next: 7. Contract review agent" icon="arrow-right" href="/tutorials/contract-review">
+  The agent that reads a counterparty's Word draft against the legal playbook.
+</Card>

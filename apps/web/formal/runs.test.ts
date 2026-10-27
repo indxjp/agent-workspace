@@ -12,7 +12,8 @@ import {
 } from '@indx-workspace/contracts/runs';
 import { describe, expect, it } from 'vitest';
 
-import { InMemoryRunStore, runStatuses } from '../server/runs/store';
+import { InMemoryRunStore } from '../server/runs/memory-store';
+import { runStatuses } from '../server/runs/store';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 
 const statusVectors = loadVectors('runs', 'run-status.json');
@@ -60,7 +61,10 @@ const RUN = {
 async function storeWithRunIn(status: RunStatus): Promise<InMemoryRunStore> {
   const store = new InMemoryRunStore();
   await store.create(RUN);
-  if (status === 'running') await store.markRunning(RUN.id);
+  if (status === 'running' || status === 'awaiting_approval') await store.markRunning(RUN.id);
+  if (status === 'awaiting_approval') {
+    await store.awaitApproval(RUN.id, { toolName: 'Bash', canonicalCall: 'Bash(ls)' });
+  }
   if (isTerminalRunStatus(status)) await store.finish(RUN.id, status, null);
   const reached = await store.get(RUN.id);
   expect(reached?.status).toBe(status);

@@ -34,8 +34,9 @@ const PROFILE_SCHEMA_OUTPUTS = [
 ];
 
 /**
- * Build the schema. Node 24 runs the CLI's TypeScript source directly (type stripping), so no
- * build comes first. The converted schema is the union of the cloud branches, envelope included;
+ * Build the schema. Node 24 runs the CLI's TypeScript source directly (type stripping); its
+ * value imports from `@indx-workspace/contracts` resolve to that package's `dist`, so the root
+ * `docs:check` / `docs:generate` scripts build the contracts first. The converted schema is the union of the cloud branches, envelope included;
  * the one rule of the CLI's first stage the branches do not carry — `kind` is required once
  * `apiVersion` is set — is added as `dependentRequired`. The specifier is a literal so the
  * repository's module-boundary gates can read it.

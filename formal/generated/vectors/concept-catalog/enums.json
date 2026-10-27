@@ -49,7 +49,7 @@
    "input": {"schema": "AgentResourceSchema", "module": "agents"},
    "id": "wire/agent",
    "expected":
-   {"optional": [],
+   {"optional": ["builtin", "createdByAgent", "archivedAt"],
     "fields":
     ["id",
      "workspaceId",
@@ -61,6 +61,9 @@
      "permissions",
      "createdBy",
      "ownerPrincipalId",
+     "builtin",
+     "createdByAgent",
+     "archivedAt",
      "createdAt",
      "updatedAt"]}},
   {"witnesses":
@@ -69,7 +72,7 @@
    "input": {"schema": "ConnectorResourceSchema", "module": "connectors"},
    "id": "wire/connector",
    "expected":
-   {"optional": ["kind", "openapi", "postgres"],
+   {"optional": ["kind", "openapi", "postgres", "identity"],
     "fields":
     ["id",
      "workspaceId",
@@ -87,7 +90,8 @@
      "createdAt",
      "updatedAt",
      "openapi",
-     "postgres"]}},
+     "postgres",
+     "identity"]}},
   {"witnesses": ["AgentWorkspace.Theorems.Meta.ConceptCatalog.file_and_skill_bodies_carry_no_owner"],
    "input": {"schema": "FileResourceSchema", "module": "files"},
    "id": "wire/file",
@@ -96,7 +100,7 @@
    "input": {"schema": "SkillDetailSchema", "module": "skills"},
    "id": "wire/skill",
    "expected":
-   {"optional": [],
+   {"optional": ["revisions"],
     "fields":
     ["id",
      "name",
@@ -108,6 +112,7 @@
      "source",
      "instructions",
      "allowedTools",
-     "files"]}}],
+     "files",
+     "revisions"]}}],
  "family": "concept-catalog",
  "description": "The catalog enumerations and the wire field lists of the resource bodies"}

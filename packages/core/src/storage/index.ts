@@ -5,22 +5,40 @@
  *
  * This barrel is deliberately small, in the spirit `packages/core/src/db/index.ts` already
  * established for the repository layer: it re-exports the types and factories a consumer needs
- * and none of this module's internals (`toFsPath`, the content-type sidecar helpers, and so on).
+ * (cloud backends only through `openObjectStore`) and none of this module's internals
+ * (`toFsPath`, the content-type sidecar helpers, and so on).
  *
  * **It is also a *runtime* surface, and nothing behind it may import a test framework.** Every
  * module reachable from here is evaluated by `apps/web`'s files routes in a running server, where
  * `vitest` is neither installed nor resolvable. `contract.ts` is the one module in this directory
  * that imports it, and the comment above that export's absence, below, is the whole story.
  */
+export { inferContentType } from './content-type.js';
+
 export {
+  clampListLimit,
   createScopedObjectStore,
   InvalidWorkspaceIdError,
+  ObjectConflictError,
+  RangeNotSatisfiableError,
   scopedObjectStoreProvider,
+  type ByteRange,
+  type ListPageOptions,
   type ObjectContent,
   type ObjectListEntry,
+  type ObjectMeta,
+  type ObjectPage,
+  type ObjectStoreCapabilities,
+  type ObjectStream,
   type ObjectStore,
   type ObjectStoreProvider,
+  type ObjectStoreProviderV2,
+  type ObjectStoreV2,
   type PutObjectInput,
+  type SignedUrl,
+  type SignedUrlRequest,
+  SignedUrlUnsupportedError,
+  type WriteOptions,
 } from './object-store.js';
 
 export {
@@ -34,41 +52,58 @@ export {
   type SafeRelativePath,
 } from './key-safety.js';
 
+export { withKeyLock } from './key-lock.js';
+
+export {
+  bytesToStream,
+  listPageFrom,
+  readBytes,
+  resolveRange,
+  streamToBytes,
+  toNodeReadable,
+  toWebStream,
+} from './streams.js';
+
 export {
   createLocalFilesystemObjectStore,
   createLocalFilesystemObjectStoreProvider,
 } from './local-fs-store.js';
 
+// Cloud backends are reached only through `openObjectStore`, which imports the one backend file a
+// deployment uses; re-exporting their values here would load every cloud library with this barrel
+// (the storage design, §02). Their types cost nothing at run time.
+export { openObjectStore, openRootObjectStore, type OpenObjectStoreOptions } from './open.js';
 export {
-  createS3ObjectStore,
-  createS3ObjectStoreProvider,
-  createS3ObjectStoreProviderFromConfig,
-  ensureS3Bucket,
-  type S3ObjectStoreConfig,
-  type S3ObjectStoreOptions,
-} from './s3-store.js';
+  ConnectionStoreError,
+  openConnectionStore,
+  resolveFileRoot,
+  ReadOnlyStoreError,
+  type ConnectionCredential,
+  type ConnectionStoreOptions,
+} from './connection-store.js';
 export {
-  createAzureBlobObjectStore,
-  createAzureBlobObjectStoreProvider,
-  createAzureBlobObjectStoreProviderFromConfig,
-  createAzureSdkBlobContainer,
-  type AzureBlobContainer,
-  type AzureBlobEntry,
-  type AzureBlobFileEntry,
-  type AzureBlobFolderEntry,
-  type AzureBlobObjectStoreConfig,
+  newObjectId,
+  parseStorageObjectName,
+  storageAreas,
+  storageObjectName,
+  workspaceFolder,
+  type StorageArea,
+  type StorageObjectName,
+} from './object-name.js';
+export type { S3ObjectStoreConfig, S3ObjectStoreOptions } from './s3-store.js';
+export type {
+  AzureBlobContainer,
+  AzureBlobEntry,
+  AzureBlobFileEntry,
+  AzureBlobFolderEntry,
+  AzureBlobObjectStoreConfig,
 } from './azure-blob-store.js';
-
-export {
-  createGcsObjectStore,
-  createGcsObjectStoreProvider,
-  createGcsObjectStoreProviderFromConfig,
-  GcsBucketUnavailableError,
-  type GcsClient,
-  type GcsObjectContent,
-  type GcsObjectStoreConfig,
-  type GcsObjectStoreOptions,
-  type GcsStoredObject,
+export type {
+  GcsClient,
+  GcsObjectContent,
+  GcsObjectStoreConfig,
+  GcsObjectStoreOptions,
+  GcsStoredObject,
 } from './gcs-store.js';
 
 // The in-memory backend is a reference implementation and a test double, not a deployment
@@ -98,7 +133,6 @@ export { createInMemoryObjectStore, createInMemoryObjectStoreProvider } from './
 // path, from a test file beside it — `import { defineObjectStoreContract } from './contract.js'`,
 // which is exactly what `local-fs-store.test.ts` and `memory-store.test.ts` already do and what
 // `contract.ts`'s own "Adding a backend" recipe prints. A backend outside this package needs a
-// `./storage/contract` entry in `packages/core/package.json`'s `exports`; that file is not this
-// task's to edit (see `apps/web/server/files/object-store-bridge.ts`), and it is a separate entry
+// `./storage/contract` entry in `packages/core/package.json`'s `exports`, which is a separate entry
 // point from this one on purpose — production code and a Vitest-dependent suite do not belong
 // behind the same specifier.

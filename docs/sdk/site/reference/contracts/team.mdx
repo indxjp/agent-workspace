@@ -15,7 +15,7 @@ already a member is `409 already_a_member`.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `email` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 
 ## ChangeMembershipRoleInput
 
@@ -23,7 +23,7 @@ The body of `PATCH /api/memberships/:id`: the new role, and nothing else.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 
 ## CreatedUserResponse
 
@@ -53,7 +53,7 @@ the workspace is `409 email_taken`.
 | --- | --- | --- | --- |
 | `email` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 
 ## MEMBERSHIP_ROLES
 
@@ -92,7 +92,7 @@ The body of `GET /api/memberships`.
 | `userId` | `string` | Yes |  |
 | `email` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 
 ## MembershipResourceSchema
@@ -113,7 +113,7 @@ membership was created, which is the join date a members table shows.
 | `userId` | `string` | Yes |  |
 | `email` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 
 ## MembershipResponse
@@ -134,9 +134,9 @@ The `201` of `POST /api/memberships` and the `200` of `PATCH /api/memberships/:i
 
 One of §21's four roles.
 
+- `"builder"`
 - `"owner"`
 - `"admin"`
-- `"builder"`
 - `"viewer"`
 
 ## MeResponse
@@ -145,7 +145,7 @@ One of §21's four roles.
 | --- | --- | --- | --- |
 | `principalId` | `string` | Yes |  |
 | `kind` | `"api-key" \| "membership"` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `userId` | `null \| string` | Yes |  |
 | `label` | `string` | Yes |  |
@@ -167,7 +167,7 @@ the standard `{ error: { code, message } }` envelope, never a `200` carrying a s
 | --- | --- | --- | --- |
 | `principalId` | `string` | Yes |  |
 | `kind` | `"api-key" \| "membership"` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `userId` | `null \| string` | Yes |  |
 | `label` | `string` | Yes |  |

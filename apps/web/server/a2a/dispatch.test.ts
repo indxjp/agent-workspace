@@ -1,3 +1,4 @@
+import { captureLog } from '../telemetry/capture-log';
 import {
   A2aAgentCardSchema,
   A2aJsonRpcResponseSchema,
@@ -10,17 +11,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   getRunApi,
-  installRunApi,
-  resetRunApi,
   type AgentRef,
   type LaunchContext,
-  type Principal,
+  type RunPrincipal,
   type RunApiEnvironment,
   type SessionRef,
 } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/store';
+import { InMemoryRunStore } from '../runs/memory-store';
+import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import { A2A_MAX_BODY_BYTES, serveA2aCard, serveA2aRpc } from './dispatch';
-import { getA2a, installA2a, resetA2a, type A2aCredentialVia, type A2aIdentity } from './env';
+import { applicationContext, clearApplicationContext } from '../application-context';
+import {
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../application-context-fixtures';
+import type { A2aCredentialVia, A2aEnvironment, A2aIdentity } from './env';
 import { A2A_RATE_LIMITS, resetA2aLimits } from './limits';
 import { taskState } from './v0_3/map';
 import { handleV03, type A2aCall } from './v0_3/rpc';
@@ -33,9 +39,26 @@ const SESSION = '44444444-4444-4444-8444-444444444444';
 const PRODUCTION_VERSION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const KEY_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SECRET = 'ak_live_SECRETSECRETSECRETSECRETSECRET00';
+function installA2a(environment: A2aEnvironment): void {
+  installTestDomains({
+    a2a: { kind: 'serving', environment },
+    // The run-ownership check reads the agents runtime; an empty store answers `unknown`, as the
+    // unwired agents slot did before it moved into the application context.
+    agents: {
+      agents: createInMemoryAgentStoreProvider(),
+      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+    },
+  });
+}
+
+function installedA2a(): A2aEnvironment | null {
+  const a2a = applicationContext()?.a2a;
+  return a2a?.kind === 'serving' ? a2a.environment : null;
+}
+
 const URL_BASE = 'http://web/api/a2a/agents';
 
-function principal(overrides: Partial<Principal> = {}): Principal {
+function principal(overrides: Partial<RunPrincipal> = {}): RunPrincipal {
   return {
     principalId: '77777777-7777-4777-8777-777777777777',
     ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
@@ -59,12 +82,16 @@ const oauthIdentity = (audience: string) => ({
 const IDENTITIES: Readonly<
   Record<
     string,
-    { via: A2aCredentialVia; principal: Principal; keyId: string | null; audience?: string }
+    { via: A2aCredentialVia; principal: RunPrincipal; keyId: string | null; audience?: string }
   >
 > = {
   oauth: oauthIdentity('https://aw.example/api/a2a/agents/support-bot'),
   oauthOtherAgent: oauthIdentity('https://aw.example/api/a2a/agents/billing-bot'),
   oauthMcp: oauthIdentity('https://aw.example/mcp/projects/support-bot'),
+  oauthBuilder: {
+    ...oauthIdentity('https://aw.example/mcp/builder'),
+    principal: principal({ scope: { kind: 'builder', id: OAUTH_CLIENT } }),
+  },
   owner: { via: 'api-key', principal: principal(), keyId: KEY_ID },
   second: { via: 'api-key', principal: principal(), keyId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' },
   viewer: { via: 'api-key', principal: principal({ role: 'viewer' }), keyId: KEY_ID },
@@ -123,14 +150,14 @@ function frame(text: string): unknown {
 function installAll(): void {
   const environment: RunApiEnvironment = {
     authenticate: () => Promise.resolve(null),
-    findAgent: (p: Principal, agentId: string): Promise<AgentRef | null> =>
+    findAgent: (p: RunPrincipal, agentId: string): Promise<AgentRef | null> =>
       Promise.resolve(
         agentId === AGENT
           ? { id: AGENT, workspaceId: p.workspaceId, engine: 'claude-agent-sdk' }
           : null,
       ),
     openSession: (
-      _p: Principal,
+      _p: RunPrincipal,
       agent: AgentRef,
       requested: string | null,
       agentVersionId?: string,
@@ -170,7 +197,7 @@ function installAll(): void {
       await store.finish(run.id, 'cancelled', 'the run was interrupted by request', true);
     },
   };
-  installRunApi(environment);
+  installTestRunApi(environment);
   installA2a({
     identify: (request): Promise<A2aIdentity | null> => {
       const named = IDENTITIES[request.headers.get('x-test-identity') ?? ''];
@@ -290,8 +317,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  resetA2a();
-  resetRunApi();
+  clearApplicationContext();
+  resetTestRunApi();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
@@ -338,7 +365,7 @@ describe('who may call the A2A endpoint', () => {
   });
 
   it('keeps an agent whose run lookup fails out of reach with the same 404', async () => {
-    installRunApi({
+    installTestRunApi({
       authenticate: () => Promise.resolve(null),
       findAgent: () => Promise.resolve(null),
       openSession: () => Promise.resolve(null),
@@ -458,7 +485,7 @@ describe('OAuth access tokens on the A2A endpoint (ADR-0134 part 3)', () => {
     expect((await task(response)).status.state).toBe('submitted');
   });
 
-  it.each(['oauthOtherAgent', 'oauthMcp'])(
+  it.each(['oauthOtherAgent', 'oauthMcp', 'oauthBuilder'])(
     'refuses a token issued for another URL (%s) with 401 invalid_token and a challenge, starting no run',
     async (identity) => {
       const response = await serveA2aRpc(
@@ -548,7 +575,7 @@ describe('the rate limits on the public A2A route', () => {
   });
 
   it('refuses an over-limit call before looking the agent up', async () => {
-    const a2a = getA2a();
+    const a2a = installedA2a();
     if (a2a === null) throw new Error('A2A not installed');
     const findPublishedAgent = vi.fn((workspaceId: string, name: string) =>
       a2a.findPublishedAgent(workspaceId, name),
@@ -705,7 +732,7 @@ describe('message/send', () => {
   it('answers a refused run start -32603 with its code and opens no session', async () => {
     const runs = getRunApi();
     if (runs === null) throw new Error('run API not installed');
-    installRunApi({
+    installTestRunApi({
       ...runs,
       preflight: () =>
         Promise.resolve({
@@ -984,6 +1011,7 @@ describe('the run status a task reports', () => {
       {
         queued: 'submitted',
         running: 'working',
+        awaiting_approval: 'input-required',
         completed: 'completed',
         failed: 'failed',
         cancelled: 'canceled',
@@ -994,12 +1022,7 @@ describe('the run status a task reports', () => {
 
 describe('what the endpoint never says', () => {
   it('turns an infrastructure failure into -32603 with a fixed message and logs no credential', async () => {
-    const logged: string[] = [];
-    for (const channel of ['log', 'info', 'warn', 'error', 'debug'] as const) {
-      vi.spyOn(console, channel).mockImplementation((...args: unknown[]) => {
-        logged.push(args.map(String).join(' '));
-      });
-    }
+    const logged = captureLog();
     openSessionFails = true;
     const response = await serveA2aRpc(send('hi'), 'support-bot');
     const text = await response.text();
@@ -1009,7 +1032,7 @@ describe('what the endpoint never says', () => {
     expect('error' in failure && failure.error.message).toBe(
       'The agent endpoint could not complete the request.',
     );
-    for (const output of [text, ...logged]) {
+    for (const output of [text, logged.text()]) {
       expect(output).not.toContain('hunter2');
       expect(output).not.toContain('postgres://');
       expect(output).not.toContain(SECRET);
@@ -1140,7 +1163,7 @@ describe('the agent card', () => {
     });
 
     it('is rate limited per client address, and an over-limit call looks nothing up', async () => {
-      const a2a = getA2a();
+      const a2a = installedA2a();
       if (a2a === null) throw new Error('the A2A environment is not installed');
       const findDeploymentAgent = vi.fn((name: string) => a2a.findDeploymentAgent(name));
       installA2a({ ...a2a, findDeploymentAgent });
@@ -1157,14 +1180,24 @@ describe('the agent card', () => {
   });
 
   it('answers 503 a2a_not_configured when the endpoint is not installed', async () => {
-    resetA2a();
+    clearApplicationContext();
     const response = await card();
     expect(response.status).toBe(503);
   });
 
+  it('answers the same 503 while the endpoint is disabled, to a call and a card fetch', async () => {
+    installTestDomains({ a2a: { kind: 'disabled' } });
+    const rpcResponse = await serveA2aRpc(rpc('tasks/get', { id: 'x' }), 'support-bot');
+    expect(rpcResponse.status).toBe(503);
+    expect(await errorCodeOf(rpcResponse)).toBe('a2a_not_configured');
+    const cardResponse = await card();
+    expect(cardResponse.status).toBe(503);
+    expect(await errorCodeOf(cardResponse)).toBe('a2a_not_configured');
+  });
+
   it('answers 401, not 503, to an RPC with no credential at all, installed or not', async () => {
-    resetA2a();
-    resetRunApi();
+    clearApplicationContext();
+    resetTestRunApi();
     const response = await serveA2aRpc(
       new Request(`${URL_BASE}/support-bot`, { method: 'POST' }),
       'x',
@@ -1174,7 +1207,7 @@ describe('the agent card', () => {
   });
 
   it('answers 503 a2a_not_configured to a credential-less card fetch when nothing is installed', async () => {
-    resetA2a();
+    clearApplicationContext();
     const response = await serveA2aCard(
       new Request(`${URL_BASE}/support-bot/.well-known/agent-card.json`),
       'support-bot',

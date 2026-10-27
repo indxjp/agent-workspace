@@ -55,7 +55,7 @@ value, with every other key untouched. -/
   (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#agents")]
 theorem policy_rewrite_renames_the_discriminant :
     migratePolicy (legacyPolicy rest) =
-      { discriminant := some ("engine", migratedEngine), rest } := by decide
+      { discriminant := some ("engine", migratedEngine), rest } := by decide +kernel
 
 /-- No document comes out of the rewrite still naming `provider`, and none loses the rest of its
 keys. -/
@@ -63,27 +63,27 @@ keys. -/
 theorem policy_rewrite_leaves_no_provider :
     (policyCases.all fun p =>
       ((migratePolicy p).discriminant.map Prod.fst != some "provider") &&
-        ((migratePolicy p).rest == p.rest)) = true := by decide
+        ((migratePolicy p).rest == p.rest)) = true := by decide +kernel
 
 /-- The rewrite is idempotent: a document that already states `engine` is left alone, which is what
 makes re-running the migration set safe. -/
 @[aw_spec (tier := T4) (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#agents")]
 theorem policy_rewrite_is_idempotent :
     (policyCases.all fun p => migratePolicy (migratePolicy p) == migratePolicy p) = true := by
-  decide
+  decide +kernel
 
 /-- A `NULL` policy column stays `NULL`. It means "compile from the permission checkboxes", and an
 invented engine there would turn an absent policy into a stored one. -/
 @[aw_spec (tier := T4) (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#agents")]
 theorem policy_rewrite_leaves_a_null_column :
-    migratePolicy { discriminant := none, rest } = { discriminant := none, rest } := by decide
+    migratePolicy { discriminant := none, rest } = { discriminant := none, rest } := by decide +kernel
 
 /-- A document naming neither key is left for a reader to find rather than given an invented
 engine. -/
 @[aw_spec (tier := T4) (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#agents")]
 theorem policy_rewrite_invents_no_discriminant :
     migratePolicy { discriminant := some ("harness", migratedEngine), rest } =
-      { discriminant := some ("harness", migratedEngine), rest } := by decide
+      { discriminant := some ("harness", migratedEngine), rest } := by decide +kernel
 
 /-! ## The session backfill -/
 
@@ -94,13 +94,13 @@ theorem session_backfill_pins_exactly_the_identified :
     (sessionCases.all fun s =>
       (migrateSession s).engine ==
         (if s.engine.isNone && s.engineSessionId.isSome then some migratedEngine
-         else s.engine)) = true := by decide
+         else s.engine)) = true := by decide +kernel
 
 /-- The backfill never touches the identity itself: it names the engine, it does not mint an id. -/
 @[aw_spec (tier := T4) (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#sessions")]
 theorem session_backfill_preserves_the_identity :
     (sessionCases.all fun s =>
-      (migrateSession s).engineSessionId == s.engineSessionId) = true := by decide
+      (migrateSession s).engineSessionId == s.engineSessionId) = true := by decide +kernel
 
 /-- The release invariant, after the backfill: `engine IS NULL AND engine_session_id IS NOT NULL`
 holds of no post-migration row. This is the acceptance criterion's `SELECT count(*) … = 0`. -/
@@ -108,7 +108,7 @@ holds of no post-migration row. This is the acceptance criterion's `SELECT count
   (doc := "docs/adr/0065-an-agents-engine-is-an-extension-point-behind-one-port.md#d8--a-session-is-pinned-to-one-engine")
   (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#sessions")]
 theorem session_backfill_establishes_the_pairing :
-    (sessionCases.all fun s => enginePaired (migrateSession s)) = true := by decide
+    (sessionCases.all fun s => enginePaired (migrateSession s)) = true := by decide +kernel
 
 /-- The invariant did **not** hold before the migration: the third case is exactly the row the
 backfill exists for. Without this, the theorem above would be satisfied by a migration that did
@@ -116,17 +116,17 @@ nothing at all. -/
 @[aw_spec (tier := T4) (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#sessions")]
 theorem the_backfill_has_something_to_do :
     enginePaired ⟨some "se1", none⟩ = false ∧
-    enginePaired (migrateSession ⟨some "se1", none⟩) = true := by decide
+    enginePaired (migrateSession ⟨some "se1", none⟩) = true := by decide +kernel
 
 /-- The backfill is idempotent. -/
 @[aw_spec (tier := T4) (ts := "migrations/0025_name_the_engine_in_stored_rows.sql#sessions")]
 theorem session_backfill_is_idempotent :
     (sessionCases.all fun s => migrateSession (migrateSession s) == migrateSession s) = true := by
-  decide
+  decide +kernel
 
 /-- The engine the backfill writes is the one the contracts publish, not a loose string. -/
 @[aw_spec (tier := T4) (ts := "packages/contracts/src/engines.ts#ENGINE_IDS")]
 theorem the_backfilled_engine_is_in_the_catalogue :
-    engineIds.contains migratedEngine = true := by decide
+    engineIds.contains migratedEngine = true := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.ContractsEngines

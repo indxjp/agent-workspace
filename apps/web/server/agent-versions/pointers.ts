@@ -17,6 +17,9 @@
  *    therefore be refused, and that is intended: the agent never becomes what a save would refuse.
  * 4. `applyAndPoint` — one core transaction rewrites the row and the assignments (`local` only),
  *    moves the pointer, checks C9 and writes the move's `agent-changed` audit row (spec §36).
+ *    A body `expectedVersion` (#1847) is compared with the pointer inside that transaction's lock:
+ *    a different pointer answers `409 pointer_moved`, `details: [environment:<env>, current:<n|none>]`,
+ *    and nothing moves. A version a caller saved for the refused move stays listed, unpointed.
  *    `name-conflict` → `409 agent_name_conflict` (the version's agent name is another agent's: the
  *    code legacy `POST`/`PATCH /api/agents` answer), `surface-name-taken` →
  *    `409 surface_name_taken`, `details: [surface:<name>]`, and the row is unchanged.
@@ -49,10 +52,12 @@
 import type {
   AgentPointerAudit,
   AgentPointerMoveReason,
+  AgentVersionRecord,
   ApplyAndPointOutcome,
   MaterialisedAgent,
   ResolvedReferences,
-} from '@agent-workspace/core/db';
+  WorkspaceAgentVersionStore,
+} from './store';
 import {
   AGENT_VERSION_PROBLEM_CODES,
   PromoteAgentRequestSchema,
@@ -65,19 +70,21 @@ import {
 import { AW_DEV_TOOLS_CONNECTOR } from '@indx-workspace/contracts/tool-connectors';
 import type { z } from 'zod';
 
-import type { AgentVersionRecord } from '@agent-workspace/core/db';
 import type { AgentRecord } from '../agents/contract';
 import { toAgentResource } from '../agents/contract';
-import { agentNotFound, problem, type ApiResult } from '../agents/handlers';
+import { agentNotFound } from '../agents/handlers';
+import { formatIssues, problem, type ApiResult } from '../http/result';
 import { toAgentVersionPointer, toAgentVersionResource } from './contract';
 import { materialise } from './materialise';
 import { definitionReferences, validateAgentVersion } from './pipeline';
+import type { StorageConnectionLookup } from './storage-grants';
 import {
   agentNameConflict,
   agentVersionNotFound,
   codeToolNeedsHost,
   noPointer,
   nothingToRollBack,
+  pointerMoved,
   promotionGateFailed,
   promotionNotEvaluated,
   stdioConnectorNeedsToolSandbox,
@@ -88,7 +95,6 @@ import {
 import { decidePromote, decideRollback, rollbackHistory, type PromoteDecision } from './release';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
-import type { WorkspaceAgentVersionStore } from './store';
 
 /** Who moves the pointer: the authenticated principal's ids and its display attribution. */
 export interface PointerActor {
@@ -106,6 +112,8 @@ export interface SetAgentPointerDependencies {
   readonly ceiling?: RequestCeiling | null;
   /** The caller's tool bundles (pipeline step 4, issue #790). */
   readonly toolBundles?: ToolBundleLookup | null;
+  /** The workspace's storage connections, which step 4a resolves `storage://` grants against. */
+  readonly storageConnections?: StorageConnectionLookup | null;
   /** Whether the deployment has a tool host (ADR-0118 TS8); absent means it has none. */
   readonly toolHost?: boolean;
   /** Why the tool sandbox cannot enforce a code tool's `allowedDomains` (#1018), or `null`. */
@@ -169,9 +177,7 @@ function invalidBody(request: string, error: z.ZodError): ApiResult {
     AGENT_VERSION_PROBLEM_CODES.invalid_agent_version,
     'invalid_agent_version',
     `The body is not a ${request}.`,
-    error.issues.map(
-      (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
-    ),
+    formatIssues(error.issues),
   );
 }
 
@@ -192,11 +198,13 @@ async function pointAt(
     readonly number: number;
     readonly reason: AgentPointerMoveReason;
     readonly dryRun: boolean;
+    /** Compare-and-set (#1847): absent moves unconditionally, `null` expects an unset pointer. */
+    readonly expectedVersion?: number | null | undefined;
   },
   actor: PointerActor,
   dependencies: SetAgentPointerDependencies,
 ): Promise<Pointed> {
-  const { environment, number, reason } = move;
+  const { environment, number, reason, expectedVersion } = move;
   const { store } = dependencies;
 
   const record = await store.find(agent.id, number);
@@ -237,6 +245,7 @@ async function pointAt(
         reason,
         agent: materialised(references),
         audit,
+        ...(expectedVersion === undefined ? {} : { expectedVersion }),
       }),
   );
   switch (outcome.kind) {
@@ -251,6 +260,8 @@ async function pointAt(
       return { kind: 'refused', result: agentNameConflict(outcome.name) };
     case 'surface-name-taken':
       return { kind: 'refused', result: surfaceNameTaken(outcome.name) };
+    case 'pointer-moved':
+      return { kind: 'refused', result: pointerMoved(environment, outcome.current) };
     case 'subagent-nesting':
       return {
         kind: 'refused',
@@ -270,7 +281,7 @@ export async function setAgentPointer(
 ): Promise<ApiResult> {
   const parsed = SetAgentPointerRequestSchema.safeParse(raw);
   if (!parsed.success) return invalidBody('pointer request', parsed.error);
-  const { environment, version: number } = parsed.data;
+  const { environment, version: number, expectedVersion } = parsed.data;
   const bar = environment === 'production' ? promotionBar(dependencies) : null;
   if (bar !== null) {
     const record = await dependencies.store.find(agent.id, number);
@@ -297,7 +308,7 @@ export async function setAgentPointer(
   }
   const pointed = await pointAt(
     agent,
-    { environment, number, reason: 'set', dryRun: false },
+    { environment, number, reason: 'set', dryRun: false, expectedVersion },
     actor,
     dependencies,
   );

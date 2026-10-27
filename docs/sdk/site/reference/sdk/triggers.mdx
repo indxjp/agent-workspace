@@ -1,0 +1,141 @@
+---
+title: "TriggersClient"
+description: "Every method of TriggersClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/triggers.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/triggers/**` — issue #1295, ADR-0144. A trigger starts a run of one agent without a person
+at the keyboard: a `webhook` is a URL whose secret is its only authentication, a `schedule` is a
+cron expression. A sender calls the `firePath` that `create` and `rotateSecret` return; there is
+no SDK method for it, because the sender is a provider that holds no API key.
+
+Problem codes: `trigger_not_found` 404, `trigger_name_taken` 409,
+`trigger_agent_not_runnable` 403, `trigger_owner_not_allowed` 403, `trigger_subject_not_allowed`
+403, `trigger_not_webhook` 409.
+
+## list
+
+Every trigger of the workspace. No secret is in the answer, only `hasSecret`.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly TriggerResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly TriggerResource[]>`
+
+**Route:** `GET /api/triggers`
+
+## get
+
+```ts
+async get(id: string, options?: RequestOptions): Promise<TriggerResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TriggerResource>`
+
+**Route:** `GET /api/triggers/:id`
+
+## create
+
+For a `webhook`, `secret` and `firePath` in the answer are the whole credential and this is the
+only time they exist outside the caller's hands; narrow with `'secret' in answer`. A `schedule`
+answers just `{ trigger }`, because it has no secret. `403 trigger_agent_not_runnable` when the
+caller cannot run the agent, and `409 trigger_name_taken`. `outputSchema` makes every run the
+trigger starts answer in that schema (ADR-0154); `422 engine_capability_unsupported` at firing
+when the agent's engine cannot produce structured output. `subject` (1 to 256 characters) is
+the caller every run the trigger starts acts for (ADR-0156): it becomes the `sub` of the identity
+assertion a connector receives, and a webhook body never overrides it. Only a caller who may
+create API keys may set it (`403 trigger_subject_not_allowed`).
+
+```ts
+create(input: CreateTriggerInput, options?: RequestOptions): Promise<CreateTriggerResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateTriggerInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<CreateTriggerResponse>`
+
+**Route:** `POST /api/triggers`
+
+## update
+
+`409 trigger_name_taken`; `zoomSecretToken` is write-only and `null` clears it. `outputSchema`
+replaces the schema, `null` clears it, and leaving it out keeps it. `subject` works the same
+way (ADR-0156). Setting it, or any change to a trigger that has one, needs a caller who may
+create API keys (`403 trigger_subject_not_allowed`); anyone who may edit the trigger may clear it.
+
+```ts
+async update(id: string, patch: UpdateTriggerInput, options?: RequestOptions): Promise<TriggerResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `patch` | `UpdateTriggerInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TriggerResource>`
+
+**Route:** `PATCH /api/triggers/:id`
+
+## remove
+
+Delete the trigger; its URL stops answering at once. The answer is the trigger as it was.
+
+```ts
+async remove(id: string, options?: RequestOptions): Promise<TriggerResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TriggerResource>`
+
+**Route:** `DELETE /api/triggers/:id`
+
+## rotateSecret
+
+Replace the URL secret. `secret` and `firePath` in the answer are shown once, and the old URL
+stops working at once. Rotate when a URL may have reached an access log.
+`409 trigger_not_webhook` for a `schedule` trigger, which has no secret.
+
+```ts
+rotateSecret(id: string, options?: RequestOptions): Promise<TriggerSecretResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TriggerSecretResponse>`
+
+**Route:** `POST /api/triggers/:id/secret`
+
+## CreateTriggerInput
+
+What a caller supplies to create a trigger; `outputSchema` may be a Zod type (ADR-0154).
+
+- `Omit<Readonly<{ name: string; agentId: string; prompt: string; kind: "webhook"; zoomSecretToken?: string | undefined; enabled?: boolean | undefined; outputSchema?: Record<string, unknown> | undefined; subject?: string | undefined; }>, "outputSchema"> & { readonly outputSchema?: TriggerOutputSchema; }`
+- `Omit<Readonly<{ cron: string; timezone: string; name: string; agentId: string; prompt: string; kind: "schedule"; enabled?: boolean | undefined; outputSchema?: Record<string, unknown> | undefined; subject?: string | undefined; }>, "outputSchema"> & { readonly outputSchema?: TriggerOutputSchema; }`
+
+## UpdateTriggerInput
+
+What a caller supplies to patch a trigger; `outputSchema: null` clears it (ADR-0154).
+
+`UpdateTriggerInput`

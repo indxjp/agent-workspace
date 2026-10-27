@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test, { after, before } from 'node:test';
 
-import { createDockerLane, createKindLane } from './lane.mjs';
+import { createDockerLane, createKindLane, run } from './lane.mjs';
 
 const laneName = process.env.ISOLATION_LANE;
 if (laneName !== 'docker' && laneName !== 'kind' && laneName !== 'kind-chart') {
@@ -212,6 +212,24 @@ check('memory-enforced', 'a process over the memory limit is killed', async () =
       );
       return state.stdout.trim();
     };
+    // On some kernels (7.0 on the self-hosted CI host) the limit is hit in the POD cgroup, whose
+    // 128 MiB also holds the pause container, not in the container's: the kernel kills the hog
+    // (oom.group takes the container with it, resetting its memory.events) and containerd reports
+    // "Error", not "OOMKilled". The pod cgroup outlives the restart and keeps the count. A kind node
+    // is a Docker container named after the node, so the count is read through `docker exec`.
+    const podCgroupOomKills = async () => {
+      if (!isKind) return 0;
+      const pod = await lane.kubectl(
+        'get', 'pod', sandbox.pod, '-n', sandbox.namespace, '-o', 'jsonpath={.metadata.uid} {.spec.nodeName}',
+      );
+      const [uid = '', node = ''] = pod.stdout.trim().split(' ');
+      if (uid === '' || node === '') return 0;
+      const events = await run('docker', [
+        'exec', node, 'sh', '-c',
+        `cat "$(find /sys/fs/cgroup/kubelet.slice -maxdepth 3 -type d -name '*pod${uid.replaceAll('-', '_')}.slice')/memory.events"`,
+      ]);
+      return Number(/^oom_kill (\d+)$/mu.exec(events.stdout)?.[1] ?? 0);
+    };
     assert.match((await allocate(16_000_000)).stdout, /survived/u, 'a small allocation must work');
     assert.equal(await oomKills(), 0, 'nothing may have been OOM-killed before the stress');
     const overBytes = (LIMIT_MB + 256) * 1024 * 1024;
@@ -223,16 +241,19 @@ check('memory-enforced', 'a process over the memory limit is killed', async () =
     );
     // Without this, any unrelated exec failure would also read as "killed by the memory limit".
     let kills = Number.NaN;
+    let podKills = 0;
     let reason = '';
     for (let attempt = 0; attempt < 15; attempt += 1) {
       kills = await oomKills();
       reason = await podOomReason();
-      if (kills > 0 || reason.includes('OOMKilled')) break;
+      podKills = await podCgroupOomKills();
+      if (kills > 0 || podKills > 0 || reason.includes('OOMKilled')) break;
       await new Promise((resolve) => setTimeout(resolve, 2_000));
     }
     assert.ok(
-      kills > 0 || reason.includes('OOMKilled'),
-      `the cgroup or pod must record an OOM kill: oom_kill=${String(kills)}, pod reason=${JSON.stringify(reason)}, ` +
+      kills > 0 || podKills > 0 || reason.includes('OOMKilled'),
+      `the cgroup or pod must record an OOM kill: oom_kill=${String(kills)}, pod cgroup oom_kill=${String(podKills)}, ` +
+        `pod reason=${JSON.stringify(reason)}, ` +
         `stdout=${JSON.stringify(over.stdout.trim())}, stderr=${JSON.stringify(over.stderr.trim())}`,
     );
   });

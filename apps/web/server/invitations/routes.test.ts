@@ -20,8 +20,9 @@ import { Principal } from '../rbac/principal';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
 import { createInvitation as createInvitationHandler } from './handlers';
 import type { InvitationAuditEvent } from './runtime';
-import { clearInvitationsRuntime, configureInvitationsRuntime } from './runtime';
 import { createManualLinkInvitationSender } from './send-invitation';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const MEMBERS = [
   {
@@ -111,19 +112,39 @@ afterEach(() => {
   ]) {
     delete process.env[name];
   }
-  clearInvitationsRuntime();
+  clearApplicationContext();
   vi.restoreAllMocks();
 });
 
 describe('/api/invitations route wiring', () => {
+  it('answers 503 rbac_runtime_not_configured while no context is installed', async () => {
+    // The invitations domain and the RBAC gate live in one context, so the gate answers first.
+    const harness = installInvitationHarness();
+    clearApplicationContext();
+    try {
+      const response = await harness.call(CREATE, {
+        method: 'POST',
+        path: '/api/invitations',
+        as: { email: 'owner@example.test' },
+        body: { email: 'invitee@example.test', role: 'viewer' },
+      });
+      expect(response.status).toBe(503);
+      expect(response.text).toContain('rbac_runtime_not_configured');
+    } finally {
+      harness.teardown();
+    }
+  });
+
   it('returns a token once, rotates it on resend, and redacts every list and audit shape', async () => {
     const audit: InvitationAuditEvent[] = [];
-    configureInvitationsRuntime({
-      recordAuditEvent: (event) => {
-        audit.push(event);
-        return Promise.resolve();
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: (event) => {
+          audit.push(event);
+          return Promise.resolve();
+        },
+        sendInvitation: createManualLinkInvitationSender(),
       },
-      sendInvitation: createManualLinkInvitationSender(),
     });
     const harness = installInvitationHarness();
     try {
@@ -179,13 +200,16 @@ describe('/api/invitations route wiring', () => {
   });
 
   it('applies conferral dominance to Admin and route grants to Builder and Viewer', async () => {
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
-      for (const role of ['owner', 'builder'] as const) {
+      // ADR-0152: Admin holds everything Builder holds, so only Owner is beyond it.
+      for (const role of ['owner'] as const) {
         const response = await harness.call(CREATE, {
           method: 'POST',
           path: '/api/invitations',
@@ -221,9 +245,11 @@ describe('/api/invitations route wiring', () => {
 
   it('rejects undeclared fields on every invitation JSON body before any state change', async () => {
     process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
@@ -285,9 +311,11 @@ describe('/api/invitations route wiring', () => {
 
   it('rejects every malformed dynamic invitation id before a repository call', async () => {
     process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
@@ -331,9 +359,11 @@ describe('/api/invitations route wiring', () => {
   });
 
   it('makes foreign and nonexistent resend and revoke responses byte-identical', async () => {
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
@@ -377,9 +407,11 @@ describe('/api/invitations route wiring', () => {
 
   it('makes a mismatched identity, an active tenant session, and a nonexistent invitation indistinguishable', async () => {
     process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
@@ -449,12 +481,14 @@ describe('/api/invitations route wiring', () => {
   it('accepts with only the dedicated OIDC identity cookie, binds identity, and mints the invited-workspace session', async () => {
     process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
     const audit: InvitationAuditEvent[] = [];
-    configureInvitationsRuntime({
-      recordAuditEvent: (event) => {
-        audit.push(event);
-        return Promise.resolve();
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: (event) => {
+          audit.push(event);
+          return Promise.resolve();
+        },
+        sendInvitation: createManualLinkInvitationSender(),
       },
-      sendInvitation: createManualLinkInvitationSender(),
     });
     const harness = installInvitationHarness();
     try {
@@ -506,12 +540,14 @@ describe('/api/invitations route wiring', () => {
   it('attributes an already-member acceptance audit to that exact membership principal', async () => {
     process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
     const audit: InvitationAuditEvent[] = [];
-    configureInvitationsRuntime({
-      recordAuditEvent: (event) => {
-        audit.push(event);
-        return Promise.resolve();
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: (event) => {
+          audit.push(event);
+          return Promise.resolve();
+        },
+        sendInvitation: createManualLinkInvitationSender(),
       },
-      sendInvitation: createManualLinkInvitationSender(),
     });
     const harness = installInvitationHarness();
     try {
@@ -561,9 +597,11 @@ describe('/api/invitations route wiring', () => {
     process.env['OIDC_CLIENT_ID'] = 'client';
     process.env['OIDC_CLIENT_SECRET'] = 'client-secret';
     process.env['OIDC_REDIRECT_URI'] = 'https://control-plane.test/api/auth/callback';
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
@@ -628,9 +666,11 @@ describe('/api/invitations route wiring', () => {
 
   it('requires the application origin and dedicated identity cookie before reading an invitation', async () => {
     process.env['SESSION_SECRET'] = TEST_SESSION_SECRET;
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installInvitationHarness();
     try {
@@ -684,9 +724,11 @@ describe('/api/invitations route wiring', () => {
   });
 
   it('refuses API-key callers without borrowing a user identity', async () => {
-    configureInvitationsRuntime({
-      recordAuditEvent: () => Promise.resolve(),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: () => Promise.resolve(),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installRbacHarness(MEMBERS);
     try {

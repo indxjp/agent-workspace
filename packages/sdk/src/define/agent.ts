@@ -10,7 +10,9 @@ import {
   AgentPolicyLimitsSchema,
   AgentPolicySchema,
   GrantingToolRuleSchema,
+  RequireApprovalRuleSchema,
   claudeDeniedToolsFor,
+  conflictingApprovalRules,
   type AgentPermissionKey,
   type AgentPolicyLimits,
 } from '@indx-workspace/contracts/agents';
@@ -69,7 +71,10 @@ type PolicyArmInput<E extends EngineId> = Extract<z.input<typeof AgentPolicySche
  * that engine carries beyond the portable `skills` and `limits`, the Claude tool grammar and an
  * engine switch's `withheldPermissions`. The Claude arm adds `autoApprove`: tool rules the run
  * pre-approves, so a tool the permissions grant does not stop on a permission prompt nobody can
- * answer. A rule for a tool the permissions turn off is refused.
+ * answer, and `requireApproval`: tool names whose every call waits for a human's approval (ADR-0145
+ * D3). A rule for a tool the permissions turn off is refused, and so is a tool in both lists.
+ * `handoff: true` offers the `handoff_to_person` tool: the run ends after an `agent.handoff` frame
+ * (ADR-0145 D4).
  */
 export type EngineSettings = {
   readonly [E in EngineId]: Flatten<
@@ -78,7 +83,10 @@ export type EngineSettings = {
       'engine' | 'skills' | 'limits' | 'tools' | 'withheldPermissions'
     > &
       (E extends 'claude-agent-sdk'
-        ? { readonly autoApprove?: readonly string[] | undefined }
+        ? {
+            readonly autoApprove?: readonly string[] | undefined;
+            readonly requireApproval?: readonly string[] | undefined;
+          }
         : unknown)
   >;
 }[EngineId];
@@ -237,11 +245,13 @@ function settingsArm<const E extends EngineId>(id: E) {
     .readonly();
 }
 
-/** The Claude arm: the catalogue's settings (none) and the SDK-only `autoApprove`. */
+/** The Claude arm: the catalogue's settings (none) and the SDK-only `autoApprove`, `requireApproval` and `handoff`. */
 const claudeSettingsArm = z
   .object({
     ...ENGINE_CATALOGUE[claudeAgentSdk].settings,
     autoApprove: z.array(GrantingToolRuleSchema).readonly().optional(),
+    requireApproval: z.array(RequireApprovalRuleSchema).readonly().optional(),
+    handoff: z.literal(true).optional(),
     id: z.literal(claudeAgentSdk),
   })
   .strict()
@@ -405,15 +415,27 @@ export const DefineAgentInputSchema = z
           unrestrictedNetwork: value.permissions?.unrestrictedNetwork ?? false,
         }),
       );
-      for (const [index, rule] of (value.engine.autoApprove ?? []).entries()) {
-        const tool = rule.split('(', 1)[0] ?? rule;
-        if (denied.has(tool)) {
-          context.addIssue({
-            code: 'custom',
-            path: ['engine', 'autoApprove', index],
-            message: `${JSON.stringify(rule)} names a tool the permissions turn off`,
-          });
+      for (const key of ['autoApprove', 'requireApproval'] as const) {
+        for (const [index, rule] of (value.engine[key] ?? []).entries()) {
+          if (denied.has(rule.split('(', 1)[0] ?? rule)) {
+            context.addIssue({
+              code: 'custom',
+              path: ['engine', key, index],
+              message: `${JSON.stringify(rule)} names a tool the permissions turn off`,
+            });
+          }
         }
+      }
+      const requireApproval = value.engine.requireApproval ?? [];
+      for (const index of conflictingApprovalRules(
+        value.engine.autoApprove ?? [],
+        requireApproval,
+      )) {
+        context.addIssue({
+          code: 'custom',
+          path: ['engine', 'requireApproval', index],
+          message: `${JSON.stringify(requireApproval[index])} matches a tool in autoApprove; a tool cannot both skip and wait for approval`,
+        });
       }
     }
     const mcpTools = new Set((value.tools ?? []).filter(isMcpTool).map((tool) => tool.connector));

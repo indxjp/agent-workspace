@@ -50,6 +50,64 @@ describe('aw agents export', () => {
     expect(AgentDefinitionSchema.parse(JSON.parse(run.stdout))).toEqual(definition);
     expect(run.stdout).not.toContain(IDS.agent);
   });
+
+  it('prints exactly the JSON it always has, byte for byte, with no flags', async () => {
+    const run = await runCli(['agents', 'export', IDS.agent], { route: source });
+    expect(run.code).toBe(EXIT_CODE.ok);
+    expect(run.stdout).toBe(
+      [
+        '{',
+        '  "apiVersion": "agentworkspace.dev/v1",',
+        '  "kind": "AgentDefinition",',
+        '  "agent": {',
+        '    "name": "Summariser",',
+        '    "instructions": "Summarise.",',
+        '    "permissions": {',
+        '      "readFiles": true,',
+        '      "writeFiles": false,',
+        '      "runCommands": false,',
+        '      "unrestrictedNetwork": false',
+        '    },',
+        '    "model": "claude-x",',
+        '    "modelConnectionName": null,',
+        '    "runtimeProfileName": null',
+        '  },',
+        '  "policy": {',
+        '    "engine": "claude-agent-sdk",',
+        '    "tools": {',
+        '      "base": "claude_code_preset",',
+        '      "autoApprove": [],',
+        '      "deny": [',
+        '        "Bash"',
+        '      ],',
+        '      "permissionMode": "default",',
+        '      "allowDangerouslySkipPermissions": false',
+        '    },',
+        '    "skills": {',
+        '      "mode": "allowlist",',
+        '      "names": []',
+        '    },',
+        '    "limits": {',
+        '      "maxTurns": 20,',
+        '      "maxBudgetUsd": null',
+        '    }',
+        '  },',
+        '  "policySource": "stored",',
+        '  "resources": {',
+        '    "files": [],',
+        '    "skills": [],',
+        '    "connectors": []',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    expect(run.calls.map((call) => `${call.method} ${call.url.pathname}`)).toEqual([
+      `GET /api/agents/${IDS.agent}`,
+      `GET /api/agents/${IDS.agent}/policy`,
+      `GET /api/agents/${IDS.agent}/resources`,
+    ]);
+  });
 });
 
 describe('aw agents import', () => {

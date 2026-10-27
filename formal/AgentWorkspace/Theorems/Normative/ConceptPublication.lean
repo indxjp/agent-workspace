@@ -24,13 +24,13 @@ four, and each names the table of its kind. -/
 theorem shareable_objects_are_exactly_four :
     WireEnum.wires SubjectType = ["agent", "session", "project", "skill"] ∧
       (WireEnum.all : List SubjectType).map SubjectType.table =
-        [.agents, .sessions, .projects, .skills] := by decide
+        [.agents, .sessions, .projects, .skills] := by decide +kernel
 
 /-- "Files are not independently shareable": no subject type names the `files` table. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")
   (ts := "packages/contracts/src/shares.ts#SHARE_SUBJECT_TYPES")]
 theorem files_are_not_shareable (t : SubjectType) : t.table ≠ .files := by
-  cases t <;> decide
+  cases t <;> decide +kernel
 
 /-- "`shares` is one table for every shareable object, not one table per type": one `NOT NULL`
 `subject_type` column whose check admits exactly the four subject types, and one `NOT NULL`
@@ -44,7 +44,7 @@ theorem one_table_for_every_shareable_object :
       (catalogue .shares).oneOfCheck? "shares_subject_type_valid" =
         some ("subject_type", WireEnum.wires SubjectType) ∧
       ((catalogue .shares).foreignKeys.all fun fk => !fk.columns.contains "subject_id") = true := by
-  decide
+  decide +kernel
 
 /-- "Three visibilities, for every shareable object": private, workspace and public, stored in the
 `NOT NULL` column `visibility`. -/
@@ -52,7 +52,7 @@ theorem one_table_for_every_shareable_object :
   (ts := "packages/contracts/src/shares.ts#SHARE_VISIBILITIES")]
 theorem three_visibilities :
     WireEnum.wires Visibility = ["private", "workspace", "public"] ∧
-      (catalogue .shares).isNotNull "visibility" = true := by decide
+      (catalogue .shares).isNotNull "visibility" = true := by decide +kernel
 
 /-! ## Expiry, passphrase, budget, limits -/
 
@@ -65,7 +65,7 @@ theorem expiry_options_and_lifetimes :
       Expiry.hours24.durationMs? = some (24 * 60 * 60 * 1000) ∧
       Expiry.days7.durationMs? = some (7 * 24 * 60 * 60 * 1000) ∧
       Expiry.days30.durationMs? = some (30 * 24 * 60 * 60 * 1000) ∧
-      Expiry.never.durationMs? = none := by decide
+      Expiry.never.durationMs? = none := by decide +kernel
 
 /-- "Optional expiry … and optional passphrase. Neither is required": both columns are nullable. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
@@ -74,7 +74,7 @@ theorem expiry_and_passphrase_are_optional :
     (catalogue .shares).isNotNull "expires_at" = false ∧
       (catalogue .shares).isNotNull "passphrase_hash" = false ∧
       (catalogue .shares).hasColumn "expires_at" = true ∧
-      (catalogue .shares).hasColumn "passphrase_hash" = true := by decide
+      (catalogue .shares).hasColumn "passphrase_hash" = true := by decide +kernel
 
 /-- "Budget cap $20 total": a runnable share published without a cap gets twenty dollars, which
 fits `budget_cap_usd numeric(12, 4)`. -/
@@ -82,13 +82,13 @@ fits `budget_cap_usd numeric(12, 4)`. -/
   (ts := "apps/web/server/shares/core/service.ts#ShareService")]
 theorem default_runnable_budget_is_twenty_dollars :
     ((Decimal.parse? defaultRunnableBudgetUsd).bind Decimal.toMicros?) = some 20000000 ∧
-      ((Decimal.parse? defaultRunnableBudgetUsd).map (Decimal.fits 12 4)) = some true := by decide
+      ((Decimal.parse? defaultRunnableBudgetUsd).map (Decimal.fits 12 4)) = some true := by decide +kernel
 
 /-- "Per-visitor limit 5 messages per hour": the limit is five and the window one hour. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2063-publishing-an-agent")
   (ts := "apps/web/server/shares/runnable/service.ts#RunnableShareService")]
 theorem five_messages_per_visitor_per_hour :
-    visitorMessageLimit = 5 ∧ visitorWindowMs = 60 * 60 * 1000 := by decide
+    visitorMessageLimit = 5 ∧ visitorWindowMs = 60 * 60 * 1000 := by decide +kernel
 
 /-- "Budget cap $20 total, then the link stops accepting messages": a runnable share whose spend
 has reached its cap is exhausted, and one below its cap is not. -/
@@ -97,7 +97,7 @@ has reached its cap is exhausted, and one below its cap is not. -/
 theorem budget_is_exhausted_at_the_cap (s : Share) (hcap : s.budgetCapUsd = some "20") :
     (s.spentUsd = "20.000000" → s.budgetExhausted = true) ∧
       (s.spentUsd = "19.999999" → s.budgetExhausted = false) := by
-  refine ⟨fun h => ?_, fun h => ?_⟩ <;> simp [Share.budgetExhausted, hcap, h] <;> decide
+  refine ⟨fun h => ?_, fun h => ?_⟩ <;> simp [Share.budgetExhausted, hcap, h] <;> decide +kernel
 
 example : ∃ s : Share, s.budgetCapUsd = some "20" :=
   ⟨{ (default : Share) with budgetCapUsd := some "20" }, rfl⟩
@@ -140,27 +140,27 @@ theorem every_option_fits_its_subject (t : SubjectType) :
       optionsFit .agent (some .runnable) false true false true = true ∧
       optionsFit .agent (some .definition) false false false true = true ∧
       optionsFit .session none true false true false = true := by
-  cases t <;> decide
+  cases t <;> decide +kernel
 
 /-- A passphrase is 1 to 1024 code units long (`SHARE_PASSPHRASE_MAX_LENGTH`). -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2062-publishing-a-session-run-history")
   (ts := "packages/contracts/src/shares.ts#SHARE_PASSPHRASE_MAX_LENGTH")]
 theorem passphrase_length_bounds :
     passphraseAccepted 1 = true ∧ passphraseAccepted 1024 = true ∧
-      passphraseAccepted 0 = false ∧ passphraseAccepted 1025 = false := by decide
+      passphraseAccepted 0 = false ∧ passphraseAccepted 1025 = false := by decide +kernel
 
 /-- "`budgetCapUsd`: a positive amount in USD": zero and negative budgets are refused, any positive
 amount is accepted. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/shares.ts#PublishShareCommand")]
 theorem budget_must_be_positive :
     budgetAccepted "0" = false ∧ budgetAccepted "-1" = false ∧ budgetAccepted "-0" = false ∧
-      budgetAccepted "0.01" = true ∧ budgetAccepted "20" = true := by decide
+      budgetAccepted "0.01" = true ∧ budgetAccepted "20" = true := by decide +kernel
 
 example := mode_budget_and_definition_are_agent_only .session none true false true false
-  (by decide) (by decide)
-example := budget_requires_runnable_mode (some .runnable) false false true (by decide)
+  (by decide +kernel) (by decide +kernel)
+example := budget_requires_runnable_mode (some .runnable) false false true (by decide +kernel)
 example := include_and_transcript_are_session_only .agent (some .definition) false false false
-  true (by decide) (by decide)
+  true (by decide +kernel) (by decide +kernel)
 
 /-! ## Opening a link -/
 
@@ -225,7 +225,7 @@ theorem live_public_share_always_opens (s : Share) (hv : s.visibility = .«publi
 private def openShare : Share :=
   { (default : Share) with visibility := .«public», expiresAt := some 10 }
 
-example : openShare.visibility = .«public» := only_a_public_share_opens openShare 3 (by decide)
+example : openShare.visibility = .«public» := only_a_public_share_opens openShare 3 (by decide +kernel)
 example := revoked_link_never_opens { openShare with revokedAt := some 1 } rfl 3
 example := suspended_link_does_not_open { openShare with suspendedAt := some 1 } rfl rfl 3
 example := stopped_link_does_not_open { openShare with stopped := true } rfl rfl rfl 3
@@ -240,7 +240,7 @@ example := budget_is_exhausted_at_the_cap
 that URL is `/p/` followed by its token. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "packages/contracts/src/shares.ts#PUBLIC_URL_INVARIANT")
-  (ts := "apps/web/app/api/shares/route.ts#toShareResource")]
+  (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem url_exactly_when_public (s : Share) :
     (s.url?.isSome = true ↔ s.visibility = .«public») ∧
       (s.visibility = .«public» → s.url? = some ("/p/" ++ s.token)) := by
@@ -251,11 +251,11 @@ theorem url_exactly_when_public (s : Share) :
 token or another persistence-only column, and a non-public share renders no `url`. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")
   (ts := "packages/contracts/src/shares.ts#ShareResourceSchema")
-  (ts := "apps/web/app/api/shares/route.ts#toShareResource")]
+  (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem token_never_crosses_the_wire_as_a_field (v : Visibility) (withViewCount : Bool) :
     (persistenceOnlyKeys.all fun k => !(resourceKeys v withViewCount).contains k) = true ∧
       (v ≠ .«public» → (resourceKeys v withViewCount).contains "url" = false) := by
-  cases v <;> cases withViewCount <;> decide
+  cases v <;> cases withViewCount <;> decide +kernel
 
 /-- "`viewCount` is present on list items only": the key is rendered exactly when a count is
 given. -/
@@ -263,16 +263,16 @@ given. -/
   (ts := "packages/contracts/src/shares.ts#ShareListItemSchema")]
 theorem view_count_only_on_list_items (v : Visibility) (withViewCount : Bool) :
     (resourceKeys v withViewCount).contains "viewCount" = withViewCount := by
-  cases v <;> cases withViewCount <;> decide
+  cases v <;> cases withViewCount <;> decide +kernel
 
 /-- "Suspended links stay listed with their state visible": every rendering carries the
 revocation, suspension, stop and expiry fields. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#2064-administration")
-  (ts := "apps/web/app/api/shares/route.ts#toShareResource")]
+  (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem state_fields_are_always_rendered (v : Visibility) (withViewCount : Bool) :
     (["revokedAt", "suspendedAt", "stopped", "expiresAt"].all
       (resourceKeys v withViewCount).contains) = true := by
-  cases v <;> cases withViewCount <;> decide
+  cases v <;> cases withViewCount <;> decide +kernel
 
 /-- "List (mine, or all as Admin/Owner)": an Owner or Admin lists every share of the workspace,
 and a Builder or Viewer lists a share exactly when it published it. -/
@@ -412,16 +412,16 @@ example := runnable_requires_owner_or_admin { agentRequest with mode := some .ru
   rfl rfl
 example := agent_share_defaults_to_definition agentRequest .viewer true false 0
   { mode := some .definition, budgetCapUsd := none, expiresAt := none, hasPassphraseHash := false }
-  rfl rfl (by decide)
+  rfl rfl (by decide +kernel)
 example := runnable_budget_defaults_to_twenty { agentRequest with mode := some .runnable } .admin 0
-  rfl rfl (by decide) rfl
+  rfl rfl (by decide +kernel) rfl
 example := passphrase_is_stored_exactly_when_given { agentRequest with passphrase := some "x" }
   .builder true false 0
   { mode := some .definition, budgetCapUsd := none, expiresAt := none, hasPassphraseHash := true }
-  (by decide)
-example := passphrase_gates_an_open_link protectedShare 0 (by decide) rfl
+  (by decide +kernel)
+example := passphrase_gates_an_open_link protectedShare 0 (by decide +kernel) rfl
 example := link_without_passphrase_opens_for_everyone { protectedShare with passphraseHash := none }
-  0 (by decide) rfl .absent
+  0 (by decide +kernel) rfl .absent
 example := list_is_mine_or_all_for_admins .builder ⟨"p"⟩ default
 
 /-! ## Relationships -/
@@ -433,7 +433,7 @@ has a non-null publisher, and the key to its principal is tenant-paired. -/
 theorem every_share_has_a_publisher_principal :
     (catalogue .shares).isNotNull "publisher_principal_id" = true ∧
       sharesPublisherKey ∈ (catalogue .shares).foreignKeys ∧
-      classify catalogue .shares sharesPublisherKey = .tenantPaired := by decide
+      classify catalogue .shares sharesPublisherKey = .tenantPaired := by decide +kernel
 
 /-- The ER diagram's `shares.created_by FK`: the legacy creator column is nullable (an API-key
 principal has no user) and references `users`, paired with a membership of the same workspace. -/
@@ -445,7 +445,7 @@ theorem creator_is_legacy_nullable_attribution :
         some (["created_by"], .users, ["id"], .restrict) ∧
       (catalogue .shares).foreignKeySignature? "shares_creator_workspace_fk" =
         some (["workspace_id", "created_by"], .memberships, ["workspace_id", "user_id"],
-          .noAction) := by decide
+          .noAction) := by decide +kernel
 
 /-- "`run_id` is the primary key because a run may be funded by at most one share": the charge
 table is keyed by the run alone. -/
@@ -453,7 +453,7 @@ table is keyed by the run alone. -/
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 theorem charge_is_keyed_by_the_run :
     (catalogue .shareRunCharges).primaryKey = ["run_id"] ∧
-      TableName.idKind? .shareRunCharges = none := by decide
+      TableName.idKind? .shareRunCharges = none := by decide +kernel
 
 /-- Deleting a share deletes its views and its charges (`ON DELETE CASCADE`), and deleting a run
 deletes its charge; deleting the workspace deletes all three tables' rows. -/
@@ -468,7 +468,7 @@ theorem share_children_cascade :
       ((catalogue .shareRunCharges).foreignKey? "share_run_charges_run_workspace_fk").map
         (·.onDelete) = some .cascade ∧
       (tables.all fun t => (catalogue t).foreignKeys.all fun fk =>
-        fk.refTable != .workspaces || fk.onDelete == .cascade) = true := by decide
+        fk.refTable != .workspaces || fk.onDelete == .cascade) = true := by decide +kernel
 
 /-- "The share view and run charge tables are public share-page accounting, out of scope for the
 SDK": neither carries an owner or publisher column. -/
@@ -477,6 +477,6 @@ SDK": neither carries an owner or publisher column. -/
 theorem share_children_carry_no_principal :
     (["owner_principal_id", "publisher_principal_id"].all fun c =>
       !(catalogue .shareViews).hasColumn c && !(catalogue .shareRunCharges).hasColumn c) = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.ConceptPublication

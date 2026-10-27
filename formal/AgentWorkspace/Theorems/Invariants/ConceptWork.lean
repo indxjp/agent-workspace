@@ -95,7 +95,7 @@ theorem key_identifies_one_row (S : Schema) (st : State) (hc : consistent S st =
   simp only [tableConsistent, Bool.and_eq_true, List.all_eq_true] at h
   simp only [TableSpec.isKey, Bool.or_eq_true, List.any_eq_true, Bool.and_eq_true,
     List.isEmpty_iff] at hkey
-  rcases hkey with hpk | ⟨u, hu, hpn, hsame⟩
+  rcases hkey with hpk | ⟨u, hu, ⟨hpn, -⟩, hsame⟩
   · have hsub := subset_of_same (by simpa using hpk)
     exact keyHolds_elim h.1.1.1.2 h1 h2 (present_of_subset hsub hpres) (project_of_subset hsub hp)
   · have hk := h.1.1.2 u hu
@@ -195,8 +195,8 @@ elab "aw_work_tenant_theorems" : command => do
           (href : References catalogue st $tIdent (workFk $tIdent $n) r r') :
           tenantOf catalogue $tIdent r = tenantOf catalogue $rIdent r' := by
         have h := AgentWorkspace.Theorems.Invariants.ErCore.no_cross_tenant_reference catalogue
-          (by decide) st hc (by decide) href
-        rwa [show (workFk $tIdent $n).refTable = $rIdent by decide] at h))
+          (by decide +kernel) st hc (by decide +kernel) href
+        rwa [show (workFk $tIdent $n).refTable = $rIdent by decide +kernel] at h))
 
 end Generator
 
@@ -218,7 +218,7 @@ theorem run_event_sequence_is_unique (st : State) (hc : consistent catalogue st 
     {e1 e2 : Row} (h1 : e1 ∈ st .runEvents) (h2 : e2 ∈ st .runEvents)
     (hrun : e1.get "run_id" = e2.get "run_id") (hseq : e1.get "sequence" = e2.get "sequence")
     (hpres : e1.present ["run_id", "sequence"] = true) : e1 = e2 :=
-  key_identifies_one_row catalogue st hc (t := .runEvents) (by decide) h1 h2 hpres
+  key_identifies_one_row catalogue st hc (t := .runEvents) (by decide +kernel) h1 h2 hpres
     (by rw [project_two, project_two, hrun, hseq])
 
 /-- In every consistent state a run's ledger holds at most one row per provider response, which
@@ -230,7 +230,7 @@ theorem usage_response_is_recorded_once (st : State) (hc : consistent catalogue 
     (hrun : u1.get "run_id" = u2.get "run_id")
     (hresp : u1.get "provider_response_id" = u2.get "provider_response_id")
     (hpres : u1.present ["run_id", "provider_response_id"] = true) : u1 = u2 :=
-  key_identifies_one_row catalogue st hc (t := .runUsageRecords) (by decide) h1 h2 hpres
+  key_identifies_one_row catalogue st hc (t := .runUsageRecords) (by decide +kernel) h1 h2 hpres
     (by rw [project_two, project_two, hrun, hresp])
 
 /-- In every consistent state an SDK session id resolves to at most one session of a workspace:
@@ -243,7 +243,7 @@ theorem sdk_session_id_is_unique_per_workspace (st : State) (hc : consistent cat
     (hws : s1.get "workspace_id" = s2.get "workspace_id")
     (hsdk : s1.get "engine_session_id" = s2.get "engine_session_id")
     (hpres : s1.present ["workspace_id", "engine_session_id"] = true) : s1 = s2 :=
-  key_identifies_one_row catalogue st hc (t := .sessions) (by decide) h1 h2 hpres
+  key_identifies_one_row catalogue st hc (t := .sessions) (by decide +kernel) h1 h2 hpres
     (by rw [project_two, project_two, hws, hsdk])
 
 /-- In every consistent state a gateway token digest identifies at most one token, across all
@@ -253,7 +253,7 @@ theorem run_token_digest_is_unique (st : State) (hc : consistent catalogue st = 
     {t1 t2 : Row} (h1 : t1 ∈ st .runTokens) (h2 : t2 ∈ st .runTokens)
     (hhash : t1.get "token_hash" = t2.get "token_hash")
     (hpres : t1.present ["token_hash"] = true) : t1 = t2 :=
-  key_identifies_one_row catalogue st hc (t := .runTokens) (by decide) h1 h2 hpres
+  key_identifies_one_row catalogue st hc (t := .runTokens) (by decide +kernel) h1 h2 hpres
     (by simp [Row.project, hhash])
 
 /-- The witness state with one more row in table `t`. -/
@@ -313,7 +313,7 @@ theorem uniqueness_keys_refuse_a_second_row :
 
 /-- One store operation at instant `now`: the status machine decides whether the run moves
 (`Lifecycle.runStep`), and a move writes the timestamps `Run.stamp` gives. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")]
 def timedStep (r : Run) (op : RunOp) (now : Nat) : Run :=
   match runStep r.status op with
@@ -356,24 +356,26 @@ private theorem stamp_le {r : Run} {now : Nat} (hle : r.lastStamp ≤ now) (op :
 private theorem step_well_formed {r : Run} {now : Nat} (hwf : r.wellFormed = true)
     (hle : r.lastStamp ≤ now) (op : RunOp) : (timedStep r op now).wellFormed = true := by
   simp only [Run.wellFormed, Run.endedAtIffTerminal, Run.endedAfterStarted, Run.costNonNegative,
-    Run.currencyUsd, Run.priceVersionMatches, Run.unpricedCostZero, Bool.and_eq_true] at hwf ⊢
-  obtain ⟨⟨⟨⟨⟨hiff, hafter⟩, hcost⟩, hcur⟩, hprice⟩, hzero⟩ := hwf
+    Run.currencyUsd, Run.priceVersionMatches, Run.unpricedCostZero, Run.pendingWhenAwaiting,
+    Run.deadlineWhenAwaiting, Bool.and_eq_true] at hwf ⊢
+  obtain ⟨⟨⟨⟨⟨⟨⟨hiff, hafter⟩, hcost⟩, hcur⟩, hprice⟩, hzero⟩, hpend⟩, hdead⟩ := hwf
   unfold Run.lastStamp at hle
   unfold timedStep
   cases op with
   | markRunning =>
     cases hs : r.status <;> simp only [runStep, Run.stamp] <;>
-      simp_all [RunStatus.isTerminal] <;> cases hst : r.startedAt <;> simp_all
+      simp_all [RunStatus.isTerminal, RunStatus.isStopped] <;> cases hst : r.startedAt <;> simp_all
   | finish target =>
     cases hs : r.status <;> cases target <;> simp only [runStep, Run.stamp] <;>
-      simp_all [RunStatus.isTerminal] <;> cases hst : r.startedAt <;> cases hen : r.endedAt <;>
+      simp_all [RunStatus.isTerminal, RunStatus.isStopped] <;> cases hst : r.startedAt <;>
+      cases hen : r.endedAt <;>
       simp_all <;> omega
 
 /-- Every run check is preserved by every sequence of store operations whose clock never runs
 behind the run's own timestamps: `markRunning` and `finish` never produce a row that
 `runs_ended_at_iff_terminal` or `runs_ended_after_started` refuses, and leave the accounting
 checks untouched. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+@[aw_spec (tier := T2) (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")]
 theorem store_operations_preserve_run_checks :
@@ -387,7 +389,7 @@ theorem store_operations_preserve_run_checks :
 
 /-- A run that a `finish` moves to a terminal status always has a duration: "a run that is
 finished without ever having been marked running still gets a start". -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+@[aw_spec (tier := T2) (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "apps/web/server/runs/api.ts#renderRun")]
 theorem finished_run_has_a_duration (r : Run) (target : RunStatus) (now : Nat)
     (hlive : r.status.isTerminal = false) (hterm : target.isTerminal = true) :
@@ -403,7 +405,7 @@ the run never had one; every other call writes nothing, because the store refuse
 on a non-queued run answers `false`, `finish` with a non-terminal target rejects or throws) or
 ignores it (`finish` on an already terminal run). -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#RunStore")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/repositories/runs.ts#markRunning")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")]
 theorem store_stamps_follow_the_status (r : Run) (target : RunStatus) (now : Nat) :
@@ -440,7 +442,7 @@ theorem store_durations_are_exact (steps : List (RunOp × Nat)) (r : Run)
   have h := store_operations_preserve_run_checks steps r hwf hclock
   simp only [Run.wellFormed, Run.endedAfterStarted, hs, he, Bool.and_eq_true,
     decide_eq_true_eq] at h
-  have hle : s ≤ e := h.1.1.1.1.2
+  have hle : s ≤ e := h.1.1.1.1.1.1.2
   simp only [Run.durationMs, hs, he, Option.some.injEq] at hd
   subst hd
   exact ⟨hle, by omega⟩
@@ -449,7 +451,7 @@ theorem store_durations_are_exact (steps : List (RunOp × Nat)) (r : Run)
 
 /-- The sequence the repository allocates next: one past the run's largest stored sequence, or
 `1` for a run with none (`max(runEvents.sequence) + 1`). -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#createDatabaseRunEventRepositoryProvider")]
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/events.ts#createDatabaseRunEventRepositoryProvider")]
 def nextSequence (events : List RunEvent) (run : RunId) : Nat :=
   (sequencesOf events run).foldl max 0 + 1
 
@@ -460,7 +462,7 @@ def nextEvent (events : List RunEvent) (run : RunId) (workspace : WorkspaceId)
 
 /-- The repository's `append` on the stored events of one table: insert the next event, then,
 when `cutoff = next - maxEvents` is positive, delete the run's events at or below it. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#createDatabaseRunEventRepositoryProvider")
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/events.ts#createDatabaseRunEventRepositoryProvider")
   (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]
 def appendEvent (events : List RunEvent) (run : RunId) (workspace : WorkspaceId)
     (type data : String) (now maxEvents : Nat) : List RunEvent :=
@@ -493,7 +495,7 @@ private theorem window_of_shape (lo n : Nat) (h : 1 ≤ lo) :
 private theorem window_extend (l : List Nat) (h : isWindow l = true) :
     isWindow (l ++ [l.foldl max 0 + 1]) = true := by
   by_cases hnil : l = []
-  · subst hnil; decide
+  · subst hnil; decide +kernel
   · obtain ⟨lo, n, hlo, hl⟩ := window_shape h hnil
     rw [hl, List.foldl_cons, show max 0 lo = lo by omega,
       foldl_max_range' n (lo + 1) lo (by omega), List.cons_append]
@@ -547,7 +549,7 @@ private theorem seq_prune (events : List RunEvent) (run run' : RunId) (c : Nat) 
 `next - maxEvents` cuts the window from below and leaves it a window, and no other run's
 events change ("assigning one contiguous sequence per run"). -/
 @[aw_spec (tier := T2)
-  (ts := "packages/core/src/db/repositories/runs.ts#createDatabaseRunEventRepositoryProvider")
+  (ts := "packages/core/src/db/repositories/runs/events.ts#createDatabaseRunEventRepositoryProvider")
   (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]
 theorem appending_an_event_keeps_every_log_contiguous (events : List RunEvent) (run run' : RunId)
     (ws : WorkspaceId) (type data : String) (now maxEvents : Nat)
@@ -585,17 +587,17 @@ events alone. -/
 example : sequencesOf (appendEvent interleavedLog ⟨"ra"⟩ ⟨"w1"⟩ "result" "{}" 9 3) ⟨"ra"⟩ =
       [2, 3, 4] ∧
     sequencesOf (appendEvent interleavedLog ⟨"ra"⟩ ⟨"w1"⟩ "result" "{}" 9 3) ⟨"rb"⟩ = [5, 6] := by
-  decide
+  decide +kernel
 
 example := appending_an_event_keeps_every_log_contiguous interleavedLog ⟨"ra"⟩ ⟨"rb"⟩ ⟨"w1"⟩
-  "result" "{}" 9 3 (by decide)
+  "result" "{}" 9 3 (by decide +kernel)
 
 /-- The repository's `append` prunes exactly at the cutoff: once `cutoff = next - maxEvents` is
 positive, every event the run keeps has a sequence above it; and with room for at least one
 event, the event just appended is always kept. Together with contiguity this bounds a run's
 stored log to its newest `maxEvents` events. -/
 @[aw_spec (tier := T2)
-  (ts := "packages/core/src/db/repositories/runs.ts#createDatabaseRunEventRepositoryProvider")]
+  (ts := "packages/core/src/db/repositories/runs/events.ts#createDatabaseRunEventRepositoryProvider")]
 theorem append_prunes_at_the_cutoff_and_keeps_the_newest (events : List RunEvent)
     (run : RunId) (ws : WorkspaceId) (type data : String) (now maxEvents : Nat) :
     (0 < nextSequence events run - maxEvents →
@@ -678,7 +680,7 @@ example : ofCells (runTokenCells Witness.token) = ofCells (runTokenCells Witness
 /-- A queued run, started at 7 and cancelled at 8, stays well formed. -/
 example : (timedSteps Witness.queuedRun [(.markRunning, 7), (.finish .cancelled, 8)]).wellFormed =
     true :=
-  store_operations_preserve_run_checks _ _ (by decide) (by decide)
+  store_operations_preserve_run_checks _ _ (by decide +kernel) (by decide +kernel)
 
 example : (timedStep Witness.queuedRun (.finish .cancelled) 7).durationMs.isSome = true :=
   finished_run_has_a_duration Witness.queuedRun .cancelled 7 rfl rfl
@@ -695,7 +697,7 @@ example : timedStep Witness.queuedRun (.finish .cancelled) 7 =
 
 /-- A second `markRunning` on the completed witness run changes nothing. -/
 example : timedStep Witness.run .markRunning 20 = Witness.run :=
-  (store_stamps_follow_the_status Witness.run .cancelled 20).2.1 (by decide)
+  (store_stamps_follow_the_status Witness.run .cancelled 20).2.1 (by decide +kernel)
 
 example : timedStep Witness.run (.finish .failed) 20 = Witness.run :=
   (store_stamps_follow_the_status Witness.run .failed 20).2.2.2 (.inl rfl)
@@ -703,10 +705,10 @@ example : timedStep Witness.run (.finish .failed) 20 = Witness.run :=
 /-- Started at 7 and cancelled at 8: a duration of exactly 1. -/
 example : (1 : Int) = (8 : Int) - (7 : Int) :=
   (store_durations_are_exact [(.markRunning, 7), (.finish .cancelled, 8)] Witness.queuedRun
-    (by decide) (by decide) (by decide) (by decide) (by decide)).2
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)).2
 
 example : Witness.session.identityCurrent = true :=
   (recording_keeps_the_session_identity { Witness.session with engineSessionId := none }
-    Witness.session "s1" (by decide)).1
+    Witness.session "s1" (by decide +kernel)).1
 
 end AgentWorkspace.Theorems.Invariants.ConceptWork

@@ -19,11 +19,7 @@
  * normally and history keeps resolving its project — both are acceptance criteria of #183, and
  * both are asserted rather than assumed.
  */
-import {
-  isProjectArchived,
-  type ProjectRepository,
-  type SessionRepository,
-} from '@agent-workspace/core/db';
+import { isProjectArchived, type ProjectRows, type ProjectSessionRows } from './store';
 
 /**
  * `null` (no such project in this workspace) is treated the same as archived, exactly as
@@ -50,7 +46,7 @@ export interface ProjectRunGate {
 }
 
 /** Build a {@link ProjectRunGate} over the same `ProjectRepository` `/api/projects` reads. */
-export function createProjectRunGate(repository: Pick<ProjectRepository, 'get'>): ProjectRunGate {
+export function createProjectRunGate(repository: Pick<ProjectRows, 'get'>): ProjectRunGate {
   return {
     async isUsableForNewWork(projectId: string | null): Promise<boolean> {
       if (projectId === null) return true;
@@ -72,9 +68,9 @@ export function createProjectRunGate(repository: Pick<ProjectRepository, 'get'>)
  * that outcome as a real refusal rather than as evidence a session was created.
  */
 export function guardProjectSessionCreation(
-  sessions: SessionRepository,
+  sessions: ProjectSessionRows,
   gate: ProjectRunGate,
-): SessionRepository {
+): ProjectSessionRows {
   return {
     ...sessions,
     async ensure(input) {

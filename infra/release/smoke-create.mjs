@@ -117,7 +117,7 @@ export async function fetchWithRetry(url, init, io = {}) {
  * Where `registry/repository:tag` stands for an anonymous reader.
  *
  * @param {string} registry e.g. ghcr.io
- * @param {string} repository e.g. indxdev/agent-workspace/web
+ * @param {string} repository e.g. indxjp/agent-workspace/web
  * @param {string} tag
  * @param {Io} [io]
  * @returns {Promise<{ state: ProbeState, detail?: string }>}

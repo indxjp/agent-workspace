@@ -184,17 +184,30 @@ describe('an Admin cannot promote itself — the verifier’s counter-example (b
 });
 
 describe('the conferral rule is derived from the permission table, not written down', () => {
-  it('is total over grant widths, and every pair has one of three answers', () => {
+  it('is exactly the formal model’s `Grant.le`, with the conferred grant on the left', () => {
+    // formal/AgentWorkspace/Authz/Permissions.lean `Grant.le`, transcribed row by row: `none` is
+    // narrowest, `any` widest, and `own` is within `permitted`, which ADR-0152 defines as "own or
+    // granted". `dominates(held, conferred)` must answer `Grant.le conferred held`.
     const widths: Grant[] = ['none', 'own', 'permitted', 'any'];
-    const answers = new Set<string>();
+    const le = new Set([
+      'none<=none',
+      'none<=own',
+      'none<=permitted',
+      'none<=any',
+      'own<=own',
+      'own<=permitted',
+      'own<=any',
+      'permitted<=permitted',
+      'permitted<=any',
+      'any<=any',
+    ]);
     for (const held of widths) {
       for (const conferred of widths) {
-        answers.add(dominates(held, conferred));
+        expect(dominates(held, conferred), `${conferred} <= ${held}`).toBe(
+          le.has(`${conferred}<=${held}`) ? 'dominates' : 'does-not',
+        );
       }
     }
-    // Every one of the three answers is reachable — including `undecidable`, which is what makes
-    // `refuse` a real branch rather than dead code.
-    expect([...answers].sort()).toEqual(['does-not', 'dominates', 'undecidable']);
   });
 
   it('lets every role confer itself — the reflexive case, over all four', () => {
@@ -221,7 +234,7 @@ describe('the conferral rule is derived from the permission table, not written d
     }
   });
 
-  it('answers every (caller, requested) pair, and answers `admin → builder` deny', () => {
+  it('answers every (caller, requested) pair: a role confers itself and every role below it', () => {
     const matrix = conferralMatrix();
     // Derived from ROLES, not written down (ADR-0016).
     expect(matrix.length).toBe(ROLES.length * ROLES.length);
@@ -232,27 +245,25 @@ describe('the conferral rule is derived from the permission table, not written d
     };
     // The fix.
     expect(answer('admin', 'owner')).toBe('deny');
-    // The cost of the fix, asserted rather than discovered later: Builder holds its own
-    // `projects` and runs its own `connectors`, neither of which §21's Admin clause grants
-    // (ADR-0116 closed the `skills` and `files` gap), so an Admin conferring Builder would hand
-    // out a capability the Admin has not got. Admin may still confer Admin and Viewer, which is
-    // what makes this a consequence of §21's own words and not a blanket refusal.
-    expect(answer('admin', 'builder')).toBe('deny');
-    const adminToBuilder = conferRole('admin', 'builder');
-    if (adminToBuilder.effect !== 'deny') throw new Error('admin → builder was not denied');
-    expect(['projects', 'connectors']).toContain(adminToBuilder.witness.resource);
-    expect(answer('admin', 'admin')).toBe('allow');
-    expect(answer('admin', 'viewer')).toBe('allow');
+    // ADR-0152 made roles monotonic (Admin gained `projects` and running `connectors`, Builder
+    // running every agent), so the matrix is the ladder: allow downwards and to itself, deny
+    // upwards. Before it, Admin could not confer Builder and Builder → Viewer was refused.
+    ROLES.forEach((caller, callerRank) => {
+      ROLES.forEach((requested, requestedRank) => {
+        expect(answer(caller, requested), `${caller} → ${requested}`).toBe(
+          callerRank <= requestedRank ? 'allow' : 'deny',
+        );
+      });
+    });
   });
 
-  it('refuses rather than denies where the comparison cannot be made', () => {
-    // Builder holds `own` where Viewer is granted `permitted` on running an agent, and §21
-    // defines no mechanism for `permitted`, so neither containment can be asserted. ADR-0031:
-    // that is a refusal, not a quiet allow and not a denial that claims a rule was applied.
-    const conferral = conferRole('builder', 'viewer');
-    expect(conferral.effect).toBe('refuse');
-    if (conferral.effect !== 'refuse') throw new Error('unreachable');
-    expect(conferral.because).toContain('permitted');
+  it('lets a `permitted` holder confer `own` and denies the reverse (ADR-0152)', () => {
+    // `permitted` is "own or granted", so it contains `own`; `own` does not contain a granted row.
+    // Builder → Viewer used to hinge on this pair (Builder ran `own` agents, Viewer `permitted`
+    // ones); ADR-0152 gave Builder `run: permitted` too, so no pair of the four roles reaches it.
+    expect(dominates('permitted', 'own')).toBe('dominates');
+    expect(dominates('own', 'permitted')).toBe('does-not');
+    expect(conferRole('builder', 'viewer').effect).toBe('allow');
   });
 
   it('refuses a caller role or a requested role that is not one of §21’s four', () => {

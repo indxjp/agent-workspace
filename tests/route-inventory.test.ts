@@ -145,6 +145,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { API_ROUTE_EXCLUSIONS } from '@indx-workspace/contracts/routes';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -426,11 +427,23 @@ export function routeShape(routePathValue: string, printedInSpec: boolean): Shap
   ) {
     return { ok: true };
   }
-  // ADR-0120 clause 7: the one fixed path Vercel Cron calls, naming no collection and no id. The
-  // same named, narrow exception as the sign-in steps above; it generalises to no other route.
-  if (routePathValue === '/api/cron/retention') {
+  // ADR-0120 clause 7, ADR-0144 D5 and issue #1674: the three fixed paths the platform cron calls,
+  // naming no collection and no id. The same named, narrow exception as the sign-in steps above; it
+  // generalises to no other route.
+  if (
+    routePathValue === '/api/cron/retention' ||
+    routePathValue === '/api/cron/triggers' ||
+    routePathValue === '/api/cron/storage-cleanup'
+  ) {
     return { ok: true };
   }
+  // Issue #1562: the readiness probe a kubelet calls. `readyz` is the Kubernetes convention for the
+  // path, not a collection. One literal with its reason attached; it generalises to no other route.
+  if (routePathValue === '/api/readyz') return { ok: true };
+  // Issue #1846: the `aw-control` MCP door a running agent reaches through the gateway. `builder` is
+  // a product name, not a collection, and `mcp` is the protocol, not an id. One literal with its
+  // reason attached; it generalises to no other route.
+  if (routePathValue === '/api/builder/mcp') return { ok: true };
   // §21's "who is this credential?" route (issue #233, dispatched by SDK-01-ME-233) is the one
   // resource that cannot be plural: a principal is a **singleton per caller**, so there is no
   // collection of "mes" to page through and no `:id` that could name one — `me` is not an id, it
@@ -459,6 +472,27 @@ export function routeShape(routePathValue: string, printedInSpec: boolean): Shap
   // print it without naming `a2a` as a resource, which it is not. One literal with its reason; it
   // generalises to no other route.
   if (routePathValue === '/.well-known/oauth-protected-resource/api/a2a/agents/:agentName') {
+    return { ok: true };
+  }
+  // Issue #1846 slice 5b: the Builder's read-only door for an outside MCP client sits beside
+  // `/mcp/projects/:name` (an MCP resource, not an `/api` collection) and, by RFC 9728, publishes
+  // its metadata under the well-known prefix. Two literals with their reason; they generalise to
+  // no other route.
+  if (
+    routePathValue === '/mcp/builder' ||
+    routePathValue === '/.well-known/oauth-protected-resource/mcp/builder'
+  ) {
+    return { ok: true };
+  }
+  // ADR-0147 (issue #1314, P8-4): search over the files a caller may read is a query of the `files`
+  // collection, so it is `GET /api/files/search?q=`, beside `/api/files/:id` and not a `searches`
+  // resource of its own. It is the SDK's `files.search` and the public contract the issue names.
+  // One literal with its reason attached; it generalises to no other route.
+  if (routePathValue === '/api/files/search') return { ok: true };
+  // ADR-0144: Microsoft Graph and Zoom can call only a fixed URL and send no header, so the
+  // trigger's secret is the last path segment. One literal with its reason; it generalises to no
+  // other route.
+  if (routePathValue === '/api/triggers/:id/fire/:secret') {
     return { ok: true };
   }
   if (!routePathValue.startsWith('/api/')) {
@@ -983,6 +1017,15 @@ describe('the route inventory equals the declared subset of spec §34', () => {
     expect(missing, 'these routes are declared as landed but no route handler serves them').toEqual(
       [],
     );
+  });
+
+  it('declares POST /api/builder/mcp as the one run-caller route (issue #1846)', () => {
+    const runCaller = API_ROUTE_EXCLUSIONS.filter(
+      (route) => route.because === 'run-caller route (per-run token, aw-control tools)',
+    ).map(key);
+    expect(runCaller).toEqual(['POST /api/builder/mcp']);
+    const declared = EXPECTED_ROUTES.filter((entry) => key(entry) === 'POST /api/builder/mcp');
+    expect(declared.map((entry) => entry.landed)).toEqual([true]);
   });
 
   it('serves all five agent routes of spec §34, and no sixth under /api/agents', () => {

@@ -34,11 +34,17 @@ export const RESOURCES = [
   'sharing-policies',
   'skills',
   'setup',
+  // Issue #1690 (STO-503, US-STO-12): the buckets and folders a workspace connects; the storage
+  // design §05. Credentials stay in the secret store, so a read discloses no secret.
+  'storage-connections',
   // Issue #790 (ADR-0118 TS1): the content-addressed code-tool bundles `aw push` uploads.
   'tool-bundles',
   // Issue #236 (SDK-04, S-1). `POST /api/tokens` mints a browser token; see §21 of
   // `apps/web/server/rbac/permissions.ts`'s policy table for its grants.
   'tokens',
+  // Issue #1293 (ADR-0144): inbound triggers — the URLs and schedules that start a run as their
+  // owner. Managed like an endpoint client: credential-bearing configuration.
+  'triggers',
   'users',
   'workspaces',
 ] as const;

@@ -25,13 +25,11 @@
  */
 import { CLI_DEVICE_CODE_TTL_SECONDS } from '@indx-workspace/contracts/cli-auth';
 
+import { applicationContext } from '../application-context';
 import { checkRequestOrigin } from '../auth/origin';
 import type { Principal } from '../rbac/principal';
-import { currentRbacRuntime } from '../rbac/runtime';
-import { currentWorkspacesRuntime } from '../workspaces/runtime';
 import { displayUserCode, normaliseUserCode } from './device-code';
 import { refuseOverLimit } from './handlers';
-import { currentCliAuthRuntime } from './runtime';
 
 const MAX_FORM_BYTES = 4 * 1024;
 
@@ -103,14 +101,14 @@ function refusal(
 }
 
 async function sessionPrincipal(request: Request): Promise<Principal | null> {
-  const rbac = currentRbacRuntime();
+  const rbac = applicationContext()?.rbac ?? null;
   if (rbac === null) return null;
   const principal = await rbac.identify(request);
   return principal?.via === 'session' ? principal : null;
 }
 
 async function workspaceName(principal: Principal): Promise<string> {
-  const workspaces = currentWorkspacesRuntime();
+  const workspaces = applicationContext()?.workspaces ?? null;
   if (workspaces === null || principal.userId === null) return principal.workspaceId;
   const view = await workspaces.repository.getForMember(principal.workspaceId, principal.userId);
   return view?.name ?? principal.workspaceId;
@@ -128,7 +126,7 @@ const signInFirst = (request: Request): Response =>
 
 /** `GET /api/auth/cli-verify?code=…` — the approval form. */
 export async function renderVerifyPage(request: Request): Promise<Response> {
-  if (currentCliAuthRuntime() === null) {
+  if (applicationContext()?.cliAuth === undefined) {
     return refusal(
       request,
       503,
@@ -180,7 +178,7 @@ export async function submitVerifyPage(
   request: Request,
   nowMs: number = Date.now(),
 ): Promise<Response> {
-  const runtime = currentCliAuthRuntime();
+  const runtime = applicationContext()?.cliAuth ?? null;
   if (runtime === null) {
     return refusal(
       request,

@@ -21,14 +21,9 @@ import {
   ownerOwnershipResolver,
   workspaceNotFound,
 } from '../../../../server/workspaces/access';
-import { currentWorkspacesRuntime } from '../../../../server/workspaces/runtime';
-import {
-  authorise,
-  problem,
-  readIdParam,
-  readJsonBody,
-  toResponse,
-} from '../../../../server/rbac/http';
+import { applicationContext } from '../../../../server/application-context';
+import { readJsonBody } from '../../../../server/http/result';
+import { authorise, problem, readIdParam, toResponse } from '../../../../server/rbac/http';
 import { resolveSessionActorUserId } from '../../../../server/rbac/ownership';
 import { requireResourceAccess } from '../../../../server/resources/authorise';
 
@@ -40,7 +35,7 @@ type WorkspaceRouteContext = { params: Promise<{ id: string }> };
 /** `GET /api/workspaces/:id`. */
 export async function GET(request: Request, context: WorkspaceRouteContext): Promise<Response> {
   const id = await readIdParam(context);
-  const workspaces = currentWorkspacesRuntime();
+  const workspaces = applicationContext()?.workspaces ?? null;
   if (workspaces === null) {
     return toResponse(
       problem(503, 'workspaces_runtime_not_configured', 'The workspaces API is not configured.'),
@@ -67,7 +62,7 @@ export async function GET(request: Request, context: WorkspaceRouteContext): Pro
 /** `PATCH /api/workspaces/:id` — rename and/or archive/restore. Owner only. */
 export async function PATCH(request: Request, context: WorkspaceRouteContext): Promise<Response> {
   const id = await readIdParam(context);
-  const workspaces = currentWorkspacesRuntime();
+  const workspaces = applicationContext()?.workspaces ?? null;
   if (workspaces === null) {
     return toResponse(
       problem(503, 'workspaces_runtime_not_configured', 'The workspaces API is not configured.'),

@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import {
   InterruptRunResponseSchema,
   StartRunRequestSchema,
@@ -10,22 +11,19 @@ import {
   interruptRun,
   interruptRunFor,
   listRuns,
-  MAX_PROMPT_CHARS,
   parseStartRunBody,
   readRun,
   renderRun,
   revokeRunTokens,
   startRun,
-  startRunOnSession,
   streamRunEvents,
 } from './api';
+import { MAX_PROMPT_CHARS, startRunOnSession } from './service';
 import {
   getRunApi,
-  installRunApi,
-  resetRunApi,
   type AgentRef,
   type LaunchContext,
-  type Principal,
+  type RunPrincipal,
   type RunApiEnvironment,
   type SessionRef,
 } from './environment';
@@ -35,22 +33,24 @@ import {
 } from '../engines/images';
 import { runStartRefusalError } from '../compose/run-preflight';
 import { createRunnerLauncher } from './launcher';
-import {
-  InMemoryRunStore,
-  runStatuses,
-  SessionBusyError,
-  type RunRecord,
-  type RunStatus,
-} from './store';
+import { InMemoryRunStore } from './memory-store';
+import { runStatuses, SessionBusyError, type RunRecord, type RunStatus } from './store';
 import { recordingCeilingFor } from '../policy-ceiling/fixtures';
+import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { admitVisitorWrite, resetSurfaceLimits } from '../surfaces/public/limits';
+import {
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const OTHER_WORKSPACE = '55555555-5555-4555-8555-555555555555';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const PRINCIPAL_USER_ID = '66666666-6666-4666-8666-666666666666';
-const PRINCIPAL: Principal = {
+const PRINCIPAL: RunPrincipal = {
   principalId: '77777777-7777-4777-8777-777777777777',
   ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
   userId: PRINCIPAL_USER_ID,
@@ -70,16 +70,16 @@ function install(
 ): Harness {
   const launched: LaunchContext[] = [];
   const environment: RunApiEnvironment = {
-    authenticate: (request: Request): Promise<Principal | null> =>
+    authenticate: (request: Request): Promise<RunPrincipal | null> =>
       Promise.resolve(request.headers.get('x-test-user') === null ? null : PRINCIPAL),
-    findAgent: (principal: Principal, agentId: string): Promise<AgentRef | null> =>
+    findAgent: (principal: RunPrincipal, agentId: string): Promise<AgentRef | null> =>
       Promise.resolve(
         agentId === AGENT
           ? { id: AGENT, workspaceId: principal.workspaceId, engine: 'claude-agent-sdk' }
           : null,
       ),
     openSession: (
-      _p: Principal,
+      _p: RunPrincipal,
       agent: AgentRef,
       requested: string | null,
     ): Promise<SessionRef | null> =>
@@ -95,7 +95,7 @@ function install(
     },
     ...overrides,
   };
-  installRunApi(environment);
+  installTestRunApi(environment);
   return { store, launched };
 }
 
@@ -122,7 +122,7 @@ async function errorCode(response: Response): Promise<string> {
 }
 
 afterEach(() => {
-  resetRunApi();
+  resetTestRunApi();
 });
 
 describe('parseStartRunBody', () => {
@@ -174,6 +174,52 @@ describe('parseStartRunBody', () => {
     expect(verdict.reason).toContain('temperature');
   });
 
+  it('rejects "limits": a run limit is set by a trusted in-process caller, never by a request', () => {
+    for (const limits of [{ maxBudgetUsd: 0.01 }, { maxTurns: 1 }, {}, null]) {
+      expect(parseStartRunBody({ prompt: 'hi', limits }).kind, JSON.stringify(limits)).toBe(
+        'rejected',
+      );
+    }
+  });
+
+  it('accepts a "subject" of 1 to 256 characters and rejects any other (ADR-0142 D2)', () => {
+    expect(parseStartRunBody({ prompt: 'hi', subject: 'user-1' })).toMatchObject({
+      kind: 'ok',
+      body: { subject: 'user-1' },
+    });
+    expect(parseStartRunBody({ prompt: 'hi', subject: 'a'.repeat(256) }).kind).toBe('ok');
+    for (const subject of ['', 'a'.repeat(257), 7, null]) {
+      expect(parseStartRunBody({ prompt: 'hi', subject }).kind, String(subject)).toBe('rejected');
+    }
+  });
+
+  it('accepts a canonical "fileScope" of 1 to 100 distinct paths and rejects any other (issue #1539)', () => {
+    expect(parseStartRunBody({ prompt: 'hi', fileScope: ['docs/alice'] })).toMatchObject({
+      kind: 'ok',
+      body: { fileScope: ['docs/alice'] },
+    });
+    const many = Array.from({ length: 100 }, (_, index) => `docs/${String(index)}`);
+    expect(parseStartRunBody({ prompt: 'hi', fileScope: many }).kind).toBe('ok');
+    const bad = [
+      [],
+      [...many, 'docs/x'],
+      ['a', 'a'],
+      ['/a'],
+      ['a/'],
+      ['a/../b'],
+      ['a//b'],
+      [''],
+      [7],
+      'a',
+      null,
+    ];
+    for (const fileScope of bad) {
+      expect(parseStartRunBody({ prompt: 'hi', fileScope }).kind, JSON.stringify(fileScope)).toBe(
+        'rejected',
+      );
+    }
+  });
+
   it('rejects a non-object, a missing prompt, an empty prompt and a non-string prompt', () => {
     for (const bad of [null, [], 'hi', 42, {}, { prompt: '' }, { prompt: '   ' }, { prompt: 7 }]) {
       expect(parseStartRunBody(bad).kind, JSON.stringify(bad)).toBe('rejected');
@@ -188,11 +234,55 @@ describe('parseStartRunBody', () => {
   it('rejects a sessionId that is not a UUID', () => {
     expect(parseStartRunBody({ prompt: 'hi', sessionId: 'not-a-uuid' }).kind).toBe('rejected');
   });
+
+  describe('outputSchema (ADR-0143)', () => {
+    const schema = { type: 'object', properties: { verdict: { type: 'string' } } };
+
+    it('carries a valid schema through, for a new session and for a follow-up', () => {
+      expect(parseStartRunBody({ prompt: 'hi', outputSchema: schema })).toEqual({
+        kind: 'ok',
+        body: { prompt: 'hi', sessionId: null, modelOverride: null, outputSchema: schema },
+      });
+      const followUp = parseStartRunBody({
+        prompt: 'hi',
+        sessionId: SESSION,
+        outputSchema: schema,
+      });
+      expect(followUp.kind === 'ok' && followUp.body.outputSchema).toEqual(schema);
+    });
+
+    it.each([
+      ['root_type', { type: 'string' }],
+      ['size', { type: 'object', description: 'x'.repeat(40_000) }],
+      ['dialect', { $schema: 'http://json-schema.org/draft-07/schema#', type: 'object' }],
+      ['ref', { type: 'object', properties: { a: { $ref: 'https://example.com/a.json' } } }],
+      [
+        'depth',
+        {
+          type: 'object',
+          properties: {
+            a: Array.from({ length: 20 }).reduce<object>((inner) => ({ items: inner }), {}),
+          },
+        },
+      ],
+    ])('rejects a schema over the %s limit, naming the limit', (limit, outputSchema) => {
+      const verdict = parseStartRunBody({ prompt: 'hi', outputSchema });
+      expect(verdict.kind).toBe('rejected');
+      if (verdict.kind !== 'rejected') return;
+      expect(verdict.reason).toContain(limit);
+    });
+
+    it('rejects an outputSchema that is not an object', () => {
+      for (const bad of [null, [], 'object', 7]) {
+        expect(parseStartRunBody({ prompt: 'hi', outputSchema: bad }).kind).toBe('rejected');
+      }
+    });
+  });
 });
 
 describe('with no environment installed', () => {
   it('answers 503 and names what is missing, on all three routes', async () => {
-    resetRunApi();
+    resetTestRunApi();
     const started = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
     expect(started.status).toBe(503);
     expect(await errorCode(started)).toBe('run_api_not_configured');
@@ -226,6 +316,20 @@ describe('POST /api/agents/:id/runs', () => {
     }
   });
 
+  it('answers 429 daily_cost_cap_reached with the cap, the spend and the reset, and creates no run', async () => {
+    const resetsAt = '2026-10-27T00:00:00.000Z';
+    const harness = install({
+      dailyCostCap: { refusal: () => Promise.resolve({ capUsd: 5, spentUsd: 5, resetsAt }) },
+    });
+    const response = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
+    expect(response.status).toBe(429);
+    const body = (await response.json()) as { error: { code: string; details?: string[] } };
+    expect(body.error.code).toBe('daily_cost_cap_reached');
+    expect(body.error.details).toEqual(['capUsd: 5', 'spentUsd: 5', `resetsAt: ${resetsAt}`]);
+    expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+    expect(harness.launched).toHaveLength(0);
+  });
+
   it('denies roles without an established grant before looking up the agent', async () => {
     let lookups = 0;
     install({
@@ -245,18 +349,16 @@ describe('POST /api/agents/:id/runs', () => {
   // own registry — a seam separate from this file's `RunApiEnvironment` — so these two cases
   // configure it directly rather than through `install()`'s `findAgent`/`authenticate` overrides.
   describe('Builder ownership (issue #117)', () => {
-    afterEach(async () => {
-      const { clearAgentsRuntime } = await import('../agents/runtime');
-      clearAgentsRuntime();
-    });
+    afterEach(clearApplicationContext);
 
     async function configureOwnedAgent(ownerPrincipalId: string): Promise<string> {
-      const { configureAgentsRuntime } = await import('../agents/runtime');
       const { createInMemoryAgentStoreProvider } = await import('../agents/memory-store');
       const agents = createInMemoryAgentStoreProvider();
-      configureAgentsRuntime({
-        agents,
-        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+      installTestDomains({
+        agents: {
+          agents,
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+        },
       });
       const outcome = await agents.forWorkspace(WORKSPACE).create(
         {
@@ -325,58 +427,143 @@ describe('POST /api/agents/:id/runs', () => {
     expect(harness.launched[0]?.prompt).toBe('summarise these contracts');
   });
 
-  describe('RF-303 launch handoff characterization', () => {
-    let actual: {
-      readonly outcome:
-        | { readonly kind: 'response'; readonly status: number }
-        | {
-            readonly kind: 'launch-error';
-          };
-      readonly runs: ReadonlyArray<{ readonly status: string; readonly workspaceId: string }>;
-    };
-
-    beforeEach(async () => {
-      const harness = install({
-        launch: () => {
-          throw new Error('process-local launch handoff failed');
-        },
-      });
-
-      const outcome = await startRun(post(AGENT, { prompt: 'hi' }), AGENT).then(
-        (response) => ({ kind: 'response' as const, status: response.status }),
-        (error: unknown) => {
-          if (
-            !(error instanceof Error) ||
-            error.message !== 'process-local launch handoff failed'
-          ) {
-            throw error;
-          }
-          return { kind: 'launch-error' as const };
-        },
-      );
-      const persisted = await harness.store.listRuns(WORKSPACE, { limit: 10 });
-      actual = {
-        outcome,
-        runs: persisted.items.map((run) => ({ status: run.status, workspaceId: run.workspaceId })),
-      };
-    });
-
-    it('RF-303 captures the launch failure and the queued run persisted by the harness', () => {
-      expect(actual).toEqual({
-        outcome: { kind: 'launch-error' },
-        runs: [{ status: 'queued', workspaceId: WORKSPACE }],
-      });
-    });
-
-    it.fails(
-      'RF-303 keeps the accepted request boundary from depending on a process-local launch callback (expected failure until RF-303)',
-      () => {
-        expect(actual).toEqual({
-          outcome: { kind: 'response', status: 202 },
-          runs: [{ status: 'queued', workspaceId: WORKSPACE }],
-        });
+  // RF-303 (ADR-0151): the committed run row is the acceptance. A launch handoff that throws does
+  // not turn an accepted request into a 500; the run stays queued for the stale-run sweep.
+  it('RF-303 answers 202 for a persisted run whose process-local launch handoff threw', async () => {
+    const logged: unknown[] = [];
+    const logger = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: (message: string, fields?: Readonly<Record<string, unknown>>) => {
+        logged.push({ message, runId: fields?.['runId'] });
       },
-    );
+      child: () => logger,
+    };
+    const harness = install({
+      logger,
+      launch: () => {
+        throw new Error('process-local launch handoff failed');
+      },
+    });
+    const response = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
+    const persisted = await harness.store.listRuns(WORKSPACE, { limit: 10 });
+    expect({
+      status: response.status,
+      runs: persisted.items.map((run) => ({ status: run.status, workspaceId: run.workspaceId })),
+    }).toEqual({ status: 202, runs: [{ status: 'queued', workspaceId: WORKSPACE }] });
+    expect(logged).toEqual([
+      {
+        message: 'the launch handoff failed; the run stays queued',
+        runId: persisted.items[0]?.id,
+      },
+    ]);
+  });
+
+  // ADR-0151, #250: an `Idempotency-Key` makes a start safe to retry.
+  describe('Idempotency-Key on run start', () => {
+    const keyed = (body: unknown, key: string): Request => {
+      const request = post(AGENT, body);
+      request.headers.set('Idempotency-Key', key);
+      return request;
+    };
+    const runIdOf = async (response: Response): Promise<string> =>
+      String(((await response.json()) as { run: { id: string } }).run.id);
+
+    it('answers a replay with the original run, and launches once', async () => {
+      const harness = install();
+      const first = await startRun(keyed({ prompt: 'hi' }, 'k-1'), AGENT);
+      const replay = await startRun(keyed({ prompt: 'hi' }, 'k-1'), AGENT);
+
+      expect([first.status, replay.status]).toEqual([202, 202]);
+      const id = await runIdOf(first);
+      expect(await runIdOf(replay)).toBe(id);
+      expect(replay.headers.get('location')).toBe(`/api/runs/${id}/events`);
+      expect(harness.launched).toHaveLength(1);
+      expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(1);
+    });
+
+    it('keeps answering with the original run after it has finished', async () => {
+      const harness = install();
+      const id = await runIdOf(await startRun(keyed({ prompt: 'hi' }, 'k-2'), AGENT));
+      await harness.store.finish(id, 'completed', null);
+
+      const replay = await startRun(keyed({ prompt: 'hi' }, 'k-2'), AGENT);
+
+      expect(replay.status).toBe(202);
+      expect(await runIdOf(replay)).toBe(id);
+      expect(harness.launched).toHaveLength(1);
+    });
+
+    it('refuses the key with a different request, and creates nothing', async () => {
+      const harness = install();
+      await startRun(keyed({ prompt: 'hi' }, 'k-3'), AGENT);
+
+      const other = await startRun(keyed({ prompt: 'something else' }, 'k-3'), AGENT);
+
+      expect(other.status).toBe(409);
+      expect(await errorCode(other)).toBe('run_idempotency_conflict');
+      expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(1);
+      expect(harness.launched).toHaveLength(1);
+    });
+
+    it('replays a retry whose JSON lists the same members in another order', async () => {
+      const harness = install();
+      const schema = { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] };
+      const reordered = { required: ['a'], properties: { a: { type: 'string' } }, type: 'object' };
+      const first = await startRun(keyed({ prompt: 'hi', outputSchema: schema }, 'k-4'), AGENT);
+
+      const replay = await startRun(keyed({ outputSchema: reordered, prompt: 'hi' }, 'k-4'), AGENT);
+
+      expect(replay.status).toBe(202);
+      expect(await runIdOf(replay)).toBe(await runIdOf(first));
+      expect(harness.launched).toHaveLength(1);
+    });
+
+    it('still refuses a retry whose array members come in another order', async () => {
+      install();
+      const body = (required: string[]): unknown => ({
+        prompt: 'hi',
+        outputSchema: {
+          type: 'object',
+          properties: { a: { type: 'string' }, b: { type: 'string' } },
+          required,
+        },
+      });
+      await startRun(keyed(body(['a', 'b']), 'k-5'), AGENT);
+
+      const other = await startRun(keyed(body(['b', 'a']), 'k-5'), AGENT);
+
+      expect(other.status).toBe(409);
+      expect(await errorCode(other)).toBe('run_idempotency_conflict');
+    });
+
+    it.each([
+      ['empty', '   '],
+      ['longer than 255 characters', 'k'.repeat(256)],
+    ])('refuses a key that is %s', async (_label, key) => {
+      const harness = install();
+      const response = await startRun(keyed({ prompt: 'hi' }, key), AGENT);
+      expect(response.status).toBe(400);
+      expect(await errorCode(response)).toBe('invalid_idempotency_key');
+      expect(harness.launched).toHaveLength(0);
+    });
+
+    it('answers the race loser with the run the winner created', async () => {
+      const store = new InMemoryRunStore();
+      const harness = install({}, store);
+      const winner = await startRun(keyed({ prompt: 'hi' }, 'k-4'), AGENT);
+      // The loser's lookup ran before the winner committed: it misses once, then hits the key.
+      const find = store.findByIdempotencyKey.bind(store);
+      let misses = 1;
+      store.findByIdempotencyKey = (...args) =>
+        misses-- > 0 ? Promise.resolve(null) : find(...args);
+
+      const loser = await startRun(keyed({ prompt: 'hi' }, 'k-4'), AGENT);
+
+      expect(loser.status).toBe(202);
+      expect(await runIdOf(loser)).toBe(await runIdOf(winner));
+      expect(harness.launched).toHaveLength(1);
+    });
   });
 
   it('records the engine a new run executes on, with no engine version yet (ADR-0065)', async () => {
@@ -472,6 +659,98 @@ describe('POST /api/agents/:id/runs', () => {
       const response = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
       expect(response.status).toBe(202);
       expect(harness.launched).toHaveLength(1);
+    });
+
+    describe('outputSchema (ADR-0143)', () => {
+      const outputSchema = { type: 'object', properties: { verdict: { type: 'string' } } };
+      const image = (engine: string): string =>
+        `registry.example/private-project/runtime-${engine}@sha256:${'c'.repeat(64)}`;
+
+      beforeEach(() => {
+        configureEngineImagesForTests(
+          new Map([
+            ['claude-agent-sdk', image('claude-agent-sdk')],
+            ['openai-agents', image('openai-agents')],
+            ['pi', image('pi')],
+          ]),
+        );
+      });
+      afterEach(clearEngineImagesConfiguredForTests);
+
+      it('forwards the schema to the run row and the launch on an engine that supports it', async () => {
+        const harness = installWithEngines(null, 'claude-agent-sdk');
+        const response = await startRun(post(AGENT, { prompt: 'hi', outputSchema }), AGENT);
+        expect(response.status).toBe(202);
+        expect(harness.launched).toHaveLength(1);
+        expect(harness.launched[0]?.outputSchema).toEqual(outputSchema);
+        const body = (await response.json()) as { run: Record<string, unknown> };
+        expect(body.run['output']).toBeNull();
+      });
+
+      it('forwards the schema on the OpenAI Agents engine too', async () => {
+        const harness = installWithEngines(null, 'openai-agents');
+        const response = await startRun(post(AGENT, { prompt: 'hi', outputSchema }), AGENT);
+        expect(response.status).toBe(202);
+        expect(harness.launched[0]?.outputSchema).toEqual(outputSchema);
+      });
+
+      it('launches without an outputSchema when the request carried none', async () => {
+        const harness = installWithEngines(null, 'claude-agent-sdk');
+        await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
+        expect(harness.launched[0]).not.toHaveProperty('outputSchema');
+      });
+
+      it('answers 400 invalid_body naming the limit, and creates no run', async () => {
+        const harness = installWithEngines(null, 'claude-agent-sdk');
+        const response = await startRun(
+          post(AGENT, { prompt: 'hi', outputSchema: { type: 'array' } }),
+          AGENT,
+        );
+        expect(response.status).toBe(400);
+        const body = (await response.json()) as { error: { code: string; message: string } };
+        expect(body.error.code).toBe('invalid_body');
+        expect(body.error.message).toContain('root_type');
+        expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+      });
+
+      it('answers 422 engine_capability_unsupported with the capability, and creates no run', async () => {
+        const harness = installWithEngines(null, 'pi');
+        const response = await startRun(post(AGENT, { prompt: 'hi', outputSchema }), AGENT);
+        expect(response.status).toBe(422);
+        const body = (await response.json()) as {
+          error: { code: string; message: string; details?: string[] };
+        };
+        expect(body.error.code).toBe('engine_capability_unsupported');
+        expect(body.error.details).toEqual(['structuredOutput']);
+        expect(body.error.message).toContain('pi');
+        expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+        expect(harness.launched).toHaveLength(0);
+      });
+
+      it('refuses an unsupported schema before opening a new session', async () => {
+        let opened = 0;
+        install({
+          findAgent: (principal, id) =>
+            Promise.resolve(
+              id === AGENT ? { id: AGENT, workspaceId: principal.workspaceId, engine: 'pi' } : null,
+            ),
+          openSession: (_p, agent) => {
+            opened += 1;
+            return Promise.resolve({ id: SESSION, agentId: agent.id, engine: null });
+          },
+        });
+        const response = await startRun(post(AGENT, { prompt: 'hi', outputSchema }), AGENT);
+        expect(response.status).toBe(422);
+        expect(await errorCode(response)).toBe('engine_capability_unsupported');
+        expect(opened).toBe(0);
+      });
+
+      it('still starts a run with no schema on an engine without structured output', async () => {
+        const harness = installWithEngines(null, 'pi');
+        const response = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
+        expect(response.status).toBe(202);
+        expect(harness.launched).toHaveLength(1);
+      });
     });
 
     // ── ENG-07 (#306, ADR-0073 D2/D3): an engine with no configured image is not installed ─────
@@ -583,6 +862,42 @@ describe('POST /api/agents/:id/runs', () => {
     expect(harness.launched).toHaveLength(0);
   });
 
+  it('answers 403 run_subject_forbidden for a "subject" from anything but an API key', async () => {
+    const input = { prompt: 'hi', subject: 'user-1' };
+    expect(StartRunRequestSchema.safeParse(input).success).toBe(true);
+    for (const via of ['session', 'user-token', 'browser-token', undefined] as const) {
+      const harness = install({
+        authenticate: () =>
+          Promise.resolve({ ...PRINCIPAL, ...(via === undefined ? {} : { via }) }),
+      });
+      const response = await startRun(post(AGENT, input), AGENT);
+      expect(response.status, String(via)).toBe(403);
+      expect(await errorCode(response)).toBe('run_subject_forbidden');
+      expect(harness.launched).toHaveLength(0);
+    }
+  });
+
+  it('launches an API-key run with its "subject"', async () => {
+    const harness = install({
+      authenticate: () =>
+        Promise.resolve({ ...PRINCIPAL, via: 'api-key' as const, kind: 'api_key' as const }),
+    });
+    const response = await startRun(post(AGENT, { prompt: 'hi', subject: 'user-1' }), AGENT);
+    expect(response.status).toBe(202);
+    expect(harness.launched[0]?.subject).toBe('user-1');
+  });
+
+  it('hands a valid "fileScope" to the launch, and answers 400 invalid_body for a bad one', async () => {
+    const harness = install();
+    const ok = await startRun(post(AGENT, { prompt: 'hi', fileScope: ['docs/alice'] }), AGENT);
+    expect(ok.status).toBe(202);
+    expect(harness.launched[0]?.fileScope).toEqual(['docs/alice']);
+    const bad = await startRun(post(AGENT, { prompt: 'hi', fileScope: ['../x'] }), AGENT);
+    expect(bad.status).toBe(400);
+    expect(await errorCode(bad)).toBe('invalid_body');
+    expect(harness.launched).toHaveLength(1);
+  });
+
   it('returns 404, not 403, for an agent in another workspace', async () => {
     // §25: a status code that distinguishes "does not exist" from "not yours" confirms the row
     // exists to a caller who is not allowed to know that.
@@ -661,6 +976,34 @@ describe('GET /api/runs/:id', () => {
     expect(body.run.id).toBe(created.run.id);
   });
 
+  it('names the agent version the run executed, or null for a legacy session (issue #1571)', async () => {
+    const harness = install();
+    const legacy = newRunId();
+    await harness.store.create({
+      engine: 'claude-agent-sdk',
+      id: SESSION,
+      workspaceId: WORKSPACE,
+      agentId: AGENT,
+      sessionId: SESSION,
+      agentVersion: 3,
+    });
+    await harness.store.create({
+      engine: 'claude-agent-sdk',
+      id: legacy,
+      workspaceId: WORKSPACE,
+      agentId: AGENT,
+      sessionId: legacy,
+    });
+    const read = async (id: string): Promise<unknown> =>
+      (
+        (await (await readRun(get(`http://web/api/runs/${id}`), id)).json()) as {
+          run: { agentVersion: unknown };
+        }
+      ).run.agentVersion;
+    expect(await read(SESSION)).toBe(3);
+    expect(await read(legacy)).toBeNull();
+  });
+
   it('returns 401 unauthenticated, 400 for a non-UUID and 404 for an unknown run', async () => {
     install();
     expect((await readRun(get('http://web/api/runs/x', {}, false), 'x')).status).toBe(401);
@@ -729,28 +1072,11 @@ async function listBody(response: Response): Promise<{
 }
 
 describe('GET /api/runs', () => {
-  it('returns 401 unauthenticated and 503 when the store has no listRuns implementation', async () => {
+  it('returns 401 unauthenticated and 503 when the run API is not configured', async () => {
     install();
     expect((await listRuns(get('http://web/api/runs', {}, false))).status).toBe(401);
 
-    // A store with no `listRuns` — the port's declared optional case.
-    installRunApi({
-      authenticate: () => Promise.resolve(PRINCIPAL),
-      findAgent: () => Promise.resolve(null),
-      openSession: () => Promise.resolve(null),
-      ownsRun: () => Promise.resolve(true),
-      store: {
-        create: () => Promise.reject(new Error('unused')),
-        get: () => Promise.resolve(null),
-        markRunning: () => Promise.resolve(false),
-        finish: () => Promise.resolve(),
-        snapshotModel: () => Promise.resolve(),
-        append: () => Promise.reject(new Error('unused')),
-        appendPlatformEvent: () => Promise.reject(new Error('unused')),
-        openStream: () => Promise.resolve(null),
-      },
-      launch: () => undefined,
-    });
+    resetTestRunApi();
     expect((await listRuns(get('http://web/api/runs'))).status).toBe(503);
   });
 
@@ -882,7 +1208,7 @@ describe('GET /api/runs', () => {
     async () => {
       const harness = install({
         authenticate: () =>
-          Promise.resolve({ ...PRINCIPAL, role: 'bogus' } as unknown as Principal),
+          Promise.resolve({ ...PRINCIPAL, role: 'bogus' } as unknown as RunPrincipal),
       });
       await seedRun(harness.store);
       const response = await listRuns(get('http://web/api/runs'));
@@ -1357,7 +1683,7 @@ describe('POST /api/runs/:id/interrupt (issue #235, S-14)', () => {
     expect((await interruptRun(interruptRequest(run.id), run.id)).status).toBe(404);
   });
 
-  it('the state matrix: queued and running are interruptible; every terminal status is 409', async () => {
+  it('the state matrix: queued, running and paused are interruptible; every terminal status is 409', async () => {
     for (const status of runStatuses) {
       const store = new InMemoryRunStore();
       let calls = 0;
@@ -1372,11 +1698,13 @@ describe('POST /api/runs/:id/interrupt (issue #235, S-14)', () => {
       );
       const run = await seedRun(store);
       if (status !== 'queued') {
-        if (status === 'running') await store.markRunning(run.id);
-        else await store.finish(run.id, status, null);
+        if (status === 'running' || status === 'awaiting_approval') await store.markRunning(run.id);
+        if (status === 'awaiting_approval') {
+          await store.awaitApproval(run.id, { toolName: 'send_email', canonicalCall: '{}' });
+        } else if (status !== 'running') await store.finish(run.id, status, null);
       }
       const response = await interruptRun(interruptRequest(run.id), run.id);
-      if (status === 'queued' || status === 'running') {
+      if (status === 'queued' || status === 'running' || status === 'awaiting_approval') {
         expect(response.status, status).toBe(200);
         expect(calls, status).toBe(1);
       } else {
@@ -1508,6 +1836,87 @@ describe('GET /api/runs/:id/events', () => {
       /event: assistant\nid: 1\nat: \d{4}-\d\d-\d\dT[\d:.]+Z\ndata: \{"text":"hello"\}\n/u,
     );
     expect(body.endsWith('event: done\ndata: {}\n\n')).toBe(true);
+  });
+
+  it('serves a visitor no frame that carries the operator-only handoff reason (ADR-0145 D4)', async () => {
+    const harness = install();
+    const runId = await startedRun();
+    const reason = 'Wants a refund over the "limit".';
+    const tool = 'mcp__agent-workspace__handoff_to_person';
+    const turn = {
+      type: 'assistant',
+      message: {
+        id: 'm1',
+        content: [
+          { type: 'text', text: 'One moment.' },
+          { type: 'tool_use', id: 'call_1', name: tool, input: { reason } },
+        ],
+      },
+    };
+    const engine = 'claude-agent-sdk';
+    const frames = [
+      {
+        frame: 'agent.message',
+        engine,
+        raw: turn,
+        messageId: 'm1',
+        role: 'assistant',
+        blocks: [{ type: 'text', text: 'One moment.' }],
+      },
+      {
+        frame: 'agent.tool.call',
+        engine,
+        raw: turn,
+        toolCallId: 'call_1',
+        name: tool,
+        kind: 'mcp',
+        input: { reason },
+      },
+      {
+        frame: 'agent.tool.result',
+        engine,
+        raw: null,
+        toolCallId: 'call_1',
+        status: 'completed',
+        output: `noted: ${reason}`,
+        isError: false,
+      },
+      {
+        frame: 'agent.result',
+        engine,
+        raw: { type: 'result', result: 'A person will take over.' },
+        stopReason: 'end_turn',
+        turns: 1,
+        engineCostUsd: null,
+      },
+      { frame: 'agent.handoff', engine, raw: { type: 'result', note: reason }, reason },
+    ];
+    for (const data of frames) await harness.store.append(runId, { type: data.frame, data });
+    await harness.store.finish(runId, 'completed', null);
+    const run = await harness.store.get(runId);
+    if (run?.sessionId == null) throw new Error('the started run has no session');
+    const onWire = JSON.stringify(reason).slice(1, -1);
+
+    const operator = await readAll(
+      await streamRunEvents(get(`http://web/api/runs/${runId}/events`), runId),
+    );
+    expect(operator).toContain(`"reason":"${onWire}"`);
+
+    install({
+      store: harness.store,
+      authenticate: () =>
+        Promise.resolve({ ...PRINCIPAL, scope: { kind: 'session', id: run.sessionId } }),
+    });
+    const response = await streamRunEvents(get(`http://web/api/runs/${runId}/events`), runId);
+    expect(response.status).toBe(200);
+    const visitor = await readAll(response);
+    for (const frame of frames)
+      expect(visitor).toContain(`event: ${frame.frame}
+`);
+    expect(visitor).toContain('A person will take over.');
+    expect(visitor).not.toContain(onWire);
+    expect(visitor).not.toContain('Wants a refund');
+    expect(visitor).not.toContain('"reason"');
   });
 
   it('lets an Admin stream another member’s transcript where a Viewer is refused — `events` inherits its parent’s grants, issue #165', async () => {
@@ -1671,7 +2080,7 @@ describe('a run that ends failed', () => {
   }
 
   it('ends the stream with run-failed before done, carrying the run error', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const harness = install(
       {
@@ -1729,11 +2138,11 @@ describe('a run that ends failed', () => {
 describe('a session-scoped browser token’s row identity (issue #236)', () => {
   const OTHER_SESSION = '99999999-9999-4999-8999-999999999999';
 
-  function sessionScopedPrincipal(sessionId: string): Principal {
+  function sessionScopedPrincipal(sessionId: string): RunPrincipal {
     return { ...PRINCIPAL, scope: { kind: 'session', id: sessionId } };
   }
 
-  function runScopedPrincipal(runId: string): Principal {
+  function runScopedPrincipal(runId: string): RunPrincipal {
     return { ...PRINCIPAL, scope: { kind: 'run', id: runId } };
   }
 
@@ -1849,6 +2258,10 @@ describe('classifyRunOutcome', () => {
       message: 'the runtime vanished',
     });
     expect(classifyRunOutcome(record('cancelled'), SESSION).kind).toBe('failed');
+  });
+
+  it('reports a run paused for approval as paused, not as a failure or a success', () => {
+    expect(classifyRunOutcome(record('awaiting_approval'), SESSION)).toEqual({ kind: 'paused' });
   });
 
   it('never claims an outcome it does not have', () => {
@@ -2137,7 +2550,7 @@ describe('startRun under the deployment policy ceiling (issue #535)', () => {
   function installWithCeiling(policy: Parameters<typeof recordingCeilingFor>[0] | null) {
     const recording = policy === null ? null : recordingCeilingFor(policy);
     const preflight = vi.fn(() => Promise.resolve(null));
-    const openSession = vi.fn((_p: Principal, agent: AgentRef) =>
+    const openSession = vi.fn((_p: RunPrincipal, agent: AgentRef) =>
       Promise.resolve<SessionRef | null>({ id: SESSION, agentId: agent.id, engine: null }),
     );
     const harness = install({
@@ -2192,7 +2605,7 @@ describe('startRun under the deployment policy ceiling (issue #535)', () => {
   it('reads a follow-up’s agent for its conversation, so a push never refuses its next turn (#612)', async () => {
     const recording = recordingCeilingFor({ models: ['claude-sonnet-4-5'] });
     // The row a push moved runs `pi`; the conversation is pinned to a version on the SDK engine.
-    const findAgent = vi.fn((principal: Principal, agentId: string, sessionId?: string | null) =>
+    const findAgent = vi.fn((principal: RunPrincipal, agentId: string, sessionId?: string | null) =>
       Promise.resolve<AgentRef | null>({
         id: agentId,
         workspaceId: principal.workspaceId,
@@ -2225,7 +2638,7 @@ describe('startRun under the deployment policy ceiling (issue #535)', () => {
 
 /** Issue #622: a surface visitor's turns are capped by its surface's `turnsPerConversation`. */
 describe('a surface visitor’s turn limit (issue #622)', () => {
-  const VISITOR: Principal = { ...PRINCIPAL, scope: { kind: 'session', id: SESSION } };
+  const VISITOR: RunPrincipal = { ...PRINCIPAL, scope: { kind: 'session', id: SESSION } };
   const SURFACE = { name: 'main', agent: 'support', limits: { turnsPerConversation: 2 } };
 
   afterEach(() => {
@@ -2260,5 +2673,181 @@ describe('a surface visitor’s turn limit (issue #622)', () => {
     const started = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
     expect(started.status).toBe(202);
     expect(asked).toEqual([]);
+  });
+});
+
+describe('runs.start attachments (issue #1307)', () => {
+  const UNKNOWN_ID = 'a0000000-0000-4000-8000-000000000002';
+  let FILE_ID: string;
+  let RESERVED_ID: string;
+  let BIG_ID: string;
+  let AUDIO_ID: string;
+  const row = (path: string, contentType: string | null, sizeBytes = 3) => ({
+    path,
+    kind: 'file' as const,
+    storageKey: path,
+    sizeBytes,
+    contentType,
+    ownerPrincipalId: PRINCIPAL.ownerPrincipalId,
+  });
+
+  const sessionSpy = () =>
+    vi.fn((_p: RunPrincipal, agent: AgentRef) =>
+      Promise.resolve<SessionRef | null>({ id: SESSION, agentId: agent.id, engine: null }),
+    );
+
+  beforeEach(async () => {
+    // The Builder ownership check reads the agents runtime; an empty store answers `unknown`, as
+    // the unwired agents slot did before it moved into the application context.
+    const { createInMemoryAgentStoreProvider } = await import('../agents/memory-store');
+    const catalog = createInMemoryCatalogStore();
+    const seeded = catalog.forWorkspaceSync(WORKSPACE);
+    FILE_ID = (await seeded.putFile(row('notes/brief.md', 'text/markdown'))).id;
+    AUDIO_ID = (await seeded.putFile(row('meetings/a.m4a', null))).id;
+    RESERVED_ID = (await seeded.putFile(row('.attachments/upload.md', 'text/markdown'))).id;
+    BIG_ID = (
+      await seeded.putFile(row('notes/huge.bin', 'application/octet-stream', 10 * 1024 * 1024 + 1))
+    ).id;
+    installTestDomains({
+      agents: {
+        agents: createInMemoryAgentStoreProvider(),
+        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+      },
+      files: {
+        kind: 'serving',
+        runtime: {
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+          store: {} as never,
+          catalog,
+        },
+      },
+    });
+  });
+
+  afterEach(clearApplicationContext);
+
+  it('launches with the resolved attachments and a prompt that names them', async () => {
+    const harness = install();
+    const response = await startRun(
+      post(AGENT, { prompt: 'summarise', attachments: [{ fileId: FILE_ID }] }),
+      AGENT,
+    );
+    expect(response.status).toBe(202);
+    const context = harness.launched[0];
+    expect(context?.attachments).toEqual([
+      { fileId: FILE_ID, path: 'notes/brief.md', kind: 'file' },
+    ]);
+    expect(context?.prompt).toContain('summarise');
+    expect(context?.prompt).toContain('Attached (read-only): notes/brief.md');
+  });
+
+  it('launches a run without attachments exactly as before', async () => {
+    const harness = install();
+    await startRun(post(AGENT, { prompt: 'plain' }), AGENT);
+    expect(harness.launched[0]?.attachments).toBeUndefined();
+    expect(harness.launched[0]?.prompt).toBe('plain');
+  });
+
+  it('answers one concealed 404 for an unknown id, a reserved path and a session-scoped token, and opens no session or run', async () => {
+    const openSession = sessionSpy();
+    const unknownHarness = install({ openSession });
+    const unknown = await startRun(
+      post(AGENT, { prompt: 'hi', attachments: [{ fileId: UNKNOWN_ID }] }),
+      AGENT,
+    );
+    expect(unknown.status).toBe(404);
+    const unknownBody = await unknown.text();
+    expect(unknownBody).toContain('file_not_found');
+    expect(unknownHarness.launched).toHaveLength(0);
+    expect(openSession).not.toHaveBeenCalled();
+    expect((await unknownHarness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+
+    const reservedSession = sessionSpy();
+    const reservedHarness = install({ openSession: reservedSession });
+    const reserved = await startRun(
+      post(AGENT, { prompt: 'hi', attachments: [{ fileId: RESERVED_ID }] }),
+      AGENT,
+    );
+    expect(reserved.status).toBe(404);
+    expect(await reserved.text()).toBe(unknownBody);
+    expect(reservedHarness.launched).toHaveLength(0);
+    expect(reservedSession).not.toHaveBeenCalled();
+    expect((await reservedHarness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+
+    const scopedSession = sessionSpy();
+    const scoped = install({
+      openSession: scopedSession,
+      authenticate: () =>
+        Promise.resolve({ ...PRINCIPAL, scope: { kind: 'session', id: SESSION } }),
+    });
+    const refused = await startRun(
+      post(AGENT, { prompt: 'hi', sessionId: SESSION, attachments: [{ fileId: FILE_ID }] }),
+      AGENT,
+    );
+    expect(refused.status).toBe(404);
+    expect(await refused.text()).toBe(unknownBody);
+    expect(scoped.launched).toHaveLength(0);
+    expect(scopedSession).not.toHaveBeenCalled();
+    expect((await scoped.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+  });
+
+  it('refuses an oversized attachment with run_attachments_too_large before any run exists', async () => {
+    const openSession = sessionSpy();
+    const harness = install({ openSession });
+    const response = await startRun(
+      post(AGENT, { prompt: 'hi', attachments: [{ fileId: BIG_ID }] }),
+      AGENT,
+    );
+    expect(response.status).toBe(422);
+    expect(await errorCode(response)).toBe('run_attachments_too_large');
+    expect(harness.launched).toHaveLength(0);
+    expect(openSession).not.toHaveBeenCalled();
+    expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+  });
+
+  it('passes the attachment count to preflight and answers its 422 with no run', async () => {
+    const counts: (number | undefined)[] = [];
+    const harness = install({
+      preflight: (_p, _a, _s, _m, _v, attachmentCount) => {
+        counts.push(attachmentCount);
+        return Promise.resolve({
+          code: 'run_attachments_unreadable',
+          message: 'this agent cannot read files.',
+        });
+      },
+    });
+    const response = await startRun(
+      post(AGENT, { prompt: 'hi', attachments: [{ fileId: FILE_ID }] }),
+      AGENT,
+    );
+    expect(response.status).toBe(422);
+    expect(await errorCode(response)).toBe('run_attachments_unreadable');
+    expect(counts).toEqual([1]);
+    expect(harness.launched).toHaveLength(0);
+  });
+
+  it('counts the audio attachments for preflight and answers its 422 with no run (issue #1313)', async () => {
+    const counts: (number | undefined)[][] = [];
+    const harness = install({
+      preflight: (_p, _a, _s, _m, _v, attachmentCount, audioAttachmentCount) => {
+        counts.push([attachmentCount, audioAttachmentCount]);
+        return Promise.resolve({
+          code: 'run_attachments_untranscribable',
+          message: 'the anthropic provider cannot transcribe audio.',
+        });
+      },
+    });
+    const response = await startRun(
+      post(AGENT, {
+        prompt: 'minutes',
+        attachments: [{ fileId: FILE_ID }, { fileId: AUDIO_ID }],
+      }),
+      AGENT,
+    );
+    expect(response.status).toBe(422);
+    expect(await errorCode(response)).toBe('run_attachments_untranscribable');
+    expect(counts).toEqual([[2, 1]]);
+    expect(harness.launched).toHaveLength(0);
+    expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
   });
 });

@@ -73,18 +73,24 @@ const BROWSER_JOURNEY = /\(04 §1\)$/u;
 const PRIVATE_RUNNER_ROUTE = 'private runner route (per-run token)';
 /** The Vercel Cron retention job: called by the platform, never by an SDK client (ADR-0120 clause 7). */
 const PLATFORM_CRON_JOB = 'platform cron job (CRON_SECRET bearer)';
+/** The web server's readiness probe: called by the platform's kubelet, never by an SDK client (#1562). */
+const PLATFORM_READINESS_PROBE = 'platform readiness probe (no credential)';
+/** The Builder's `aw-control` MCP door: called by the gateway with a run token, never by an SDK client (#1846). */
+const RUN_CALLER_ROUTE = 'run-caller route (per-run token, aw-control tools)';
 
 /** The OAuth 2.1 server's protocol endpoints (ADR-0134 part 3): specified by an RFC, not by this API. */
 const OAUTH_PROTOCOL_ROUTE = /\(RFC \d+\)/u;
 
 describe('route coverage', () => {
-  it('excludes only browser journeys, private runner routes, OAuth protocol endpoints and the platform cron job', () => {
+  it('excludes only browser journeys, private runner routes, OAuth protocol endpoints, the platform cron job, the readiness probe and the run-caller route', () => {
     const reasons = API_ROUTE_EXCLUSIONS.filter(
       (route) =>
         !BROWSER_JOURNEY.test(route.because) &&
         !OAUTH_PROTOCOL_ROUTE.test(route.because) &&
         route.because !== PRIVATE_RUNNER_ROUTE &&
-        route.because !== PLATFORM_CRON_JOB,
+        route.because !== PLATFORM_CRON_JOB &&
+        route.because !== PLATFORM_READINESS_PROBE &&
+        route.because !== RUN_CALLER_ROUTE,
     );
     const oauthOnly = API_ROUTE_EXCLUSIONS.filter((route) =>
       OAUTH_PROTOCOL_ROUTE.test(route.because),
@@ -93,6 +99,7 @@ describe('route coverage', () => {
       [
         'GET /.well-known/oauth-authorization-server',
         'GET /.well-known/oauth-protected-resource/mcp/projects/:name',
+        'GET /.well-known/oauth-protected-resource/mcp/builder',
         'GET /.well-known/oauth-protected-resource/api/a2a/agents/:agentName',
         'POST /oauth/token',
         'POST /oauth/revoke',
@@ -101,14 +108,28 @@ describe('route coverage', () => {
     const cronOnly = API_ROUTE_EXCLUSIONS.filter(
       (route) => route.because === PLATFORM_CRON_JOB,
     ).map((route) => key(route.method, route.path));
-    expect(cronOnly).toEqual(['GET /api/cron/retention']);
+    expect(cronOnly).toEqual([
+      'GET /api/cron/retention',
+      'GET /api/cron/triggers',
+      'GET /api/cron/storage-cleanup',
+    ]);
+    const probeOnly = API_ROUTE_EXCLUSIONS.filter(
+      (route) => route.because === PLATFORM_READINESS_PROBE,
+    ).map((route) => key(route.method, route.path));
+    expect(probeOnly).toEqual(['GET /api/readyz']);
+    const runCallerOnly = API_ROUTE_EXCLUSIONS.filter(
+      (route) => route.because === RUN_CALLER_ROUTE,
+    ).map((route) => key(route.method, route.path));
+    expect(runCallerOnly).toEqual(['POST /api/builder/mcp']);
     expect(reasons, 'an exclusion that is neither kind').toEqual([]);
     const runnerOnly = API_ROUTE_EXCLUSIONS.filter(
       (route) => route.because === PRIVATE_RUNNER_ROUTE,
     ).map((route) => key(route.method, route.path));
-    // The ENG-06 state routes and the transcript writes: `apps/runner` is their only client.
+    // The ENG-06 state routes, the transcript writes and the run's file search: the running agent
+    // (through `apps/runner`) is their only client.
     expect(runnerOnly.sort()).toEqual(
       [
+        'GET /api/sessions/:engineSessionId/file-search',
         'POST /api/sessions/:engineSessionId/transcript',
         'DELETE /api/sessions/:engineSessionId/transcript',
         ...['GET', 'POST', 'PUT', 'DELETE'].map((method) =>
@@ -251,7 +272,6 @@ const UNDESCRIBED_BODIES = [
   'GET /api/setup/runtime-detect 200',
   'PATCH /api/agents/:id request',
   'PATCH /api/connectors/:id request',
-  'PATCH /api/files/:id request',
   'PATCH /api/memberships/:id request',
   'PATCH /api/model-connections/:id request',
   'PATCH /api/projects/:id request',

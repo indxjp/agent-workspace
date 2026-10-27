@@ -36,6 +36,11 @@ done
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# CI runs several jobs at once on one Docker daemon (MS-A2), and two scans of one image shared a tag:
+# one job's `docker image rm` removed the image the other was about to scan or remove. The tag is
+# unique to this invocation (its temporary directory's name), so each job scans and removes only
+# the image it built.
+tag="local-$(basename "$work" | tr -cd 'A-Za-z0-9')"
 plan="$work/plan"
 node infra/release/images.mjs > "$plan"
 for name in $only; do
@@ -50,7 +55,7 @@ while read -r name dockerfile target engine engine_version <&3; do
   if [ -n "$only" ]; then
     case " $only " in *" $name "*) ;; *) continue ;; esac
   fi
-  reference="agent-workspace-scan/$name:local"
+  reference="agent-workspace-scan/$name:$tag"
   set -- --platform "$platform" --file "$dockerfile" --target "$target" --load --tag "$reference"
   if [ "$engine" != - ]; then
     # runtime.Dockerfile re-checks ENGINE_VERSION against the manifests it copied.

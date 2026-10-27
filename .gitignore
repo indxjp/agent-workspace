@@ -48,3 +48,7 @@ formal/.lake/
 # run leaves them behind (the next run removes them); they must never be committed.
 apps/web/app/api/w1cp06-unregistered/
 apps/web/app/p/w1cp06-unauthenticated/
+
+# Playwright output; a run with CI set writes its HTML and JSON reports into the repository root.
+/playwright-report/
+/test-results/

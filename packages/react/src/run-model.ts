@@ -39,7 +39,7 @@ import {
   type AssistantResponse,
 } from '@indx-workspace/sdk/events';
 
-import { parseRunFailure } from '@indx-workspace/contracts/runs';
+import { parseRunFailure, RUN_STATUSES } from '@indx-workspace/contracts/runs';
 
 /** A tone from the design system's badge palette (`.badge.ok`, `.badge.warn`, … in `ui/assets/app.css`). */
 export type BadgeTone = 'ok' | 'warn' | 'danger' | 'info' | 'muted';
@@ -517,7 +517,7 @@ export function userMessage(id: string, speaker: Speaker, text: string): Message
  * badgeForRunStatus} does not crash and does not fabricate one of the five it expected; it shows
  * the raw string the server actually sent.
  */
-export const RUN_STATUS_NAMES = ['queued', 'running', 'completed', 'failed', 'cancelled'] as const;
+export const RUN_STATUS_NAMES = RUN_STATUSES;
 type RunStatusName = (typeof RUN_STATUS_NAMES)[number];
 
 function isRunStatusName(value: unknown): value is RunStatusName {
@@ -592,7 +592,7 @@ export function eventLineFrom(id: string, time: string, event: string, data: unk
 
 /**
  * The run-state badge for a status string this screen read off a real API response. Total over
- * the five names this platform defines; an unrecognised string is still shown, in its own words,
+ * the names this platform defines; an unrecognised string is still shown, in its own words,
  * rather than hidden (ADR-0015 — a status this function did not check is not asserted as one it
  * did).
  */
@@ -605,6 +605,8 @@ export function badgeForRunStatus(status: unknown): RunBadge {
       return { label: 'Queued', tone: 'muted', dot: true };
     case 'running':
       return { label: 'Running', tone: 'info', dot: true };
+    case 'awaiting_approval':
+      return { label: 'Awaiting approval', tone: 'warn', dot: false };
     case 'completed':
       return { label: 'Completed', tone: 'ok', dot: false };
     case 'failed':

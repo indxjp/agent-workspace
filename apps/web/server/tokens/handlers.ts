@@ -16,16 +16,13 @@ import {
   type MintTokenResponse,
 } from '@indx-workspace/contracts/tokens';
 
-import {
-  authorise,
-  problem,
-  readJsonBody,
-  type ApiResult,
-  type OwnershipResolver,
-} from '../rbac/http';
+import { applicationContext } from '../application-context';
+import { problemWithDetail as problem, readJsonBody } from '../http/result';
+import { authorise, type OwnershipResolver } from '../rbac/http';
+import type { ApiResult } from '../http/result';
 import type { Principal } from '../rbac/principal';
 import type { BrowserTokenScope } from '../rbac/token-scope';
-import { currentTokensRuntime } from './runtime';
+import type { TokensRuntime } from './runtime';
 
 const notConfigured = (): ApiResult =>
   problem(
@@ -47,6 +44,12 @@ const targetNotFound = (scope: BrowserTokenScope): ApiResult =>
     `no ${scope.kind} ${scope.id} in this workspace.`,
   );
 
+/** The installed `POST /api/tokens` runtime, or `null` while it is not serving (the route's 503). */
+function servingTokens(): TokensRuntime | null {
+  const tokens = applicationContext()?.tokens;
+  return tokens?.kind === 'serving' ? tokens.runtime : null;
+}
+
 /**
  * Resolve the ownership `decide()` needs for the `tokens` cell of §21's table: whose row `scope`
  * names. Refuses with an indistinguishable `404` for a target that does not exist in the caller's
@@ -56,7 +59,7 @@ const targetNotFound = (scope: BrowserTokenScope): ApiResult =>
  */
 function ownershipOfScope(scope: BrowserTokenScope): OwnershipResolver {
   return async (principal: Principal) => {
-    const runtime = currentTokensRuntime();
+    const runtime = servingTokens();
     if (runtime === null) return { kind: 'refuse', result: notConfigured() };
     // `runs.id` and `sessions.id` are `uuid` columns, so an id that is not one must never be
     // handed to a store "to see what happens" (`packages/contracts/src/identifiers.ts`): PostgreSQL
@@ -92,7 +95,7 @@ export async function mintToken(request: Request): Promise<ApiResult> {
   const { scope, ttlSeconds } = parsed.data;
 
   return authorise(request, ownershipOfScope(scope), async ({ principal }) => {
-    const runtime = currentTokensRuntime();
+    const runtime = servingTokens();
     if (runtime === null) return notConfigured();
     const minted = await runtime.issue(
       principal,

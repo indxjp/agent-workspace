@@ -244,6 +244,36 @@ describe('the release trivy gate (#373, docs/adr/0087)', () => {
     // Nine images through a POSIX shell: slower than the default 5 s on a Windows host.
   }, 60_000);
 
+  it("tags each invocation uniquely, so concurrent jobs on one daemon never remove each other's image", () => {
+    // Stand-ins for docker and trivy that log every docker call.
+    const bin = mkdtempSync(path.join(tmpdir(), 'aw-scan-images-'));
+    temporary.push(bin);
+    const calls = path.join(bin, 'calls.log');
+    writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\necho "$*" >> '${calls}'\nexit 0\n`, {
+      mode: 0o755,
+    });
+    writeFileSync(path.join(bin, 'trivy'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const run = () => {
+      const result = spawnSync(shell, ['infra/release/scan-images.sh', '--image', 'gateway'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, PATH: [bin, process.env['PATH']].join(path.delimiter) },
+      });
+      if (result.error) throw result.error;
+      expect(result.status).toBe(0);
+    };
+    run();
+    run();
+    const log = readFileSync(calls, 'utf8');
+    const built = [...log.matchAll(/--tag (\S+)/gu)].map((match) => match[1]);
+    const removed = [...log.matchAll(/^image rm (\S+)$/gmu)].map((match) => match[1]);
+    expect(built).toHaveLength(2);
+    expect(built[0]).toMatch(/^agent-workspace-scan\/gateway:local-[A-Za-z0-9]+$/u);
+    expect(built[0]).not.toBe(built[1]);
+    // Each invocation removes exactly the image it built.
+    expect(removed).toEqual(built);
+  }, 60_000);
+
   it('builds with the packageManager pnpm, and keeps npm and corepack out of every final stage', () => {
     const packageManager = /^pnpm@(\d+\.\d+\.\d+)$/u.exec(
       (JSON.parse(read('package.json')) as { packageManager: string }).packageManager,
@@ -293,7 +323,7 @@ describe('the release trivy gate (#373, docs/adr/0087)', () => {
 
   it('runs the trivy version the release runs', () => {
     const version =
-      /aquasecurity\/setup-trivy@[0-9a-f]{40} # v\S+\n {8}with:\n {10}version: (v\S+)\n/u;
+      /aquasecurity\/setup-trivy@[0-9a-f]{40} # v\S+\n(?: {8}if: .+\n)? {8}with:\n {10}version: (v\S+)\n/u;
     const released = version.exec(read('.github/workflows/images.yml'))?.[1];
     expect(released).toMatch(/^v\d+\.\d+\.\d+$/u);
     expect(version.exec(ci)?.[1]).toBe(released);
@@ -358,7 +388,7 @@ describe('the image release workflow', () => {
 
   it('pins buildx and BuildKit', () => {
     expect(workflow).toMatch(
-      /setup-buildx-action@[0-9a-f]{40} # v\S+\n {8}with:\n {10}version: v\d+\.\d+\.\d+\n/u,
+      /setup-buildx-action@[0-9a-f]{40} # v\S+\n(?: {8}if: .+\n)? {8}with:\n {10}version: v\d+\.\d+\.\d+\n/u,
     );
     expect(workflow).toMatch(/driver-opts: image=moby\/buildkit:v[\d.]+@sha256:[0-9a-f]{64}/u);
   });

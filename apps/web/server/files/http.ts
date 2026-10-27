@@ -1,104 +1,90 @@
 /**
  * The HTTP edge of the files routes — mirrors `apps/web/server/agents/http.ts`'s split between
- * "turn a `Request` into what a handler needs" and "turn a handler's `ApiResult` into a
+ * "turn a `Request` into what a handler needs" and "turn a handler's `FileResult` into a
  * `Response`", extended with a binary body path `agents/http.ts` never needed.
  */
-import { problem, type ApiResult } from './handlers';
-import { currentFilesRuntime } from './runtime';
-import { jsonBodyResponse, readRouteParam } from '../http/json-transport';
-import type { ObjectStore } from './object-store-bridge';
+import { MAX_UPLOAD_BYTES } from '@indx-workspace/contracts/files';
+import { contentDisposition, problem, type FileResult } from './handlers';
+import { applicationContext } from '../application-context';
+import { jsonBodyResponse, readBoundedJson, readRouteParam } from '../http/json-transport';
 import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
+import type { Principal } from '../rbac/principal';
+import type { WorkspaceResolution } from './runtime';
+import type { StorageContext, StorageService } from '../storage/service';
 
-/** The most bytes a single upload may carry. MVP proxies bytes through this route (R-15 §2: a
- * presigned URL is the scale answer; correctness at this size does not need one yet). 64 MiB is
- * comfortably above the `pricing.xlsx`/`report-template.docx` examples spec §16 itself shows. */
-export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+/** The catalog service's caller, from the signed-in principal only. */
+export function storageContextOf(principal: Principal): StorageContext {
+  return {
+    workspaceId: principal.workspaceId,
+    principalId: principal.ownerPrincipalId,
+    userId: principal.userId,
+    actor: { principalId: principal.principalId, userId: principal.userId, label: principal.label },
+  };
+}
 
-function tooLarge(observed: string): ApiResult {
+export function tooLarge(observed: string, maxBytes: number): FileResult {
   return problem(
     413,
     'request_body_too_large',
-    `This route reads at most ${String(MAX_UPLOAD_BYTES)} bytes of request body; the request ${observed}.`,
+    `This route reads at most ${String(maxBytes)} bytes of request body; the request ${observed}.`,
   );
 }
 
-/**
- * Read a request body as raw bytes, bounded while it streams — the same shape
- * `agents/http.ts`'s `readBoundedBodyText` uses, kept binary throughout rather than decoded to a
- * string anywhere, per this task's "byte-identical, no implicit text mode" mandate.
- */
-export async function readBoundedBodyBytes(
-  request: Request,
-): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; result: ApiResult }> {
+/** The refusal for a declared `Content-Length` that is not a byte count or is over `maxBytes`, else `null`. */
+function declaredLengthRefusal(request: Request, maxBytes: number): FileResult | null {
   const declared = request.headers.get('content-length');
-  if (declared !== null) {
-    const length = Number(declared);
-    if (!Number.isInteger(length) || length < 0) {
-      return {
-        ok: false,
-        result: problem(
-          400,
-          'malformed_body',
-          `The Content-Length header is ${JSON.stringify(declared)}, which is not a byte count.`,
-        ),
-      };
-    }
-    if (length > MAX_UPLOAD_BYTES)
-      return { ok: false, result: tooLarge(`declared a Content-Length of ${String(length)}`) };
+  if (declared === null) return null;
+  const length = Number(declared);
+  if (!Number.isInteger(length) || length < 0) {
+    return problem(
+      400,
+      'malformed_body',
+      `The Content-Length header is ${JSON.stringify(declared)}, which is not a byte count.`,
+    );
   }
-
-  const body = request.body;
-  if (body === null || body === undefined) return { ok: true, bytes: new Uint8Array(0) };
-
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (value === undefined) continue;
-    total += value.byteLength;
-    if (total > MAX_UPLOAD_BYTES) {
-      try {
-        await reader.cancel();
-      } catch {
-        // The body is being abandoned either way.
-      }
-      return { ok: false, result: tooLarge('sent more than that and was not read to the end') };
-    }
-    chunks.push(value);
-  }
-  const joined = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    joined.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { ok: true, bytes: joined };
+  return length > maxBytes
+    ? tooLarge(`declared a Content-Length of ${String(length)}`, maxBytes)
+    : null;
 }
 
 /**
- * `Content-Disposition` for a download, in the two-form shape RFC 6266 §4.3 specifies: a quoted
- * ASCII `filename` every client understands, and a `filename*` carrying the real name in
- * `UTF-8''`-percent-encoded form for the ones that do.
- *
- * The ASCII form is built from a positive character set — letters, digits and a short list of
- * punctuation — with everything else replaced, rather than by deleting the characters that would
- * break the quoting. A key is a caller-supplied string, so a name containing `"`, `\`, a newline or
- * a `;` must not be able to close the quoted string and add a header parameter of its own, and a
- * substitution that starts from what is *allowed* cannot miss a case the way one that starts from
- * what is forbidden can (ADR-0015).
+ * A request body as a stream, refused up front when its declared `Content-Length` is malformed or
+ * over `maxBytes`. A body with no (or a false) length is not counted here: the catalog service
+ * measures the bytes as it writes them and stops at the limit (`storage/measure.ts`).
  */
-function contentDisposition(filename: string): string {
-  const ascii = filename.replace(/[^A-Za-z0-9._-]/g, '_');
-  // `filename` comes from a key that passed `key-safety.ts`, so it is never empty and has no `/`;
-  // the fallback is here because this function must produce a well-formed header regardless.
-  const quoted = ascii === '' ? 'download' : ascii;
-  return `attachment; filename="${quoted}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+export function boundedBodyStream(
+  request: Request,
+  maxBytes: number = MAX_UPLOAD_BYTES,
+): { ok: true; body: ReadableStream<Uint8Array> } | { ok: false; result: FileResult } {
+  const refusal = declaredLengthRefusal(request, maxBytes);
+  if (refusal !== null) return { ok: false, result: refusal };
+  return { ok: true, body: request.body ?? new Blob([]).stream() };
+}
+
+/** The most a presign request body may be: a content type, a size and a lifetime. */
+const MAX_PRESIGN_BODY_BYTES = 4096;
+
+/** Read a small JSON request body and parse it with a wire contract's schema; a refusal is a `400`. */
+export async function readContractBody<T>(
+  request: Request,
+  schema: {
+    safeParse(input: unknown): { success: true; data: T } | { success: false };
+  },
+): Promise<{ ok: true; value: T } | { ok: false; result: FileResult }> {
+  const body = await readBoundedJson(request, { maxBytes: MAX_PRESIGN_BODY_BYTES, problem });
+  if (!body.ok) return body;
+  const parsed = schema.safeParse(body.value);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      result: problem(400, 'malformed_body', 'The request body does not match the route’s schema.'),
+    };
+  }
+  return { ok: true, value: parsed.data };
 }
 
 /**
- * Turn a handler's `ApiResult` into a `Response`. The binary arm never touches `JSON.stringify`.
+ * Turn a handler's `FileResult` into a `Response`. The binary arm never touches `JSON.stringify`.
  *
  * ## Why every response here carries `X-Content-Type-Options: nosniff`, and every download is an attachment
  *
@@ -121,11 +107,23 @@ function contentDisposition(filename: string): string {
  * time) and is unaffected; an inline *content* preview needs a separate, sandboxed delivery path
  * (a distinct origin, or a one-time signed URL), which no task in this wave owns.
  */
-export function toResponse(result: ApiResult): Response {
+export function toResponse(result: FileResult): Response {
   if (result.kind === 'empty') {
     return new Response(null, {
       status: result.status,
       headers: { 'x-content-type-options': 'nosniff' },
+    });
+  }
+  if (result.kind === 'stream') {
+    return new Response(result.body, {
+      status: result.status,
+      headers: {
+        'content-type': result.contentType,
+        'content-length': String(result.sizeBytes),
+        'content-disposition': contentDisposition(result.filename),
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'no-store',
+      },
     });
   }
   if (result.kind === 'binary') {
@@ -147,44 +145,43 @@ export function toResponse(result: ApiResult): Response {
   return jsonBodyResponse(result.status, result.body, { 'x-content-type-options': 'nosniff' });
 }
 
+/** {@link toResponse} for a presigned URL, which is a bearer secret and must not be cached. */
+export function toPresignedResponse(result: FileResult): Response {
+  const response = toResponse(result);
+  response.headers.set('cache-control', 'no-store');
+  return response;
+}
+
 /**
- * Resolve the caller's workspace, hand the matching {@link ObjectStore} to `run`, and return its
+ * Resolve the caller's workspace, hand the catalog and the catalog service to `run`, and return its
  * answer. Every files route goes through here — see `agents/http.ts`'s `withWorkspaceStore` for
- * why this is what makes tenant scoping a property of the route layer.
+ * why this is what makes tenant scoping a property of the route layer. A deployment without the
+ * catalog service (no `AW_STORAGE_URL`) answers `503 files_runtime_not_configured`.
  */
-export async function withWorkspaceObjectStore(
+export async function withCatalogService(
   request: Request,
-  run: (store: ObjectStore, catalog: ResourceCatalogRepository | null) => Promise<ApiResult>,
+  run: (storage: StorageService, catalog: ResourceCatalogRepository) => Promise<FileResult>,
   authenticatedWorkspaceId?: string,
-): Promise<ApiResult> {
-  const runtime = currentFilesRuntime();
-  if (runtime === null) {
+): Promise<FileResult> {
+  const files = applicationContext()?.files;
+  const runtime = files?.kind === 'serving' ? files.runtime : null;
+  if (runtime?.storage === undefined || runtime.catalog === undefined) {
     return problem(
       503,
       'files_runtime_not_configured',
-      'The files API has no store or workspace resolver wired into it. This deployment cannot ' +
-        'serve file requests; it is not that the request was rejected.',
+      'The files API has no catalog service or workspace resolver wired into it. This deployment ' +
+        'cannot serve file requests; it is not that the request was rejected.',
     );
   }
+  const { storage } = runtime;
 
-  if (authenticatedWorkspaceId !== undefined) {
-    return run(
-      runtime.store.forWorkspace(authenticatedWorkspaceId),
-      runtime.catalog === undefined
-        ? null
-        : await runtime.catalog.forWorkspace(authenticatedWorkspaceId),
-    );
-  }
-
-  const resolution = await runtime.resolveWorkspace(request);
+  const resolution: WorkspaceResolution =
+    authenticatedWorkspaceId === undefined
+      ? await runtime.resolveWorkspace(request)
+      : { kind: 'workspace', workspaceId: authenticatedWorkspaceId };
   switch (resolution.kind) {
     case 'workspace':
-      return run(
-        runtime.store.forWorkspace(resolution.workspaceId),
-        runtime.catalog === undefined
-          ? null
-          : await runtime.catalog.forWorkspace(resolution.workspaceId),
-      );
+      return run(storage, await runtime.catalog.forWorkspace(resolution.workspaceId));
     case 'unauthenticated':
       return problem(401, 'unauthenticated', resolution.reason);
     case 'forbidden':

@@ -15,6 +15,7 @@ What you can do with skills:
 
 - [Import](#import) a skill from one `SKILL.md` or a whole directory, and [list](#list) or [get](#get) skills in full.
 - [Update](#update) a skill: enable or disable it, write files, remove files.
+- [Publish](#publish) a skill's files as an immutable, numbered revision an agent can pin.
 - [Export](#export) a skill's directory byte for byte, and [remove](#remove) a skill no agent uses.
 - Give an agent a skill through its [resource assignments](/resources/agents#replaceresourceassignments).
 
@@ -86,11 +87,9 @@ async function main(): Promise<void> {
     'Read the merged PRs since the last tag and draft release notes.',
   ].join('\n');
 
-  const encode = (text: string) => Buffer.from(text, 'utf8').toString('base64');
-
   const created = await aw.skills.import({
     name: 'release-notes',
-    files: [{ path: 'SKILL.md', contentBase64: encode(skillMd) }],
+    files: [{ path: 'SKILL.md', body: skillMd }],
   });
   console.log(`created ${created.name}, enabled: ${created.enabled}`);
 
@@ -139,16 +138,21 @@ See [`skills.list`](/reference/sdk/skills#list).
 
 Create a skill from one `SKILL.md`, or import a whole directory in one call. `files` must be
 non-empty and contain a `SKILL.md` entry; every path is relative to the skill directory with
-forward slashes, and `contentBase64` is standard padded base64 (an empty file is `""`). There is
-no per-file or file-count bound — only the whole request body is bounded
+forward slashes, and each file's bytes are its `body`, sent as `multipart/form-data` with no base64.
+There is no per-file or file-count bound — only the whole request body is bounded
 (`MAX_SKILL_REQUEST_BODY_BYTES`, 16 MiB).
+
+**Deprecated:** the JSON body of this route, and `contentBase64` on a file of `import`, still work
+— the server answers a JSON import with a `Deprecation` header and the SDK logs one warning per
+process — and are removed in the next major release. `missing_files` below is a refusal of the JSON
+form only; `malformed_file_entry` and `malformed_content` apply to both forms.
 
 **Route:** `POST /api/skills`
 
 ```ts title="illustrative" claim="illustrative"
 const skill = await aw.skills.import({
   name: 'release-notes',
-  files: [{ path: 'SKILL.md', contentBase64: 'LS0t...' }],
+  files: [{ path: 'SKILL.md', body: '---\nname: release-notes\n---\n' }],
 });
 ```
 
@@ -157,11 +161,11 @@ const skill = await aw.skills.import({
 | `missing_name`                  | 400    | No `name` in the body.                                                                                                       |
 | `invalid_name`                  | 400    | `name` outside `SKILL_NAME_PATTERN` (`^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`, 1–64 chars).                                  |
 | `missing_files`                 | 400    | `files` absent or empty.                                                                                                     |
-| `malformed_file_entry`          | 400    | A `files` entry that is not `{ path, contentBase64 }` with a non-empty string path.                                          |
+| `malformed_file_entry`          | 400    | A `file` part with no filename or an unknown part, or a JSON `files` entry not `{ path, contentBase64 }` with a path.        |
 | `inadmissible_path`             | 400    | A path outside the server's admission grammar (see `SKILL_FILE_PATH_MAX_BYTES`, 4096 UTF-8 bytes).                           |
 | `duplicate_path`                | 400    | The same path twice in one request.                                                                                          |
 | `missing_skill_md`              | 400    | No entry named `SKILL.md`.                                                                                                   |
-| `malformed_content`             | 400    | A `contentBase64` outside the standard base64 alphabet, or (K-4, issue #234) `SKILL.md`'s decoded bytes are not valid UTF-8. |
+| `malformed_content`             | 400    | A JSON `contentBase64` outside the base64 alphabet, or (K-4, issue #234) `SKILL.md`'s bytes are blank or not valid UTF-8.    |
 | `invalid_path`                  | 400    | A path the object-store key guard refuses after admission.                                                                   |
 | `skill_already_exists`          | 409    | The name is already taken in this workspace.                                                                                 |
 | `colliding_paths`               | 409    | Two paths in the request differ only by letter case.                                                                         |
@@ -284,6 +288,36 @@ aw skills update release-notes --file patch.json
 
 `aw skills enable`/`disable` are shorthand for `update(name, { enabled })`. See
 [`skills.update`](/reference/sdk/skills#update).
+
+## `publish`
+
+Replace a skill's current files with `files` — a whole directory, `SKILL.md` included, as `import`
+takes — and freeze them as the next numbered revision (1, 2, 3 …). A revision never changes, so an
+agent that pins it keeps loading the same bytes; [`get`](#get) lists a skill's revisions, newest
+first, in `revisions`. Publishing needs the same grant as [`update`](#update).
+
+**Route:** `POST /api/skills/:name/revisions`
+
+```ts title="illustrative" claim="illustrative"
+const revision = await aw.skills.publish('release-notes', { files });
+// { number: 2, fileCount: 3, publishedAt: '2026-01-01T00:00:00.000Z' }
+```
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `missing_files` / `missing_skill_md` / `duplicate_path` | 400 | The directory is not one `import` would accept. |
+| `malformed_file_entry` / `inadmissible_path` / `malformed_content` / `invalid_path` | 400 | Same rules as `import`, applied to `files`. |
+| `skill_not_found` | 404 | No such skill. |
+| `colliding_paths` | 409 | Two paths differ only by letter case. |
+| `skills_runtime_not_configured` | 503 | This deployment has no skills backend. |
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw skills publish release-notes ./release-notes
+```
+
+An agent pins a revision with `skillRevisions` (skill id → number) in its resource assignments; a
+pin naming a revision that does not exist is refused with `422 agent_definition_references_missing`.
+See [Revisions](/building/skills#revisions) and [`skills.publish`](/reference/sdk/skills#publish).
 
 ## `remove`
 

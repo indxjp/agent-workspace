@@ -72,7 +72,9 @@ names for the same thing. Each alias resolves to exactly one term
 | **creator**                 | Legacy human attribution: the creating membership's user id, `NULL` for an API key. Display only.                                                                                       | `created_by`, "createdBy", `invited_by`, "initiatingUserId". Not an owner.                                                                 | `Refinement.ErSynthesis.columns_diverge_exactly_at` (the target adds principal attribution beside it)                 |
 | **agent**                   | One `agents` row: instructions, model choice, runtime profile, permissions, owner.                                                                                                      | `AgentResource` is the agent's body.                                                                                                       | `Concepts.Agent.Agent`                                                                                                |
 | **skill**                   | One `skills` row, addressed by its slug name.                                                                                                                                           | —                                                                                                                                          | `Concepts.Skill.Skill`                                                                                                |
+| **skill revision**          | One published, immutable, numbered copy of a skill's files (`skill_revisions`); an assignment may pin one.                                                                              | —                                                                                                                                          | `Er.Core.catalogue .skillRevisions`                                                                                   |
 | **file**                    | A node of the workspace tree: a file (with an object key) or a folder.                                                                                                                  | "folder" (a file of kind `folder`).                                                                                                        | `Concepts.File.File`                                                                                                  |
+| **file text**               | One extracted, searchable passage of a file, cached for lexical search (`file_texts`).                                                                                                  | —                                                                                                                                          | `Er.Core.catalogue .fileTexts`                                                                                        |
 | **connector**               | An MCP server reached by `stdio`, `http` or `sse`, with an optional sealed credential.                                                                                                  | "MCP server", `mcp_servers`, `mcp_server_id`, "mcpServerIds" (project wire) beside "connectorIds" (agent wire).                            | `Concepts.Connector.Connector`, `Refinement.ErSynthesis.table_names_diverge_exactly_at`                               |
 | **assignment**              | An agent may load or call a catalogued resource: an `agent_files` (with access), `agent_skills` or `agent_mcp_servers` row.                                                             | "resources", "capabilities", "file grant", "read-only grant".                                                                              | `Concepts.Grant.FileAssignment`, `SkillAssignment`, `ConnectorAssignment`                                             |
 | **project link**            | A project contributes a file or connector to its sessions.                                                                                                                              | "project resources".                                                                                                                       | `Concepts.Grant.ProjectFileLink`, `ProjectConnectorLink`                                                              |
@@ -92,6 +94,7 @@ names for the same thing. Each alias resolves to exactly one term
 | **runtime profile**         | A named description of where and within which limits runs execute.                                                                                                                      | —                                                                                                                                          | `Concepts.RuntimeProfile.RuntimeProfile`                                                                              |
 | **runtime connection**      | The endpoint and credential a driver needs.                                                                                                                                             | "RuntimeConnection" (04 §2 lists it as a resource); a secret named `RUNTIME_CONNECTION__…`. It has no table.                               | `Concepts.Secret.Purpose`, `Er.Current.Configuration.runtimeConnectionsTyped`                                         |
 | **secret**                  | One envelope-encrypted value of a workspace with an environment-variable-shaped name.                                                                                                   | Also holds runtime connections and model-connection credentials.                                                                           | `Concepts.Secret.Secret`                                                                                              |
+| **storage connection**      | A bucket or folder a workspace connected: provider, URL, allowed prefixes and whether writes are allowed.                                                                               | Its credential is a secret (`STORAGE_CONNECTION_<ID>`); the row holds no credential column.                                                | `Er.Target.storageConnections`                                                                                        |
 | **secret purpose**          | What a secret is for: plain, model-connection credential or runtime connection.                                                                                                         | Recorded only by the name today.                                                                                                           | `Concepts.Secret.Purpose`, `Refinement.ErSynthesis.diverges_at_an_untyped_runtime_connection`                         |
 | **project**                 | A container of sessions, instructions, defaults and links; active or archived.                                                                                                          | The transcript `project_key` is a workspace id, not a project.                                                                             | `Concepts.Project.Project`                                                                                            |
 | **session**                 | One conversation with one agent: the continuity between runs.                                                                                                                           | "conversation". The sign-in credential is also called "session".                                                                           | `Concepts.Session.Session`                                                                                            |
@@ -112,6 +115,10 @@ names for the same thing. Each alias resolves to exactly one term
 | **run feedback**            | One rating, up or down, of the answer a run gave, with an optional comment; append-only.                                                                                                | Not an evaluation case; slice 4 reads it.                                                                                                  | `Er.Target.runFeedback`                                                                                               |
 | **run token**               | A gateway credential minted for one run.                                                                                                                                                | Not a browser token scoped to a run.                                                                                                       | `Concepts.Run.RunToken`                                                                                               |
 | **surface session key**     | The hashed key that lets a browser resume one surface session; only its SHA-256 digest is kept.                                                                                         | `resumeKey`; not a run token or a browser token.                                                                                           | `Er.Target.surfaceSessionKeys`                                                                                        |
+| **trigger**                 | What starts runs of one agent without a person at the keyboard: a webhook (its URL secret stored only as a SHA-256 digest) or a schedule (a cron expression in a time zone).            | Each firing runs as the trigger's owner principal (ADR-0144).                                                                              | `Er.Target.triggers`                                                                                                  |
+| **trigger delivery**        | The claimed slot of one firing of a trigger, unique per (trigger, delivery key) within the dedupe window, naming the run it started.                                                    | The delivery key is a webhook's `Idempotency-Key` or a schedule's `scheduled_at`.                                                          | `Er.Target.triggerDeliveries`                                                                                         |
+| **builder tool call**       | One tool call of a Builder run as its journal keeps it: the tool, what the core decided, how it ended, and the input and result, capped at the tool-output limit.                       | A retry with the same (run, call) keeps the first row. The run id is the engine's, not a row of `runs`.                                    | `Er.Target.builderToolCalls`                                                                                          |
+| **storage migration run**   | One verify pass of the move off the old object naming: how many objects it checked and how many old rows and mismatches it found.                                                       | Old copies are deleted only while the latest run shows no old rows and no mismatches.                                                      | `Er.Target.storageMigrationRuns`                                                                                      |
 | **audit event**             | One recorded control-plane action.                                                                                                                                                      | Every publish is audited as `session-published`.                                                                                           | `Er.Current.Work.AuditEvent`                                                                                          |
 | **share**                   | One published subject of one workspace; the only mechanism that reaches outside a workspace.                                                                                            | —                                                                                                                                          | `Concepts.Share.Share`                                                                                                |
 | **subject**                 | What a share publishes: a typed reference to an agent, session, project or skill of the share's workspace.                                                                              | `subject_id`, untyped text with no key today.                                                                                              | `Concepts.Share.SubjectType`, `Invariants.ErSynthesis.target_share_subject_stays_in_workspace`                        |
@@ -183,7 +190,7 @@ ADR draft, status proposed; none changes product code.
 | Identity, permission and tenant selection stay separate in the sign-in token                                    | [FORMAL-P1-identity-permission-tenant-selection](../adr/FORMAL-P1-identity-permission-tenant-selection.md)   |
 
 The diagram is generated from `Er.Target.schema` by `Er.Target.erDiagram` and must not be edited by
-hand. It draws every foreign key except the 39 references to the tenant root (every table but
+hand. It draws every foreign key except the 46 references to the tenant root (every table but
 `workspaces`, `users` and `user_identities` belongs to exactly one workspace) and the 9
 single-column `SET NULL` siblings (the tenant-paired key beside each is drawn instead). A label is
 the child's key columns other than its tenant column. `||` means every key column is `NOT NULL`
@@ -200,6 +207,11 @@ erDiagram
   connectors ||--o{ agent_connectors : "connector_id"
   agents ||--o{ agent_skills : "agent_id"
   skills ||--o{ agent_skills : "skill_id"
+  skill_revisions |o--o{ agent_skills : "skill_id, revision"
+  agents ||--o{ agent_storage_grants : "agent_id"
+  storage_connections ||--o{ agent_storage_grants : "connection_id"
+  agent_versions ||--o{ agent_version_storage_grants : "version_id"
+  storage_connections ||--o{ agent_version_storage_grants : "connection_id"
   agents ||--o{ agent_pointer_moves : "agent_id"
   agent_versions ||--o{ agent_pointer_moves : "version_id, agent_id"
   workspace_principals |o--o{ agent_pointer_moves : "moved_by"
@@ -214,6 +226,7 @@ erDiagram
   memberships |o--o{ agents : "created_by"
   workspace_principals ||--o{ agents : "owner_principal_id"
   agent_versions |o--o| agents : "materialised_version_id, id"
+  agents |o--o{ agents : "created_by_agent_id"
   users |o--o{ audit_events : "actor_user_id"
   workspace_principals |o--o{ audit_events : "actor_principal_id"
   runs |o--o{ browser_tokens : "run_id"
@@ -226,6 +239,7 @@ erDiagram
   api_keys ||--o| endpoint_client_api_keys : "api_key_id"
   workspace_principals ||--o{ endpoint_clients : "acts_for_principal_id"
   workspace_principals ||--o{ endpoint_clients : "created_by_principal_id"
+  files ||--o{ file_texts : "file_id"
   memberships |o--o{ files : "created_by"
   workspace_principals ||--o{ files : "owner_principal_id"
   users |o--o{ invitations : "invited_by"
@@ -247,6 +261,7 @@ erDiagram
   workspace_principals ||--o{ projects : "owner_principal_id"
   sessions ||--o{ runs : "session_id"
   model_connections |o--o{ runs : "model_connection_id"
+  runs |o--o{ runs : "continues_run_id"
   runs ||--o{ run_events : "run_id"
   runs ||--o{ run_feedback : "run_id"
   runs ||--o{ run_usage_records : "run_id"
@@ -273,10 +288,15 @@ erDiagram
   sessions |o--o{ shares : "subject_session_id"
   projects |o--o{ shares : "subject_project_id"
   skills |o--o{ shares : "subject_skill_id"
+  skills ||--o{ skill_revisions : "skill_id"
   memberships |o--o{ skills : "created_by"
   workspace_principals ||--o{ skills : "owner_principal_id"
   sessions ||--o| surface_session_keys : "session_id"
   agents ||--o{ surface_session_keys : "agent_id"
+  triggers ||--o{ trigger_deliveries : "trigger_id"
+  runs |o--o{ trigger_deliveries : "run_id"
+  agents ||--o{ triggers : "agent_id"
+  workspace_principals ||--o{ triggers : "owner_principal_id"
   users ||--o{ user_identities : "user_id"
   model_connections |o--o| workspaces : "default_model_connection_id"
   memberships |o--o| workspace_principals : "membership_id"

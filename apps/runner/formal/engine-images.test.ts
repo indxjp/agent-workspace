@@ -10,7 +10,7 @@
  * A disagreement is a failing test, and the fix is never to edit a vector
  * (`docs/formal/00-orchestrator-prompt.md` §10).
  */
-import { EngineImageConfigurationError } from '@agent-workspace/runtime';
+import { EngineImageConfigurationError } from '@agent-workspace/runtime/engine-images';
 import { describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors.js';

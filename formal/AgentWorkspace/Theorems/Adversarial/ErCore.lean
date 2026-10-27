@@ -60,8 +60,8 @@ end Forged
 /-- The forged agent is the only fault: without it the state is consistent, with it the
 database rejects it, as the theorem predicts. -/
 example : consistent catalogue Forged.state = false :=
-  forged_cross_tenant_reference_is_rejected catalogue (by decide) Forged.state rfl
-    Forged.forged_reference (by decide)
+  forged_cross_tenant_reference_is_rejected catalogue (by decide +kernel) Forged.state rfl
+    Forged.forged_reference (by decide +kernel)
 
 example : consistent catalogue (fun t => if t = .agents then Witness.state .agents else
     Forged.state t) = true := by decide +kernel
@@ -105,11 +105,11 @@ key is left to be unpaired) but fails the declared-reference gate, which is why 
 theorem deleting_a_reference_passes_pairing_but_not_the_gate :
     pairingComplete withoutModelConnectionKeys = true ∧
       idColumnsCovered withoutModelConnectionKeys nonReferenceIdColumns = false := by
-  decide
+  decide +kernel
 
 example : idColumnsCovered withoutModelConnectionKeys nonReferenceIdColumns = false :=
   deleted_reference_is_caught withoutModelConnectionKeys nonReferenceIdColumns .agents
-    ⟨"model_connection_id", .uuid, false⟩ (by decide) (by decide) (by decide) (by decide)
+    ⟨"model_connection_id", .uuid, false⟩ (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 private theorem safe_char_is_ascii (c : Char) (h : isSafeValueChar c = true) : c.toNat < 128 := by
   simp only [isSafeValueChar, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq,
@@ -117,16 +117,16 @@ private theorem safe_char_is_ascii (c : Char) (h : isSafeValueChar c = true) : c
   have hz : c.toNat ≤ 'z'.toNat ∨ c = '-' := by
     rcases h with (⟨_, h⟩ | ⟨_, h⟩) | h
     · exact Or.inl h
-    · exact Or.inl (Nat.le_trans h (by decide))
+    · exact Or.inl (Nat.le_trans h (by decide +kernel))
     · exact Or.inr h
   rcases hz with h | rfl
   · have : 'z'.toNat = 122 := rfl
     omega
-  · decide
+  · decide +kernel
 
 private theorem ascii_safe_chars : ∀ n, n < 128 → isSafeValueChar (Char.ofNat n) = true →
     Char.ofNat n ∈ "abcdefghijklmnopqrstuvwxyz0123456789-".toList := by
-  decide
+  decide +kernel
 
 private theorem safe_char_mem (c : Char) (h : isSafeValueChar c = true) :
     c ∈ "abcdefghijklmnopqrstuvwxyz0123456789-".toList := by
@@ -155,7 +155,7 @@ theorem safe_value_has_only_slug_characters (v : String) (h : isSafeValue v = tr
     · exact safe_char_mem x (List.all_eq_true.mp h.1.1.1.2 x hx)
 
 example : ∀ c ∈ "read-write".toList, c ∈ "abcdefghijklmnopqrstuvwxyz0123456789-".toList :=
-  safe_value_has_only_slug_characters "read-write" (by decide)
+  safe_value_has_only_slug_characters "read-write" (by decide +kernel)
 
 /-- A value with an upper-case letter anywhere, not only first, is refused by the gate. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/schema/one-of.ts#SAFE_VALUE")]
@@ -165,20 +165,20 @@ theorem upper_case_value_is_refused (v : String) (c : Char) (hc : c ∈ v.toList
   | false => rfl
   | true =>
     have hm := safe_value_has_only_slug_characters v h c hc
-    have hlt : c.toNat < 128 := Nat.lt_of_le_of_lt hZ (by decide)
+    have hlt : c.toNat < 128 := Nat.lt_of_le_of_lt hZ (by decide +kernel)
     have key : ∀ n, n < 128 → 'A'.toNat ≤ n → n ≤ 'Z'.toNat →
         Char.ofNat n ∉ "abcdefghijklmnopqrstuvwxyz0123456789-".toList := by
-      decide
+      decide +kernel
     have := key c.toNat hlt hA hZ
     rw [Char.ofNat_toNat] at this
     exact absurd hm this
 
 example : isSafeValue "aB" = false :=
-  upper_case_value_is_refused "aB" 'B' (by decide) (by decide) (by decide)
+  upper_case_value_is_refused "aB" 'B' (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : isSafeValue "abC1" = false ∧ isSafeValue "a-B" = false :=
-  ⟨upper_case_value_is_refused "abC1" 'C' (by decide) (by decide) (by decide),
-    upper_case_value_is_refused "a-B" 'B' (by decide) (by decide) (by decide)⟩
+  ⟨upper_case_value_is_refused "abC1" 'C' (by decide +kernel) (by decide +kernel) (by decide +kernel),
+    upper_case_value_is_refused "a-B" 'B' (by decide +kernel) (by decide +kernel) (by decide +kernel)⟩
 
 /-- Any value list containing a quote is refused by `renderValueList`, so no attacker-chosen value
 reaches the DDL text with a quote in it. -/
@@ -191,7 +191,7 @@ theorem quoted_value_is_refused (vs : List String) (v : String) (hv : v ∈ vs)
     | false => rfl
     | true =>
       have := safe_value_has_only_slug_characters v h '\'' hq
-      exact absurd this (by decide)
+      exact absurd this (by decide +kernel)
   have : vs.all isSafeValue = false := by
     cases hall : vs.all isSafeValue with
     | false => rfl
@@ -199,6 +199,6 @@ theorem quoted_value_is_refused (vs : List String) (v : String) (hv : v ∈ vs)
   simp [this]
 
 example : renderValueList? ["read", "x'); drop table users; --"] = none :=
-  quoted_value_is_refused _ "x'); drop table users; --" (by simp) (by decide)
+  quoted_value_is_refused _ "x'); drop table users; --" (by simp) (by decide +kernel)
 
 end AgentWorkspace.Theorems.Adversarial.ErCore

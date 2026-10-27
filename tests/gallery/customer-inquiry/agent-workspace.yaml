@@ -2,20 +2,23 @@ apiVersion: agentworkspace.dev/v2
 kind: Project
 name: customer-inquiry
 engine: claude-agent-sdk
-# The CRM history server is your own MCP server (mcp/crm-history.mjs). A project file names only
-# remote connectors, so run it over Streamable HTTP for `aw dev`, with the same secret the chat
-# backend signs customer tokens with:
-#   CRM_TOKEN_SECRET=... MCP_TRANSPORT=http PORT=8788 node mcp/crm-history.mjs
-connectors:
-  crm-history:
-    url: http://127.0.0.1:8788/mcp
-    transport: http
+# No MCP connector: the CRM history is an openapiTool() in tools/crm.ts. `aw dev` reads
+# apis/crm.openapi.json and registers it, taking CRM_TOKEN and CRM_IDENTITY_SECRET from its
+# environment (`identity` opts the tool in to the signed caller assertion, ADR-0142; give the CRM
+# the same secret so it can verify whose records are asked for):
+#   CRM_TOKEN=... CRM_IDENTITY_SECRET=... aw dev
+# The document's `servers` is the company's CRM (crm.example.co.jp), which is not reachable from
+# here. The FAQ is searched with the built-in `search_files` over `data/faq` (upload it with
+# `aw files upload`).
 policy:
   permissions:
-    readFiles: false
+    # search_files reads the granted FAQ folder only.
+    readFiles: true
     writeFiles: false
     runCommands: false
     unrestrictedNetwork: false
+  # The only connector any agent in this project may use.
+  tools: [crm]
   limits:
     maxBudgetUsd: 0.5
   promotion:

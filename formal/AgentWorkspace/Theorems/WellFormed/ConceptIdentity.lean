@@ -1,3 +1,4 @@
+import ErSnapshot
 import AgentWorkspace.Er.Current.Identity
 
 /-!
@@ -32,7 +33,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Er.Current.Identity
   (ts := "packages/core/src/db/schema/memberships.ts#membershipRoles")
   (ts := "apps/web/server/rbac/roles.ts#ROLES")]
 theorem role_wires_match_contract :
-    WireEnum.wires Role = ["owner", "admin", "builder", "viewer"] := by decide
+    WireEnum.wires Role = ["owner", "admin", "builder", "viewer"] := by decide +kernel
 
 /-- Decoding the JSON encoding of any role gives that role back. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/team.ts#MEMBERSHIP_ROLES")]
@@ -50,9 +51,9 @@ theorem parse_role_refuses_unknown_spelling (s : String)
   exact h
 
 example : parseRole "Owner" = none ∧ parseRole " viewer" = none ∧ parseRole "member" = none :=
-  ⟨parse_role_refuses_unknown_spelling _ (by decide),
-    parse_role_refuses_unknown_spelling _ (by decide),
-    parse_role_refuses_unknown_spelling _ (by decide)⟩
+  ⟨parse_role_refuses_unknown_spelling _ (by decide +kernel),
+    parse_role_refuses_unknown_spelling _ (by decide +kernel),
+    parse_role_refuses_unknown_spelling _ (by decide +kernel)⟩
 
 /-- Every role column of the schema (`memberships`, `api_keys`, `invitations`) is checked against
 exactly the four role spellings. -/
@@ -64,12 +65,12 @@ theorem role_checks_hold_the_four_roles :
         some ("role", WireEnum.wires Role) ∧
       (catalogue .apiKeys).oneOfCheck? "api_keys_role_valid" = some ("role", WireEnum.wires Role) ∧
       (catalogue .invitations).oneOfCheck? "invitations_role_valid" =
-        some ("role", WireEnum.wires Role) := by decide
+        some ("role", WireEnum.wires Role) := by decide +kernel
 
 /-- The wire principal kinds are exactly the contract's `PRINCIPAL_KINDS`. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/team.ts#PRINCIPAL_KINDS")]
 theorem principal_kind_wires_match_contract :
-    WireEnum.wires Kind = ["membership", "api-key"] := by decide
+    WireEnum.wires Kind = ["membership", "api-key"] := by decide +kernel
 
 /-- The storage spellings are the schema's `workspacePrincipalKinds` (and the server's
 `PRINCIPAL_KINDS`), and `workspace_principals_kind_valid` admits exactly them. -/
@@ -79,7 +80,7 @@ theorem principal_kind_wires_match_contract :
 theorem principal_kind_storage_matches_schema :
     storageSpellings = ["membership", "api_key"] ∧
       (catalogue .workspacePrincipals).oneOfCheck? "workspace_principals_kind_valid" =
-        some ("kind", storageSpellings) := by decide
+        some ("kind", storageSpellings) := by decide +kernel
 
 /-- Reading back the storage spelling of a kind gives the kind. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipalKinds")]
@@ -92,7 +93,7 @@ spelling is not a storage spelling. -/
 theorem wire_kind_maps_storage_to_wire :
     wireKindOfStorage? "membership" = some "membership" ∧
       wireKindOfStorage? "api_key" = some "api-key" ∧ wireKindOfStorage? "api-key" = none := by
-  decide
+  decide +kernel
 
 /-- The scope kinds are `TOKEN_SCOPE_KINDS` (contract and server) and `browserTokenScopeKinds`,
 and `browser_tokens_scope_kind_valid` admits exactly them. -/
@@ -101,17 +102,17 @@ and `browser_tokens_scope_kind_valid` admits exactly them. -/
 theorem scope_kind_wires_match_contract_and_schema :
     WireEnum.wires ScopeKind = ["run", "session"] ∧
       (catalogue .browserTokens).oneOfCheck? "browser_tokens_scope_kind_valid" =
-        some ("scope_kind", WireEnum.wires ScopeKind) := by decide
+        some ("scope_kind", WireEnum.wires ScopeKind) := by decide +kernel
 
 /-- The verifiers are `session`, `api-key` and `browser-token`, the members of `Via`. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/principal.ts#Via")]
 theorem via_wires_match_server :
-    WireEnum.wires Via = ["session", "api-key", "browser-token"] := by decide
+    WireEnum.wires Via = ["session", "api-key", "browser-token"] := by decide +kernel
 
 /-- The invitation states are the four `InvitationState` names. -/
 @[aw_spec (tier := T0) (ts := "apps/web/components/team/invitations-model.ts#InvitationState")]
 theorem invitation_state_wires :
-    WireEnum.wires InvitationState = ["pending", "expired", "accepted", "revoked"] := by decide
+    WireEnum.wires InvitationState = ["pending", "expired", "accepted", "revoked"] := by decide +kernel
 
 /-! ## The refined checks -/
 
@@ -122,7 +123,7 @@ fourteen identity tables, in the same order, and no check is refined twice. -/
 theorem refined_checks_cover_the_cluster :
     tables.all (fun t => (checksOf t).map (·.1) == otherCheckNames t) = true ∧
       checks.all (fun c => tables.contains c.1) = true ∧ (checks.map (·.2.1)).Nodup ∧
-      checks.length = 36 := by decide
+      checks.length = 36 := by decide +kernel
 
 section Generator
 
@@ -287,7 +288,7 @@ theorem source_of_row_decodes_iff_source_xor_is_true (r : Row) :
 
 example : (sourceOfRow? ⟨[("kind", "membership"), ("membership_id", "m1"),
     ("api_key_id", "k1")]⟩).isSome = false :=
-  (source_of_row_decodes_iff_source_xor_is_true _).trans (by decide)
+  (source_of_row_decodes_iff_source_xor_is_true _).trans (by decide +kernel)
 
 /-- On a row with a `kind`, a `workspace_principals` row decodes to a source exactly when the
 row passes `workspace_principals_source_xor`. -/
@@ -320,7 +321,7 @@ theorem scope_of_row_decodes_iff_scope_xor_is_true (r : Row) :
 
 example : (scopeOfRow? ⟨[("scope_kind", "run"), ("run_id", "r1"),
     ("session_id", "s1")]⟩).isSome = false :=
-  (scope_of_row_decodes_iff_scope_xor_is_true _).trans (by decide)
+  (scope_of_row_decodes_iff_scope_xor_is_true _).trans (by decide +kernel)
 
 /-- On a row with a `scope_kind`, a `browser_tokens` row decodes to a scope exactly when the row
 passes `browser_tokens_scope_xor`. -/
@@ -376,7 +377,7 @@ theorem from_browser_token_is_well_formed (m : Actor) (s : Scope) (hm : m.wellFo
 
 example : (fromBrowserToken (fromApiKey ⟨"p", "k", "w", .builder, "CI", none⟩)
     (.run ⟨"r"⟩)).wellFormed = true :=
-  from_browser_token_is_well_formed _ _ rfl (by decide)
+  from_browser_token_is_well_formed _ _ rfl (by decide +kernel)
 
 /-- A well-formed authenticated principal carries a scope exactly when a browser token produced
 it: `isPrincipal`'s scope invariant. -/
@@ -405,19 +406,19 @@ example : unscopedTokenActor.wellFormed = false ∧
     { unscopedTokenActor with scope := some (.run ⟨"r"⟩) }.wellFormed = true ∧
     { unscopedTokenActor with via := .session, scope := some (.run ⟨"r"⟩) }.wellFormed = false ∧
     { unscopedTokenActor with via := .session }.wellFormed = true :=
-  ⟨actor_with_a_scope_its_verifier_does_not_carry_is_refused _ (by decide), by decide,
-    actor_with_a_scope_its_verifier_does_not_carry_is_refused _ (by decide), by decide⟩
+  ⟨actor_with_a_scope_its_verifier_does_not_carry_is_refused _ (by decide +kernel), by decide +kernel,
+    actor_with_a_scope_its_verifier_does_not_carry_is_refused _ (by decide +kernel), by decide⟩
 
 /-! ## Concept values are rows the database admits -/
 
 private theorem role_contains (r : Role) :
     ["owner", "admin", "builder", "viewer"].contains (WireEnum.toWire r) = true := by
-  cases r <;> decide
+  cases r <;> decide +kernel
 
 private theorem role_disj (r : Role) :
     WireEnum.toWire r = "owner" ∨ WireEnum.toWire r = "admin" ∨ WireEnum.toWire r = "builder" ∨
       WireEnum.toWire r = "viewer" := by
-  cases r <;> decide
+  cases r <;> decide +kernel
 
 private theorem bne_true_of_ne {a b : String} (h : ¬a = b) : (a != b) = true := by
   simp [bne_iff_ne, h]
@@ -504,18 +505,18 @@ theorem browser_token_row_is_admitted (t : BrowserToken) (h : t.valid = true) :
 private def sampleWorkspace : Workspace :=
   ⟨⟨"w1"⟩, "acme", "Acme", true, some ⟨⟨"c1"⟩, "claude"⟩, none, 1000, 1000⟩
 
-example : sampleWorkspace.valid = true := by decide
-example : (User.valid ⟨⟨"u1"⟩, "ada@example.com", "Ada", 1000, 1000⟩) = true := by decide
+example : sampleWorkspace.valid = true := by decide +kernel
+example : (User.valid ⟨⟨"u1"⟩, "ada@example.com", "Ada", 1000, 1000⟩) = true := by decide +kernel
 example : (UserIdentity.valid ⟨⟨"i1"⟩, "https://id.example.com", "sub-1", ⟨"u1"⟩, 1000, 1000⟩) =
-    true := by decide
+    true := by decide +kernel
 example : (Principal.valid ⟨⟨"p1"⟩, ⟨"w1"⟩, .apiKey ⟨"k1"⟩, 1000, some 2000, 1000, some ⟨"p0"⟩⟩) = true := by
-  decide
+  decide +kernel
 example : (ApiKey.valid ⟨⟨"k1"⟩, ⟨"w1"⟩, "CI", .builder, "ak_live_x", "ab", none, some 5000,
-    some 3000, 1000, 1000⟩) = true := by decide
+    some 3000, 1000, 1000⟩) = true := by decide +kernel
 example : (Invitation.valid ⟨⟨"i1"⟩, ⟨"w1"⟩, "bob@example.com", .viewer, some ⟨"u1"⟩, "ab",
-    5000, some 2000, none, 1000, 1000⟩) = true := by decide
+    5000, some 2000, none, 1000, 1000⟩) = true := by decide +kernel
 example : (BrowserToken.valid ⟨⟨"t1"⟩, ⟨"w1"⟩, ⟨"p1"⟩, .session ⟨"s1"⟩, "ab", 1300, none,
-    1000⟩) = true := by decide
+    1000⟩) = true := by decide +kernel
 
 /-! ## Contract bounds -/
 

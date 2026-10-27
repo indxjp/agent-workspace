@@ -4,6 +4,7 @@ import {
   readEvaluationBody,
 } from '../../../../../server/evaluations/handlers';
 import { getRunApi } from '../../../../../server/runs/environment';
+import { route } from '../../../../../server/http/route';
 
 /**
  * `POST /api/agents/:id/evaluations` (issue #618): run a version's evaluation cases on the server
@@ -13,13 +14,20 @@ import { getRunApi } from '../../../../../server/runs/environment';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function POST(
+async function servePost(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  return serveAgentVersionRoute(request, context, async ({ agent, principal, store }) => {
-    const body = await readEvaluationBody(request);
-    if (!body.ok) return body.result;
-    return evaluateAgentVersion(body.value, agent.id, principal, { store, runs: getRunApi() });
-  });
+  return serveAgentVersionRoute(
+    request,
+    context,
+    'evaluate',
+    async ({ agent, principal, store }) => {
+      const body = await readEvaluationBody(request);
+      if (!body.ok) return body.result;
+      return evaluateAgentVersion(body.value, agent.id, principal, { store, runs: getRunApi() });
+    },
+  );
 }
+
+export const POST = route({ component: 'evaluations', operation: 'evaluate' }, servePost);

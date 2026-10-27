@@ -1,6 +1,6 @@
 /**
- * The acceptance harness — the only thing in this repository that calls `installRunApi`, and it
- * exists solely so the W1-CP-04 acceptance criterion can be executed against the **real** route
+ * The acceptance harness — the only thing outside the composition root that serves a run API, and
+ * it exists solely so the W1-CP-04 acceptance criterion can be executed against the **real** route
  * handlers in a **real** `next build && next start`, behind a **real** nginx.
  *
  * **Read this before you copy anything from it.**
@@ -16,9 +16,10 @@
  * See `README.md` beside this file for what the probe measures and what it does not prove.
  */
 import { DEFAULT_ENGINE_ID } from '../../engines/session-engine';
-import { installRunApi, type AgentRef, type Principal, type SessionRef } from '../environment';
+import type { AgentRef, RunPrincipal, SessionRef } from '../environment';
 import { createRunnerLauncher } from '../launcher';
-import { InMemoryRunStore } from '../store';
+import { InMemoryRunStore } from '../memory-store';
+import { installTestRunApi } from '../../application-context-fixtures';
 
 const ENABLED = 'AW_ACCEPTANCE_HARNESS';
 const RUNNER_URL = 'AW_ACCEPTANCE_RUNNER_URL';
@@ -29,7 +30,7 @@ export const ACCEPTANCE_AGENT_ID = 'a0000000-0000-4000-8000-000000000002';
 export const ACCEPTANCE_USER_ID = 'a0000000-0000-4000-8000-000000000003';
 export const ACCEPTANCE_PRINCIPAL_ID = 'a0000000-0000-4000-8000-000000000004';
 
-const PRINCIPAL: Principal = {
+const PRINCIPAL: RunPrincipal = {
   principalId: ACCEPTANCE_PRINCIPAL_ID,
   ownerPrincipalId: ACCEPTANCE_PRINCIPAL_ID,
   userId: ACCEPTANCE_USER_ID,
@@ -64,10 +65,10 @@ export function register(): void {
   // The probe reads this line to confirm the harness really ran in this process.
   console.log(`[acceptance] installing the run API harness, relaying from ${runnerUrl}`);
   const store = new InMemoryRunStore();
-  installRunApi({
+  installTestRunApi({
     // Authenticates unconditionally. Only ever reachable behind the env guard above.
-    authenticate: (): Promise<Principal> => Promise.resolve(PRINCIPAL),
-    findAgent: (principal: Principal, agentId: string): Promise<AgentRef | null> =>
+    authenticate: (): Promise<RunPrincipal> => Promise.resolve(PRINCIPAL),
+    findAgent: (principal: RunPrincipal, agentId: string): Promise<AgentRef | null> =>
       Promise.resolve(
         agentId === ACCEPTANCE_AGENT_ID
           ? {
@@ -79,7 +80,11 @@ export function register(): void {
             }
           : null,
       ),
-    openSession: (_p: Principal, agent: AgentRef, requested: string | null): Promise<SessionRef> =>
+    openSession: (
+      _p: RunPrincipal,
+      agent: AgentRef,
+      requested: string | null,
+    ): Promise<SessionRef> =>
       // `engine: null` is an unpinned session: the harness never writes a session row, so nothing
       // has pinned one, and the first run's engine is the agent's.
       Promise.resolve({ id: requested ?? crypto.randomUUID(), agentId: agent.id, engine: null }),

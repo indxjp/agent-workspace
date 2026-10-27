@@ -64,7 +64,7 @@ would have said about the rest of it. There is no silent acceptance of the old s
 theorem legacy_provider_discriminant_is_always_refused :
     (legacyBodies.all fun j =>
       unionVerdicts.all fun accept =>
-        parsePolicy defaultRegistered accept j == PolicyVerdict.invalidBody) = true := by decide
+        parsePolicy defaultRegistered accept j == PolicyVerdict.invalidBody) = true := by decide +kernel
 
 /-- The refusal carries `invalid_body` at `400`, not the union's `invalid_policy`: a client on the
 old shape is told about the rename rather than handed a list of complaints about a missing key. -/
@@ -72,7 +72,7 @@ old shape is told about the rename rather than handed a list of complaints about
 theorem legacy_refusal_names_the_rename :
     PolicyVerdict.invalidBody.code = some "invalid_body" ∧
     PolicyVerdict.invalidBody.status = 400 ∧
-    PolicyVerdict.invalidBody ≠ PolicyVerdict.invalidPolicy := by decide
+    PolicyVerdict.invalidBody ≠ PolicyVerdict.invalidPolicy := by decide +kernel
 
 /-- An engine this deployment does not register is refused as `unsupported_engine`, whatever the
 union would have said. A body whose `engine` is not even a string is refused here too: it names an
@@ -84,13 +84,13 @@ theorem unregistered_engine_is_always_refused :
     (unregisteredBodies.all fun j =>
       unionVerdicts.all fun accept =>
         parsePolicy defaultRegistered accept j == PolicyVerdict.unsupportedEngine) = true := by
-  decide
+  decide +kernel
 
 /-- The refusal carries `unsupported_engine` at `400`. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/engines.ts#ENGINE_PROBLEM_CODES")]
 theorem unsupported_engine_is_a_four_hundred :
     PolicyVerdict.unsupportedEngine.code = some "unsupported_engine" ∧
-    PolicyVerdict.unsupportedEngine.status = 400 := by decide
+    PolicyVerdict.unsupportedEngine.status = 400 := by decide +kernel
 
 /-- `unsupported_engine` is a statement about the **registry**, not about the spelling: registering
 acp moves the same body off that refusal and onto the union's own verdict. -/
@@ -99,7 +99,7 @@ theorem the_refusal_is_about_the_registry :
     parsePolicy defaultRegistered (fun _ => true) acpBody = PolicyVerdict.unsupportedEngine ∧
     parsePolicy ["claude-agent-sdk", "acp"] (fun _ => true) acpBody = PolicyVerdict.accepted ∧
     parsePolicy ["claude-agent-sdk", "acp"] (fun _ => false) acpBody
-      = PolicyVerdict.invalidPolicy := by decide
+      = PolicyVerdict.invalidPolicy := by decide +kernel
 
 /-- Naming **both** discriminants is refused too. The engine check passes — `claude-agent-sdk` is
 registered — and the union refuses the extra key, so the body reaches `invalid_policy` rather than
@@ -107,7 +107,7 @@ being read as either shape. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/agents.ts#AgentPolicySchema")]
 theorem naming_both_discriminants_is_refused :
     parsePolicy defaultRegistered (fun _ => false) bothBody = PolicyVerdict.invalidPolicy := by
-  decide
+  decide +kernel
 
 /-- The engine this deployment does register reaches the union, and the union's answer is the
 parser's answer. Nothing above turns a well-formed Claude policy into a refusal. -/
@@ -115,7 +115,7 @@ parser's answer. Nothing above turns a well-formed Claude policy into a refusal.
 theorem a_registered_engine_reaches_the_union :
     parsePolicy defaultRegistered (fun _ => true) claudeBody = PolicyVerdict.accepted ∧
     parsePolicy defaultRegistered (fun _ => false) claudeBody
-      = PolicyVerdict.invalidPolicy := by decide
+      = PolicyVerdict.invalidPolicy := by decide +kernel
 
 /-- The registry a deployment installs by default is exactly the published catalogue. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/engines/registry.ts#registeredEngines")]
@@ -141,7 +141,7 @@ theorem capability_refusal_is_exact :
     (assignmentCapabilities.all fun cap =>
       assignmentDemands.all fun demand =>
         (unsupportedCapability cap demand).isNone == honoursAssignments cap demand) = true := by
-  decide
+  decide +kernel
 
 /-- When it refuses, the capability it names is one the engine really lacks **and** the agent really
 demands. A refusal never names a capability that is beside the point. -/
@@ -154,7 +154,7 @@ theorem a_capability_refusal_names_a_real_gap :
         | some CapabilityKey.mcp => demand.connectors && !cap.mcp
         | some CapabilityKey.skills => demand.skills && !cap.skills
         | some CapabilityKey.subagents => demand.subagents && !cap.subagents
-        | Option.none => true) = true := by decide
+        | Option.none => true) = true := by decide +kernel
 
 /-- Nothing changes for `claude-agent-sdk`'s assignments. It honours both assignable resources, so
 the check never fires for it on connectors or skills, whatever the agent is assigned — which is why
@@ -166,7 +166,7 @@ theorem claude_agent_sdk_never_refuses_an_assignment :
     (assignmentDemands.all fun demand =>
       saveAgent claudeAssignmentCapabilities demand ==
         if demand.subagents then CapabilityVerdict.unsupported CapabilityKey.subagents
-        else CapabilityVerdict.saved) = true := by decide
+        else CapabilityVerdict.saved) = true := by decide +kernel
 
 /-- The refusal travels as `422 engine_capability_unsupported`, and its `details` is exactly the
 capability — one published wire string, never prose a client would have to parse. -/
@@ -179,13 +179,13 @@ theorem engine_capability_unsupported_is_a_four_twenty_two :
     (CapabilityVerdict.unsupported CapabilityKey.mcp).details = ["mcp"] ∧
     (CapabilityVerdict.unsupported CapabilityKey.skills).details = ["skills"] ∧
     (CapabilityVerdict.unsupported CapabilityKey.subagents).details = ["subagents"] ∧
-    CapabilityVerdict.saved.details = [] := by decide
+    CapabilityVerdict.saved.details = [] := by decide +kernel
 
 /-- Every capability a refusal can name is one the published capability set has a field for, so a
 `details` entry always points at something an engine descriptor really states. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/engines.ts#ENGINE_CAPABILITY_KEYS")]
 theorem a_refusal_only_names_a_published_capability :
-    capabilityKeys = ["mcp", "skills", "subagents"] := by decide
+    capabilityKeys = ["mcp", "skills", "subagents"] := by decide +kernel
 
 /-! ### The refinement of ENG-01's abstract composition
 
@@ -224,6 +224,6 @@ theorem capability_check_refines_compose :
       assignmentDemands.all fun demand =>
         (saveAgent cap demand == CapabilityVerdict.saved) ==
           (Concepts.Engine.compose (abstractAgent demand) (abstractEngine cap)
-            == Concepts.Engine.ComposeResult.accepted)) = true := by decide
+            == Concepts.Engine.ComposeResult.accepted)) = true := by decide +kernel
 
 end AgentWorkspace.Theorems.Normative.ContractsEngines

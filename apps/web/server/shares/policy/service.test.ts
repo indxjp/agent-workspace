@@ -16,13 +16,11 @@ function sharing(enabled = true) {
       getPublicSharingEnabled,
       setPublicSharingEnabled,
       revoke: vi.fn(),
-      setSuspended: vi.fn(),
       stop: vi.fn(),
       reserveVisitorMessage: vi.fn(),
-      linkRun: vi.fn(),
     },
-    views: { record: vi.fn(), count: vi.fn(), countVisitorSince: vi.fn() },
-    audit: { write: writeAudit, count: vi.fn(), list: vi.fn() },
+    views: { record: vi.fn(), count: vi.fn() },
+    audit: { write: writeAudit },
   };
   return { repositories, getPublicSharingEnabled, setPublicSharingEnabled, writeAudit };
 }

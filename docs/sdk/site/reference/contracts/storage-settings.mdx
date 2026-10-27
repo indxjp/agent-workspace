@@ -1,0 +1,191 @@
+---
+title: "storage-settings"
+description: "The @indx-workspace/contracts/storage-settings exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/storage-settings.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## configuredObjectStorageBackend
+
+Reads `OBJECT_STORAGE_BACKEND` as 0.6.10 did; throws on a value it does not know.
+
+```ts
+configuredObjectStorageBackend(env: Readonly<Record<string, string | undefined>>): ObjectStorageBackend | null
+```
+
+## configuredPath
+
+A non-empty, trimmed environment value, or `null`.
+
+```ts
+configuredPath(name: string, env: Readonly<Record<string, string | undefined>>): string | null
+```
+
+## FILE_STORAGE_ROOT_ENV
+
+Value: `'AW_FILE_STORAGE_ROOT'`
+
+## IGNORED_STORAGE_VARIABLES
+
+The old location variables: no longer read, and warned about while they are still set.
+
+- `FILE_STORAGE_ROOT_ENV`
+- `SKILL_STORAGE_ROOT_ENV`
+- `SESSION_STATE_STORAGE_ROOT_ENV`
+- `OBJECT_STORAGE_BUCKET_ENV`
+- `OBJECT_STORAGE_BACKEND_ENV`
+- `'OBJECT_STORAGE_ENDPOINT'`
+- `'OBJECT_STORAGE_PUBLIC_ENDPOINT'`
+- `'OBJECT_STORAGE_FORCE_PATH_STYLE'`
+
+## ignoredStorageSettingsWarning
+
+The one warning for the old variables `env` sets, or `null` when none is: it names them and
+never a value. With `AW_STORAGE_URL` unset it also says that storage is off, because nothing is
+read from the old location.
+
+```ts
+ignoredStorageSettingsWarning(env: StorageEnv): string | null
+```
+
+## ignoredStorageVariables
+
+The old storage variables that are set, by name, in a stable order.
+
+```ts
+ignoredStorageVariables(env: StorageEnv): string[]
+```
+
+## LegacyAreaPrefix
+
+Where one area's objects sit in the old per-area naming: list `prefix` (no trailing slash) in
+the store `location` opens as a root. Each key beneath it is `workspaces/<id>/<storage key>`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `area` | `"skills" \| "files" \| "session-state"` | Yes |  |
+| `location` | `{ kind: "file"; root: string; } \| { kind: "s3"; bucket: string; prefix: string; endpoint?: string; publicEndpoint?: string; region?: string; forcePathStyle: boolean; } \| { kind: "gcs"; bucket: string; prefix: string; projectId?: string; } \| { kind: "azblob"; account: string; serviceUrl: string; container: string; prefix: string; }` | Yes |  |
+| `prefix` | `string` | Yes |  |
+
+## legacyAreaPrefixes
+
+The old object layouts a deployment may still hold (the storage design, §06 "Moving existing
+files safely"): one entry per area. A bucket or a `file://` root keeps each area under its own
+directory. Pure, so the server's adopt stage and `agent-workspace doctor` read one list.
+
+```ts
+legacyAreaPrefixes(settings: StorageSettings): readonly LegacyAreaPrefix[]
+```
+
+## LegacyLocalRoots
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"local-roots"` | Yes |  |
+| `files` | `null \| string` | Yes |  |
+| `skills` | `null \| string` | Yes |  |
+| `sessionState` | `null \| string` | Yes |  |
+| `filesAndSkillsRefusal` | `null \| string` | Yes | `OBJECT_STORAGE_BACKEND` without a bucket refuses files and skills, but not session state. |
+
+## legacyStorageVariables
+
+The old storage variables that are set.
+
+```ts
+legacyStorageVariables(env: StorageEnv): string[]
+```
+
+## OBJECT_STORAGE_BACKEND_ENV
+
+Value: `'OBJECT_STORAGE_BACKEND'`
+
+## OBJECT_STORAGE_BUCKET_ENV
+
+Value: `'OBJECT_STORAGE_BUCKET'`
+
+## ObjectStorageBackend
+
+- `"s3"`
+- `"gcs"`
+- `"azure-blob"`
+
+## ResolvedStorageSettings
+
+What `resolveStorageSettings` returns: `StorageSettings` with its warnings always set. The
+`legacy` arm is never produced; it stays so that a `case 'legacy'` on the result still compiles.
+
+- `{ kind: "url"; location: StorageLocation; warnings: readonly string[]; }`
+- `{ kind: "legacy"; location: StorageLocation | LegacyLocalRoots; warnings: readonly string[]; }`
+- `{ kind: "none"; warnings: readonly string[]; }`
+- `{ kind: "refused"; reason: string; warnings: readonly string[]; }`
+
+## ResolvePath
+
+`ResolvePath`
+
+## resolveStorageSettings
+
+Where this deployment keeps files, skills and session state (the storage design, §03 and §04).
+
+`AW_STORAGE_URL` is the only setting. The old location variables never name a place: while any
+is set the result carries one `storage_setting_ignored` warning, and nothing else changes, so a
+leftover variable never stops start-up. An invalid URL is `refused`, and so is an endpoint on
+`AW_PUBLIC_URL`'s origin; a refusal still carries the ignored-variables warning. Every message
+names variables and never repeats a value, because a value may be a secret.
+
+```ts
+resolveStorageSettings(env: StorageEnv, resolve?: ResolvePath): ResolvedStorageSettings
+```
+
+## SESSION_STATE_STORAGE_ROOT_ENV
+
+Value: `'AW_SESSION_TRANSCRIPT_ROOT'`
+
+## SKILL_STORAGE_ROOT_ENV
+
+Value: `'AW_SKILL_STORAGE_ROOT'`
+
+## STORAGE_URL_ENV
+
+The one setting that says where files, skills and session state are kept (the storage design, §04).
+
+Value: `'AW_STORAGE_URL'`
+
+## StorageArea
+
+- `"skills"`
+- `"files"`
+- `"session-state"`
+
+## storageAreaPlace
+
+```ts
+storageAreaPlace(settings: StorageSettings, area: StorageArea): StorageAreaPlace
+```
+
+## StorageAreaPlace
+
+Where one area lives under the settings, as `openObjectStore(location, area)` expects it.
+
+- `{ kind: "at"; location: StorageLocation; }`
+- `{ kind: "unset"; }`
+- `{ kind: "refused"; reason: string; }`
+
+## StorageSettings
+
+Where storage is kept. The `legacy` kind is deprecated and never produced: it stays in the type
+until the next major release so that a `case 'legacy'` still compiles.
+
+- `{ kind: "url"; location: StorageLocation; warnings: readonly string[]; }`
+- `{ kind: "legacy"; location: StorageLocation | LegacyLocalRoots; warnings: readonly string[]; }`
+- `{ kind: "none"; warnings?: readonly string[]; }`
+- `{ kind: "refused"; reason: string; warnings?: readonly string[]; }`
+
+## storageUrlReplacing
+
+The `AW_STORAGE_URL` that names the same places as the old settings, or `null` when none can
+(mixed local roots, or an Azure service URL with no account). Doctor prints it as the advice.
+
+```ts
+storageUrlReplacing(location: StorageLocation | LegacyLocalRoots, env: StorageEnv): string | null
+```

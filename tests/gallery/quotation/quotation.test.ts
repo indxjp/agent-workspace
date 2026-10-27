@@ -1,11 +1,12 @@
 /**
- * Use case 3, the quotation agent: the definition and its read-only ERP tool pass the contract,
- * the cost model reproduces hand-computed prices, and the sales backend accepts a draft only when
- * its numbers are the cost model's. See `../README.md` for the tiers and what each proves.
+ * Use case 3, the quotation agent: the definition and its ERP tool pass the contract,
+ * the cost model reproduces hand-computed prices, and the sales backend asks a person to approve a
+ * booking only when its numbers are the cost model's. See `../README.md` for the tiers and what each proves.
  *
  * The ERP is an `openapiTool()`: in a real run the platform's tool gateway, not a server of ours,
  * turns each admitted operation into an MCP tool (`packages/gateway/src/tools/openapi.ts`). Here a
- * small gateway double (`erpGateway`) plays that part against a loopback fake ERP. What it assumes,
+ * small gateway double (`../harness/openapi-gateway.ts`, which lists what it assumes) plays that part
+ * against a loopback fake ERP. What it assumes,
  * read from the gateway and `apps/web/server/openapi/normalise.ts`: one tool per admitted
  * operation, named by its `operationId`; arguments are the operation's parameters by name; the
  * result is the upstream body as text, an error when the status is not 2xx; the credential is the
@@ -18,24 +19,40 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { canonicalCall } from '@indx-workspace/contracts/agents';
 import {
   selectAllowedOperations,
+  toolApprovalRules,
   toolServerKey,
   TOOL_OPERATION_NAME_PATTERN,
 } from '@indx-workspace/contracts/tool-connectors';
-import {
-  DefinitionError,
-  openapiTool,
-  secret,
-  toolDefinitionsOf,
-} from '@indx-workspace/sdk/define';
+import { toolDefinitionsOf } from '@indx-workspace/sdk/define';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
-import type { McpSession, McpToolResult } from '../harness/mcp-client.ts';
-import { PROBES } from '../harness/probes.ts';
+import { GALLERY_WORKSPACE_ID, signedHeaders } from '../harness/identity.ts';
+import {
+  isToolMethod,
+  openapiGateway,
+  operationsOf,
+  type OpenApiDocument,
+} from '../harness/openapi-gateway.ts';
 import { loadGalleryProject, type GalleryProject } from '../harness/project.ts';
-import { scriptedWorkspace, type ScriptContext } from '../harness/scripted-workspace.ts';
-import { draftQuote, lastJsonBlock, type QuoteOutcome, type QuoteSpec } from './backend/quote.ts';
+import {
+  scriptedWorkspace,
+  type BuiltinTools,
+  type Script,
+} from '../harness/scripted-workspace.ts';
+import { RunDidNotComplete } from '../shared/run-answer.ts';
+import {
+  type BookedQuote,
+  decideQuote,
+  draftQuote,
+  type QuoteAwaitingApproval,
+  type QuoteOutcome,
+  type QuoteRequest,
+  type QuoteSpec,
+} from './backend/quote.ts';
 import { startFakeErp, type FakeErp } from './erp/fake-erp.mjs';
 import { answerBlock, estimate, type RateTable } from './skills/cost-model/scripts/estimate.mjs';
 import { erp as erpTool } from './tools/erp.ts';
@@ -45,7 +62,17 @@ import surfaceDefinition from './surfaces/quote-desk.ts';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CONNECTOR_ID = '6b1c1f0e-0000-4000-8000-000000000003';
 const ERP_TOKEN = 'erp-test-token';
+const IDENTITY_KEY = 'gallery-erp-secret-0123456789';
+// Who is asking: both are in `data/erp/access.json`; the second sees 北陸フードシステム only.
+const SALES_LEAD = '山田 浩';
+const FOOD_REP = '佐野 敦';
 const ESTIMATE_SCRIPT = path.join(DIR, 'skills', 'cost-model', 'scripts', 'estimate.mjs');
+
+/** The last fenced json block in `text`, parsed: the spec in the prompt, the block the skill prints. */
+function lastJsonBlock(text: string): unknown {
+  const body = [...text.matchAll(/```json[^\S\n]*\n([\s\S]*?)\n```/gu)].at(-1)?.[1];
+  return body === undefined ? undefined : (JSON.parse(body) as unknown);
+}
 
 const readJson = <T>(...segments: string[]): T =>
   JSON.parse(readFileSync(path.join(DIR, ...segments), 'utf8')) as T;
@@ -54,70 +81,30 @@ const SPECS = {
   cover: readJson<QuoteSpec>('data', 'specs', 'cover-sus304.json'),
   plate: readJson<QuoteSpec>('data', 'specs', 'plate-a5052.json'),
 };
+const DRAWING_ID = 'a0000000-0000-4000-8000-000000000031';
+/** What sales sends: the drawing as an uploaded file, and the customer and quantity it does not carry. */
+const requestFor = (spec: QuoteSpec): QuoteRequest => ({
+  drawing: { fileId: DRAWING_ID },
+  customer: spec.customer,
+  quantity: spec.quantity,
+});
 const RATES = readJson<Record<string, RateTable>>('data', 'erp', 'rates.json');
 
-interface Operation {
-  readonly method: string;
-  readonly path: string;
-  readonly operationId: string;
-  readonly parameters: readonly { readonly name: string; readonly in: string }[];
-}
-interface OpenApiDocument {
-  readonly paths: Record<
-    string,
-    Record<string, { operationId: string; parameters?: Operation['parameters'] }>
-  >;
-}
-
 const document = readJson<OpenApiDocument>('apis', 'erp.openapi.json');
-const operations: Operation[] = Object.entries(document.paths).flatMap(([template, methods]) =>
-  Object.entries(methods).map(([method, operation]) => ({
-    method: method.toUpperCase(),
-    path: template,
-    operationId: operation.operationId,
-    parameters: operation.parameters ?? [],
-  })),
-);
-
-/**
- * The tool gateway's part, as a session the scripted workspace can call: the operations the
- * `allow` rules admit, each called on `baseUrl` with the connector's credential.
- */
-function erpGateway(baseUrl: string, token: string | null): McpSession {
-  const admitted = selectAllowedOperations(erpTool.allow, operations).admitted;
-  async function call(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
-    const operation = admitted.find((candidate) => candidate.operationId === name);
-    if (operation === undefined)
-      return { text: `unknown tool ${JSON.stringify(name)}`, isError: true };
-    let route = operation.path;
-    const query = new URLSearchParams();
-    for (const parameter of operation.parameters) {
-      const value = args[parameter.name];
-      if (value === undefined) continue;
-      if (typeof value !== 'string') {
-        return { text: `invalid arguments: ${parameter.name} must be a string`, isError: true };
-      }
-      if (parameter.in === 'path')
-        route = route.replace(`{${parameter.name}}`, encodeURIComponent(value));
-      else query.set(parameter.name, value);
-    }
-    const search = query.size === 0 ? '' : `?${query.toString()}`;
-    const response = await fetch(`${baseUrl}${route}${search}`, {
-      headers: token === null ? {} : { authorization: `Bearer ${token}` },
-    });
-    return { text: await response.text(), isError: !response.ok };
-  }
-  return {
-    tools: () => Promise.resolve(admitted.map((operation) => operation.operationId)),
-    call,
-    callJson: async <T = unknown>(name: string, args: Record<string, unknown>): Promise<T> => {
-      const result = await call(name, args);
-      if (result.isError) throw new Error(`${name} refused: ${result.text}`);
-      return JSON.parse(result.text) as T;
-    },
-    close: () => undefined,
-  };
-}
+const operations = operationsOf(document);
+const erpGateway = (
+  baseUrl: string,
+  token: string | null,
+  approvedToolCalls: readonly string[] = [],
+) =>
+  openapiGateway({
+    document,
+    allow: erpTool.allow,
+    baseUrl,
+    token,
+    serverKey: toolServerKey('erp'),
+    approvedToolCalls,
+  });
 
 interface PartHit {
   readonly partNo: string;
@@ -135,17 +122,75 @@ interface Order {
 
 const KINDS = ['ブラケット', 'カバー', 'プレート'];
 
+/** The `createQuote` body the cost model gives for `spec`: what a faithful agent asks the ERP to book. */
+const bookingOf = (spec: QuoteSpec): Record<string, unknown> => {
+  const priced = estimate(spec, RATES[spec.material]);
+  return {
+    customer: spec.customer,
+    drawingNo: spec.drawingNo,
+    partName: spec.partName,
+    material: spec.material,
+    quantity: spec.quantity,
+    unitPrice: priced.unitPrice,
+    total: priced.total,
+  };
+};
+
+/** `run_skill_script` as the platform runs it: the skill's script with the given arguments, no shell. */
+const builtins: BuiltinTools = {
+  run_skill_script: (args) => {
+    const run = spawnSync(
+      process.execPath,
+      [ESTIMATE_SCRIPT, ...z.array(z.string()).parse(args['args'])],
+      { encoding: 'utf8' },
+    );
+    return Promise.resolve({
+      text: run.status === 0 ? run.stdout : run.stderr,
+      isError: run.status !== 0,
+    });
+  },
+};
+
+/** What a test may change in what the agent read and is about to book, as a careless model would. */
+interface Draft {
+  spec: Record<string, unknown>;
+  quote: Record<string, unknown>;
+  cited: string[];
+}
+
 /**
- * What a model following `agents/quotation.md` does: search past parts by kind and material, read
- * their orders, read the rate, run the cost model and answer with the skill's JSON block. `edit`
- * lets a test play a model that changes the script's output before pasting it.
+ * What a model following `agents/quotation.md` does with the attached drawing, whose content is
+ * `drawn`: read its spec, search past parts by kind and material, read their orders, read the
+ * rate, run the cost model through `run_skill_script`, then call `createQuote`, which pauses the
+ * run. `edit` lets a test play a model that misreads the drawing or changes a number before it
+ * books. On `approved` it makes the same call again and closes with its typed answer; on
+ * `rejected: <comment>` it books `revise(quote, comment)` (which pauses again), or stops without
+ * `revise`.
  */
 function quotationModel(
-  edit: (block: { breakdown: Record<string, unknown>; similarOrders: string[] }) => void = () =>
-    undefined,
-) {
-  return async (context: ScriptContext): Promise<string> => {
-    const spec = lastJsonBlock(context.prompt) as QuoteSpec;
+  drawn: QuoteSpec,
+  edit: (draft: Draft) => void = () => undefined,
+  revise?: (quote: Record<string, unknown>, comment: string) => Record<string, unknown>,
+): Script {
+  let booking: Record<string, unknown> | null = null;
+  let closing: { text: string; structured: unknown } | null = null;
+  return async (context) => {
+    if (booking !== null && closing !== null) {
+      if (context.prompt === 'approved') {
+        const booked = await context.tool('erp', 'createQuote', { body: booking });
+        const { quoteNo } = z.object({ quoteNo: z.string() }).parse(JSON.parse(booked.text));
+        return { text: `${closing.text}\n見積番号 ${quoteNo}`, structured: closing.structured };
+      }
+      const comment = /^rejected: (.*)$/su.exec(context.prompt)?.[1];
+      if (revise !== undefined && comment !== undefined) {
+        booking = revise(booking, comment);
+        await context.tool('erp', 'createQuote', { body: booking });
+      }
+      return { text: '登録しませんでした。', structured: closing.structured };
+    }
+
+    const quantity = Number(/^数量: (\d+)個$/mu.exec(context.prompt)?.[1]);
+    const spec: QuoteSpec = { ...drawn, quantity };
     const q = KINDS.find((kind) => spec.partName.includes(kind)) ?? spec.partName;
     const hits = JSON.parse(
       (await context.tool('erp', 'searchParts', { q, material: spec.material })).text,
@@ -156,17 +201,36 @@ function quotationModel(
       if (!read.isError) orders.push(JSON.parse(read.text) as Order);
     }
     const similar = orders.filter((order) => order.material === spec.material);
-    const rate: unknown = JSON.parse(
-      (await context.tool('erp', 'getRate', { material: spec.material })).text,
-    );
-    // The Bash call that runs the skill script is not an MCP tool, so the scripted stream does
-    // not show it; the model's "run" is the same function the script's command line calls.
-    const breakdown = estimate(spec, rate) as unknown as Record<string, unknown>;
-    const block = {
-      breakdown: structuredClone(breakdown),
-      similarOrders: similar.map((o) => o.orderNo),
+    const draft: Draft = {
+      spec: {
+        drawingNo: drawn.drawingNo,
+        partName: drawn.partName,
+        material: drawn.material,
+        lengthMm: drawn.lengthMm,
+        widthMm: drawn.widthMm,
+        thicknessMm: drawn.thicknessMm,
+        holeCount: drawn.holeCount,
+        holeDiameterMm: drawn.holeDiameterMm ?? 0,
+        bendCount: drawn.bendCount,
+      },
+      quote: bookingOf(spec),
+      cited: similar.map((order) => order.orderNo),
     };
-    edit(block);
+    edit(draft);
+    const rate = await context.tool('erp', 'getRate', { material: String(draft.spec['material']) });
+    await context.builtin('run_skill_script', {
+      skill: 'cost-model',
+      script: 'estimate.mjs',
+      args: [
+        'quote',
+        '--spec',
+        JSON.stringify({ ...draft.spec, quantity }),
+        '--rate',
+        rate.text,
+        ...(draft.cited.length === 0 ? [] : ['--orders', draft.cited.join(',')]),
+      ],
+    });
+
     const references =
       similar.length === 0
         ? '類似実績なし'
@@ -176,17 +240,19 @@ function quotationModel(
                 `- ${o.orderNo} ${o.partName} ${String(o.quantity)}個 単価${String(o.unitPrice)}円（${o.orderedOn}）`,
             )
             .join('\n');
-    const unitPrice = Number(block.breakdown['unitPrice']);
-    return [
-      `見積単価 ${unitPrice.toLocaleString('ja-JP')}円（税抜）`,
-      '',
-      '参考にした類似実績:',
-      references,
-      '',
-      '```json',
-      JSON.stringify(block, null, 2),
-      '```',
-    ].join('\n');
+    const priced = estimate(spec, RATES[spec.material]);
+    closing = {
+      text: [
+        `見積単価 ${priced.unitPrice.toLocaleString('ja-JP')}円（税抜）`,
+        '',
+        '参考にした類似実績:',
+        references,
+      ].join('\n'),
+      structured: { spec: draft.spec, breakdown: priced, similarOrders: draft.cited },
+    };
+    booking = draft.quote;
+    await context.tool('erp', 'createQuote', { body: booking });
+    return closing;
   };
 }
 
@@ -194,7 +260,10 @@ let erp: FakeErp;
 let project: GalleryProject;
 
 beforeAll(async () => {
-  erp = await startFakeErp({ token: ERP_TOKEN });
+  erp = await startFakeErp({
+    token: ERP_TOKEN,
+    identity: { key: IDENTITY_KEY, audience: CONNECTOR_ID, workspace: GALLERY_WORKSPACE_ID },
+  });
   project = await loadGalleryProject(DIR, {
     'agents/quotation.ts': agentDefinition,
     'surfaces/quote-desk.ts': surfaceDefinition,
@@ -204,13 +273,25 @@ afterAll(async () => {
   await erp.close();
 });
 
-const workspaceFor = (model: ReturnType<typeof quotationModel>) =>
-  scriptedWorkspace(model, {
-    erp: { id: CONNECTOR_ID, session: erpGateway(erp.url, ERP_TOKEN) },
-  });
+/** The headers the platform sends the ERP for a run started with `subject`. */
+const asPerson = async (subject: string) => ({
+  headers: await signedHeaders({ key: IDENTITY_KEY, connectorId: CONNECTOR_ID, subject }),
+});
 
-function draftOf(outcome: QuoteOutcome) {
-  if (outcome.status !== 'draft') throw new Error(`refused ${outcome.code}: ${outcome.detail}`);
+const workspaceFor = (model: Script) =>
+  scriptedWorkspace(
+    model,
+    {
+      erp: { id: CONNECTOR_ID, session: erpGateway(erp.url, ERP_TOKEN), identityKey: IDENTITY_KEY },
+    },
+    builtins,
+  );
+
+/** The run paused on `createQuote`, or a failure that says why it did not. */
+function awaitingOf(outcome: BookedQuote | QuoteOutcome): QuoteAwaitingApproval {
+  if (outcome.status !== 'awaiting_approval') {
+    throw new Error(`not paused: ${outcome.status}`);
+  }
   return outcome;
 }
 
@@ -242,6 +323,7 @@ describe('quotation agent', () => {
     expect(definition?.agent.instructions).toContain('ブロックも省かずに貼り');
     expect(definition?.policySource).toBe('stored');
     expect(agent?.body.surfaces?.map((surface) => surface.name)).toStrictEqual(['quote-desk']);
+    expect(agent?.body.surfaces).toMatchObject([{ parts: { attachments: true } }]);
     expect(project.skills.map((skill) => skill.name)).toStrictEqual(['cost-model']);
     expect(project.project.policy).toMatchObject({
       permissions: { writeFiles: false, runCommands: true },
@@ -261,72 +343,164 @@ describe('quotation agent', () => {
     expect(project.project.policy?.promotion?.minEvalScore).toBe(0.9);
   });
 
-  it('the ERP tool admits exactly the three read operations and refuses a write rule', () => {
+  it('the ERP tool admits the three read operations and the one write, createQuote', () => {
     const [definition] = toolDefinitionsOf(project.agents[0]!.definition);
     expect(definition).toStrictEqual({
       kind: 'openapi',
       name: 'erp',
       spec: 'apis/erp.openapi.json',
-      allow: ['GET /parts/*', 'GET /orders/*', 'GET /rates/*'],
+      allow: ['GET /parts/*', 'GET /orders/*', 'GET /rates/*', 'operationId:createQuote'],
       auth: 'bearer',
       credential: { secret: 'ERP_TOKEN' },
+      identity: { secret: 'ERP_IDENTITY_SECRET' },
     });
 
     // `*` is one segment: /parts/search, /orders/{orderNo}, /rates/{material}. POST /quotes is
-    // in the document but no rule admits it.
+    // named by its operation id, so no glob can admit a second write by accident.
     const selected = selectAllowedOperations(erpTool.allow, operations);
     expect(selected.refusals).toStrictEqual([]);
     expect(selected.admitted.map((operation) => operation.operationId)).toStrictEqual([
       'searchParts',
       'getOrder',
       'getRate',
+      'createQuote',
     ]);
     for (const operation of selected.admitted) {
       expect(operation.operationId).toMatch(TOOL_OPERATION_NAME_PATTERN);
     }
     expect(`mcp__${toolServerKey('erp')}__getRate`).toBe('mcp__erp__getRate');
+    // Compose adds exactly this rule to `requireApproval`: the write, and no read.
+    expect(
+      toolApprovalRules(
+        toolServerKey('erp'),
+        selected.admitted.flatMap((operation) =>
+          isToolMethod(operation.method)
+            ? [{ name: operation.operationId, method: operation.method }]
+            : [],
+        ),
+      ),
+    ).toStrictEqual(['mcp__erp__createQuote']);
+  });
 
-    // A write is refused where the tool is defined, by rule or by operation id (probe
-    // openapi-write keeps the gallery honest the day this changes).
-    expect(() =>
-      openapiTool({
-        name: 'erp',
-        spec: 'apis/erp.openapi.json',
-        auth: secret('ERP_TOKEN'),
-        allow: ['POST /quotes'],
-      }),
-    ).toThrow(DefinitionError);
-    expect(selectAllowedOperations(['operationId:createQuote'], operations).refusals).toMatchObject(
-      [{ code: 'connector_write_unsupported' }],
-    );
-    expect(PROBES['openapi-write'].present()).toBe(false);
+  it('the agent books the quote in the ERP only after the call is approved', async () => {
+    const body = {
+      customer: '東和機工株式会社',
+      drawingNo: 'TWK-M-2231 rev.B',
+      partName: 'L形ブラケット',
+      material: 'SS400',
+      quantity: 50,
+      unitPrice: 440,
+      total: 22000,
+    };
+    const as = await asPerson(SALES_LEAD);
+    const before = erp.requests.length;
+
+    // Not approved: the gateway refuses and the ERP is never dialled.
+    expect(await erpGateway(erp.url, ERP_TOKEN).call('createQuote', { body }, as)).toStrictEqual({
+      text: 'approval_required',
+      isError: true,
+    });
+    expect(erp.requests).toHaveLength(before);
+
+    // Approved: the canonical call books exactly one quote, carrying the body.
+    const approved = erpGateway(erp.url, ERP_TOKEN, [
+      canonicalCall('mcp__erp__createQuote', { body }),
+    ]);
+    expect(
+      (await approved.callJson<{ quoteNo: string }>('createQuote', { body }, as)).quoteNo,
+    ).toBe('QT-0001');
+    expect(erp.requests.slice(before)).toStrictEqual([
+      { method: 'POST', path: '/api/v1/quotes', body, by: SALES_LEAD },
+    ]);
+
+    // An approval is for those arguments only: another price is another call.
+    const changed = await approved.call('createQuote', { body: { ...body, unitPrice: 400 } }, as);
+    expect(changed).toStrictEqual({ text: 'approval_required', isError: true });
+    expect(erp.requests).toHaveLength(before + 1);
   });
 
   it('the fake ERP serves Japanese past orders and refuses a call without the credential', async () => {
     const gateway = erpGateway(erp.url, ERP_TOKEN);
-    expect(await gateway.tools()).toStrictEqual(['searchParts', 'getOrder', 'getRate']);
+    const as = await asPerson(SALES_LEAD);
+    expect(await gateway.tools()).toStrictEqual([
+      'searchParts',
+      'getOrder',
+      'getRate',
+      'createQuote',
+    ]);
 
-    const brackets = await gateway.callJson<PartHit[]>('searchParts', {
-      q: 'ブラケット',
-      material: 'SS400',
-    });
+    const brackets = await gateway.callJson<PartHit[]>(
+      'searchParts',
+      {
+        q: 'ブラケット',
+        material: 'SS400',
+      },
+      as,
+    );
     expect(brackets.map((hit) => hit.partNo)).toStrictEqual(['P-10231', 'P-10388']);
     expect(
-      await gateway.callJson<PartHit[]>('searchParts', { q: 'プレート', material: 'A5052' }),
+      await gateway.callJson<PartHit[]>('searchParts', { q: 'プレート', material: 'A5052' }, as),
     ).toStrictEqual([]);
 
-    const order = await gateway.callJson<Order>('getOrder', { orderNo: 'SO-2024-0412' });
+    const order = await gateway.callJson<Order>('getOrder', { orderNo: 'SO-2024-0412' }, as);
     expect(order).toMatchObject({
       partName: 'モーター取付L形ブラケット',
       quantity: 50,
       unitPrice: 430,
     });
-    expect((await gateway.call('getOrder', { orderNo: 'SO-1999-0001' })).isError).toBe(true);
-    expect((await gateway.call('getRate', { material: 'SPCC' })).isError).toBe(true);
-    expect((await gateway.call('createQuote', {})).text).toContain('unknown tool');
+    expect((await gateway.call('getOrder', { orderNo: 'SO-1999-0001' }, as)).isError).toBe(true);
+    expect((await gateway.call('getRate', { material: 'SPCC' }, as)).isError).toBe(true);
+    expect((await gateway.call('deleteQuote', {}, as)).text).toContain('unknown tool');
 
     const anonymous = await erpGateway(erp.url, null).call('getRate', { material: 'SS400' });
     expect(anonymous).toStrictEqual({ text: '{"error":"unauthorized"}', isError: true });
+  });
+
+  it('refuses past orders of another customer by the asserted subject, not by prompt text', async () => {
+    const gateway = erpGateway(erp.url, ERP_TOKEN);
+    const lead = await asPerson(SALES_LEAD);
+    const rep = await asPerson(FOOD_REP);
+    // The brackets are 東和機工's and 中央精工's: the lead finds them, the food rep finds none.
+    const search = { q: 'ブラケット', material: 'SS400' };
+    expect(await gateway.callJson<PartHit[]>('searchParts', search, lead)).toHaveLength(2);
+    expect(await gateway.callJson<PartHit[]>('searchParts', search, rep)).toStrictEqual([]);
+
+    // Another customer's order gets the words of an order that does not exist.
+    const foreign = await gateway.call('getOrder', { orderNo: 'SO-2024-0412' }, rep);
+    const missing = await gateway.call('getOrder', { orderNo: 'SO-1999-0001' }, rep);
+    expect(foreign.isError && missing.isError).toBe(true);
+    expect(foreign.text).toBe(missing.text);
+    expect((await gateway.call('getOrder', { orderNo: 'SO-2025-0533' }, rep)).isError).toBe(false);
+    // The rates are the same for everyone.
+    expect((await gateway.call('getRate', { material: 'SS400' }, rep)).isError).toBe(false);
+
+    // The spec names 東和機工, the run's subject is the food rep, and the subject decides.
+    const workspace = workspaceFor(quotationModel(SPECS.bracket));
+    const { proposed } = awaitingOf(
+      await draftQuote(workspace.aw, workspace.agentId, requestFor(SPECS.bracket), FOOD_REP),
+    );
+    expect(workspace.runs[0]?.subject).toBe(FOOD_REP);
+    expect(proposed.similarOrders).toStrictEqual([]);
+    expect(proposed.confidence).toBe('low');
+
+    // No assertion, a wrong audience or a stranger: nothing is listed.
+    const anonymous = await gateway.call('getRate', { material: 'SS400' });
+    expect(anonymous.isError).toBe(true);
+    expect(anonymous.text).toContain('identity_assertion_invalid');
+    const stranger = await asPerson('someone else');
+    expect((await gateway.call('getRate', { material: 'SS400' }, stranger)).text).toContain(
+      'no access',
+    );
+    const elsewhere = {
+      headers: await signedHeaders({
+        key: IDENTITY_KEY,
+        connectorId: '6b1c1f0e-0000-4000-8000-0000000000ff',
+        subject: SALES_LEAD,
+      }),
+    };
+    expect((await gateway.call('getRate', { material: 'SS400' }, elsewhere)).text).toContain(
+      'identity_audience_mismatch',
+    );
   });
 
   it('the cost model reproduces the hand-computed prices', () => {
@@ -445,99 +619,274 @@ describe('quotation agent', () => {
     ).toBe(2);
   });
 
-  it('the backend returns a draft with the cost model breakdown, the past orders it read and a high confidence', async () => {
-    const workspace = workspaceFor(quotationModel());
-    const quote = draftOf(await draftQuote(workspace.aw, workspace.agentId, SPECS.bracket));
+  it('draftQuote pauses on the checked createQuote and writes nothing; once approved the continuation books it for the asking salesperson', async () => {
+    const workspace = workspaceFor(quotationModel(SPECS.bracket));
+    const seen = erp.requests.length;
+    const awaiting = awaitingOf(
+      await draftQuote(workspace.aw, workspace.agentId, requestFor(SPECS.bracket), SALES_LEAD),
+    );
 
-    expect(quote.approval).toBe('pending');
-    expect(quote.breakdown).toMatchObject({ unitPrice: 440, total: 22000 });
-    expect(quote.similarOrders.map((order) => [order.orderNo, order.unitPrice])).toStrictEqual([
+    // The person is asked to approve the cost model's numbers beside the spec and the orders read.
+    const { proposed } = awaiting;
+    expect(proposed.quote).toStrictEqual(bookingOf(SPECS.bracket));
+    expect(proposed.breakdown).toMatchObject({ unitPrice: 440, total: 22000 });
+    expect(proposed.similarOrders.map((order) => [order.orderNo, order.unitPrice])).toStrictEqual([
       ['SO-2024-0412', 430],
       ['SO-2025-0108', 460],
       ['SO-2025-0377', 380],
     ]);
-    expect(quote.confidence).toBe('high');
-    expect(quote.confidenceReasons[0]).toContain('中央値 430円');
-    expect(quote.answer).toContain('見積単価 440円');
-    expect(workspace.runs[0]?.prompt).toContain('"drawingNo":"TWK-M-2231 rev.B"');
-    // Every ERP call carried the connector's credential and was a read.
-    expect(erp.requests.every((request) => request.method === 'GET')).toBe(true);
-    expect(erp.requests.map((request) => request.path)).toContain(
+    expect(proposed.confidence).toBe('high');
+    expect(proposed.confidenceReasons[0]).toContain('中央値 430円');
+    expect(proposed.spec).toMatchObject({
+      drawingNo: 'TWK-M-2231 rev.B',
+      customer: '東和機工株式会社',
+      quantity: 50,
+    });
+    // Before the approval the ERP saw reads only: booking waits for the approved createQuote.
+    const drafted = erp.requests.slice(seen);
+    expect(drafted.every((request) => request.method === 'GET')).toBe(true);
+    expect(drafted.map((request) => request.path)).toContain(
       `/api/v1/parts/search?q=${encodeURIComponent('ブラケット')}&material=SS400`,
     );
+
+    // Approve: the continuation, in the same session and for the same salesperson, books it.
+    const booked = await decideQuote(workspace.aw, awaiting, { approve: true });
+    if (booked.status !== 'booked') throw new Error(`the booking run ${booked.status}`);
+    expect(booked.quoteNo).toMatch(/^QT-\d{4}$/u);
+    expect(booked.answer).toContain('見積単価 440円');
+    expect(booked.sessionId).toBe(awaiting.sessionId);
+    expect(booked.runId).not.toBe(awaiting.runId);
+    expect(erp.requests.slice(seen).filter((request) => request.method === 'POST')).toStrictEqual([
+      { method: 'POST', path: '/api/v1/quotes', body: proposed.quote, by: SALES_LEAD },
+    ]);
+    expect(workspace.runs.map((run) => run.subject)).toStrictEqual([SALES_LEAD, SALES_LEAD]);
+
+    // The approval is spent: a second decision is a 409, and nothing is booked twice.
+    await expect(decideQuote(workspace.aw, awaiting, { approve: true })).rejects.toMatchObject({
+      code: 'run_not_awaiting_approval',
+    });
+    expect(erp.requests.slice(seen).filter((request) => request.method === 'POST')).toHaveLength(1);
+  });
+
+  it('a rejection with a comment sends the agent back and its revised createQuote pauses again, nothing booked', async () => {
+    const workspace = workspaceFor(
+      quotationModel(SPECS.bracket, undefined, (quote, comment) => ({
+        ...quote,
+        drawingNo: /図番は (.+?) です/u.exec(comment)?.[1] ?? quote['drawingNo'],
+      })),
+    );
+    const seen = erp.requests.length;
+    const first = awaitingOf(
+      await draftQuote(workspace.aw, workspace.agentId, requestFor(SPECS.bracket), SALES_LEAD),
+    );
+
+    const revised = awaitingOf(
+      await decideQuote(workspace.aw, first, {
+        approve: false,
+        comment: '図番は TWK-M-2231 rev.C です',
+      }),
+    );
+    expect(revised.proposed.quote).toStrictEqual({
+      ...first.proposed.quote,
+      drawingNo: 'TWK-M-2231 rev.C',
+    });
+    expect(revised.proposed.breakdown).toStrictEqual(first.proposed.breakdown);
+    expect(revised.runId).not.toBe(first.runId);
+    expect(revised.sessionId).toBe(first.sessionId);
+    expect(erp.requests.slice(seen).some((request) => request.method === 'POST')).toBe(false);
+
+    // The revised call is the one the approval admits.
+    const booked = await decideQuote(workspace.aw, revised, { approve: true });
+    expect(booked).toMatchObject({ status: 'booked', quote: { drawingNo: 'TWK-M-2231 rev.C' } });
+    expect(erp.requests.slice(seen).filter((request) => request.method === 'POST')).toMatchObject([
+      { body: { drawingNo: 'TWK-M-2231 rev.C', unitPrice: 440, total: 22000 }, by: SALES_LEAD },
+    ]);
+  });
+
+  it('a rejection the agent does not revise books nothing, and a revision to other numbers is refused', async () => {
+    const seen = erp.requests.length;
+    const stops = workspaceFor(quotationModel(SPECS.bracket));
+    const stopped = awaitingOf(
+      await draftQuote(stops.aw, stops.agentId, requestFor(SPECS.bracket), SALES_LEAD),
+    );
+    expect(await decideQuote(stops.aw, stopped, { approve: false })).toMatchObject({
+      status: 'refused',
+      code: 'not_proposed',
+    });
+
+    // Sent back for a typo, the agent also takes off 10%: the revision is checked against the cost model.
+    const greedy = workspaceFor(
+      quotationModel(SPECS.bracket, undefined, (quote) => ({
+        ...quote,
+        unitPrice: 400,
+        total: 20000,
+      })),
+    );
+    const paused = awaitingOf(
+      await draftQuote(greedy.aw, greedy.agentId, requestFor(SPECS.bracket), SALES_LEAD),
+    );
+    const revised = await decideQuote(greedy.aw, paused, {
+      approve: false,
+      comment: '図番を直して',
+    });
+    expect(revised).toMatchObject({ status: 'refused', code: 'numbers_differ' });
+    expect(revised.status === 'refused' ? revised.detail : '').toContain('unitPrice: 400 ≠ 440');
+
+    expect(erp.requests.slice(seen).some((request) => request.method === 'POST')).toBe(false);
+  });
+
+  it('the drawing rides on the quote run as an attachment and the spec reaches the backend as the cost model input', async () => {
+    const workspace = workspaceFor(quotationModel(SPECS.bracket));
+    const { proposed } = awaitingOf(
+      await draftQuote(workspace.aw, workspace.agentId, requestFor(SPECS.bracket), SALES_LEAD),
+    );
+
+    const [start] = workspace.calls
+      .filter((call) => call.method === 'POST')
+      .map((call) => call.json as { prompt: string; attachments?: unknown });
+    expect(start?.attachments).toStrictEqual([{ fileId: DRAWING_ID }]);
+    // The prompt carries what a drawing does not say, and no spec for the agent to copy.
+    expect(start?.prompt).toContain('顧客: 東和機工株式会社');
+    expect(start?.prompt).toContain('数量: 50個');
+    expect(start?.prompt).not.toContain('```json');
+    expect(start?.prompt).not.toContain('TWK-M-2231');
+    // The spec in the proposal is the one the agent gave the cost-model script, with the request's
+    // customer and quantity.
+    expect(proposed.spec).toMatchObject({
+      material: 'SS400',
+      lengthMm: 200,
+      widthMm: 100,
+      thicknessMm: 3.2,
+      holeCount: 4,
+      holeDiameterMm: 10,
+      bendCount: 2,
+      quantity: 50,
+    });
+  });
+
+  it('a drawing the agent cannot read into a priceable spec is refused', async () => {
+    // The agent read a material the cost model does not price.
+    const misread = workspaceFor(
+      quotationModel(SPECS.bracket, (draft) => {
+        draft.spec['material'] = 'SPCC';
+      }),
+    );
+    const refused = await draftQuote(
+      misread.aw,
+      misread.agentId,
+      requestFor(SPECS.bracket),
+      SALES_LEAD,
+    );
+    expect(refused).toMatchObject({ status: 'refused', code: 'invalid_spec' });
+    expect(refused.status === 'refused' ? refused.runId : null).not.toBeNull();
+    expect(refused.status === 'refused' ? refused.detail : '').toContain('spec.material');
+  });
+
+  it('a request with a bad quantity or a blank customer starts no run', async () => {
+    const neverRun = scriptedWorkspace(() => Promise.resolve(''));
+    for (const request of [
+      { ...requestFor(SPECS.bracket), quantity: 0 },
+      { ...requestFor(SPECS.bracket), quantity: 1.5 },
+      { ...requestFor(SPECS.bracket), quantity: Number.NaN },
+      { ...requestFor(SPECS.bracket), quantity: 100001 },
+      { ...requestFor(SPECS.bracket), customer: ' ' },
+    ]) {
+      expect(await draftQuote(neverRun.aw, neverRun.agentId, request, SALES_LEAD)).toMatchObject({
+        status: 'refused',
+        code: 'invalid_spec',
+        runId: null,
+      });
+    }
+    expect(neverRun.runs).toHaveLength(0);
   });
 
   it('the backend rates a single past order medium and no past order low', async () => {
-    const first = workspaceFor(quotationModel());
-    const cover = draftOf(await draftQuote(first.aw, first.agentId, SPECS.cover));
+    const first = workspaceFor(quotationModel(SPECS.cover));
+    const cover = awaitingOf(
+      await draftQuote(first.aw, first.agentId, requestFor(SPECS.cover), SALES_LEAD),
+    ).proposed;
     expect(cover.breakdown.unitPrice).toBe(1560);
     expect(cover.similarOrders.map((order) => order.orderNo)).toStrictEqual(['SO-2025-0533']);
     expect(cover.confidence).toBe('medium');
     expect(cover.confidenceReasons).toContain('類似実績が1件のみ');
 
-    const workspace = workspaceFor(quotationModel());
-    const plate = draftOf(await draftQuote(workspace.aw, workspace.agentId, SPECS.plate));
+    const workspace = workspaceFor(quotationModel(SPECS.plate));
+    const plate = awaitingOf(
+      await draftQuote(workspace.aw, workspace.agentId, requestFor(SPECS.plate), SALES_LEAD),
+    ).proposed;
     expect(plate.breakdown).toMatchObject({ unitPrice: 1180, total: 8260 });
     expect(plate.similarOrders).toStrictEqual([]);
     expect(plate.confidence).toBe('low');
-    expect(plate.answer).toContain('類似実績なし');
   });
 
-  it('the backend refuses a draft whose numbers differ from the cost model', async () => {
+  it('the booking run asks for a typed answer and the backend refuses a createQuote whose numbers the cost model does not give', async () => {
+    const seen = erp.requests.length;
     const workspace = workspaceFor(
-      quotationModel((block) => {
-        // A "friendly" discount for a regular customer, written straight into the block.
-        block.breakdown['unitPrice'] = 400;
-        block.breakdown['total'] = 20000;
+      quotationModel(SPECS.bracket, (draft) => {
+        // A "friendly" discount for a regular customer, written straight into the booking.
+        draft.quote['unitPrice'] = 400;
+        draft.quote['total'] = 20000;
       }),
     );
-    const outcome = await draftQuote(workspace.aw, workspace.agentId, SPECS.bracket);
+    const outcome = await draftQuote(
+      workspace.aw,
+      workspace.agentId,
+      requestFor(SPECS.bracket),
+      SALES_LEAD,
+    );
+    expect(workspace.runs[0]?.outputSchema).toMatchObject({
+      type: 'object',
+      required: ['spec', 'breakdown', 'similarOrders'],
+      properties: { similarOrders: { type: 'array' } },
+    });
     expect(outcome).toMatchObject({ status: 'refused', code: 'numbers_differ' });
     expect(outcome.status === 'refused' ? outcome.detail : '').toBe(
-      'the cost model gives other numbers: unitPrice: 400 ≠ 440; total: 20000 ≠ 22000',
+      'the call differs from the request and the cost model: unitPrice: 400 ≠ 440; total: 20000 ≠ 22000',
     );
+    expect(erp.requests.slice(seen).some((request) => request.method === 'POST')).toBe(false);
   });
 
   it('the backend refuses numbers without an ERP rate and drops orders the agent never read', async () => {
-    const noRate = scriptedWorkspace(
-      () =>
-        Promise.resolve(
-          '単価は 440円 です。\n```json\n' +
-            JSON.stringify({
-              breakdown: estimate(SPECS.bracket, RATES['SS400']),
-              similarOrders: [],
-            }) +
-            '\n```',
-        ),
-      { erp: { id: CONNECTOR_ID, session: erpGateway(erp.url, ERP_TOKEN) } },
-    );
-    expect(await draftQuote(noRate.aw, noRate.agentId, SPECS.bracket)).toMatchObject({
+    const noRate = workspaceFor(async (context) => {
+      await context.builtin('run_skill_script', {
+        skill: 'cost-model',
+        script: 'estimate.mjs',
+        args: ['quote', '--spec', JSON.stringify(SPECS.bracket)],
+      });
+      await context.tool('erp', 'createQuote', { body: bookingOf(SPECS.bracket) });
+      return '';
+    });
+    expect(
+      await draftQuote(noRate.aw, noRate.agentId, requestFor(SPECS.bracket), SALES_LEAD),
+    ).toMatchObject({
       status: 'refused',
       code: 'rate_not_read',
     });
 
     const invented = workspaceFor(
-      quotationModel((block) => {
-        block.similarOrders.push('SO-2023-0001', 'SO-2025-0219');
+      quotationModel(SPECS.cover, (draft) => {
+        draft.cited.push('SO-2023-0001', 'SO-2025-0219');
       }),
     );
-    const quote = draftOf(await draftQuote(invented.aw, invented.agentId, SPECS.cover));
-    expect(quote.droppedOrders).toStrictEqual(['SO-2023-0001', 'SO-2025-0219']);
-    expect(quote.similarOrders.map((order) => order.orderNo)).toStrictEqual(['SO-2025-0533']);
+    const { proposed } = awaitingOf(
+      await draftQuote(invented.aw, invented.agentId, requestFor(SPECS.cover), SALES_LEAD),
+    );
+    expect(proposed.droppedOrders).toStrictEqual(['SO-2023-0001', 'SO-2025-0219']);
+    expect(proposed.similarOrders.map((order) => order.orderNo)).toStrictEqual(['SO-2025-0533']);
 
+    // An answer without the typed shape is not a refusal the backend decides: the platform fails the
+    // run, and the backend surfaces that.
     const unanswered = scriptedWorkspace(() => Promise.resolve('見積を作成しました。'));
-    expect(await draftQuote(unanswered.aw, unanswered.agentId, SPECS.bracket)).toMatchObject({
-      status: 'refused',
-      code: 'no_breakdown',
+    const failure: unknown = await draftQuote(
+      unanswered.aw,
+      unanswered.agentId,
+      requestFor(SPECS.bracket),
+      SALES_LEAD,
+    ).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RunDidNotComplete);
+    expect(failure instanceof RunDidNotComplete ? failure.run : null).toMatchObject({
+      status: 'failed',
+      error: expect.stringMatching(/^output_schema_unsatisfied: /u) as unknown,
     });
-
-    const neverRun = scriptedWorkspace(() => Promise.resolve(''));
-    expect(
-      await draftQuote(neverRun.aw, neverRun.agentId, {
-        ...SPECS.bracket,
-        material: 'SPCC',
-      } as unknown as QuoteSpec),
-    ).toMatchObject({ status: 'refused', code: 'invalid_spec', runId: null });
-    expect(neverRun.runs).toHaveLength(0);
   });
 });

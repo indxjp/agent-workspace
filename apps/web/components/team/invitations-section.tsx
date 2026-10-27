@@ -41,15 +41,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { NO_INVITATION_CAPABILITY } from '../../contracts/invitations';
-import { describeTransportRejection } from '../agents/model';
+import { browserClient } from '../../lib/browser-client';
 import { InvitationForm } from './invitation-form';
 import { InvitationReveal } from './invitation-reveal';
 import {
   describeInvitationFailure,
   EMPTY_INVITATION_DRAFT,
   invitationRequestFrom,
-  readInvitationList,
-  revealIssuedInvitation,
   type CopyState,
   type InvitationCapability,
   type InvitationDraft,
@@ -57,19 +55,14 @@ import {
   type RevealedInvitation,
 } from './invitations-model';
 import { InvitationsTable, type InvitationsTableState } from './invitations-table';
-import { describeRequestFailure } from './model';
-
-const JSON_READ = { cache: 'no-store', headers: { accept: 'application/json' } } as const;
-const JSON_WRITE = {
-  'content-type': 'application/json',
-  accept: 'application/json',
-} as const;
+import {
+  issueInvitation,
+  loadInvitations,
+  resendInvitation as resend,
+  revokeInvitation as revoke,
+} from './team-requests-model';
 
 const HEADING_ID = 'team-invitations-heading';
-
-const UNREADABLE_LIST =
-  'The invitation list came back in a shape this screen cannot read, so nothing is shown rather ' +
-  'than a partial list. Reload to try again.';
 
 /**
  * What is said when a create succeeded but its body could not be read.
@@ -94,10 +87,6 @@ const UNREADABLE_ISSUED =
 const UNREADABLE_RESENT =
   'The invitation was resent, but the response carrying its new link could not be read, so the ' +
   'link is gone. Resend it again to get a fresh one.';
-
-function invitationUrl(id: string): string {
-  return `/api/invitations/${encodeURIComponent(id)}`;
-}
 
 export function InvitationsSection({
   capability = NO_INVITATION_CAPABILITY,
@@ -148,28 +137,13 @@ export function InvitationsSection({
       setTable({ kind: 'refused' });
       return;
     }
-    let response: Response;
-    try {
-      response = await fetch('/api/invitations', JSON_READ);
-    } catch (error) {
-      setTable({
-        kind: 'failed',
-        message: describeInvitationFailure(describeTransportRejection(error)),
-      });
-      return;
-    }
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setTable({ kind: 'failed', message: describeInvitationFailure(problem) });
-      return;
-    }
-    const invitations = readInvitationList(await response.json().catch(() => null));
+    const result = await loadInvitations(browserClient());
     setTable(
-      invitations === null
-        ? { kind: 'failed', message: UNREADABLE_LIST }
-        : // The clock is read here, once, so the table stays a pure render of its props: the four
+      result.ok
+        ? // The clock is read here, once, so the table stays a pure render of its props: the four
           // states are `expiresAt` compared against this number.
-          { kind: 'ready', invitations, nowMs: Date.now() },
+          { kind: 'ready', invitations: result.value, nowMs: Date.now() }
+        : { kind: 'failed', message: describeInvitationFailure(result.problem) },
     );
   }, [capability.canListInvitations]);
 
@@ -188,13 +162,12 @@ export function InvitationsSection({
   }, [clearReveal]);
 
   /**
-   * Read a create or resend response into the reveal. `false` when the body could not be read.
+   * Show a create or resend answer as the reveal. `false` when the answer could not be read.
    *
-   * The parsed body is never stored — `revealIssuedInvitation` returns three strings and the object
-   * it parsed goes out of scope — so the `token` field exists only for the duration of this call.
+   * The response is never stored — `revealIssuedInvitation` returns three strings and the object
+   * it read goes out of scope — so the `token` field exists only for the duration of the request.
    */
-  function showReveal(body: unknown): boolean {
-    const next = revealIssuedInvitation(body, window.location.origin);
+  function showReveal(next: RevealedInvitation | null): boolean {
     if (next === null) return false;
     setRevealed(next);
     setCopyState('untouched');
@@ -208,25 +181,13 @@ export function InvitationsSection({
     setCreateProblem(null);
     setActionProblem(null);
     setSending(true);
-    let response: Response;
-    try {
-      response = await fetch('/api/invitations', {
-        method: 'POST',
-        headers: JSON_WRITE,
-        body: JSON.stringify(request),
-      });
-    } catch (error) {
-      setSending(false);
-      setCreateProblem(describeInvitationFailure(describeTransportRejection(error)));
-      return;
-    }
+    const result = await issueInvitation(browserClient(), request, window.location.origin);
     setSending(false);
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setCreateProblem(describeInvitationFailure(problem));
+    if (!result.ok) {
+      setCreateProblem(describeInvitationFailure(result.problem));
       return;
     }
-    if (!showReveal(await response.json().catch(() => null))) setCreateProblem(UNREADABLE_ISSUED);
+    if (!showReveal(result.value)) setCreateProblem(UNREADABLE_ISSUED);
     // The address is cleared so the next invitation starts from an empty field rather than from one
     // that looks like it still needs sending. The role is cleared with it: carrying the previous
     // choice forward would make the next invitation's grant something nobody chose for it.
@@ -242,24 +203,13 @@ export function InvitationsSection({
     setActionProblem(null);
     setCreateProblem(null);
     setBusyInvitationId(invitation.id);
-    let response: Response;
-    try {
-      response = await fetch(`${invitationUrl(invitation.id)}/resend`, {
-        method: 'POST',
-        headers: { accept: 'application/json' },
-      });
-    } catch (error) {
-      setBusyInvitationId(null);
-      setActionProblem(describeInvitationFailure(describeTransportRejection(error)));
-      return;
-    }
+    const result = await resend(browserClient(), invitation.id, window.location.origin);
     setBusyInvitationId(null);
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setActionProblem(describeInvitationFailure(problem));
+    if (!result.ok) {
+      setActionProblem(describeInvitationFailure(result.problem));
       return;
     }
-    if (!showReveal(await response.json().catch(() => null))) setActionProblem(UNREADABLE_RESENT);
+    if (!showReveal(result.value)) setActionProblem(UNREADABLE_RESENT);
     // Reload rather than patch the row: the resend moved this row's expiry, and the state the table
     // shows is derived from it.
     await load();
@@ -270,21 +220,10 @@ export function InvitationsSection({
     setActionProblem(null);
     setCreateProblem(null);
     setBusyInvitationId(invitation.id);
-    let response: Response;
-    try {
-      response = await fetch(invitationUrl(invitation.id), {
-        method: 'DELETE',
-        headers: { accept: 'application/json' },
-      });
-    } catch (error) {
-      setBusyInvitationId(null);
-      setActionProblem(describeInvitationFailure(describeTransportRejection(error)));
-      return;
-    }
+    const result = await revoke(browserClient(), invitation.id);
     setBusyInvitationId(null);
-    if (!response.ok) {
-      const problem = await describeRequestFailure(response, () => response.json());
-      setActionProblem(describeInvitationFailure(problem));
+    if (!result.ok) {
+      setActionProblem(describeInvitationFailure(result.problem));
       return;
     }
     await load();

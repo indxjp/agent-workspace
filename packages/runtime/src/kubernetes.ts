@@ -29,6 +29,7 @@ export const KUBERNETES_RUNTIME_CAPABILITIES: RuntimeCapabilities = {
   gpu: false,
   managedByProvider: false,
   typicalStartMs: 2_000,
+  fileTransfer: 'push-archive',
 };
 
 export type KubernetesResource = KubernetesObject & {

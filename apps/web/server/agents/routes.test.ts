@@ -10,7 +10,7 @@
  * circumstance is indistinguishable from a route that does not work, and "it will work once
  * W1-CP-06 wires a session" is a claim, not a test.
  *
- * What a test can supply that production cannot yet is the runtime: `configureAgentsRuntime`
+ * What a test can supply that production cannot yet is the runtime: `installTestDomains`
  * installs the in-memory reference store and a resolver. Everything downstream of that seam is the
  * real code path a deployed request takes.
  *
@@ -18,7 +18,8 @@
  * and how it fills `params`. That is what `tests/route-inventory.test.ts` covers, from the other
  * side.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { log as webLogger } from '../telemetry/logger';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GET as listRoute, POST as createRoute } from '../../app/api/agents/route';
 import {
@@ -31,18 +32,15 @@ import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
 } from '../agent-versions/memory-store';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../agent-versions/runtime';
+import { applicationContext, clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import type { AgentResourceStoreProvider } from './resource-store';
-import { clearAgentsRuntime, configureAgentsRuntime, type WorkspaceResolution } from './runtime';
+import { type WorkspaceResolution } from './runtime';
 import { clearEnginesRegisteredForTests, registerEngineForTests } from '../engines/registry';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import type { Role } from '../rbac/roles';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
@@ -53,9 +51,7 @@ const WORKSPACE_HEADER = 'x-test-workspace';
 const ACTOR_HEADER = 'x-test-actor';
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 /**
@@ -67,8 +63,8 @@ afterEach(() => {
  * then asserts that workspace B still cannot reach workspace A's row.
  */
 function useMemoryRuntime(role: Role = 'owner'): InMemoryAgentVersionStoreProvider {
-  const agents = createInMemoryAgentStoreProvider();
   const assignments = new Map<string, AgentResourceAssignments>();
+  const agents = createInMemoryAgentStoreProvider({ assignments });
   const agentResources: AgentResourceStoreProvider = {
     forWorkspace: (workspaceId) => ({
       get: async (agentId) => {
@@ -78,6 +74,7 @@ function useMemoryRuntime(role: Role = 'owner'): InMemoryAgentVersionStoreProvid
             files: [],
             skillIds: [],
             connectorIds: [],
+            storageGrants: [],
           }
         );
       },
@@ -85,89 +82,94 @@ function useMemoryRuntime(role: Role = 'owner'): InMemoryAgentVersionStoreProvid
         if ((await agents.forWorkspace(workspaceId).get(agentId)) === null) {
           return { kind: 'not-found' as const };
         }
-        assignments.set(`${workspaceId}:${agentId}`, next);
-        return { kind: 'updated' as const, assignments: next };
+        const stored = { ...next, storageGrants: next.storageGrants ?? [] };
+        assignments.set(`${workspaceId}:${agentId}`, stored);
+        return { kind: 'updated' as const, assignments: stored };
       },
     }),
   };
-  configureAgentsRuntime({
-    agents,
-    agentResources,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      if (workspaceId === null) {
-        return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-      }
-      return Promise.resolve({ kind: 'workspace', workspaceId });
+  installTestDomains({
+    agents: {
+      agents,
+      agentResources,
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        if (workspaceId === null) {
+          return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
+        }
+        return Promise.resolve({ kind: 'workspace', workspaceId });
+      },
     },
   });
   // Issue #616: a PATCH saves a version, so the version store is part of the runtime.
   const versions = createInMemoryAgentVersionStoreProvider({ agents, resources: agentResources });
-  configureAgentVersionsRuntime({ versions });
-  configureRbacRuntime({
-    // Issue #117: `POST /api/agents` resolves `created_by`, falling back to the workspace's
-    // oldest Owner when the caller cannot be matched by email (true here, which authenticates as
-    // an API key) — so each fixture workspace needs at least one seeded member.
-    directory: createMemoryDirectory({
-      users: [
-        {
-          email: 'owner-a@example.test',
-          name: 'Owner A',
-          workspaceId: WORKSPACE_A,
-          role: 'owner',
-        },
-        {
-          email: 'owner-b@example.test',
-          name: 'Owner B',
-          workspaceId: WORKSPACE_B,
-          role: 'owner',
-        },
-        // Two distinct Builders of workspace A, seeded by real email — issue #117's ownership
-        // tests need two people the "own"/"other" comparison can actually tell apart, which the
-        // single fixed test actor below could not.
-        {
-          email: 'builder-a@example.test',
-          name: 'Builder A',
-          workspaceId: WORKSPACE_A,
-          role: 'builder',
-        },
-        {
-          email: 'builder-b@example.test',
-          name: 'Builder B',
-          workspaceId: WORKSPACE_A,
-          role: 'builder',
-        },
-      ],
-    }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER) ?? 'agent-route-test';
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId:
-                actor === 'builder-a@example.test'
-                  ? '819aac78-a253-48ca-bb59-638a37531f1d'
-                  : actor === 'builder-b@example.test'
-                    ? '54450291-6b86-470a-819a-d242b67bcdba'
-                    : '1353503f-91fc-4c4c-89d4-e7f1dd35386c',
-              apiKeyId:
-                actor === 'builder-a@example.test'
-                  ? '10a92952-c0a5-43e1-a7f0-901b32dcaedc'
-                  : actor === 'builder-b@example.test'
-                    ? '3d469b13-fdb5-4206-895a-37f762c28ea1'
-                    : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              workspaceId,
-              role,
-              label:
-                actor === 'builder-a@example.test'
-                  ? 'Builder A automation'
-                  : actor === 'builder-b@example.test'
-                    ? 'Builder B automation'
-                    : 'Agent route test key',
-            }),
-      );
+  installTestDomains({ agentVersions: { versions } });
+  installTestDomains({
+    rbac: {
+      // Issue #117: `POST /api/agents` resolves `created_by`, falling back to the workspace's
+      // oldest Owner when the caller cannot be matched by email (true here, which authenticates as
+      // an API key) — so each fixture workspace needs at least one seeded member.
+      directory: createMemoryDirectory({
+        users: [
+          {
+            email: 'owner-a@example.test',
+            name: 'Owner A',
+            workspaceId: WORKSPACE_A,
+            role: 'owner',
+          },
+          {
+            email: 'owner-b@example.test',
+            name: 'Owner B',
+            workspaceId: WORKSPACE_B,
+            role: 'owner',
+          },
+          // Two distinct Builders of workspace A, seeded by real email — issue #117's ownership
+          // tests need two people the "own"/"other" comparison can actually tell apart, which the
+          // single fixed test actor below could not.
+          {
+            email: 'builder-a@example.test',
+            name: 'Builder A',
+            workspaceId: WORKSPACE_A,
+            role: 'builder',
+          },
+          {
+            email: 'builder-b@example.test',
+            name: 'Builder B',
+            workspaceId: WORKSPACE_A,
+            role: 'builder',
+          },
+        ],
+      }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER) ?? 'agent-route-test';
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId:
+                  actor === 'builder-a@example.test'
+                    ? '819aac78-a253-48ca-bb59-638a37531f1d'
+                    : actor === 'builder-b@example.test'
+                      ? '54450291-6b86-470a-819a-d242b67bcdba'
+                      : '1353503f-91fc-4c4c-89d4-e7f1dd35386c',
+                apiKeyId:
+                  actor === 'builder-a@example.test'
+                    ? '10a92952-c0a5-43e1-a7f0-901b32dcaedc'
+                    : actor === 'builder-b@example.test'
+                      ? '3d469b13-fdb5-4206-895a-37f762c28ea1'
+                      : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                workspaceId,
+                role,
+                label:
+                  actor === 'builder-a@example.test'
+                    ? 'Builder A automation'
+                    : actor === 'builder-b@example.test'
+                      ? 'Builder B automation'
+                      : 'Agent route test key',
+              }),
+        );
+      },
     },
   });
   return versions;
@@ -262,14 +264,14 @@ describe('the five agent routes serve real responses once a runtime is wired', (
         workspace: WORKSPACE_A,
         body: JSON.stringify({
           agent: JSON.parse(CREATE_BODY) as unknown,
-          assignments: { files: [], skillIds: [], connectorIds: [] },
+          assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
         }),
       }),
     );
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toMatchObject({
       agent: { name: 'Support triage' },
-      assignments: { files: [], skillIds: [], connectorIds: [] },
+      assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
     });
   });
 
@@ -322,6 +324,7 @@ describe('the five agent routes serve real responses once a runtime is wired', (
         files: [],
         skillIds: [],
         connectorIds: ['44444444-4444-4444-8444-444444444444'],
+        storageGrants: [],
       });
 
       expect(response.status).toBe(422);
@@ -341,6 +344,7 @@ describe('the five agent routes serve real responses once a runtime is wired', (
         files: [],
         skillIds: ['55555555-5555-4555-8555-555555555555'],
         connectorIds: [],
+        storageGrants: [],
       });
 
       expect(response.status).toBe(422);
@@ -357,10 +361,46 @@ describe('the five agent routes serve real responses once a runtime is wired', (
         files: [],
         skillIds: [],
         connectorIds: ['44444444-4444-4444-8444-444444444444'],
+        storageGrants: [],
       }).then(async (response) => {
         expect(response.status, JSON.stringify(await bodyOf(response))).toBe(201);
       });
     });
+  });
+
+  it('leaves no agent row when an assignment names a skill the workspace does not have', async () => {
+    // W2-3 (F-05): this answered `400 unknown-skill` after creating and then deleting the row, and
+    // an agent that vanished inside its own create answered `500 not-found`. The row and the
+    // assignment are now one store write, and the refusal is the caller's to correct.
+    useMemoryRuntime();
+    const runtime = applicationContext()?.agents ?? null;
+    if (runtime === null) throw new Error('useMemoryRuntime installed no agents runtime.');
+    installTestDomains({
+      agents: {
+        ...runtime,
+        agents: createInMemoryAgentStoreProvider({ knownAssignableIds: new Set() }),
+      },
+    });
+    const skillId = '55555555-5555-4555-8555-555555555555';
+    const response = await createRoute(
+      request('POST', '/api/agents', {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({
+          agent: JSON.parse(CREATE_BODY) as unknown,
+          assignments: { files: [], skillIds: [skillId], connectorIds: [], storageGrants: [] },
+        }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'unknown_skill',
+        message: 'An assigned skill is not in this workspace.',
+        details: [skillId],
+      },
+    });
+    const list = await listRoute(request('GET', '/api/agents', { workspace: WORKSPACE_A }));
+    expect(await list.json()).toEqual({ agents: [] });
   });
 
   it('lists, reads, updates and deletes that agent through the real handlers', async () => {
@@ -397,6 +437,30 @@ describe('the five agent routes serve real responses once a runtime is wired', (
 
     const afterDelete = await listRoute(request('GET', '/api/agents', { workspace: WORKSPACE_A }));
     expect(await bodyOf(afterDelete)).toEqual({ agents: [] });
+  });
+
+  it('answers 503 runtime_switch_audit_not_configured to a runtime switch with no audit sink', async () => {
+    // W3-6: the sink is `null` (no runtimes API installed), not absent; the switch still refuses
+    // before writing, and the agent keeps its runtime profile.
+    useMemoryRuntime();
+    expect(applicationContext()?.agents.runtimeSwitchAudit).toBeNull();
+    const agent = await createIn(WORKSPACE_A);
+    const response = await patchRoute(
+      request('PATCH', `/api/agents/${agent.id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ runtimeProfileId: '99999999-9999-4999-8999-999999999999' }),
+      }),
+      idContext(agent.id),
+    );
+    expect(response.status).toBe(503);
+    expect(await bodyOf(response)).toMatchObject({
+      error: { code: 'runtime_switch_audit_not_configured' },
+    });
+    const read = await getRoute(
+      request('GET', `/api/agents/${agent.id}`, { workspace: WORKSPACE_A }),
+      idContext(agent.id),
+    );
+    expect((await bodyOf(read)) as AgentResource).toMatchObject({ runtimeProfileId: null });
   });
 
   it('saves each PATCH as one ui version and points local at it (issue #616)', async () => {
@@ -539,5 +603,42 @@ describe('agent routes enforce the shared role policy', () => {
       idContext(agent.id),
     );
     expect(allowedForOwner.status, await allowedForOwner.clone().text()).toBe(200);
+  });
+});
+
+describe('agent routes answer a store failure with the safe Problem envelope', () => {
+  const SENTINEL = 'postgresql://admin:TOP-SECRET@internal.example/workspace';
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // I-02 (engineering audit): a throwing store used to reject the route function, and Next.js
+  // answered a bodiless 500 with no logged context. The `server/http/route.ts` wrapper renders it.
+  it('GET /api/agents maps a throwing store to 500 internal_error', async () => {
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    useMemoryRuntime();
+    const runtime = applicationContext()?.agents ?? null;
+    if (runtime === null) throw new Error('useMemoryRuntime installed no agents runtime.');
+    installTestDomains({
+      agents: {
+        ...runtime,
+        agents: {
+          forWorkspace: (workspaceId) => ({
+            ...runtime.agents.forWorkspace(workspaceId),
+            list: () => Promise.reject(new Error(SENTINEL)),
+          }),
+        },
+      },
+    });
+
+    const response = await listRoute(request('GET', '/api/agents', { workspace: WORKSPACE_A }));
+
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(text).not.toContain(SENTINEL);
+    expect(JSON.parse(text)).toEqual({
+      error: { code: 'internal_error', message: 'The request could not be completed.' },
+    });
   });
 });

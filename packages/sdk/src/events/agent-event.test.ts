@@ -50,6 +50,8 @@ const FRAMES: Readonly<Record<string, Record<string, unknown>>> = {
   'agent.result': { stopReason: 'end_turn', turns: 1, engineCostUsd: null },
   'agent.native': { type: 'system/status', payload: { type: 'system' } },
   'agent.malformed': { reason: 'not an object' },
+  'agent.approval.requested': { toolCallId: 't1', toolName: 'send_email', canonicalCall: '{}' },
+  'agent.handoff': { reason: 'The visitor asked for a person.' },
 };
 
 describe('toAgentEvent', () => {

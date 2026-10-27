@@ -101,18 +101,18 @@ user alone decides a role. -/
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#workspace-and-principal")]
 theorem identity_does_not_determine_permission :
     resolveTarget Current.Witness.state ⟨"u2", "one"⟩ = some ("p2", "viewer") ∧
-      resolveTarget Current.Witness.state ⟨"u2", "two"⟩ = some ("p4", "owner") := by decide
+      resolveTarget Current.Witness.state ⟨"u2", "two"⟩ = some ("p4", "owner") := by decide +kernel
 
 example : ∃ m ∈ Current.Witness.state .memberships, m.get "user_id" = some "u2" ∧
     m.get "role" = some "viewer" :=
-  role_is_read_from_the_membership _ ⟨"u2", "one"⟩ "p2" "viewer" (by decide)
+  role_is_read_from_the_membership _ ⟨"u2", "one"⟩ "p2" "viewer" (by decide +kernel)
 
 example : ∃ w ∈ Current.Witness.state .workspaces, w.get "slug" = some "two" ∧
     (∃ m ∈ Current.Witness.state .memberships, m.get "workspace_id" = w.get "id" ∧
       m.get "user_id" = some "u2") ∧
     ∃ pr ∈ Current.Witness.state .workspacePrincipals, pr.get "id" = some "p4" ∧
       pr.get "workspace_id" = w.get "id" :=
-  tenant_selection_requires_a_membership _ ⟨"u2", "two"⟩ "p4" "owner" (by decide)
+  tenant_selection_requires_a_membership _ ⟨"u2", "two"⟩ "p4" "owner" (by decide +kernel)
 
 /-! ## Today's resolution: `DatabaseRoot.resolveMembership(email, workspaceSlug)` -/
 
@@ -190,31 +190,31 @@ the member's membership. -/
 theorem a_principal_of_another_kind_never_resolves :
     resolveCurrent Refinement.ResolutionCells.otherKind ⟨"ada@example.com", "one", "owner"⟩ =
       none := by
-  decide
+  decide +kernel
 
 example : ∃ u ∈ Current.Witness.state .users, u.get "email" = some "bob@example.com" ∧
     ∃ m ∈ Current.Witness.state .memberships, m.get "user_id" = u.get "id" ∧
       m.get "role" = some "viewer" :=
   current_role_is_read_from_the_membership _ ⟨"bob@example.com", "one", "owner"⟩ "p2" "viewer"
-    (by decide)
+    (by decide +kernel)
 
 example : ∃ w ∈ Current.Witness.state .workspaces, w.get "slug" = some "two" ∧
     (∃ m ∈ Current.Witness.state .memberships, m.get "workspace_id" = w.get "id") ∧
     ∃ pr ∈ Current.Witness.state .workspacePrincipals, pr.get "id" = some "p4" ∧
       pr.get "workspace_id" = w.get "id" :=
   current_tenant_selection_requires_a_membership _ ⟨"bob@example.com", "two", "owner"⟩ "p4"
-    "owner" (by decide)
+    "owner" (by decide +kernel)
 
 example : ∃ pr ∈ Current.Witness.state .workspacePrincipals, pr.get "id" = some "p1" ∧
     pr.get "revoked_at" = none :=
-  resolved_principal_is_not_revoked _ ⟨"ada@example.com", "one", "owner"⟩ "p1" "owner" (by decide)
+  resolved_principal_is_not_revoked _ ⟨"ada@example.com", "one", "owner"⟩ "p1" "owner" (by decide +kernel)
 
 example : ∃ m ∈ Current.Witness.state .memberships,
     ∃ pr ∈ Current.Witness.state .workspacePrincipals,
       pr.get "id" = some "p1" ∧ pr.get "kind" = some "membership" ∧
         pr.get "membership_id" = m.get "id" :=
   resolved_principal_is_a_membership_principal _ ⟨"ada@example.com", "one", "owner"⟩ "p1" "owner"
-    (by decide)
+    (by decide +kernel)
 
 end AgentWorkspace.Theorems.Normative.ErSynthesis
 

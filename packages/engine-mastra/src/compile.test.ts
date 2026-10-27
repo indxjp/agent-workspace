@@ -71,6 +71,12 @@ function refusal(overrides: Partial<EngineRunRequest>): { code: string; reason: 
 const portable = request().portable;
 
 describe('compileMastraRun', () => {
+  it('copies an outputSchema verbatim, and compiles none to null (ADR-0143)', () => {
+    const schema = { type: 'object', properties: { verdict: { type: 'string' } } };
+    expect(compiled({ outputSchema: schema }).outputSchema).toEqual(schema);
+    expect(compiled().outputSchema).toBeNull();
+  });
+
   it('compiles every portable field', () => {
     const out = compiled();
     expect(out.agent).toEqual({
@@ -207,7 +213,7 @@ describe('compileMastraRun', () => {
       cwd: '/workspace/tenant',
       skillsDirectory: '.mastra/skills',
       skills: [{ name: 'writer', scripts: ['a.mjs'] }],
-      writable: [],
+      writable: ['outputs'],
     });
     expect(out.agent.tools.some((tool) => tool.includes('command'))).toBe(false);
     expect(compiled().skillScript).toBeNull();

@@ -5,13 +5,13 @@
  *
  * It reads what `pnpm --filter @indx-workspace/embedded build` wrote (the Nx `test` target
  * depends on `build`) and fails, never skips, when that output is missing. The runtime starts its
- * own embedded PostgreSQL on the fixed port 25432 under `<projectDir>/.agent-workspace/postgres`
- * (its web port is an ephemeral one, from 32768 up, so the database port derived from it, #664,
- * lies past 49151 and keeps 25432)
- * (outside every OS ephemeral range, #556); a database already listening there (another embedded
- * runtime on this host) fails the first start, before anything starts, with a `failed` naming
- * `port 25432 (embedded PostgreSQL) is already in use: …` and what to do (#660), never a retry or a
- * hang, which the last test proves.
+ * own embedded PostgreSQL under `<projectDir>/.agent-workspace/postgres` on {@link DATABASE_PORT},
+ * a free port this file picks and passes as `AW_DATABASE_PORT`, not on the fixed 25432: the CI
+ * runners share one host, so two runs of this file there took the same port, and a postmaster a
+ * cancelled run left on 25432 failed every later run on that host. The first test checks that the
+ * postmaster listens on that port. A database already listening on the runtime's port fails the
+ * first start, before anything starts, with a `failed` naming `port <n> (embedded PostgreSQL) is
+ * already in use: …` and what to do (#660), never a retry or a hang, which the last test proves.
  *
  * The credential is a workspace API key (S1-21, issue #500): it is accepted by `/api/me` and by the
  * control-plane routes `aw dev` calls, such as `/api/model-connections`, which the CLI user token
@@ -100,12 +100,11 @@ const bin = path.join(packageDirectory, 'dist', 'bin.js');
 const START_TIMEOUT_MS = 240_000;
 /** How long a runtime may take to exit after SIGINT. */
 const STOP_TIMEOUT_MS = 60_000;
-const EMBEDDED_DATABASE_PORT = 25432;
+/** The port every launcher uses when `AW_DATABASE_PORT` is unset; this file never uses it. */
+const DEFAULT_DATABASE_PORT = 25432;
 /** How long a runtime whose database port is taken may take to answer `failed` and exit. */
 const PORT_TAKEN_TIMEOUT_MS = 60_000;
 const BOOTSTRAP_ADMIN = 'admin@localhost.test';
-/** The fixed loopback-only role `embedded-db.ts` creates for the embedded database. */
-const EMBEDDED_DATABASE_URL = `postgresql://agent_workspace:agent_workspace_local@127.0.0.1:${String(EMBEDDED_DATABASE_PORT)}/postgres`;
 /** `LOCAL_RUNTIME_API_KEY_NAME_PREFIX` in `apps/web/server/cli-auth/local-credential.ts`. */
 const LOCAL_KEY_NAME_PREFIX = 'aw dev local runtime ';
 
@@ -126,6 +125,32 @@ function holdPort(port: number): Promise<Server | null> {
   });
 }
 
+/** The first and last port {@link freeDatabasePort} draws from: below the Linux ephemeral range. */
+const DATABASE_PORT_RANGE = { first: 20_000, last: 32_767 } as const;
+
+/**
+ * A loopback port nothing listens on, for the runtime's embedded PostgreSQL. It is drawn at random
+ * from {@link DATABASE_PORT_RANGE}, so two runs of this file on one host almost never draw the same
+ * one, and no outgoing connection is handed it before the postmaster binds it, as one could be an
+ * OS-assigned (ephemeral) port. A port that cannot be bound for any reason is skipped.
+ */
+async function freeDatabasePort(): Promise<number> {
+  const span = DATABASE_PORT_RANGE.last - DATABASE_PORT_RANGE.first + 1;
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const port = DATABASE_PORT_RANGE.first + Math.floor(Math.random() * span);
+    const server = await holdPort(port).catch(() => null);
+    if (server !== null) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      return port;
+    }
+  }
+  throw new Error('no free port for the embedded PostgreSQL after 50 attempts');
+}
+
+const DATABASE_PORT = await freeDatabasePort();
+/** The fixed loopback-only role `embedded-db.ts` creates for the embedded database. */
+const EMBEDDED_DATABASE_URL = `postgresql://agent_workspace:agent_workspace_local@127.0.0.1:${String(DATABASE_PORT)}/postgres`;
+
 /**
  * Variables the runtime sets itself (C1, the managed workspace variables and the local secrets).
  * A value inherited from the test process would be refused as a conflict, or would silently point
@@ -140,6 +165,7 @@ const INHERITED_VARIABLES_REMOVED = new Set([
   'AW_SESSION_MIRROR_URL',
   'AW_SESSION_TRANSCRIPT_ROOT',
   'AW_SKILL_STORAGE_ROOT',
+  'AW_STORAGE_URL',
   'BOOTSTRAP_ADMIN',
   'BOOTSTRAP_ADMIN_PASSWORD',
   'DATABASE_URL',
@@ -213,6 +239,7 @@ class ForkedRuntime {
     }
     environment['GATEWAY_PORT'] = String(ports.gateway);
     environment['RUNNER_PORT'] = String(ports.runner);
+    environment['AW_DATABASE_PORT'] = String(DATABASE_PORT);
 
     this.child = fork(bin, [], {
       cwd: projectDir,
@@ -270,9 +297,9 @@ class ForkedRuntime {
     }
     const failed = this.messages.find((message) => message.type === 'failed');
     if (failed !== undefined) {
-      const collision = failed.message.includes(String(EMBEDDED_DATABASE_PORT))
-        ? ` The embedded PostgreSQL port ${String(EMBEDDED_DATABASE_PORT)} is taken: stop the ` +
-          'other embedded runtime on this host (pnpm start:embedded, aw dev) and run again.'
+      const collision = failed.message.includes(String(DATABASE_PORT))
+        ? ` The embedded PostgreSQL port ${String(DATABASE_PORT)} was taken after this file ` +
+          'found it free: run again.'
         : '';
       throw new Error(`the runtime sent failed: ${failed.message}.${collision}`);
     }
@@ -400,6 +427,12 @@ function readPostmasterPid(projectDir: string): number {
   const pid = Number.parseInt(readFileSync(file, 'utf8').split('\n')[0] ?? '', 10);
   if (!Number.isInteger(pid) || pid <= 0) throw new Error('postmaster.pid names no pid');
   return pid;
+}
+
+/** The port the postmaster listens on: the fourth line of `postmaster.pid`. */
+function readPostmasterPort(projectDir: string): number {
+  const file = path.join(projectDir, '.agent-workspace', 'postgres', 'postmaster.pid');
+  return Number.parseInt(readFileSync(file, 'utf8').split('\n')[3] ?? '', 10);
 }
 
 /** The process group of `pid`: field 5 of `/proc/<pid>/stat` on Linux, `ps` elsewhere. */
@@ -682,6 +715,9 @@ describe('dist/bin.js forked with an IPC channel', () => {
       await runtime.signInPrinted();
 
       expect(ready.url).toBe(`http://127.0.0.1:${String(ports.web)}`);
+      // The database is on this file's own port, never the default every other runtime shares.
+      expect(readPostmasterPort(projectDir)).toBe(DATABASE_PORT);
+      expect(DATABASE_PORT).not.toBe(DEFAULT_DATABASE_PORT);
       expect(ready.contractsVersion).toBe(CONTRACTS_VERSION);
       expect(credential.workspaceSlug).toBe('default');
       expect(Date.parse(credential.expiresAt)).toBeGreaterThan(Date.now());
@@ -1072,8 +1108,8 @@ describe('dist/bin.js leading its own process group, as a terminal job does', ()
       expect(exit, runtime.stderr).toStrictEqual({ code: 0, signal: null });
       expectCleanStop(runtime.stderr);
       if (process.platform !== 'win32') expect(isAlive(pid)).toBe(false);
-      const held = await holdPort(EMBEDDED_DATABASE_PORT);
-      expect(held, `port ${String(EMBEDDED_DATABASE_PORT)} is still in use`).not.toBeNull();
+      const held = await holdPort(DATABASE_PORT);
+      expect(held, `port ${String(DATABASE_PORT)} is still in use`).not.toBeNull();
       if (held !== null) await new Promise<void>((resolve) => held.close(() => resolve()));
 
       // A normal restart on the same project: the first key was revoked by the stop.
@@ -1108,11 +1144,8 @@ describe('dist/bin.js leading its own process group, as a terminal job does', ()
       });
       expectCleanStop(next.stderr);
       if (process.platform !== 'win32') expect(isAlive(nextPid)).toBe(false);
-      const heldAfterHangUp = await holdPort(EMBEDDED_DATABASE_PORT);
-      expect(
-        heldAfterHangUp,
-        `port ${String(EMBEDDED_DATABASE_PORT)} is still in use`,
-      ).not.toBeNull();
+      const heldAfterHangUp = await holdPort(DATABASE_PORT);
+      expect(heldAfterHangUp, `port ${String(DATABASE_PORT)} is still in use`).not.toBeNull();
       if (heldAfterHangUp !== null) {
         await new Promise<void>((resolve) => heldAfterHangUp.close(() => resolve()));
       }
@@ -1136,14 +1169,14 @@ describe('dist/bin.js with the embedded PostgreSQL port taken', () => {
       throw new Error(`run pnpm --filter @indx-workspace/embedded build first; missing: ${bin}`);
     }
     projectDir = mkdtempSync(path.join(tmpdir(), 'embedded-launcher-port-'));
-    holder = await holdPort(EMBEDDED_DATABASE_PORT);
+    holder = await holdPort(DATABASE_PORT);
   });
 
   /** A stale holder (a postmaster an earlier failed run left) would turn this into a real start. */
   function expectPortHeld(): void {
     expect(
       holder,
-      `port ${String(EMBEDDED_DATABASE_PORT)} was already taken before this suite could hold it`,
+      `port ${String(DATABASE_PORT)} was already taken before this suite could hold it`,
     ).not.toBeNull();
   }
 
@@ -1170,7 +1203,7 @@ describe('dist/bin.js with the embedded PostgreSQL port taken', () => {
           type: 'failed',
           message:
             'the local runtime cannot start; nothing was started. These ports are not free:\n' +
-            `  port ${String(EMBEDDED_DATABASE_PORT)} (embedded PostgreSQL) is already in use: ` +
+            `  port ${String(DATABASE_PORT)} (embedded PostgreSQL) is already in use: ` +
             'stop the process that holds it, or set AW_DATABASE_PORT in .env to a free port below 49152',
         },
       ]);

@@ -65,6 +65,8 @@ export type MastraEvent =
       readonly usage: MastraUsage | null;
       /** Mastra's `finish` chunk, or `null` when the run ended without one (an interrupt). */
       readonly finish: unknown;
+      /** The answer and its parsed form, when the stop was `end_turn` (ADR-0143). */
+      readonly output?: { readonly text: string; readonly structured: unknown };
     };
 
 export type MastraFrameMapper = {
@@ -272,6 +274,7 @@ export function createMastraFrameMapper(connectors: readonly string[] = []): Mas
           // Any cost here would be the provisional table's, not the engine's own figure; billing is
           // the gateway's `run_usage_records` (ADR-0065 D6).
           engineCostUsd: null,
+          ...(event.output === undefined ? {} : { output: event.output }),
         },
         event,
       ),

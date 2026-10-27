@@ -1,34 +1,19 @@
 'use client';
+import type { ShareListItem } from '@indx-workspace/contracts/shares';
 import { useCallback, useEffect, useState } from 'react';
-type Share = {
-  id: string;
-  subjectLabel: string;
-  subjectType: string;
-  visibility: string;
-  mode: string | null;
-  viewCount: number;
-  spentUsd: string;
-  budgetCapUsd: string | null;
-  revokedAt: string | null;
-  suspendedAt: string | null;
-  stopped: boolean;
-};
+
+import { browserClient } from '../../lib/browser-client';
+import { loadSharing, revokeShare, setPublicSharing } from './shared-links-model';
+
 export function SharedLinksScreen() {
-  const [shares, setShares] = useState<readonly Share[] | null>(null);
+  const [shares, setShares] = useState<readonly ShareListItem[] | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [problem, setProblem] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
-      const [shareResponse, policyResponse] = await Promise.all([
-        fetch('/api/shares'),
-        fetch('/api/sharing-policies'),
-      ]);
-      if (!shareResponse.ok || !policyResponse.ok)
-        throw new Error(
-          `Sharing request returned ${shareResponse.status}/${policyResponse.status}`,
-        );
-      setShares(((await shareResponse.json()) as { shares: Share[] }).shares);
-      setEnabled(((await policyResponse.json()) as { publicSharing: boolean }).publicSharing);
+      const view = await loadSharing(browserClient());
+      setShares(view.shares);
+      setEnabled(view.publicSharing);
     } catch (e) {
       setProblem(e instanceof Error ? e.message : String(e));
     }
@@ -37,29 +22,17 @@ export function SharedLinksScreen() {
     void load();
   }, [load]);
   async function revoke(id: string) {
-    try {
-      const response = await fetch(`/api/shares/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (!response.ok) {
-        setProblem(`Revoke returned ${response.status}`);
-        return;
-      }
-      setProblem(null);
-      await load();
-    } catch (e) {
-      setProblem(e instanceof Error ? e.message : String(e));
-    }
+    const refused = await revokeShare(browserClient(), id);
+    setProblem(refused);
+    if (refused === null) await load();
   }
   async function toggle() {
     const next = !enabled;
-    const response = await fetch('/api/sharing-policies', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ publicSharing: next }),
-    });
-    if (response.ok) {
+    const refused = await setPublicSharing(browserClient(), next);
+    if (refused === null) {
       setEnabled(next);
       await load();
-    } else setProblem(`Policy update returned ${response.status}`);
+    } else setProblem(refused);
   }
   return (
     <main className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">

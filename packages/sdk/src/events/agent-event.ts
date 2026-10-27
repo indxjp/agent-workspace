@@ -91,7 +91,7 @@ function parseAgentFrame(name: string, data: unknown): AgentEvent {
 /**
  * The neutral event one frame carries, or `null` for the platform's own frames.
  *
- * `run-status`, `run-failed`, `stream-reset` and `done` are already typed on {@link RunEventFrame}
+ * `run-status`, `run-warning`, `run-failed`, `stream-reset` and `done` are already typed on {@link RunEventFrame}
  * and are not agent events: they are the *platform* speaking about the run and the stream, not the
  * engine speaking about the turn. Conflating the two is how a failed run gets rendered as a
  * finished one, so they stay apart.

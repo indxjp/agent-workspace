@@ -9,6 +9,7 @@ import {
   loadEgressPolicyFromEnv,
   type EgressPolicyConfig,
 } from '@agent-workspace/core';
+import { IDENTITY_ASSERTION_HEADER } from '@indx-workspace/contracts/identity-assertion';
 import {
   OPENAPI_AUTH_HEADER_REFUSED_NAMES,
   TOOL_GATEWAY_PROBLEM_CODES,
@@ -17,20 +18,33 @@ import {
 } from '@indx-workspace/contracts/tool-connectors';
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 
-import type { ToolParameter } from './authorize.js';
+import { approvalDecision, type ToolApproval, type ToolParameter } from './authorize.js';
 
 export const TOOL_UPSTREAM_TIMEOUT_MS = 30_000;
 export const TOOL_RESPONSE_MAX_BYTES = 256 * 1024;
 const TRUNCATION_MARKER = `\n[truncated: the response exceeded ${String(TOOL_RESPONSE_MAX_BYTES)} bytes]`;
 
-/** The locations a value can be sent in. A `cookie` parameter is neither advertised nor sent. */
-const SENT_LOCATIONS: ReadonlySet<string> = new Set(['path', 'query', 'header']);
+/**
+ * The locations a value can be sent in. A `cookie` parameter is neither advertised nor sent; `body`
+ * is the JSON request body of a write, sent as the request entity.
+ */
+const SENT_LOCATIONS: ReadonlySet<string> = new Set(['path', 'query', 'header', 'body']);
+/** A connector resolved without approval data: every write is refused, every read still runs. */
+const NO_APPROVAL: ToolApproval = {
+  serverKey: '',
+  approvedToolCalls: [],
+  consume: () => Promise.resolve('not-approved'),
+};
 const REFUSED_HEADERS: ReadonlySet<string> = new Set<string>(OPENAPI_AUTH_HEADER_REFUSED_NAMES);
 
 export type ToolCallOptions = {
   readonly transport?: typeof fetch;
   readonly timeoutMs?: number;
   readonly policy?: EgressPolicyConfig;
+  /** Signs this call's identity assertion; set only for a connector that opted in (ADR-0142). */
+  readonly identity?: () => Promise<string | null>;
+  /** Decides a write; without it every write is refused (ADR-0113 SD4, amended by #1304). */
+  readonly approval?: ToolApproval;
 };
 
 /**
@@ -131,7 +145,7 @@ function buildRequest(
   parameters: readonly ToolParameter[],
   args: Readonly<Record<string, unknown>>,
   credential: string | null,
-): { readonly url: string; readonly headers: Headers } {
+): { readonly url: string; readonly headers: Headers; readonly body?: string } {
   const known = new Set(parameters.map((p) => p.name));
   for (const name of Object.keys(args)) {
     if (!known.has(name)) {
@@ -142,12 +156,18 @@ function buildRequest(
   const headers = new Headers({ accept: 'application/json' });
   const query: [string, string][] = [];
   let resolvedPath = path;
+  let body: string | undefined;
   for (const parameter of parameters) {
     const value = args[parameter.name];
     if (value === undefined) {
       if (parameter.required) {
         throw new InvalidArgumentError(`missing argument ${JSON.stringify(parameter.name)}`);
       }
+      continue;
+    }
+    if (parameter.in === 'body') {
+      body = JSON.stringify(value);
+      headers.set('content-type', 'application/json');
       continue;
     }
     if (parameter.in === 'query') {
@@ -205,7 +225,7 @@ function buildRequest(
     throw new InvalidArgumentError('the path arguments leave the operation path');
   }
   for (const [name, value] of query) url.searchParams.append(name, value);
-  return { url: url.toString(), headers };
+  return { url: url.toString(), headers, ...(body === undefined ? {} : { body }) };
 }
 
 /** Read at most {@link TOOL_RESPONSE_MAX_BYTES}, then cancel the rest of the body. */
@@ -255,6 +275,36 @@ export async function callTool(
   const operation = config.operations.find((candidate) => candidate.name === name);
   if (operation === undefined) return textResult(`unknown tool ${JSON.stringify(name)}`, true);
 
+  // Before the credential is read or the upstream is dialled: a write that was not approved
+  // never reaches either, whatever the engine did (the backstop to its `canUseTool`).
+  const approval = options.approval ?? NO_APPROVAL;
+  const decision = approvalDecision(approval, config.operations, name, args);
+  if (decision.kind === 'refused') {
+    return upstreamFailure(
+      'approval_required',
+      `${operation.method} operations run only after the call is approved`,
+    );
+  }
+  // At most once (ADR-0145 D2.1): the approval is used up here, durably, before anything is read
+  // or dialled. A write whose arguments then fail to build, or whose upstream call fails, has still
+  // consumed it; the person approves again. A run that stopped approving the call in the meantime
+  // (it left `running`) answers `approval_required`: that approval was never used.
+  if (decision.kind === 'write') {
+    const outcome = await approval.consume(decision.call);
+    if (outcome === 'already-used') {
+      return upstreamFailure(
+        'approval_already_used',
+        `${operation.method} operations run once per approval, and this one was already used`,
+      );
+    }
+    if (outcome === 'not-approved') {
+      return upstreamFailure(
+        'approval_required',
+        `${operation.method} operations run only after the call is approved`,
+      );
+    }
+  }
+
   let secret: string | null = null;
   if (config.auth !== 'none') {
     secret = await credential();
@@ -262,7 +312,7 @@ export async function callTool(
       return upstreamFailure('tool_upstream_failed', 'the connector credential is unavailable');
     }
   }
-  let request: { readonly url: string; readonly headers: Headers };
+  let request: ReturnType<typeof buildRequest>;
   try {
     request = buildRequest(
       config,
@@ -277,11 +327,27 @@ export async function callTool(
     throw error;
   }
 
+  if (options.identity !== undefined) {
+    const assertion = await options.identity();
+    if (assertion === null) {
+      return upstreamFailure(
+        'tool_upstream_failed',
+        'the connector requires a caller identity this run cannot provide',
+      );
+    }
+    request.headers.set(IDENTITY_ASSERTION_HEADER, assertion);
+  }
+
   const signal = AbortSignal.timeout(options.timeoutMs ?? TOOL_UPSTREAM_TIMEOUT_MS);
   try {
     const response = await guardedFetch(
       request.url,
-      { method: operation.method, headers: request.headers, signal },
+      {
+        method: operation.method,
+        headers: request.headers,
+        signal,
+        ...(request.body === undefined ? {} : { body: request.body }),
+      },
       options.policy ?? loadEgressPolicyFromEnv(),
       options.transport,
     );

@@ -13,7 +13,8 @@ request, both with `403 token_out_of_scope`:
 
 1. `decide()`'s scope grammar (`checkTokenScope`, `apps/web/server/rbac/decide.ts`) admits only the
    route shapes of a session scope: `GET /api/runs/:id`, `GET /api/runs/:id/events`,
-   `POST /api/agents/:id/runs` and `POST /api/runs/:id/feedback`.
+   `POST /api/agents/:id/runs`, `POST /api/runs/:id/feedback`, the presigned file download URL, and
+   `POST /api/sessions/:id/attachments`, which only the scope's own session may reach (issue #1308).
 2. `requireSessionScopeMatch` (`apps/web/server/runs/api.ts`) compares the session the run row, or
    the turn's body, names with the scope's. A turn whose body names no session is refused too.
 

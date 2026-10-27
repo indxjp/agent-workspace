@@ -7,23 +7,28 @@
  * The imports are relative, not `@/…`, so that a Vitest test can import this file — see the note
  * in `../route.ts` and `apps/web/server/agents/routes.test.ts`.
  */
-import type { UpdateAgentPatch } from '../../../../contracts/agents';
+import {
+  UpdateAgentPatchSchema,
+  type BuiltinAgentOperation,
+  type UpdateAgentPatch,
+} from '../../../../contracts/agents';
 import {
   agentNotFound,
   deleteAgent,
   getAgent,
   updateAgent,
-  type ApiResult,
+  refuseBuiltinWrite,
 } from '../../../../server/agents/handlers';
+import { type ApiResult } from '../../../../server/http/result';
 import { saveConsoleEdit } from '../../../../server/agent-versions/http';
 import { judgeAgent } from '../../../../server/policy-ceiling/ceiling';
-import { isUuid, parseRuntimeProfileId } from '../../../../server/agents/contract';
+import { isUuid } from '../../../../server/agents/contract';
 import {
   readAgentIdParam,
   readJsonBody,
-  toResponse,
   withAuthorisedWorkspaceStore,
 } from '../../../../server/agents/http';
+import { route } from '../../../../server/http/route';
 import { resolverForRow } from '../../../../server/resources/item-ownership';
 import type { WorkspaceAgentStore } from '../../../../server/agents/store';
 import type { OwnershipResolver } from '../../../../server/rbac/http';
@@ -32,7 +37,10 @@ import type { OwnershipResolver } from '../../../../server/rbac/http';
  * Issue #117: load the agent within the caller's workspace, answer an indistinguishable 404 when
  * it is absent, and only then let `decide()` compare `created_by` against the caller.
  */
-function ownershipOf(id: unknown): (store: WorkspaceAgentStore) => OwnershipResolver {
+function ownershipOf(
+  id: unknown,
+  operation: BuiltinAgentOperation,
+): (store: WorkspaceAgentStore) => OwnershipResolver {
   return (store) =>
     resolverForRow(
       // `isUuid`, not merely `typeof id === 'string'`: `agents.id` is a `uuid` column, and a
@@ -40,6 +48,7 @@ function ownershipOf(id: unknown): (store: WorkspaceAgentStore) => OwnershipReso
       // throw, rather than answering "not found" the way this resolver promises to.
       () => (isUuid(id) ? store.get(id) : Promise.resolve(null)),
       agentNotFound,
+      (row) => refuseBuiltinWrite(row, operation),
     );
 }
 
@@ -53,13 +62,14 @@ export const runtime = 'nodejs';
 type AgentRouteContext = { params: Promise<{ id: string }> };
 
 /** `GET /api/agents/:id` — 404 for an id this workspace does not have, never 403 (§25). */
-export async function GET(request: Request, context: AgentRouteContext): Promise<Response> {
+async function serveGet(request: Request, context: AgentRouteContext): Promise<ApiResult> {
   const id = await readAgentIdParam(context);
-  const result = await withAuthorisedWorkspaceStore(request, ownershipOf(id), (store) =>
+  return withAuthorisedWorkspaceStore(request, ownershipOf(id, 'read'), (store) =>
     getAgent(store, id),
   );
-  return toResponse(result);
 }
+
+export const GET = route({ component: 'agents', operation: 'get' }, serveGet);
 
 /**
  * `PATCH /api/agents/:id` — apply a partial update to one agent in the caller's workspace.
@@ -69,18 +79,21 @@ export async function GET(request: Request, context: AgentRouteContext): Promise
  * fails the gate must not learn this route's body format, and once W1-CP-06 wires a session the
  * other order would answer `400` where it owes `401`.
  */
-export async function PATCH(request: Request, context: AgentRouteContext): Promise<Response> {
+async function servePatch(request: Request, context: AgentRouteContext): Promise<ApiResult> {
   const id = await readAgentIdParam(context);
-  const result = await withAuthorisedWorkspaceStore(
+  return withAuthorisedWorkspaceStore(
     request,
-    ownershipOf(id),
+    ownershipOf(id, 'update'),
     async (store, runtime, workspaceId, principal) => {
       const body = await readJsonBody(request);
       if (!body.ok) return body.result;
       // Issue #535: the patch merged over the agent as stored, with its stored policy and its
       // current connectors, is judged against the deployment's ceiling before it is written.
       // ponytail: check-then-write race until V-2, same as SD11
-      const ceiling = runtime.ceilingFor?.(request, workspaceId) ?? null;
+      const ceiling =
+        runtime.ceiling.kind === 'enforced'
+          ? runtime.ceiling.ceilingFor(request, workspaceId)
+          : null;
       const judge = async (patch: UpdateAgentPatch): Promise<ApiResult | null> => {
         if (ceiling === null || !isUuid(id)) return null;
         const current = await store.get(id);
@@ -108,13 +121,16 @@ export async function PATCH(request: Request, context: AgentRouteContext): Promi
         return updateAgent(store, id, body.value, judge, write);
       }
 
-      const requested = parseRuntimeProfileId(record['runtimeProfileId']);
-      if (!requested.ok) return updateAgent(store, id, body.value, judge, write);
+      const requested = UpdateAgentPatchSchema.safeParse({
+        runtimeProfileId: record['runtimeProfileId'],
+      });
+      const requestedProfileId = requested.data?.runtimeProfileId;
+      if (requestedProfileId === undefined) return updateAgent(store, id, body.value, judge, write);
       const before = await store.get(id);
-      if (before === null || before.runtimeProfileId === requested.value) {
+      if (before === null || before.runtimeProfileId === requestedProfileId) {
         return updateAgent(store, id, body.value, judge, write);
       }
-      if (runtime.runtimeSwitchAudit === undefined) {
+      if (runtime.runtimeSwitchAudit === null) {
         return {
           status: 503,
           body: {
@@ -132,20 +148,22 @@ export async function PATCH(request: Request, context: AgentRouteContext): Promi
           agentId: before.id,
           agentName: before.name,
           fromRuntimeProfileId: before.runtimeProfileId,
-          toRuntimeProfileId: requested.value,
+          toRuntimeProfileId: requestedProfileId,
         });
       }
       return updated;
     },
   );
-  return toResponse(result);
 }
 
+export const PATCH = route({ component: 'agents', operation: 'update' }, servePatch);
+
 /** `DELETE /api/agents/:id` — 204 on success, 404 if the workspace has no such agent. */
-export async function DELETE(request: Request, context: AgentRouteContext): Promise<Response> {
+async function serveDelete(request: Request, context: AgentRouteContext): Promise<ApiResult> {
   const id = await readAgentIdParam(context);
-  const result = await withAuthorisedWorkspaceStore(request, ownershipOf(id), (store) =>
+  return withAuthorisedWorkspaceStore(request, ownershipOf(id, 'delete'), (store) =>
     deleteAgent(store, id),
   );
-  return toResponse(result);
 }
+
+export const DELETE = route({ component: 'agents', operation: 'delete' }, serveDelete);

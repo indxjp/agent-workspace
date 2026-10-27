@@ -95,8 +95,9 @@
 # image used is read off the image itself rather than from a comment here.
 #
 # `NODE_IMAGE` is pinned by digest, as the root `Dockerfile` and `gateway.Dockerfile` are: the
-# digest is the multi-arch index of the `node:24.21.0-bookworm-slim` tag (#373 moved it from
-# 24.19.0, whose base failed the release trivy gate).
+# digest is the multi-arch index of the `node:24.22.1-bookworm-slim` tag (#373 moved it from
+# 24.19.0, whose base failed the release trivy gate; 24.22.1 is the October 2026 security release,
+# which also distrusts the compromised eMudhra intermediates).
 #
 # **No npm and no corepack in the image (ADR-0087).** The `runtime` stage deletes npm, npx,
 # corepack and Yarn: their bundled dependencies are HIGH or CRITICAL trivy findings whenever they
@@ -104,15 +105,15 @@
 # connectors, served by `pnpm dlx`: the stage installs the patched pnpm and the
 # `infra/images/npx.mjs` shim, which the release trivy gate scans like everything else.
 
-ARG NODE_IMAGE=node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 ARG ENGINE=claude-agent-sdk
-ARG ENGINE_VERSION=0.0.0+0.3.296
+ARG ENGINE_VERSION=0.0.0+0.3.310
 
 FROM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
 WORKDIR /srv
 
 # ── build ───────────────────────────────────────────────────────────────────────────────────────
@@ -145,12 +146,14 @@ COPY packages/engine/package.json  packages/engine/package.json
 # exactly that naming and a unit test holds it to `ENGINE_IDS`, so there is no second table here to
 # fall out of step with the contracts.
 COPY packages/engine-${ENGINE}/package.json packages/engine-${ENGINE}/package.json
+COPY packages/run-protocol/package.json packages/run-protocol/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
 RUN pnpm install --frozen-lockfile --filter "@agent-workspace/runner..." --filter "@agent-workspace/engine-${ENGINE}..."
 COPY packages/contracts packages/contracts
 COPY packages/core    packages/core
 COPY packages/engine  packages/engine
 COPY packages/engine-${ENGINE} packages/engine-${ENGINE}
+COPY packages/run-protocol packages/run-protocol
 COPY packages/runtime packages/runtime
 COPY apps/runner      apps/runner
 RUN pnpm --filter "@agent-workspace/runner..." --filter "@agent-workspace/engine-${ENGINE}..." build
@@ -205,8 +208,8 @@ RUN apt-get update \
 # root filesystem. So the wrappers name Node by absolute path, the shim needs no variable (it
 # defaults PNPM_CLI and puts pnpm's directories under /tmp), and `npx` is also linked into
 # /usr/bin, which is where a spawn with no PATH looks (libuv's default is /usr/bin:/bin).
-ARG PNPM_VERSION=11.28.2
-ARG PNPM_TARBALL_SHA256=30d4099fa03b9ba1124d81527808b1e4d8e719aeb0ddfe169426df3c4a038a5f
+ARG PNPM_VERSION=11.28.8
+ARG PNPM_TARBALL_SHA256=02bf6cec47fe28f30a224204f924175c2d8750c60e84e315a25cba57ce84da6a
 ADD --checksum=sha256:${PNPM_TARBALL_SHA256} \
     https://registry.npmjs.org/pnpm/-/pnpm-${PNPM_VERSION}.tgz /tmp/pnpm.tgz
 COPY infra/images/npx.mjs infra/images/npx-run-bin.mjs /opt/npx/
@@ -238,6 +241,7 @@ COPY --from=build --chown=node:node /srv/packages/contracts /srv/packages/contra
 COPY --from=build --chown=node:node /srv/packages/core    /srv/packages/core
 COPY --from=build --chown=node:node /srv/packages/engine  /srv/packages/engine
 COPY --from=build --chown=node:node /srv/packages/engine-${ENGINE} /srv/packages/engine-${ENGINE}
+COPY --from=build --chown=node:node /srv/packages/run-protocol /srv/packages/run-protocol
 COPY --from=build --chown=node:node /srv/packages/runtime /srv/packages/runtime
 COPY --from=build --chown=node:node /srv/apps/runner      /srv/apps/runner
 COPY --chown=node:node LICENSE /srv/LICENSE

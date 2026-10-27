@@ -1,0 +1,123 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CRM 問い合わせ履歴 API",
+    "version": "1.0.0",
+    "description": "ログイン中のお客様ご本人の問い合わせ・注文履歴を読む。参照専用。誰の履歴かは呼び出しに付く署名済みの本人情報（x-aw-identity）で決まり、個人情報（電話番号・メール・住所）は API が伏せ字にして返す。"
+  },
+  "servers": [{ "url": "https://crm.example.co.jp/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "InteractionHit": {
+        "type": "object",
+        "required": ["id", "date", "channel", "subject", "snippet", "outcome"],
+        "properties": {
+          "id": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "channel": { "type": "string" },
+          "subject": { "type": "string" },
+          "snippet": { "type": "string" },
+          "outcome": { "type": "string" },
+          "score": { "type": "number" }
+        }
+      },
+      "Interaction": {
+        "type": "object",
+        "required": ["id", "date", "channel", "subject", "body", "outcome"],
+        "properties": {
+          "id": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "channel": { "type": "string" },
+          "subject": { "type": "string" },
+          "body": { "type": "string" },
+          "outcome": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    }
+  },
+  "paths": {
+    "/interactions/search": {
+      "get": {
+        "operationId": "searchInteractions",
+        "summary": "ログイン中のお客様の問い合わせ・注文履歴（チケット、メール、電話メモ、注文）を全文検索する",
+        "description": "関連度順。個人情報は伏せ字で返る。見つからなければ空配列。",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "検索語（商品名、型番、注文番号、「配送」「発送」など）",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "一致した履歴。なければ空配列。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/InteractionHit" }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "本人情報がない、または検証できない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/interactions/{id}": {
+      "get": {
+        "operationId": "getInteraction",
+        "summary": "searchInteractions が返した id の履歴を全文で読む",
+        "description": "ログイン中のお客様ご本人の履歴だけが読める。他のお客様の id は存在しない id と同じ 404 になる。個人情報は伏せ字で返る。",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "履歴",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Interaction" } }
+            }
+          },
+          "401": {
+            "description": "本人情報がない、または検証できない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
+          "404": {
+            "description": "その id の履歴はない（他のお客様の履歴を含む）",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/customers/me/address": {
+      "put": {
+        "operationId": "changeAddress",
+        "summary": "登録住所を変更する（エージェントには許可しない。本人確認のうえ担当者が行う）",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object" } } }
+        },
+        "responses": { "204": { "description": "変更した" } }
+      }
+    }
+  }
+}

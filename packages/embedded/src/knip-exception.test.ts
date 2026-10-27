@@ -6,7 +6,8 @@
  * the members reached only through other members. They are real run-time dependencies knip cannot
  * see. This test keeps the list exactly that: a name may be on it only when it is a dependency of
  * this manifest that `src/` never imports, and every such dependency must be on it, except one
- * that a workspace member it depends on declares as a peer, which knip counts as used.
+ * that a workspace member it depends on or one of its devDependencies declares as a peer, which
+ * knip counts as used.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -21,7 +22,10 @@ import { packageNameOf } from './packaging/externals.ts';
 const packageDirectory = fileURLToPath(new URL('..', import.meta.url));
 
 const manifest = z
-  .looseObject({ dependencies: z.record(z.string(), z.string()) })
+  .looseObject({
+    dependencies: z.record(z.string(), z.string()),
+    devDependencies: z.record(z.string(), z.string()),
+  })
   .parse(JSON.parse(readFileSync(path.join(packageDirectory, 'package.json'), 'utf8')));
 
 const ignored = z
@@ -51,11 +55,21 @@ function packagesImportedBySource(): ReadonlySet<string> {
   return names;
 }
 
-/** Every package a workspace member this manifest depends on declares as a peer (`@indx-workspace/cli`'s bucket clients). */
+/**
+ * Every package declared as a peer by a workspace member this manifest depends on
+ * (`@indx-workspace/cli`'s bucket clients) or by a devDependency, which its tests and build
+ * reference (`vitest`'s optional `@opentelemetry/api`). knip counts a peer of a referenced package
+ * as used.
+ */
 function peersOfDependencies(): ReadonlySet<string> {
   const peers = new Set<string>();
-  for (const [name, specifier] of Object.entries(manifest.dependencies)) {
-    if (!specifier.startsWith('workspace:')) continue;
+  const hosts = [
+    ...Object.entries(manifest.dependencies).filter(([, specifier]) =>
+      specifier.startsWith('workspace:'),
+    ),
+    ...Object.entries(manifest.devDependencies),
+  ];
+  for (const [name] of hosts) {
     const installed = path.join(
       packageDirectory,
       'node_modules',

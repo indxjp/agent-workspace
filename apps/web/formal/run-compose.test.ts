@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import type { AgentPermissions } from '@agent-workspace/core';
+import type { AgentPermissions } from '@agent-workspace/run-protocol';
 import { openDatabaseRoot, type DatabaseRoot } from '@agent-workspace/core/db';
 import {
   closeIsolatedTestResources,
@@ -24,6 +24,9 @@ import { createInMemoryModelsStoreProvider } from '../server/models/memory-store
 import { parseStartRunBody } from '../server/runs/api';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 import type { RegisteredComposition } from '../server/composition/register';
+
+/** The SHA-256 of no bytes, built at runtime: a reference whose content is never read here. */
+const EMPTY_SHA256 = crypto.createHash('sha256').digest('hex');
 
 const FAMILY = 'run-compose';
 const parserVectors = loadVectors(FAMILY, 'parser.json');
@@ -133,7 +136,7 @@ describe('run-compose: real narrowing decisions', () => {
   it('preserves stored denials and intersects requested skills with assignment', () => {
     const config = portableAgentConfigFor(agent, undefined, null, {
       files: [],
-      skills: [{ name: 'assigned', files: [{ path: 'SKILL.md', contentBase64: '' }] }],
+      skills: [{ name: 'assigned', files: [{ path: 'SKILL.md', size: 0, sha256: EMPTY_SHA256 }] }],
       mcpServers: {},
     });
     expect(config.skills).toEqual({ mode: 'allowlist', names: ['assigned'] });
@@ -143,7 +146,7 @@ describe('run-compose: real narrowing decisions', () => {
     // The compose-side guard, which since ENG-04b answers the denial list rather than editing a
     // Claude-shaped agent configuration. The adapter derives the same list and de-duplicates.
     const deny = applyFileGrantPolicy('/workspace/w/s', [
-      { kind: 'file', path: 'readme.txt', access: 'read', contentBase64: '' },
+      { kind: 'file', path: 'readme.txt', access: 'read', size: 0, sha256: EMPTY_SHA256 },
     ]);
     expect(deny).toContain('KillShell');
     expect(deny).toContain('Edit(//workspace/w/s/readme.txt)');

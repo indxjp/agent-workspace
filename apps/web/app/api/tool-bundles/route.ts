@@ -1,4 +1,4 @@
-import { toResponse } from '../../../server/agents/http';
+import { apiResultResponse } from '../../../server/http/json-transport';
 import { uploadToolBundle } from '../../../server/tool-bundles/handlers';
 import {
   openToolBundleStore,
@@ -18,8 +18,8 @@ export async function POST(request: Request): Promise<Response> {
   const access = await requireResourceAccess(request, 'not-applicable');
   if (!access.ok) return access.response;
   const store = openToolBundleStore(access.principal.workspaceId);
-  if (store === null) return toResponse(toolBundlesNotConfigured());
+  if (store === null) return apiResultResponse(toolBundlesNotConfigured());
   const body = await readToolBundleBody(request);
-  if (!body.ok) return toResponse(body.result);
-  return toResponse(await uploadToolBundle(store, body.value));
+  if (!body.ok) return apiResultResponse(body.result);
+  return apiResultResponse(await uploadToolBundle(store, body.value));
 }

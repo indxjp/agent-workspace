@@ -25,14 +25,12 @@ import { describe, expect, it, afterEach } from 'vitest';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
 import { ROLES, type Role } from '../../../server/rbac/roles';
-import {
-  clearRbacRuntime,
-  configureRbacRuntime,
-  type RbacRuntime,
-} from '../../../server/rbac/runtime';
+import { type RbacRuntime } from '../../../server/rbac/runtime';
 import { recordRunTelemetry } from '../../../server/telemetry/runtime';
 
 import { GET } from './route';
+import { clearApplicationContext } from '../../../server/application-context';
+import { installTestDomains } from '../../../server/application-context-fixtures';
 
 const TEST_PRINCIPAL_HEADER = 'x-w9-sec-116-test-principal';
 
@@ -73,7 +71,7 @@ function installTestRuntime(): void {
       );
     },
   };
-  configureRbacRuntime(runtime);
+  installTestDomains({ rbac: runtime });
 }
 
 function requestFor(
@@ -89,7 +87,7 @@ function requestFor(
 }
 
 afterEach(() => {
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 describe('GET /api/metrics scopes the projection to the caller’s own workspace', () => {
@@ -183,7 +181,7 @@ describe('GET /api/metrics scopes the projection to the caller’s own workspace
   });
 
   it('answers 503 when the rbac runtime is not configured, not a silent empty 200', async () => {
-    clearRbacRuntime();
+    clearApplicationContext();
     const response = await GET(requestFor(null));
     const text = await response.text();
     expect(response.status, text).toBe(503);

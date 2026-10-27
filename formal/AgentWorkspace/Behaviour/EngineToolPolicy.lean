@@ -138,6 +138,8 @@ structure Case where
   readOnly : List (String × Bool)
   /-- `true` models a body carrying `applyFileGrantPolicy`'s denials; `false` a body without them. -/
   guarded : Bool
+  /-- The stored arm's `requireApproval` rules (ADR-0145 D3, #1300). Empty for every case before it. -/
+  requireApproval : List String := []
   deriving DecidableEq, Repr
 
 /-- What the compose-side guard put on the wire for this case. -/
@@ -152,6 +154,154 @@ def target (c : Case) : ToolPolicy :=
 def current (c : Case) : ToolPolicy :=
   composeCurrent c.permissions c.stored c.mcpServers c.cwd c.readOnly
 
+/-! ## The approval gate (ADR-0145, #1300)
+
+`allowedTools` bypasses `canUseTool`, so `packages/engine-claude-agent-sdk/src/tools.ts`'s
+`splitApprovals` moves every auto-approval that could approve a gated tool out of it. Rule matching
+is over `List Char` so the kernel can decide it, and globs are read the way
+`packages/contracts/src/agents/tool-rules.ts`' `globMatches` reads them: `*` is any run of
+characters and `?` any one, anywhere in the head (`mcp__gh__a*b` included). -/
+
+/-- A rule's tool name: the text before `(`, as `toolRuleHead` reads it. -/
+def ruleHead (rule : String) : List Char := rule.toList.takeWhile (· != '(')
+
+/-- `TOOL_RULE_GLOB_CHARS`. -/
+def isGlobChar (c : Char) : Bool := c == '*' || c == '?'
+
+/-- Every suffix of a list, longest first: where a `*` may stop consuming. -/
+def suffixes : List Char → List (List Char)
+  | [] => [[]]
+  | c :: cs => (c :: cs) :: suffixes cs
+
+/-- `globMatches`: `*` is any run of characters, `?` any one, every other character itself. -/
+def globMatch : List Char → List Char → Bool
+  | [], t => t.isEmpty
+  | p :: ps, t =>
+    if p == '*' then (suffixes t).any (globMatch ps)
+    else match t with
+      | [] => false
+      | c :: cs => (p == '?' || p == c) && globMatch ps cs
+
+/-- A glob that matches a tool name starts with its own literal prefix. -/
+theorem globMatch_literal_prefix (h t : List Char) (hm : globMatch h t = true) :
+    (h.takeWhile (fun c => !isGlobChar c)).isPrefixOf t = true := by
+  induction h generalizing t with
+  | nil => simp
+  | cons p ps ih =>
+    by_cases hp : isGlobChar p = true
+    · simp [List.takeWhile, hp]
+    · have hstar : (p == '*') = false := by
+        simp only [isGlobChar, Bool.or_eq_true, beq_iff_eq, not_or] at hp
+        simpa using hp.1
+      have hq : (p == '?') = false := by
+        simp only [isGlobChar, Bool.or_eq_true, beq_iff_eq, not_or] at hp
+        simpa using hp.2
+      cases t with
+      | nil => simp [globMatch, hstar] at hm
+      | cons c cs =>
+        simp only [globMatch, hstar, hq, Bool.false_or, Bool.and_eq_true, Bool.false_eq_true,
+          ↓reduceIte] at hm
+        have hpc : p = c := by simpa using hm.1
+        subst hpc
+        have hp' : isGlobChar p = false := by simpa using hp
+        simpa [List.takeWhile, hp'] using ih cs hm.2
+
+/-- Two prefixes of one list are prefixes of one another, one way or the other. -/
+theorem prefixes_are_comparable (p q t : List Char) (hp : p.isPrefixOf t = true)
+    (hq : q.isPrefixOf t = true) : (p.isPrefixOf q || q.isPrefixOf p) = true := by
+  induction p generalizing q t with
+  | nil => simp
+  | cons a ps ih =>
+    cases t with
+    | nil => simp [List.isPrefixOf] at hp
+    | cons b ts =>
+      cases q with
+      | nil => simp [List.isPrefixOf]
+      | cons c qs =>
+        simp only [List.isPrefixOf, Bool.and_eq_true, beq_iff_eq] at hp hq
+        obtain ⟨hab, hps⟩ := hp
+        obtain ⟨hcb, hqs⟩ := hq
+        subst hab hcb
+        simpa [List.isPrefixOf] using ih qs ts hps hqs
+
+/-- `ruleCoversTool`: a glob head matches by pattern, any other head by equality. -/
+def covers (rule : String) (tool : List Char) : Bool :=
+  let h := ruleHead rule
+  if h.any isGlobChar then globMatch h tool else h == tool
+
+/-- `globPrefix`: the literal text before a glob head's first `*` or `?`, or `none` for a head that
+is not a glob. -/
+def globPrefix (rule : String) : Option (List Char) :=
+  let h := ruleHead rule
+  if h.any isGlobChar then some (h.takeWhile (fun c => !isGlobChar c)) else none
+
+/-- `CLAUDE_EDIT_RULE_TOOLS`: Claude Code checks every built-in file write against `Edit` rules. -/
+def editRuleTools : List (List Char) :=
+  ["Edit", "Write", "MultiEdit", "NotebookEdit"].map String.toList
+
+/-- What an auto-approval approves when it sits in `allowedTools`: the tools it covers, and every
+file-writing tool for an `Edit` / `Edit(path)` rule. -/
+def approves (rule : String) (tool : List Char) : Bool :=
+  covers rule tool || (ruleHead rule == "Edit".toList && editRuleTools.any (· == tool))
+
+/-- `approvalOverlapsGate`: each rule against the other's tool name, and an `Edit` rule against
+every tool it approves. -/
+def overlaps (approved gate : String) : Bool :=
+  covers approved (ruleHead gate) || covers gate (ruleHead approved) ||
+    (ruleHead approved == "Edit".toList && editRuleTools.any (covers gate))
+
+/-- Does an auto-approval overlap a gated rule? `approvalOverlapsGate`, plus prefix-compatible
+globs. -/
+def overlapsGate (gates : List String) (rule : String) : Bool :=
+  gates.any (overlaps rule) ||
+    match globPrefix rule with
+    | none => false
+    | some p => gates.any fun g =>
+        match globPrefix g with
+        | none => false
+        | some q => p.isPrefixOf q || q.isPrefixOf p
+
+/-- `splitApprovals`: `(allowedTools, deferred)`. -/
+def splitApprovals (autoApprove gates : List String) : List String × List String :=
+  if gates.isEmpty then (autoApprove, [])
+  else (autoApprove.filter (fun r => !overlapsGate gates r), autoApprove.filter (overlapsGate gates))
+
+/-- `CLAUDE_APPROVABLE_TOOLS`: the tools the SDK asks `canUseTool` about in `default` mode. -/
+def approvableTools : List String :=
+  ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"]
+
+/-- Does a list contain `__`? -/
+def hasDoubleUnderscore : List Char → Bool
+  | '_' :: '_' :: _ => true
+  | _ :: cs => hasDoubleUnderscore cs
+  | [] => false
+
+/-- `isConnectorGate`: a connector gate Claude Code's own rule matcher can match — an exact
+connector tool name (no `*` or `?` after `mcp__`), or exactly `mcp__<server>__*`. -/
+def connectorGate (r : String) : Bool :=
+  let l := r.toList
+  let rest := l.drop "mcp__".length
+  let server := rest.take (rest.length - 3)
+  "mcp__".toList.isPrefixOf l &&
+    (!rest.any isGlobChar ||
+      ("__*".toList.reverse.isPrefixOf rest.reverse && !server.any isGlobChar &&
+        !hasDoubleUnderscore server))
+
+/-- `unapprovableRules`: the gates the compile refuses — a tool `canUseTool` would never be asked
+about, or a connector glob Claude Code's rules cannot match. An allowlist, so a tool a later SDK
+adds is refused rather than silently ungated. -/
+def unapprovable (gates : List String) : List String :=
+  gates.filter fun r => !(connectorGate r || approvableTools.contains r)
+
+/-- The compile refuses this case's gate (`engine_policy_invalid`). -/
+def refused (c : Case) : Bool := !(unapprovable c.requireApproval).isEmpty
+
+/-- The `allowedTools` the adapter emits for this case. -/
+def allowed (c : Case) : List String := (splitApprovals (target c).autoApprove c.requireApproval).1
+
+/-- The auto-approvals moved out of `allowedTools` and left to `canUseTool`. -/
+def deferred (c : Case) : List String := (splitApprovals (target c).autoApprove c.requireApproval).2
+
 private def allOn : Permissions :=
   { readFiles := true, writeFiles := true, runCommands := true, unrestrictedNetwork := true }
 
@@ -164,6 +314,21 @@ private def storedNarrowing : ToolPolicy :=
     permissionMode := "dontAsk", allowDangerouslySkipPermissions := false }
 
 private def sandbox : String := "/workspace/tenant-a/session-1"
+
+/-- A stored arm that pre-approves one connector tool, in `default` mode so a gate can ask. -/
+private def storedConnectorSearch : ToolPolicy :=
+  { storedNarrowing with autoApprove := ["Read", "mcp__jira__search"], permissionMode := "default" }
+
+/-- A stored arm that pre-approves built-in tools, one of them scoped. -/
+private def storedBuiltins : ToolPolicy :=
+  { base := none, autoApprove := ["Bash(git status)", "Read", "WebFetch"], deny := [],
+    permissionMode := "default", allowDangerouslySkipPermissions := false }
+
+/-- A stored arm that pre-approves edits under the workspace and an inner-glob connector rule. -/
+private def storedEdits : ToolPolicy :=
+  { base := none,
+    autoApprove := ["Edit(//workspace/tenant-a/session-1/**)", "mcp__github__list*s", "Read"],
+    deny := [], permissionMode := "default", allowDangerouslySkipPermissions := false }
 
 /-- Every shape a composed request can have, in the order a reader should meet them. -/
 def cases : List Case :=
@@ -200,6 +365,29 @@ def cases : List Case :=
      readOnly := [("docs", true)], guarded := true },
    { id := "everything-off-with-grants", permissions := allOff,
      stored := some storedNarrowing, mcpServers := ["github", "zulip"], cwd := sandbox,
-     readOnly := [("notes/plan.md", false), ("docs", true)], guarded := true }]
+     readOnly := [("notes/plan.md", false), ("docs", true)], guarded := true },
+   { id := "gate-a-connector-tool", permissions := allOn, stored := none,
+     mcpServers := ["github", "jira"], cwd := sandbox, readOnly := [], guarded := false,
+     requireApproval := ["mcp__github__create_issue"] },
+   { id := "gate-a-whole-connector", permissions := allOn,
+     stored := some storedConnectorSearch,
+     mcpServers := ["github", "jira"], cwd := sandbox, readOnly := [], guarded := false,
+     requireApproval := ["mcp__jira__*"] },
+   { id := "gate-a-builtin", permissions := allOn,
+     stored := some storedBuiltins,
+     mcpServers := [], cwd := sandbox, readOnly := [], guarded := false,
+     requireApproval := ["Bash", "Write"] },
+   { id := "gate-read-is-refused", permissions := allOn, stored := none, mcpServers := [],
+     cwd := sandbox, readOnly := [], guarded := false, requireApproval := ["Read"] },
+   { id := "gate-glob-is-refused", permissions := allOn, stored := none, mcpServers := ["github"],
+     cwd := sandbox, readOnly := [], guarded := false,
+     requireApproval := ["mcp__github__*", "Glob"] },
+   { id := "gate-write-moves-the-edit-rule", permissions := allOn,
+     stored := some storedEdits,
+     mcpServers := ["github"], cwd := sandbox, readOnly := [], guarded := false,
+     requireApproval := ["Write", "mcp__github__create_issue"] },
+   { id := "gate-partial-connector-glob-is-refused", permissions := allOn, stored := none,
+     mcpServers := ["github"], cwd := sandbox, readOnly := [], guarded := false,
+     requireApproval := ["mcp__github__*_issue"] }]
 
 end AgentWorkspace.Behaviour.EngineToolPolicy

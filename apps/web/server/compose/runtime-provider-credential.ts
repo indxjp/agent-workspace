@@ -1,4 +1,4 @@
-import type { RuntimeRunSpec } from '@agent-workspace/runtime';
+import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 import type { WorkspaceScopeResolver } from '@agent-workspace/core/db';
 
 import { DomainError } from '../errors';

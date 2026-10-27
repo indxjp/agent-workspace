@@ -1,11 +1,9 @@
 /**
  * An in-memory {@link RuntimeProfileStoreProvider}, for `routes.test.ts` — the same role
- * `apps/web/server/agents/memory-store.ts` plays for the agent routes. Not a fixture of the
- * database adapter (`store.test.ts` is not written here; see this task's PR body for why): a
- * conformance suite proving the two are the same would need a real PostgreSQL either way, and that
- * coverage already exists in `packages/core/src/db/repositories/runtime-profiles.test.ts`. What
- * this buys is a fast, dependency-free way to prove the HTTP layer — status codes, JSON shapes,
- * outcome mapping — is wired correctly.
+ * `apps/web/server/agents/memory-store.ts` plays for the agent routes. `store.test.ts` holds it
+ * and the database adapter to one shared conformance suite, so the two cannot drift apart. It is
+ * also a fast, dependency-free way to prove the HTTP layer — status codes, JSON shapes, outcome
+ * mapping — is wired correctly.
  */
 import type {
   CreateRuntimeProfileInput,

@@ -6,12 +6,12 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
+import { type RuntimeDriverId } from '@agent-workspace/runtime/driver';
 import {
   DOCKER_COMPOSE_PROJECT_LABEL,
   DOCKER_SANDBOX_LABEL,
-  engineImageEnvName,
-  type RuntimeDriverId,
-} from '@agent-workspace/runtime';
+} from '@agent-workspace/runtime/driver/docker';
+import { engineImageEnvName } from '@agent-workspace/runtime/engine-images';
 import {
   CLAUDE_AGENT_SDK_RUNTIME_IMAGE_KEY,
   COMPOSE_PROJECT_LABEL,

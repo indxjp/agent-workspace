@@ -5,7 +5,7 @@ description: "Talk to an agent from the terminal: the interactive loop, one-shot
 
 <Info>
 
-**Chapter 1 · Run your first agent — step 3 of 3** · [the chapter map](/path/first-agent)
+**Chapter 1 · Run your first agent — step 4 of 4** · [the chapter map](/path/first-agent)
 
 - **You will:** talk to your agent from the terminal, in a conversation or one prompt at a time.
 - **You will learn:** how a conversation keeps its session, which version answers, and the three SDK calls behind a turn.
@@ -42,7 +42,7 @@ sequenceDiagram
 On a terminal, without `--prompt`, `aw chat` opens a prompt with line history. The agent's text
 prints as it arrives, and each tool call is one dim line:
 
-```text
+```text title="Example session with an orders tool (illustrative)" claim="illustrative"
   aw chat · /help for commands
 › where is order A-1042?
   ⚙ get_order {"id":"A-1042"} → ok · 41 ms
@@ -62,6 +62,20 @@ conversation.
 | `/exit` or Ctrl-D                     | Leaves.                                                                                      |
 
 ## One shot
+
+`-p` (`--prompt`) sends one prompt, prints the answer on stdout and exits. In the Quickstart's
+project, with `npm run dev` running in another terminal,
+`npx aw chat -p "Can I return a mug I bought 20 days ago?"` took nine seconds and printed:
+
+```text title="Output"
+I'll check the refund policy for you.
+Yes, you can return the mug! Our refund policy allows returns within 30 days of purchase, and you're at 20 days, so you're well within the timeframe.
+
+To process your return, I'll need your order number. Could you provide that?
+```
+
+The text the agent writes before a tool call (`I'll check the refund policy for you.`) is printed
+too, on its own line.
 
 ```bash title="illustrative" claim="illustrative"
 aw chat support -p "summarise our refund policy"          # the answer on stdout
@@ -146,3 +160,7 @@ async function turn(agentId: string, prompt: string): Promise<void> {
 ```
 
 </Accordion>
+
+<Card title="Next: Chapter 2: Build your agent" icon="arrow-right" href="/path/build">
+  Give the agent its instructions, engine, model, skills, tools and credentials as committed files.
+</Card>

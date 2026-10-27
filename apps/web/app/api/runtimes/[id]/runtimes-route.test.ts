@@ -11,16 +11,13 @@ import {
   type TestableDriverRegistry,
 } from '../../../../server/runtimes/registry.js';
 import { DomainError } from '../../../../server/errors';
-import { clearRbacRuntime } from '../../../../server/rbac/runtime';
 import { installWorkspaceHeaderRbac, TEST_ROLE_HEADER } from '../../../../server/rbac/testing';
-import {
-  createDockerDriver,
-  createLocalDriver,
-  runDockerCommand,
-  type RuntimeDriver,
-} from '@agent-workspace/runtime';
+import { type RuntimeDriver } from '@agent-workspace/runtime/driver';
+import { createDockerDriver, runDockerCommand } from '@agent-workspace/runtime/driver/docker';
+import { createLocalDriver } from '@agent-workspace/runtime/driver/local';
 
 import { POST } from './route';
+import { clearApplicationContext } from '../../../../server/application-context';
 
 // No Docker CLI at all (the self-hosted dgx pool) means no daemon either: skip, not fail (#429).
 const dockerDaemonAvailable = await runDockerCommand(['info']).then(
@@ -37,7 +34,7 @@ const OWNER = { [WORKSPACE_HEADER]: '11111111-1111-4111-8111-111111111111' };
 beforeEach(() => installWorkspaceHeaderRbac(WORKSPACE_HEADER));
 afterEach(() => {
   clearWebRuntimeRegistry();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 const testContext = { params: Promise.resolve({ id: 'test' }) };

@@ -19,6 +19,12 @@ export default defineConfig({
         find: '@agent-workspace/core',
         replacement: fileURLToPath(new URL('./packages/core/src/index.ts', import.meta.url)),
       },
+      {
+        find: '@agent-workspace/run-protocol',
+        replacement: fileURLToPath(
+          new URL('./packages/run-protocol/src/index.ts', import.meta.url),
+        ),
+      },
       // The two SDK packages resolve subpaths to their sources: `@indx-workspace/contracts/runs`
       // becomes `packages/contracts/src/runs.ts`, and the bare name becomes `src/index.ts`.
       {
@@ -84,8 +90,45 @@ export default defineConfig({
         replacement: fileURLToPath(new URL('./packages/platforms/src/index.ts', import.meta.url)),
       },
       {
-        find: '@agent-workspace/runtime',
+        find: '@agent-workspace/skills-office/office-reader/scripts/ooxml.mjs',
+        replacement: fileURLToPath(
+          new URL('./packages/skills-office/office-reader/scripts/ooxml.mjs', import.meta.url),
+        ),
+      },
+      {
+        find: '@agent-workspace/skills-office/office-reader/scripts/pdf.mjs',
+        replacement: fileURLToPath(
+          new URL('./packages/skills-office/office-reader/scripts/pdf.mjs', import.meta.url),
+        ),
+      },
+      {
+        find: '@agent-workspace/skills-office/office-reader/scripts/dxf.mjs',
+        replacement: fileURLToPath(
+          new URL('./packages/skills-office/office-reader/scripts/dxf.mjs', import.meta.url),
+        ),
+      },
+      {
+        find: '@agent-workspace/skills-office',
+        replacement: fileURLToPath(
+          new URL('./packages/skills-office/src/index.mjs', import.meta.url),
+        ),
+      },
+      // The runtime has no bare entry (F-22): `runtime/driver` is the contract, every driver is
+      // `runtime/driver/<id>` (`src/<id>.ts`, or `src/external/index.ts`), and `engine-images`
+      // and `transfer` are `src/<name>.ts`. Exact matches before the pattern they would also hit.
+      {
+        find: /^@agent-workspace\/runtime\/driver$/,
         replacement: fileURLToPath(new URL('./packages/runtime/src/index.ts', import.meta.url)),
+      },
+      {
+        find: /^@agent-workspace\/runtime\/driver\/external$/,
+        replacement: fileURLToPath(
+          new URL('./packages/runtime/src/external/index.ts', import.meta.url),
+        ),
+      },
+      {
+        find: /^@agent-workspace\/runtime\/(?:driver\/)?(.+)$/,
+        replacement: fileURLToPath(new URL('./packages/runtime/src/$1.ts', import.meta.url)),
       },
       // ENG-04: the engine port and its adapters. `engine/testing` and the `engine-<id>` adapters
       // are listed before the bare `@agent-workspace/engine`, because these are prefix matches

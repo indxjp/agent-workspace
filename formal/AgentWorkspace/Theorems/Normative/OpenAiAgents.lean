@@ -68,7 +68,7 @@ example :
       .ok { tools := [.readFile, .listFiles, .searchFiles, .shell], networkEgress := false,
             connection := connectionFor .openaiResponses "http://gw" "tok", connectors := [],
             maxTurns := some 2, budgetCap := false, grants := [], tracingDisabled := true } := by
-    decide
+    decide +kernel
 
 /-- No compiled tool is vendor-hosted: every one is sent as a function tool, which the gateway's
 closed hosted-tool allowlist relays. -/
@@ -85,7 +85,7 @@ as hosted, so an adapter that compiled it could not reach its model through the 
 @[aw_spec (tier := T1) (doc := "docs/formal/units/engine-openai-agents.md#tools")
   (ts := "packages/contracts/src/agents.ts#OPENAI_AGENTS_TOOL_NAMES")]
 theorem the_sdk_shell_tool_type_is_not_relayed :
-    Behaviour.GatewayIngress.ToolType.shell.isRelayable = false := by decide
+    Behaviour.GatewayIngress.ToolType.shell.isRelayable = false := by decide +kernel
 
 /-! ## The protocol follows the connection -/
 
@@ -103,7 +103,7 @@ theorem the_protocol_follows_the_connection :
         Behaviour.EnginePort.resolveWireProtocol engineProtocols provider ==
           some "anthropic-messages") = true ∧
       clientFor .openaiResponses = .openai ∧ clientFor .openaiChatCompletions = .openai ∧
-      clientFor .anthropicMessages = .aisdkAnthropic := by decide
+      clientFor .anthropicMessages = .aisdkAnthropic := by decide +kernel
 
 /-- An accepted compile speaks exactly the protocol the gateway connection names, through the
 client that protocol selects. -/
@@ -255,6 +255,6 @@ example :
       compile { base with gateway := some ("http://gw", "tok", "gemini") } =
         .refused (.capabilityUnsupported "wireProtocols") ∧
       compile { base with gateway := some ("http://gw", "tok", "anthropic-messages") } =
-        .refused (.capabilityUnsupported "model") := by decide
+        .refused (.capabilityUnsupported "model") := by decide +kernel
 
 end AgentWorkspace.Theorems.Normative.OpenAiAgents

@@ -25,7 +25,7 @@ import type { EngineSessionKey, SessionDurabilityVerdict } from './port.js';
  * 32 MiB. The number is a judgement and the shape of the judgement is what matters: a blob is an
  * agent's own state directory snapshotted, so the cap has to be well above a conversation's worth of
  * JSON and well below anything a control-plane request should hold in memory. `apps/web`'s file
- * upload cap is 64 MiB (`apps/web/server/files/http.ts`) and that is a *tenant's* file, deliberately
+ * upload cap is 64 MiB (`packages/contracts/src/files.ts`) and that is a *tenant's* file, deliberately
  * larger than an engine's internal bookkeeping.
  *
  * It is a refusal, never a truncation: a snapshot cut off at the cap is a state directory that

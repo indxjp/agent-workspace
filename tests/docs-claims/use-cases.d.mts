@@ -1,4 +1,5 @@
 export const PROJECTS: readonly string[];
+export const STAND_IN: RegExp;
 export function serverCommands(
   projectYaml: string,
   secret: () => string,
@@ -13,7 +14,6 @@ export function failedRuns(
 export function chatFailedRunId(chatOutput: string): string | undefined;
 export function fileSetupCommands(dir: string): string[];
 export function pointApisAtLoopback(dir: string, port: number): void;
-export function sharedSkills(dir: string): string[];
 export function parseArguments(argv: readonly string[]): { version: string; registry: string };
 export function installSteps(
   version: string,

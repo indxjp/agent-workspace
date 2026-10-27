@@ -6,14 +6,13 @@ import { once } from 'node:events';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import type { DockerCommand, DockerReapReport, RuntimeHandle } from '@agent-workspace/runtime';
+import type { RuntimeHandle } from '@agent-workspace/runtime/driver';
+import type { DockerCommand, DockerReapReport } from '@agent-workspace/runtime/driver/docker';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  createRunnerManagerServer,
-  createShutdownGate,
-  type ManagedRuntimeDriver,
-} from './manager.js';
+import { createRunnerManagerServer } from './manager.js';
+import type { ManagedRuntimeDriver } from './manager-support.js';
+import { createShutdownGate } from './shutdown-gate.js';
 import { composeProjectFor, dockerDriverOptions, shutdownRunnerManager } from './manager-start.js';
 
 const IMAGE_ENV = { AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: 'alpine:3.20' } as const;

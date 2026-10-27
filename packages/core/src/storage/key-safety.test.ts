@@ -11,8 +11,12 @@
  */
 import { describe, expect, it } from 'vitest';
 
+import { SIDE_PATH_ROOT, sidePath } from '../db/side-paths.js';
 import {
   OBJECT_METADATA_SUFFIX,
+  prefixedListPrefix,
+  prefixedObjectKey,
+  storeKeyPrefix,
   toObjectKey,
   toObjectPrefix,
   UnsafeObjectKeyError,
@@ -250,5 +254,31 @@ describe('the documented cost: a literal "%" cannot be stored through this guard
     // both — at `Q1 report 100%.pdf` and `100/done.txt`, not where the caller asked.
     expect(decodeURIComponent('Q1 report 100%25.pdf')).toBe('Q1 report 100%.pdf');
     expect(decodeURIComponent('100%2Fdone.txt')).toBe('100/done.txt');
+  });
+
+  it('refuses a catalog side path, so no route can name a row that waits at one', () => {
+    expectRule(sidePath(crypto.randomUUID()), 'malformed-encoding');
+    expectRule(SIDE_PATH_ROOT, 'malformed-encoding');
+  });
+});
+
+describe('the adapter key-prefix helpers', () => {
+  it('storeKeyPrefix yields "" for an absent or blank prefix and a single trailing slash otherwise', () => {
+    expect(storeKeyPrefix(undefined)).toBe('');
+    expect(storeKeyPrefix('')).toBe('');
+    expect(storeKeyPrefix('  ')).toBe('');
+    expect(storeKeyPrefix('files//')).toBe('files/');
+    expect(() => storeKeyPrefix('../x')).toThrow(UnsafeObjectKeyError);
+  });
+
+  it('prefixedListPrefix keeps the prefix for the root and appends a delimiter otherwise', () => {
+    expect(prefixedListPrefix('files/', '')).toBe('files/');
+    expect(prefixedListPrefix('files/', 'a')).toBe('files/a/');
+    expect(() => prefixedListPrefix('files/', '../x')).toThrow(UnsafeObjectKeyError);
+  });
+
+  it('prefixedObjectKey joins a valid key and refuses an unsafe one', () => {
+    expect(prefixedObjectKey('files/', 'a/b')).toBe('files/a/b');
+    expect(() => prefixedObjectKey('files/', '../x')).toThrow(UnsafeObjectKeyError);
   });
 });

@@ -5,6 +5,7 @@
  * `aw dev` reuses {@link pushProject}.
  */
 export { resolveSummary, type BundleReport } from './check.js';
+export { exportAgentAsCode } from './export-code.js';
 export {
   evalAgents,
   evalCaseFileLabel,

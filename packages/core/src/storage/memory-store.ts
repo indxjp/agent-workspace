@@ -40,18 +40,24 @@
 import { toObjectKey, toObjectPrefix } from './key-safety.js';
 import {
   scopedObjectStoreProvider,
+  ObjectConflictError,
+  validatedWriteKey,
   type ObjectContent,
   type ObjectListEntry,
-  type ObjectStore,
-  type ObjectStoreProvider,
+  type ObjectMeta,
+  type ObjectStoreV2,
+  type ObjectStoreProviderV2,
   type PutObjectInput,
+  type WriteOptions,
   compareEntryKeys,
 } from './object-store.js';
+import { listPageFrom, resolveRange, streamToBytes } from './streams.js';
 
 interface StoredObject {
   readonly body: Uint8Array;
   readonly contentType: string | null;
   readonly lastModified: Date;
+  readonly etag: string;
 }
 
 /**
@@ -59,17 +65,73 @@ interface StoredObject {
  * `createLocalFilesystemObjectStore`'s is — `createScopedObjectStore` is what adds a workspace
  * prefix, and {@link createInMemoryObjectStoreProvider} is the wrapped form to use in a fixture.
  */
-export function createInMemoryObjectStore(): ObjectStore {
+export function createInMemoryObjectStore(): ObjectStoreV2 {
   const objects = new Map<string, StoredObject>();
+  let version = 0;
+  const metaOf = (object: StoredObject): ObjectMeta => ({
+    sizeBytes: object.body.byteLength,
+    contentType: object.contentType,
+    etag: object.etag,
+    lastModified: object.lastModified,
+  });
+  const store = (safeKey: string, body: Uint8Array, contentType: string | null): StoredObject => {
+    version += 1;
+    const object = {
+      body: Uint8Array.from(body),
+      contentType,
+      lastModified: new Date(),
+      etag: `"${version}"`,
+    };
+    objects.set(safeKey, object);
+    return object;
+  };
 
-  return {
-    put(key, input: PutObjectInput): Promise<void> {
-      const safeKey = toObjectKey(key);
-      objects.set(safeKey, {
-        body: Uint8Array.from(input.body),
-        contentType: input.contentType ?? null,
-        lastModified: new Date(),
+  const backend: ObjectStoreV2 = {
+    capabilities: {
+      sign: false,
+      boundLengthSign: false,
+      range: true,
+      conditionalPut: true,
+      fileAndFolderShareKey: true,
+    },
+
+    head(key): Promise<ObjectMeta | null> {
+      const found = objects.get(toObjectKey(key));
+      return Promise.resolve(found === undefined ? null : metaOf(found));
+    },
+
+    read(key, options) {
+      const found = objects.get(toObjectKey(key));
+      if (found === undefined) return Promise.resolve(null);
+      const range = resolveRange(options?.range, found.body.byteLength);
+      const bytes = range === null ? found.body : found.body.subarray(range.start, range.end + 1);
+      return Promise.resolve({
+        meta: metaOf(found),
+        range,
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(Uint8Array.from(bytes));
+            controller.close();
+          },
+        }),
       });
+    },
+
+    async write(key, body, options: WriteOptions): Promise<ObjectMeta> {
+      const safeKey = await validatedWriteKey(body, options, () => toObjectKey(key));
+      const bytes = body instanceof Uint8Array ? body : await streamToBytes(body);
+      const current = objects.get(safeKey);
+      if (options.ifNoneMatch === '*' && current !== undefined) throw new ObjectConflictError();
+      if (options.ifMatch !== undefined && current?.etag !== options.ifMatch) {
+        throw new ObjectConflictError();
+      }
+      return metaOf(store(safeKey, bytes, options.contentType ?? null));
+    },
+
+    listPage: (prefix, options) => listPageFrom(backend, prefix, options),
+
+    put(key, input: PutObjectInput): Promise<void> {
+      store(toObjectKey(key), input.body, input.contentType ?? null);
       return Promise.resolve();
     },
 
@@ -148,14 +210,11 @@ export function createInMemoryObjectStore(): ObjectStore {
       // A missing source is a no-op — see `object-store.ts`'s header for why this is what makes a
       // retried subtree move idempotent rather than an error the second time.
       if (found === undefined) return Promise.resolve();
-      objects.set(safeDestination, {
-        body: Uint8Array.from(found.body),
-        contentType: found.contentType,
-        lastModified: new Date(),
-      });
+      store(safeDestination, found.body, found.contentType);
       return Promise.resolve();
     },
   };
+  return backend;
 }
 
 /**
@@ -163,6 +222,6 @@ export function createInMemoryObjectStore(): ObjectStore {
  * shared map, via {@link scopedObjectStoreProvider} — the same wrapper the local-filesystem
  * provider uses, so "which workspace this key belongs to" is decided in one place for both.
  */
-export function createInMemoryObjectStoreProvider(): ObjectStoreProvider {
+export function createInMemoryObjectStoreProvider(): ObjectStoreProviderV2 {
   return scopedObjectStoreProvider(createInMemoryObjectStore());
 }

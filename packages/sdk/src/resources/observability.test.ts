@@ -160,6 +160,23 @@ describe('AuditClient.list', () => {
     expect(call?.json).toBeUndefined();
   });
 
+  it('[US-BLD-05][api][sdk] lists the agent-created row of a Builder save under the person', async () => {
+    const created = {
+      ...event,
+      action: 'agent-created',
+      actorLabel: 'Ada',
+      builderRunId: 'run-1',
+    };
+    const { observability } = client(() =>
+      json(200, { events: [created, event], nextCursor: null }),
+    );
+    const page = await observability.audit.list({ action: 'agent-created' });
+    expect(page.events.map((row) => [row.action, row.actorLabel, row.builderRunId])).toEqual([
+      ['agent-created', 'Ada', 'run-1'],
+      ['api-key-created', 'Ops key', undefined],
+    ]);
+  });
+
   it('renders the limit and the cursor as the route spells them', async () => {
     const { observability, calls } = client(() => json(200, { events: [], nextCursor: null }));
     expect(await observability.audit.list({ limit: 25, cursor: 'c-1' })).toEqual({
@@ -168,6 +185,16 @@ describe('AuditClient.list', () => {
     });
     expect(calls[0]?.url.pathname).toBe('/prefix/api/audit-events');
     expect(calls[0]?.url.search).toBe('?limit=25&cursor=c-1');
+  });
+
+  it('sends the action filter as a query param, on list and on every listAll page', async () => {
+    const { observability, calls } = client(() => json(200, { events: [], nextCursor: null }));
+    await observability.audit.list({ action: 'file-deleted' });
+    for await (const row of observability.audit.listAll({ action: 'file-deleted' })) void row;
+    expect(calls.map((call) => call.url.search)).toEqual([
+      '?action=file-deleted',
+      '?action=file-deleted',
+    ]);
   });
 
   it('surfaces the route refusals by status and code', async () => {

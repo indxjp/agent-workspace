@@ -58,7 +58,7 @@ a table cell cannot render it, and `--json` carries it instead. -/
 @[aw_spec (tier := T2) (ts := "packages/aw/src/commands/engines.ts#engineCommands")]
 theorem the_columns_are_scalar_fields :
     columns = ["id", "displayName", "version", "installed"] ∧
-      columns.length = 4 ∧ columns.Nodup := by decide
+      columns.length = 4 ∧ columns.Nodup := by decide +kernel
 
 /-! ## The refusal -/
 
@@ -87,7 +87,7 @@ contracts publish. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/engines/registry.ts#registeredEngines")]
 theorem the_shipped_registry_projects_to_itself :
     list shippedRegistry = some shippedRegistry ∧
-      listRequest = { method := "GET", path := "/api/engines", expect := 200 } := by decide
+      listRequest = { method := "GET", path := "/api/engines", expect := 200 } := by decide +kernel
 
 /-- And a registry with one engine the contracts do not publish answers nothing at all, even
 though the other descriptor in it is perfectly describable. -/
@@ -95,7 +95,7 @@ though the other descriptor in it is perfectly describable. -/
 theorem one_undescribable_engine_hides_the_describable_one :
     list (shippedRegistry ++
       [{ id := "acp", displayName := "ACP agent", version := "0.0.1", installed := false }])
-      = Option.none := by decide
+      = Option.none := by decide +kernel
 
 /-! ## `--engine`, resolved against the catalogue -/
 
@@ -111,6 +111,6 @@ theorem the_engine_flag_is_resolved_or_refused :
     resolveEngineFlag shippedRegistry (some "acp") = EngineFlag.refused "unsupported_engine" ∧
     resolveEngineFlag (shippedRegistry.map fun d => { d with installed := false })
       (some "claude-agent-sdk") = EngineFlag.refused "unsupported_engine" := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.SdkEngines

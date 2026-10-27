@@ -112,12 +112,10 @@ describe('conferrableRolesFor', () => {
     );
   });
 
-  it('lets an Admin confer Admin and Viewer, and neither Owner nor Builder', () => {
-    // `conferral.ts`'s own header states these two cells: Builder holds its own `projects` and
-    // runs its own `connectors`, which §21's Admin clause does not grant, so Admin conferring
-    // Builder would hand out a capability the Admin has not got. A `<select>` built from a
-    // privilege ladder would offer it.
-    expect(conferrableRolesFor('admin')).toEqual(['admin', 'viewer']);
+  it('lets an Admin confer Admin, Builder and Viewer, and not Owner', () => {
+    // ADR-0152 made roles monotonic, so Admin holds everything Builder holds. Owner holds
+    // `secrets`, which Admin does not, so Admin still may not confer Owner.
+    expect(conferrableRolesFor('admin')).toEqual(['admin', 'builder', 'viewer']);
   });
 
   it('lets an Owner confer every role', () => {

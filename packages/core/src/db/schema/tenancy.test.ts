@@ -61,6 +61,10 @@ const TENANT_EXEMPT: Readonly<Record<string, string>> = {
     'An OIDC (issuer, subject) binding names a global user, not a workspace membership (issue ' +
     '#118). The same binding is the same fact in every workspace the user belongs to; the tenant ' +
     'is chosen after sign-in, from `memberships`, not before.',
+  storage_migration_runs:
+    'A verify pass of the move off the old object naming covers every workspace at once and ' +
+    'decides whether old copies may be deleted for the whole deployment (the storage design, §06). ' +
+    'It holds counts only, no workspace data.',
 };
 
 /**
@@ -227,6 +231,12 @@ const NON_REFERENCE_ID_COLUMNS: Readonly<Record<string, DeclaredNonReference>> =
       '(ADR-0065) — the Claude Agent SDK today. It is an opaque token from another system, not a ' +
       'key into this one.',
   },
+  'agents.created_by_run_id': {
+    sqlType: 'text',
+    why:
+      'Names the run that made the agent, as `builder_tool_calls.run_id` does: text, with no ' +
+      'foreign key. The lineage records what happened and must outlive a pruned run.',
+  },
   'runtime_verifications.driver_id': {
     sqlType: 'text',
     why:
@@ -240,6 +250,44 @@ const NON_REFERENCE_ID_COLUMNS: Readonly<Record<string, DeclaredNonReference>> =
       'Groups the codes and tokens one authorization grant issued, so reuse of one revokes the ' +
       'rest (ADR-0134 part 3). It is minted with the first row of a grant and no other table ' +
       'holds a family, so there is nothing for it to reference.',
+  },
+  'files.object_id': {
+    sqlType: 'uuid',
+    why:
+      "The identity of the stored object this row's content lives under (the storage design, " +
+      '§04), minted by the storage layer when the object is written. The object is a blob in ' +
+      'the object store, not a row in any table, so there is nothing for it to reference.',
+  },
+  'session_state_blobs.object_id': {
+    sqlType: 'uuid',
+    why:
+      'The identity of the stored object a session-state blob lives under (the storage design, ' +
+      '§04), minted by the storage layer when the object is written. The object is a blob in ' +
+      'the object store, not a row in any table, so there is nothing for it to reference.',
+  },
+  'builder_tool_calls.run_id': {
+    sqlType: 'text',
+    why:
+      "The ENGINE's run identifier, the key the Builder journal groups its tool calls under. The " +
+      'journal is keyed by the engine run, not by a row of `runs`, so there is nothing to reference.',
+  },
+  'builder_tool_calls.call_id': {
+    sqlType: 'text',
+    why:
+      "The engine's own tool-use identifier, minted by the model API for each call. It is an " +
+      'opaque token from another system, not a key into this one.',
+  },
+  'builder_tool_calls.trace_id': {
+    sqlType: 'text',
+    why:
+      'The trace identifier of the run, written so a journal row can be found in the trace ' +
+      'store. The trace store is outside this database.',
+  },
+  'builder_tool_calls.model_id': {
+    sqlType: 'text',
+    why:
+      'Names the model the Builder ran on ("claude-..."), a provider-owned identifier, not a ' +
+      'row of any table here.',
   },
   'shares.subject_id': {
     sqlType: 'text',

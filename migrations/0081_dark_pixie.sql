@@ -1,0 +1,2 @@
+ALTER TABLE "agents" ADD COLUMN "builtin_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "agents_workspace_builtin_key" ON "agents" USING btree ("workspace_id","builtin_key") WHERE "agents"."builtin_key" is not null;

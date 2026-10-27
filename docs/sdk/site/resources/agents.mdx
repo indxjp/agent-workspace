@@ -267,13 +267,18 @@ aw agents create --file agent.json --skill <skillId> --connector <connectorId> -
 | `409`  | `agent_name_conflict`      | Another agent in this workspace already has that (trimmed) name.                            |
 | `400`  | `unknown_model_connection` | `modelConnectionId` does not name a model connection in this workspace.                     |
 | `400`  | `unknown_runtime_profile`  | `runtimeProfileId` does not name a runtime profile in this workspace.                       |
+| `400`  | `invalid_assignments`      | A compound body's `assignments` is not valid assignment arrays.                             |
+| `400`  | `unknown_file`             | An assigned file is not in this workspace — `details` is `[fileId]`.                        |
+| `400`  | `unknown_skill`            | An assigned skill is not in this workspace — `details` is `[skillId]`.                      |
+| `400`  | `unknown_skill_revision`   | A pinned skill revision is not published — `details` is `["<skillId>@<revision>"]`.         |
+| `400`  | `unknown_connector`        | An assigned connector is not in this workspace — `details` is `[connectorId]`.              |
 
 <Note>
   K-2 (issue #234): the HTTP route accepts a **compound** body, `{ agent, assignments }`, that
   creates the agent and its [resource assignments](#getresourceassignments) atomically in one
-  request (`apps/web/app/api/agents/route.ts`, which compensates by deleting the agent if the
-  assignment write fails). `AgentsClient.create` exposes this as its second parameter,
-  `create(input, { assignments? })` — without it, the body and the response are exactly what they
+  request: the agent row and its assignments commit in one database transaction, so a refused
+  assignment (one of the `unknown_*` codes above) leaves no agent behind. `AgentsClient.create`
+  exposes this as its second parameter, `create(input, { assignments? })` — without it, the body and the response are exactly what they
   were before; with it, the request and the response both carry `{ agent, assignments }`.
   [`replaceResourceAssignments`](#replaceresourceassignments) still exists for changing an
   existing agent's assignments after creation.

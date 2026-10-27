@@ -5,6 +5,8 @@ import {
   CreateEvaluationRequestSchema,
   CreateEvaluationRunRequestSchema,
   EVALUATION_CASE_LIMIT,
+  EVALUATION_OUTPUT_MAX_LENGTH,
+  EVALUATION_OUTPUT_SCHEMA_MAX_LENGTH,
   EVALUATION_RUN_CASE_LIMIT,
   EVALUATION_TOOL_INPUT_MAX_LENGTH,
   EvalCaseFileSchema,
@@ -176,6 +178,94 @@ describe('evaluation runs and tool arguments (issue #799)', () => {
     expect(issues({ cases: [one({ tool: 't', toolInput: oversize })] })[0]).toMatch(
       /^cases\.0\.expect\.toolInput: must be at most/,
     );
+  });
+
+  describe('output (issue #1289)', () => {
+    const outputSchema = { type: 'object', properties: { width: { type: 'number' } } };
+    const withOutput = (extra: Record<string, unknown> = {}) => ({
+      ...one({ output: { width: 140 } }),
+      outputSchema,
+      ...extra,
+    });
+
+    it('parses a case with outputSchema and expect.output, and output alone is a check', () => {
+      expect(EvalCaseFileSchema.parse({ cases: [withOutput()] }).cases[0]).toEqual(withOutput());
+    });
+
+    it('refuses output without outputSchema at the output', () => {
+      expect(issues({ cases: [one({ output: { width: 140 } })] })).toEqual([
+        "cases.0.expect.output: output needs outputSchema: the schema the case's run answers with",
+      ]);
+    });
+
+    it('refuses an outputSchema whose root is not an object', () => {
+      const found = issues({ cases: [withOutput({ outputSchema: { type: 'array' } })] });
+      expect(found[0]).toMatch(/^cases\.0\.outputSchema: root_type/);
+    });
+
+    it('refuses an oversize outputSchema, an oversize output and an array output', () => {
+      const bigSchema = {
+        type: 'object',
+        description: 'x'.repeat(EVALUATION_OUTPUT_SCHEMA_MAX_LENGTH),
+      };
+      expect(issues({ cases: [withOutput({ outputSchema: bigSchema })] })[0]).toMatch(
+        /^cases\.0\.outputSchema: must be at most/,
+      );
+      const bigOutput = { text: 'x'.repeat(EVALUATION_OUTPUT_MAX_LENGTH) };
+      expect(issues({ cases: [withOutput({ expect: { output: bigOutput } })] })[0]).toMatch(
+        /^cases\.0\.expect\.output: must be at most/,
+      );
+      expect(issues({ cases: [withOutput({ expect: { output: [1] } })] })[0]).toMatch(
+        /^cases\.0\.expect\.output: /,
+      );
+    });
+
+    it('keeps expect strict beside output', () => {
+      expect(
+        issues({ cases: [withOutput({ expect: { output: { a: 1 }, regex: 'x' } })] })[0],
+      ).toMatch(/^cases\.0\.expect: /);
+    });
+  });
+
+  describe('awaitsApproval (issue #1569)', () => {
+    it('parses alone, where it is itself a check, and beside the other checks', () => {
+      const expectations = [
+        { awaitsApproval: true },
+        {
+          awaitsApproval: true,
+          tool: 'Write',
+          toolInput: { file_path: 'outputs/plan.json' },
+          contains: ['plan'],
+          notContains: ['total'],
+          judge: 'Stops before writing',
+        },
+      ];
+      for (const expectation of expectations) {
+        expect(EvalCaseFileSchema.parse({ cases: [one(expectation)] }).cases[0]?.expect).toEqual(
+          expectation,
+        );
+      }
+    });
+
+    it('refuses false, since the flag is true or absent', () => {
+      expect(issues({ cases: [one({ tool: 't', awaitsApproval: false })] })[0]).toMatch(
+        /^cases\.0\.expect\.awaitsApproval: /,
+      );
+    });
+
+    it('refuses awaitsApproval together with output, at the flag', () => {
+      const found = issues({
+        cases: [
+          {
+            ...one({ awaitsApproval: true, output: { width: 140 } }),
+            outputSchema: { type: 'object', properties: { width: { type: 'number' } } },
+          },
+        ],
+      });
+      expect(found).toEqual([
+        'cases.0.expect.awaitsApproval: awaitsApproval cannot be combined with output: a paused run has no structured output yet',
+      ]);
+    });
   });
 
   it('parses a running run with its progress and refuses an unknown status', () => {

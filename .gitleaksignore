@@ -1,0 +1,5 @@
+# The R-14 throwaway test key, added in this commit and deleted one commit later. It is a generated
+# fixture with no access to anything (owner decision D1); see docs/research/fixtures/R-14/README.md.
+# One fingerprint (commit:path:rule:line), so only this finding is ignored. It only matters to a
+# full-history scan: CI scans just the commits a change adds, and the file is not in the tree.
+0d903b4f11904298c22ad7af76437c7d1fe8d7dd:docs/research/fixtures/R-14/key.pem:private-key:1

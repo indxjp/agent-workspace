@@ -839,6 +839,21 @@
                 "const": "agent.result",
                 "type": "string"
               },
+              "output": {
+                "additionalProperties": false,
+                "properties": {
+                  "structured": {},
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "text",
+                  "structured"
+                ],
+                "type": "object"
+              },
               "raw": {},
               "stopReason": {
                 "enum": [
@@ -938,6 +953,77 @@
               "reason"
             ],
             "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "canonicalCall": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "engine": {
+                "enum": [
+                  "claude-agent-sdk",
+                  "openai-agents",
+                  "pi",
+                  "mastra"
+                ],
+                "type": "string"
+              },
+              "frame": {
+                "const": "agent.approval.requested",
+                "type": "string"
+              },
+              "raw": {},
+              "toolCallId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "toolName": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "frame",
+              "engine",
+              "raw",
+              "toolCallId",
+              "toolName",
+              "canonicalCall"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "engine": {
+                "enum": [
+                  "claude-agent-sdk",
+                  "openai-agents",
+                  "pi",
+                  "mastra"
+                ],
+                "type": "string"
+              },
+              "frame": {
+                "const": "agent.handoff",
+                "type": "string"
+              },
+              "raw": {},
+              "reason": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "frame",
+              "engine",
+              "raw"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -981,6 +1067,17 @@
             "items": {
               "additionalProperties": false,
               "properties": {
+                "archivedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "builtin": {
+                  "enum": [
+                    "builder"
+                  ],
+                  "type": "string"
+                },
                 "createdAt": {
                   "format": "date-time",
                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -996,6 +1093,39 @@
                       "type": "null"
                     }
                   ]
+                },
+                "createdByAgent": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "agentId": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "runId": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "agentId",
+                    "version",
+                    "runId"
+                  ],
+                  "type": "object"
                 },
                 "id": {
                   "minLength": 1,
@@ -1155,6 +1285,10 @@
                 "const": "claude-agent-sdk",
                 "type": "string"
               },
+              "handoff": {
+                "const": true,
+                "type": "boolean"
+              },
               "limits": {
                 "additionalProperties": false,
                 "properties": {
@@ -1188,6 +1322,13 @@
                   "maxBudgetUsd"
                 ],
                 "type": "object"
+              },
+              "requireApproval": {
+                "items": {
+                  "type": "string"
+                },
+                "readOnly": true,
+                "type": "array"
               },
               "skills": {
                 "oneOf": [
@@ -1648,6 +1789,10 @@
                 "const": "claude-agent-sdk",
                 "type": "string"
               },
+              "handoff": {
+                "const": true,
+                "type": "boolean"
+              },
               "limits": {
                 "additionalProperties": false,
                 "properties": {
@@ -1681,6 +1826,13 @@
                   "maxBudgetUsd"
                 ],
                 "type": "object"
+              },
+              "requireApproval": {
+                "items": {
+                  "type": "string"
+                },
+                "readOnly": true,
+                "type": "array"
               },
               "skills": {
                 "oneOf": [
@@ -2152,6 +2304,10 @@
                     "const": "claude-agent-sdk",
                     "type": "string"
                   },
+                  "handoff": {
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "limits": {
                     "additionalProperties": false,
                     "properties": {
@@ -2185,6 +2341,13 @@
                       "maxBudgetUsd"
                     ],
                     "type": "object"
+                  },
+                  "requireApproval": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "readOnly": true,
+                    "type": "array"
                   },
                   "skills": {
                     "oneOf": [
@@ -2653,6 +2816,17 @@
       "AgentResource": {
         "additionalProperties": false,
         "properties": {
+          "archivedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "builtin": {
+            "enum": [
+              "builder"
+            ],
+            "type": "string"
+          },
           "createdAt": {
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -2668,6 +2842,39 @@
                 "type": "null"
               }
             ]
+          },
+          "createdByAgent": {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "runId": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              "version": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "agentId",
+              "version",
+              "runId"
+            ],
+            "type": "object"
           },
           "id": {
             "minLength": 1,
@@ -2798,6 +3005,151 @@
             },
             "readOnly": true,
             "type": "array"
+          },
+          "skillRevisions": {
+            "additionalProperties": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "propertyNames": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
+          "storageGrants": {
+            "default": [],
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "access": {
+                  "enum": [
+                    "read",
+                    "read-write"
+                  ],
+                  "type": "string"
+                },
+                "connectionId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "prefix": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "connectionId",
+                "prefix",
+                "access"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "files",
+          "skillIds",
+          "connectorIds",
+          "storageGrants"
+        ],
+        "type": "object"
+      },
+      "AgentResourceAssignmentsInput": {
+        "additionalProperties": false,
+        "properties": {
+          "connectorIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "access": {
+                  "enum": [
+                    "read",
+                    "read-write"
+                  ],
+                  "type": "string"
+                },
+                "fileId": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "fileId",
+                "access"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "skillIds": {
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "skillRevisions": {
+            "additionalProperties": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "propertyNames": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
+          "storageGrants": {
+            "default": [],
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "access": {
+                  "enum": [
+                    "read",
+                    "read-write"
+                  ],
+                  "type": "string"
+                },
+                "connectionId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "prefix": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "connectionId",
+                "prefix",
+                "access"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
           }
         },
         "readOnly": true,
@@ -2855,13 +3207,59 @@
                 },
                 "readOnly": true,
                 "type": "array"
+              },
+              "skillRevisions": {
+                "additionalProperties": {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "readOnly": true,
+                "type": "object"
+              },
+              "storageGrants": {
+                "default": [],
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "access": {
+                      "enum": [
+                        "read",
+                        "read-write"
+                      ],
+                      "type": "string"
+                    },
+                    "connectionId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "prefix": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "connectionId",
+                    "prefix",
+                    "access"
+                  ],
+                  "type": "object"
+                },
+                "readOnly": true,
+                "type": "array"
               }
             },
             "readOnly": true,
             "required": [
               "files",
               "skillIds",
-              "connectorIds"
+              "connectorIds",
+              "storageGrants"
             ],
             "type": "object"
           }
@@ -3049,6 +3447,10 @@
                                   "const": "claude-agent-sdk",
                                   "type": "string"
                                 },
+                                "handoff": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
                                 "limits": {
                                   "additionalProperties": false,
                                   "properties": {
@@ -3082,6 +3484,13 @@
                                     "maxBudgetUsd"
                                   ],
                                   "type": "object"
+                                },
+                                "requireApproval": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "readOnly": true,
+                                  "type": "array"
                                 },
                                 "skills": {
                                   "oneOf": [
@@ -3582,6 +3991,19 @@
                               "readOnly": true,
                               "type": "array"
                             },
+                            "skillRevisions": {
+                              "additionalProperties": {
+                                "maximum": 2147483647,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "propertyNames": {
+                                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                                "type": "string"
+                              },
+                              "readOnly": true,
+                              "type": "object"
+                            },
                             "skills": {
                               "items": {
                                 "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
@@ -3777,6 +4199,9 @@
                                   "agents"
                                 ],
                                 "type": "object"
+                              },
+                              "attachments": {
+                                "type": "boolean"
                               },
                               "disclaimer": {
                                 "allOf": [
@@ -4060,7 +4485,8 @@
                   "enum": [
                     "ui",
                     "aw-push",
-                    "api"
+                    "api",
+                    "builder"
                   ],
                   "type": "string"
                 },
@@ -4313,6 +4739,10 @@
                             "const": "claude-agent-sdk",
                             "type": "string"
                           },
+                          "handoff": {
+                            "const": true,
+                            "type": "boolean"
+                          },
                           "limits": {
                             "additionalProperties": false,
                             "properties": {
@@ -4346,6 +4776,13 @@
                               "maxBudgetUsd"
                             ],
                             "type": "object"
+                          },
+                          "requireApproval": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "readOnly": true,
+                            "type": "array"
                           },
                           "skills": {
                             "oneOf": [
@@ -4846,6 +5283,19 @@
                         "readOnly": true,
                         "type": "array"
                       },
+                      "skillRevisions": {
+                        "additionalProperties": {
+                          "maximum": 2147483647,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "propertyNames": {
+                          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                          "type": "string"
+                        },
+                        "readOnly": true,
+                        "type": "object"
+                      },
                       "skills": {
                         "items": {
                           "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
@@ -5041,6 +5491,9 @@
                             "agents"
                           ],
                           "type": "object"
+                        },
+                        "attachments": {
+                          "type": "boolean"
                         },
                         "disclaimer": {
                           "allOf": [
@@ -5324,7 +5777,8 @@
             "enum": [
               "ui",
               "aw-push",
-              "api"
+              "api",
+              "builder"
             ],
             "type": "string"
           },
@@ -5579,6 +6033,7 @@
                     "user-created",
                     "user-deleted",
                     "agent-changed",
+                    "agent-created",
                     "provider-credential-changed",
                     "api-key-created",
                     "api-key-revoked",
@@ -5603,7 +6058,19 @@
                     "endpoint-tool-called",
                     "oauth-client-secret-rotated",
                     "oauth-grant-issued",
-                    "oauth-grant-revoked"
+                    "oauth-grant-revoked",
+                    "file-uploaded",
+                    "file-downloaded",
+                    "file-link-created",
+                    "file-moved",
+                    "file-deleted",
+                    "storage-connection-created",
+                    "storage-connection-updated",
+                    "storage-connection-deleted",
+                    "storage-connection-credential-changed",
+                    "storage-connection-tested",
+                    "storage-connection-written",
+                    "storage-grant-changed"
                   ],
                   "type": "string"
                 },
@@ -5622,6 +6089,10 @@
                     "string",
                     "null"
                   ]
+                },
+                "builderRunId": {
+                  "minLength": 1,
+                  "type": "string"
                 },
                 "createdAt": {
                   "format": "date-time",
@@ -5851,6 +6322,21 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "identity": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "secret": {
+                      "maxLength": 128,
+                      "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "secret"
+                  ],
+                  "type": "object"
+                },
                 "kind": {
                   "enum": [
                     "mcp",
@@ -5912,7 +6398,11 @@
                           "method": {
                             "enum": [
                               "GET",
-                              "HEAD"
+                              "HEAD",
+                              "POST",
+                              "PUT",
+                              "PATCH",
+                              "DELETE"
                             ],
                             "type": "string"
                           },
@@ -6134,6 +6624,21 @@
             "minLength": 1,
             "type": "string"
           },
+          "identity": {
+            "additionalProperties": false,
+            "properties": {
+              "secret": {
+                "maxLength": 128,
+                "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "secret"
+            ],
+            "type": "object"
+          },
           "kind": {
             "enum": [
               "mcp",
@@ -6195,7 +6700,11 @@
                     "method": {
                       "enum": [
                         "GET",
-                        "HEAD"
+                        "HEAD",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE"
                       ],
                       "type": "string"
                     },
@@ -6348,6 +6857,17 @@
           "agent": {
             "additionalProperties": false,
             "properties": {
+              "archivedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "builtin": {
+                "enum": [
+                  "builder"
+                ],
+                "type": "string"
+              },
               "createdAt": {
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -6363,6 +6883,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "createdByAgent": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentId": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "runId": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "agentId",
+                  "version",
+                  "runId"
+                ],
+                "type": "object"
               },
               "id": {
                 "minLength": 1,
@@ -6564,6 +7117,10 @@
                                 "const": "claude-agent-sdk",
                                 "type": "string"
                               },
+                              "handoff": {
+                                "const": true,
+                                "type": "boolean"
+                              },
                               "limits": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -6597,6 +7154,13 @@
                                   "maxBudgetUsd"
                                 ],
                                 "type": "object"
+                              },
+                              "requireApproval": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "readOnly": true,
+                                "type": "array"
                               },
                               "skills": {
                                 "oneOf": [
@@ -7097,6 +7661,19 @@
                             "readOnly": true,
                             "type": "array"
                           },
+                          "skillRevisions": {
+                            "additionalProperties": {
+                              "maximum": 2147483647,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "propertyNames": {
+                              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                              "type": "string"
+                            },
+                            "readOnly": true,
+                            "type": "object"
+                          },
                           "skills": {
                             "items": {
                               "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
@@ -7292,6 +7869,9 @@
                                 "agents"
                               ],
                               "type": "object"
+                            },
+                            "attachments": {
+                              "type": "boolean"
                             },
                             "disclaimer": {
                               "allOf": [
@@ -7575,7 +8155,8 @@
                 "enum": [
                   "ui",
                   "aw-push",
-                  "api"
+                  "api",
+                  "builder"
                 ],
                 "type": "string"
               },
@@ -7717,6 +8298,10 @@
                             "const": "claude-agent-sdk",
                             "type": "string"
                           },
+                          "handoff": {
+                            "const": true,
+                            "type": "boolean"
+                          },
                           "limits": {
                             "additionalProperties": false,
                             "properties": {
@@ -7750,6 +8335,13 @@
                               "maxBudgetUsd"
                             ],
                             "type": "object"
+                          },
+                          "requireApproval": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "readOnly": true,
+                            "type": "array"
                           },
                           "skills": {
                             "oneOf": [
@@ -8250,6 +8842,19 @@
                         "readOnly": true,
                         "type": "array"
                       },
+                      "skillRevisions": {
+                        "additionalProperties": {
+                          "maximum": 2147483647,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "propertyNames": {
+                          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                          "type": "string"
+                        },
+                        "readOnly": true,
+                        "type": "object"
+                      },
                       "skills": {
                         "items": {
                           "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
@@ -8445,6 +9050,9 @@
                             "agents"
                           ],
                           "type": "object"
+                        },
+                        "attachments": {
+                          "type": "boolean"
                         },
                         "disclaimer": {
                           "allOf": [
@@ -8838,6 +9446,10 @@
                             "const": "claude-agent-sdk",
                             "type": "string"
                           },
+                          "handoff": {
+                            "const": true,
+                            "type": "boolean"
+                          },
                           "limits": {
                             "additionalProperties": false,
                             "properties": {
@@ -8871,6 +9483,13 @@
                               "maxBudgetUsd"
                             ],
                             "type": "object"
+                          },
+                          "requireApproval": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "readOnly": true,
+                            "type": "array"
                           },
                           "skills": {
                             "oneOf": [
@@ -9370,6 +9989,19 @@
                         "readOnly": true,
                         "type": "array"
                       },
+                      "skillRevisions": {
+                        "additionalProperties": {
+                          "maximum": 2147483647,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "propertyNames": {
+                          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                          "type": "string"
+                        },
+                        "readOnly": true,
+                        "type": "object"
+                      },
                       "skills": {
                         "items": {
                           "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
@@ -9564,6 +10196,9 @@
                             "agents"
                           ],
                           "type": "object"
+                        },
+                        "attachments": {
+                          "type": "boolean"
                         },
                         "disclaimer": {
                           "allOf": [
@@ -9851,6 +10486,17 @@
           "agent": {
             "additionalProperties": false,
             "properties": {
+              "archivedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "builtin": {
+                "enum": [
+                  "builder"
+                ],
+                "type": "string"
+              },
               "createdAt": {
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -9866,6 +10512,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "createdByAgent": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentId": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "runId": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "agentId",
+                  "version",
+                  "runId"
+                ],
+                "type": "object"
               },
               "id": {
                 "minLength": 1,
@@ -9996,13 +10675,59 @@
                 },
                 "readOnly": true,
                 "type": "array"
+              },
+              "skillRevisions": {
+                "additionalProperties": {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "readOnly": true,
+                "type": "object"
+              },
+              "storageGrants": {
+                "default": [],
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "access": {
+                      "enum": [
+                        "read",
+                        "read-write"
+                      ],
+                      "type": "string"
+                    },
+                    "connectionId": {
+                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                      "type": "string"
+                    },
+                    "prefix": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "connectionId",
+                    "prefix",
+                    "access"
+                  ],
+                  "type": "object"
+                },
+                "readOnly": true,
+                "type": "array"
               }
             },
             "readOnly": true,
             "required": [
               "files",
               "skillIds",
-              "connectorIds"
+              "connectorIds",
+              "storageGrants"
             ],
             "type": "object"
           }
@@ -10014,6 +10739,18 @@
         ],
         "type": "object"
       },
+      "CreateDownloadUrlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "ttlSeconds": {
+            "maximum": 900,
+            "minimum": 60,
+            "type": "integer"
+          }
+        },
+        "readOnly": true,
+        "type": "object"
+      },
       "CreateEndpointClientRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10023,14 +10760,14 @@
               "type": "string"
             },
             "maxItems": 64,
-            "minItems": 1,
             "readOnly": true,
             "type": "array"
           },
           "kind": {
             "enum": [
               "mcp-project",
-              "a2a-agent"
+              "a2a-agent",
+              "builder"
             ],
             "type": "string"
           },
@@ -10073,6 +10810,10 @@
                 "expect": {
                   "additionalProperties": false,
                   "properties": {
+                    "awaitsApproval": {
+                      "const": true,
+                      "type": "boolean"
+                    },
                     "contains": {
                       "items": {
                         "maxLength": 200,
@@ -10096,6 +10837,13 @@
                       "minItems": 1,
                       "readOnly": true,
                       "type": "array"
+                    },
+                    "output": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
                     },
                     "tool": {
                       "maxLength": 256,
@@ -10123,6 +10871,22 @@
                 "name": {
                   "maxLength": 200,
                   "type": "string"
+                },
+                "outputSchema": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "tags": {
+                  "items": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "readOnly": true,
+                  "type": "array"
                 }
               },
               "readOnly": true,
@@ -10161,6 +10925,10 @@
                 "expect": {
                   "additionalProperties": false,
                   "properties": {
+                    "awaitsApproval": {
+                      "const": true,
+                      "type": "boolean"
+                    },
                     "contains": {
                       "items": {
                         "maxLength": 200,
@@ -10184,6 +10952,13 @@
                       "minItems": 1,
                       "readOnly": true,
                       "type": "array"
+                    },
+                    "output": {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
                     },
                     "tool": {
                       "maxLength": 256,
@@ -10211,6 +10986,22 @@
                 "name": {
                   "maxLength": 200,
                   "type": "string"
+                },
+                "outputSchema": {
+                  "additionalProperties": {},
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "tags": {
+                  "items": {
+                    "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "readOnly": true,
+                  "type": "array"
                 }
               },
               "readOnly": true,
@@ -10236,6 +11027,759 @@
         "required": [
           "version",
           "cases"
+        ],
+        "type": "object"
+      },
+      "CreateStorageConnectionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedPrefixes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessKeyId": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "s3",
+                    "type": "string"
+                  },
+                  "secretAccessKey": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accessKeyId",
+                  "secretAccessKey"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "gcs",
+                    "type": "string"
+                  },
+                  "serviceAccountJson": {
+                    "maxLength": 65536,
+                    "minLength": 2,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "serviceAccountJson"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "gcs",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accessToken"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accountKey": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "azblob",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accountKey"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "azblob",
+                    "type": "string"
+                  },
+                  "sasToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "sasToken"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "writeAllowed": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "allowedPrefixes",
+          "writeAllowed"
+        ],
+        "type": "object"
+      },
+      "CreateStorageConnectionInputInput": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedPrefixes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessKeyId": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "s3",
+                    "type": "string"
+                  },
+                  "secretAccessKey": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accessKeyId",
+                  "secretAccessKey"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "gcs",
+                    "type": "string"
+                  },
+                  "serviceAccountJson": {
+                    "maxLength": 65536,
+                    "minLength": 2,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "serviceAccountJson"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "gcs",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accessToken"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accountKey": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "azblob",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accountKey"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "azblob",
+                    "type": "string"
+                  },
+                  "sasToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "sasToken"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "writeAllowed": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "url",
+          "allowedPrefixes"
+        ],
+        "type": "object"
+      },
+      "CreateTriggerRequest": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "webhook",
+                "type": "string"
+              },
+              "name": {
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "outputSchema": {
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "prompt": {
+                "maxLength": 100000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "subject": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              "zoomSecretToken": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "agentId",
+              "prompt"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "cron": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "schedule",
+                "type": "string"
+              },
+              "name": {
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "outputSchema": {
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "prompt": {
+                "maxLength": 100000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "subject": {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              "timezone": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name",
+              "agentId",
+              "prompt",
+              "cron",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ],
+        "readOnly": true
+      },
+      "CreateTriggerResponse": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "firePath": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "secret": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "trigger": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "cron": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "hasSecret": {
+                    "type": "boolean"
+                  },
+                  "hasZoomSecretToken": {
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "webhook",
+                      "schedule"
+                    ],
+                    "type": "string"
+                  },
+                  "lastFiredAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "outputSchema": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": {},
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerPrincipalId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "timezone": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "updatedAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "agentId",
+                  "prompt",
+                  "cron",
+                  "timezone",
+                  "enabled",
+                  "outputSchema",
+                  "subject",
+                  "ownerPrincipalId",
+                  "hasSecret",
+                  "hasZoomSecretToken",
+                  "lastFiredAt",
+                  "createdAt",
+                  "updatedAt"
+                ],
+                "type": "object"
+              },
+              "warning": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "trigger",
+              "secret",
+              "firePath",
+              "warning"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "trigger": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  "cron": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "hasSecret": {
+                    "type": "boolean"
+                  },
+                  "hasZoomSecretToken": {
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "webhook",
+                      "schedule"
+                    ],
+                    "type": "string"
+                  },
+                  "lastFiredAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                    "type": "string"
+                  },
+                  "outputSchema": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": {},
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "ownerPrincipalId": {
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "anyOf": [
+                      {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "timezone": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "updatedAt": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "agentId",
+                  "prompt",
+                  "cron",
+                  "timezone",
+                  "enabled",
+                  "outputSchema",
+                  "subject",
+                  "ownerPrincipalId",
+                  "hasSecret",
+                  "hasZoomSecretToken",
+                  "lastFiredAt",
+                  "createdAt",
+                  "updatedAt"
+                ],
+                "type": "object"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "trigger"
+            ],
+            "type": "object"
+          }
+        ],
+        "readOnly": true
+      },
+      "CreateUploadUrlRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "contentType": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sizeBytes": {
+            "maximum": 5368709120,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ttlSeconds": {
+            "maximum": 900,
+            "minimum": 60,
+            "type": "integer"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "sizeBytes"
         ],
         "type": "object"
       },
@@ -10540,7 +12084,6 @@
                     "type": "string"
                   },
                   "maxItems": 64,
-                  "minItems": 1,
                   "readOnly": true,
                   "type": "array"
                 },
@@ -10567,7 +12110,8 @@
                 "kind": {
                   "enum": [
                     "mcp-project",
-                    "a2a-agent"
+                    "a2a-agent",
+                    "builder"
                   ],
                   "type": "string"
                 },
@@ -10661,7 +12205,6 @@
                   "type": "string"
                 },
                 "maxItems": 64,
-                "minItems": 1,
                 "readOnly": true,
                 "type": "array"
               },
@@ -10688,7 +12231,8 @@
               "kind": {
                 "enum": [
                   "mcp-project",
-                  "a2a-agent"
+                  "a2a-agent",
+                  "builder"
                 ],
                 "type": "string"
               },
@@ -11217,6 +12761,62 @@
         ],
         "type": "object"
       },
+      "FileSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "hits": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "page": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "score": {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "snippet": {
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "path",
+                "page",
+                "snippet",
+                "score"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "pending": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "hits",
+          "pending"
+        ],
+        "type": "object"
+      },
       "InterruptRunResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11242,6 +12842,18 @@
               "agentId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "agentVersion": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "cost": {
                 "additionalProperties": false,
@@ -11348,6 +12960,54 @@
                   "null"
                 ]
               },
+              "output": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "structured": {},
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "text",
+                      "structured"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendingApproval": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "canonicalCall": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "toolName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "toolName",
+                      "canonicalCall"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "projectId": {
                 "type": [
                   "string",
@@ -11391,6 +13051,7 @@
                 "enum": [
                   "queued",
                   "running",
+                  "awaiting_approval",
                   "completed",
                   "failed",
                   "cancelled"
@@ -11455,6 +13116,7 @@
               "projectId",
               "initiatingUserId",
               "sessionId",
+              "agentVersion",
               "status",
               "createdAt",
               "startedAt",
@@ -11468,6 +13130,8 @@
               "usage",
               "cost",
               "error",
+              "output",
+              "pendingApproval",
               "accountingState",
               "accountingError"
             ],
@@ -12369,6 +14033,20 @@
           }
         ]
       },
+      "MoveFileRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "newPath": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "newPath"
+        ],
+        "type": "object"
+      },
       "MoveFileResponse": {
         "anyOf": [
           {
@@ -12470,6 +14148,14 @@
                     "maximum": 9007199254740991,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "phase": {
+                    "enum": [
+                      "copy",
+                      "catalog",
+                      "delete"
+                    ],
+                    "type": "string"
                   },
                   "remaining": {
                     "items": {
@@ -12854,6 +14540,50 @@
         ],
         "type": "object"
       },
+      "PresignedUrl": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "readOnly": true,
+            "type": "object"
+          },
+          "method": {
+            "enum": [
+              "PUT",
+              "GET"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "url",
+          "method",
+          "headers",
+          "expiresAt",
+          "path"
+        ],
+        "type": "object"
+      },
       "ProjectListResponse": {
         "additionalProperties": false,
         "properties": {
@@ -13157,6 +14887,39 @@
         "readOnly": true,
         "type": "object"
       },
+      "PublishSkillRevisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "contentBase64": {
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                  "type": "string"
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "path",
+                "contentBase64"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "files"
+        ],
+        "type": "object"
+      },
       "RemoveFileResponse": {
         "anyOf": [
           {
@@ -13313,6 +15076,359 @@
         ],
         "type": "object"
       },
+      "RunApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "decision"
+        ],
+        "type": "object"
+      },
+      "RunApprovalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "run": {
+            "additionalProperties": false,
+            "properties": {
+              "accountingError": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "accountingState": {
+                "enum": [
+                  "pending",
+                  "complete",
+                  "partial",
+                  "failed",
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              "agentId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "agentVersion": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "amount": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "currency": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "priceTableVersion": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "amount",
+                  "currency",
+                  "priceTableVersion"
+                ],
+                "type": "object"
+              },
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "durationMs": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "endedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "engine": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "claude-agent-sdk",
+                      "openai-agents",
+                      "pi",
+                      "mastra"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "engineVersion": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "initiatingUserId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "modelConnectionId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "output": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "structured": {},
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "text",
+                      "structured"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendingApproval": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "canonicalCall": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "toolName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "toolName",
+                      "canonicalCall"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "projectId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "anthropic",
+                      "anthropic-compatible",
+                      "openai",
+                      "azure-openai",
+                      "openai-compatible"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sessionId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "startedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "awaiting_approval",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "usage": {
+                "additionalProperties": false,
+                "properties": {
+                  "cacheCreationInputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cacheReadInputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "inputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "toolCalls": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "totalTokens": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "cacheReadInputTokens",
+                  "cacheCreationInputTokens",
+                  "totalTokens",
+                  "toolCalls"
+                ],
+                "type": "object"
+              },
+              "workspaceId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "id",
+              "workspaceId",
+              "agentId",
+              "projectId",
+              "initiatingUserId",
+              "sessionId",
+              "agentVersion",
+              "status",
+              "createdAt",
+              "startedAt",
+              "endedAt",
+              "durationMs",
+              "model",
+              "provider",
+              "modelConnectionId",
+              "engine",
+              "engineVersion",
+              "usage",
+              "cost",
+              "error",
+              "output",
+              "pendingApproval",
+              "accountingState",
+              "accountingError"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "run",
+          "events"
+        ],
+        "type": "object"
+      },
       "RunFailedFrameData": {
         "additionalProperties": false,
         "properties": {
@@ -13325,6 +15441,7 @@
                 "enum": [
                   "queued",
                   "running",
+                  "awaiting_approval",
                   "completed",
                   "failed",
                   "cancelled"
@@ -13464,6 +15581,18 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "agentVersion": {
+                  "anyOf": [
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "cost": {
                   "additionalProperties": false,
                   "properties": {
@@ -13569,6 +15698,54 @@
                     "null"
                   ]
                 },
+                "output": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "structured": {},
+                        "text": {
+                          "type": "string"
+                        }
+                      },
+                      "readOnly": true,
+                      "required": [
+                        "text",
+                        "structured"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "pendingApproval": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "canonicalCall": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "toolName": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "readOnly": true,
+                      "required": [
+                        "toolName",
+                        "canonicalCall"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "projectId": {
                   "type": [
                     "string",
@@ -13612,6 +15789,7 @@
                   "enum": [
                     "queued",
                     "running",
+                    "awaiting_approval",
                     "completed",
                     "failed",
                     "cancelled"
@@ -13676,6 +15854,7 @@
                 "projectId",
                 "initiatingUserId",
                 "sessionId",
+                "agentVersion",
                 "status",
                 "createdAt",
                 "startedAt",
@@ -13689,6 +15868,8 @@
                 "usage",
                 "cost",
                 "error",
+                "output",
+                "pendingApproval",
                 "accountingState",
                 "accountingError"
               ],
@@ -13730,6 +15911,18 @@
               "agentId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "agentVersion": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "cost": {
                 "additionalProperties": false,
@@ -13836,6 +16029,54 @@
                   "null"
                 ]
               },
+              "output": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "structured": {},
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "text",
+                      "structured"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendingApproval": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "canonicalCall": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "toolName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "toolName",
+                      "canonicalCall"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "projectId": {
                 "type": [
                   "string",
@@ -13879,6 +16120,7 @@
                 "enum": [
                   "queued",
                   "running",
+                  "awaiting_approval",
                   "completed",
                   "failed",
                   "cancelled"
@@ -13943,6 +16185,7 @@
               "projectId",
               "initiatingUserId",
               "sessionId",
+              "agentVersion",
               "status",
               "createdAt",
               "startedAt",
@@ -13956,6 +16199,8 @@
               "usage",
               "cost",
               "error",
+              "output",
+              "pendingApproval",
               "accountingState",
               "accountingError"
             ],
@@ -13981,6 +16226,7 @@
             "enum": [
               "queued",
               "running",
+              "awaiting_approval",
               "completed",
               "failed",
               "cancelled"
@@ -14032,6 +16278,7 @@
                   "enum": [
                     "queued",
                     "running",
+                    "awaiting_approval",
                     "completed",
                     "failed",
                     "cancelled"
@@ -14061,6 +16308,23 @@
         "readOnly": true,
         "required": [
           "runs"
+        ],
+        "type": "object"
+      },
+      "RunWarningEventData": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "code"
         ],
         "type": "object"
       },
@@ -14915,6 +17179,18 @@
             ],
             "type": "string"
           },
+          "expectedVersion": {
+            "anyOf": [
+              {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "version": {
             "maximum": 2147483647,
             "minimum": 1,
@@ -14934,6 +17210,17 @@
           "agent": {
             "additionalProperties": false,
             "properties": {
+              "archivedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "builtin": {
+                "enum": [
+                  "builder"
+                ],
+                "type": "string"
+              },
               "createdAt": {
                 "format": "date-time",
                 "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
@@ -14949,6 +17236,39 @@
                     "type": "null"
                   }
                 ]
+              },
+              "createdByAgent": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentId": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "runId": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  }
+                },
+                "readOnly": true,
+                "required": [
+                  "agentId",
+                  "version",
+                  "runId"
+                ],
+                "type": "object"
               },
               "id": {
                 "minLength": 1,
@@ -15521,6 +17841,37 @@
                   "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
                   "type": "string"
                 },
+                "revisions": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "fileCount": {
+                        "maximum": 9007199254740991,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "number": {
+                        "maximum": 2147483647,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "publishedAt": {
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "number",
+                      "fileCount",
+                      "publishedAt"
+                    ],
+                    "type": "object"
+                  },
+                  "readOnly": true,
+                  "type": "array"
+                },
                 "source": {
                   "type": [
                     "string",
@@ -15636,6 +17987,37 @@
                 "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
                 "type": "string"
               },
+              "revisions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "fileCount": {
+                      "maximum": 9007199254740991,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "number": {
+                      "maximum": 2147483647,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "publishedAt": {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                      "type": "string"
+                    }
+                  },
+                  "readOnly": true,
+                  "required": [
+                    "number",
+                    "fileCount",
+                    "publishedAt"
+                  ],
+                  "type": "object"
+                },
+                "readOnly": true,
+                "type": "array"
+              },
               "source": {
                 "type": [
                   "string",
@@ -15671,9 +18053,72 @@
         ],
         "type": "object"
       },
+      "SkillRevisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "additionalProperties": false,
+            "properties": {
+              "fileCount": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "number": {
+                "maximum": 2147483647,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "publishedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "number",
+              "fileCount",
+              "publishedAt"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
       "StartRunRequest": {
         "additionalProperties": false,
         "properties": {
+          "attachments": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "fileId": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "fileId"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array"
+          },
+          "fileScope": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
           "model": {
             "anyOf": [
               {
@@ -15696,6 +18141,13 @@
               }
             ]
           },
+          "outputSchema": {
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            },
+            "type": "object"
+          },
           "prompt": {
             "maxLength": 100000,
             "type": "string"
@@ -15710,6 +18162,11 @@
                 "type": "null"
               }
             ]
+          },
+          "subject": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
           },
           "version": {
             "maximum": 2147483647,
@@ -15752,6 +18209,18 @@
               "agentId": {
                 "minLength": 1,
                 "type": "string"
+              },
+              "agentVersion": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "cost": {
                 "additionalProperties": false,
@@ -15858,6 +18327,54 @@
                   "null"
                 ]
               },
+              "output": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "structured": {},
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "text",
+                      "structured"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "pendingApproval": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "canonicalCall": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "toolName": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "readOnly": true,
+                    "required": [
+                      "toolName",
+                      "canonicalCall"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "projectId": {
                 "type": [
                   "string",
@@ -15901,6 +18418,7 @@
                 "enum": [
                   "queued",
                   "running",
+                  "awaiting_approval",
                   "completed",
                   "failed",
                   "cancelled"
@@ -15965,6 +18483,7 @@
               "projectId",
               "initiatingUserId",
               "sessionId",
+              "agentVersion",
               "status",
               "createdAt",
               "startedAt",
@@ -15978,6 +18497,8 @@
               "usage",
               "cost",
               "error",
+              "output",
+              "pendingApproval",
               "accountingState",
               "accountingError"
             ],
@@ -15990,6 +18511,357 @@
           "events"
         ],
         "type": "object"
+      },
+      "StorageConnectionBrowseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "file",
+                    "folder"
+                  ],
+                  "type": "string"
+                },
+                "path": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "size": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "path",
+                "kind"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
+          "next": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "entries"
+        ],
+        "type": "object"
+      },
+      "StorageConnectionCredential": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "accessKeyId": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "provider": {
+                "const": "s3",
+                "type": "string"
+              },
+              "secretAccessKey": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "sessionToken": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "accessKeyId",
+              "secretAccessKey"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "const": "gcs",
+                "type": "string"
+              },
+              "serviceAccountJson": {
+                "maxLength": 65536,
+                "minLength": 2,
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "serviceAccountJson"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "accessToken": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "provider": {
+                "const": "gcs",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "accessToken"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "accountKey": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              },
+              "provider": {
+                "const": "azblob",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "accountKey"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "const": "azblob",
+                "type": "string"
+              },
+              "sasToken": {
+                "maxLength": 65536,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "sasToken"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "provider": {
+                "const": "file",
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "StorageConnectionListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "connections": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "allowedPrefixes": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "hasCredential": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "name": {
+                  "pattern": "^[a-z][a-z0-9-]{0,62}$",
+                  "type": "string"
+                },
+                "provider": {
+                  "enum": [
+                    "s3",
+                    "gcs",
+                    "azblob",
+                    "file"
+                  ],
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "url": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "writeAllowed": {
+                  "type": "boolean"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "id",
+                "name",
+                "provider",
+                "url",
+                "allowedPrefixes",
+                "writeAllowed",
+                "hasCredential",
+                "createdAt",
+                "updatedAt"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "connections"
+        ],
+        "type": "object"
+      },
+      "StorageConnectionResource": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedPrefixes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "hasCredential": {
+            "type": "boolean"
+          },
+          "id": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "s3",
+              "gcs",
+              "azblob",
+              "file"
+            ],
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "writeAllowed": {
+            "type": "boolean"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "id",
+          "name",
+          "provider",
+          "url",
+          "allowedPrefixes",
+          "writeAllowed",
+          "hasCredential",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object"
+      },
+      "StorageConnectionTestOutcome": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "ok": {
+                "const": true,
+                "type": "boolean"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "ok"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "enum": [
+                  "unreachable",
+                  "forbidden",
+                  "not_found"
+                ],
+                "type": "string"
+              },
+              "ok": {
+                "const": false,
+                "type": "boolean"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "ok",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "StreamResetFrameData": {
         "additionalProperties": false,
@@ -16008,6 +18880,31 @@
         "required": [
           "reason",
           "resumedAfter"
+        ],
+        "type": "object"
+      },
+      "SurfaceAttachmentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "fileId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "size": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "fileId",
+          "path",
+          "size"
         ],
         "type": "object"
       },
@@ -16164,6 +19061,445 @@
         ],
         "type": "object"
       },
+      "TriggerListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "triggers": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "agentId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "cron": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "hasSecret": {
+                  "type": "boolean"
+                },
+                "hasZoomSecretToken": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "webhook",
+                    "schedule"
+                  ],
+                  "type": "string"
+                },
+                "lastFiredAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                  "type": "string"
+                },
+                "outputSchema": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {},
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ownerPrincipalId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "prompt": {
+                  "type": "string"
+                },
+                "subject": {
+                  "anyOf": [
+                    {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "timezone": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "id",
+                "name",
+                "kind",
+                "agentId",
+                "prompt",
+                "cron",
+                "timezone",
+                "enabled",
+                "outputSchema",
+                "subject",
+                "ownerPrincipalId",
+                "hasSecret",
+                "hasZoomSecretToken",
+                "lastFiredAt",
+                "createdAt",
+                "updatedAt"
+              ],
+              "type": "object"
+            },
+            "readOnly": true,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "triggers"
+        ],
+        "type": "object"
+      },
+      "TriggerResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "trigger": {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "cron": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "hasSecret": {
+                "type": "boolean"
+              },
+              "hasZoomSecretToken": {
+                "type": "boolean"
+              },
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "webhook",
+                  "schedule"
+                ],
+                "type": "string"
+              },
+              "lastFiredAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "outputSchema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ownerPrincipalId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "subject": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timezone": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "id",
+              "name",
+              "kind",
+              "agentId",
+              "prompt",
+              "cron",
+              "timezone",
+              "enabled",
+              "outputSchema",
+              "subject",
+              "ownerPrincipalId",
+              "hasSecret",
+              "hasZoomSecretToken",
+              "lastFiredAt",
+              "createdAt",
+              "updatedAt"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "trigger"
+        ],
+        "type": "object"
+      },
+      "TriggerSecretResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "firePath": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "secret": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "trigger": {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "cron": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "hasSecret": {
+                "type": "boolean"
+              },
+              "hasZoomSecretToken": {
+                "type": "boolean"
+              },
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "webhook",
+                  "schedule"
+                ],
+                "type": "string"
+              },
+              "lastFiredAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+                "type": "string"
+              },
+              "outputSchema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": {},
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ownerPrincipalId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "subject": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "timezone": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "updatedAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "id",
+              "name",
+              "kind",
+              "agentId",
+              "prompt",
+              "cron",
+              "timezone",
+              "enabled",
+              "outputSchema",
+              "subject",
+              "ownerPrincipalId",
+              "hasSecret",
+              "hasZoomSecretToken",
+              "lastFiredAt",
+              "createdAt",
+              "updatedAt"
+            ],
+            "type": "object"
+          },
+          "warning": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "trigger",
+          "secret",
+          "firePath",
+          "warning"
+        ],
+        "type": "object"
+      },
       "UpdateEndpointClientRequest": {
         "additionalProperties": false,
         "properties": {
@@ -16196,6 +19532,212 @@
                 "maxItems": 64,
                 "readOnly": true,
                 "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "readOnly": true,
+        "type": "object"
+      },
+      "UpdateStorageConnectionPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedPrefixes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessKeyId": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "s3",
+                    "type": "string"
+                  },
+                  "secretAccessKey": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "sessionToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accessKeyId",
+                  "secretAccessKey"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "gcs",
+                    "type": "string"
+                  },
+                  "serviceAccountJson": {
+                    "maxLength": 65536,
+                    "minLength": 2,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "serviceAccountJson"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "gcs",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accessToken"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accountKey": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "provider": {
+                    "const": "azblob",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "accountKey"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "azblob",
+                    "type": "string"
+                  },
+                  "sasToken": {
+                    "maxLength": 65536,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider",
+                  "sasToken"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "provider": {
+                    "const": "file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "writeAllowed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "UpdateTriggerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+            "type": "string"
+          },
+          "outputSchema": {
+            "anyOf": [
+              {
+                "additionalProperties": {},
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "prompt": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "zoomSecretToken": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "minLength": 1,
+                "type": "string"
               },
               {
                 "type": "null"
@@ -16596,6 +20138,25 @@
           "workspace"
         ],
         "type": "object"
+      },
+      "ZoomUrlValidationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "encryptedToken": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "plainToken": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "plainToken",
+          "encryptedToken"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -16625,7 +20186,7 @@
       "name": "Apache-2.0"
     },
     "title": "Agent Workspace API",
-    "version": "0.6.9"
+    "version": "0.6.11"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -17842,7 +21403,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AgentResourceAssignments"
+                "$ref": "#/components/schemas/AgentResourceAssignmentsInput"
               }
             }
           },
@@ -19410,6 +22971,49 @@
         ]
       }
     },
+    "/api/files/search": {
+      "get": {
+        "operationId": "files.search",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSearchResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Search the text of workspace files (`q`, `limit`): path, page and snippet per hit; `pending` counts files not yet searchable",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/files/{id}": {
       "delete": {
         "operationId": "files.remove",
@@ -19540,7 +23144,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "description": "Not yet described by a contract schema; the route catalogue lists it as `json-undescribed` (packages/contracts/src/routes.ts)."
+                "$ref": "#/components/schemas/MoveFileRequest"
               }
             }
           },
@@ -19576,6 +23180,179 @@
           }
         },
         "summary": "Move or rename a file or folder",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/files/{id}/download-urls": {
+      "post": {
+        "operationId": "files.createDownloadUrl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDownloadUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignedUrl"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Mint a short-lived GET URL on the object store, so the holder downloads without a relay",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/files/{id}/upload-complete": {
+      "post": {
+        "operationId": "files.completeUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Verify the object a signed PUT wrote and mark the file ready",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/files/{id}/upload-urls": {
+      "post": {
+        "operationId": "files.createUploadUrl",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUploadUrlRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignedUrl"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Mint a short-lived PUT URL on the object store, so the holder uploads without a relay",
         "tags": [
           "files"
         ]
@@ -21134,6 +24911,67 @@
         ]
       }
     },
+    "/api/runs/{id}/approval": {
+      "post": {
+        "operationId": "runs.approval",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunApprovalResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Approve or reject the tool call a paused run is waiting on (starts a continuation run; `409` once decided)",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
     "/api/runs/{id}/events": {
       "get": {
         "operationId": "runs.events",
@@ -21161,6 +24999,9 @@
                 "x-agent-workspace-frames": [
                   {
                     "$ref": "#/components/schemas/RunStatusEventData"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RunWarningEventData"
                   },
                   {
                     "$ref": "#/components/schemas/AgentFrame"
@@ -22117,6 +25958,68 @@
         ]
       }
     },
+    "/api/sessions/{engineSessionId}/attachments": {
+      "post": {
+        "operationId": "sessions.attachments.upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engineSessionId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SurfaceAttachmentResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Upload one file (bytes, name in `name`) into a visitor's session, for `runs.start` `attachments`",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
     "/api/sessions/{engineSessionId}/subkeys": {
       "get": {
         "operationId": "sessions.transcript.subkeys",
@@ -22748,6 +26651,476 @@
         ]
       }
     },
+    "/api/skills/{name}/revisions": {
+      "post": {
+        "operationId": "skills.publish",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSkillRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRevisionResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Publish the skill as the next immutable revision an agent can pin",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/storage-connections": {
+      "get": {
+        "operationId": "storage.connections.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionListResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List the storage connections of the workspace",
+        "tags": [
+          "storage-connections"
+        ]
+      },
+      "post": {
+        "operationId": "storage.connections.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStorageConnectionInputInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Connect an S3 bucket or an operator folder, read-only by default",
+        "tags": [
+          "storage-connections"
+        ]
+      }
+    },
+    "/api/storage-connections/{id}": {
+      "delete": {
+        "operationId": "storage.connections.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Delete a storage connection and its credential",
+        "tags": [
+          "storage-connections"
+        ]
+      },
+      "get": {
+        "operationId": "storage.connections.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Read one storage connection",
+        "tags": [
+          "storage-connections"
+        ]
+      },
+      "patch": {
+        "operationId": "storage.connections.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStorageConnectionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Rename a storage connection or change its URL, allowed prefixes or write access",
+        "tags": [
+          "storage-connections"
+        ]
+      }
+    },
+    "/api/storage-connections/{id}/browse": {
+      "get": {
+        "operationId": "storage.connections.browse",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionBrowseResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List a folder of a storage connection inside its allowed prefixes (?prefix=&cursor=)",
+        "tags": [
+          "storage-connections"
+        ]
+      }
+    },
+    "/api/storage-connections/{id}/credential": {
+      "put": {
+        "operationId": "storage.connections.rotate",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StorageConnectionCredential"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Replace the credential of a storage connection (the old value is never returned)",
+        "tags": [
+          "storage-connections"
+        ]
+      }
+    },
+    "/api/storage-connections/{id}/test": {
+      "post": {
+        "operationId": "storage.connections.test",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageConnectionTestOutcome"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Open a storage connection and list one page of an allowed folder",
+        "tags": [
+          "storage-connections"
+        ]
+      }
+    },
     "/api/tokens": {
       "post": {
         "operationId": "tokens.mint",
@@ -22920,6 +27293,399 @@
         "summary": "Read the address and size of a stored code-tool bundle",
         "tags": [
           "tool-bundles"
+        ]
+      }
+    },
+    "/api/triggers": {
+      "get": {
+        "operationId": "triggers.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerListResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List triggers",
+        "tags": [
+          "triggers"
+        ]
+      },
+      "post": {
+        "operationId": "triggers.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateTriggerResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Create a webhook or schedule trigger; a webhook URL secret is returned once",
+        "tags": [
+          "triggers"
+        ]
+      }
+    },
+    "/api/triggers/{id}": {
+      "delete": {
+        "operationId": "triggers.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Delete a trigger and its delivery records",
+        "tags": [
+          "triggers"
+        ]
+      },
+      "get": {
+        "operationId": "triggers.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Read one trigger",
+        "tags": [
+          "triggers"
+        ]
+      },
+      "patch": {
+        "operationId": "triggers.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTriggerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Change a trigger's name, prompt template, enabled flag or Zoom secret token",
+        "tags": [
+          "triggers"
+        ]
+      }
+    },
+    "/api/triggers/{id}/fire/{secret}": {
+      "post": {
+        "operationId": "triggers.fire",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoomUrlValidationResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Fire a webhook trigger: the body is the {{body}} of its prompt and a run starts as the trigger owner in a new session (202). The URL secret is the authentication and travels in the path, so it can appear in access logs of a proxy or CDN: rotate it if one may have leaked. Every miss answers one 404 trigger_not_found. A Microsoft Graph validationToken query parameter is echoed as text/plain, and Zoom endpoint.url_validation is answered with the token and its HMAC (200); neither starts a run.",
+        "tags": [
+          "triggers"
+        ]
+      }
+    },
+    "/api/triggers/{id}/secret": {
+      "post": {
+        "operationId": "triggers.rotateSecret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerSecretResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Rotate a webhook trigger's URL secret; the new secret is returned once",
+        "tags": [
+          "triggers"
         ]
       }
     },
@@ -23221,6 +27987,64 @@
         ]
       }
     },
+    "/mcp/builder": {
+      "post": {
+        "operationId": "mcp.builderRpc",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/A2aJsonRpcRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/A2aJsonRpcResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "MCP JSON-RPC to the Builder's read tools (initialize, ping, tools/list, tools/call) for an outside client",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/mcp/projects/{name}": {
       "post": {
         "operationId": "mcp.projectRpc",
@@ -23361,6 +28185,9 @@
       "name": "skills"
     },
     {
+      "name": "storage-connections"
+    },
+    {
       "name": "team"
     },
     {
@@ -23368,6 +28195,9 @@
     },
     {
       "name": "tool-bundles"
+    },
+    {
+      "name": "triggers"
     },
     {
       "name": "workspaces"

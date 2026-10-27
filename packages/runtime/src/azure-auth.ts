@@ -1,5 +1,4 @@
 /** Authentication helpers for Azure Container Apps dynamic sessions. */
-import { DefaultAzureCredential } from '@azure/identity';
 
 /** The only OAuth scope accepted by the dynamic sessions data plane. */
 export const ACA_SESSIONS_TOKEN_SCOPE = 'https://dynamicsessions.io/.default';
@@ -30,13 +29,19 @@ export function createAcaSessionsAccessTokenProvider(
   };
 }
 
-let sharedProvider: AcaSessionsAccessTokenProvider | undefined;
+let sharedProvider: Promise<AcaSessionsAccessTokenProvider> | undefined;
 
 /**
  * Use Azure's standard credential chain (managed identity in Container Apps; developer identity
- * locally) to obtain a data-plane token. The credential caches tokens internally.
+ * locally) to obtain a data-plane token. The credential caches tokens internally. `@azure/identity`
+ * is loaded on this first call, not when the module is (F-22): a process that never selects the
+ * aca-sessions driver never loads it.
  */
 export async function fetchAcaSessionsAccessToken(): Promise<string> {
-  sharedProvider ??= createAcaSessionsAccessTokenProvider(new DefaultAzureCredential());
-  return await sharedProvider();
+  sharedProvider ??= import('@azure/identity').then(({ DefaultAzureCredential }) =>
+    createAcaSessionsAccessTokenProvider(new DefaultAzureCredential()),
+  );
+  return await (
+    await sharedProvider
+  )();
 }

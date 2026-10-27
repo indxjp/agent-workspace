@@ -11,6 +11,7 @@
  * 503 `oidc_not_configured` above already answers that question. It is the *provider* failing to
  * answer, which is a 502.
  */
+import { log } from '../../../../server/telemetry/logger';
 import { NextResponse } from 'next/server';
 
 import {
@@ -40,9 +41,7 @@ export async function GET(request: Request): Promise<Response> {
       safeNextPath(url.searchParams.get('next')),
     );
   } catch (error) {
-    console.error(
-      `[auth] OIDC discovery failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log.error('[auth] OIDC discovery failed', { error });
     return NextResponse.json({ error: 'oidc_provider_unreachable' }, { status: 502 });
   }
   const response = NextResponse.redirect(login.url, 303);

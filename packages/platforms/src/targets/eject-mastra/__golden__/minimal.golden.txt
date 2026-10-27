@@ -37,8 +37,8 @@ The platform report that came with this project gives every field a verdict and 
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mastra/core": "1.76.0",
-    "zod": "4.6.6"
+    "@mastra/core": "1.79.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "26.6.5",

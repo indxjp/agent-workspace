@@ -43,6 +43,7 @@ export function cloudflareSandboxRuntimeCapabilities(): RuntimeCapabilities {
     gpu: false,
     managedByProvider: true,
     typicalStartMs: null,
+    fileTransfer: 'push-archive',
   };
 }
 

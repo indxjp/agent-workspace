@@ -19,7 +19,7 @@ repository) followed by the route's workspace check answers exactly what the in-
 `findRunForPrincipal` does: `findRunWorkspace`'s one unscoped query decides nothing. -/
 @[aw_spec (tier := T4) (doc := "docs/adr/W2-DB-02-the-run-port-is-not-scope-bound.md#decision")
   (ts := "packages/core/src/db/repositories/runs.ts#findRunWorkspace")
-  (ts := "apps/web/server/runs/store.ts#createRepositoryRunStore")]
+  (ts := "apps/web/server/runs/repository-store.ts#createRepositoryRunStore")]
 theorem database_run_lookup_refines_memory_lookup (st : State) (ws runId : String)
     (hd : IdsDistinct (st .runs)) :
     ((dbStoreGet st runId).bind fun r => if colIs r "workspace_id" ws then some r else none) =
@@ -174,7 +174,7 @@ theorem object_store_current_diverges_at_slash_workspace_id :
       scopedObjectOpCurrent "a" (.list "") = .backend ["workspaces/a"] ∧
       scopedObjectOpTarget "a/b" (.put "c") = .invalidWorkspaceId ∧
       scopedObjectOpTarget "a" (.put "b/c") = .backend ["workspaces/a/b/c"] := by
-  decide
+  decide +kernel
 
 /-! ## Witnesses -/
 
@@ -184,15 +184,15 @@ private def twoRuns : State
   | _ => []
 
 example : IdsDistinct (twoRuns .runs) ∧ dbStoreGet twoRuns "r2" = some ⟨[("id", "r2"), ("workspace_id", "w2")]⟩ := by
-  decide
+  decide +kernel
 
 example : (∀ r ∈ twoRuns .workspaces, (r.get "slug").isSome = true) ∧
-    inMemoryForId (knownOf twoRuns) "w1" = some ⟨"w1"⟩ := by decide
+    inMemoryForId (knownOf twoRuns) "w1" = some ⟨"w1"⟩ := by decide +kernel
 
-example : Uuid.isCanonical "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" = true := by decide
+example : Uuid.isCanonical "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" = true := by decide +kernel
 
 example : (∀ r ∈ twoRuns .workspaces, (r.get "id").isSome = true ∧ (r.get "slug").isSome = true) ∧
     (knownOf twoRuns).Pairwise (fun a b => a.slug ≠ b.slug) ∧
-    inMemoryForSlug (knownOf twoRuns) "one" = some ⟨"w1"⟩ := by decide
+    inMemoryForSlug (knownOf twoRuns) "one" = some ⟨"w1"⟩ := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.AuthzTenancy

@@ -1,7 +1,7 @@
 import type { ShareRecord } from '@agent-workspace/core/db';
 import { describe, expect, it } from 'vitest';
 
-import { publishedSnapshot, toShareResource } from '../../../app/api/shares/route';
+import { publishedSnapshot, toShareResource, visibleShares } from './resource';
 import { parsePublishShareRequest } from './input';
 
 function share(visibility: ShareRecord['visibility']): ShareRecord {
@@ -55,23 +55,53 @@ describe('published share content', () => {
   const materials = { values: ['sk-live-secret'], referenceIds: [] };
   const base = { subjectId: 's-1', subjectLabel: 'S', visibility: 'public' } as const;
 
-  it('never stores a caller-authored raw snapshot, which would skip secret masking', () => {
+  const runId = '11111111-1111-4111-8111-111111111111';
+  const sessionRuns = () =>
+    Promise.resolve([
+      {
+        id: runId,
+        sessionId: base.subjectId,
+        createdAt: new Date('2026-10-19T10:00:00Z'),
+        prompt: 'my key is sk-live-secret',
+        answer: 'ok',
+      },
+    ]);
+
+  it('never stores a caller-authored raw snapshot, which would skip secret masking', async () => {
     for (const subjectType of ['session', 'agent', 'project', 'skill'] as const) {
       const body = parsePublishShareRequest({
         ...base,
         subjectType,
         snapshot: { messages: ['sk-live-secret'] },
       });
-      expect(publishedSnapshot(body, materials)).toBeUndefined();
+      expect(await publishedSnapshot(body, materials, sessionRuns)).toBeUndefined();
     }
   });
 
-  it('masks a session transcript with the workspace secrets', () => {
+  it('copies the chosen runs of the session and masks them with the workspace secrets', async () => {
     const body = parsePublishShareRequest({
       ...base,
       subjectType: 'session',
-      transcript: [{ role: 'user', content: 'my key is sk-live-secret' }],
+      transcript: { runIds: [runId] },
     });
-    expect(JSON.stringify(publishedSnapshot(body, materials))).not.toContain('sk-live-secret');
+    const snapshot = await publishedSnapshot(body, materials, sessionRuns);
+    expect(snapshot).toMatchObject({ kind: 'session-transcript', turns: [{ answer: 'ok' }] });
+    expect(JSON.stringify(snapshot)).not.toContain('sk-live-secret');
+  });
+});
+
+describe('share list visibility', () => {
+  const mine = { id: 'mine', publisherPrincipalId: 'me' };
+  const theirs = { id: 'theirs', publisherPrincipalId: 'someone-else' };
+
+  it.each(['owner', 'admin'] as const)('shows a %s every share in the workspace', (role) => {
+    expect(visibleShares([mine, theirs], { role, ownerPrincipalId: 'me' })).toStrictEqual([
+      mine,
+      theirs,
+    ]);
+  });
+
+  it.each(['builder', 'viewer'] as const)('shows a %s only their own shares', (role) => {
+    expect(visibleShares([mine, theirs], { role, ownerPrincipalId: 'me' })).toStrictEqual([mine]);
   });
 });

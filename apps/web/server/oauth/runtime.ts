@@ -1,10 +1,10 @@
 /**
- * The seam between the OAuth endpoints (ADR-0134 part 3) and the database layer, in the shape of
- * `endpoint-clients/runtime.ts`: a `globalThis` registry the composition root fills.
+ * The seam between the OAuth endpoints (ADR-0134 part 3) and the database layer. The composition
+ * root builds it once and installs it as `ApplicationContext.oauth`; with no context installed the
+ * OAuth endpoints answer their `server_error` 503.
  */
-import type { OAuthClientRecord, OAuthTokenRepository } from '@agent-workspace/core/db';
-
 import type { Principal } from '../rbac/principal';
+import type { OAuthClientRecord, OAuthTokenRows } from './store';
 
 /** An endpoint client as the OAuth endpoints see it, with the resource its tokens are valid for. */
 export interface OAuthClient extends OAuthClientRecord {
@@ -12,6 +12,8 @@ export interface OAuthClient extends OAuthClientRecord {
   readonly agentIds: readonly string[];
   /** The protected resource's path, or `null` when it has none (an `a2a-agent` whose agent is gone). */
   readonly resourcePath: string | null;
+  /** The label of the member who registered the client, shown on the consent page. */
+  readonly creatorLabel?: string;
 }
 
 export interface OAuthAuditEvent {
@@ -28,24 +30,7 @@ export interface OAuthRuntime {
   canRunAll(principal: Principal, agentIds: readonly string[]): Promise<boolean>;
   /** The names of `agentIds` in that order for the consent page, or `null` if any no longer exists. */
   agentNames(workspaceId: string, agentIds: readonly string[]): Promise<readonly string[] | null>;
-  tokens(workspaceId: string): Promise<OAuthTokenRepository>;
+  tokens(workspaceId: string): Promise<OAuthTokenRows>;
   /** Audit as `actorPrincipalId`; the trail has no place for a secret and none is passed. */
   audit(workspaceId: string, actorPrincipalId: string, event: OAuthAuditEvent): Promise<void>;
-}
-
-interface Registry {
-  __agentWorkspaceOAuthRuntime__?: OAuthRuntime;
-}
-const registry = globalThis as typeof globalThis & Registry;
-
-export function configureOAuthRuntime(runtime: OAuthRuntime): void {
-  registry.__agentWorkspaceOAuthRuntime__ = runtime;
-}
-
-export function clearOAuthRuntime(): void {
-  delete registry.__agentWorkspaceOAuthRuntime__;
-}
-
-export function currentOAuthRuntime(): OAuthRuntime | null {
-  return registry.__agentWorkspaceOAuthRuntime__ ?? null;
 }

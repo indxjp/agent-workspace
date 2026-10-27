@@ -1,0 +1,1 @@
+ALTER TABLE "skill_revisions" ADD COLUMN "pending" boolean DEFAULT false NOT NULL;

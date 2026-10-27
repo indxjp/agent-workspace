@@ -35,6 +35,7 @@
  * `Access-Control-Allow-Origin` for it; an earlier refusal never does, so a page of another origin
  * cannot even read why.
  */
+import { log } from '../../telemetry/logger';
 import { z } from 'zod';
 
 import {
@@ -54,7 +55,8 @@ import {
   type SurfaceSessionResponse,
 } from '@indx-workspace/contracts/surfaces';
 
-import type { ApiResult } from '../../rbac/http';
+import { applicationContext } from '../../application-context';
+import { formatIssues, type ApiResult } from '../../http/result';
 import {
   frameAncestorsFor,
   mayOpenSession,
@@ -63,7 +65,6 @@ import {
 } from './conditions';
 import { admitSurfaceSession } from './limits';
 import {
-  currentSurfaceSessionsRuntime,
   surfaceModeOf,
   type ResolvedSurface,
   type ServedSurface,
@@ -71,6 +72,12 @@ import {
   type SurfaceModelRefusal,
   type SurfaceSessionsRuntime,
 } from './runtime';
+
+/** The installed bootstrap, or `null` while it is not `serving`. */
+function surfaceSessions(): SurfaceSessionsRuntime | null {
+  const surfaces = applicationContext()?.surfaces;
+  return surfaces?.kind === 'serving' ? surfaces.runtime : null;
+}
 
 /** The response headers every answer of the bootstrap carries, besides `cache-control`. */
 export const SURFACE_RESPONSE_HEADERS: Readonly<Record<string, string>> = {
@@ -169,9 +176,7 @@ async function readSessionRequest(request: Request): Promise<SessionRequestReadi
   if (!parsed.success) {
     return {
       ok: false,
-      details: parsed.error.issues.map(
-        (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
-      ),
+      details: formatIssues(parsed.error.issues),
     };
   }
   return { ok: true, request: parsed.data };
@@ -217,7 +222,7 @@ export async function createSurfaceSession(
   }
   if (!isSurfaceName(name)) return surfaceNotFound();
 
-  const runtime = currentSurfaceSessionsRuntime();
+  const runtime = surfaceSessions();
   if (runtime === null) {
     return surfaceProblem(
       'surface_sessions_not_configured',
@@ -324,12 +329,12 @@ function servesMode(mode: SurfaceMode, branch: 'loopback' | 'allowed-origin'): b
 
 /** The surface served under `name`, or `null`; a lookup that fails is logged and is `null`. */
 async function resolvedSurface(name: string): Promise<ResolvedSurface | null> {
-  const runtime = currentSurfaceSessionsRuntime();
+  const runtime = surfaceSessions();
   if (!isSurfaceName(name) || runtime === null) return null;
   try {
     return await runtime.resolve(name, 'public');
   } catch (error: unknown) {
-    console.error(`[surfaces] the surface "${name}" could not be resolved at the edge.`, error);
+    log.error(`[surfaces] the surface "${name}" could not be resolved at the edge.`, { error });
     return null;
   }
 }
@@ -371,13 +376,13 @@ async function promotionPendingOrigin(
   headers: SurfaceConditionHeaders,
   env: SurfaceConditionEnvironment,
 ): Promise<string | null> {
-  const runtime = currentSurfaceSessionsRuntime();
+  const runtime = surfaceSessions();
   if (headers.get('origin') === null || !isSurfaceName(name) || runtime === null) return null;
   let draft: ResolvedSurface | null;
   try {
     draft = await runtime.resolve(name, 'try');
   } catch (error: unknown) {
-    console.error(`[surfaces] the draft of surface "${name}" could not be resolved.`, error);
+    log.error(`[surfaces] the draft of surface "${name}" could not be resolved.`, { error });
     return null;
   }
   if (draft === null || !draft.promoted) return null;
@@ -412,13 +417,13 @@ async function visitorRunCors(
   headers: SurfaceConditionHeaders,
   env: SurfaceConditionEnvironment = process.env,
 ): Promise<string | null> {
-  const runtime = currentSurfaceSessionsRuntime();
+  const runtime = surfaceSessions();
   if (headers.get('origin') === null || runtime === null) return null;
   let surfaces: readonly ServedSurface[];
   try {
     surfaces = await runtime.servedSurfaces();
   } catch (error: unknown) {
-    console.error('[surfaces] the served surfaces could not be read at the edge.', error);
+    log.error('[surfaces] the served surfaces could not be read at the edge.', { error });
     return null;
   }
   for (const surface of surfaces) {
@@ -527,7 +532,7 @@ async function servedSurface(
   readonly page: SurfacePage;
 } | null> {
   if (!isSurfaceName(name)) return null;
-  const runtime = currentSurfaceSessionsRuntime();
+  const runtime = surfaceSessions();
   if (runtime === null) return null;
   const resolved = await runtime.resolve(name, mode);
   if (resolved === null) return null;

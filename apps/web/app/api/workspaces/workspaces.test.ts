@@ -6,18 +6,16 @@
  * `packages/core/src/db/repositories/workspaces.test.ts`, against real PostgreSQL; this file
  * proves the wiring above it.
  */
+import { clearApplicationContext } from '../../../server/application-context';
+import { installTestDomains } from '../../../server/application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../../../server/rbac/testing';
-import {
-  clearWorkspacesRuntime,
-  configureWorkspacesRuntime,
-} from '../../../server/workspaces/runtime';
 import { createMemoryWorkspaceRepository } from '../../../server/workspaces/testing';
 import { GET, POST } from './route';
 
 afterEach(() => {
-  clearWorkspacesRuntime();
+  clearApplicationContext();
 });
 
 describe('GET /api/workspaces', () => {
@@ -27,14 +25,16 @@ describe('GET /api/workspaces', () => {
     ]);
     const userId = (await harness.directory.findUserByEmail('a@example.com'))?.id;
     if (userId === undefined) throw new Error('seed failed');
-    configureWorkspacesRuntime({
-      repository: createMemoryWorkspaceRepository({
-        workspaces: [
-          { id: 'ws-a', slug: 'ws-a', name: 'Alpha', members: [{ userId, role: 'owner' }] },
-          { id: 'ws-b', slug: 'ws-b', name: 'Beta', members: [{ userId, role: 'viewer' }] },
-          { id: 'ws-c', slug: 'ws-c', name: 'Gamma', members: [] },
-        ],
-      }),
+    installTestDomains({
+      workspaces: {
+        repository: createMemoryWorkspaceRepository({
+          workspaces: [
+            { id: 'ws-a', slug: 'ws-a', name: 'Alpha', members: [{ userId, role: 'owner' }] },
+            { id: 'ws-b', slug: 'ws-b', name: 'Beta', members: [{ userId, role: 'viewer' }] },
+            { id: 'ws-c', slug: 'ws-c', name: 'Gamma', members: [] },
+          ],
+        }),
+      },
     });
 
     const response = await harness.call(GET, {
@@ -51,16 +51,18 @@ describe('GET /api/workspaces', () => {
 
   it('answers 401 with no session', async () => {
     const harness = installRbacHarness([]);
-    configureWorkspacesRuntime({ repository: createMemoryWorkspaceRepository() });
+    installTestDomains({ workspaces: { repository: createMemoryWorkspaceRepository() } });
     const response = await harness.call(GET, { method: 'GET', path: '/api/workspaces', as: null });
     expect(response.status).toBe(401);
     harness.teardown();
   });
 
-  it('answers 503 when the workspaces runtime is not configured', async () => {
+  it('answers 503 when no application context is installed', async () => {
+    // The workspaces domain and the RBAC gate live in one context, so the gate answers first.
     const harness = installRbacHarness([
       { email: 'a@example.com', name: 'A', workspaceId: TEST_WORKSPACE_ID, role: 'viewer' },
     ]);
+    clearApplicationContext();
     const response = await harness.call(GET, {
       method: 'GET',
       path: '/api/workspaces',
@@ -77,7 +79,7 @@ describe('POST /api/workspaces', () => {
       const harness = installRbacHarness([
         { email: 'creator@example.com', name: 'Creator', workspaceId: TEST_WORKSPACE_ID, role },
       ]);
-      configureWorkspacesRuntime({ repository: createMemoryWorkspaceRepository() });
+      installTestDomains({ workspaces: { repository: createMemoryWorkspaceRepository() } });
       const response = await harness.call(POST, {
         method: 'POST',
         path: '/api/workspaces',
@@ -89,7 +91,7 @@ describe('POST /api/workspaces', () => {
       expect(body.workspace.role).toBe('owner');
       expect(body.workspace.slug).toBe(`new-co-${role}`);
       harness.teardown();
-      clearWorkspacesRuntime();
+      clearApplicationContext();
     }
   });
 
@@ -102,7 +104,7 @@ describe('POST /api/workspaces', () => {
         role: 'owner',
       },
     ]);
-    configureWorkspacesRuntime({ repository: createMemoryWorkspaceRepository() });
+    installTestDomains({ workspaces: { repository: createMemoryWorkspaceRepository() } });
     const blankName = await harness.call(POST, {
       method: 'POST',
       path: '/api/workspaces',
@@ -129,7 +131,7 @@ describe('POST /api/workspaces', () => {
         role: 'owner',
       },
     ]);
-    configureWorkspacesRuntime({ repository: createMemoryWorkspaceRepository() });
+    installTestDomains({ workspaces: { repository: createMemoryWorkspaceRepository() } });
     const response = await harness.call(POST, {
       method: 'POST',
       path: '/api/workspaces',
@@ -151,7 +153,7 @@ describe('POST /api/workspaces', () => {
         role: 'owner',
       },
     ]);
-    configureWorkspacesRuntime({ repository: createMemoryWorkspaceRepository() });
+    installTestDomains({ workspaces: { repository: createMemoryWorkspaceRepository() } });
     const response = await harness.call(POST, {
       method: 'POST',
       path: '/api/workspaces',
@@ -173,7 +175,7 @@ describe('POST /api/workspaces', () => {
         role: 'owner',
       },
     ]);
-    configureWorkspacesRuntime({ repository: createMemoryWorkspaceRepository() });
+    installTestDomains({ workspaces: { repository: createMemoryWorkspaceRepository() } });
     const first = await harness.call(POST, {
       method: 'POST',
       path: '/api/workspaces',
@@ -219,7 +221,7 @@ describe('POST /api/workspaces', () => {
           }
         },
       });
-      configureWorkspacesRuntime({ repository });
+      installTestDomains({ workspaces: { repository } });
 
       let threw: unknown = null;
       try {

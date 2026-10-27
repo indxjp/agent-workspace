@@ -15,44 +15,19 @@
  * `tests/sdk-surface.test.ts` checks every key name below against the installed `sdk.d.ts` as
  * text, including its optionality, so an upstream rename breaks a test rather than a run.
  */
-import type { SdkSettingSource } from '@agent-workspace/core';
+import type { SdkSettingSource } from '@agent-workspace/run-protocol';
+import type { McpServerRecord, McpToolPolicy } from '@indx-workspace/contracts';
 import type { AgentToolPermissionMode } from '@indx-workspace/contracts/agents';
 
 /**
- * `mcpServers` entries, transcribed from R-01 §9. The `sdk` arm of the SDK's union is
- * deliberately absent: it carries a live `McpServer` **instance**, so it is not a thing a
- * database row can hold.
- *
- * Optional members are spelled `?: T | undefined` rather than `?: T`. Under this repository's
- * `exactOptionalPropertyTypes`, those are different types, and the second one cannot hold what
- * `McpServerConfig.parse()` returns — Zod's output marks an absent optional as `T | undefined`.
- * Writing `?: T` here would force a cast at the only place the two meet, which is precisely
- * where a cast should not be.
+ * `mcpServers` entries (R-01 §9), inferred from the one schema in `@indx-workspace/contracts`. The
+ * `sdk` arm of the SDK's union is deliberately absent: it carries a live `McpServer` **instance**,
+ * so it is not a thing a database row can hold.
  */
-export type CompiledMcpServerConfig =
-  | {
-      readonly type?: 'stdio' | undefined;
-      readonly command: string;
-      readonly args?: readonly string[] | undefined;
-      readonly env?: Readonly<Record<string, string>> | undefined;
-      readonly timeout?: number | undefined;
-      readonly alwaysLoad?: boolean | undefined;
-    }
-  | {
-      readonly type: 'http' | 'sse';
-      readonly url: string;
-      readonly headers?: Readonly<Record<string, string>> | undefined;
-      readonly tools?: readonly CompiledMcpToolPolicy[] | undefined;
-      readonly timeout?: number | undefined;
-      readonly alwaysLoad?: boolean | undefined;
-    };
+export type CompiledMcpServerConfig = McpServerRecord;
 
-/** `McpServerToolPolicy`, transcribed from R-01 §9. */
-export type CompiledMcpToolPolicy = {
-  readonly name: string;
-  readonly permission_policy?: 'always_allow' | 'always_ask' | 'always_deny' | undefined;
-  readonly org_max_permission?: 'allow' | 'ask' | 'blocked' | undefined;
-};
+/** `McpServerToolPolicy` (R-01 §9), inferred from the same schema. */
+export type CompiledMcpToolPolicy = McpToolPolicy;
 
 /** One `agents` entry (ADR-0133 D14): a subagent the model delegates to through the `Agent` tool. */
 export type CompiledSdkAgent = {
@@ -92,6 +67,33 @@ export type CompiledSdkOptions = {
   readonly resume?: string;
   readonly forkSession?: boolean;
   readonly allowDangerouslySkipPermissions?: boolean;
+  /** Present only when the run asked for structured output (ADR-0143). */
+  readonly outputFormat?: {
+    readonly type: 'json_schema';
+    readonly schema: Readonly<Record<string, unknown>>;
+  };
+};
+
+/**
+ * What `canUseTool` decides with (ADR-0145). Carried next to {@link CompiledSdkOptions}, never in it:
+ * `compiledSdkOptionKeys` must stay exactly the SDK's option keys.
+ */
+export type ClaudeApprovalGate = {
+  /** The `requireApproval` rules: a call to a tool one of them names needs a person's approval. */
+  readonly requireApproval: readonly string[];
+  /** The `autoApprove` rules moved out of `allowedTools` because they could approve a gated tool. */
+  readonly deferred: readonly string[];
+  /** The canonical texts of the calls already approved. */
+  readonly approvedToolCalls: readonly string[];
+};
+
+/**
+ * {@link CompiledSdkOptions} plus the approval gate (present only when `requireApproval` is non-empty)
+ * and `handoff` (present only when the agent offers `handoff_to_person`).
+ */
+export type CompiledClaudeRun = CompiledSdkOptions & {
+  readonly approval?: ClaudeApprovalGate;
+  readonly handoff?: true;
 };
 
 /**
@@ -121,6 +123,7 @@ export const compiledSdkOptionKeys = [
   'resume',
   'forkSession',
   'allowDangerouslySkipPermissions',
+  'outputFormat',
 ] as const satisfies readonly (keyof CompiledSdkOptions)[];
 export type CompiledSdkOptionKey = (typeof compiledSdkOptionKeys)[number];
 

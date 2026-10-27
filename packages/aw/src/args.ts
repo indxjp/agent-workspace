@@ -27,6 +27,8 @@ const VALUE_FLAGS = [
   // queries
   'limit',
   'cursor',
+  // `aw audit list --action <action>`
+  'action',
   'path',
   'status',
   'archived',
@@ -34,6 +36,10 @@ const VALUE_FLAGS = [
   'after',
   'project-key',
   'subpath',
+  // `aw runs outputs <id> --download <dir>`
+  'download',
+  // `aw runs start <agent> --output-schema <path>`: a JSON Schema file for the run's structured output
+  'output-schema',
   // issue #236 (SDK-04, S-1): `aw tokens mint --scope run|session --id <id> [--ttl <seconds>]`
   'scope',
   'id',
@@ -71,15 +77,25 @@ const VALUE_FLAGS = [
   // issue #697: `aw chat --agent-version <n> | --env local|production` (`--version` is aw's own)
   'agent-version',
   'env',
+  // issue #1850: `aw agents new --from-prompt <text>` starts a Builder chat
+  'from-prompt',
   // issue #800: `aw tool call <name> --input <json>`
   'input',
   // issue #949: `aw endpoint-clients create --kind mcp-project|a2a-agent`, `keys create --expires-at <iso>`
   'kind',
   'expires-at',
+  // ADR-0156: `aw triggers create|update --subject <s>` names the caller its runs act for
+  'subject',
   // ADR-0133: aw platforms export|import|publish
   'platform',
   'out',
   'from',
+  // issue #1692: `aw storage connections create --storage-url <url> --credential-file <path|->`;
+  // `--url` is already the control plane's, so the bucket's URL has its own name
+  'storage-url',
+  'credential-file',
+  // issue #1850: `aw agents export <id> --format json|ts`
+  'format',
 ] as const;
 
 const SWITCH_FLAGS = [
@@ -92,6 +108,9 @@ const SWITCH_FLAGS = [
   'help',
   'version',
   'recursive',
+  'direct',
+  // issue #1664: `aw files download <path> --link [--ttl <seconds>]` prints a signed link instead
+  'link',
   'wait',
   'follow',
   'interrupt-on-cancel',
@@ -117,6 +136,10 @@ const SWITCH_FLAGS = [
   'strict',
   // ADR-0133 D11: `aw platforms publish --experimental` unlocks executors the vendor marks preview
   'experimental',
+  // issue #1692: `aw storage connections create --write-allowed` lets grants include write
+  'write-allowed',
+  // issue #1850: `aw agents export <id> --format ts --force` replaces files it would write
+  'force',
 ] as const;
 
 /**
@@ -129,6 +152,10 @@ const REPEATABLE_VALUE_FLAGS = [
   'skill',
   'connector',
   'grant-file',
+  // issue #1539: `aw runs start <agent> --file-scope <path> [--file-scope …]`
+  'file-scope',
+  // the storage design, §07 (US-STO-06): `aw runs start <agent> --attach <file> [--attach …]`
+  'attach',
   // issue #698: `aw eval add "<input>" --expect-contains <text>`, once per needle
   'expect-contains',
   // issue #949: `aw endpoint-clients create --agent <name> [--agent …] [--tool <name> …]`; the
@@ -137,6 +164,8 @@ const REPEATABLE_VALUE_FLAGS = [
   'tool',
   // issue #971: `aw endpoint-clients update <id> --redirect-uri <uri> [--redirect-uri …]`
   'redirect-uri',
+  // issue #1692: `aw storage connections create --allow <prefix> [--allow …]`
+  'allow',
 ] as const;
 
 export type ValueFlag = (typeof VALUE_FLAGS)[number];

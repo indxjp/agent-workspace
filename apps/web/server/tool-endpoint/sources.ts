@@ -3,11 +3,6 @@
  * client's agents publish at `production`, and how a call reaches their sandbox. Every read is
  * scoped to the caller's workspace; the composition root supplies the stores.
  */
-import type {
-  AgentVersionRepositoryProvider,
-  RuntimeProfileRepositoryProvider,
-  WorkspaceScope,
-} from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
 import {
   GATEWAY_TOOL_SANDBOX_ENDPOINT_ROUTE,
@@ -24,12 +19,13 @@ import type { ProviderCredentialSpec } from '../compose/runtime-provider-credent
 import { buildToolSandboxRequest } from '../compose/tool-sandbox';
 import type { GatewayIssuerSettingsResult } from '../gateway/issuer';
 import type { ToolEndpointEnvironment } from './env';
+import type { EndpointAgentVersions, EndpointRuntimeProfiles, WorkspaceScope } from './store';
 
 export interface ToolEndpointSourceDependencies {
   readonly scopes: { forWorkspaceId(workspaceId: string): Promise<WorkspaceScope | null> };
-  readonly agentVersions: AgentVersionRepositoryProvider;
+  readonly agentVersions: EndpointAgentVersions;
   /** Where the workspace's default runtime profile is read; it picks the sandbox's credential. */
-  readonly runtimeProfiles: RuntimeProfileRepositoryProvider;
+  readonly runtimeProfiles: EndpointRuntimeProfiles;
   readonly providerCredential: (
     workspaceId: string,
     spec: ProviderCredentialSpec,

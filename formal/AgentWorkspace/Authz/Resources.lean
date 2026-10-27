@@ -27,14 +27,14 @@ instance decidableForallWireEnum {α : Type} [WireEnum α] (p : α → Prop) [De
   decidable_of_iff (∀ a ∈ (WireEnum.all : List α), p a)
     ⟨fun h a => h a (WireEnum.complete a), fun h a _ => h a⟩
 
-/-- `RESOURCES`: the 29 top-level resources, in the `as const` order of `resources.ts`. -/
+/-- `RESOURCES`: the 31 top-level resources, in the `as const` order of `resources.ts`. -/
 @[aw_spec (ts := "apps/web/server/rbac/resources.ts#RESOURCES")
   (doc := "docs/sdk/04-api-specification.md#33-roles")]
 inductive Resource where
   | agents | apiKeys | auditEvents | connectors | endpointClients | engines | files | invitations
   | me | memberships | metrics | modelConnections | models | platforms | projects | runs
   | runtimeConnections | runtimeProfiles | runtimes | secrets | sessions | shares | sharingPolicies | skills | setup
-  | toolBundles | tokens | users | workspaces
+  | storageConnections | toolBundles | tokens | triggers | users | workspaces
   deriving DecidableEq, Repr, Inhabited
 
 /-- The path segment of a resource. -/
@@ -49,15 +49,16 @@ def Resource.toWire : Resource → String
   | .runs => "runs" | .runtimeConnections => "runtime-connections"
   | .runtimeProfiles => "runtime-profiles" | .runtimes => "runtimes" | .secrets => "secrets"
   | .sessions => "sessions" | .shares => "shares" | .sharingPolicies => "sharing-policies"
-  | .skills => "skills" | .setup => "setup" | .toolBundles => "tool-bundles" | .tokens => "tokens"
-  | .users => "users" | .workspaces => "workspaces"
+  | .skills => "skills" | .setup => "setup" | .storageConnections => "storage-connections"
+  | .toolBundles => "tool-bundles" | .tokens => "tokens"
+  | .triggers => "triggers" | .users => "users" | .workspaces => "workspaces"
 
 /-- Every resource, in `RESOURCES` order. -/
 def Resource.all : List Resource :=
   [.agents, .apiKeys, .auditEvents, .connectors, .endpointClients, .engines, .files, .invitations,
     .me, .memberships, .metrics, .modelConnections, .models, .platforms, .projects, .runs,
     .runtimeConnections, .runtimeProfiles, .runtimes, .secrets, .sessions, .shares, .sharingPolicies, .skills, .setup,
-    .toolBundles, .tokens, .users, .workspaces]
+    .storageConnections, .toolBundles, .tokens, .triggers, .users, .workspaces]
 
 instance : WireEnum Resource where
   all := Resource.all
@@ -110,14 +111,25 @@ def declaredSubResources : List SubDeclaration :=
     ⟨"ENG-06-SESSION-STATE-305", .sessions, "state-entries"⟩,
     ⟨"ENG-06-SESSION-STATE-305", .sessions, "state-streams"⟩,
     ⟨"ENG-06-SESSION-STATE-305", .sessions, "state-blobs"⟩,
+    ⟨"P5-4-RUN-APPROVAL-1301", .runs, "approval"⟩,
+    ⟨"P7-2-SURFACE-ATTACHMENTS-1308", .sessions, "attachments"⟩,
+    ⟨"P8-4-FILE-SEARCH-1314", .sessions, "file-search"⟩,
     ⟨"PT-T1A-ENDPOINT-CLIENTS", .endpointClients, "keys"⟩,
     ⟨"PT-T1C-OAUTH", .endpointClients, "secret"⟩,
+    ⟨"PT-TRIGGERS-1293", .triggers, "secret"⟩,
     ⟨"PT-U5-PLATFORM-EXPORTS-968", .agents, "platform-exports"⟩,
     ⟨"PT-U5-PLATFORM-EXPORTS-968", .agents, "platform-archives"⟩,
     ⟨"SDK-02-AGENT-POLICY-234", .agents, "policy"⟩,
     ⟨"SDK-03-RUN-CONTROL-235", .runs, "interrupt"⟩,
     ⟨"SDK-03-RUN-CONTROL-235", .runs, "revoke-tokens"⟩,
     ⟨"SDK-05-AUTH-237", .agents, "grants"⟩,
+    ⟨"SDK-19-PRESIGNED-FILES-251", .files, "upload-urls"⟩,
+    ⟨"SDK-19-PRESIGNED-FILES-251", .files, "upload-complete"⟩,
+    ⟨"SDK-19-PRESIGNED-FILES-251", .files, "download-urls"⟩,
+    ⟨"SDK-19-SKILL-REVISIONS-251", .skills, "revisions"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", .storageConnections, "credential"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", .storageConnections, "test"⟩,
+    ⟨"STO-503-STORAGE-CONNECTIONS-1690", .storageConnections, "browse"⟩,
     ⟨"W1-CP-05", .agents, "resources"⟩,
     ⟨"W2-CP-05", .connectors, "test-connection"⟩,
     ⟨"W2-CP-07", .sessions, "transcript"⟩,

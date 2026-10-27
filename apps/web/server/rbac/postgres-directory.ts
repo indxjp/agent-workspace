@@ -1,6 +1,7 @@
 import type {
   DatabaseDirectoryRoot,
   DirectoryApiKeyRecord,
+  DirectoryEndpointScope,
   DirectoryInvitationRecord,
   DirectoryMembershipRecord,
   DirectoryUserRecord,
@@ -16,6 +17,7 @@ import type {
   UserSummary,
   WorkspaceDirectory,
 } from './directory';
+import type { TokenScope } from './token-scope';
 import { hashInvitationToken, INVITATION_TTL_MS, mintInvitationToken } from '../invitations/token';
 
 const iso = (value: Date | null): string | null => (value === null ? null : value.toISOString());
@@ -74,6 +76,21 @@ function storedApiKey(row: DirectoryApiKeyRecord): StoredApiKey {
 }
 
 /** Adapt the scope-safe PostgreSQL repository to the RBAC route contract. */
+/** The token scope an endpoint-bound API key carries; a binding of an unknown kind fails closed. */
+function tokenScopeOf(scope: DirectoryEndpointScope | null): TokenScope | null {
+  if (scope === null) return null;
+  switch (scope.kind) {
+    case 'a2a-agent':
+      return { kind: 'a2a-agent', id: scope.agentId };
+    case 'mcp-project':
+      return { kind: 'mcp-project', id: scope.clientId };
+    default: {
+      const unreachable: never = scope;
+      throw new Error(`unhandled endpoint scope ${JSON.stringify(unreachable)}`);
+    }
+  }
+}
+
 export function createPostgresDirectory(
   repository: DatabaseDirectoryRoot,
   now: () => Date = () => new Date(),
@@ -228,12 +245,7 @@ export function createPostgresDirectory(
             role: row.role,
             label: row.name,
             actsForPrincipalId: row.actsForPrincipalId,
-            scope:
-              row.endpointScope === null
-                ? null
-                : row.endpointScope.kind === 'a2a-agent'
-                  ? { kind: 'a2a-agent', id: row.endpointScope.agentId }
-                  : { kind: 'mcp-project', id: row.endpointScope.clientId },
+            scope: tokenScopeOf(row.endpointScope),
           };
     },
     resolveRole: (email, workspaceId) => repository.resolveRole(email, workspaceId),

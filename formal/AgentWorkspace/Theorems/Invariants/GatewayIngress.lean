@@ -205,7 +205,7 @@ theorem a_repeated_function_call_is_counted_once :
         .terminal 1 1 0 ["fc_1"]]).counters.toolCalls = 1 ∧
     (extractResponses
       [.functionCallDone "fc_1", .functionCallDone "fc_2",
-        .terminal 1 1 0 ["fc_1", "fc_2"]]).counters.toolCalls = 2 := by decide
+        .terminal 1 1 0 ["fc_1", "fc_2"]]).counters.toolCalls = 2 := by decide +kernel
 
 /-! ## OpenAI Chat Completions -/
 
@@ -285,7 +285,7 @@ theorem a_fragmented_tool_call_is_counted_once :
     (extractChat [.toolCallDelta 0 0, .toolCallDelta 0 0, .toolCallDelta 0 0,
       .finish, .usage 1 1 0]).counters.toolCalls = 1 ∧
     (extractChat [.toolCallDelta 0 0, .toolCallDelta 0 1, .toolCallDelta 1 0,
-      .finish, .usage 1 1 0]).counters.toolCalls = 3 := by decide
+      .finish, .usage 1 1 0]).counters.toolCalls = 3 := by decide +kernel
 
 /-- `prompt_tokens` includes the cached prefix here too, and is split the same way. -/
 @[aw_spec (tier := T2)
@@ -318,7 +318,7 @@ exactly what the frames said. -/
 theorem responses_settlement_has_a_measured_witness :
     settle .openaiResponses (extractResponses
       [.created, .functionCallDone "fc_1", .terminal 100 40 30 ["fc_1"]]) =
-      .recorded ⟨70, 40, 30, 0, 1⟩ true := by decide
+      .recorded ⟨70, 40, 30, 0, 1⟩ true := by decide +kernel
 
 /-- And a witness for the unmetered-but-finished case: a compatible upstream that never reported
 usage records measured-nothing and settles `unavailable`. -/
@@ -330,6 +330,6 @@ theorem chat_unmetered_settlement_has_a_witness :
       settledAccounting
           (settle .openaiChatCompletions (extractChat [.toolCallDelta 0 0, .finish])) =
         .unavailable := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.GatewayIngress

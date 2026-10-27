@@ -37,11 +37,20 @@
  */
 import { and, asc, eq, type SQL } from 'drizzle-orm';
 
-import type { Database } from '../client.js';
+import type { AgentCreatedByAgent, BuiltinAgentKey } from '@indx-workspace/contracts/agents';
+
+import {
+  createDatabaseAgentResourceRepositoryProvider,
+  type AgentResourceAssignments,
+  type AgentResourceAssignmentsInput,
+  type ReplaceAgentResourcesOutcome,
+} from './agent-resources.js';
+import type { Executor } from './agent-versions-shared.js';
 import {
   agents,
   parseAgentPermissions,
   parseAgentPolicy,
+  parseBuiltinKey,
   type AgentPermissions as StoredAgentPermissions,
   type AgentStoredPolicy as StoredAgentPolicy,
 } from '../schema/agents.js';
@@ -70,6 +79,12 @@ export interface AgentRecord {
   readonly createdBy: string | null;
   /** Exact human or API-key owner. */
   readonly ownerPrincipalId: string;
+  /** Which built-in agent this is; absent on every ordinary agent. */
+  readonly builtin?: BuiltinAgentKey;
+  /** Lineage of an agent made by an agent; absent on a person-made agent (issue #1851). */
+  readonly createdByAgent?: AgentCreatedByAgent;
+  /** When the agent was archived; absent while active, as `projects.archived_at` (issue #1851). */
+  readonly archivedAt?: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -90,6 +105,8 @@ export interface CreateAgentInput {
   readonly permissions: AgentPermissions;
   readonly ownerPrincipalId: string;
   readonly createdBy?: string | null;
+  /** Lineage of an agent made by an agent; omitted for a person-made agent (issue #1851). */
+  readonly createdByAgent?: AgentCreatedByAgent & { readonly agentId: string };
 }
 
 /** Everything an update may change. An absent key is "leave it alone". */
@@ -108,6 +125,19 @@ export type CreateAgentOutcome =
   | { readonly kind: 'name-conflict'; readonly name: string }
   | { readonly kind: 'unknown-model-connection'; readonly modelConnectionId: string }
   | { readonly kind: 'unknown-runtime-profile'; readonly runtimeProfileId: string };
+
+/**
+ * What creating an agent together with its resource assignments can produce (W2-3): the create's
+ * refusals, then the assignment's. Any refusal rolls the whole write back, so it leaves no row.
+ */
+export type CreateAgentWithAssignmentsOutcome =
+  | {
+      readonly kind: 'created';
+      readonly agent: AgentRecord;
+      readonly assignments: AgentResourceAssignments;
+    }
+  | Exclude<CreateAgentOutcome, { readonly kind: 'created' }>
+  | Exclude<ReplaceAgentResourcesOutcome, { readonly kind: 'updated' | 'not-found' }>;
 
 /** What updating an agent can produce. `not-found` covers "another workspace's id", by design. */
 export type UpdateAgentOutcome =
@@ -137,6 +167,11 @@ export interface AgentRepository {
   /** One agent in this workspace, or `null` if this workspace has no agent with that id. */
   get(id: string): Promise<AgentRecord | null>;
   create(input: CreateAgentInput): Promise<CreateAgentOutcome>;
+  /** The row and its assignments in one transaction: a refused assignment leaves no row. */
+  createWithAssignments(
+    input: CreateAgentInput,
+    assignments: AgentResourceAssignmentsInput,
+  ): Promise<CreateAgentWithAssignmentsOutcome>;
   update(id: string, patch: UpdateAgentPatch): Promise<UpdateAgentOutcome>;
   delete(id: string): Promise<DeleteAgentOutcome>;
   /** `null` writes back to "compiled" — a `PUT` may not partially replace a stored policy. */
@@ -218,6 +253,11 @@ const AGENT_COLUMNS = {
   policy: agents.policy,
   createdBy: agents.createdBy,
   ownerPrincipalId: agents.ownerPrincipalId,
+  builtinKey: agents.builtinKey,
+  createdByAgentId: agents.createdByAgentId,
+  createdByAgentVersion: agents.createdByAgentVersion,
+  createdByRunId: agents.createdByRunId,
+  archivedAt: agents.archivedAt,
   createdAt: agents.createdAt,
   updatedAt: agents.updatedAt,
 } as const;
@@ -235,9 +275,15 @@ function toRecord(row: {
   policy: unknown;
   createdBy: string | null;
   ownerPrincipalId: string;
+  builtinKey: string | null;
+  createdByAgentId: string | null;
+  createdByAgentVersion: number | null;
+  createdByRunId: string | null;
+  archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): AgentRecord {
+  const builtin = parseBuiltinKey(row.builtinKey);
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -250,9 +296,28 @@ function toRecord(row: {
     policy: parseAgentPolicy(row.policy),
     createdBy: row.createdBy,
     ownerPrincipalId: row.ownerPrincipalId,
+    ...(builtin === undefined ? {} : { builtin }),
+    // The lineage CHECK makes the version and the run both present or both absent.
+    ...(row.createdByAgentVersion === null || row.createdByRunId === null
+      ? {}
+      : {
+          createdByAgent: {
+            agentId: row.createdByAgentId,
+            version: row.createdByAgentVersion,
+            runId: row.createdByRunId,
+          },
+        }),
+    ...(row.archivedAt === null ? {} : { archivedAt: row.archivedAt }),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+/** Private: thrown inside a transaction to roll it back, and caught by the method that threw it. */
+class Rollback extends Error {
+  constructor(readonly outcome: Exclude<CreateAgentWithAssignmentsOutcome, { kind: 'created' }>) {
+    super(`agent create rolled back: ${outcome.kind}`);
+  }
 }
 
 /**
@@ -261,7 +326,7 @@ function toRecord(row: {
  * One `db` handle, one provider, any number of scopes. The handle is a pool, so the repositories
  * this hands out are cheap: `forScope` allocates a closure and issues no query.
  */
-export function createDatabaseAgentRepositoryProvider(db: Database): AgentRepositoryProvider {
+export function createDatabaseAgentRepositoryProvider(db: Executor): AgentRepositoryProvider {
   return {
     forScope(scope: WorkspaceScope): AgentRepository {
       // The run-time half of the scope gate, before any predicate is built. The compiler admits
@@ -320,6 +385,9 @@ export function createDatabaseAgentRepositoryProvider(db: Database): AgentReposi
                 permissions: { ...input.permissions },
                 ownerPrincipalId: input.ownerPrincipalId,
                 createdBy: input.createdBy ?? null,
+                createdByAgentId: input.createdByAgent?.agentId ?? null,
+                createdByAgentVersion: input.createdByAgent?.version ?? null,
+                createdByRunId: input.createdByAgent?.runId ?? null,
               })
               .returning(AGENT_COLUMNS);
             const row = rows[0];
@@ -342,6 +410,35 @@ export function createDatabaseAgentRepositoryProvider(db: Database): AgentReposi
                 runtimeProfileId: input.runtimeProfileId ?? '',
               };
             }
+            throw error;
+          }
+        },
+
+        async createWithAssignments(input, assignments) {
+          try {
+            return await db.transaction(async (tx) => {
+              // The same create and replace as the single writes, over the transaction, so the
+              // rules (constraint mapping, the #133 file ceiling) are stated once.
+              const created = await createDatabaseAgentRepositoryProvider(tx)
+                .forScope(scope)
+                .create(input);
+              if (created.kind !== 'created') throw new Rollback(created);
+              const assigned = await createDatabaseAgentResourceRepositoryProvider(tx)
+                .forScope(scope)
+                .replace(created.agent.id, assignments);
+              if (assigned.kind === 'not-found') {
+                throw new Error(`agent ${created.agent.id} vanished inside its own create`);
+              }
+              if (assigned.kind !== 'updated') throw new Rollback(assigned);
+              // `updated_at` is `now()`, the transaction's start, so the created row is still current.
+              return {
+                kind: 'created' as const,
+                agent: created.agent,
+                assignments: assigned.assignments,
+              };
+            });
+          } catch (error) {
+            if (error instanceof Rollback) return error.outcome;
             throw error;
           }
         },

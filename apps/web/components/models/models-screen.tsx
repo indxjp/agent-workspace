@@ -3,12 +3,10 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import {
-  connectionDetail,
-  connectionStatus,
-  readModelConnections,
-  type ModelConnectionView,
-} from './model';
+import { browserClient } from '../../lib/browser-client';
+
+import { loadConnections, testConnection } from './connections-model';
+import { connectionDetail, connectionStatus, type ModelConnectionView } from './model';
 import { ProviderDetailPanel } from './provider-detail';
 
 const CARD = 'overflow-hidden rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
@@ -66,20 +64,8 @@ export function ModelsList({
                 className={BUTTON}
                 onClick={() => {
                   setTestMessage(`Testing ${model.name}…`);
-                  void fetch(`/api/model-connections/${model.id}/test`, {
-                    method: 'POST',
-                    headers: { accept: 'application/json' },
-                  })
-                    .then(async (response) => {
-                      const body = (await response.json()) as { message?: unknown };
-                      if (!response.ok)
-                        throw new Error(`Connection test returned ${response.status}.`);
-                      setTestMessage(
-                        typeof body.message === 'string'
-                          ? body.message
-                          : `${model.name} is connected.`,
-                      );
-                    })
+                  void testConnection(browserClient(), model.id)
+                    .then(setTestMessage)
                     .catch((error: unknown) =>
                       setTestMessage(error instanceof Error ? error.message : String(error)),
                     );
@@ -130,13 +116,9 @@ export function ModelsScreen() {
     // Issue #130: `GET /api/models` was repurposed by #129 for discovered *models*
     // (`{connectionId, providerModelId, displayName, capabilities}`), not connections — this
     // screen manages connections, and reads `GET /api/model-connections` for exactly that reason.
-    void fetch('/api/model-connections', { headers: { accept: 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Model connections request returned ${response.status}.`);
-        return response.json() as Promise<unknown>;
-      })
-      .then((body) => {
-        if (active) setModels(readModelConnections(body));
+    void loadConnections(browserClient())
+      .then((connections) => {
+        if (active) setModels(connections);
       })
       .catch((error: unknown) => {
         if (active) setProblem(error instanceof Error ? error.message : String(error));

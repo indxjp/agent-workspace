@@ -94,15 +94,13 @@ describe('invitationCapabilityForViewer', () => {
     },
   );
 
-  it('lets an Admin invite Admin and Viewer, and neither Owner nor Builder', () => {
-    // `conferral.ts`'s own header states these two cells: Builder holds its own `projects` and
-    // runs its own `connectors`, which §21's Admin clause does not grant, so an Admin inviting a
-    // Builder would hand out a capability the Admin has not got. `POST /api/invitations` answers
-    // that `403` (`readConferredRole`), so a role `<select>` built from a privilege ladder would
-    // offer it.
+  it('lets an Admin invite Admin, Builder and Viewer, and not Owner', () => {
+    // ADR-0152 made roles monotonic, so Admin now holds everything Builder holds and may invite
+    // one. Owner holds `secrets`, which Admin does not, so `POST /api/invitations` still answers
+    // an Admin's Owner invitation `403` (`readConferredRole`).
     expect(
       invitationCapabilityForViewer({ userId: 'user-admin', role: 'admin' }).invitableRoles,
-    ).toEqual(['admin', 'viewer']);
+    ).toEqual(['admin', 'builder', 'viewer']);
   });
 
   it('lets an Owner invite every role §21 names', () => {
@@ -115,12 +113,12 @@ describe('invitationCapabilityForViewer', () => {
     const capability = invitationCapabilityForViewer({ userId: `user-${role}`, role });
     expect(capability).toMatchObject(ALL_FOUR_DENIED);
     // `invitableRoles` is **not** empty for these two, and that is `conferral.ts`'s answer rather
-    // than an oversight: grant domination is reflexive, so `conferRole('builder','builder')` is
-    // `allow` and a Builder's set is `['builder']`. The two checks are independent — §21 decides
+    // than an oversight: grant domination is reflexive and roles are monotonic (ADR-0152), so a
+    // Builder's set is `['builder', 'viewer']` and a Viewer's `['viewer']`. The two checks are independent — §21 decides
     // whether this caller may create an invitation at all, `conferRole` decides which role a
     // permitted caller may name — so the create form is gated on `canCreateInvitation` and never on
     // this set being empty. `invitations-table.test.tsx` asserts that gate over the markup.
-    expect(capability.invitableRoles).toEqual([role]);
+    expect(capability.invitableRoles).toEqual(ROLES.slice(ROLES.indexOf(role)));
     expect(capability.canCreateInvitation).toBe(false);
   });
 

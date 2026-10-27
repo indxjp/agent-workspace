@@ -24,9 +24,31 @@ async list(query?: ListFilesQuery, options?: RequestOptions): Promise<readonly F
 
 **Route:** `GET /api/files`
 
+## search
+
+Lexical search over the text of the workspace's files, best passage first. Text is extracted
+on demand: while `pending` is above zero the answer is partial and repeating the call
+continues the work.
+
+```ts
+async search(query: string, options?: SearchFilesOptions): Promise<FileSearchResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `query` | `string` | Yes |
+| `options` | `SearchFilesOptions` | No |
+
+**Returns:** `Promise<FileSearchResponse>`
+
+**Route:** `GET /api/files/search`
+
 ## upload
 
-Write (or overwrite) one file. The bytes are sent as-is; the path travels as a header.
+Write (or overwrite) one file. Up to `MAX_UPLOAD_BYTES` the bytes are sent as-is through the
+control plane, the path travelling as a header. A larger body, or `options.direct`, goes to the
+object store on a signed link and is then completed (the storage design, §03 and §04); the
+file is listed only once that finishes.
 
 ```ts
 async upload(path: string, body: UploadBody, options?: UploadFileOptions): Promise<FileResource>
@@ -41,6 +63,24 @@ async upload(path: string, body: UploadBody, options?: UploadFileOptions): Promi
 **Returns:** `Promise<FileResource>`
 
 **Route:** `POST /api/files`
+
+## completeUpload
+
+Finish a signed-link upload: the server checks the object the `PUT` wrote and marks the file
+ready. `409 upload_not_verified` means no object, or a smaller one, is there yet.
+
+```ts
+async completeUpload(path: string, options?: RequestOptions): Promise<FileResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<FileResource>`
+
+**Route:** `POST :path/upload-complete`
 
 ## createFolder
 
@@ -74,8 +114,11 @@ async download(path: string, options?: RequestOptions): Promise<FileDownload>
 
 ## move
 
-Rename or move. A file answers `{ file }`; a folder answers a subtree outcome, and a
-`partial` one is a declared state to retry, not a failure.
+Rename or move. A file answers `{ file }`; a folder answers a subtree outcome. A `partial`
+outcome is not thrown: the move stopped part-way (`phase` says where, `remaining` lists the
+originals still in place), so check `status` and repeat the same call until it answers `ok`.
+After `phase: 'delete'` the move itself is done and a retry answers `409`: delete the leftover
+originals in `remaining` instead. `aw files move` exits 1 on it and prints `remaining` to stderr.
 
 ```ts
 async move(path: string, newPath: string, options?: RequestOptions): Promise<MoveFileResponse>
@@ -92,7 +135,9 @@ async move(path: string, newPath: string, options?: RequestOptions): Promise<Mov
 ## remove
 
 Delete a file or folder. `null` is the `204` — a file, or nothing there to begin with; a
-folder (even one created empty) answers what was deleted and, if `partial`, what remains.
+folder (even one created empty) answers what was deleted and, if `partial`, what remains. A
+`partial` outcome is not thrown: check `status` and repeat the same call to delete
+`remaining`. `aw files remove` exits 1 on it and prints `remaining` to stderr.
 
 ```ts
 async remove(path: string, options?: RemoveFileOptions): Promise<RemoveFileResponse>
@@ -104,6 +149,50 @@ async remove(path: string, options?: RemoveFileOptions): Promise<RemoveFileRespo
 | `options` | `RemoveFileOptions` | No |
 
 **Returns:** `Promise<RemoveFileResponse>`
+
+## createUploadUrl
+
+A short-lived `PUT` URL on the object store, so the bytes never pass through the control plane.
+`sizeBytes` is signed into the URL; send the returned `headers` with the `PUT`. A store that
+cannot sign answers `501 direct_transfer_unsupported`: use `FilesClient.upload`.
+
+```ts
+async createUploadUrl(path: string, input: UploadUrlInput, options?: RequestOptions): Promise<PresignedUrl>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `input` | `UploadUrlInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<PresignedUrl>`
+
+**Route:** `POST :path/upload-urls`
+
+## createDownloadUrl
+
+A short-lived `GET` URL that serves the file as the inert attachment `download` returns.
+
+```ts
+async createDownloadUrl(path: string, input?: DownloadUrlInput, options?: RequestOptions): Promise<PresignedUrl>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `path` | `string` | Yes |
+| `input` | `DownloadUrlInput` | No |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<PresignedUrl>`
+
+**Route:** `POST :path/download-urls`
+
+## DownloadUrlInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `ttlSeconds` | `undefined \| number` | No |  |
 
 ## FileDownload
 
@@ -127,12 +216,19 @@ bytes must branch on `kind`.
 | `recursive` | `undefined \| false \| true` | No | Required to delete a folder that has contents (`409 folder_not_empty` otherwise). |
 | `signal` | `undefined \| AbortSignal` | No |  |
 
+## SearchFilesOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | `undefined \| number` | No | 1 to 50; the server's default (10) applies when omitted. |
+| `signal` | `undefined \| AbortSignal` | No |  |
+
 ## UploadBody
 
 What `FilesClient.upload` accepts as the file's content.
 
-- `Uint8Array<ArrayBufferLike>`
 - `Blob`
+- `Uint8Array<ArrayBufferLike>`
 - `ReadableStream<Uint8Array<ArrayBufferLike>>`
 
 ## UploadFileOptions
@@ -140,4 +236,13 @@ What `FilesClient.upload` accepts as the file's content.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `contentType` | `undefined \| string` | No | Stored with the file and reported back as `contentType`. Omit to store `null` (a `Blob` with a `type` of its own still declares it). Downloads never echo it as active content: the server serves only a closed table of inert types, everything else as `application/octet-stream`. |
+| `direct` | `undefined \| false \| true` | No | Always go through a signed link on the object store (mint, `PUT`, complete) instead of the control plane, even for a small body, and fail with `501 direct_transfer_unsupported` where the store cannot sign. Without it a body larger than `MAX_UPLOAD_BYTES` uses a signed link too, and falls back to the relay when the store cannot sign. |
 | `signal` | `undefined \| AbortSignal` | No |  |
+
+## UploadUrlInput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `sizeBytes` | `number` | Yes | The exact byte length of the upload. S3 and GCS sign it, so they refuse a body of any other length; an Azure Blob SAS cannot carry a length, so there it is not enforced. |
+| `contentType` | `undefined \| string` | No | Recorded with the object and required again as the `content-type` header of the `PUT`. |
+| `ttlSeconds` | `undefined \| number` | No | 60 to 900; the server's default (300) applies when omitted. |

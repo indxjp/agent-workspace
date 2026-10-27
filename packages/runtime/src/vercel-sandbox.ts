@@ -42,6 +42,7 @@ export function vercelSandboxRuntimeCapabilities(
     gpu: false,
     managedByProvider: true,
     typicalStartMs: null,
+    fileTransfer: 'push-archive',
   };
 }
 

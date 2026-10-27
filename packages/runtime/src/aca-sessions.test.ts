@@ -453,29 +453,6 @@ describe('aca-sessions runtime driver', () => {
       }),
     ).rejects.toThrow(/pool is EgressEnabled/u);
   });
-
-  it('forwards workspace archive operations through the same identifier route', async () => {
-    const { client, requests } = fakeClient();
-    const driver = createAcaSessionsDriver<string, string>({
-      engine: 'claude-agent-sdk',
-      poolManagementEndpoint: 'https://pool.example',
-      networkStatus: 'EgressDisabled',
-      identifierSecret: 's'.repeat(32),
-      client,
-      startAgent: () => echoConnection('unused'),
-    });
-    const handle = await driver.create(CONFIG);
-    await driver.putFiles?.(handle, new ReadableStream());
-    await driver.getFiles?.(handle, ['reports/today.md', 'output']);
-
-    expect(requests.map(({ identifier, path }) => ({ identifier, path }))).toEqual([
-      { identifier: handle.externalId, path: '/files' },
-      {
-        identifier: handle.externalId,
-        path: '/files?path=reports%2Ftoday.md&path=output',
-      },
-    ]);
-  });
 });
 
 describe('aca-sessions runtime: one engine per pool (ENG-07, ADR-0073 D6)', () => {

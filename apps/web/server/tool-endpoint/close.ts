@@ -1,4 +1,5 @@
-import { getToolEndpoint } from './env';
+import { applicationContext } from '../application-context';
+import { log } from '../telemetry/logger';
 
 /**
  * Closes a project endpoint client's tool sandbox once its access ends (client, key or OAuth grant
@@ -13,10 +14,12 @@ export async function closeEndpointToolSandbox(
   clientId: string,
 ): Promise<void> {
   try {
-    await getToolEndpoint()?.closeSandbox(workspaceId, clientId);
+    const endpoint = applicationContext()?.toolEndpoint;
+    if (endpoint?.kind === 'serving')
+      await endpoint.environment.closeSandbox(workspaceId, clientId);
   } catch (error) {
-    console.error(
-      `[tool-endpoint] the tool sandbox did not close on revoke (${error instanceof Error ? error.name : 'unknown'})`,
-    );
+    log.error('[tool-endpoint] the tool sandbox did not close on revoke', {
+      errorName: error instanceof Error ? error.name : 'unknown',
+    });
   }
 }

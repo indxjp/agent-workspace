@@ -209,7 +209,7 @@ runs where id = …` through the same call is the whole mechanism. The gap is de
 15. **The page-size ceiling is a number this port states twice, held together by a text-reading
     drift test, and enforced by the conformance suite rather than by one implementation (issue
     #166).** `MAX_RUN_LIST_LIMIT = 200` lives in `packages/core/src/db/repositories/runs.ts`, where
-    the repository refuses a larger page by name, and in `apps/web/server/runs/api.ts`, which
+    the repository refuses a larger page by name, and in `apps/web/server/runs/list-query.ts`, which
     answers `400 invalid_limit` before any store is reached. `InMemoryRunStore` had neither, so
     `listRuns(workspace, { limit: 201 })` resolved on one implementation of this port and was
     refused by the other — invisible over HTTP, reachable by a direct port caller. It now restates

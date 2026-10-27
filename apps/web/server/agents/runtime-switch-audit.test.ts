@@ -20,17 +20,13 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PATCH } from '../../app/api/agents/[id]/route';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../agent-versions/runtime';
+import { applicationContext, clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { createRepositoryAgentVersionStoreProvider } from '../agent-versions/store';
 import { createRepositoryRuntimeProfileStoreProvider } from '../runtimes/store';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 import { createRepositoryAgentResourceStoreProvider } from './resource-store';
-import { clearAgentsRuntime, configureAgentsRuntime } from './runtime';
 import { createRuntimeSwitchAudit } from './runtime-switch-audit';
 import { createRepositoryAgentStoreProvider } from './store';
 
@@ -104,59 +100,63 @@ describe.skipIf(!hasDatabase)('runtime switch audit through PATCH /api/agents/:i
       repositories: createDatabaseRuntimeProfileRepositoryProvider(isolated.db),
       scopes,
     });
-    configureAgentsRuntime({
-      agents,
-      agentResources: createRepositoryAgentResourceStoreProvider({
-        repositories: createDatabaseAgentResourceRepositoryProvider(isolated.db),
-        scopes,
-      }),
-      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: workspace.id }),
-      runtimeSwitchAudit: createRuntimeSwitchAudit({
-        profiles,
-        identifyActor: () =>
-          Promise.resolve({
-            principalId: apiKeyPrincipalId,
-            userId: null,
-            userLabel: 'Runtime switch audit key',
-            workspaceId: workspace.id,
-          }),
-        recordAuditEvent: async (event) => {
-          await isolated.db.insert(auditEvents).values(event);
-        },
-      }),
+    installTestDomains({
+      agents: {
+        agents,
+        agentResources: createRepositoryAgentResourceStoreProvider({
+          repositories: createDatabaseAgentResourceRepositoryProvider(isolated.db),
+          scopes,
+        }),
+        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: workspace.id }),
+        runtimeSwitchAudit: createRuntimeSwitchAudit({
+          profiles,
+          identifyActor: () =>
+            Promise.resolve({
+              principalId: apiKeyPrincipalId,
+              userId: null,
+              userLabel: 'Runtime switch audit key',
+              workspaceId: workspace.id,
+            }),
+          recordAuditEvent: async (event) => {
+            await isolated.db.insert(auditEvents).values(event);
+          },
+        }),
+      },
     });
     // Issue #616: the PATCH saves a version, so the version store is part of the runtime.
-    configureAgentVersionsRuntime({
-      versions: createRepositoryAgentVersionStoreProvider({
-        repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
-        evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
-        scopes,
-      }),
+    installTestDomains({
+      agentVersions: {
+        versions: createRepositoryAgentVersionStoreProvider({
+          repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
+          evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
+          scopes,
+        }),
+      },
     });
-    configureRbacRuntime({
-      directory: createMemoryDirectory(),
-      identify: () =>
-        Promise.resolve(
-          Principal.fromApiKey({
-            principalId: apiKeyPrincipalId,
-            apiKeyId,
-            workspaceId: workspace.id,
-            role: 'owner',
-            label: 'Runtime switch audit key',
-          }),
-        ),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory(),
+        identify: () =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: apiKeyPrincipalId,
+              apiKeyId,
+              workspaceId: workspace.id,
+              role: 'owner',
+              label: 'Runtime switch audit key',
+            }),
+          ),
+      },
     });
   }, 180_000);
 
   afterAll(async () => {
-    clearAgentsRuntime();
-    clearAgentVersionsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
     await isolated.close();
   });
 
   it('writes exactly one §36 row naming both driver ids', async () => {
-    const runtime = (await import('./runtime')).currentAgentsRuntime();
+    const runtime = applicationContext()?.agents ?? null;
     if (runtime === null) throw new Error('test runtime was not configured');
     const created = await runtime.agents.forWorkspace(workspace.id).create(
       {

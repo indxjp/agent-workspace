@@ -141,7 +141,7 @@ example :
         [.toolCall "c1" "read" .read .null, .toolCall "c1" "read" .read .null,
          .toolResult "c1" .completed "x" false,
          .malformed "a tool result for a call no tool execution announced"] := by
-  decide
+  decide +kernel
 
 /-! ## The turn limit -/
 
@@ -224,7 +224,7 @@ example :
     turnRun (some 2) 0 [true, true, true, false] = (2, .maxTurns) ∧
       turnRun (some 2) 0 [false] = (1, .endTurn) ∧
       (step [] (.completed .maxTurns 2 none)).2 = [.result .maxTurns (some 2) none] := by
-  decide
+  decide +kernel
 
 /-! ## The session -/
 
@@ -317,6 +317,6 @@ example :
       persist [header, a, b, c] [header, a, b, c, d] = [header, a, b, c, d] ∧
       readStream "s1" [header, ⟨"message", "z", some "nowhere"⟩] = none ∧
       readStream "s2" [header, a] = none := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.Pi

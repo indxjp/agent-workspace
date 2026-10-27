@@ -4,6 +4,7 @@ import {
   AUDIT_ACTIONS,
   AUDIT_LIST_DEFAULT_LIMIT,
   AUDIT_LIST_MAX_LIMIT,
+  AgentCreatedAuditDetailsSchema,
   AuditEventListResponseSchema,
   AuditEventSchema,
   RunTelemetryListResponseSchema,
@@ -98,7 +99,48 @@ describe('AuditEventSchema', () => {
   it('lists every action once, in the order the column restates them', () => {
     expect(new Set(AUDIT_ACTIONS).size).toBe(AUDIT_ACTIONS.length);
     expect(AUDIT_ACTIONS[0]).toBe('user-created');
-    expect(AUDIT_ACTIONS.at(-1)).toBe('oauth-grant-revoked');
+    expect(AUDIT_ACTIONS.at(-1)).toBe('storage-grant-changed');
+  });
+
+  it('records a new agent as agent-created, and AuditEventSchema reads it', () => {
+    expect(AUDIT_ACTIONS).toContain('agent-created');
+    expect(AuditEventSchema.safeParse({ ...event, action: 'agent-created' }).success).toBe(true);
+  });
+
+  it('reads the Builder run as an optional, non-empty string', () => {
+    expect(AuditEventSchema.safeParse({ ...event, builderRunId: 'run-1' }).success).toBe(true);
+    expect(AuditEventSchema.safeParse({ ...event, builderRunId: '' }).success).toBe(false);
+    expect(AuditEventSchema.safeParse({ ...event, createdByAgentId: 'agent-1' }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('AgentCreatedAuditDetailsSchema', () => {
+  const details = {
+    agentId: '11111111-1111-4111-8111-111111111111',
+    version: 1,
+    via: 'builder',
+  };
+
+  it('reads the minimal and the full shape', () => {
+    expect(AgentCreatedAuditDetailsSchema.parse(details)).toEqual(details);
+    const full = {
+      ...details,
+      builderRunId: '33333333-3333-4333-8333-333333333333',
+      createdByAgentId: '22222222-2222-4222-8222-222222222222',
+    };
+    expect(AgentCreatedAuditDetailsSchema.parse(full)).toEqual(full);
+  });
+
+  it('refuses an unknown key, an unknown via and a version below 1', () => {
+    expect(AgentCreatedAuditDetailsSchema.safeParse({ ...details, extra: 1 }).success).toBe(false);
+    expect(AgentCreatedAuditDetailsSchema.safeParse({ ...details, via: 'other' }).success).toBe(
+      false,
+    );
+    expect(AgentCreatedAuditDetailsSchema.safeParse({ ...details, version: 0 }).success).toBe(
+      false,
+    );
   });
 });
 

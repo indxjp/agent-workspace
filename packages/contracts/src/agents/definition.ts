@@ -7,7 +7,8 @@ import {
   AGENT_MODEL_MAX_LENGTH,
   AGENT_NAME_MAX_LENGTH,
 } from './resource.js';
-import { SKILL_NAME_PATTERN } from '../skills.js';
+import { SKILL_NAME_PATTERN, SkillRevisionPinsByNameSchema } from '../skills.js';
+import { parseStorageGrantPath, STORAGE_GRANT_SCHEME } from '../storage-connections.js';
 
 // ── Agent definition (K-1; spec §6.2) ────────────────────────────────────────────────────
 
@@ -53,14 +54,26 @@ export const AgentDefinitionAgentSchema = z
   .readonly();
 export type AgentDefinitionAgent = z.infer<typeof AgentDefinitionAgentSchema>;
 
-/** The agent's resource assignments, by workspace path and by name — never by id. */
+/**
+ * The agent's resource assignments, by workspace path and by name — never by id. A file path that
+ * starts with `storage://` grants a folder of a storage connection, as
+ * `storage://<connection>/<folder>` (the storage design, §05); any other path is a workspace file.
+ */
 export const AgentDefinitionResourcesSchema = z
   .object({
     files: z
       .array(
         z
           .object({
-            path: z.string().min(1).max(AGENT_DEFINITION_FILE_PATH_MAX_LENGTH),
+            path: z
+              .string()
+              .min(1)
+              .max(AGENT_DEFINITION_FILE_PATH_MAX_LENGTH)
+              .refine(
+                (path) =>
+                  !path.startsWith(STORAGE_GRANT_SCHEME) || parseStorageGrantPath(path) !== null,
+                'a storage:// path must be storage://<connection>/<folder>',
+              ),
             access: z.enum(['read', 'read-write']),
           })
           .strict()
@@ -72,6 +85,11 @@ export const AgentDefinitionResourcesSchema = z
       .array(z.string().regex(SKILL_NAME_PATTERN))
       .max(AGENT_DEFINITION_MAX_REFERENCES)
       .readonly(),
+    /**
+     * The revision each listed skill is pinned to, by skill name; a skill with no key follows
+     * `latest`. Every key must be in `skills`. Absent when nothing is pinned.
+     */
+    skillRevisions: SkillRevisionPinsByNameSchema.optional(),
     connectors: z.array(DefinitionNameSchema).max(AGENT_DEFINITION_MAX_REFERENCES).readonly(),
   })
   .strict()
@@ -109,8 +127,17 @@ export const AgentDefinitionSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    if (value.policy.skills.mode !== 'allowlist') return;
     const assigned = new Set(value.resources.skills);
+    for (const name of Object.keys(value.resources.skillRevisions ?? {})) {
+      if (!assigned.has(name)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['resources', 'skillRevisions', name],
+          message: `the pin names the skill ${JSON.stringify(name)}, which resources.skills does not assign`,
+        });
+      }
+    }
+    if (value.policy.skills.mode !== 'allowlist') return;
     for (const [index, name] of value.policy.skills.names.entries()) {
       if (!assigned.has(name)) {
         context.addIssue({

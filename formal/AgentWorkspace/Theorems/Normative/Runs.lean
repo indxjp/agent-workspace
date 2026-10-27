@@ -14,7 +14,7 @@ theorem live_and_terminal_statuses :
     RunStatus.queued.isTerminal = false ∧ RunStatus.running.isTerminal = false ∧
     RunStatus.completed.isTerminal ∧ RunStatus.failed.isTerminal ∧
     RunStatus.cancelled.isTerminal := by
-  decide
+  decide +kernel
 
 /-- A run moves to `running` only from `queued`, and `markRunning` on a queued run always moves
 it (so `startedAt` is stamped exactly once). -/
@@ -23,7 +23,7 @@ it (so `startedAt` is stamped exactly once). -/
   (ts := "packages/core/src/db/repositories/runs.ts#markRunning")]
 theorem running_is_entered_only_from_queued (s t : RunStatus) :
     runStep s .markRunning = .moved t ↔ s = .queued ∧ t = .running := by
-  cases s <;> cases t <;> decide
+  cases s <;> cases t <;> decide +kernel
 
 /-- The documented edges `queued → running → {completed, failed, cancelled}` are all admitted. -/
 @[aw_spec (tier := T1)
@@ -45,7 +45,7 @@ theorem queued_run_may_finish_directly (t : RunStatus) (h : t.isTerminal = true)
 
 /-- `finish` with a live target is refused as a programming error, never applied. -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs.ts#finish")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")]
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")]
 theorem finish_requires_terminal_target (s t : RunStatus) (h : t.isTerminal = false) :
     runStep s (.finish t) = .invalidCall := by
   simp [runStep, h]

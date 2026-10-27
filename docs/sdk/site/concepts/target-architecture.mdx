@@ -245,8 +245,8 @@ Today's `start`, `follow`, `interrupt` and `waitForOutcome` are exactly this wit
 idempotency key — see [Integrate a backend](/building/backend).
 
 <Note>
-  **Today:** no idempotency key; a queued run can strand if the web process dies between persisting
-  and launching. **Target:** the code above, backed by database leases and attempts. Tracked as
+  **Today:** `runs.start` takes an idempotency key, but there are no run leases yet; a queued run can
+  strand if the web process dies between persisting and launching. **Target:** the code above, backed by database leases and attempts. Tracked as
   [S-6](/concepts/roadmap#s-6-idempotency-keys) and
   [RF-301](/concepts/roadmap#rf-301-run-leases-and-attempts).
 </Note>

@@ -1,3 +1,7 @@
+import {
+  IDENTITY_PRINCIPAL_KINDS,
+  IDENTITY_SUBJECT_MAX_LENGTH,
+} from '@indx-workspace/contracts/identity-assertion';
 import { z } from 'zod';
 
 import { base64Url, decodeBase64Url } from './base64url.js';
@@ -15,6 +19,14 @@ const RunTokenClaimsSchema = z
     workspaceId: NonBlankStringSchema,
     agentId: NonBlankStringSchema,
     modelConnectionId: NonBlankStringSchema,
+    /** Who the run acts for (ADR-0142 D2); absent when no caller identity can be asserted. */
+    caller: z
+      .strictObject({
+        sub: z.string().min(1).max(IDENTITY_SUBJECT_MAX_LENGTH),
+        principalKind: z.enum(IDENTITY_PRINCIPAL_KINDS),
+      })
+      .readonly()
+      .optional(),
     issuedAt: z.number().int(),
     expiresAt: z.number().int(),
   })
@@ -26,7 +38,7 @@ export type RunTokenClaims = z.infer<typeof RunTokenClaimsSchema>;
 
 export type RunTokenSubject = Pick<
   RunTokenClaims,
-  'runId' | 'sessionId' | 'workspaceId' | 'agentId' | 'modelConnectionId'
+  'runId' | 'sessionId' | 'workspaceId' | 'agentId' | 'modelConnectionId' | 'caller'
 >;
 
 export type RunTokenVerification =
@@ -79,7 +91,8 @@ export function createRunTokenCodec(options: RunTokenCodecOptions): RunTokenCode
   return {
     async issue(subject) {
       for (const [name, value] of Object.entries(subject)) {
-        if (!nonBlank(value)) throw new Error(`Run token ${name} must not be blank.`);
+        if (name !== 'caller' && !nonBlank(value))
+          throw new Error(`Run token ${name} must not be blank.`);
       }
       const issuedAt = now();
       const claims: RunTokenClaims = {

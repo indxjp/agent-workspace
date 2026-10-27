@@ -88,13 +88,14 @@
  *     `no-audit-row.test.ts` in this directory proves that against a real PostgreSQL, gated on
  *     `TEST_DATABASE_URL` like every other database suite in this repository.
  */
+import { captureLog } from '../telemetry/capture-log';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { GET as listRoute, POST as createRoute } from '../../app/api/secrets/route';
 import { DELETE as deleteRoute, PUT as replaceRoute } from '../../app/api/secrets/[id]/route';
@@ -102,14 +103,15 @@ import { routes as declaredRoutes } from '../../../../tests/route-declarations/W
 import { createInMemorySecretsStoreProvider } from './memory-store';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
-import { clearSecretsRuntime, configureSecretsRuntime, type WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './runtime';
 import type {
   CreateSecretOutcome,
   ReplaceSecretOutcome,
   SecretsStoreProvider,
   WorkspaceSecretsStore,
 } from './store';
+import { installTestDomains } from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const REPO_ROOT = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..', '..');
 const THIS_TASKS_DECLARATION_FILE = 'W2-CP-02.ts';
@@ -241,14 +243,19 @@ const ROTATED_MARKER = 'sk-ant-ACCEPTANCE-CRITERION-1-ROTATED-MARKER-9a3d27';
 
 function useMemoryRuntime(): void {
   const secrets = createInMemorySecretsStoreProvider();
-  configureSecretsRuntime({
-    secrets,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      if (workspaceId === null) {
-        return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-      }
-      return Promise.resolve({ kind: 'workspace', workspaceId });
+  installTestDomains({
+    secrets: {
+      kind: 'serving',
+      runtime: {
+        secrets,
+        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          if (workspaceId === null) {
+            return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
+          }
+          return Promise.resolve({ kind: 'workspace', workspaceId });
+        },
+      },
     },
   });
   useOwnerRbac();
@@ -259,21 +266,23 @@ function useMemoryRuntime(): void {
  * #388), and secrets are Owner-only; an Owner key reaches all of them.
  */
 function useOwnerRbac(): void {
-  configureRbacRuntime({
-    directory: createMemoryDirectory(),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-              workspaceId,
-              role: 'owner',
-              label: 'Secrets leak scan',
-            }),
-      );
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory(),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                workspaceId,
+                role: 'owner',
+                label: 'Secrets leak scan',
+              }),
+        );
+      },
     },
   });
 }
@@ -359,24 +368,16 @@ describe('acceptance criterion 1 — the trip-wire for what this task cannot sca
 });
 
 describe('acceptance criterion 1 — no secret value in any API response or log line', () => {
-  let restoreConsole: (() => void)[] = [];
-  const loggedArguments: unknown[] = [];
+  let capture: ReturnType<typeof captureLog>;
 
   beforeEach(() => {
     responses.length = 0;
-    loggedArguments.length = 0;
-    restoreConsole = (['log', 'warn', 'error'] as const).map((method) => {
-      const spy = vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
-        loggedArguments.push(...args);
-      });
-      return (): void => spy.mockRestore();
-    });
+    capture = captureLog();
   });
 
   afterEach(() => {
-    for (const restore of restoreConsole) restore();
-    clearSecretsRuntime();
-    clearRbacRuntime();
+    capture.restore();
+    clearApplicationContext();
   });
 
   it("scans every declared route's response, and every log line, for the plaintext", async () => {
@@ -416,13 +417,9 @@ describe('acceptance criterion 1 — no secret value in any API response or log 
       );
     }
 
-    const logged = loggedArguments.map((value) =>
-      typeof value === 'string' ? value : JSON.stringify(value),
-    );
-    for (const line of logged) {
-      expect(line).not.toContain(PLAINTEXT_MARKER);
-      expect(line).not.toContain(ROTATED_MARKER);
-    }
+    const logged = capture.text();
+    expect(logged).not.toContain(PLAINTEXT_MARKER);
+    expect(logged).not.toContain(ROTATED_MARKER);
   });
 
   it('also does not leak the value through a 404, a 409 or a 400 for these routes', async () => {
@@ -491,14 +488,22 @@ describe('acceptance criterion 1 — no secret value in any API response or log 
         remove: () => Promise.resolve({ kind: 'not-found' }),
       }),
     };
-    configureSecretsRuntime({
-      secrets: malformed,
-      resolveWorkspace(req: Request): Promise<WorkspaceResolution> {
-        const workspaceId = req.headers.get(WORKSPACE_HEADER);
-        if (workspaceId === null) {
-          return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-        }
-        return Promise.resolve({ kind: 'workspace', workspaceId });
+    installTestDomains({
+      secrets: {
+        kind: 'serving',
+        runtime: {
+          secrets: malformed,
+          resolveWorkspace(req: Request): Promise<WorkspaceResolution> {
+            const workspaceId = req.headers.get(WORKSPACE_HEADER);
+            if (workspaceId === null) {
+              return Promise.resolve({
+                kind: 'unauthenticated',
+                reason: 'no test workspace header',
+              });
+            }
+            return Promise.resolve({ kind: 'workspace', workspaceId });
+          },
+        },
       },
     });
     useOwnerRbac();

@@ -27,6 +27,11 @@ const nextConfig: NextConfig = {
   // here is needed for the build itself. A run's stream consumer is kept alive by `after()` in
   // `server/composition/register.ts`, not by this file.
   distDir: readNextDistDir(process.env),
+  // The Azure SDKs `@agent-workspace/core`'s blob store and key vault provider import stay
+  // `node_modules` packages loaded at run time, as Next.js already does by default for
+  // `@aws-sdk/client-s3` and `pg`. Bundled, their sources (including the public Azurite
+  // development key in `@azure/storage-blob`) land in `.next/server` chunks and source maps.
+  serverExternalPackages: ['@azure/identity', '@azure/keyvault-secrets', '@azure/storage-blob'],
 };
 
 export default nextConfig;

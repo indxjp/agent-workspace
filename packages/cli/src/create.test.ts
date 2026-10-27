@@ -122,7 +122,7 @@ describe('createWorkspace', () => {
     // has to arrive with the one of them that must never be committed already ignored.
     await expect(readFile(path.join(target, '.gitignore'), 'utf8')).resolves.toMatch(/^\.env$/mu);
     expect(env).toContain('DATABASE_URL=postgres://agent_workspace:');
-    expect(env).toContain('OBJECT_STORAGE_BUCKET=');
+    expect(env).toContain('AW_STORAGE_URL=file:///var/lib/agent-workspace');
     expect(env).toContain('RUNTIME_DRIVER=docker');
     expect(env).toContain(`WEB_IMAGE=${images.web}`);
     expect(env).toContain('BOOTSTRAP_ADMIN=admin@localhost.test');
@@ -239,8 +239,13 @@ describe('createWorkspace', () => {
     );
 
     const env = await readFile(path.join(target, '.env'), 'utf8');
-    expect(env).toContain('OBJECT_STORAGE_ENDPOINT=http://seaweedfs:8333');
-    expect(env).toContain('OBJECT_STORAGE_BUCKET=agent-workspace');
+    // The bucket, endpoint and path style the old names gave it, so its objects stay where they are.
+    expect(env).toContain(
+      'AW_STORAGE_URL=s3://agent-workspace?endpoint=http://seaweedfs:8333&publicEndpoint=http://localhost:8333&pathStyle=true\n',
+    );
+    expect(env).toContain('AW_STORAGE_CREATE_BUCKET=true\n');
+    expect(env).not.toContain('OBJECT_STORAGE_ENDPOINT=');
+    expect(env).not.toContain('OBJECT_STORAGE_BUCKET=');
     expect(env).toContain('RUNTIME_DRIVER=docker');
   });
 
@@ -318,7 +323,12 @@ describe('createWorkspace', () => {
     );
     expect(model.services['web']?.environment).toMatchObject({
       MODEL_GATEWAY_URL: 'http://gateway:4000',
-      OBJECT_STORAGE_ENDPOINT: 'http://seaweedfs:8333',
+      AW_STORAGE_URL:
+        's3://agent-workspace?endpoint=http://seaweedfs:8333&publicEndpoint=http://localhost:8333&pathStyle=true',
+      AW_STORAGE_CREATE_BUCKET: 'true',
+      // Forwarded empty: only a leftover value in `.env` reaches the server, which warns.
+      OBJECT_STORAGE_ENDPOINT: '',
+      AW_FILE_STORAGE_ROOT: '',
       RUNNER_URL: 'http://runner:8080',
       RUNTIME_DRIVER: 'docker',
     });
@@ -342,6 +352,17 @@ describe('createWorkspace', () => {
       postgres: { condition: 'service_healthy' },
       runner: { condition: 'service_healthy' },
     });
+
+    // No manifest invents a storage location: without AW_STORAGE_URL nothing starts.
+    const envPath = path.join(target, '.env');
+    const env = await readFile(envPath, 'utf8');
+    await writeFile(envPath, env.replace(/^AW_STORAGE_URL=.*\n/mu, ''));
+    const refused = spawnSync('docker', ['compose', 'config', '--format', 'json'], {
+      cwd: target,
+      encoding: 'utf8',
+    });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain('set AW_STORAGE_URL in .env');
   }, 20_000);
 });
 
@@ -377,7 +398,7 @@ describe('createWorkspace --cloud', () => {
     expect(existsSync(path.join(target, 'deploy/helm/values.yaml'))).toBe(true);
     // The .env still carries the profile-derived placement for a cloud target.
     await expect(readFile(path.join(target, '.env'), 'utf8')).resolves.toContain(
-      'OBJECT_STORAGE_BUCKET=acme-ai-files',
+      'AW_STORAGE_URL=gcs://acme-ai-files',
     );
     // The Compose project belongs to `local` alone: a cloud `.env` supplies none of the
     // variables the Compose file demands, so shipping it here would be an unrunnable file.

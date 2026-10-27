@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AGENT_NAME_MAX_LENGTH } from './agents.js';
 import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 import { NAME_KEY_PATTERN } from './project-file.js';
+import { SURFACE_ATTACHMENT_MAX_BYTES } from './attachment-limits.js';
 import { RUN_START_PROBLEM_CODES } from './runs.js';
 import { HEX_COLOUR_PATTERN, SURFACE_TITLE_MAX_LENGTH, SURFACE_TITLE_PATTERN } from './setup.js';
 import { BROWSER_TOKEN_PATTERN } from './tokens.js';
@@ -13,8 +14,9 @@ import { BROWSER_TOKEN_PATTERN } from './tokens.js';
  * `/p/s/<name>` reads its look from. It accepts rungs ① (look) and ② (layout and parts) of
  * ADR-0108; rung ② is complete since issue #537 (ADR-0108 SD10): history, feedback, the agent
  * switcher, a full tool trace and built-in tool-result components. Allowed origins and limits
- * embed a surface on a customer's own site (issue #622). Audience and attachments arrive in later
- * units, and until then a strict object refuses each of them rather than accepting and ignoring it.
+ * embed a surface on a customer's own site (issue #622). Attachments (`parts.attachments`,
+ * ADR-0146; issue #1308) join the parts. Audience arrives in a later unit, and until then a strict
+ * object refuses it rather than accepting and ignoring it.
  *
  * Every schema here is plain structure: no default and no transform, so the parsed value is the
  * value written, and `z.toJSONSchema` can emit an editor schema from the same definitions.
@@ -87,7 +89,7 @@ export const SurfaceToolResultComponentSchema = z.enum(SURFACE_TOOL_RESULT_COMPO
 /**
  * A `toolResults` key: a tool name as a run's `agent.tool.call` frame carries it, up to the
  * 64-character model-visible cap, so engine-prefixed names such as `mcp__<key>__<op>` fit; how a
- * prefixed MCP name is matched is S2-05d's (ADR-0108 SD10; issue #537).
+ * prefixed name is matched is {@link toolResultFor}'s (ADR-0108 SD10; issues #537, #1276).
  */
 export const SURFACE_TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 
@@ -272,8 +274,8 @@ export type SurfaceTheme = z.infer<typeof SurfaceThemeSchema>;
 
 /**
  * The parts a surface shows — ADR-0108's rung ②, complete since issue #537 (SD10): history,
- * feedback and the agent switcher join the slice-1 parts. Attachments are a later unit, so a
- * strict object refuses them (ADR-0108, ADR-0101; issues #440, #537).
+ * feedback and the agent switcher join the slice-1 parts, and attachments follow in ADR-0146
+ * (ADR-0108, ADR-0101; issues #440, #537, #1308).
  */
 export const SurfacePartsSchema = z
   .object({
@@ -291,6 +293,12 @@ export const SurfacePartsSchema = z
     history: z.boolean().optional(),
     /** Whether the surface asks for a thumbs-up or -down on each answer (ADR-0108 SD10; #537). */
     feedback: z.boolean().optional(),
+    /**
+     * Whether the composer offers a file input; the visitor's files go to
+     * `POST /api/sessions/:id/attachments` and ride on the run as `attachments` (ADR-0146 D7;
+     * issue #1308).
+     */
+    attachments: z.boolean().optional(),
     /**
      * The agents a visitor may switch between, by name, 1–{@link SURFACE_AGENT_SWITCHER_MAX} with
      * no repeat. Whether each is the surface owner's is a runtime check, not this schema's
@@ -334,6 +342,23 @@ export const SurfaceToolResultsSchema = z
     (entries) => Object.keys(entries).length <= SURFACE_TOOL_RESULTS_MAX_ENTRIES,
     `must hold at most ${String(SURFACE_TOOL_RESULTS_MAX_ENTRIES)} entries`,
   );
+
+/**
+ * The component `toolResults` names for a run's tool: the exact key first, else the key equal to
+ * the part after the last `__`, so `find_files` matches Claude's `mcp__<connector>__find_files`
+ * (issue #1276). A single `_` is never a separator: Mastra's `<server>_<tool>` is ambiguous.
+ */
+export function toolResultFor(
+  toolName: string,
+  toolResults: z.infer<typeof SurfaceToolResultsSchema> | undefined,
+): SurfaceToolResultComponent | undefined {
+  if (toolResults === undefined) return undefined;
+  if (Object.hasOwn(toolResults, toolName)) return toolResults[toolName];
+  const bare = toolName.slice(toolName.lastIndexOf('__') + 2);
+  return toolName.includes('__') && Object.hasOwn(toolResults, bare)
+    ? toolResults[bare]
+    : undefined;
+}
 
 /** Hosts that may be named over plain `http`, so a local runtime and browser tests can embed. */
 const LOOPBACK_ORIGIN_HOSTNAMES: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -525,3 +550,47 @@ export const SURFACE_SESSION_PROBLEM_CODES = {
 } as const;
 /** A key of {@link SURFACE_SESSION_PROBLEM_CODES} (ADR-0105; S1-17, issue #455). */
 export type SurfaceSessionProblemCode = keyof typeof SURFACE_SESSION_PROBLEM_CODES;
+
+/** The most bytes one surface attachment upload may carry, 10 MiB (ADR-0146 D6). */
+export { SURFACE_ATTACHMENT_MAX_BYTES };
+
+/** The most files one visitor session may store through the upload route (ADR-0146 D6). */
+export const SURFACE_ATTACHMENTS_MAX_FILES = 20;
+
+/** The most bytes one visitor session may store through the upload route, 50 MiB (ADR-0146 D6). */
+export const SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+
+/** The longest attachment file name, in UTF-8 bytes (ADR-0146 D2). */
+export const SURFACE_ATTACHMENT_NAME_MAX_BYTES = 255;
+
+/**
+ * The `201` of `POST /api/sessions/:id/attachments` (ADR-0146 D6; issue #1308): the `fileId` to send
+ * as `attachments: [{ fileId }]` on `runs.start`, the store path the agent will read it at, and the
+ * stored size in bytes.
+ */
+export const SurfaceAttachmentResponseSchema = z
+  .object({
+    fileId: z.string().min(1),
+    path: z.string().min(1),
+    size: z.number().int().nonnegative(),
+  })
+  .strict()
+  .readonly();
+/** A parsed {@link SurfaceAttachmentResponseSchema} (issue #1308). */
+export type SurfaceAttachmentResponse = z.infer<typeof SurfaceAttachmentResponseSchema>;
+
+/**
+ * The problem codes `POST /api/sessions/:id/attachments` answers with, and each one's HTTP status
+ * (ADR-0146 D6; issue #1308). `file_not_found` is also the answer for a session whose surface does
+ * not offer attachments, so the route is not visible without the part. `request_body_too_large`
+ * is the 10 MiB cap and `attachments_quota_exceeded` the per-session 20 files or 50 MiB.
+ */
+export const SURFACE_ATTACHMENT_PROBLEM_CODES = {
+  file_not_found: 404,
+  invalid_attachment_name: 400,
+  request_body_too_large: 413,
+  attachments_quota_exceeded: 413,
+  surface_rate_limited: SURFACE_LIMIT_PROBLEM_CODES.surface_rate_limited,
+} as const;
+/** A key of {@link SURFACE_ATTACHMENT_PROBLEM_CODES} (issue #1308). */
+export type SurfaceAttachmentProblemCode = keyof typeof SURFACE_ATTACHMENT_PROBLEM_CODES;

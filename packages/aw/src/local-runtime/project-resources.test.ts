@@ -156,6 +156,30 @@ describe('applyProjectResources', () => {
     expect(rotations((await apply(root, env, existing)).sent)).toEqual([]);
   });
 
+  it('sends the identity a connector declares, which the server resolves from the workspace secret (ADR-0142)', async () => {
+    const root = await freshRoot();
+    const yaml = YAML.replace(
+      '  github:\n    url: https://mcp.example.com\n',
+      '  github:\n    url: https://mcp.example.com\n    identity:\n      secret: CRM_IDENTITY_SECRET\n',
+    );
+    const { sent, stderr } = await apply(
+      root,
+      { ANTHROPIC_API_KEY: KEY, ORDERS_TOKEN: TOKEN },
+      (route) => {
+        if (route === 'GET /api/connectors') return json(200, { connectors: [] });
+        if (route === 'POST /api/connectors') return json(201, FIXTURES.connector);
+        return existing(route);
+      },
+      yaml,
+    );
+    const created = sent.find((request) => request.route === 'POST /api/connectors');
+    expect(JSON.parse(created?.body ?? 'null')).toMatchObject({
+      name: 'github',
+      identity: { secret: 'CRM_IDENTITY_SECRET' },
+    });
+    expect(stderr).not.toContain('identity');
+  });
+
   it('treats a malformed fingerprint file as nothing recorded, and rotates', async () => {
     const root = await freshRoot();
     await tempFile(root, FINGERPRINTS, '{ "key": "not base64", "fingerprints": {} }');

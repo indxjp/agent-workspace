@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { IsoDateTimeSchema } from './identifiers.js';
+import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 
 /** What a share publishes. Matches `shares.subject_type`. */
 export const SHARE_SUBJECT_TYPES = ['agent', 'session', 'project', 'skill'] as const;
@@ -35,7 +35,9 @@ export const SHARE_PASSPHRASE_MAX_LENGTH = 1_024;
 export const SHARES_PROBLEM_CODES = {
   /**
    * A body the route refuses: not JSON, a field outside the contract, an option the subject type
-   * does not take, a `public` share while public sharing is off, or `runnable` mode.
+   * does not take, a `public` share while public sharing is off, `runnable` mode, or a transcript
+   * that names a run outside the shared session or would publish more than
+   * {@link SHARE_TRANSCRIPT_MAX_BYTES}.
    */
   invalid_share: 400,
   share_not_found: 404,
@@ -57,6 +59,34 @@ export const ShareIncludeSchema = z
   .readonly();
 
 export type ShareInclude = z.infer<typeof ShareIncludeSchema>;
+
+/** The most turns one session share may publish. */
+export const SHARE_TRANSCRIPT_MAX_RUNS = 100;
+
+/** The largest transcript a share publishes, in UTF-8 bytes of its JSON. */
+export const SHARE_TRANSCRIPT_MAX_BYTES = 1_048_576;
+
+/**
+ * Which turns of the session a session share publishes (ADR-0158): ids of the session's own runs.
+ * The server copies each run's prompt and final answer from its stored record, in the order the
+ * runs were created, so a caller chooses turns but never writes them.
+ */
+export const ShareTranscriptSelectionSchema = z
+  .object({
+    runIds: z
+      .array(UuidSchema)
+      .min(1)
+      .max(SHARE_TRANSCRIPT_MAX_RUNS)
+      .refine((runIds) => new Set(runIds.map((id) => id.toLowerCase())).size === runIds.length, {
+        message: 'runIds must not repeat a run',
+      })
+      .readonly(),
+  })
+  .strict()
+  .readonly();
+
+/** A session share's chosen turns: `{ runIds }` of that session (ADR-0158). */
+export type ShareTranscriptSelection = z.infer<typeof ShareTranscriptSelectionSchema>;
 
 const shareFields = {
   id: z.string().min(1),
@@ -133,7 +163,8 @@ export type ShareListResponse = z.infer<typeof ShareListResponseSchema>;
  *
  * `subjectLabel` is client-authored until RF-103, when the server derives it from the subject:
  * the route requires it today and stores it verbatim. The share's content (`snapshot`) is
- * likewise server-owned; this command never carries a transcript, a definition or a snapshot.
+ * server-owned: a session share's `transcript` chooses runs of that session and the server copies
+ * their text (ADR-0158); this command never carries a definition, a snapshot or transcript text.
  */
 export interface PublishShareCommand {
   readonly subjectType: ShareSubjectType;
@@ -142,6 +173,8 @@ export interface PublishShareCommand {
   readonly visibility: ShareVisibility;
   readonly mode?: ShareMode;
   readonly include?: ShareInclude;
+  /** For a session share only: which of the session's turns to publish. */
+  readonly transcript?: ShareTranscriptSelection;
   readonly expiry?: ShareExpiry;
   /** At most {@link SHARE_PASSPHRASE_MAX_LENGTH} code units; hashed at rest, never returned. */
   readonly passphrase?: string;

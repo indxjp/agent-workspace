@@ -1,10 +1,11 @@
 import type { AgentVersionRecord } from '@agent-workspace/core/db';
+import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { EvaluationRunResourceSchema, type EvalCase } from '@indx-workspace/contracts/evaluations';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import type { LaunchContext, Principal, RunApiEnvironment } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/store';
-import { ORDER_STATUS_FRAMES } from './fixtures';
+import type { LaunchContext, RunPrincipal, RunApiEnvironment } from '../runs/environment';
+import { InMemoryRunStore } from '../runs/memory-store';
+import { assistantSays, ORDER_STATUS_FRAMES } from './fixtures';
 import {
   advanceEvaluationRun,
   getEvaluationRun,
@@ -16,7 +17,7 @@ const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const OTHER_AGENT = '33333333-3333-4333-8333-444444444444';
 const VERSION_ID = '44444444-4444-4444-8444-444444444444';
-const PRINCIPAL: Principal = {
+const PRINCIPAL: RunPrincipal = {
   principalId: '77777777-7777-4777-8777-777777777777',
   ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
   userId: null,
@@ -45,12 +46,30 @@ function setUp(latencyMs = 0) {
   const store = new InMemoryRunStore();
   const rows = new Map<string, Row>();
   const playing: Promise<void>[] = [];
-  const play = async ({ run }: LaunchContext) => {
+  /** The `outputSchema` each launched run was started with (`undefined` when it had none). */
+  const schemas: (Readonly<Record<string, unknown>> | undefined)[] = [];
+  const interrupted: string[] = [];
+  const play = async ({ run, prompt, outputSchema }: LaunchContext) => {
+    schemas.push(outputSchema);
     if (latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, latencyMs));
+    if (prompt === PAUSING_PROMPT) {
+      await store.append(run.id, {
+        type: 'agent.message',
+        data: assistantSays('Plan ready for approval.'),
+      });
+      await store.markRunning(run.id);
+      await store.awaitApproval(run.id, {
+        toolName: 'Write',
+        canonicalCall: canonicalCall('Write', { file_path: 'outputs/plan.json' }),
+      });
+      return;
+    }
     for (const frame of ORDER_STATUS_FRAMES) {
       await store.append(run.id, { type: frame.frame, data: frame });
     }
-    await store.finish(run.id, 'completed', null, true);
+    const output =
+      outputSchema === undefined ? null : { text: 'Drafted.', structured: DRAFTED_OUTLINE };
+    await store.finish(run.id, 'completed', null, true, output);
   };
   const stored = (row: Row) => ({ ...row, leaseUntil: null });
   const runs: RunApiEnvironment = {
@@ -65,6 +84,10 @@ function setUp(latencyMs = 0) {
         agentVersionId: agentVersionId ?? null,
       }),
     ownsRun: () => Promise.resolve(true),
+    interruptRun: async (_principal, run) => {
+      interrupted.push(run.id);
+      await store.finish(run.id, 'cancelled', null, true);
+    },
     store,
     launch: (context) => {
       playing.push(play(context));
@@ -81,7 +104,8 @@ function setUp(latencyMs = 0) {
           score: '0',
           passed: 0,
           total: run.total,
-          casesSnapshot: run.casesSnapshot,
+          // Stored as JSON, as the jsonb column does.
+          casesSnapshot: JSON.parse(JSON.stringify(run.casesSnapshot)) as unknown,
           results: [],
           createdAt: new Date('2026-10-07T00:00:00Z'),
           leased: false,
@@ -129,6 +153,8 @@ function setUp(latencyMs = 0) {
   const dependencies: EvaluationRunDependencies = { runs };
   return {
     rows,
+    interrupted,
+    schemas,
     store,
     runs,
     start: (body: unknown) => startEvaluationRun(body, AGENT, PRINCIPAL, { runs, store: versions }),
@@ -141,6 +167,16 @@ function setUp(latencyMs = 0) {
     dependencies,
   };
 }
+
+const PAUSING_PROMPT = 'Plan the consolidation';
+const DRAFTED_OUTLINE = { width: 140, height: 90, drawingNo: 'BRK-1101' };
+const DRAFT_SCHEMA = { type: 'object', properties: { width: { type: 'number' } } };
+const drafting = (name: string, output: Readonly<Record<string, unknown>>): EvalCase => ({
+  name,
+  input: 'Draft the change set',
+  outputSchema: DRAFT_SCHEMA,
+  expect: { output },
+});
 
 const passing = (name: string): EvalCase => ({
   name,
@@ -289,6 +325,48 @@ describe('advanceEvaluationRun (issue #799)', () => {
       ['right args', []],
     ]);
     expect(body).toMatchObject({ passed: 2, total: 3, score: 0.6667 });
+  });
+
+  // Issue #1289: the cases go through `casesSnapshot` before they run, and must keep `outputSchema`.
+  it('starts a stored case with its outputSchema and scores its structured output', async () => {
+    const h = setUp();
+    const run = await started(h, [
+      drafting('right outline', { width: 140, height: 90 }),
+      passing('a'),
+      drafting('wrong outline', { width: 141 }),
+    ]);
+    const body = EvaluationRunResourceSchema.parse((await h.advance(run.id)).body);
+    expect(h.schemas).toEqual([DRAFT_SCHEMA, undefined, DRAFT_SCHEMA]);
+    expect(body.results.map((result) => [result.name, result.failures])).toEqual([
+      ['right outline', []],
+      ['a', []],
+      ['wrong outline', ['output: the structured output did not have {"width":141}']],
+    ]);
+  });
+
+  // Issue #1569: a case that expects the approval pause is scored there, and its run is cancelled.
+  it('scores a case at the approval pause and cancels its run', async () => {
+    const h = setUp();
+    const run = await started(h, [
+      {
+        name: 'stops at the plan write',
+        input: PAUSING_PROMPT,
+        expect: {
+          awaitsApproval: true,
+          tool: 'Write',
+          toolInput: { file_path: 'outputs/plan.json' },
+          contains: ['Plan ready'],
+        },
+      },
+      passing('a'),
+    ]);
+    const body = EvaluationRunResourceSchema.parse((await h.advance(run.id)).body);
+    expect(body).toMatchObject({ status: 'completed', passed: 2, total: 2 });
+    const pausedRunId = body.results[0]?.runId ?? '';
+    await vi.waitFor(async () => {
+      expect((await h.store.get(pausedRunId))?.status).toBe('cancelled');
+    });
+    expect(h.interrupted).toEqual([pausedRunId]);
   });
 
   it('refuses a second advance while one holds the lease', async () => {

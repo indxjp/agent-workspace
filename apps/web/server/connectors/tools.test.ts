@@ -61,8 +61,6 @@ describe('tool connector registration', () => {
         document: PETSTORE.replace('#/components/parameters/PetId', './other.yaml#/X'),
       },
     ],
-    ['POST /pets in allow', { ...openapiBody, allow: ['POST /pets'] }],
-    ['operationId:addPet', { ...openapiBody, allow: ['operationId:addPet'] }],
     [
       'a relative server',
       { ...openapiBody, document: PETSTORE.replace('https://{host}/v1', '/v1') },
@@ -144,6 +142,26 @@ describe('tool connector registration', () => {
       expect(outcome.ok && outcome.toolCount).toBe(3);
     }
     expect(await connectors.list()).toEqual([]);
+  });
+
+  it.each([
+    ['POST /pets', ['POST /pets']],
+    ['operationId:addPet', ['operationId:addPet']],
+  ])('registers a write operation named by %s (#1304)', async (_name, allow) => {
+    const connectors = store();
+    const dry = await createConnector(
+      connectors,
+      { ...openapiBody, allow, dryRun: true },
+      null,
+      open,
+    );
+    expect(dry.status).toBe(200);
+    expect(await connectors.list()).toEqual([]);
+    const saved = await createConnector(connectors, { ...openapiBody, allow }, OWNER, open);
+    expect(saved.status).toBe(201);
+    expect(saved.body).toMatchObject({
+      openapi: { operations: [{ name: 'addPet', method: 'POST', path: '/pets' }] },
+    });
   });
 
   it('refuses an unknown kind with 400 connector_kind_unsupported', async () => {

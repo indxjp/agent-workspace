@@ -25,6 +25,17 @@
    ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
     "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
     "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
+   "input": "run.warning",
+   "id": "\"run.warning\"",
+   "expected":
+   {"stored": {"name": "run.warning", "kind": "ok"},
+    "relay": {"name": "run.warning", "kind": "reserved"},
+    "platform": {"name": "run.warning", "kind": "ok"},
+    "pattern": true}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Adversarial.EventsSse.runtime_cannot_claim_control_or_platform_name",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.name_injection_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.EventsSse.accepted_runtime_name_is_in_grammar"],
    "input": "done",
    "id": "\"done\"",
    "expected":

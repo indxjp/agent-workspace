@@ -160,7 +160,13 @@ async function drive(options: DriveOptions): Promise<Driven> {
           connectionProvider: connectionProviderOf(options.family),
           credential: CREDENTIAL,
           // `localhost` satisfies the egress policy while the transport stays a stub.
-          settings: { baseUrl: 'http://localhost/v1', deployment: DEPLOYMENT },
+          settings: {
+            baseUrl: 'http://localhost/v1',
+            deployment: DEPLOYMENT,
+            ...(connectionProviderOf(options.family) === 'azure-openai'
+              ? { apiVersion: 'v1' }
+              : {}),
+          },
         };
   const resolver: GatewayRunResolver = { resolve: () => Promise.resolve(resolution) };
   const recorder: UsageRecorder = {
@@ -612,7 +618,11 @@ function ingressApplication(providerId: RegisteredProviderId): {
           providerId,
           connectionProvider: providerId,
           credential: CREDENTIAL,
-          settings: { baseUrl: 'http://localhost/v1', deployment: DEPLOYMENT },
+          settings: {
+            baseUrl: 'http://localhost/v1',
+            deployment: DEPLOYMENT,
+            ...(providerId === 'azure-openai' ? { apiVersion: 'v1' } : {}),
+          },
         });
       },
     },

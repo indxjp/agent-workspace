@@ -8,7 +8,7 @@ RUNNER_IMAGE=registry.example/runner@sha256:333333333333333333333333333333333333
 AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK=registry.example/runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
 # The release the images above were resolved for. `deploy` refuses a source checkout at
 # another release, because the migrations run from WEB_IMAGE and the code from the checkout.
-AGENT_WORKSPACE_VERSION=0.6.9
+AGENT_WORKSPACE_VERSION=0.6.11
 DOCKER_GID=0
 # Relational store: neon
 # The Vercel Marketplace Neon integration supplies DATABASE_URL as a project environment variable.
@@ -19,20 +19,21 @@ DATABASE_URL=
 # Object store: s3://acme-ai-files
 SEAWEEDFS_ACCESS_KEY_ID=
 SEAWEEDFS_SECRET_ACCESS_KEY=
+# The loopback host port SeaweedFS is published on. Change it to run beside another project
+# that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.
+SEAWEEDFS_PORT=
 COMPOSE_PROFILES=
-OBJECT_STORAGE_BACKEND=s3
-OBJECT_STORAGE_ENDPOINT=
-OBJECT_STORAGE_BUCKET=acme-ai-files
+# Where files, skills and session transcripts live, in one URL. No key or password belongs in
+# it: the credential lines below, or the workload identity, supply those.
+AW_STORAGE_URL=s3://acme-ai-files
+# Largest signed upload in bytes. Blank keeps the server default, 5 GiB.
+AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES=
 # The two keys below are the cloud's to supply: the pod's IAM role or workload identity, or a
 # key held by the cloud's own key service. Leave both empty when the service account itself
 # grants the bucket — the S3 client then signs with the identity the pod already has.
 OBJECT_STORAGE_ACCESS_KEY_ID=
 OBJECT_STORAGE_SECRET_ACCESS_KEY=
-OBJECT_STORAGE_FORCE_PATH_STYLE=false
 AWS_REGION=us-east-1
-AW_FILE_STORAGE_ROOT=/var/lib/agent-workspace/files
-AW_SKILL_STORAGE_ROOT=/var/lib/agent-workspace/skills
-AW_SESSION_TRANSCRIPT_ROOT=/var/lib/agent-workspace/sessions
 # Runtime: vercel-sandbox
 RUNTIME_DRIVER=vercel-sandbox
 # Vercel runs no Services: the gateway and the runner-manager are Vercel projects of their

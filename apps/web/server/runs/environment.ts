@@ -19,15 +19,22 @@
  *
  * See `docs/adr/W1-CP-04-run-api-is-installed-not-imported.md`.
  */
-import type { AgentPermissions } from '@agent-workspace/core';
+import type { AgentPermissions } from '@agent-workspace/run-protocol';
 import type { StoredAgentVersionEvaluation } from '@agent-workspace/core/db';
+import type { Logger } from '@agent-workspace/core/telemetry';
+import type { MembershipRoleName } from '@indx-workspace/contracts/team';
+import type { ProjectPolicyLimits } from '@indx-workspace/contracts/policy-ceiling';
 import type { RunFeedbackRating, RunFeedbackRequest } from '@indx-workspace/contracts/feedback';
 import type { RunStartProblemCode } from '@indx-workspace/contracts/runs';
 import type { SurfaceLimitProblemCode } from '@indx-workspace/contracts/surfaces';
 import type { CeilingFor } from '../policy-ceiling/ceiling';
+import type { DailyCostCap } from '../usage/daily-cost';
+import type { PrincipalKind, Via } from '../rbac/principal';
 import type { TokenScope } from '../rbac/token-scope';
+import type { ResolvedAttachment } from './attachments';
 import type { SseEvent } from './sse';
 import type { RunRecord, RunStore } from './store';
+import { applicationContext } from '../application-context';
 
 /** What `listAgentFeedback` reads (issue #620). */
 export interface AgentFeedbackQuery {
@@ -51,7 +58,7 @@ export interface AgentFeedbackRow {
 }
 
 /** Who is making the request, already resolved to one workspace (spec §25 multi-tenant isolation). */
-export interface Principal {
+export interface RunPrincipal {
   /** The principal that acted. */
   readonly principalId: string;
   /**
@@ -64,7 +71,7 @@ export interface Principal {
   readonly userId: string | null;
   readonly workspaceId: string;
   /** Present for cookie/API-key identities that need an owner/admin-only operation. */
-  readonly role?: 'owner' | 'admin' | 'builder' | 'viewer';
+  readonly role?: MembershipRoleName;
   /**
    * The attenuation a browser-token credential carries (issue #236, SDK-04, S-1), or `null` for a
    * session or an API-key principal. `requireRunPermission` and `decideRunListAccess` (`./api.ts`)
@@ -78,6 +85,13 @@ export interface Principal {
    * positive assertion that this credential carries no attenuation.
    */
   readonly scope: TokenScope | null;
+  /**
+   * Which verifier produced the principal and what kind it is. Optional so a fixture that predates
+   * the identity assertion compiles; absent means no caller identity can be signed (fails closed,
+   * `./caller.ts`).
+   */
+  readonly via?: Via;
+  readonly kind?: PrincipalKind;
 }
 
 /** The part of an agent a run route needs. The rest of §17's agent belongs to W1-CP-05. */
@@ -89,7 +103,7 @@ export interface AgentRef {
    * agent with no stored policy (`engineForStoredPolicy`, `../engines/session-engine.ts`). For a
    * follow-up in a version-pinned conversation, the pinned version's policy (issue #612).
    *
-   * **Required, not optional**, for the reason {@link Principal.scope} gives: an optional field lets
+   * **Required, not optional**, for the reason {@link RunPrincipal.scope} gives: an optional field lets
    * a composition root that forgets it compile anyway, and a run whose engine silently read
    * `undefined` would be recorded as the platform's default engine whatever the agent actually says.
    *
@@ -120,6 +134,8 @@ export interface SessionRef {
    * from that version. `null` or absent for a legacy session, whose runs read the agent row.
    */
   readonly agentVersionId?: string | null;
+  /** The number of that pinned version, for the run record the in-memory store builds (#1571). */
+  readonly agentVersionNumber?: number;
   /** The engine the pinned version runs on, which a run compares in place of the agent's. */
   readonly versionEngine?: string;
 }
@@ -167,11 +183,18 @@ export interface RunTargetDescriptions {
   readonly byProject: ReadonlyMap<string, RunTargetDescription>;
 }
 
+/**
+ * A cap one run is started under. It can only lower the limits the agent's policy and the
+ * deployment ceiling resolve (`lowerLimits`), and only a trusted in-process caller sets it: no
+ * request body carries it.
+ */
+export type RunLimitsOverride = ProjectPolicyLimits;
+
 export interface LaunchContext {
   readonly run: RunRecord;
   readonly agent: AgentRef;
   readonly session: SessionRef;
-  readonly principal: Principal;
+  readonly principal: RunPrincipal;
   readonly prompt: string;
   /** A caller may only narrow the stored agent permissions for this run. */
   readonly permissionOverride?: AgentPermissions;
@@ -191,6 +214,23 @@ export interface LaunchContext {
    * own default, then the project's, then the workspace's.
    */
   readonly modelOverride?: ModelSelection | null;
+  /**
+   * Workspace files granted to this run read-only (ADR-0146), already authorised for the caller.
+   * Like `prompt`, they live only in this context, never on the stored run.
+   */
+  readonly attachments?: readonly ResolvedAttachment[];
+  /** The JSON Schema the run must answer with (ADR-0143); the engine is asked for it as given. */
+  readonly outputSchema?: Readonly<Record<string, unknown>>;
+  /** The person an API-key caller acts for (ADR-0142 D2); never set for another kind of caller. */
+  readonly subject?: string;
+  /**
+   * Narrows the run's file grants to these workspace paths (issue #1539). Like `subject`, it lives
+   * only in this context, never on the stored run: `runs.file_grants` records the result. Compose
+   * refuses a path the agent is not granted with `run_file_scope_not_granted`.
+   */
+  readonly fileScope?: readonly string[];
+  /** Lowers this run's limits; like `fileScope` it lives only in this context, and an approval continuation does not inherit it. */
+  readonly limits?: RunLimitsOverride;
 }
 
 export interface RunApiEnvironment {
@@ -200,14 +240,14 @@ export interface RunApiEnvironment {
    * Returning a principal is a positive assertion that the request carried valid credentials —
    * an implementation must not return a default principal when it finds no credentials.
    */
-  authenticate(request: Request): Promise<Principal | null>;
+  authenticate(request: Request): Promise<RunPrincipal | null>;
   /**
    * The agent, or `null` when it does not exist **or** is not this principal's to run. With the
    * `sessionId` a follow-up continues, `engine` is that conversation's pinned version's when it
    * has one (issue #612), not the row's a push moved.
    */
   findAgent(
-    principal: Principal,
+    principal: RunPrincipal,
     agentId: string,
     sessionId?: string | null,
   ): Promise<AgentRef | null>;
@@ -219,17 +259,23 @@ export interface RunApiEnvironment {
    * points at (an evaluation, issue #618); the caller has already found it among the agent's.
    */
   openSession(
-    principal: Principal,
+    principal: RunPrincipal,
     agent: AgentRef,
     requested: string | null,
     agentVersionId?: string,
   ): Promise<SessionRef | null>;
   /**
+   * Remove a session this start opened (`openSession` with `requested` null) whose run row was never
+   * written. It must keep a session that holds a run, since a run's session cascades. Optional so a
+   * composition without a session table (a test, a share) has nothing to remove.
+   */
+  readonly discardSession?: (principal: RunPrincipal, sessionId: string) => Promise<void>;
+  /**
    * Version `number` of `agentId` in the principal's workspace, or `null` when there is none
    * (issue #697: `POST /api/agents/:id/runs` with `version`). Absent: no version can be named.
    */
   readonly findAgentVersion?: (
-    principal: Principal,
+    principal: RunPrincipal,
     agentId: string,
     number: number,
   ) => Promise<{ readonly id: string } | null>;
@@ -241,7 +287,7 @@ export interface RunApiEnvironment {
    * reports the same code as the run's failure.
    */
   readonly preflight?: (
-    principal: Principal,
+    principal: RunPrincipal,
     agent: AgentRef,
     /**
      * The session the run continues, or `null` for a run that opens a new one. A new run is
@@ -251,23 +297,41 @@ export interface RunApiEnvironment {
     modelOverride: ModelSelection | null,
     /** The version a new session will pin, as {@link RunApiEnvironment.openSession} takes it. */
     agentVersionId?: string,
+    /** How many workspace files the run attaches (ADR-0146); a count above 0 needs `readFiles`. */
+    attachmentCount?: number,
+    /** How many of those are audio files (issue #1313); they need a provider that transcribes. */
+    audioAttachmentCount?: number,
+    /**
+     * The run's attachments and `fileScope`, for its files total (the storage design, §04); absent
+     * for a check that starts no run (a surface's bootstrap), which totals the grants alone.
+     */
+    files?: {
+      readonly attachments: readonly { readonly fileId: string }[];
+      readonly fileScope?: readonly string[];
+    },
   ) => Promise<{ readonly code: RunStartProblemCode; readonly message: string } | null>;
   /**
    * The deployment's policy ceiling (issue #535): `startRun` refuses an explicit `modelOverride`
    * outside its `models` with `403 policy_cannot_widen`. Absent when `AW_DEPLOYMENT_POLICY` is unset.
    */
   readonly ceilingFor?: CeilingFor;
+  /**
+   * The workspace's daily cost cap (`maxCostPerDayUsd`, issue #1851): every start refuses with
+   * `429 daily_cost_cap_reached` once the workspace has spent it today. Absent when the policy sets
+   * no cap, so no spend is read at all.
+   */
+  readonly dailyCostCap?: DailyCostCap;
   /** What a new run of the agent would use, for the composer (issue #393); `null` if unknown. */
   readonly describeRunTarget?: (
     workspaceId: string,
     agentId: string,
   ) => Promise<RunTargetDescriptions | null>;
   /** Establish row ownership through the run's persisted session owner. */
-  ownsRun(principal: Principal, run: RunRecord): Promise<boolean>;
+  ownsRun(principal: RunPrincipal, run: RunRecord): Promise<boolean>;
   readonly store: RunStore;
   /** Revoke one token id, or every active token when tokenId is null. */
   readonly revokeRunTokens?: (
-    principal: Principal,
+    principal: RunPrincipal,
     runId: string,
     tokenId: string | null,
   ) => Promise<{ readonly revoked: number; readonly outcome: string }>;
@@ -278,13 +342,13 @@ export interface RunApiEnvironment {
    * `interruptRun` in `./api.ts` does that after calling it, so the response always reflects what
    * was actually written rather than what was asked for.
    */
-  readonly interruptRun?: (principal: Principal, run: RunRecord) => Promise<void>;
+  readonly interruptRun?: (principal: RunPrincipal, run: RunRecord) => Promise<void>;
   /**
    * Append one rating of `run` (issue #539, S2-05c, C19). The caller has already found the run,
    * checked a session scope's row identity and §21, and parsed the body; this only stores it.
    */
   readonly recordRunFeedback?: (
-    principal: Principal,
+    principal: RunPrincipal,
     run: RunRecord,
     feedback: RunFeedbackRequest,
   ) => Promise<void>;
@@ -294,7 +358,7 @@ export interface RunApiEnvironment {
    * the call and decided `ownerPrincipalId` from the caller's runs grant; this only reads.
    */
   readonly listAgentFeedback?: (
-    principal: Principal,
+    principal: RunPrincipal,
     query: AgentFeedbackQuery,
   ) => Promise<readonly AgentFeedbackRow[] | null>;
   /**
@@ -318,7 +382,7 @@ export interface RunApiEnvironment {
    * `judge_unavailable`.
    */
   readonly judgeEvaluationCase?: (
-    principal: Principal,
+    principal: RunPrincipal,
     agent: AgentRef,
     agentVersionId: string,
     prompt: string,
@@ -329,7 +393,7 @@ export interface RunApiEnvironment {
    * authorised the call and run every case; this only stores it.
    */
   readonly recordEvaluation?: (
-    principal: Principal,
+    principal: RunPrincipal,
     evaluation: {
       readonly versionId: string;
       readonly passed: number;
@@ -344,7 +408,7 @@ export interface RunApiEnvironment {
    */
   readonly evaluationRuns?: {
     readonly start: (
-      principal: Principal,
+      principal: RunPrincipal,
       run: {
         readonly versionId: string;
         readonly total: number;
@@ -352,17 +416,17 @@ export interface RunApiEnvironment {
       },
     ) => Promise<{ readonly id: string; readonly createdAt: Date }>;
     readonly find: (
-      principal: Principal,
+      principal: RunPrincipal,
       evaluationId: string,
     ) => Promise<StoredAgentVersionEvaluation | null>;
     /** Take the run's lease for `leaseMs`; `null` when it is not running or already leased. */
     readonly claim: (
-      principal: Principal,
+      principal: RunPrincipal,
       evaluationId: string,
       leaseMs: number,
     ) => Promise<StoredAgentVersionEvaluation | null>;
     readonly progress: (
-      principal: Principal,
+      principal: RunPrincipal,
       evaluationId: string,
       progress: {
         readonly results: unknown;
@@ -377,43 +441,29 @@ export interface RunApiEnvironment {
    * store, never to the HTTP response that started it (R-13 finding 8, spec §14.6).
    */
   launch(context: LaunchContext): void;
+  /** Where the run routes log what no caller is told (F-04); absent in a test that does not care. */
+  readonly logger?: Logger;
 }
 
 /**
- * The registry is anchored on `globalThis`, not on a module-level `let`, and that is not a
- * stylistic choice.
- *
- * **Next.js compiles `instrumentation.ts` and the route handlers into separate module graphs.**
- * Verified during this task's acceptance run on `next@16.3.4`: an `instrumentation.ts` that
- * imported this module and called `installRunApi` logged its own success, and a request to
- * `GET /api/runs/:id` in the same process still answered `503 run_api_not_configured`, because
- * the route's bundle held a second, untouched copy of the module-level variable. A `globalThis`
- * property is shared by every bundle in one Node process, so the two halves see one registry.
- *
- * The scope this buys is exactly one process. It is deliberately not more: two replicas have two
- * registries, which is correct, because what they are registering is per-process wiring.
+ * The run routes as the application context holds them. `disabled` is a deployment with no run
+ * runtime (no `RUNNER_URL` and no runner manager, or no driver registry): every run route answers
+ * `503 run_api_not_configured`, exactly as with no context at all.
  */
-interface RunApiRegistry {
-  /** Namespaced so it cannot collide with anything else on the global object. */
-  __agentWorkspaceRunApiEnvironment__?: RunApiEnvironment;
-}
+export type RunApi =
+  | { readonly kind: 'serving'; readonly environment: RunApiEnvironment }
+  | { readonly kind: 'disabled' };
 
-const registry = globalThis as typeof globalThis & RunApiRegistry;
-
-/** Install the adapters. Called once by whoever composes the application. */
-export function installRunApi(environment: RunApiEnvironment): void {
-  registry.__agentWorkspaceRunApiEnvironment__ = environment;
-}
-
-/** Remove the adapters. For tests, and for a harness that must not leak into the next case. */
-export function resetRunApi(): void {
-  delete registry.__agentWorkspaceRunApiEnvironment__;
-}
-
+/**
+ * The run API of the installed application context, or `null` when there is no context or its run
+ * API is `disabled`. Read per request; never cached.
+ */
 export function getRunApi(): RunApiEnvironment | null {
-  return registry.__agentWorkspaceRunApiEnvironment__ ?? null;
+  const runs = applicationContext()?.runs;
+  return runs?.kind === 'serving' ? runs.environment : null;
 }
 
 /** The 503 every run route returns while nothing is installed. */
 export const RUN_API_NOT_CONFIGURED_MESSAGE =
-  'the run API has no environment installed: call installRunApi() with an authenticator, an agent lookup, a run store and a runtime launcher. This server will not guess any of them.';
+  'No run runtime is configured for this deployment: set RUNNER_URL, or RUNNER_MANAGER_URL and ' +
+  'RUNNER_MANAGER_TOKEN for a runner manager. This server will not guess one.';

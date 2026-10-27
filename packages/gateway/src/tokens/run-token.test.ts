@@ -32,6 +32,18 @@ describe('run token codec', () => {
     });
   });
 
+  it('carries the caller claim, and refuses one with an unknown principal kind', async () => {
+    const codec = createRunTokenCodec({ secret: SECRET, now: () => 1_000 });
+    const caller = { sub: 'customer-42', principalKind: 'api-key' } as const;
+    const verified = await codec.verify(await codec.issue({ ...SUBJECT, caller }));
+    expect(verified).toMatchObject({ ok: true, claims: { caller } });
+    const forged = await codec.issue({
+      ...SUBJECT,
+      caller: { sub: 'x', principalKind: 'root' as 'visitor' },
+    });
+    await expect(codec.verify(forged)).resolves.toEqual({ ok: false, reason: 'invalid' });
+  });
+
   it('rejects modified and expired claims without exposing their contents', async () => {
     let now = 1_000;
     const codec = createRunTokenCodec({ secret: SECRET, now: () => now });

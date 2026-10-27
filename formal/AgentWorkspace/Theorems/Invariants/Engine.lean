@@ -66,11 +66,11 @@ example :
     SessionRuns.launchAll (SessionRuns.pin .claudeAgentSdk)
         [.claudeAgentSdk, .claudeAgentSdk, .claudeAgentSdk]
       = some ⟨.claudeAgentSdk, [⟨.claudeAgentSdk⟩, ⟨.claudeAgentSdk⟩, ⟨.claudeAgentSdk⟩]⟩ := by
-  decide
+  decide +kernel
 
 /-- Witness: a request for another engine refuses rather than re-pinning the session. -/
 example :
     SessionRuns.launchAll (SessionRuns.pin .claudeAgentSdk) [.claudeAgentSdk, .pi] = none := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.Engine

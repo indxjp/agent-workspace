@@ -6,15 +6,12 @@ import {
   PATCH as patchConnectorRoute,
 } from '../../app/api/connectors/[id]/route';
 import { POST as testConnectorRoute } from '../../app/api/connectors/[id]/test-connection/route';
-import { clearRbacRuntime } from '../rbac/runtime';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';
 import { createInMemoryConnectorsStoreProvider } from './memory-store';
-import {
-  clearConnectorsRuntime,
-  configureConnectorsRuntime,
-  type ConnectorsRuntime,
-} from './runtime';
+import type { ConnectorsRuntime } from './runtime';
 import type { ConnectorsStoreProvider } from './store';
+import { installTestDomains } from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const rotateConnectorCredentialObservation = vi.hoisted(() => ({ calls: 0 }));
 
@@ -73,8 +70,7 @@ const VIEWER = {
 };
 
 afterEach(() => {
-  clearConnectorsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 async function connectorFixture(): Promise<{
@@ -118,13 +114,14 @@ function configureConnectorRuntime(stores: ConnectorsStoreProvider): void {
     identifyActor: () => Promise.resolve({ principalId: CREATOR.principalId, userId: CREATOR.id }),
     recordAudit: () => Promise.resolve(),
   };
-  configureConnectorsRuntime(runtime);
+  installTestDomains({ connectors: { kind: 'serving', runtime: runtime } });
 }
 
 describe('connector item authorization characterization', () => {
   it('reports an unwired connector runtime as itself on both item route families', async () => {
     const id = crypto.randomUUID();
     const harness = installRbacHarness([OWNER]);
+    installTestDomains({ connectors: { kind: 'unavailable' } });
     for (const [method, path, handler] of [
       ['GET', `/api/connectors/${id}`, getConnectorRoute],
       ['POST', `/api/connectors/${id}/test-connection`, testConnectorRoute],

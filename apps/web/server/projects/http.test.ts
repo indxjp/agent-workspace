@@ -110,6 +110,13 @@ describe('projectConnectorKindRefusal (#586)', () => {
     });
   });
 
+  it("answers a binding of an .attachments/ file as the agent assignment's 400 unknown_file (ADR-0146 D6)", async () => {
+    const refused = Object.assign(new Error('reserved'), { name: 'ProjectFileReservedError' });
+    const response = projectConnectorKindRefusal(refused);
+    expect(response?.status).toBe(400);
+    expect(await response?.json()).toMatchObject({ error: { code: 'unknown_file' } });
+  });
+
   it('leaves every other failure to the generic mapping', () => {
     expect(projectConnectorKindRefusal(new Error('boom'))).toBeNull();
     expect(projectConnectorKindRefusal({ name: 'ProjectConnectorKindError' })).toBeNull();

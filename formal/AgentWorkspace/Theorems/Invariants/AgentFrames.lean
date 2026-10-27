@@ -32,14 +32,14 @@ express becomes `agent.native`, and one that could not be parsed becomes `agent.
 the guarantee the runner's writer relies on without re-checking, and the reason the closed frame set
 is safe to close. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#63-the-neutral-event-vocabulary")
-  (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+  (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem never_drops_an_engine_message (classified : Classified) :
     toAgentFrames classified ≠ [] :=
   nonEmptyOr_ne_nil _ _
 
 /-- The fallback of an unmapped message names the engine's own message, so nothing is lost when the
 neutral vocabulary has nothing to say about it. -/
-@[aw_spec (tier := T2) (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (tier := T2) (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem unmapped_message_is_carried_natively (classified : Classified)
     (h : mappedFrames classified = []) :
     toAgentFrames classified = [fallbackFrame classified] := by
@@ -59,7 +59,7 @@ example :
         (.obj [("message", .obj [("content", .arr [.obj [("type", .str "image")]])])])] ∧
     toAgentFrames (.malformed "an SDK event must be an object; got the string \"nope\""
         (.str "nope")) =
-      [.malformed "an SDK event must be an object; got the string \"nope\""] := by decide
+      [.malformed "an SDK event must be an object; got the string \"nope\""] := by decide +kernel
 
 /-! ## 2. Tool results are paired -/
 
@@ -82,7 +82,7 @@ anything: the Claude Agent SDK carries a `tool_use` block on the assistant's mes
 `tool_result` on the *following* user message, so the frame announcing a `toolCallId` is always
 emitted before the frame answering it. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/04-api-specification.md#63-the-neutral-event-vocabulary")
-  (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+  (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem tool_frames_follow_the_turn_that_can_carry_them (items : List JValue) :
     (toolFrames "assistant" (some (.arr items))).all Frame.isToolCall = true ∧
     (toolFrames "user" (some (.arr items))).all Frame.isToolResult = true := by
@@ -91,7 +91,7 @@ theorem tool_frames_follow_the_turn_that_can_carry_them (items : List JValue) :
   · simpa [toolFrames] using mapped_results_are_results (items.filterMap toolResultData)
 
 /-- A turn that is neither the assistant's nor the user's carries no tool frame at all. -/
-@[aw_spec (tier := T2) (ts := "packages/core/src/schemas.ts#toAgentFrames")]
+@[aw_spec (tier := T2) (ts := "packages/run-protocol/src/schemas.ts#toAgentFrames")]
 theorem no_tool_frames_from_another_role (items : List JValue) :
     toolFrames "system" (some (.arr items)) = [] := by
   simp [toolFrames]
@@ -109,10 +109,10 @@ example :
         (.obj [("uuid", .str "u-1"),
           ("message", .obj [("content", .arr [
             .obj [("type", .str "tool_result"), ("tool_use_id", .str "tool_1"),
-              ("content", .str "ok")]])])]))) = true := by decide
+              ("content", .str "ok")]])])]))) = true := by decide +kernel
 
 /-- And the checker is not vacuous: a result whose call was never announced is **not** paired. -/
-example : paired [.toolResult "tool_9" .completed "ok" false] = false := by decide
+example : paired [.toolResult "tool_9" .completed "ok" false] = false := by decide +kernel
 
 /-! ## 3. Resume is exact -/
 
@@ -218,13 +218,13 @@ a post-ENG-03 run wrote — is served under strictly increasing `(sequence, sub-
 example :
     idsIncreasing [(1, none), (2, some 0), (2, some 1), (2, some 2), (3, none)] = true ∧
     idsIncreasing [(2, some 1), (2, some 0)] = false ∧
-    idsIncreasing [(3, none), (2, some 0)] = false := by decide
+    idsIncreasing [(3, none), (2, some 0)] = false := by decide +kernel
 
 /-- And the ids are rendered under the documented grammar. -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/agent-frames.ts#wireEventId")]
 theorem wire_ids_follow_the_documented_grammar :
     wireEventId 41 none = "41" ∧
     wireEventId 41 (some 0) = "41.0" ∧
-    wireEventId 41 (some 7) = "41.7" := by decide
+    wireEventId 41 (some 7) = "41.7" := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.AgentFrames

@@ -124,7 +124,6 @@ per-run claim, matched by `engineSessionId`.
 | `invalid_session_status`     | 400    | `status` was present and was neither `active` nor `archived`.                               |
 | `invalid_limit`              | 400    | `limit` was present and is not an integer from 1 to 200.                                    |
 | `invalid_cursor`             | 400    | `cursor` is not a `nextCursor` this list minted for the caller's workspace.                 |
-| `pagination_unavailable`     | 400    | `limit` or `cursor` was sent to a deployment with no session repository, which cannot page. |
 | `workspace_not_addressable`  | 500    | The caller's workspace id cannot be a transcript project key (deployment defect).           |
 
 <CodeGroup>

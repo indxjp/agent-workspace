@@ -165,17 +165,17 @@ run "azure_native_data_backends_use_managed_identity" {
   assert {
     condition = length([
       for item in azurerm_container_app.web.template[0].container[0].env : item
-      if item.name == "OBJECT_STORAGE_BACKEND" && item.value == "azure-blob"
+      if item.name == "AW_STORAGE_URL" && item.value == "azblob://${azurerm_storage_account.workspace.name}/${azurerm_storage_container.workspace_objects.name}"
     ]) == 1
-    error_message = "the web application must select the native Azure Blob backend explicitly"
+    error_message = "the web application must receive one AW_STORAGE_URL naming the provisioned account and container"
   }
 
   assert {
     condition = length([
       for item in azurerm_container_app.web.template[0].container[0].env : item
-      if item.name == "OBJECT_STORAGE_BUCKET" && item.value == azurerm_storage_container.workspace_objects.name
-    ]) == 1
-    error_message = "the web application must receive the provisioned object container"
+      if contains(["OBJECT_STORAGE_BACKEND", "OBJECT_STORAGE_BUCKET", "OBJECT_STORAGE_ENDPOINT", "AW_SESSION_TRANSCRIPT_ROOT"], item.name)
+    ]) == 0
+    error_message = "the web application must not also receive the legacy storage settings"
   }
 
   assert {

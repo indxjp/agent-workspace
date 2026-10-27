@@ -85,12 +85,15 @@ import {
   query,
   tool,
   type AgentDefinition,
+  type CanUseTool,
   type McpServerConfig as SdkMcpServerConfig,
   type Options as SdkOptions,
   type SDKMessage,
   type SessionStore,
+  type Settings,
 } from '@anthropic-ai/claude-agent-sdk';
-import { classifySdkEvent, RunRequest, type ClassifiedSdkEvent } from '@agent-workspace/core';
+import { classifySdkEvent, type ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
+import { canonicalCall, needsApproval } from '@indx-workspace/contracts/agents';
 import {
   executeRunSkillScript,
   RUN_SKILL_SCRIPT_TOOL,
@@ -99,9 +102,22 @@ import {
   type SkillScriptSetup,
 } from '@agent-workspace/engine';
 
-import { compileRunRequest } from './compile.js';
-import type { CompiledMcpServerConfig, CompiledSdkOptions } from './options.js';
+import type { ClaudeApprovalGate, CompiledMcpServerConfig, CompiledSdkOptions } from './options.js';
 import { claudeSessionScope } from './scope.js';
+import {
+  CLAUDE_SEARCH_FILES_INPUT,
+  executeFileSearch,
+  type FileSearchSetup,
+  SEARCH_FILES_DESCRIPTION,
+  SEARCH_FILES_TOOL,
+} from './file-search.js';
+import {
+  CLAUDE_HANDOFF_INPUT,
+  HANDOFF_DESCRIPTION,
+  HANDOFF_RESULT_TEXT,
+  HANDOFF_TOOL,
+  type RecordedHandoff,
+} from './handoff.js';
 import {
   CLAUDE_SKILL_SCRIPT_INPUT,
   CLAUDE_SKILL_SCRIPT_SERVER,
@@ -335,35 +351,84 @@ export type SdkOptionOverlay = {
   readonly abortController?: AbortController;
   /** `run_skill_script` (ADR-0137): offered as an in-process MCP server when present. */
   readonly skillScript?: SkillScriptSetup;
+  /** `search_files` (ADR-0147): offered on the same in-process MCP server when present. */
+  readonly fileSearch?: FileSearchSetup;
+  /** ADR-0145's gate and the run state it records into; `canUseTool` is set only when it gates a tool. */
+  readonly approval?: { readonly gate: ClaudeApprovalGate; readonly state: ApprovalState };
+  /** `handoff_to_person` (ADR-0145 D4): offered on the same in-process MCP server; `record` is called by the tool. */
+  readonly handoff?: { readonly record: (handoff: RecordedHandoff) => void };
 };
 
 /**
- * The in-process MCP server that carries `run_skill_script`; the SDK type stays in this file. The
- * run's `signal` stops a running script.
+ * The in-process MCP server that carries `run_skill_script`, `search_files` and
+ * `handoff_to_person`; the SDK type stays in this file. The run's `signal` stops a running script or
+ * search.
  */
-function skillScriptServer(
-  setup: SkillScriptSetup,
+function agentWorkspaceServer(
+  overlay: Pick<SdkOptionOverlay, 'skillScript' | 'fileSearch' | 'handoff'>,
   signal: AbortSignal | undefined,
 ): SdkMcpServerConfig {
+  const { skillScript, fileSearch, handoff } = overlay;
   return createSdkMcpServer({
     name: CLAUDE_SKILL_SCRIPT_SERVER,
     tools: [
-      tool(
-        RUN_SKILL_SCRIPT_TOOL,
-        skillScriptToolDescription(setup),
-        CLAUDE_SKILL_SCRIPT_INPUT.shape,
-        async (input) => {
-          const { text, isError } = await executeRunSkillScript(
-            nodeSkillScriptHost,
-            setup,
-            input,
-            signal,
-          );
-          return { content: [{ type: 'text', text }], isError };
-        },
-      ),
+      ...(skillScript === undefined
+        ? []
+        : [
+            tool(
+              RUN_SKILL_SCRIPT_TOOL,
+              skillScriptToolDescription(skillScript),
+              CLAUDE_SKILL_SCRIPT_INPUT.shape,
+              async (input) => {
+                const { text, isError } = await executeRunSkillScript(
+                  nodeSkillScriptHost,
+                  skillScript,
+                  input,
+                  signal,
+                );
+                return { content: [{ type: 'text' as const, text }], isError };
+              },
+            ),
+          ]),
+      ...(fileSearch === undefined
+        ? []
+        : [
+            tool(
+              SEARCH_FILES_TOOL,
+              SEARCH_FILES_DESCRIPTION,
+              CLAUDE_SEARCH_FILES_INPUT.shape,
+              async (input) => {
+                const { text, isError } = await executeFileSearch(fileSearch, input, signal);
+                return { content: [{ type: 'text' as const, text }], isError };
+              },
+            ),
+          ]),
+      ...(handoff === undefined
+        ? []
+        : [
+            tool(HANDOFF_TOOL, HANDOFF_DESCRIPTION, CLAUDE_HANDOFF_INPUT.shape, (input) => {
+              handoff.record({ reason: input.reason });
+              return Promise.resolve({
+                content: [{ type: 'text' as const, text: HANDOFF_RESULT_TEXT }],
+              });
+            }),
+          ]),
     ],
   });
+}
+
+/**
+ * The flag-tier settings a gated run starts with (ADR-0145 D3).
+ *
+ * `settingSources: ['project']` loads the workspace's `.claude/settings.json`, whose
+ * `permissions.allow` rules and hooks can settle a call before `canUseTool` is asked. Each gate is
+ * therefore also an `ask` rule, which Claude Code evaluates before every allow rule from any source,
+ * and settings hooks are off: Claude Code folds PreToolUse hook decisions as deny > defer > ask >
+ * allow but does not document a hook's `allow` as yielding to an `ask` rule. The flag tier outranks
+ * project settings, so the workspace cannot turn either back.
+ */
+function gatedRunSettings(requireApproval: readonly string[]): Settings {
+  return { permissions: { ask: [...requireApproval] }, disableAllHooks: true };
 }
 
 /**
@@ -377,6 +442,14 @@ function skillScriptServer(
  * taken off the exported signature.
  */
 function buildSdkOptions(compiled: CompiledSdkOptions, overlay: SdkOptionOverlay): SdkOptions {
+  const { approval } = overlay;
+  const canUseTool: CanUseTool | undefined =
+    approval === undefined || approval.gate.requireApproval.length === 0
+      ? undefined
+      : (toolName, input, { toolUseID }) =>
+          Promise.resolve(
+            decideToolPermission(approval.gate, approval.state, toolName, input, toolUseID),
+          );
   return {
     cwd: compiled.cwd,
     // R-01 §3's first trap: `env` REPLACES the subprocess environment. `compiled.env` is
@@ -387,11 +460,13 @@ function buildSdkOptions(compiled: CompiledSdkOptions, overlay: SdkOptionOverlay
     strictMcpConfig: compiled.strictMcpConfig,
     mcpServers: {
       ...toSdkMcpServers(compiled.mcpServers),
-      ...(overlay.skillScript === undefined
+      ...(overlay.skillScript === undefined &&
+      overlay.fileSearch === undefined &&
+      overlay.handoff === undefined
         ? {}
         : {
-            [CLAUDE_SKILL_SCRIPT_SERVER]: skillScriptServer(
-              overlay.skillScript,
+            [CLAUDE_SKILL_SCRIPT_SERVER]: agentWorkspaceServer(
+              overlay,
               overlay.abortController?.signal,
             ),
           }),
@@ -412,8 +487,16 @@ function buildSdkOptions(compiled: CompiledSdkOptions, overlay: SdkOptionOverlay
     ...(compiled.allowDangerouslySkipPermissions === undefined
       ? {}
       : { allowDangerouslySkipPermissions: compiled.allowDangerouslySkipPermissions }),
+    ...(compiled.outputFormat === undefined
+      ? {}
+      : {
+          outputFormat: { type: 'json_schema', schema: { ...compiled.outputFormat.schema } },
+        }),
     ...(overlay.sessionStore === undefined ? {} : { sessionStore: overlay.sessionStore }),
     ...(overlay.abortController === undefined ? {} : { abortController: overlay.abortController }),
+    ...(canUseTool === undefined || approval === undefined
+      ? {}
+      : { canUseTool, settings: gatedRunSettings(approval.gate.requireApproval) }),
   };
 }
 
@@ -428,6 +511,20 @@ export function toSdkOptions(
   overlay: SdkOptionOverlay = {},
 ): TranslatedSdkOptions {
   return buildSdkOptions(compiled, overlay);
+}
+
+/**
+ * The failure a run ends with when the SDK gave up getting an answer that matches the requested
+ * schema, or `null` for any other event (ADR-0143). The message is fixed: it never repeats the
+ * schema or model text.
+ */
+export function structuredOutputFailure(event: ClassifiedSdkEvent): Error | null {
+  if (event.kind !== 'result' || event.subtype !== 'error_max_structured_output_retries') {
+    return null;
+  }
+  return new Error(
+    'output_schema_unsatisfied: the model could not produce an answer that matches the requested output schema.',
+  );
 }
 
 // ── 2. Durability: an answer that is only ever `true` because something passed ───────────
@@ -446,7 +543,89 @@ export function toSdkOptions(
  */
 export type SessionDurability = SessionDurabilityVerdict;
 
+/** The call a run stopped on. The tool's arguments appear only in `canonicalCall`, never in a message. */
+export type ApprovalRequest = {
+  readonly toolName: string;
+  readonly toolUseId: string;
+  readonly canonicalCall: string;
+};
+
+/**
+ * What the approval gate remembers about one run. `consumed` holds single use within this
+ * execution; across executions the control plane holds it, by stamping the continuation's approvals
+ * consumed when the run starts and never queueing it again (ADR-0151). The gateway keeps its own
+ * durable record per call (`runs.consumed_tool_calls`, ADR-0145 D2.1), because it runs the write.
+ */
+export type ApprovalState = {
+  readonly consumed: Set<string>;
+  request: ApprovalRequest | null;
+};
+
+type PermissionDecision =
+  | { readonly behavior: 'allow'; readonly updatedInput: Record<string, unknown> }
+  | { readonly behavior: 'deny'; readonly message: string; readonly interrupt?: true };
+
+/**
+ * `canUseTool`, as a pure decision (ADR-0145 D2.1, D5). Only reached for a call no `allowedTools`
+ * rule or `disallowedTools` rule already settled.
+ *
+ * A gated call runs only when its exact canonical text was approved, and each approval is good for
+ * one call. A gated call that is not approved records itself and denies with `interrupt`, which ends
+ * the run; the first one wins, because the model may issue several in one turn. A call to a tool the
+ * gate does not name is denied, except for the `deferred` auto-approvals `splitApprovals` moved out of
+ * `allowedTools`, which are allowed here — unscoped ones only: this decision reads the tool name, so a
+ * scoped rule such as `Edit(//ws/**)` allowing here would allow the tool over every path.
+ */
+export function decideToolPermission(
+  gate: ClaudeApprovalGate,
+  state: ApprovalState,
+  toolName: string,
+  input: Record<string, unknown>,
+  toolUseId: string,
+): PermissionDecision {
+  if (!needsApproval(gate.requireApproval, toolName)) {
+    const unscoped = gate.deferred.filter((rule) => !rule.includes('('));
+    return needsApproval(unscoped, toolName)
+      ? { behavior: 'allow', updatedInput: input }
+      : { behavior: 'deny', message: `${toolName} is not allowed by this agent's tool policy.` };
+  }
+  let call: string;
+  try {
+    call = canonicalCall(toolName, input);
+  } catch {
+    return {
+      behavior: 'deny',
+      message: `approval_required: the arguments of ${toolName} are not JSON, so the call cannot be approved.`,
+    };
+  }
+  if (gate.approvedToolCalls.includes(call)) {
+    if (state.consumed.has(call)) {
+      return {
+        behavior: 'deny',
+        message: `approval_already_used: the approval for this ${toolName} call was already used.`,
+      };
+    }
+    state.consumed.add(call);
+    return { behavior: 'allow', updatedInput: input };
+  }
+  if (gate.approvedToolCalls.length > 0) {
+    return {
+      behavior: 'deny',
+      message: `approval_call_mismatch: ${toolName} was called with arguments nobody approved.`,
+    };
+  }
+  state.request ??= { toolName, toolUseId, canonicalCall: call };
+  return {
+    behavior: 'deny',
+    interrupt: true,
+    message: `approval_required: ${toolName} needs a person's approval before it runs.`,
+  };
+}
+
 type RunState = {
+  readonly approval: ApprovalState;
+  /** The first `handoff_to_person` call of the run; later calls are ignored. */
+  handoff: RecordedHandoff | null;
   readonly storeConfigured: boolean;
   appendsSettled: number;
   appendsInFlight: number;
@@ -459,6 +638,8 @@ type RunState = {
 
 function newRunState(storeConfigured: boolean): RunState {
   return {
+    approval: { consumed: new Set(), request: null },
+    handoff: null,
     storeConfigured,
     appendsSettled: 0,
     appendsInFlight: 0,
@@ -626,6 +807,10 @@ export type ClaudeRun = {
   readonly events: AsyncGenerator<ClassifiedSdkEvent, void, void>;
   /** See {@link SessionDurability}. Meaningful once `events` has been exhausted. */
   sessionDurability(): SessionDurability;
+  /** The call the run stopped on for want of approval, or `null`. Meaningful once `events` has ended. */
+  approvalRequest(): ApprovalRequest | null;
+  /** The handoff the model asked for, or `null`. Meaningful once the run's `result` event has arrived. */
+  handoff(): RecordedHandoff | null;
   /**
    * Cancel the run. This is `AbortController.abort()`, not `Query.interrupt()`: `interrupt()`
    * is a control request and the SDK supports control requests only in streaming-input mode,
@@ -659,35 +844,43 @@ async function* normalise(
   }
 }
 
-/**
- * Start one run.
- *
- * The request is **parsed, not trusted**, before anything else happens: it arrives from a
- * database row, an HTTP body or a queue message, and ADR-0015's first rule is to parse before
- * comparing. `compileRunRequest` parses again internally; the cost is microseconds and the
- * alternative is reading `prompt` off a value that was never validated.
- *
- * The tenant session scope is then asserted a second time, explicitly. `RunRequest` already
- * refuses an invalid one, but this is the check spec §25 rests on and R-01 §7 records that both
- * of the SDK's failure modes here are *silent* — an invalid `CLAUDE_CODE_PROJECT_DIR_NAME`, or
- * one set without `CLAUDE_CONFIG_DIR`, is ignored and the session is keyed under the sanitised
- * `cwd`, colliding with every other tenant on the same workspace path. A check that cannot run
- * must fail; this one runs where the run starts.
- *
- * Throws `ZodError` on an invalid request and `Error` on a scope or translation the boundary
- * refuses. There is no partial-success return: a run whose configuration could not be validated
- * must not start, and must not start *with defaults* either.
- */
-export function startRun(request: RunRequest, deps: RunDeps = {}): ClaudeRun {
-  const parsed = RunRequest.parse(request);
+/** What {@link startRun} needs: the adapter's own compile output, plus what that output omits. */
+export type ClaudeRunStart = {
+  readonly runId: string;
+  readonly projectKey: string;
+  readonly prompt: string;
+  readonly options: CompiledSdkOptions;
+  /** Present when the agent requires approval for some tool (`CompiledClaudeRun.approval`). */
+  readonly approval?: ClaudeApprovalGate | undefined;
+  /** Present when the agent offers `handoff_to_person` (`CompiledClaudeRun.handoff`). */
+  readonly handoff?: true | undefined;
+};
 
+/**
+ * Start one run from the options `compileRunRequest` produced.
+ *
+ * The input is the adapter's own compiled output, which `compileRunRequest` already parsed, so
+ * nothing is parsed or compiled again here: a second compile could disagree with the one
+ * `compile()` approved.
+ *
+ * The tenant session scope is still asserted, explicitly. This is the check spec §25 rests on
+ * and R-01 §7 records that both of the SDK's failure modes here are *silent* — an invalid
+ * `CLAUDE_CODE_PROJECT_DIR_NAME`, or one set without `CLAUDE_CONFIG_DIR`, is ignored and the
+ * session is keyed under the sanitised `cwd`, colliding with every other tenant on the same
+ * workspace path. A check that cannot run must fail; this one runs where the run starts.
+ *
+ * Throws `Error` on a scope the boundary refuses. There is no partial-success return: a run
+ * whose configuration could not be validated must not start, and must not start *with defaults*
+ * either.
+ */
+export function startRun(start: ClaudeRunStart, deps: RunDeps = {}): ClaudeRun {
   // ENG-04b: the scope is *derived* now, from `cwd` and the platform's project key, because the
   // config directory is this engine's own (`./scope.ts`). The assertion is unchanged: the pair the
   // SDK will be given is checked before the run starts, because both of the SDK's failure modes
   // here are silent.
-  const scope = claudeSessionScope(parsed.cwd, parsed.projectKey);
+  const scope = claudeSessionScope(start.options.cwd, start.projectKey);
   if (!scope.ok) {
-    throw new Error(`refusing to start run ${parsed.runId}: ${scope.reason}`);
+    throw new Error(`refusing to start run ${start.runId}: ${scope.reason}`);
   }
 
   const state = newRunState(deps.sessionStore !== undefined);
@@ -695,25 +888,40 @@ export function startRun(request: RunRequest, deps: RunDeps = {}): ClaudeRun {
   const overlay: SdkOptionOverlay = {
     abortController,
     ...(deps.skillScript === undefined ? {} : { skillScript: deps.skillScript }),
+    ...(deps.fileSearch === undefined ? {} : { fileSearch: deps.fileSearch }),
     ...(deps.sessionStore === undefined
       ? {}
       : { sessionStore: instrumentSessionStore(deps.sessionStore, state) }),
+    ...(start.approval === undefined
+      ? {}
+      : { approval: { gate: start.approval, state: state.approval } }),
+    ...(start.handoff === undefined
+      ? {}
+      : {
+          handoff: {
+            record: (handoff) => {
+              state.handoff ??= handoff;
+            },
+          },
+        }),
   };
 
   // `buildSdkOptions`, not the exported `toSdkOptions`: `query()` needs the value at the SDK's
   // own `Options` type, and the export deliberately no longer carries it.
   //
-  // `parsed.prompt` reaches `query()` unfiltered. That is what makes user-typed `/name` skill
+  // `start.prompt` reaches `query()` unfiltered. That is what makes user-typed `/name` skill
   // dispatch a tenant-controlled path this boundary does not close — see the header's third
   // skill-surface bullet, and the declared gap on this task's PR.
   const session = query({
-    prompt: parsed.prompt,
-    options: buildSdkOptions(compileRunRequest(parsed), overlay),
+    prompt: start.prompt,
+    options: buildSdkOptions(start.options, overlay),
   });
 
   return {
     events: normalise(session, state),
     sessionDurability: () => verdict(state),
+    approvalRequest: () => state.approval.request,
+    handoff: () => state.handoff,
     abort: (reason?: unknown) => {
       abortController.abort(reason);
     },

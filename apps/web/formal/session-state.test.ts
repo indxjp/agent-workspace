@@ -35,6 +35,8 @@
  * session to engines the closed `ENGINE_IDS` set (and so the `sessions.engine` CHECK) cannot carry,
  * which is exactly the state the engine check exists for.
  */
+import { clearApplicationContext } from '../server/application-context';
+import { installTestDomains } from '../server/application-context-fixtures';
 import crypto from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -67,18 +69,17 @@ import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors.js';
-import { createLocalFilesystemObjectStoreProvider } from '../server/files/object-store-bridge';
+import { createLocalFilesystemObjectStoreProvider } from '@agent-workspace/core/storage';
 import { loadTranscript } from '../server/sessions/api';
-import { DatabaseTranscriptStore } from '../server/sessions/database-store';
-import {
-  installSessionApi,
-  resetSessionApi,
-  type SessionPrincipal,
-} from '../server/sessions/environment';
+import type { SessionApiPrincipal } from '../server/sessions/environment';
 import { InMemoryTranscriptStore } from '../server/sessions/memory-store';
 import type { SessionStateStore } from '../server/sessions/state';
 import { InMemorySessionStateStore } from '../server/sessions/state-memory-store';
-import { DatabaseSessionStateStore } from '../server/sessions/state-store';
+import {
+  DatabaseSessionStateStore,
+  DatabaseTranscriptStore,
+  createRepositorySessionsStoreProvider,
+} from '../server/sessions/store';
 import {
   appendSessionState,
   deleteSessionState,
@@ -156,6 +157,7 @@ function repositoryOf(session: SessionRecord): SessionRepositoryProvider {
       update: () => Promise.resolve({ kind: 'no-op', session }),
       archive: () => Promise.resolve({ kind: 'no-op', session }),
       restore: () => Promise.resolve({ kind: 'no-op', session }),
+      discardIfUnused: () => Promise.resolve(false),
     }),
   };
 }
@@ -292,31 +294,35 @@ function postgresBackend(): Backend & {
 async function install(
   backend: Backend,
   options: {
-    readonly principal: SessionPrincipal;
+    readonly principal: SessionApiPrincipal;
     readonly session: SessionRecord;
   },
 ): Promise<Awaited<ReturnType<Backend['fresh']>>> {
   const fresh = await backend.fresh();
-  installSessionApi({
-    authenticate: () => Promise.resolve(options.principal),
-    canAccessSession: (caller, id) =>
-      Promise.resolve(
-        caller.kind === 'runner'
-          ? caller.sessionId === id && caller.workspaceId === options.session.workspaceId
-          : caller.workspaceId === options.session.workspaceId,
-      ),
-    store: fresh.legacy,
-    stateStore: fresh.stateStore,
-    sessions: repositoryOf(options.session),
-    scopes: createInMemoryWorkspaceScopeResolver([
-      { id: WORKSPACE, slug: 'one' },
-      { id: OTHER_WORKSPACE, slug: 'two' },
-    ]),
+  installTestDomains({
+    sessions: {
+      authenticate: () => Promise.resolve(options.principal),
+      canAccessSession: (caller, id) =>
+        Promise.resolve(
+          caller.kind === 'runner'
+            ? caller.sessionId === id && caller.workspaceId === options.session.workspaceId
+            : caller.workspaceId === options.session.workspaceId,
+        ),
+      store: fresh.legacy,
+      stateStore: fresh.stateStore,
+      sessions: createRepositorySessionsStoreProvider({
+        repositories: repositoryOf(options.session),
+        scopes: createInMemoryWorkspaceScopeResolver([
+          { id: WORKSPACE, slug: 'one' },
+          { id: OTHER_WORKSPACE, slug: 'two' },
+        ]),
+      }),
+    },
   });
   return fresh;
 }
 
-const OWN_RUNNER: SessionPrincipal = {
+const OWN_RUNNER: SessionApiPrincipal = {
   kind: 'runner',
   workspaceId: WORKSPACE,
   runId: USER,
@@ -328,7 +334,7 @@ function installOwnSession(backend: Backend): Promise<Awaited<ReturnType<Backend
 }
 
 afterEach(() => {
-  resetSessionApi();
+  clearApplicationContext();
 });
 
 function entriesUrl(query: Record<string, string> = {}): string {

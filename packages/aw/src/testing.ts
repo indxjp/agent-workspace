@@ -82,6 +82,8 @@ export interface CliRunOptions {
   readonly stdinIsTty?: boolean;
   /** Answers `io.prompt`; absent means the process has no prompt. */
   readonly prompt?: (question: string) => Promise<string>;
+  /** Called by `io.discardInput`; absent means the process has none. */
+  readonly discardInput?: () => Promise<void>;
   /** Answers `io.choose`; absent means the process has no menus (the typed prompt asks). */
   readonly choose?: (spec: MenuSpec) => Promise<readonly string[]>;
   /** Answers `io.promptSecret`; absent means the process has none. */
@@ -133,6 +135,7 @@ export async function runCli(
     stdinIsTty: options.stdinIsTty ?? options.isTty ?? false,
     cwd: options.cwd ?? NO_PROJECT_DIRECTORY,
     ...(options.prompt === undefined ? {} : { prompt: options.prompt }),
+    ...(options.discardInput === undefined ? {} : { discardInput: options.discardInput }),
     ...(options.choose === undefined ? {} : { choose: options.choose }),
     ...(options.promptSecret === undefined ? {} : { promptSecret: options.promptSecret }),
     ...(options.openUrl === undefined ? {} : { openUrl: options.openUrl }),
@@ -350,6 +353,7 @@ export const FIXTURES = {
     files: [{ fileId: 'f-1', access: 'read' }],
     skillIds: ['release-notes'],
     connectorIds: ['c-1'],
+    storageGrants: [],
   },
   policy: {
     engine: 'claude-agent-sdk',
@@ -443,6 +447,7 @@ export function runFixture(status: string) {
     projectId: null,
     initiatingUserId: null,
     sessionId: IDS.session,
+    agentVersion: null,
     status,
     createdAt: AT,
     startedAt: null,
@@ -463,6 +468,9 @@ export function runFixture(status: string) {
     },
     cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
     error: null,
+    output: null,
+    pendingApproval:
+      status === 'awaiting_approval' ? { toolName: 'send_email', canonicalCall: '{}' } : null,
     accountingState: 'pending',
     accountingError: null,
   };

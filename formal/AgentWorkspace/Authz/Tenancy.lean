@@ -30,7 +30,7 @@ here redefines a table, a row or a constraint. Seven parts, each faithful to tod
    `workspaces/<workspaceId>/<key>`, the caller's key passes `key-safety.ts`'s guard first. Today
    the workspace id is only checked to be non-blank (`…Current`); the target also refuses `/`
    (`…Target`), without which two workspaces can name one key.
-6. **The tenant session scope** (`packages/core/src/schemas.ts#validateTenantSessionScope`).
+6. **The tenant session scope** (`packages/run-protocol/src/schemas.ts#validateTenantSessionScope`).
 7. **The shared 404-before-decide shape** (`apps/web/server/rbac/http.ts#authorise`,
    `resources/authorise.ts#requireResourceAccess`, ADR W9-AUTH-117) and the two workspace-route
    resolvers of `apps/web/server/workspaces/access.ts`.
@@ -440,7 +440,7 @@ def repoCommit (st : State) (s : WorkspaceScope) (w : RepoWrite) : State :=
 /-! ## 4. Run lookup and 404 concealment -/
 
 /-- `RunStore.get(runId)` (the in-memory store keys by id alone): the run row with that id. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")]
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")]
 def storeGet (st : State) (runId : String) : Option Row := (st .runs).find? (colIs · "id" runId)
 
 /-- `findRunForPrincipal`: the run, only if it belongs to the principal's workspace; `null` for
@@ -458,7 +458,7 @@ def findRunWorkspace (st : State) (runId : String) : Option String :=
   (storeGet st runId).bind (·.get "workspace_id")
 
 /-- The database store's `get`: resolve the workspace, then read through the scoped repository. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#createRepositoryRunStore")
+@[aw_spec (ts := "apps/web/server/runs/repository-store.ts#createRepositoryRunStore")
   (doc := "docs/adr/W2-DB-02-the-run-port-is-not-scope-bound.md#decision")]
 def dbStoreGet (st : State) (runId : String) : Option Row :=
   (findRunWorkspace st runId).bind fun ws => (scopedSelect st ⟨ws⟩ .runs (colIs · "id" runId)).head?
@@ -737,7 +737,7 @@ inductive TenantScopeVerdict where
   deriving DecidableEq, Repr
 
 /-- `SDK_PROJECT_DIR_NAME = /^[A-Za-z0-9_-]{1,64}$/`. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#SDK_PROJECT_DIR_NAME")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#SDK_PROJECT_DIR_NAME")]
 def sdkProjectDirName (s : String) : Bool :=
   let cs := s.toList
   1 ≤ cs.length && cs.length ≤ 64 && cs.all fun c => Text.isAsciiAlnum c || c == '_' || c == '-'
@@ -747,7 +747,7 @@ def asciiLower (s : String) : List Char :=
   s.toList.map fun c => if Text.isAsciiUpper c then Char.ofNat (c.toNat + 32) else c
 
 /-- `SDK_WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/i`. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")]
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")]
 def sdkWindowsDeviceName (s : String) : Bool :=
   match asciiLower s with
   | ['c', 'o', 'n'] | ['p', 'r', 'n'] | ['a', 'u', 'x'] | ['n', 'u', 'l'] => true
@@ -756,7 +756,7 @@ def sdkWindowsDeviceName (s : String) : Bool :=
 
 /-- `validateTenantSessionScope(input)`: an object with a non-blank string `configDir` and a
 string `projectKey` the SDK's own validator accepts and that names no Windows device. -/
-@[aw_spec (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+@[aw_spec (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")]
 def validateTenantSessionScope : JValue → TenantScopeVerdict
   | .obj fs =>
@@ -897,18 +897,24 @@ def leadingIndexedColumns : TableName → List String
   | .agentGrants => ["agent_id", "user_id", "workspace_id"]
   | .agentMcpServers => ["mcp_server_id", "workspace_id"]
   | .agentSkills => ["skill_id", "workspace_id"]
+  | .agentStorageGrants => ["connection_id", "workspace_id"]
+  | .agentVersionStorageGrants => ["connection_id", "workspace_id"]
   | .agentPointerMoves => ["workspace_id"]
   | .agentVersionEvaluations => ["workspace_id"]
   | .agentVersionPointers => ["workspace_id"]
   | .agentVersions => ["workspace_id", "id"]
-  | .agents => ["workspace_id", "model_connection_id", "runtime_profile_id", "owner_principal_id", "id"]
+  | .agents =>
+    ["workspace_id", "model_connection_id", "runtime_profile_id", "owner_principal_id",
+      "created_by_agent_id", "id"]
   | .apiKeys => ["workspace_id", "key_hash"]
   | .auditEvents => ["workspace_id", "actor_user_id", "actor_principal_id"]
   | .browserTokens => ["token_hash", "workspace_id"]
+  | .builderToolCalls => ["workspace_id"]
   | .cliSessions => ["workspace_id", "user_code", "token_hash"]
   | .endpointClientAgents => ["workspace_id"]
   | .endpointClientApiKeys => ["workspace_id"]
   | .endpointClients => ["workspace_id"]
+  | .fileTexts => ["workspace_id", "tsv", "file_id"]
   | .files => ["workspace_id", "id"]
   | .invitations => ["workspace_id", "invited_by"]
   | .mcpServers => ["workspace_id", "credential_secret_id", "owner_principal_id", "id"]
@@ -918,7 +924,7 @@ def leadingIndexedColumns : TableName → List String
   | .projectFiles => ["workspace_id"]
   | .projectMcpServers => ["workspace_id"]
   | .projects => ["workspace_id", "default_agent_id", "owner_principal_id", "id"]
-  | .runs => ["workspace_id", "session_id", "model_connection_id", "id"]
+  | .runs => ["workspace_id", "session_id", "model_connection_id", "id", "continues_run_id"]
   | .runEvents => ["workspace_id"]
   | .runFeedback => ["workspace_id"]
   | .runUsageRecords => ["run_id", "workspace_id"]
@@ -932,11 +938,16 @@ def leadingIndexedColumns : TableName → List String
   | .sessionStateStreams => ["workspace_id"]
   | .sessionTranscripts => ["workspace_id", "project_key"]
   | .sessions => ["workspace_id", "agent_id", "project_id", "user_id", "owner_principal_id", "id"]
+  | .storageConnections => ["workspace_id", "id"]
+  | .storageMigrationRuns => ["finished_at"]
   | .shareViews => ["workspace_id"]
   | .shareRunCharges => ["workspace_id"]
   | .shares => ["workspace_id", "publisher_principal_id", "id", "token"]
+  | .skillRevisions => ["workspace_id"]
   | .skills => ["workspace_id", "owner_principal_id", "id"]
   | .surfaceSessionKeys => ["workspace_id"]
+  | .triggerDeliveries => ["workspace_id"]
+  | .triggers => ["workspace_id"]
   | .userIdentities => ["user_id", "issuer"]
   | .users => ["email"]
   | .workspaces => ["slug"]

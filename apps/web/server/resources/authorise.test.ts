@@ -3,26 +3,29 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import type { Role } from '../rbac/roles';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 import { requireResourceAccess } from './authorise';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
-afterEach(clearRbacRuntime);
+afterEach(clearApplicationContext);
 
 function useRole(role: Role): void {
-  configureRbacRuntime({
-    directory: createMemoryDirectory(),
-    identify: () =>
-      Promise.resolve(
-        Principal.fromApiKey({
-          principalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-          apiKeyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          workspaceId: WORKSPACE_ID,
-          role,
-          label: `${role} key`,
-        }),
-      ),
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory(),
+      identify: () =>
+        Promise.resolve(
+          Principal.fromApiKey({
+            principalId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            apiKeyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            workspaceId: WORKSPACE_ID,
+            role,
+            label: `${role} key`,
+          }),
+        ),
+    },
   });
 }
 

@@ -9,6 +9,7 @@ import { bigint, foreignKey, index, pgTable, primaryKey, text, uuid } from 'driz
 
 import { engineIds } from './agents.js';
 import { createdAt, updatedAt } from './columns.js';
+import { fileStatuses } from './files.js';
 import { oneOf } from './one-of.js';
 import { sessions } from './sessions.js';
 import { workspaces } from './workspaces.js';
@@ -33,6 +34,10 @@ export const sessionStateBlobs = pgTable(
     blobKey: text('blob_key').notNull(),
     /** The workspace-relative object-store key the bytes are at. Derived, never caller-supplied. */
     storageKey: text('storage_key').notNull(),
+    /** The permanent object ID (the storage design, §04); `null` for a blob written before object IDs, whose bytes are at `storage_key`. */
+    objectId: uuid('object_id'),
+    /** `ready` is the only status a read serves; `pending` and `deleting` are for the save and cleanup steps. */
+    status: text('status', { enum: fileStatuses }).notNull().default('ready'),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
     /** Lower-case hex SHA-256 of the stored bytes, so a read can verify what it was handed. */
     sha256: text('sha256').notNull(),
@@ -51,6 +56,7 @@ export const sessionStateBlobs = pgTable(
     }).onDelete('cascade'),
     index('session_state_blobs_workspace_updated_idx').on(table.workspaceId, table.updatedAt),
     oneOf('session_state_blobs_engine_valid', table.engine, engineIds),
+    oneOf('session_state_blobs_status_valid', table.status, fileStatuses),
   ],
 );
 

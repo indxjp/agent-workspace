@@ -31,7 +31,7 @@ import {
   readPiStream,
   type PiEvent,
   type PiFileEntry,
-} from '@agent-workspace/engine-pi';
+} from '@agent-workspace/engine-pi/testing';
 import type { AgentPermissions, PiToolName } from '@indx-workspace/contracts/agents';
 import type { AgentStopReason } from '@indx-workspace/contracts/run-events';
 import { describe, expect, it } from 'vitest';

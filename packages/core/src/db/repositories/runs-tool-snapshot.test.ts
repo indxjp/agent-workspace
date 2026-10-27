@@ -25,10 +25,14 @@ import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing
 
 /** Both are optional on {@link RunRepository}; the database provider implements them. */
 type SnapshottingRunRepository = RunRepository &
-  Required<Pick<RunRepository, 'snapshotTools' | 'recordToolSandbox'>>;
+  Required<Pick<RunRepository, 'snapshotTools' | 'recordToolSandbox' | 'snapshotFileGrants'>>;
 
 function hasSnapshotTools(repository: RunRepository): repository is SnapshottingRunRepository {
-  return repository.snapshotTools !== undefined && repository.recordToolSandbox !== undefined;
+  return (
+    repository.snapshotTools !== undefined &&
+    repository.recordToolSandbox !== undefined &&
+    repository.snapshotFileGrants !== undefined
+  );
 }
 
 function withSnapshotTools(repository: RunRepository): SnapshottingRunRepository {
@@ -309,5 +313,19 @@ describe.skipIf(!hasDatabase)('RunRepository.snapshotTools', () => {
       },
     );
     expect((await tenantB.repository.get(runInB))?.toolSandboxOrigin).toBeNull();
+  });
+
+  it('snapshots the granted file paths while queued, and refuses a change after launch (ADR-0147)', async () => {
+    const runId = await newRun(tenantA);
+    expect((await tenantA.repository.get(runId))?.fileGrants).toEqual([]);
+    await expect(tenantA.repository.snapshotFileGrants(runId, ['b', 'a/x', 'b'])).resolves.toBe(
+      true,
+    );
+    expect((await tenantA.repository.get(runId))?.fileGrants).toEqual(['a/x', 'b']);
+    await expect(tenantA.repository.markRunning(runId)).resolves.toMatchObject({ kind: 'moved' });
+    await expect(tenantA.repository.snapshotFileGrants(runId, ['b', 'a/x'])).resolves.toBe(true);
+    await expect(tenantA.repository.snapshotFileGrants(runId, ['other'])).resolves.toBe(false);
+    const runInB = await newRun(tenantB);
+    await expect(tenantA.repository.snapshotFileGrants(runInB, ['a'])).resolves.toBe(false);
   });
 });

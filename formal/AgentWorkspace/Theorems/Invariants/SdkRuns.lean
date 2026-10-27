@@ -32,7 +32,7 @@ theorem repeated_drops_stay_within_budget (maxReconnects drops count : Nat)
 /-- Five drops with a budget of two produce exactly two reconnects. -/
 @[aw_spec (tier := T2) (ts := "packages/sdk/src/resources/runs.ts#follow")]
 theorem reconnect_budget_is_cumulative_witness :
-    reconnectCount 2 5 0 = 2 := by decide
+    reconnectCount 2 5 0 = 2 := by decide +kernel
 
 /-- Caller abort blocks reconnection regardless of remaining budget. -/
 @[aw_spec (tier := T2) (ts := "packages/sdk/src/resources/runs.ts#follow")]
@@ -61,6 +61,6 @@ theorem unexpected_status_precedes_body_validation (expected status : Nat)
 theorem cursor_advances_only_on_durable_id :
     recordFrameId { after := some "7" } false (some "8") = { after := some "7" } ∧
     recordFrameId { after := some "7" } true (some "8") = { after := some "8" } ∧
-    recordFrameId { after := some "7" } true none = { after := some "7" } := by decide
+    recordFrameId { after := some "7" } true none = { after := some "7" } := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.SdkRuns

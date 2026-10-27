@@ -10,7 +10,10 @@
  * delete-last and replace-all, the engine check, and the 404 concealment a run token gets for a
  * session that is not its own.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
+import { log as webLogger } from '../telemetry/logger';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createInMemoryWorkspaceScopeResolver,
@@ -19,7 +22,8 @@ import {
 } from '@agent-workspace/core/db';
 import { ENGINE_IDS } from '@indx-workspace/contracts/engines';
 
-import { installSessionApi, resetSessionApi, type SessionPrincipal } from './environment';
+import type { SessionApiPrincipal } from './environment';
+import { createRepositorySessionsStoreProvider } from './store';
 import { InMemoryTranscriptStore } from './memory-store';
 import { InMemorySessionStateStore } from './state-memory-store';
 import {
@@ -32,6 +36,7 @@ import {
   putSessionStateBlob,
   replaceSessionState,
 } from './state-api';
+import { GET as getStateBlobRoute } from '../../app/api/sessions/[engineSessionId]/state-blobs/route';
 
 const WORKSPACE = 'c8b1f0de-6a2e-4a1f-9d3b-000000000001';
 const USER = 'c8b1f0de-6a2e-4a1f-9d3b-000000000009';
@@ -40,7 +45,7 @@ const OTHER_SESSION = '22222222-3333-4444-8555-666666666666';
 const ENGINE = 'claude-agent-sdk';
 const STREAM = `${WORKSPACE}/`;
 
-const PRINCIPAL: SessionPrincipal = {
+const PRINCIPAL: SessionApiPrincipal = {
   kind: 'user',
   principalId: USER,
   ownerPrincipalId: USER,
@@ -50,7 +55,7 @@ const PRINCIPAL: SessionPrincipal = {
 };
 
 /** A runner, as `apps/web/server/composition/session-rbac.ts` resolves a per-run token. */
-const RUNNER: SessionPrincipal = {
+const RUNNER: SessionApiPrincipal = {
   kind: 'runner',
   workspaceId: WORKSPACE,
   runId: '33333333-4444-4555-8666-777777777777',
@@ -87,41 +92,44 @@ function repository(session: SessionRecord): SessionRepositoryProvider {
       update: () => Promise.resolve({ kind: 'no-op', session }),
       archive: () => Promise.resolve({ kind: 'no-op', session }),
       restore: () => Promise.resolve({ kind: 'no-op', session }),
+      discardIfUnused: () => Promise.resolve(false),
     }),
   };
 }
 
 interface InstallOptions {
   readonly session?: SessionRecord;
-  readonly principal?: SessionPrincipal | null;
-  readonly stateStore?: InMemorySessionStateStore | null;
-  readonly canAccess?: (principal: SessionPrincipal, id: string) => boolean;
+  readonly principal?: SessionApiPrincipal | null;
+  readonly stateStore?: InMemorySessionStateStore;
+  readonly canAccess?: (principal: SessionApiPrincipal, id: string) => boolean;
 }
 
 function install(options: InstallOptions = {}): InMemorySessionStateStore {
   const session = options.session ?? row();
-  const stateStore =
-    options.stateStore === null
-      ? undefined
-      : (options.stateStore ?? new InMemorySessionStateStore());
+  const stateStore = options.stateStore ?? new InMemorySessionStateStore();
   const principal = options.principal === undefined ? PRINCIPAL : options.principal;
   const canAccess =
     options.canAccess ??
-    ((caller: SessionPrincipal, id: string) =>
+    ((caller: SessionApiPrincipal, id: string) =>
       caller.kind === 'runner' ? caller.sessionId === id : true);
-  installSessionApi({
-    authenticate: () => Promise.resolve(principal),
-    canAccessSession: (caller, id) => Promise.resolve(canAccess(caller, id)),
-    store: new InMemoryTranscriptStore(),
-    ...(stateStore === undefined ? {} : { stateStore }),
-    sessions: repository(session),
-    scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
+  installTestDomains({
+    sessions: {
+      authenticate: () => Promise.resolve(principal),
+      canAccessSession: (caller, id) => Promise.resolve(canAccess(caller, id)),
+      store: new InMemoryTranscriptStore(),
+      stateStore,
+      sessions: createRepositorySessionsStoreProvider({
+        repositories: repository(session),
+        scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
+      }),
+    },
   });
-  return stateStore ?? new InMemorySessionStateStore();
+  return stateStore;
 }
 
 afterEach(() => {
-  resetSessionApi();
+  clearApplicationContext();
+  vi.restoreAllMocks();
 });
 
 function entriesUrl(query: Record<string, string> = {}, id = SESSION): string {
@@ -148,8 +156,8 @@ async function readEntries(id = SESSION): Promise<unknown> {
 }
 
 describe('the order every session-state handler is written in', () => {
-  it('answers 503 before anything else when no store is installed', async () => {
-    install({ stateStore: null });
+  it('answers 503 before anything else when no session API is installed', async () => {
+    clearApplicationContext();
     const response = await appendSessionState(appendRequest(batch([])), SESSION);
     expect(response.status).toBe(503);
   });
@@ -243,18 +251,22 @@ describe('the engine a stream declares must be the engine the session is pinned 
     const accepted = await appendSessionState(appendRequest(batch([])), SESSION);
     expect(accepted.status).toBe(204);
 
-    resetSessionApi();
+    clearApplicationContext();
     const store = new InMemorySessionStateStore();
-    installSessionApi({
-      authenticate: () => Promise.resolve(PRINCIPAL),
-      canAccessSession: () => Promise.resolve(true),
-      store: new InMemoryTranscriptStore(),
-      stateStore: store,
-      // A session pinned to an engine that is not the one the request will name. The cast is the
-      // narrowest way to express "a row written by a release whose engine set was larger", which is
-      // exactly the state this check exists for.
-      sessions: repository(row({ engine: 'another-engine' as SessionRecord['engine'] })),
-      scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
+    installTestDomains({
+      sessions: {
+        authenticate: () => Promise.resolve(PRINCIPAL),
+        canAccessSession: () => Promise.resolve(true),
+        store: new InMemoryTranscriptStore(),
+        stateStore: store,
+        // A session pinned to an engine that is not the one the request will name. The cast is the
+        // narrowest way to express "a row written by a release whose engine set was larger", which is
+        // exactly the state this check exists for.
+        sessions: createRepositorySessionsStoreProvider({
+          repositories: repository(row({ engine: 'another-engine' as SessionRecord['engine'] })),
+          scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
+        }),
+      },
     });
     const refused = await appendSessionState(appendRequest(batch([])), SESSION);
     expect(refused.status).toBe(409);
@@ -458,6 +470,32 @@ describe('blobs', () => {
     expect(read.status).toBe(200);
     expect(read.headers.get('x-session-state-sha256')).toMatch(/^[0-9a-f]{64}$/);
     expect(new Uint8Array(await read.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('answers a store that throws with the generic 500, never its message', async () => {
+    const sentinel = ['postgresql://admin:', 'TOP-SECRET', '@internal.example/state'].join('');
+    const stateStore = new InMemorySessionStateStore();
+    vi.spyOn(stateStore, 'getBlob').mockRejectedValue(new Error(sentinel));
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    install({ stateStore });
+    const response = await getStateBlobRoute(new Request(blobUrl()), {
+      params: Promise.resolve({ engineSessionId: SESSION }),
+    });
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(text).not.toContain('TOP-SECRET');
+    expect(JSON.parse(text)).toMatchObject({ error: { code: 'internal_error' } });
+  });
+
+  it('serves a snapshot as an inert attachment a browser never sniffs or renders', async () => {
+    install();
+    const markup = new TextEncoder().encode('<script>alert(1)</script>');
+    await putSessionStateBlob(new Request(blobUrl(), { method: 'PUT', body: markup }), SESSION);
+    const read = await getSessionStateBlob(new Request(blobUrl()), SESSION);
+    expect(read.status).toBe(200);
+    expect(read.headers.get('content-type')).toBe('application/octet-stream');
+    expect(read.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(read.headers.get('content-disposition')).toBe('attachment');
   });
 
   it('answers 413 session_state_too_large over the cap, and stores nothing', async () => {

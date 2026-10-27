@@ -1,3 +1,4 @@
+import { log as webLog } from '../telemetry/logger';
 import {
   DomainError,
   InfrastructureError,
@@ -59,7 +60,7 @@ export function errorResponse(error: unknown, context: ErrorResponseContext): Re
   const response = INFRASTRUCTURE_RESPONSE[classified.failureKind];
   const log =
     context.log ??
-    ((message: string, failure: InfrastructureError) => console.error(message, failure));
+    ((message: string, failure: InfrastructureError) => webLog.error(message, { error: failure }));
   log(`[${classified.component}] ${classified.operation} failed`, classified);
   return Response.json(
     { error: { code: response.code, message: response.message } },

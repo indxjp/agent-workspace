@@ -17,7 +17,7 @@ import {
   platformTarget,
 } from '@indx-workspace/platforms';
 
-import { problem, type ApiResult } from '../agents/handlers';
+import { problem, type ApiResult } from '../http/result';
 import {
   buildPortableProject,
   PlatformExportTooLargeError,

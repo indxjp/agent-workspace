@@ -1,6 +1,10 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import type { RuntimeDriverId, RuntimeHandle, RuntimeRunSpec } from '@agent-workspace/runtime';
+import type {
+  RuntimeDriverId,
+  RuntimeHandle,
+  RuntimeRunSpec,
+} from '@agent-workspace/runtime/driver';
 import type { ToolSandboxRequest } from '@indx-workspace/contracts/agent-versions';
 
 import type { LaunchContext } from '../runs/environment';

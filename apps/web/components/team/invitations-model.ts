@@ -16,8 +16,8 @@
  * see the token can never interpolate it into a sentence a screen, a log or an error boundary then
  * renders.
  *
- * `readInvitationList` is the other half of the same guarantee. `InvitationListResponseSchema` is
- * `.strict()`, so the create response — which does carry a token — cannot be read as list rows.
+ * The SDK's `team.invitations.list` is the other half of the same guarantee: it reads through
+ * `InvitationListResponseSchema`, which is `.strict()`, so the create response — which does carry a token — cannot be read as list rows.
  *
  * ## What is deliberately not here
  *
@@ -27,29 +27,12 @@
  * (`server/team/invitation-capability.ts`), and what is left in the browser is a comparison of four
  * timestamps against the clock.
  */
-import {
-  InvitationListResponseSchema,
-  IssuedInvitationResponseSchema,
-  type InvitationCapability,
-  type InvitationResource,
-} from '../../contracts/invitations';
+import { type InvitationCapability, type InvitationResource } from '../../contracts/invitations';
+import type { IssuedInvitationResponse } from '@indx-workspace/contracts/invitations';
 import type { MembershipRoleName } from '../../contracts/team';
 import { formatTeamDate, type RequestProblem } from './model';
 
 export type { InvitationCapability, InvitationResource };
-
-/**
- * `GET /api/invitations` → the rows this screen may trust, or `null` for a body it cannot read.
- *
- * `null` rather than a throw, and rather than an empty list: an empty invitations table is a claim
- * ("nobody is waiting on an invitation here") that a malformed response is no evidence for, and
- * this section has a failed state for exactly that reason — the same decision `readMemberList`
- * made.
- */
-export function readInvitationList(body: unknown): readonly InvitationResource[] | null {
-  const parsed = InvitationListResponseSchema.safeParse(body);
-  return parsed.success ? parsed.data.invitations : null;
-}
 
 // ── the four states ────────────────────────────────────────────────────────────────────────────
 
@@ -220,10 +203,11 @@ export interface RevealedInvitation {
  * the honest report is "this response could not be read" — with no fragment of it quoted, which is
  * exactly the error path that would otherwise leak the secret into a message.
  */
-export function revealIssuedInvitation(body: unknown, origin: string): RevealedInvitation | null {
-  const parsed = IssuedInvitationResponseSchema.safeParse(body);
-  if (!parsed.success) return null;
-  const { invitation, link, warning } = parsed.data;
+export function revealIssuedInvitation(
+  issued: IssuedInvitationResponse,
+  origin: string,
+): RevealedInvitation | null {
+  const { invitation, link, warning } = issued;
   let absolute: string;
   try {
     absolute = new URL(link, origin).toString();

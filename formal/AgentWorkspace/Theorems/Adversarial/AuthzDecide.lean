@@ -23,7 +23,7 @@ open AgentWorkspace AgentWorkspace.Concepts.Membership AgentWorkspace.Concepts.B
 private theorem allow_cases (q : Query) (f : Option RouteFacts) (h : decideOrdinary q = .allow f) :
     (classifyPath q.path = .«public» ∧ f = none) ∨
       ∃ role res sub id op, parseRoleInput q.role = some role ∧ classifyPath q.path = .api ∧
-        parsePath q.path = .ok res sub id ∧ parseOperation q.method sub = .ok op ∧
+        parsePath q.path = .ok res sub id ∧ parseOperationFor q.method res sub = .ok op ∧
         (q.scope.bind fun s => checkTokenScope s res op sub id) = none ∧
         applyGrant (grantFor role res op) q.ownership = true ∧
         f = some ⟨res, RouteOperation.ofOperation op, grantFor role res op⟩ := by
@@ -40,7 +40,7 @@ private theorem allow_cases (q : Query) (f : Option RouteFacts) (h : decideOrdin
       cases hp : parsePath q.path with
       | ok res sub id =>
         simp only [hp] at h
-        cases ho : parseOperation q.method sub with
+        cases ho : parseOperationFor q.method res sub with
         | refused m => simp [ho] at h
         | ok op =>
           simp only [ho, decideClassified] at h
@@ -63,7 +63,7 @@ theorem run_scoped_token_reaches_only_reads_of_its_run (q : Query) (run : RunId)
     classifyPath q.path = .«public» ∨
       ∃ sub id, parsePath q.path = .ok .runs sub (some id) ∧
         sameRunId (some id) run.val = true ∧
-        parseOperation q.method sub = .ok .read := by
+        parseOperationFor q.method .runs sub = .ok .read := by
   rcases allow_cases q f h with ⟨hs, _⟩ | ⟨role, res, sub, id, op, _, _, hp, ho, hsc, _, _⟩
   · exact Or.inl hs
   · right
@@ -78,44 +78,67 @@ theorem run_scoped_token_reaches_only_reads_of_its_run (q : Query) (run : RunId)
 
 example : classifyPath "/api/runs/r/events" = .«public» ∨
     ∃ sub id, parsePath "/api/runs/r/events" = .ok .runs sub (some id) ∧
-      sameRunId (some id) "r" = true ∧ parseOperation "GET" sub = .ok .read :=
+      sameRunId (some id) "r" = true ∧ parseOperationFor "GET" .runs sub = .ok .read :=
   run_scoped_token_reaches_only_reads_of_its_run ⟨"viewer", "GET", "/api/runs/r/events", .own,
-    some (.run ⟨"r"⟩)⟩ ⟨"r"⟩ (some ⟨.runs, .read, .own⟩) rfl (by decide)
+    some (.run ⟨"r"⟩)⟩ ⟨"r"⟩ (some ⟨.runs, .read, .own⟩) rfl (by decide +kernel)
 
 /-- A session-scoped browser token is allowed nothing but reads of a single run, the `run` verb
 on `agents` (starting a run) and the `run` verb on a run's `feedback` sub-resource (rating it),
-outside the public surface. No other `runs` sub-resource reaches the `run` verb: `interrupt` stays
-out. -/
+outside the public surface, the `download-urls` sub-resource of `files` (a read; issue #251), and
+`attachments` on `sessions` (handing one file to the visitor's own session, a write; issue #1308).
+No other `runs` sub-resource reaches the `run` verb: `interrupt` stays out; no other `files` route
+is reachable: the relay routes stay out, and so does `upload-urls` (issue #1574). -/
 @[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
 theorem session_scoped_token_reaches_only_run_reads_and_agent_runs (q : Query) (session : SessionId)
     (f : Option RouteFacts) (hq : q.scope = some (.session session)) (h : decideOrdinary q = .allow f) :
     classifyPath q.path = .«public» ∨
-      (∃ sub id, parsePath q.path = .ok .runs sub (some id) ∧ parseOperation q.method sub = .ok .read) ∨
-      (∃ sub id, parsePath q.path = .ok .agents sub id ∧ parseOperation q.method sub = .ok .run) ∨
+      (∃ sub id, parsePath q.path = .ok .runs sub (some id) ∧ parseOperationFor q.method .runs sub = .ok .read) ∨
+      (∃ sub id, parsePath q.path = .ok .agents sub id ∧ parseOperationFor q.method .agents sub = .ok .run) ∨
       (∃ id, parsePath q.path = .ok .runs (some "feedback") id ∧
-        parseOperation q.method (some "feedback") = .ok .run) := by
+        parseOperationFor q.method .runs (some "feedback") = .ok .run) ∨
+      (∃ id, parsePath q.path = .ok .files (some "download-urls") id ∧
+        parseOperationFor q.method .files (some "download-urls") = .ok .read) ∨
+      (∃ id, parsePath q.path = .ok .sessions (some "attachments") id ∧
+        parseOperationFor q.method .sessions (some "attachments") = .ok .write) := by
   rcases allow_cases q f h with ⟨hs, _⟩ | ⟨role, res, sub, id, op, _, _, hp, ho, hsc, _, _⟩
   · exact Or.inl hs
   · right
     rw [hq] at hsc
+    by_cases hsess : res = .sessions ∧ op = .write
+    · obtain ⟨rfl, rfl⟩ := hsess
+      have hsub : sub = some "attachments" := by
+        by_cases hne : sub = some "attachments"
+        · exact hne
+        simp [checkTokenScope, inGrammar, grammar, Scope.kind, Ne.symm hne] at hsc
+      subst hsub
+      exact Or.inr (Or.inr (Or.inr (Or.inr ⟨id, hp, ho⟩)))
     simp only [Option.bind_some, checkTokenScope, inGrammar, grammar, Scope.kind] at hsc
-    cases res <;> cases op <;> simp at hsc
+    cases res <;> cases op
+    all_goals try exact (hsess ⟨rfl, rfl⟩).elim
+    all_goals simp at hsc
     · exact Or.inr (Or.inl ⟨sub, id, hp, ho⟩)
+    · have hs : sub = some "download-urls" := by simpa [eq_comm] using hsc
+      subst hs
+      exact Or.inr (Or.inr (Or.inr (Or.inl ⟨id, hp, ho⟩)))
     · obtain ⟨i, rfl⟩ := Option.ne_none_iff_exists'.mp hsc
       exact Or.inl ⟨sub, i, hp, ho⟩
     · subst hsc
-      exact Or.inr (Or.inr ⟨id, hp, ho⟩)
+      exact Or.inr (Or.inr (Or.inl ⟨id, hp, ho⟩))
 
 example : classifyPath "/api/agents/a/runs" = .«public» ∨
     (∃ sub id, parsePath "/api/agents/a/runs" = .ok .runs sub (some id) ∧
-      parseOperation "POST" sub = .ok .read) ∨
+      parseOperationFor "POST" .runs sub = .ok .read) ∨
     (∃ sub id, parsePath "/api/agents/a/runs" = .ok .agents sub id ∧
-      parseOperation "POST" sub = .ok .run) ∨
+      parseOperationFor "POST" .agents sub = .ok .run) ∨
     (∃ id, parsePath "/api/agents/a/runs" = .ok .runs (some "feedback") id ∧
-      parseOperation "POST" (some "feedback") = .ok .run) :=
+      parseOperationFor "POST" .runs (some "feedback") = .ok .run) ∨
+    (∃ id, parsePath "/api/agents/a/runs" = .ok .files (some "download-urls") id ∧
+      parseOperationFor "POST" .files (some "download-urls") = .ok .read) ∨
+    (∃ id, parsePath "/api/agents/a/runs" = .ok .sessions (some "attachments") id ∧
+      parseOperationFor "POST" .sessions (some "attachments") = .ok .write) :=
   session_scoped_token_reaches_only_run_reads_and_agent_runs ⟨"builder", "POST", "/api/agents/a/runs",
-    .own, some (.session ⟨"s"⟩)⟩ ⟨"s"⟩ (some ⟨.agents, .run, .own⟩) rfl (by decide)
+    .own, some (.session ⟨"s"⟩)⟩ ⟨"s"⟩ (some ⟨.agents, .run, .permitted⟩) rfl (by decide +kernel)
 
 /-- The feedback cell is keyed by its sub-resource and belongs to the session scope alone: a run
 scope never reaches `POST /api/runs/:id/feedback`, and the session scope's `run` verb on `runs`
@@ -183,7 +206,7 @@ theorem scoped_token_never_mints_or_lists (q : Query) (s : Scope) (hq : q.scope 
 example : Resource.runs ≠ .tokens ∧
     (Resource.runs = .runs → ∃ sub id, parsePath "/api/runs/r" = .ok .runs sub (some id)) :=
   scoped_token_never_mints_or_lists ⟨"owner", "GET", "/api/runs/r", .own, some (.run ⟨"r"⟩)⟩
-    (.run ⟨"r"⟩) rfl ⟨.runs, .read, .any⟩ (by decide)
+    (.run ⟨"r"⟩) rfl ⟨.runs, .read, .any⟩ (by decide +kernel)
 
 private theorem parsed_sub_is_classified (path : String) (res : Resource) (sub id : Option String)
     (s : String) (hp : parsePath path = .ok res sub id) (hs : sub = some s) :
@@ -224,7 +247,7 @@ example : classifyPath "/api/runs/r/events" = .api ∧ ∃ sub id,
     parsePath "/api/runs/r/events" = .ok Resource.runs sub id ∧
       (∀ s, sub = some s → s ∈ subResources .runs) :=
   allow_needs_a_classified_route ⟨"owner", "GET", "/api/runs/r/events", .own, none⟩
-    ⟨.runs, .read, .any⟩ (by decide)
+    ⟨.runs, .read, .any⟩ (by decide +kernel)
 
 /-- Secrets are Owner-only: no other role, whatever path spelling, method, ownership or scope it
 supplies, is ever allowed on `secrets`. -/
@@ -238,11 +261,11 @@ theorem secrets_are_owner_only (q : Query) (fact : RouteFacts) (h : decideOrdina
     dsimp only at hs; subst hs
     rw [hr]
     revert hap
-    cases role <;> cases op <;> cases q.ownership <;> decide
+    cases role <;> cases op <;> cases q.ownership <;> decide +kernel
 
 example : parseRoleInput "owner" = some .owner :=
   secrets_are_owner_only ⟨"owner", "GET", "/api/secrets", .notApplicable, none⟩
-    ⟨.secrets, .read, .any⟩ (by decide) rfl
+    ⟨.secrets, .read, .any⟩ (by decide +kernel) rfl
 
 /-- A Viewer writes nothing but its own shares and workspace memberships: every write it is
 allowed is on `shares` or `workspaces`, for a row it owns or a collection. -/
@@ -259,12 +282,12 @@ theorem viewer_writes_only_its_own_shares_and_workspaces (q : Query) (fact : Rou
     rw [hr] at hr'; cases hr'
     cases op <;> simp [RouteOperation.ofOperation] at hw
     revert hap
-    cases res <;> cases q.ownership <;> decide
+    cases res <;> cases q.ownership <;> decide +kernel
 
 example : (Resource.shares = .shares ∨ Resource.shares = .workspaces) ∧
     (Ownership.own = .own ∨ Ownership.own = .notApplicable) :=
   viewer_writes_only_its_own_shares_and_workspaces ⟨"viewer", "DELETE", "/api/shares/s", .own, none⟩
-    ⟨.shares, .write, .own⟩ (by decide) (by decide) rfl
+    ⟨.shares, .write, .own⟩ (by decide +kernel) (by decide +kernel) rfl
 
 /-! ## The surface cannot be disguised -/
 
@@ -300,7 +323,7 @@ theorem api_variants_are_protected (raw : List Char) (hne : raw ≠ [])
         simp [this]
 
 example : classifyChars "/API\\runs".toList = .api :=
-  api_variants_are_protected _ (by decide) (by decide)
+  api_variants_are_protected _ (by decide +kernel) (by decide +kernel)
 
 /-- The public verdict needs the raw pathname itself (backslashes read as slashes) to be under
 `/p`, case-sensitively, and not under `/api` in any case. -/
@@ -334,7 +357,7 @@ theorem public_needs_the_raw_path_under_p (raw : List Char) (h : classifyChars r
 
 example : isUnder (replaceBackslash "/p/x".toList) publicPrefix = true ∧
     isUnder (asciiLower (replaceBackslash "/p/x".toList)) apiPrefix = false :=
-  public_needs_the_raw_path_under_p _ (by decide)
+  public_needs_the_raw_path_under_p _ (by decide +kernel)
 
 private theorem addContinuations_one (a b : Nat) : addContinuations a [b] = a * 64 + b % 64 := rfl
 private theorem addContinuations_two (a b c : Nat) :
@@ -366,7 +389,7 @@ example : (([0xC2] : List Nat).length = 1 → 0x80 ≤ 0x80) ∧ (([0xC2] : List
     (([0xC2] : List Nat).length = 3 → 0x10000 ≤ 0x80 ∧ 0x80 ≤ 0x10FFFF) ∧
     ¬ (0xD800 ≤ 0x80 ∧ 0x80 ≤ 0xDFFF) ∧ 1 ≤ ([0xC2] : List Nat).length ∧
     ([0xC2] : List Nat).length ≤ 3 :=
-  utf8_accepts_only_shortest_scalar_values 0xC2 [0x80] 0x80 (by decide)
+  utf8_accepts_only_shortest_scalar_values 0xC2 [0x80] 0x80 (by decide +kernel)
 
 /-- `decodeURIComponent` throws on every overlong 2-byte form (`%C0`/`%C1` with any continuation
 byte), on the overlong 3- and 4-byte forms and the out-of-range 4-byte form at their boundaries, and
@@ -385,7 +408,7 @@ theorem uri_decode_rejects_overlong_and_surrogate_forms :
           "%F4%8F%BF%BF"].map fun s => (decodeURIComponent s.toList).map (·.map Char.toNat)) =
         [some [0x80], some [0x7FF], some [0x800], some [0xD7FF], some [0xE000], some [0x10000],
           some [0x10FFFF]] := by
-  decide
+  decide +kernel
 
 /-- Traversal and encoding attacks on the prefix rule: dot segments (plain, percent-encoded, doubly
 encoded, overlong UTF-8), overlong slashes, surrogate escapes, encoded slashes and letters,
@@ -401,7 +424,7 @@ theorem encoded_traversal_stays_protected :
       "/p\\..\\api\\runs", "api/runs", ""].all
       (classifyPath · == .api) = true ∧
       classifyPath "/P/x" = .page ∧ classifyPath "/p/x" = .«public» ∧ classifyPath "/p" = .«public» ∧
-      classifyPath "/apiary" = .page ∧ classifyPath "/api" = .api := by decide
+      classifyPath "/apiary" = .page ∧ classifyPath "/api" = .api := by decide +kernel
 
 private theorem takeContinuations_zero (cs : List Char) : takeContinuations 0 cs = some ([], cs) :=
   rfl
@@ -566,7 +589,7 @@ example : ('%' : Char) ≠ '%' ∧ (∃ tail, decodeAux 5 "C3%A9".toList = some 
           conts.length = (if lead < 0xE0 then 1 else if lead < 0xF0 then 2 else 3) ∧
           (∀ b ∈ conts, b / 64 = 2) ∧ utf8CodePoint lead conts = some cp ∧
           decodeAux 5 rest' = some tail))) :=
-  decode_step_is_well_formed 5 '%' "C3%A9".toList ['é'] (by decide)
+  decode_step_is_well_formed 5 '%' "C3%A9".toList ['é'] (by decide +kernel)
 
 /-- An upper-case hex digit. -/
 private def hexDigit (d : Nat) : Char := "0123456789ABCDEF".toList.getD d '0'

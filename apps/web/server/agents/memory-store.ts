@@ -29,8 +29,11 @@
 import type { AgentPolicy, CreateAgentInput, UpdateAgentPatch } from '../../contracts/agents';
 import type { AgentRecord } from './contract';
 import type {
+  AgentResourceAssignments,
+  AgentResourceAssignmentsInput,
   AgentStoreProvider,
   CreateAgentOutcome,
+  CreateAgentWithAssignmentsOutcome,
   DeleteAgentOutcome,
   ReplaceAgentPolicyOutcome,
   UpdateAgentOutcome,
@@ -49,6 +52,17 @@ export interface InMemoryAgentStoreOptions {
   readonly knownModelConnectionIds?: ReadonlySet<string> | undefined;
   /** The `runtime_profiles.id` values accepted by the in-memory foreign-key mirror. */
   readonly knownRuntimeProfileIds?: ReadonlySet<string> | undefined;
+  /**
+   * The file, skill and connector ids an assignment may name, standing in for core's existence
+   * checks (`agent-resources.ts`). `undefined` means "do not check", as for model connections.
+   * Skill revision pins are not checked here; `agent-resources.test.ts` holds that rule.
+   */
+  readonly knownAssignableIds?: ReadonlySet<string> | undefined;
+  /**
+   * The assignment rows `createWithAssignments` writes, keyed `${workspaceId}:${agentId}` — the
+   * tables PostgreSQL shares with the resource store, so a test's resource store can read them.
+   */
+  readonly assignments?: Map<string, AgentResourceAssignments> | undefined;
   /** The clock. Injected so a test can make `createdAt` and `updatedAt` differ deterministically. */
   readonly now?: (() => Date) | undefined;
   /** Id generation. Injected for the same reason. Defaults to `crypto.randomUUID()`. */
@@ -90,6 +104,51 @@ export function createInMemoryAgentStoreProvider(
     return !knownRuntimeProfileIds.has(id);
   }
 
+  /** Core's assignment refusals, in its order: files (a duplicate is one), skills, connectors. */
+  function assignmentRefusal(
+    assignments: AgentResourceAssignmentsInput,
+  ): Exclude<CreateAgentWithAssignmentsOutcome, { kind: 'created' }> | null {
+    const known = options.knownAssignableIds;
+    const seen = new Set<string>();
+    for (const { fileId } of assignments.files) {
+      if (seen.has(fileId) || (known !== undefined && !known.has(fileId))) {
+        return { kind: 'unknown-file', id: fileId };
+      }
+      seen.add(fileId);
+    }
+    if (known === undefined) return null;
+    const skill = assignments.skillIds.find((id) => !known.has(id));
+    if (skill !== undefined) return { kind: 'unknown-skill', id: skill };
+    const connector = assignments.connectorIds.find((id) => !known.has(id));
+    if (connector !== undefined) return { kind: 'unknown-connector', id: connector };
+    return null;
+  }
+
+  /** The assignments as core reads them back: sorted, deduplicated, files under `writeFiles`. */
+  function storedAssignments(
+    assignments: AgentResourceAssignmentsInput,
+    permissions: CreateAgentInput['permissions'],
+  ): AgentResourceAssignments {
+    const sorted = (ids: readonly string[]): string[] => [...new Set(ids)].sort();
+    const skillIds = sorted(assignments.skillIds);
+    const pins = Object.entries(assignments.skillRevisions ?? {}).filter(([id]) =>
+      skillIds.includes(id),
+    );
+    return {
+      // Issue #133's ceiling: without `writeFiles` a read-write grant is stored as read.
+      files: assignments.files
+        .map((grant) =>
+          permissions.writeFiles ? grant : { fileId: grant.fileId, access: 'read' as const },
+        )
+        .sort((a, b) => a.fileId.localeCompare(b.fileId)),
+      skillIds,
+      ...(pins.length > 0 ? { skillRevisions: Object.fromEntries(pins) } : {}),
+      connectorIds: sorted(assignments.connectorIds),
+      // Only a materialised version writes grants; a create with assignments starts with none.
+      storageGrants: [],
+    };
+  }
+
   function nameTakenBySomeoneElse(
     rows: Map<string, AgentRecord>,
     name: string,
@@ -107,6 +166,46 @@ export function createInMemoryAgentStoreProvider(
       // can read or write another workspace's bucket (spec §25).
       const rows = (): Map<string, AgentRecord> => bucket(workspaceId);
 
+      /** The create, synchronously, so {@link createWithAssignments} can undo it with no gap. */
+      function insert(
+        input: CreateAgentInput,
+        owner: { readonly principalId: string; readonly userId: string | null },
+      ): CreateAgentOutcome {
+        if (modelConnectionIsUnknown(input.modelConnectionId)) {
+          // Narrowed by the guard: `modelConnectionIsUnknown` returns false for null.
+          const id = input.modelConnectionId ?? '';
+          return { kind: 'unknown-model-connection', modelConnectionId: id };
+        }
+        if (runtimeProfileIsUnknown(input.runtimeProfileId)) {
+          return {
+            kind: 'unknown-runtime-profile',
+            runtimeProfileId: input.runtimeProfileId ?? '',
+          };
+        }
+        const current = rows();
+        if (nameTakenBySomeoneElse(current, input.name, null)) {
+          return { kind: 'name-conflict', name: input.name };
+        }
+        const timestamp = now();
+        const agent: AgentRecord = {
+          id: newId(),
+          workspaceId,
+          name: input.name,
+          instructions: input.instructions,
+          modelConnectionId: input.modelConnectionId,
+          model: input.model,
+          runtimeProfileId: input.runtimeProfileId ?? null,
+          permissions: { ...input.permissions },
+          policy: null,
+          createdBy: owner.userId,
+          ownerPrincipalId: owner.principalId,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        current.set(agent.id, agent);
+        return { kind: 'created', agent };
+      }
+
       return {
         list(): Promise<readonly AgentRecord[]> {
           // Oldest first, ties broken by id, so the order is total and does not depend on insertion
@@ -122,43 +221,22 @@ export function createInMemoryAgentStoreProvider(
           return Promise.resolve(rows().get(id) ?? null);
         },
 
-        create(
-          input: CreateAgentInput,
-          owner: { readonly principalId: string; readonly userId: string | null },
-        ): Promise<CreateAgentOutcome> {
-          if (modelConnectionIsUnknown(input.modelConnectionId)) {
-            // Narrowed by the guard: `modelConnectionIsUnknown` returns false for null.
-            const id = input.modelConnectionId ?? '';
-            return Promise.resolve({ kind: 'unknown-model-connection', modelConnectionId: id });
+        create(input, owner): Promise<CreateAgentOutcome> {
+          return Promise.resolve(insert(input, owner));
+        },
+
+        createWithAssignments(input, owner, assignments) {
+          const refusal = assignmentRefusal(assignments);
+          const created = insert(input, owner);
+          if (created.kind !== 'created') return Promise.resolve(created);
+          if (refusal === null) {
+            const stored = storedAssignments(assignments, input.permissions);
+            options.assignments?.set(`${workspaceId}:${created.agent.id}`, stored);
+            return Promise.resolve({ ...created, assignments: stored });
           }
-          if (runtimeProfileIsUnknown(input.runtimeProfileId)) {
-            return Promise.resolve({
-              kind: 'unknown-runtime-profile',
-              runtimeProfileId: input.runtimeProfileId ?? '',
-            });
-          }
-          const current = rows();
-          if (nameTakenBySomeoneElse(current, input.name, null)) {
-            return Promise.resolve({ kind: 'name-conflict', name: input.name });
-          }
-          const timestamp = now();
-          const agent: AgentRecord = {
-            id: newId(),
-            workspaceId,
-            name: input.name,
-            instructions: input.instructions,
-            modelConnectionId: input.modelConnectionId,
-            model: input.model,
-            runtimeProfileId: input.runtimeProfileId ?? null,
-            permissions: { ...input.permissions },
-            policy: null,
-            createdBy: owner.userId,
-            ownerPrincipalId: owner.principalId,
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          };
-          current.set(agent.id, agent);
-          return Promise.resolve({ kind: 'created', agent });
+          // Undone in the same synchronous turn, so no reader ever sees the row: the rollback.
+          rows().delete(created.agent.id);
+          return Promise.resolve(refusal);
         },
 
         update(id: string, patch: UpdateAgentPatch): Promise<UpdateAgentOutcome> {
@@ -208,6 +286,10 @@ export function createInMemoryAgentStoreProvider(
             policy: existing.policy,
             createdBy: existing.createdBy,
             ownerPrincipalId: existing.ownerPrincipalId,
+            ...(existing.createdByAgent === undefined
+              ? {}
+              : { createdByAgent: existing.createdByAgent }),
+            ...(existing.archivedAt === undefined ? {} : { archivedAt: existing.archivedAt }),
             createdAt: existing.createdAt,
             updatedAt: now(),
           };

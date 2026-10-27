@@ -11,24 +11,17 @@ import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
 } from '../../../../../server/agent-versions/memory-store';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import type { AgentResourceStoreProvider } from '../../../../../server/agents/resource-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import {
   clearEnginesRegisteredForTests,
   registerEngineForTests,
 } from '../../../../../server/engines/registry';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 import type { ResourceCatalogStoreProvider } from '../../../../../server/resources/catalog-store';
 
 /**
@@ -81,9 +74,7 @@ function validPolicy(overrides: Partial<AgentPolicy> = {}): AgentPolicy {
 }
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 /** Only `listSkills` — the one member the policy routes call — is real; the rest is unused. */
@@ -111,8 +102,8 @@ function useMemoryRuntime(
   options: { readonly skillsConfigured?: boolean } = {},
 ): InMemoryAgentVersionStoreProvider {
   const skillsConfigured = options.skillsConfigured ?? true;
-  const agents = createInMemoryAgentStoreProvider();
   const assignments = new Map<string, AgentResourceAssignments>();
+  const agents = createInMemoryAgentStoreProvider({ assignments });
   const agentResources: AgentResourceStoreProvider = {
     forWorkspace: (workspaceId) => ({
       get: async (agentId) => {
@@ -122,6 +113,7 @@ function useMemoryRuntime(
             files: [],
             skillIds: [],
             connectorIds: [],
+            storageGrants: [],
           }
         );
       },
@@ -129,22 +121,25 @@ function useMemoryRuntime(
         if ((await agents.forWorkspace(workspaceId).get(agentId)) === null) {
           return { kind: 'not-found' as const };
         }
-        assignments.set(`${workspaceId}:${agentId}`, next);
-        return { kind: 'updated' as const, assignments: next };
+        const stored = { ...next, storageGrants: next.storageGrants ?? [] };
+        assignments.set(`${workspaceId}:${agentId}`, stored);
+        return { kind: 'updated' as const, assignments: stored };
       },
     }),
   };
-  configureAgentsRuntime({
-    agents,
-    agentResources,
-    ...(skillsConfigured ? { skillCatalog: fakeSkillCatalog() } : {}),
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
+  installTestDomains({
+    agents: {
+      agents,
+      agentResources,
+      ...(skillsConfigured ? { skillCatalog: fakeSkillCatalog() } : {}),
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : { kind: 'workspace', workspaceId },
+        );
+      },
     },
   });
   // Issue #616: a policy PUT saves a version, so the version store is part of the runtime.
@@ -158,47 +153,49 @@ function useMemoryRuntime(
       },
     },
   });
-  configureAgentVersionsRuntime({ versions });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({
-      users: [
-        {
-          email: 'builder-a@example.test',
-          name: 'Builder A',
-          workspaceId: WORKSPACE_A,
-          role: 'builder',
-        },
-        {
-          email: 'builder-b@example.test',
-          name: 'Builder B',
-          workspaceId: WORKSPACE_A,
-          role: 'builder',
-        },
-      ],
-    }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      return Promise.resolve(
-        workspaceId === null || actor === null
-          ? null
-          : Principal.fromApiKey({
-              principalId:
-                actor === 'builder-a@example.test'
-                  ? '36377a6a-7a0b-4610-8efc-d31547dcc38a'
-                  : 'c1353585-43d3-45dd-8276-edf59109fdfa',
-              apiKeyId:
-                actor === 'builder-a@example.test'
-                  ? '04aa9a6d-4862-41ce-b910-b43ba3f4d12f'
-                  : 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
-              workspaceId,
-              role: 'builder',
-              label:
-                actor === 'builder-a@example.test'
-                  ? 'Builder A policy key'
-                  : 'Builder B policy key',
-            }),
-      );
+  installTestDomains({ agentVersions: { versions } });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({
+        users: [
+          {
+            email: 'builder-a@example.test',
+            name: 'Builder A',
+            workspaceId: WORKSPACE_A,
+            role: 'builder',
+          },
+          {
+            email: 'builder-b@example.test',
+            name: 'Builder B',
+            workspaceId: WORKSPACE_A,
+            role: 'builder',
+          },
+        ],
+      }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        return Promise.resolve(
+          workspaceId === null || actor === null
+            ? null
+            : Principal.fromApiKey({
+                principalId:
+                  actor === 'builder-a@example.test'
+                    ? '36377a6a-7a0b-4610-8efc-d31547dcc38a'
+                    : 'c1353585-43d3-45dd-8276-edf59109fdfa',
+                apiKeyId:
+                  actor === 'builder-a@example.test'
+                    ? '04aa9a6d-4862-41ce-b910-b43ba3f4d12f'
+                    : 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+                workspaceId,
+                role: 'builder',
+                label:
+                  actor === 'builder-a@example.test'
+                    ? 'Builder A policy key'
+                    : 'Builder B policy key',
+              }),
+        );
+      },
     },
   });
   return versions;
@@ -572,6 +569,7 @@ describe('PUT /api/agents/:id/policy — engine capability check', () => {
       files: [],
       skillIds: [],
       connectorIds: [CONNECTOR_ID],
+      storageGrants: [],
     });
     registerClaudeWithout('mcp');
 
@@ -590,6 +588,7 @@ describe('PUT /api/agents/:id/policy — engine capability check', () => {
       files: [],
       skillIds: [SKILL_ID],
       connectorIds: [],
+      storageGrants: [],
     });
     registerClaudeWithout('skills');
 
@@ -607,6 +606,7 @@ describe('PUT /api/agents/:id/policy — engine capability check', () => {
       files: [],
       skillIds: [],
       connectorIds: [CONNECTOR_ID],
+      storageGrants: [],
     });
     registerClaudeWithout('mcp');
     await put(agent.id, validPolicy({ skills: { mode: 'allowlist', names: [] } }));
@@ -631,6 +631,7 @@ describe('PUT /api/agents/:id/policy — engine capability check', () => {
       files: [],
       skillIds: [SKILL_ID],
       connectorIds: [CONNECTOR_ID],
+      storageGrants: [],
     });
 
     const response = await put(agent.id, validPolicy());
@@ -646,6 +647,7 @@ describe('PUT /api/agents/:id/policy — engine capability check', () => {
       files: [],
       skillIds: [SKILL_ID],
       connectorIds: [],
+      storageGrants: [],
     });
     registerClaudeWithout('skills');
 
@@ -792,10 +794,12 @@ describe('PUT /api/agents/:id/policy — an engine switch carries the narrowing 
       const versions = useMemoryRuntime();
       const agent = await created();
       expect((await put(agent.id, denying(['Bash', 'mcp__jira__*']))).status).toBe(200);
-      configureAgentVersionsRuntime({
-        versions: {
-          ...versions,
-          forWorkspace: () => Promise.reject(new Error('unexpected version store read')),
+      installTestDomains({
+        agentVersions: {
+          versions: {
+            ...versions,
+            forWorkspace: () => Promise.reject(new Error('unexpected version store read')),
+          },
         },
       });
 
@@ -901,7 +905,7 @@ describe('PUT /api/agents/:id/policy — the step that stores an imported openai
 
   it('stores the definition verbatim, withheld switches included, with nothing carried', async () => {
     useMemoryRuntime();
-    const agent = await imported({ files: [], skillIds: [], connectorIds: [] });
+    const agent = await imported({ files: [], skillIds: [], connectorIds: [], storageGrants: [] });
 
     const response = await put(agent.id, OPENAI_DEFINITION_POLICY);
 
@@ -911,7 +915,12 @@ describe('PUT /api/agents/:id/policy — the step that stores an imported openai
 
   it('refuses 422 engine_capability_unsupported when the definition assigns a skill', async () => {
     useMemoryRuntime();
-    const agent = await imported({ files: [], skillIds: [SKILL_ID], connectorIds: [] });
+    const agent = await imported({
+      files: [],
+      skillIds: [SKILL_ID],
+      connectorIds: [],
+      storageGrants: [],
+    });
 
     const response = await put(agent.id, {
       ...OPENAI_DEFINITION_POLICY,
@@ -926,7 +935,7 @@ describe('PUT /api/agents/:id/policy — the step that stores an imported openai
 
   it('refuses 400 for a withheld switch the contract does not know', async () => {
     useMemoryRuntime();
-    const agent = await imported({ files: [], skillIds: [], connectorIds: [] });
+    const agent = await imported({ files: [], skillIds: [], connectorIds: [], storageGrants: [] });
 
     const response = await put(agent.id, {
       ...OPENAI_DEFINITION_POLICY,
@@ -938,7 +947,7 @@ describe('PUT /api/agents/:id/policy — the step that stores an imported openai
 
   it('refuses 400 unsupported_engine for an engine this deployment does not register', async () => {
     useMemoryRuntime();
-    const agent = await imported({ files: [], skillIds: [], connectorIds: [] });
+    const agent = await imported({ files: [], skillIds: [], connectorIds: [], storageGrants: [] });
 
     const response = await put(agent.id, { ...OPENAI_DEFINITION_POLICY, engine: 'no-such-engine' });
 

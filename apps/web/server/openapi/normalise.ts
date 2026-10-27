@@ -5,7 +5,8 @@
  *
  * The stages run in order and the first failing stage answers, with every problem it found:
  * parse (JSON or YAML) → `openapi` version → internal `$ref` resolution → operation count →
- * `allow` filtering (`selectAllowedOperations`) and the parameter-style subset → C17 names →
+ * `allow` filtering (`selectAllowedOperations`), the parameter-style subset and the JSON-only
+ * request bodies of writes (#1304) → C17 names →
  * SD15 base URL → the contracts schema as a backstop.
  */
 import { createHash } from 'node:crypto';
@@ -16,6 +17,7 @@ import {
   problemCodeOfIssue,
   selectAllowedOperations,
   TOOL_OPERATION_NAME_MAX_LENGTH,
+  TOOL_WRITE_METHODS,
   type OpenApiAuth,
   type OpenApiToolConfig,
   type ToolConnectorProblemCode,
@@ -137,11 +139,30 @@ function resolveRefs(root: unknown): { value: unknown; problems: string[] } {
   return { value: walk(root, [], 0), problems };
 }
 
+/** The one argument an operation's JSON request body is exposed as (ADR-0113 SD4, #1304). */
+const BODY_PARAMETER = 'body';
+
+/** A write operation's request body: none, `application/json`, or some other media type only. */
+type RequestBody =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'json'; readonly required: boolean; readonly schema: unknown }
+  | { readonly kind: 'other' };
+
 interface Candidate {
   readonly method: string;
   readonly path: string;
   readonly operationId?: string;
   readonly parameters: readonly OperationParameter[];
+  readonly requestBody: RequestBody;
+}
+
+function requestBodyOf(operation: Json): RequestBody {
+  const body = operation['requestBody'];
+  if (!isObject(body)) return { kind: 'none' };
+  const content = isObject(body['content']) ? body['content'] : {};
+  const json = content['application/json'];
+  if (!isObject(json)) return { kind: 'other' };
+  return { kind: 'json', required: body['required'] === true, schema: json['schema'] ?? {} };
 }
 
 function parametersOf(list: unknown): OperationParameter[] {
@@ -183,10 +204,46 @@ function candidatesOf(paths: Json): Candidate[] {
           path,
           ...(typeof operationId === 'string' ? { operationId } : {}),
           parameters,
+          requestBody: requestBodyOf(operation),
         },
       ];
     });
   });
+}
+
+function isWrite(candidate: Candidate): boolean {
+  return TOOL_WRITE_METHODS.some((method) => method === candidate.method);
+}
+
+/** Why an admitted write's request body cannot be exposed: JSON only, and `body` must be free. */
+function bodyProblemsOf(candidate: Candidate): string[] {
+  if (!isWrite(candidate)) return [];
+  const where = `${candidate.method} ${candidate.path}`;
+  if (candidate.requestBody.kind === 'other') {
+    return [`${where}: only application/json request bodies are supported`];
+  }
+  if (
+    candidate.requestBody.kind === 'json' &&
+    candidate.parameters.some((p) => p.name === BODY_PARAMETER)
+  ) {
+    return [`${where}: a parameter named "body" collides with the request body argument`];
+  }
+  return [];
+}
+
+/** The operation's parameters, with a write's JSON request body appended as the `body` argument. */
+function parametersWithBody(candidate: Candidate): readonly OperationParameter[] {
+  const { requestBody } = candidate;
+  if (!isWrite(candidate) || requestBody.kind !== 'json') return candidate.parameters;
+  return [
+    ...candidate.parameters,
+    {
+      name: BODY_PARAMETER,
+      in: 'body',
+      required: requestBody.required,
+      schema: requestBody.schema,
+    },
+  ];
 }
 
 function sanitise(text: string): string {
@@ -284,11 +341,7 @@ export function normaliseOpenApi(input: NormaliseInput): NormaliseResult {
 
   const selected = selectAllowedOperations(input.allow, candidates);
   if (selected.refusals.length > 0) {
-    const write = selected.refusals.some((r) => r.code === 'connector_write_unsupported');
-    return refused(
-      selected.refusals.map((r) => `${r.path.join('.')}: ${r.message}`),
-      write ? 'connector_write_unsupported' : 'connector_spec_invalid',
-    );
+    return refused(selected.refusals.map((r) => `${r.path.join('.')}: ${r.message}`));
   }
   const styleProblems = selected.admitted.flatMap((candidate) =>
     candidate.parameters
@@ -299,6 +352,8 @@ export function normaliseOpenApi(input: NormaliseInput): NormaliseResult {
       ),
   );
   if (styleProblems.length > 0) return refused(styleProblems);
+  const bodyProblems = selected.admitted.flatMap(bodyProblemsOf);
+  if (bodyProblems.length > 0) return refused(bodyProblems);
 
   const named = new Map<string, Candidate>();
   const collisions: string[] = [];
@@ -323,7 +378,7 @@ export function normaliseOpenApi(input: NormaliseInput): NormaliseResult {
   const fromServers = input.baseUrl === undefined;
 
   const parameters = Object.fromEntries(
-    [...named].map(([name, candidate]) => [name, candidate.parameters]),
+    [...named].map(([name, candidate]) => [name, parametersWithBody(candidate)]),
   );
   let hasNul = false;
   JSON.stringify(parameters, (key, value: unknown) => {

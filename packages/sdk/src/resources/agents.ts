@@ -12,6 +12,7 @@ import {
   type AgentGrants,
   type AgentResource,
   type AgentResourceAssignments,
+  type AgentResourceAssignmentsInput,
   type CreateAgentInput,
   type CreateAgentOptions,
   type CreateAgentWithAssignmentsResponse,
@@ -122,8 +123,8 @@ export class AgentsClient {
   /**
    * K-2: creates the agent and its resource assignments in one request — the same rows
    * `create` followed by `replaceResourceAssignments` would produce, written atomically by the
-   * server (`apps/web/app/api/agents/route.ts`'s `POST`, which compensates by deleting the agent
-   * if the assignment write fails). Posting two requests from the client would risk exactly the
+   * server (`POST /api/agents` commits the agent and its assignments in one transaction, so a
+   * refused assignment leaves no agent behind). Posting two requests from the client would risk exactly the
    * orphan a single atomic write avoids.
    *
    * Throws {@link ApiProblemError}. The engine-specific code (ADR-0065,
@@ -253,7 +254,7 @@ export class AgentsClient {
    */
   public async replaceResourceAssignments(
     agentId: string,
-    assignments: AgentResourceAssignments,
+    assignments: AgentResourceAssignmentsInput,
     options: RequestOptions = {},
   ): Promise<AgentResourceAssignments> {
     const response = await this.#http.json({

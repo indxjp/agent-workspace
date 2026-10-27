@@ -118,7 +118,7 @@ def checkSemantics (t : TableName) (n : String) (r : Row) : Bool :=
 /-! ## Consistency, whole-schema -/
 
 /-- Today's database is consistent: every cluster's view of the state is. That is every constraint
-of `catalogue` (`Er.Core.consistent`), the meaning of every one of the 88 checks that are not
+of `catalogue` (`Er.Core.consistent`), the meaning of every one of the 97 checks that are not
 closed sets, and the identity cluster's cell typing (timestamps are instants, booleans are
 `true` or `false`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
@@ -289,11 +289,13 @@ def grant : Row :=
 
 /-- Two workspaces. `w1` has two members (`u1` its owner, `u2` a viewer) and an API key, each
 with its principal; a model connection (the workspace and project default) and its credential; a
-runtime connection and the profile that names it, and a passing Test Runtime of its driver; a connector with its credential; an agent with
-a file, a skill and the connector assigned and a grant to the viewer; a project that links the
+runtime connection and the profile that names it, and a passing Test Runtime of its driver; a connector with its credential; a
+skill with one published revision; an agent with
+a file, the skill (pinned to that revision) and the connector assigned and a grant to the viewer; a project that links the
 file and the connector; a session with its transcript and a message; a completed run with an
 event, a usage row, a run token and a browser token; an audit event; an invitation; and a public
-agent share with a view and a charge. `w2` has `u2` as its owner and an agent of its own. -/
+agent share with a view and a charge; and a webhook trigger of the agent, run as its owner, with
+the delivery that started the run. `w2` has `u2` as its owner and an agent of its own. -/
 @[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def state : State
   | .workspaces =>
@@ -322,6 +324,11 @@ def state : State
     [row [("id", "bt1"), ("workspace_id", "w1"), ("minted_by_principal_id", "p1"),
        ("scope_kind", "run"), ("run_id", "r1"), ("token_hash", "ef56"), ("expires_at", "1300"),
        ("created_at", "1000")]]
+  | .builderToolCalls =>
+    [row [("id", "btc1"), ("workspace_id", "w1"), ("run_id", "engine-run-1"),
+       ("call_id", "toolu_1"), ("tool", "draft_check"), ("decision", "run"), ("outcome", "ok"),
+       ("input_json", "{}"), ("trace_id", "trace-1"), ("model_id", "model-1"),
+       ("prompt_version", "prompt-1"), ("created_at", "1000")]]
   | .cliSessions =>
     [row [("id", "cs1"), ("workspace_id", "w1"), ("user_id", "u1"), ("user_code", "ABCDEFGH"),
        ("status", "active"), ("approval_expires_at", "1100"), ("token_hash", "bb22"),
@@ -344,12 +351,21 @@ def state : State
   | .skills =>
     [row ([("id", "sk1"), ("workspace_id", "w1"), ("name", "review"), ("skill_md", "# Review"),
        ("enabled", "true"), ("created_by", "u1"), ("owner_principal_id", "p1")] ++ stamps)]
+  | .skillRevisions =>
+    [row [("id", "skr1"), ("workspace_id", "w1"), ("skill_id", "sk1"), ("number", "1"),
+       ("file_count", "1"), ("pending", "false"), ("created_at", "1000")]]
+  | .fileTexts =>
+    [row [("id", "ft1"), ("workspace_id", "w1"), ("file_id", "f1"), ("ordinal", "0"),
+       ("page", "1"), ("text", "Hello"), ("tsv", "'hello':1"), ("source_size_bytes", "12"),
+       ("source_updated_at", "1000"), ("created_at", "1000")]]
   | .files =>
     [row ([("id", "f1"), ("workspace_id", "w1"), ("path", "docs/a.md"), ("kind", "file"),
        ("storage_key", "docs/a.md"), ("size_bytes", "12"), ("content_type", "text/markdown"),
-       ("created_by", "u1"), ("owner_principal_id", "p1")] ++ stamps),
+       ("created_by", "u1"), ("status", "ready"), ("area", "files"),
+       ("owner_principal_id", "p1")] ++ stamps),
      row ([("id", "f2"), ("workspace_id", "w1"), ("path", "docs"), ("kind", "folder"),
-       ("size_bytes", "0"), ("owner_principal_id", "p1")] ++ stamps)]
+       ("size_bytes", "0"), ("status", "ready"), ("area", "files"),
+       ("owner_principal_id", "p1")] ++ stamps)]
   | .mcpServers =>
     [row ([("id", "cn1"), ("workspace_id", "w1"), ("name", "github"), ("kind", "mcp"),
        ("transport", "http"),
@@ -361,7 +377,10 @@ def state : State
        ("access", "read")] ++ stamps)]
   | .agentSkills =>
     [row [("id", "as1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("skill_id", "sk1"),
-       ("created_at", "1000")]]
+       ("revision", "1"), ("created_at", "1000")]]
+  | .agentStorageGrants =>
+    [row [("id", "asg1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("connection_id", "sc1"),
+       ("prefix", "reports/"), ("access", "read"), ("created_at", "1000")]]
   | .agentMcpServers =>
     [row [("id", "am1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("mcp_server_id", "cn1"),
        ("created_at", "1000")]]
@@ -370,6 +389,10 @@ def state : State
     [row [("id", "av1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("number", "1"),
        ("summary", "First version"), ("via", "ui"), ("body", "{}"),
        ("created_by_principal_id", "p1"), ("created_at", "1000")]]
+  | .agentVersionStorageGrants =>
+    [row [("id", "avsg1"), ("workspace_id", "w1"), ("version_id", "av1"),
+       ("connection_id", "sc1"), ("prefix", "reports/"), ("access", "read"),
+       ("created_at", "1000")]]
   | .agentPointerMoves =>
     [row [("id", "apm1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("environment", "local"),
        ("version_id", "av1"), ("moved_by", "p1"), ("moved_at", "1000"), ("reason", "set")]]
@@ -414,14 +437,14 @@ def state : State
   | .sessionStateBlobs =>
     [row ([("workspace_id", "w1"), ("session_id", "se1"), ("engine", "claude-agent-sdk"),
        ("blob_key", "state.tar"), ("storage_key", "session-state/se1/claude-agent-sdk/state.tar"),
-       ("size_bytes", "3"), ("sha256", "ab12")] ++ stamps)]
+       ("status", "ready"), ("size_bytes", "3"), ("sha256", "ab12")] ++ stamps)]
   | .runs =>
     [row ([("id", "r1"), ("workspace_id", "w1"), ("session_id", "se1"), ("status", "completed"),
        ("model", "claude-sonnet"), ("provider", "anthropic"), ("model_connection_id", "c1"),
        ("started_at", "1000"), ("ended_at", "1100"), ("input_tokens", "10"),
        ("output_tokens", "5"), ("cache_read_input_tokens", "0"),
        ("cache_creation_input_tokens", "0"), ("cost_usd", "0"), ("cost_currency", "USD"),
-       ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}")] ++
+       ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}"), ("file_grants", "{}"), ("approved_tool_calls", "[]"), ("consumed_tool_calls", "[]")] ++
        stamps)]
   | .runEvents =>
     [row [("run_id", "r1"), ("workspace_id", "w1"), ("sequence", "1"), ("type", "run.status"),
@@ -446,18 +469,37 @@ def state : State
   | .surfaceSessionKeys =>
     [row [("session_id", "se1"), ("workspace_id", "w1"), ("surface_name", "main"),
        ("agent_id", "a1"), ("key_hash", "h1"), ("created_at", "1000")]]
+  | .triggers =>
+    [row ([("id", "tr1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("name", "Deploy hook"),
+       ("kind", "webhook"), ("prompt_template", "Summarise {{body}}"), ("enabled", "true"),
+       ("owner_principal_id", "p1"),
+       ("secret_hash", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+       ("last_fired_at", "1000")] ++ stamps)]
+  | .triggerDeliveries =>
+    [row [("id", "td1"), ("workspace_id", "w1"), ("trigger_id", "tr1"), ("delivery_key", "evt-1"),
+       ("run_id", "r1"), ("created_at", "1000")]]
+  | .storageConnections =>
+    [row ([("id", "sc1"), ("workspace_id", "w1"), ("name", "archive"), ("provider", "s3"),
+       ("url", "s3://archive/"), ("allowed_prefixes", "{}"), ("write_allowed", "false")] ++
+       stamps)]
+  | .storageMigrationRuns =>
+    [row [("id", "smr1"), ("finished_at", "1000"), ("rows_checked", "4"), ("legacy_rows", "0"),
+       ("mismatches", "0"), ("stage", "finalize"), ("skipped_ownerless", "0"),
+       ("skipped_path_taken", "0"), ("skipped_failed", "0")]]
 
 /-- The transaction that inserts every row of `state` into an empty database, parents first. -/
 def load : List Stmt :=
   [.workspaces, .users, .userIdentities, .memberships, .apiKeys, .workspacePrincipals,
-    .invitations, .cliSessions, .modelConnections, .secrets, .runtimeProfiles,
-    .runtimeVerifications, .agents, .skills, .files,
-    .mcpServers, .agentFiles, .agentSkills, .agentMcpServers, .agentGrants, .agentVersions,
+    .invitations, .cliSessions, .modelConnections, .secrets, .storageConnections, .runtimeProfiles,
+    .runtimeVerifications, .agents, .skills, .skillRevisions, .files, .fileTexts,
+    .mcpServers, .agentFiles, .agentSkills, .agentStorageGrants, .agentMcpServers, .agentGrants,
+    .agentVersions, .agentVersionStorageGrants,
     .agentVersionPointers, .agentPointerMoves, .agentVersionEvaluations, .endpointClients,
     .endpointClientAgents, .endpointClientApiKeys, .oauthTokens, .projects, .projectFiles,
     .projectMcpServers, .sessions, .surfaceSessionKeys, .sessionTranscripts, .sessionMessages, .sessionStateStreams, .sessionStateEntries, .sessionStateBlobs, .runs,
-    .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .auditEvents, .shares, .shareViews,
-    .shareRunCharges].flatMap fun t => (state t).map (.insert t)
+    .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .builderToolCalls, .auditEvents, .shares, .shareViews,
+    .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns].flatMap fun t =>
+      (state t).map (.insert t)
 
 end Witness
 

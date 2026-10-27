@@ -62,6 +62,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+import { ignoredStorageVariables } from '@indx-workspace/contracts/storage-settings';
+import { formatStorageUrl } from '@indx-workspace/contracts/storage-url';
+
 import {
   addressOf,
   awsCredentials,
@@ -76,6 +79,8 @@ import {
   MIGRATION_VARIABLES,
   NOT_PROJECT_VARIABLES,
   selected,
+  storageTarget,
+  withoutIgnoredStorageSettings,
   toolHostVariables,
 } from './vercel.ts';
 import { runStep, type DeployContext, type DeployOutcome } from './steps.ts';
@@ -466,12 +471,56 @@ async function readAccountState(
   return { exists, registryListing };
 }
 
+/**
+ * The control plane's R2 bucket and the `AW_STORAGE_URL` it is pushed with: the account's R2
+ * endpoint and region `auto` fill what the URL leaves out. `overrides` are the secrets that replace
+ * `.env`'s own storage values.
+ */
+function r2Storage(
+  dotEnv: Readonly<Record<string, string>>,
+  account: string,
+): { readonly bucket: string; readonly overrides: Readonly<Record<string, string>> } {
+  const storage = storageTarget(dotEnv);
+  if (storage.kind === 'none') return { bucket: '', overrides: {} };
+  const { location } = storage;
+  if (location.kind !== 's3') {
+    throw new Error(
+      'AW_STORAGE_URL in .env must be an s3:// URL: a Worker keeps nothing on disk and R2 is ' +
+        'S3-compatible. Nothing was run.',
+    );
+  }
+  return {
+    bucket: location.bucket,
+    overrides: {
+      AW_STORAGE_URL: formatStorageUrl({
+        ...location,
+        endpoint: location.endpoint ?? `https://${account}.r2.cloudflarestorage.com`,
+        region: location.region ?? 'auto',
+      }),
+    },
+  };
+}
+
 export async function deployWithCloudflare(
   context: DeployContext,
   target: CloudflareTarget,
-  dotEnv: Readonly<Record<string, string>>,
+  projectEnv: Readonly<Record<string, string>>,
   apply: boolean,
 ): Promise<DeployOutcome> {
+  const dotEnv = withoutIgnoredStorageSettings(context, projectEnv);
+  // As on Vercel: old names alone used to place the store, so an apply with only them would quietly
+  // run with no files, skills or session state.
+  if (
+    apply &&
+    ignoredStorageVariables(projectEnv).length > 0 &&
+    storageTarget(dotEnv).kind === 'none'
+  ) {
+    throw new Error(
+      'AW_STORAGE_URL is empty in .env, and the old storage settings in it are ignored: the ' +
+        'control plane would keep no files, skills or session state. Set AW_STORAGE_URL to the ' +
+        's3:// URL of its R2 bucket and run again. Nothing was run.',
+    );
+  }
   const unset = [CLOUDFLARE_API_TOKEN_VARIABLE, CLOUDFLARE_ACCOUNT_ID_VARIABLE].filter(
     (name) => (context.env[name]?.trim() ?? '') === '',
   );
@@ -511,17 +560,22 @@ export async function deployWithCloudflare(
     ['RUNNER_MANAGER_URL', managerUrl],
     ...(frontendOrigin === null ? [] : [[FRONTEND_ORIGIN_VARIABLE, frontendOrigin] as const]),
   ];
+  const r2 = r2Storage(dotEnv, account);
   const controlPlaneSecrets: Secrets = Object.entries({
     ...dotEnv,
-    OBJECT_STORAGE_ENDPOINT:
-      dotEnv['OBJECT_STORAGE_ENDPOINT']?.trim() || `https://${account}.r2.cloudflarestorage.com`,
+    ...r2.overrides,
     ...awsCredentials(dotEnv),
   })
     .filter(([name, value]) => value.trim() !== '' && !NOT_PROJECT_VARIABLES.has(name))
     .filter(([name]) => !addresses.some(([address]) => address === name))
     .concat(toolHostVariables(dotEnv).map(([name, value]) => [name, value]))
     .concat(addresses.map(([name, value]) => [name, value]));
-  const gatewaySecrets = gatewayVariables(dotEnv);
+  // The gateway forwards the Builder's aw-control MCP calls to the control plane Worker's own
+  // workers.dev origin, derived like the gateway's, never from `.env` or a request.
+  const gatewaySecrets: Secrets = [
+    ...gatewayVariables(dotEnv),
+    ['GATEWAY_CONTROL_PLANE_ORIGIN', workersDev(target.controlPlaneWorkerName)],
+  ];
   const managerSecrets: Secrets = [
     ...selected(managerEnvironment(dotEnv), [...MANAGER_VARIABLES, BRIDGE_URL_VARIABLE]),
     // E2B finds a session's sandbox again, so an idle-stopped manager keeps no table to lose (ADR-0126).
@@ -580,7 +634,7 @@ export async function deployWithCloudflare(
   // Secret values cannot be read back, so they are always put again (a rotation must land).
   if (!apply) return { changes: true, applied: false };
 
-  const bucket = dotEnv['OBJECT_STORAGE_BUCKET']?.trim() ?? '';
+  const bucket = r2.bucket;
   if (bucket !== '') {
     // The S3 adapter does not create a bucket when the backend is explicit, as it is on Cloudflare.
     const info = await runStep(context, 'wrangler', ['r2', 'bucket', 'info', bucket], {

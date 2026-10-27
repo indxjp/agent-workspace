@@ -48,7 +48,7 @@ describe('runtime images per engine', () => {
   it('pins every Node base image by digest', async () => {
     for (const file of ['Dockerfile', 'gateway.Dockerfile', 'runtime.Dockerfile']) {
       expect(dockerArg(await read(file), 'NODE_IMAGE'), file).toMatch(
-        /^node:24\.21\.0-bookworm-slim@sha256:[0-9a-f]{64}$/u,
+        /^node:24\.22\.1-bookworm-slim@sha256:[0-9a-f]{64}$/u,
       );
     }
   });

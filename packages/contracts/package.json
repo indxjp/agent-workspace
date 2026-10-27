@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/contracts",
-  "version": "0.6.9",
+  "version": "0.6.11",
   "description": "The Agent Workspace API contracts: Zod schemas, route catalogue and the contracts version every client and server share.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -47,6 +47,10 @@
       "types": "./src/api-keys.ts",
       "default": "./dist/api-keys.js"
     },
+    "./builder": {
+      "types": "./src/builder.ts",
+      "default": "./dist/builder.js"
+    },
     "./cli-auth": {
       "types": "./src/cli-auth.ts",
       "default": "./dist/cli-auth.js"
@@ -74,6 +78,10 @@
     "./files": {
       "types": "./src/files.ts",
       "default": "./dist/files.js"
+    },
+    "./identity-assertion": {
+      "types": "./src/identity-assertion.ts",
+      "default": "./dist/identity-assertion.js"
     },
     "./invitations": {
       "types": "./src/invitations.ts",
@@ -151,6 +159,18 @@
       "types": "./src/skills.ts",
       "default": "./dist/skills.js"
     },
+    "./storage-connections": {
+      "types": "./src/storage-connections.ts",
+      "default": "./dist/storage-connections.js"
+    },
+    "./storage-settings": {
+      "types": "./src/storage-settings.ts",
+      "default": "./dist/storage-settings.js"
+    },
+    "./storage-url": {
+      "types": "./src/storage-url.ts",
+      "default": "./dist/storage-url.js"
+    },
     "./surfaces": {
       "types": "./src/surfaces.ts",
       "default": "./dist/surfaces.js"
@@ -166,6 +186,10 @@
     "./tool-connectors": {
       "types": "./src/tool-connectors.ts",
       "default": "./dist/tool-connectors.js"
+    },
+    "./triggers": {
+      "types": "./src/triggers.ts",
+      "default": "./dist/triggers.js"
     },
     "./workspaces": {
       "types": "./src/workspaces.ts",
@@ -201,6 +225,10 @@
         "types": "./dist/api-keys.d.ts",
         "default": "./dist/api-keys.js"
       },
+      "./builder": {
+        "types": "./dist/builder.d.ts",
+        "default": "./dist/builder.js"
+      },
       "./cli-auth": {
         "types": "./dist/cli-auth.d.ts",
         "default": "./dist/cli-auth.js"
@@ -228,6 +256,10 @@
       "./files": {
         "types": "./dist/files.d.ts",
         "default": "./dist/files.js"
+      },
+      "./identity-assertion": {
+        "types": "./dist/identity-assertion.d.ts",
+        "default": "./dist/identity-assertion.js"
       },
       "./invitations": {
         "types": "./dist/invitations.d.ts",
@@ -305,6 +337,18 @@
         "types": "./dist/skills.d.ts",
         "default": "./dist/skills.js"
       },
+      "./storage-connections": {
+        "types": "./dist/storage-connections.d.ts",
+        "default": "./dist/storage-connections.js"
+      },
+      "./storage-settings": {
+        "types": "./dist/storage-settings.d.ts",
+        "default": "./dist/storage-settings.js"
+      },
+      "./storage-url": {
+        "types": "./dist/storage-url.d.ts",
+        "default": "./dist/storage-url.js"
+      },
       "./surfaces": {
         "types": "./dist/surfaces.d.ts",
         "default": "./dist/surfaces.js"
@@ -320,6 +364,10 @@
       "./tool-connectors": {
         "types": "./dist/tool-connectors.d.ts",
         "default": "./dist/tool-connectors.js"
+      },
+      "./triggers": {
+        "types": "./dist/triggers.d.ts",
+        "default": "./dist/triggers.js"
       },
       "./workspaces": {
         "types": "./dist/workspaces.d.ts",
@@ -337,8 +385,8 @@
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3",
-    "zod": "4.6.6"
+    "vitest": "5.0.5",
+    "zod": "4.6.7"
   },
   "nx": {
     "targets": {

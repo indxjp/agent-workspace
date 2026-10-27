@@ -68,6 +68,16 @@ variable "public_url" {
   }
 }
 
+variable "storage_signed_upload_max_bytes" {
+  description = "web's AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES: the largest signed upload in bytes. Null leaves it unset and the server default applies."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.storage_signed_upload_max_bytes == null || (var.storage_signed_upload_max_bytes >= 1 && floor(var.storage_signed_upload_max_bytes) == var.storage_signed_upload_max_bytes)
+    error_message = "storage_signed_upload_max_bytes must be null or a whole number of bytes of at least 1."
+  }
+}
+
 variable "db_tier" {
   description = "Cloud SQL machine tier. db-f1-micro is a shared-core tier suitable for a test/demo deployment, not sustained production load."
   type        = string

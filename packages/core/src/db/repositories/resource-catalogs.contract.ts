@@ -1,0 +1,1585 @@
+/**
+ * The one catalog contract suite (the storage design, §03 and §04): the in-memory catalog and the
+ * PostgreSQL catalog both run it, so a test that passes against the memory version cannot hide a
+ * rule the database enforces. Cases drive {@link CatalogPort}, plus the one-step writes
+ * (`putFile`, `renameFile`, `renameFilesByPrefix`) where a rule constrains them too.
+ *
+ * A fixture owes the suite one catalog per workspace (`'a'` and `'b'`, empty and unrelated to every
+ * other fixture's) and the principal that owns rows written in each. `makeFixture` runs once per
+ * test.
+ */
+import { describe, expect, it } from 'vitest';
+
+import type { FileStatus } from '../schema/files.js';
+import { sidePath } from '../side-paths.js';
+import {
+  CatalogPathPendingError,
+  CatalogPathTakenError,
+  type CatalogFile,
+  type CatalogPort,
+  type CatalogSkill,
+  type ReserveOutcome,
+  type ResourceCatalogRepository,
+} from './resource-catalogs.js';
+
+export interface CatalogConformanceFixture {
+  readonly catalog: (workspace: 'a' | 'b') => ResourceCatalogRepository;
+  readonly ownerA: string;
+  readonly ownerB: string;
+  /** A member of workspace `'a'`, valid as a row's `createdBy`. */
+  readonly actorA: string;
+  /** Put a file row in any state, bypassing the port, the way a raw insert does. Rejects on a duplicate. */
+  readonly seed: (
+    workspace: 'a' | 'b',
+    row: { readonly path: string; readonly status: FileStatus; readonly objectId?: string },
+  ) => Promise<void>;
+}
+
+export function describeCatalogConformance(
+  label: string,
+  makeFixture: () => Promise<CatalogConformanceFixture>,
+): void {
+  describe(`catalog conformance: ${label}`, () => {
+    const upload = async (
+      catalog: CatalogPort,
+      owner: string,
+      path: string,
+      sizeBytes = 1,
+    ): Promise<CatalogFile> => {
+      const reserved = await catalog.reserve(path, {
+        ownerPrincipalId: owner,
+        sizeBytes,
+        contentType: null,
+      });
+      if (reserved.kind !== 'reserved') throw new Error(`${path} was already taken`);
+      const done = await catalog.confirm(reserved.row, { sizeBytes, contentType: 'text/plain' });
+      if (done === null) throw new Error(`${path} vanished before confirm`);
+      return done.row;
+    };
+    const replace = async (
+      catalog: CatalogPort,
+      owner: string,
+      path: string,
+    ): Promise<ReserveOutcome> =>
+      catalog.reserve(path, {
+        ownerPrincipalId: owner,
+        sizeBytes: 1,
+        contentType: null,
+        objectId: crypto.randomUUID(),
+      });
+    const paths = (rows: readonly CatalogFile[]) => rows.map((row) => row.path);
+    const pending = async (catalog: CatalogPort, owner: string, path: string) => {
+      const reserved = await catalog.reserve(path, {
+        ownerPrincipalId: owner,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      if (reserved.kind !== 'reserved') throw new Error(`${path} was already taken`);
+      return reserved.row;
+    };
+    const fileInput = (path: string, owner: string) => ({
+      path,
+      kind: 'file' as const,
+      storageKey: path,
+      sizeBytes: 3,
+      contentType: 'text/plain',
+      ownerPrincipalId: owner,
+    });
+    /** PostgreSQL's CHECK violation, as the driver error's cause carries it. */
+    const checkViolation = (constraint: string) => ({ cause: { code: '23514', constraint } });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] a reserved row is pending and invisible to get and list', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const reserved = await a.reserve('big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      expect(reserved).toMatchObject({
+        kind: 'reserved',
+        row: { path: 'big.bin', kind: 'file', status: 'pending', ownerPrincipalId: ownerA },
+      });
+      await expect(a.get('big.bin')).resolves.toBeNull();
+      expect(paths((await a.list('')).rows)).not.toContain('big.bin');
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] new rows default to the files area with no object id', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const reserved = await a.reserve('docs/big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      const defaults = { objectId: null, area: 'files', sha256: null };
+      expect(reserved.row).toMatchObject(defaults);
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 5, contentType: null }),
+      ).resolves.toMatchObject({ row: defaults });
+      await expect(a.get('docs')).resolves.toMatchObject({ kind: 'folder', ...defaults });
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] two rows in one workspace never share an object id', async () => {
+      const { seed } = await makeFixture();
+      const objectId = crypto.randomUUID();
+      await seed('a', { path: 'one.bin', status: 'ready', objectId });
+      await expect(seed('a', { path: 'two.bin', status: 'ready', objectId })).rejects.toThrow();
+      await expect(
+        seed('b', { path: 'one.bin', status: 'ready', objectId }),
+      ).resolves.toBeUndefined();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] get with includePending returns a pending row', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const reserved = await a.reserve('big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      await expect(a.get('big.bin', { includePending: true })).resolves.toMatchObject({
+        id: reserved.row.id,
+        status: 'pending',
+      });
+      await expect(a.get('missing.bin', { includePending: true })).resolves.toBeNull();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] confirm makes the row ready and listed', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const reserved = await a.reserve('big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      const confirmed = await a.confirm(reserved.row, {
+        sizeBytes: 7,
+        contentType: 'application/octet-stream',
+        sha256: null,
+      });
+      expect(confirmed).toMatchObject({
+        row: {
+          id: reserved.row.id,
+          status: 'ready',
+          sizeBytes: 7,
+          contentType: 'application/octet-stream',
+        },
+      });
+      expect(confirmed?.replaced).toBeUndefined();
+      await expect(a.get('big.bin')).resolves.toMatchObject({ id: reserved.row.id });
+      expect(paths((await a.list('')).rows)).toContain('big.bin');
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] pending finds the upload for a path, a pending replacement included', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await expect(a.pending('x.bin')).resolves.toBeNull();
+
+      const fresh = await pending(a, ownerA, 'x.bin');
+      await expect(a.pending('x.bin')).resolves.toMatchObject({ id: fresh.id });
+      await a.confirm(fresh, { sizeBytes: 5, contentType: null });
+      await expect(a.pending('x.bin')).resolves.toBeNull();
+
+      const replacement = await replace(a, ownerA, 'x.bin');
+      if (replacement.kind !== 'reserved') throw new Error('x.bin was not replaceable');
+      await expect(a.get('x.bin', { includePending: true })).resolves.not.toMatchObject({
+        id: replacement.row.id,
+      });
+      await expect(a.pending('x.bin')).resolves.toMatchObject({ id: replacement.row.id });
+      await expect(catalog('b').pending('x.bin')).resolves.toBeNull();
+
+      await a.forget(replacement.row);
+      await expect(a.pending('x.bin')).resolves.toBeNull();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] countPending counts pending rows of one workspace', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const b = catalog('b');
+      const reserve = (target: CatalogPort, owner: string, path: string) =>
+        target.reserve(path, { ownerPrincipalId: owner, sizeBytes: 1, contentType: null });
+      const x = await reserve(a, ownerA, 'x.bin');
+      await reserve(a, ownerA, 'y.bin');
+      await reserve(b, ownerB, 'z.bin');
+      await expect(a.countPending()).resolves.toBe(2);
+      await expect(b.countPending()).resolves.toBe(1);
+
+      await a.confirm(x.row, { sizeBytes: 1, contentType: null });
+      await expect(a.countPending()).resolves.toBe(1);
+      await reserve(a, ownerA, 'y.bin');
+      await expect(a.countPending()).resolves.toBe(1);
+
+      await a.remove('y.bin');
+      await expect(a.countPending()).resolves.toBe(0);
+      await expect(b.countPending()).resolves.toBe(1);
+
+      await a.reserve('.staging-s', {
+        area: 'staging',
+        objectId: crypto.randomUUID(),
+        ownerPrincipalId: ownerA,
+        sizeBytes: 0,
+        contentType: null,
+      });
+      await expect(a.countPending()).resolves.toBe(0);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] one row per path', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const first = await a.reserve('big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      await expect(
+        a.reserve('big.bin', { ownerPrincipalId: ownerB, sizeBytes: 9, contentType: 'text/plain' }),
+      ).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.get('big.bin')).resolves.toBeNull();
+      await a.confirm(first.row, { sizeBytes: 5, contentType: null });
+      const third = await a.reserve('big.bin', {
+        ownerPrincipalId: ownerB,
+        sizeBytes: 9,
+        contentType: null,
+      });
+      expect(third).toMatchObject({
+        kind: 'taken',
+        row: { id: first.row.id, ownerPrincipalId: ownerA, status: 'ready' },
+      });
+      expect(paths((await a.list('')).rows).filter((path) => path === 'big.bin')).toHaveLength(1);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a pending row is refreshed only by a reserve of its own upload mode', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const input = { ownerPrincipalId: ownerA, contentType: null };
+      // (a) a relay save over the owner's pending signed upload must not reset its declared size.
+      const signed = await a.reserve('signed.bin', {
+        ...input,
+        sizeBytes: 9,
+        uploadMode: 'signed',
+      });
+      await expect(
+        a.reserve('signed.bin', { ...input, sizeBytes: 0, uploadMode: 'relay' }),
+      ).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.reserve('signed.bin', { ...input, sizeBytes: 0 })).rejects.toBeInstanceOf(
+        CatalogPathPendingError,
+      );
+      await expect(
+        a.reserve('signed.bin', { ...input, sizeBytes: 9, uploadMode: 'signed' }),
+      ).resolves.toMatchObject({ kind: 'taken', row: { id: signed.row.id, sizeBytes: 9 } });
+      await expect(a.pending('signed.bin')).resolves.toMatchObject({ sizeBytes: 9 });
+      // (b) a mint during the owner's in-flight relay save must not take over the save's row.
+      const relay = await a.reserve('relay.bin', { ...input, sizeBytes: 0, uploadMode: 'relay' });
+      await expect(
+        a.reserve('relay.bin', { ...input, sizeBytes: 5, uploadMode: 'signed' }),
+      ).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.pending('relay.bin')).resolves.toMatchObject({
+        id: relay.row.id,
+        sizeBytes: 0,
+      });
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] confirm of a forgotten row returns null', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const reserved = await a.reserve('big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      const [removed] = await a.remove('big.bin');
+      expect(removed).toMatchObject({ id: reserved.row.id, status: 'deleting' });
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 5, contentType: null }),
+      ).resolves.toBeNull();
+      await expect(a.get('big.bin', { includePending: true })).resolves.toBeNull();
+      if (removed !== undefined) await a.forget(removed);
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 5, contentType: null }),
+      ).resolves.toBeNull();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] confirm of a ready row returns null and changes nothing', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const ready = await upload(a, ownerA, 'done.txt', 4);
+      await expect(
+        a.confirm(ready, { sizeBytes: 9, contentType: 'image/png' }),
+      ).resolves.toBeNull();
+      await expect(a.get('done.txt')).resolves.toMatchObject({
+        id: ready.id,
+        sizeBytes: 4,
+        contentType: 'text/plain',
+      });
+      await expect(
+        a.confirm(ready, { sizeBytes: 9, contentType: 'image/png', expect: 'any' }),
+      ).resolves.toMatchObject({ row: { id: ready.id, status: 'ready', sizeBytes: 9 } });
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] confirm refuses a row that moved off its storage key', async () => {
+      // A pending row cannot move (`renameFile` and folder moves refuse it), so the storage-key
+      // guard is pinned with a ready row re-confirmed under `expect: 'any'` after a rename.
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const row = await a.putFile(fileInput('docs/x.bin', ownerA));
+      const moved = await a.renameFile('docs/x.bin', {
+        path: 'moved/x.bin',
+        kind: 'file',
+        storageKey: 'moved/x.bin',
+        sizeBytes: 3,
+        contentType: 'text/plain',
+      });
+      await expect(
+        a.confirm(row, { sizeBytes: 9, contentType: null, expect: 'any' }),
+      ).resolves.toBeNull();
+      await expect(a.get('moved/x.bin')).resolves.toEqual(moved);
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] putFile on a pending path is refused and the row is unchanged', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const row = await pending(a, ownerA, 'inbox/reserved.bin');
+      await expect(a.putFile(fileInput('inbox/reserved.bin', ownerA))).rejects.toBeInstanceOf(
+        CatalogPathPendingError,
+      );
+      await expect(a.get('inbox/reserved.bin', { includePending: true })).resolves.toEqual(row);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] the owner re-reserves a pending path with a new size', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const row = await pending(a, ownerA, 'big.bin');
+      await expect(
+        a.reserve('big.bin', { ownerPrincipalId: ownerA, sizeBytes: 9, contentType: 'text/csv' }),
+      ).resolves.toMatchObject({
+        kind: 'taken',
+        row: { id: row.id, status: 'pending', sizeBytes: 9, contentType: 'text/csv' },
+      });
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] another member cannot re-reserve a pending path', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const row = await pending(a, ownerA, 'big.bin');
+      await expect(
+        a.reserve('big.bin', { ownerPrincipalId: ownerB, sizeBytes: 9, contentType: null }),
+      ).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.get('big.bin', { includePending: true })).resolves.toEqual(row);
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] a folder move refuses while a child is pending', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const done = await upload(a, ownerA, 'docs/done.txt');
+      const row = await pending(a, ownerA, 'docs/sub/x.bin');
+      await expect(a.rename('docs', 'moved')).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.renameFilesByPrefix('docs', 'moved')).rejects.toBeInstanceOf(
+        CatalogPathPendingError,
+      );
+      await expect(a.get('docs/done.txt')).resolves.toMatchObject({ id: done.id });
+      await expect(a.get('docs/sub/x.bin', { includePending: true })).resolves.toEqual(row);
+      await expect(a.get('moved', { includePending: true })).resolves.toBeNull();
+    });
+
+    it('refuses a dot segment in a path as the files_path_no_dot_segments CHECK does', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await expect(
+        a.reserve('docs/../x.bin', { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null }),
+      ).rejects.toMatchObject(checkViolation('files_path_no_dot_segments'));
+      await expect(a.get('docs', { includePending: true })).resolves.toBeNull();
+    });
+
+    it('refuses a negative size as the files_size_non_negative CHECK does', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await expect(
+        a.reserve('neg.bin', { ownerPrincipalId: ownerA, sizeBytes: -1, contentType: null }),
+      ).rejects.toMatchObject(checkViolation('files_size_non_negative'));
+      await expect(a.get('neg.bin', { includePending: true })).resolves.toBeNull();
+    });
+
+    it('refuses a folder with a storage key as the files_storage_key_iff_file CHECK does', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await expect(
+        a.putFile({ ...fileInput('dir', ownerA), kind: 'folder', sizeBytes: 0, contentType: null }),
+      ).rejects.toMatchObject(checkViolation('files_storage_key_iff_file'));
+      await expect(a.get('dir')).resolves.toBeNull();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] renameFile refuses a pending row and leaves it in place', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.reserve('big.bin', { ownerPrincipalId: ownerA, sizeBytes: 5, contentType: null });
+      const moved = {
+        path: 'moved.bin',
+        kind: 'file' as const,
+        storageKey: 'moved.bin',
+        sizeBytes: 5,
+        contentType: null,
+      };
+      await expect(a.renameFile('big.bin', moved)).resolves.toBeNull();
+      await expect(a.get('big.bin', { includePending: true })).resolves.toMatchObject({
+        status: 'pending',
+      });
+      await expect(a.get('moved.bin', { includePending: true })).resolves.toBeNull();
+    });
+
+    it('creates the parent folders of a reserved path, ready and owned by its owner', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.reserve('docs/deep/big.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+      });
+      for (const path of ['docs', 'docs/deep']) {
+        await expect(a.get(path)).resolves.toMatchObject({
+          kind: 'folder',
+          status: 'ready',
+          ownerPrincipalId: ownerA,
+        });
+      }
+    });
+
+    it('[US-STO-01][contract][sdk] createFolder adds a ready folder row with its parents and no object', async () => {
+      const { catalog, ownerA, actorA } = await makeFixture();
+      const a = catalog('a');
+      const made = await a.createFolder('docs/deep', {
+        ownerPrincipalId: ownerA,
+        createdBy: actorA,
+      });
+      expect(made).toMatchObject({
+        kind: 'created',
+        row: {
+          path: 'docs/deep',
+          kind: 'folder',
+          status: 'ready',
+          storageKey: null,
+          sizeBytes: 0,
+          ownerPrincipalId: ownerA,
+          createdBy: actorA,
+        },
+      });
+      await expect(a.get('docs')).resolves.toMatchObject({ kind: 'folder', status: 'ready' });
+      expect(paths((await a.list('')).rows)).toEqual(['docs', 'docs/deep']);
+
+      const again = await a.createFolder('docs/deep', { ownerPrincipalId: ownerA });
+      expect(again).toMatchObject({ kind: 'taken', row: { id: made.row.id } });
+    });
+
+    it('[US-STO-01][contract][sdk] createFolder over a file or a pending upload is taken and changes nothing', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const file = await upload(a, ownerA, 'docs/ready.txt');
+      const held = await pending(a, ownerA, 'docs/pending.txt');
+
+      await expect(
+        a.createFolder('docs/ready.txt', { ownerPrincipalId: ownerA }),
+      ).resolves.toMatchObject({ kind: 'taken', row: { id: file.id, kind: 'file' } });
+      await expect(
+        a.createFolder('docs/pending.txt', { ownerPrincipalId: ownerA }),
+      ).resolves.toMatchObject({ kind: 'taken', row: { id: held.id, status: 'pending' } });
+      await expect(a.get('docs/ready.txt')).resolves.toMatchObject({ id: file.id, kind: 'file' });
+      await expect(a.createFolder(sidePath(file.id), { ownerPrincipalId: ownerA })).rejects.toThrow(
+        'reserved catalog path',
+      );
+    });
+
+    it('lists ready rows in path order, a page at a time, and clamps the page size', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      for (const name of ['f3', 'f1', 'f5', 'f2', 'f4']) await upload(a, ownerA, name);
+      await a.reserve('f0', { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null });
+
+      const first = await a.list('', { limit: 2 });
+      expect(paths(first.rows)).toEqual(['f1', 'f2']);
+      expect(first.cursor).toBe('f2');
+      const second = await a.list('', { cursor: 'f2', limit: 2 });
+      expect(paths(second.rows)).toEqual(['f3', 'f4']);
+      expect(second.cursor).toBe('f4');
+      const last = await a.list('', { cursor: 'f4', limit: 2 });
+      expect(paths(last.rows)).toEqual(['f5']);
+      expect(last.cursor).toBeNull();
+
+      expect(paths((await a.list('', { limit: 0 })).rows)).toEqual(['f1']);
+      expect(paths((await a.list('', { limit: 100_000 })).rows)).toHaveLength(5);
+    });
+
+    it('pages in code-point order, as collate "C" does, not UTF-16 code-unit order', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await upload(a, ownerA, 'a\u{1F600}');
+      await upload(a, ownerA, 'a\u{FF01}');
+      const first = await a.list('', { limit: 1 });
+      expect(paths(first.rows)).toEqual(['a\u{FF01}']);
+      expect(first.cursor).toBe('a\u{FF01}');
+      const second = await a.list('', { cursor: 'a\u{FF01}', limit: 1 });
+      expect(paths(second.rows)).toEqual(['a\u{1F600}']);
+    });
+
+    it('lists only what is at or under the folder, never a sibling that shares its characters', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await upload(a, ownerA, 'docs/a.txt');
+      await upload(a, ownerA, 'docs2/b.txt');
+      expect(paths((await a.list('docs')).rows)).toEqual(['docs', 'docs/a.txt']);
+    });
+
+    it('renames a subtree keeping ids and leaves docs2 alone when renaming docs', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const inside = await upload(a, ownerA, 'docs/sub/a.txt');
+      const sibling = await upload(a, ownerA, 'docs2/b.txt');
+
+      // docs, docs/sub and docs/sub/a.txt
+      await expect(a.rename('docs', 'guides')).resolves.toBe(3);
+
+      await expect(a.get('guides/sub/a.txt')).resolves.toMatchObject({
+        id: inside.id,
+        storageKey: 'guides/sub/a.txt',
+      });
+      await expect(a.get('docs/sub/a.txt')).resolves.toBeNull();
+      await expect(a.get('docs2/b.txt')).resolves.toMatchObject({ id: sibling.id });
+      await expect(a.rename('nothing-here', 'elsewhere')).resolves.toBe(0);
+    });
+
+    it('rename writes the parent folders of the target', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const file = await upload(a, ownerA, 'plain.txt');
+      await expect(a.rename('plain.txt', 'new/place/plain.txt')).resolves.toBe(1);
+      await expect(a.get('new/place')).resolves.toMatchObject({ kind: 'folder' });
+      await expect(a.get('new/place/plain.txt')).resolves.toMatchObject({ id: file.id });
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] removing a folder marks every row under it deleting', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await upload(a, ownerA, 'docs/sub/a.txt');
+      await a.reserve('docs/pending.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      await upload(a, ownerA, 'docs2/b.txt');
+
+      // The file rows come back deleting, moved aside with their old path in `targetPath`; the
+      // folder rows (docs, docs/sub) have no object to clean up.
+      const removed = await a.remove('docs');
+      expect(removed.map((row) => [row.targetPath, row.status]).sort()).toEqual([
+        ['docs/pending.bin', 'deleting'],
+        ['docs/sub/a.txt', 'deleting'],
+      ]);
+      for (const row of removed) expect(row.path).toBe(sidePath(row.id));
+
+      expect(paths((await a.list('')).rows)).toEqual(['docs2', 'docs2/b.txt']);
+      for (const path of ['docs', 'docs/sub', 'docs/sub/a.txt', 'docs/pending.bin']) {
+        await expect(a.get(path, { includePending: true })).resolves.toBeNull();
+      }
+      expect((await a.deleting()).map((row) => row.targetPath).sort()).toEqual([
+        'docs/pending.bin',
+        'docs/sub/a.txt',
+      ]);
+      await expect(a.remove('docs')).resolves.toEqual([]);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] remove marks a file deleting and get and list stop showing it', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const file = await upload(a, ownerA, 'one.txt');
+      await upload(a, ownerA, 'two.txt');
+
+      const removed = await a.remove('one.txt');
+      expect(removed).toEqual([
+        { ...file, status: 'deleting', path: sidePath(file.id), targetPath: 'one.txt' },
+      ]);
+      await expect(a.get('one.txt')).resolves.toBeNull();
+      await expect(a.get('one.txt', { includePending: true })).resolves.toBeNull();
+      expect(paths((await a.list('')).rows)).toEqual(['two.txt']);
+      await expect(a.deleting()).resolves.toEqual(removed);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] confirm stores the checksum', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const sha256 = 'ab'.repeat(32);
+      const reserved = await a.reserve('sum.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 1, contentType: null, sha256 }),
+      ).resolves.toMatchObject({ row: { status: 'ready', sha256 } });
+      await expect(a.get('sum.bin')).resolves.toMatchObject({ sha256 });
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] confirm of a removed row returns null and never revives it', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const reserved = await a.reserve('gone.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      await a.remove('gone.bin');
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 1, contentType: null }),
+      ).resolves.toBeNull();
+      await expect(a.get('gone.bin', { includePending: true })).resolves.toBeNull();
+      await expect(a.deleting()).resolves.toHaveLength(1);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] a removed path is free at once: reserve wins', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const input = { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null };
+      const reserved = await a.reserve('gone.bin', input);
+      await a.remove('gone.bin');
+      const again = await a.reserve('gone.bin', input);
+      expect(again).toMatchObject({
+        kind: 'reserved',
+        row: { path: 'gone.bin', status: 'pending' },
+      });
+      expect(again.row.id).not.toBe(reserved.row.id);
+      await expect(a.deleting()).resolves.toHaveLength(1);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] stalePending returns only pending rows reserved before the cut-off', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await upload(a, ownerA, 'ready.bin');
+      const pending = await a.reserve('pending.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      const minute = 60_000;
+
+      await expect(a.stalePending(new Date(Date.now() - minute))).resolves.toEqual([]);
+      await expect(a.stalePending(new Date(Date.now() + minute))).resolves.toEqual([pending.row]);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] a re-reserve refreshes the time stalePending compares', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const input = { ownerPrincipalId: ownerA, sizeBytes: 5, contentType: null };
+      const first = await a.reserve('again.bin', input);
+      if (first.kind !== 'reserved') throw new Error('again.bin was already taken');
+      const pause = () => new Promise((resolve) => setTimeout(resolve, 25));
+      await pause();
+      const cut = new Date();
+      await pause();
+
+      await expect(a.stalePending(cut)).resolves.toEqual([first.row]);
+      await expect(a.reserve('again.bin', input)).resolves.toMatchObject({ kind: 'taken' });
+      await expect(a.stalePending(cut)).resolves.toEqual([]);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] a fresh reservation is not stale through another handle', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const pending = await catalog('a').reserve('pending.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      const minute = 60_000;
+
+      await expect(catalog('a').stalePending(new Date(Date.now() - minute))).resolves.toEqual([]);
+      await expect(catalog('a').stalePending(new Date(Date.now() + minute))).resolves.toEqual([
+        pending.row,
+      ]);
+    });
+
+    it('putFile over a row with no creator keeps createdBy null', async () => {
+      const { catalog, ownerA, actorA } = await makeFixture();
+      const a = catalog('a');
+      const input = {
+        path: 'a.txt',
+        kind: 'file' as const,
+        storageKey: 'a.txt',
+        sizeBytes: 1,
+        contentType: 'text/plain',
+        ownerPrincipalId: ownerA,
+      };
+      await a.putFile(input);
+      const again = await a.putFile({ ...input, sizeBytes: 2, createdBy: actorA });
+      expect(again.createdBy).toBeNull();
+      await expect(a.get('a.txt')).resolves.toMatchObject({ createdBy: null, sizeBytes: 2 });
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] forget is idempotent and never deletes a ready row', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const ready = await upload(a, ownerA, 'keep.bin');
+      await upload(a, ownerA, 'doomed.bin');
+      const removed = await a.remove('doomed.bin');
+      expect(removed).toHaveLength(1);
+
+      await a.forget(ready);
+      await expect(a.get('keep.bin')).resolves.toMatchObject({ id: ready.id });
+
+      for (const row of [...removed, ...removed]) await a.forget(row);
+      await expect(a.deleting()).resolves.toEqual([]);
+      const again = await a.reserve('doomed.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      expect(again.kind).toBe('reserved');
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] a second workspace cannot remove, list deleting or forget the first one', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const b = catalog('b');
+      await upload(a, ownerA, 'private.bin');
+      const removed = await a.remove('private.bin');
+
+      await expect(b.remove('private.bin')).resolves.toEqual([]);
+      await expect(b.deleting()).resolves.toEqual([]);
+      await expect(b.stalePending(new Date(Date.now() + 60_000))).resolves.toEqual([]);
+      for (const row of removed) await b.forget(row);
+      await expect(a.deleting()).resolves.toHaveLength(1);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] referencing finds rows in every status by object id and legacy key', async () => {
+      const { catalog, ownerA, ownerB, seed } = await makeFixture();
+      const a = catalog('a');
+      const readyId = crypto.randomUUID();
+      const goneId = crypto.randomUUID();
+      const replacementId = crypto.randomUUID();
+      const ready = await upload(a, ownerA, 'legacy.bin');
+      await upload(a, ownerA, 'gone.bin');
+      const [legacyGone] = await a.remove('gone.bin');
+      const stillPending = await pending(a, ownerA, 'pending.bin');
+      await seed('a', { path: 'new/ready.bin', status: 'ready', objectId: readyId });
+      await seed('a', { path: 'new/gone.bin', status: 'ready', objectId: goneId });
+      const [newGone] = await a.remove('new/gone.bin');
+      const replacement = await a.reserve('legacy.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+        objectId: replacementId,
+      });
+      if (replacement.kind !== 'reserved') throw new Error('the replacement was not reserved');
+      expect(replacement.row.path).not.toBe('legacy.bin');
+      await upload(catalog('b'), ownerB, 'legacy.bin');
+
+      const found = await a.referencing({
+        objectIds: [readyId, goneId, replacementId, crypto.randomUUID()],
+        storageKeys: ['legacy.bin', 'gone.bin', 'pending.bin', 'absent.bin'],
+      });
+
+      expect(found.map((row) => row.id).sort()).toEqual(
+        [
+          ready.id,
+          legacyGone?.id,
+          stillPending.id,
+          newGone?.id,
+          replacement.row.id,
+          (await a.get('new/ready.bin'))?.id,
+        ].sort(),
+      );
+      await expect(a.referencing({ objectIds: [], storageKeys: [] })).resolves.toEqual([]);
+      // A key only matches a legacy row, and an object id only a row that has one.
+      await expect(
+        a.referencing({ objectIds: [], storageKeys: [`files/${readyId}`] }),
+      ).resolves.toEqual([]);
+      await expect(
+        catalog('b').referencing({ objectIds: [readyId, goneId], storageKeys: ['gone.bin'] }),
+      ).resolves.toEqual([]);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] rename of a new-style row keeps its storage key and object id', async () => {
+      const { catalog, seed } = await makeFixture();
+      const a = catalog('a');
+      const objectId = crypto.randomUUID();
+      await seed('a', { path: 'old/new-style.bin', status: 'ready', objectId });
+      const before = await a.get('old/new-style.bin');
+
+      await expect(a.rename('old', 'moved')).resolves.toBeGreaterThan(0);
+      await expect(a.get('moved/new-style.bin')).resolves.toMatchObject({
+        id: before?.id,
+        objectId,
+        storageKey: before?.storageKey,
+      });
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] confirming a replacement leaves exactly one ready row and marks the old one deleting', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'r.bin', 1);
+      const reserved = await replace(a, ownerA, 'r.bin');
+      expect(reserved.kind).toBe('reserved');
+
+      const done = await a.confirm(reserved.row, {
+        sizeBytes: 2,
+        contentType: 'text/plain',
+        sha256: 'cd'.repeat(32),
+      });
+      expect(done).toMatchObject({
+        row: {
+          id: reserved.row.id,
+          path: 'r.bin',
+          status: 'ready',
+          sizeBytes: 2,
+          targetPath: null,
+        },
+        replaced: { id: old.id, status: 'deleting', targetPath: 'r.bin' },
+      });
+      expect((await a.list('')).rows.filter((row) => row.path === 'r.bin')).toEqual([done?.row]);
+      await expect(a.deleting()).resolves.toEqual([done?.replaced]);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a replacement is pending beside the ready row; get and list still show the old row', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'r.bin');
+      const reserved = await replace(a, ownerA, 'r.bin');
+
+      expect(reserved).toMatchObject({
+        kind: 'reserved',
+        row: { status: 'pending', targetPath: 'r.bin' },
+      });
+      expect(reserved.row.path).toBe(sidePath(reserved.row.id));
+      await expect(a.get('r.bin')).resolves.toMatchObject({ id: old.id });
+      await expect(a.get('r.bin', { includePending: true })).resolves.toMatchObject({ id: old.id });
+      expect((await a.list('')).rows.map((row) => row.id)).toEqual([old.id]);
+      await expect(a.countPending()).resolves.toBe(1);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a second pending replacement of one path is taken', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await upload(a, ownerA, 'r.bin');
+      const first = await replace(a, ownerA, 'r.bin');
+      const second = await replace(a, ownerA, 'r.bin');
+      expect(second).toMatchObject({ kind: 'taken', row: { id: first.row.id, status: 'pending' } });
+      await expect(a.countPending()).resolves.toBe(1);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a reserve without an object id on a ready path is taken by the ready row', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'r.bin');
+      const again = await a.reserve('r.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+      expect(again).toMatchObject({ kind: 'taken', row: { id: old.id, status: 'ready' } });
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a reserve with an object id on a free path stores the object id and key', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const objectId = crypto.randomUUID();
+      const reserved = await a.reserve('new/free.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+        objectId,
+        area: 'files',
+      });
+      expect(reserved).toMatchObject({
+        kind: 'reserved',
+        row: { path: 'new/free.bin', objectId, area: 'files', storageKey: `files/${objectId}` },
+      });
+      expect(reserved.row.targetPath ?? null).toBeNull();
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a reserve with an object id already in use is refused', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const objectId = crypto.randomUUID();
+      const input = { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null, objectId };
+      await a.reserve('used.bin', input);
+      await upload(a, ownerA, 'r.bin');
+      for (const path of ['free.bin', 'r.bin']) {
+        await expect(a.reserve(path, input)).rejects.toThrow('files_workspace_object_key');
+      }
+      await expect(a.countPending()).resolves.toBe(1);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] confirm of a forgotten replacement returns null and keeps the ready row', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'r.bin');
+      const reserved = await replace(a, ownerA, 'r.bin');
+      await a.forget(reserved.row);
+
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 2, contentType: null }),
+      ).resolves.toBeNull();
+      await expect(a.get('r.bin')).resolves.toMatchObject({ id: old.id, status: 'ready' });
+      await expect(a.deleting()).resolves.toEqual([]);
+      expect((await replace(a, ownerA, 'r.bin')).kind).toBe('reserved');
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] renaming a file carries its pending replacement along', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'r.bin');
+      const reserved = await replace(a, ownerA, 'r.bin');
+      await a.renameFile('r.bin', {
+        path: 'moved.bin',
+        kind: 'file',
+        storageKey: old.storageKey,
+        sizeBytes: old.sizeBytes,
+        contentType: old.contentType,
+      });
+
+      const done = await a.confirm(reserved.row, { sizeBytes: 2, contentType: null });
+      expect(done).toMatchObject({
+        row: { id: reserved.row.id, path: 'moved.bin', status: 'ready' },
+        replaced: { id: old.id, targetPath: 'moved.bin' },
+      });
+      expect(paths((await a.list('')).rows)).toEqual(['moved.bin']);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][contract][sdk] removing a file also marks its pending replacement deleting', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'r.bin');
+      const reserved = await replace(a, ownerA, 'r.bin');
+
+      const removed = await a.remove('r.bin');
+      expect(removed.map((row) => row.id).sort()).toEqual([old.id, reserved.row.id].sort());
+      expect(removed.every((row) => row.status === 'deleting' && row.targetPath === 'r.bin')).toBe(
+        true,
+      );
+      await expect(a.get('r.bin', { includePending: true })).resolves.toBeNull();
+      await expect(a.countPending()).resolves.toBe(0);
+      await expect(
+        a.confirm(reserved.row, { sizeBytes: 2, contentType: null }),
+      ).resolves.toBeNull();
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a folder move refuses while a file under it has a pending replacement', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const old = await upload(a, ownerA, 'docs/r.bin');
+      const reserved = await replace(a, ownerA, 'docs/r.bin');
+
+      await expect(a.rename('docs', 'guides')).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.get('docs/r.bin')).resolves.toMatchObject({ id: old.id });
+      await expect(a.get('guides/r.bin')).resolves.toBeNull();
+      const done = await a.confirm(reserved.row, { sizeBytes: 2, contentType: null });
+      expect(done).toMatchObject({
+        row: { id: reserved.row.id, path: 'docs/r.bin', status: 'ready' },
+        replaced: { id: old.id, targetPath: 'docs/r.bin' },
+      });
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] rename onto a taken logical path is refused and moves nothing', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const from = await upload(a, ownerA, 'from.bin');
+      const to = await upload(a, ownerA, 'to.bin');
+
+      await expect(a.rename('from.bin', 'to.bin')).rejects.toBeInstanceOf(CatalogPathTakenError);
+      await expect(a.get('from.bin')).resolves.toMatchObject({ id: from.id });
+      await expect(a.get('to.bin')).resolves.toMatchObject({ id: to.id });
+      await expect(
+        a.renameFile('from.bin', {
+          path: 'to.bin',
+          kind: 'file',
+          storageKey: 'to.bin',
+          sizeBytes: 1,
+          contentType: null,
+        }),
+      ).rejects.toBeInstanceOf(CatalogPathTakenError);
+      await expect(a.get('from.bin')).resolves.toMatchObject({ id: from.id });
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][contract][sdk] a side path is never returned by get or list and cannot be written', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await upload(a, ownerA, 'r.bin');
+      const reserved = await replace(a, ownerA, 'r.bin');
+
+      await expect(a.get(reserved.row.path)).resolves.toBeNull();
+      await expect(a.get(reserved.row.path, { includePending: true })).resolves.toBeNull();
+      expect((await a.list('')).rows.every((row) => row.path !== reserved.row.path)).toBe(true);
+      await expect(
+        a.reserve(sidePath(crypto.randomUUID()), {
+          ownerPrincipalId: ownerA,
+          sizeBytes: 1,
+          contentType: null,
+        }),
+      ).rejects.toThrow();
+      await expect(a.rename('r.bin', sidePath(crypto.randomUUID()))).rejects.toThrow();
+    });
+
+    const legacyObject = (storageKey: string) => ({ storageKey, sizeBytes: 4, contentType: null });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] adopting a row-less legacy object gives it a ready row and its folders', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+
+      await expect(
+        a.adoptLegacyFiles([legacyObject('docs/deep/a.txt'), legacyObject('b.txt')], ownerA),
+      ).resolves.toEqual({ adopted: 2, hadRow: 0, pathTaken: 0 });
+
+      await expect(a.get('docs/deep/a.txt')).resolves.toMatchObject({
+        kind: 'file',
+        status: 'ready',
+        storageKey: 'docs/deep/a.txt',
+        objectId: null,
+        area: 'files',
+        sizeBytes: 4,
+        ownerPrincipalId: ownerA,
+      });
+      await expect(a.get('docs/deep')).resolves.toMatchObject({ kind: 'folder' });
+      await expect(a.get('docs')).resolves.toMatchObject({ kind: 'folder' });
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] adopting twice, and adopting a file that has a row, changes nothing', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const existing = await a.putFile(fileInput('kept.txt', ownerA));
+
+      const outcome = await a.adoptLegacyFiles(
+        [legacyObject('kept.txt'), legacyObject('new.txt')],
+        ownerA,
+      );
+      expect(outcome).toEqual({ adopted: 1, hadRow: 1, pathTaken: 0 });
+      await expect(a.adoptLegacyFiles([legacyObject('new.txt')], ownerA)).resolves.toEqual({
+        adopted: 0,
+        hadRow: 1,
+        pathTaken: 0,
+      });
+      await expect(a.get('kept.txt')).resolves.toEqual(existing);
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] a legacy object whose row is deleting is never brought back', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putFile(fileInput('gone.txt', ownerA));
+      await a.remove('gone.txt');
+
+      await expect(a.adoptLegacyFiles([legacyObject('gone.txt')], ownerA)).resolves.toEqual({
+        adopted: 0,
+        hadRow: 1,
+        pathTaken: 0,
+      });
+      await expect(a.get('gone.txt')).resolves.toBeNull();
+      expect(paths((await a.list('')).rows)).not.toContain('gone.txt');
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] a path held by another object is skipped, never overwritten', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const heldReservation = await replace(a, ownerA, 'held.txt');
+      const held = await a.confirm(heldReservation.row, { sizeBytes: 1, contentType: null });
+      const waiting = await replace(a, ownerA, 'waiting.txt');
+
+      await expect(
+        a.adoptLegacyFiles([legacyObject('held.txt'), legacyObject('waiting.txt')], ownerA),
+      ).resolves.toEqual({ adopted: 0, hadRow: 0, pathTaken: 2 });
+      await expect(a.get('held.txt')).resolves.toMatchObject({
+        id: held?.row.id,
+        status: 'ready',
+      });
+      await expect(a.get('waiting.txt', { includePending: true })).resolves.toMatchObject({
+        id: waiting.row.id,
+        status: 'pending',
+      });
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] a side path is never adopted and the rest of the batch is', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+
+      await expect(
+        a.adoptLegacyFiles([legacyObject('%aside/x'), legacyObject('kept.txt')], ownerA),
+      ).resolves.toEqual({ adopted: 1, hadRow: 0, pathTaken: 1 });
+      expect(paths((await a.list('')).rows)).toEqual(['kept.txt']);
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] two calls at once adopt each object exactly once', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const objects = Array.from({ length: 8 }, (_, index) => legacyObject(`dir/f-${index}.txt`));
+
+      const [first, second] = await Promise.all([
+        a.adoptLegacyFiles(objects, ownerA),
+        a.adoptLegacyFiles(objects, ownerA),
+      ]);
+
+      expect(first.adopted + second.adopted).toBe(objects.length);
+      expect(first.hadRow + second.hadRow + first.pathTaken + second.pathTaken).toBe(
+        objects.length,
+      );
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] adopting in one workspace leaves the other alone', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      await catalog('a').adoptLegacyFiles([legacyObject('only-a.txt')], ownerA);
+
+      await expect(catalog('b').get('only-a.txt')).resolves.toBeNull();
+      await expect(catalog('b').adoptLegacyFiles([], ownerB)).resolves.toEqual({
+        adopted: 0,
+        hadRow: 0,
+        pathTaken: 0,
+      });
+    });
+
+    /** A ready file stored under the new naming (it has an object id). */
+    async function movedFile(a: ResourceCatalogRepository, owner: string, path: string) {
+      const reserved = await a.reserve(path, {
+        ownerPrincipalId: owner,
+        sizeBytes: 1,
+        contentType: null,
+        objectId: crypto.randomUUID(),
+      });
+      const confirmed = await a.confirm(reserved.row, { sizeBytes: 1, contentType: null });
+      return confirmed?.row ?? never();
+    }
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] the legacy count covers rows without an object id and no others', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await expect(a.countLegacyFiles()).resolves.toBe(0);
+
+      await a.putFile(fileInput('old.txt', ownerA));
+      await a.adoptLegacyFiles([legacyObject('docs/adopted.txt')], ownerA);
+      await movedFile(a, ownerA, 'new.txt');
+
+      // Folders hold no object, and a moved file is not legacy.
+      await expect(a.countLegacyFiles()).resolves.toBe(2);
+      await expect(catalog('b').countLegacyFiles()).resolves.toBe(0);
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][contract][sdk] the holders of an old key are the rows that name it by key or, for files, by path', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const legacy = await a.putFile(fileInput('legacy.txt', ownerA));
+      const moved = await movedFile(a, ownerA, 'moved.txt');
+      // A moved row keeps its path as the old key only when it had one: here the old key is another.
+      const keys = ['legacy.txt', 'moved.txt', moved.storageKey ?? never(), 'nobody.txt'];
+
+      const files = await a.holdersOfKeys('files', keys);
+
+      expect(files.map((row) => row.id).sort()).toEqual([legacy.id, moved.id].sort());
+      // Another area's rows are not in the answer, and a skills key is matched by key alone.
+      await expect(a.holdersOfKeys('skills', keys)).resolves.toEqual([]);
+      await expect(a.holdersOfKeys('files', [])).resolves.toEqual([]);
+      await expect(catalog('b').holdersOfKeys('files', keys)).resolves.toEqual([]);
+    });
+
+    it('never shows workspace A to workspace B, and B can reserve the same path', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const b = catalog('b');
+      const fileA = await upload(a, ownerA, 'shared/same.txt');
+      const pendingA = await a.reserve('pending.bin', {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
+
+      await expect(b.get('shared/same.txt')).resolves.toBeNull();
+      await expect(b.get('pending.bin', { includePending: true })).resolves.toBeNull();
+      expect((await b.list('')).rows).toEqual([]);
+      await expect(
+        b.confirm(pendingA.row, { sizeBytes: 1, contentType: null }),
+      ).resolves.toBeNull();
+      await expect(b.rename('shared', 'taken')).resolves.toBe(0);
+      await expect(b.remove('shared')).resolves.toEqual([]);
+
+      const reservedInB = await b.reserve('shared/same.txt', {
+        ownerPrincipalId: ownerB,
+        sizeBytes: 2,
+        contentType: null,
+      });
+      expect(reservedInB).toMatchObject({ kind: 'reserved', row: { ownerPrincipalId: ownerB } });
+      expect(reservedInB.row.id).not.toBe(fileA.id);
+      await expect(a.get('shared/same.txt')).resolves.toMatchObject({ id: fileA.id });
+      await expect(a.get('pending.bin', { includePending: true })).resolves.toMatchObject({
+        status: 'pending',
+      });
+    });
+  });
+}
+
+export interface SkillCatalogConformanceFixture {
+  readonly catalog: (workspace: 'a' | 'b') => ResourceCatalogRepository;
+  readonly ownerA: string;
+  readonly ownerB: string;
+  /** A member of workspace `'a'`, valid as a skill's `createdBy`. */
+  readonly actorA: string;
+  /** Assign `skill` to a new agent in `workspace`, the way an agent version does; returns the agent id. */
+  readonly assign: (workspace: 'a' | 'b', skill: CatalogSkill) => Promise<string>;
+  /** Date the pending revisions of the skill named `name` in `'a'` past the stale window. */
+  readonly ageRevisions: (name: string) => Promise<void>;
+}
+
+/**
+ * The skill half of the catalog contract (the storage design, §03): skills and their revisions
+ * follow the PostgreSQL rules in memory too. `makeFixture` runs once per test.
+ */
+export function describeSkillCatalogConformance(
+  label: string,
+  makeFixture: () => Promise<SkillCatalogConformanceFixture>,
+): void {
+  describe(`skill catalog conformance: ${label}`, () => {
+    const noWrite = () => Promise.resolve(undefined);
+    const skillInput = (name: string, ownerPrincipalId: string) => ({
+      name,
+      skillMd: `# ${name}`,
+      enabled: true,
+      ownerPrincipalId,
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] listSkills returns put skills ordered by name', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await expect(a.listSkills()).resolves.toEqual([]);
+      const zeta = await a.putSkill(skillInput('zeta', ownerA));
+      const alpha = await a.putSkill(skillInput('alpha', ownerA));
+      await expect(a.listSkills()).resolves.toEqual([alpha, zeta]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] getSkill reads one skill by name, in its workspace only', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const alpha = await catalog('a').putSkill(skillInput('alpha', ownerA));
+      await expect(catalog('a').getSkill('alpha')).resolves.toEqual(alpha);
+      await expect(catalog('a').getSkill('zeta')).resolves.toBeNull();
+      await expect(catalog('b').getSkill('alpha')).resolves.toBeNull();
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] putSkill upserts by name and never transfers id or owner', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const first = await a.putSkill(skillInput('reviewer', ownerA));
+      const second = await a.putSkill({
+        ...skillInput('reviewer', ownerB),
+        skillMd: '# changed',
+        enabled: false,
+      });
+      expect(second).toEqual({ ...first, skillMd: '# changed', enabled: false });
+      await expect(a.listSkills()).resolves.toEqual([second]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] createSkill inserts once; a second create of the name returns null and changes nothing', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const created = await a.createSkill(skillInput('reviewer', ownerA));
+      expect(created).toMatchObject({
+        name: 'reviewer',
+        skillMd: '# reviewer',
+        ownerPrincipalId: ownerA,
+      });
+
+      await expect(
+        a.createSkill({ ...skillInput('reviewer', ownerB), skillMd: '# other', enabled: false }),
+      ).resolves.toBeNull();
+      await expect(a.listSkills()).resolves.toEqual([created]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] putSkill over a created skill keeps its id and owner', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const created = await a.createSkill(skillInput('reviewer', ownerA));
+      const updated = await a.putSkill({ ...skillInput('reviewer', ownerB), skillMd: '# changed' });
+      expect(updated).toEqual({ ...created, skillMd: '# changed' });
+    });
+
+    it('putSkill over a skill with no creator keeps createdBy null', async () => {
+      const { catalog, ownerA, actorA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('reviewer', ownerA));
+      const again = await a.putSkill({ ...skillInput('reviewer', ownerA), createdBy: actorA });
+      expect(again.createdBy).toBeNull();
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] deleteSkill of an unknown name is not-found', async () => {
+      const { catalog } = await makeFixture();
+      await expect(catalog('a').deleteSkill('missing')).resolves.toEqual({ kind: 'not-found' });
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] deleteSkill refuses an assigned skill naming its agents, then deletes', async () => {
+      const { catalog, ownerA, assign } = await makeFixture();
+      const a = catalog('a');
+      const assigned = await a.putSkill(skillInput('assigned', ownerA));
+      const free = await a.putSkill(skillInput('free', ownerA));
+      const agentId = await assign('a', assigned);
+
+      await expect(a.deleteSkill('assigned')).resolves.toEqual({
+        kind: 'in-use',
+        agentIds: [agentId],
+      });
+      await expect(a.listSkills()).resolves.toEqual([assigned, free]);
+
+      await expect(a.deleteSkill('free')).resolves.toEqual({ kind: 'deleted', skill: free });
+      await expect(a.deleteSkill('free')).resolves.toEqual({ kind: 'not-found' });
+      await expect(a.listSkills()).resolves.toEqual([assigned]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] deleteSkill with an id leaves a later row of the name alone', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      const first = await a.putSkill(skillInput('reused', ownerA));
+      await a.deleteSkill('reused');
+      const second = await a.putSkill(skillInput('reused', ownerA));
+
+      await expect(a.deleteSkill('reused', first.id)).resolves.toEqual({ kind: 'not-found' });
+      await expect(a.listSkills()).resolves.toEqual([second]);
+      await expect(a.deleteSkill('reused', second.id)).resolves.toEqual({
+        kind: 'deleted',
+        skill: second,
+      });
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] revisions number 1, 2, 3 per skill and list newest first', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('numbered', ownerA));
+      await a.putSkill(skillInput('numbered-other', ownerA));
+      const written: number[] = [];
+      const write = (number: number) => {
+        written.push(number);
+        return Promise.resolve(undefined);
+      };
+
+      const first = await a.publishSkillRevision('numbered', { fileCount: 1, write });
+      const second = await a.publishSkillRevision('numbered', { fileCount: 3, write });
+      const third = await a.publishSkillRevision('numbered', { fileCount: 2, write });
+      const other = await a.publishSkillRevision('numbered-other', {
+        fileCount: 1,
+        write: noWrite,
+      });
+
+      expect([first?.number, second?.number, third?.number, other?.number]).toEqual([1, 2, 3, 1]);
+      expect(written).toEqual([1, 2, 3]);
+      const revisions = await a.listSkillRevisions('numbered');
+      expect(revisions.map((r) => [r.number, r.fileCount])).toEqual([
+        [3, 2],
+        [2, 3],
+        [1, 1],
+      ]);
+      expect(revisions[0]?.publishedAt).toBeInstanceOf(Date);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] a throwing write records nothing and the number is reused', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('flaky', ownerA));
+      await expect(
+        a.publishSkillRevision('flaky', {
+          fileCount: 1,
+          write: () => Promise.reject(new Error('store down')),
+        }),
+      ).rejects.toThrow('store down');
+      await expect(a.listSkillRevisions('flaky')).resolves.toEqual([]);
+      await expect(
+        a.publishSkillRevision('flaky', { fileCount: 1, write: noWrite }),
+      ).resolves.toMatchObject({ number: 1 });
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] a stale revision number is never reused and completing it changes nothing', async () => {
+      const { catalog, ownerA, ageRevisions } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('stale', ownerA));
+      let started!: () => void;
+      const writing = new Promise<void>((resolve) => (started = resolve));
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      const slow = a.publishSkillRevision('stale', {
+        fileCount: 1,
+        write: async () => {
+          started();
+          await released;
+          return { skillMd: '# abandoned', enabled: false };
+        },
+      });
+      await writing;
+      await ageRevisions('stale');
+
+      const abandonedSeen: (readonly number[])[] = [];
+      const next = await a.publishSkillRevision('stale', {
+        fileCount: 2,
+        write: (_number, abandoned) => {
+          abandonedSeen.push(abandoned);
+          return Promise.resolve(undefined);
+        },
+      });
+      expect(next?.number).toBe(2);
+      expect(abandonedSeen).toEqual([[1]]);
+
+      release();
+      await expect(slow).resolves.toBeNull();
+      expect((await a.listSkillRevisions('stale')).map((r) => [r.number, r.fileCount])).toEqual([
+        [2, 2],
+      ]);
+      await expect(a.listSkills()).resolves.toMatchObject([
+        { name: 'stale', skillMd: '# stale', enabled: true },
+      ]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] a revision is not listed until its write completes', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('pending', ownerA));
+      const listedDuringWrite: number[][] = [];
+      const revision = await a.publishSkillRevision('pending', {
+        fileCount: 1,
+        write: async () => {
+          listedDuringWrite.push((await a.listSkillRevisions('pending')).map((r) => r.number));
+          listedDuringWrite.push(
+            (await a.listSkillRevisions('pending', { includePending: true })).map((r) => r.number),
+          );
+          return undefined;
+        },
+      });
+      expect(listedDuringWrite).toEqual([[], [1]]);
+      expect(revision?.number).toBe(1);
+      expect((await a.listSkillRevisions('pending')).map((r) => r.number)).toEqual([1]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] the content a write returns is stamped on the skill row', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('stamped', ownerA));
+      await a.publishSkillRevision('stamped', {
+        fileCount: 1,
+        write: () => Promise.resolve({ skillMd: '# published', enabled: false }),
+      });
+      await expect(a.listSkills()).resolves.toMatchObject([
+        { name: 'stamped', skillMd: '# published', enabled: false },
+      ]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] concurrent publishes of one skill get distinct numbers', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('concurrent', ownerA));
+      const published = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          a.publishSkillRevision('concurrent', { fileCount: 1, write: noWrite }),
+        ),
+      );
+      expect(published.map((r) => r?.number).sort()).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] an unknown skill publishes nothing and has no revisions', async () => {
+      const { catalog } = await makeFixture();
+      const a = catalog('a');
+      await expect(
+        a.publishSkillRevision('missing', { fileCount: 1, write: noWrite }),
+      ).resolves.toBeNull();
+      await expect(a.listSkillRevisions('missing')).resolves.toEqual([]);
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] revisions leave with their skill, so a recreated skill restarts at 1', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      await a.putSkill(skillInput('recreated', ownerA));
+      await a.publishSkillRevision('recreated', { fileCount: 1, write: noWrite });
+      await a.publishSkillRevision('recreated', { fileCount: 1, write: noWrite });
+      await expect(a.deleteSkill('recreated')).resolves.toMatchObject({ kind: 'deleted' });
+      await expect(a.listSkillRevisions('recreated')).resolves.toEqual([]);
+
+      await a.putSkill(skillInput('recreated', ownerA));
+      await expect(
+        a.publishSkillRevision('recreated', { fileCount: 1, write: noWrite }),
+      ).resolves.toMatchObject({ number: 1 });
+    });
+
+    // @story US-STO-08
+    it('[US-STO-08][contract][sdk] another workspace cannot list, delete or publish to a skill', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
+      const a = catalog('a');
+      const b = catalog('b');
+      const skill = await a.putSkill(skillInput('private', ownerA));
+      await a.publishSkillRevision('private', { fileCount: 1, write: noWrite });
+
+      await expect(b.listSkills()).resolves.toEqual([]);
+      await expect(b.deleteSkill('private')).resolves.toEqual({ kind: 'not-found' });
+      await expect(
+        b.publishSkillRevision('private', { fileCount: 1, write: noWrite }),
+      ).resolves.toBeNull();
+      await expect(b.listSkillRevisions('private')).resolves.toEqual([]);
+
+      const inB = await b.putSkill(skillInput('private', ownerB));
+      expect(inB.id).not.toBe(skill.id);
+      await expect(a.listSkills()).resolves.toEqual([skill]);
+      expect(await a.listSkillRevisions('private')).toHaveLength(1);
+    });
+  });
+}
+
+function never(): never {
+  throw new Error('unreachable');
+}

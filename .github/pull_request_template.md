@@ -1,14 +1,3 @@
-<!--
-REQUIRED FAIL-FAST CONTRACT: CI parses exactly one "## Ownership" section before it runs builds
-or tests. Keep "Owns globs:" on one physical line, replace every placeholder, and make the diff a
-subset of those globs. A missing or malformed declaration fails the first CI phase.
--->
-
-## Ownership
-
-Owns globs: <comma-separated globs from the task card or explicitly approved cleanup scope>
-Files touched outside Owns: none
-
 ## Summary
 
 <What changed and why, in a few sentences.>
@@ -30,4 +19,5 @@ declare is a more serious finding than the gap itself.>
 
 - [ ] `pnpm check:fast`, `pnpm test` and `pnpm build` pass
 - [ ] Documentation is updated
+- [ ] A user-visible change adds a `changes/<slug>.md` fragment; no `CHANGELOG.md` is edited
 - [ ] No secrets or local files are committed

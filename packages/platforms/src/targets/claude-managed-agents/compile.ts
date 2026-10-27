@@ -339,7 +339,10 @@ function frontmatterOf(
 }
 
 function yamlText(value: unknown): string {
-  return stringify(value, { lineWidth: 0 });
+  return stringify(value, {
+    lineWidth: 0,
+    doubleQuotedMinMultiLineLength: Number.POSITIVE_INFINITY,
+  });
 }
 
 function agentFile(frontmatter: Plain, instructions: string): PlatformFile {

@@ -537,6 +537,7 @@ describe('resolveSaveOutcome', () => {
     files: [{ fileId: 'file-a', access: 'read' }],
     skillIds: ['skill-a'],
     connectorIds: [],
+    storageGrants: [],
   };
 
   it("reports the definition half failed and the assignments half not-attempted when the PATCH itself fails, and names no persisted assignments — a reload must show what it already showed, not this attempt's draft", () => {

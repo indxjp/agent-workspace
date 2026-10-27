@@ -1,34 +1,40 @@
 ---
 name: dxf-draft
-description: ASCII DXF（R12）図面を JSON に読み、過去図面から寸法の変更点だけを反映した新図面（未検図）を書く。Node だけで動く。
+description: office-reader が読んだ DXF 図面（JSON）から、寸法の変更点だけを反映した新図面（未検図）を書く。Node だけで動く。
 ---
 
-# DXF 図面の読み方と流用作図
+# DXF 図面の流用作図
 
-Agent Workspace はアップロードされた図面を解析しません。DXF はテキスト形式なので、このスキルの
-`scripts/dxf.mjs` で読み書きします。Node だけで動き、追加のパッケージは不要です。
-スクリプトは `run_skill_script` ツール（`skill`・`script`・`args`）で動かします。シェルはありません。
-読めるのは作業ディレクトリの中だけで、書けるのは書き込み可で渡されたフォルダ（`drafts`）だけです。
+Agent Workspace はアップロードされた図面を解析しません。DXF を読むのは組み込みの `office-reader` スキル
+（`dxf.mjs`）で、このスキルの `scripts/dxf.mjs` はその JSON から新図面の DXF を書きます。Node だけで動き、
+追加のパッケージは不要です。スクリプトは `run_skill_script` ツール（`skill`・`script`・`args`）で動かします。
+シェルはありません。読めるのは作業ディレクトリの中だけで、書けるのは書き込み可で渡されたフォルダ
+（`drafts`）と、実行の成果物を置く `outputs` だけです。
 
-## 読む
+## 元図を読む
+
+出力先（`drafts/` の中）を付けると、出力（`lines`・`circles`・`texts`・`counts`・`blocks` ほか）は
+そのファイルに書かれ、標準出力には `{"written": "drafts/BRK-1003.base.json"}` だけが出る。`Write` は使わない。
+以降の `draft` はこのファイルを元図として読む。
 
 ```json
 {
-  "skill": "dxf-draft",
+  "skill": "office-reader",
   "script": "dxf.mjs",
-  "args": ["summary", "drawings/BRK-1003.dxf"]
+  "args": ["drawings/BRK/BRK-1003.dxf", "drafts/BRK-1003.base.json"]
 }
 ```
 
-出力: `{ drawingNo, partName, material, thickness, width, height, rectangular, holes: [{ x, y, diameter }], notes, title, unreadEntities }`
-
-- 寸法はすべて mm。穴の位置は外形の左下角からの距離、`diameter` は直径（φ）。
-- `rectangular: false` の図面（L形・切欠きあり）は伸縮で流用できない。`draft` は拒否する。
-- `unreadEntities` に要素があれば、その要素は読めていない。回答にそのことを書く。
+- 外形（`OUTLINE` 層の LINE）、穴（`HOLE` 層の CIRCLE）、表題欄（`TITLE` 層の TEXT）、注記（`NOTE` 層の TEXT）が
+  流用作図の対象。寸法はすべて mm。穴の位置は外形の左下角からの距離、直径は半径の2倍。
+- `counts` に LINE・CIRCLE・TEXT 以外の要素（ARC・LWPOLYLINE・INSERT など）があるか、`blocks` が空でない
+  図面は、座標を読めないので `draft` が拒否する。回答にそのことを書く。
+- 外形が矩形でない図面（L形・切欠きあり）も、伸縮で流用できないので `draft` が拒否する。
 
 ## 流用して作図する
 
-変更セット（JSON）を書き、`draft` に渡す:
+変更セット（JSON）を `Write` で `drafts/BRK-1101.changes.json` に書く。これが設計者の承認を待つ唯一の `Write`
+で、承認されると（`approved`）同じ内容でもう一度 `Write` してから `draft` に渡す:
 
 ```json
 {
@@ -51,13 +57,19 @@ Agent Workspace はアップロードされた図面を解析しません。DXF 
 {
   "skill": "dxf-draft",
   "script": "dxf.mjs",
-  "args": ["draft", "drawings/BRK-1003.dxf", "drafts/BRK-1101.changes.json", "drafts/BRK-1101.dxf"]
+  "args": [
+    "draft",
+    "drafts/BRK-1003.base.json",
+    "drafts/BRK-1101.changes.json",
+    "outputs/BRK-1101.dxf"
+  ]
 }
 ```
 
 - 変更セットには、要件が変える項目だけを書く。元図と同じ値は書かない（`material`・`thickness`・
   `partName` は元図と違うときだけ）。`width`・`height` は必須で、変えない方は元図の値を書く。
   `holes` を省くと元図の穴をそのまま残し、書くと元図の穴をすべて置き換える。
+- 新図面は `outputs/<新図番>.dxf` に書く。そこに置いたファイルが実行の成果物として返る。
 - 出力は新図面の要約に、元図との差を表す `changes`（例: `高さ 80 → 90`、`穴 (15,65)φ9 → (15,75)φ9`）と、
   変わっていない値を表す `kept`（例: `幅 140（元図のまま）`）が付く。回答の変更点の箇条書きはこの
   2つをそのまま写す。
@@ -72,5 +84,5 @@ Agent Workspace はアップロードされた図面を解析しません。DXF 
 
 - 要件にも元図にもない寸法を作らない。足りない寸法は設計者に聞く。
 - `draft` の結果を検図済みとして扱わない。出図の判断は設計者の検図による。
-- 文字コード: このスクリプトは UTF-8 の DXF を読み書きする。Shift_JIS（ANSI_932）の R12 DXF は
-  CAD 側で UTF-8（R2007 以降）に書き出してから使う。
+- 文字コード: 書き出す DXF は AC1027（AutoCAD 2013）の UTF-8 で、日本語の文字がそのまま入る。
+  元図の読み方（Shift_JIS の DXF の扱いを含む）は `office-reader` の SKILL.md に従う。

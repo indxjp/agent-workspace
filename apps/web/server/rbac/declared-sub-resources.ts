@@ -61,12 +61,19 @@ import { subResources as djs105agentversions443 } from './declarations/DJ-S1-05-
 import { subResources as djs106agentpointers444 } from './declarations/DJ-S1-06-AGENT-POINTERS-444';
 import { subResources as djs205crunfeedback539 } from './declarations/DJ-S2-05C-RUN-FEEDBACK-539';
 import { subResources as eng06sessionstate305 } from './declarations/ENG-06-SESSION-STATE-305';
+import { subResources as p54runapproval1301 } from './declarations/P5-4-RUN-APPROVAL-1301';
+import { subResources as p72surfaceattachments1308 } from './declarations/P7-2-SURFACE-ATTACHMENTS-1308';
+import { subResources as p84filesearch1314 } from './declarations/P8-4-FILE-SEARCH-1314';
 import { subResources as ptt1aendpointclients } from './declarations/PT-T1A-ENDPOINT-CLIENTS';
 import { subResources as ptt1coauth } from './declarations/PT-T1C-OAUTH';
+import { subResources as pttriggers1293 } from './declarations/PT-TRIGGERS-1293';
 import { subResources as ptu5platformexports968 } from './declarations/PT-U5-PLATFORM-EXPORTS-968';
 import { subResources as sdk02agentpolicy234 } from './declarations/SDK-02-AGENT-POLICY-234';
 import { subResources as sdk03runcontrol235 } from './declarations/SDK-03-RUN-CONTROL-235';
 import { subResources as sdk05auth237 } from './declarations/SDK-05-AUTH-237';
+import { subResources as sdk19presignedfiles251 } from './declarations/SDK-19-PRESIGNED-FILES-251';
+import { subResources as sdk19skillrevisions251 } from './declarations/SDK-19-SKILL-REVISIONS-251';
+import { subResources as sto503storageconnections1690 } from './declarations/STO-503-STORAGE-CONNECTIONS-1690';
 import { subResources as w1cp05 } from './declarations/W1-CP-05';
 import { subResources as w2cp05 } from './declarations/W2-CP-05';
 import { subResources as w2cp07 } from './declarations/W2-CP-07';
@@ -109,12 +116,19 @@ export const DECLARED_SUB_RESOURCES: readonly SubResourceDeclaration[] = [
   ...djs106agentpointers444,
   ...djs205crunfeedback539,
   ...eng06sessionstate305,
+  ...p54runapproval1301,
+  ...p72surfaceattachments1308,
+  ...p84filesearch1314,
   ...ptt1aendpointclients,
   ...ptt1coauth,
+  ...pttriggers1293,
   ...ptu5platformexports968,
   ...sdk02agentpolicy234,
   ...sdk03runcontrol235,
   ...sdk05auth237,
+  ...sdk19presignedfiles251,
+  ...sdk19skillrevisions251,
+  ...sto503storageconnections1690,
   ...w1cp05,
   ...w2cp05,
   ...w2cp07,

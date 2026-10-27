@@ -3,14 +3,10 @@
  *
  * Spec §14.2 prints this contract and calls it "intentionally tiny": *"That is the whole
  * contract. If a driver needs more, the driver keeps it internal."* W3-RT-01 transcribes the
- * **whole** of §14.2 here — `RuntimeDriverId`, `RuntimeHandle`, `RuntimeDriver` (including the
- * optional `putFiles`/`getFiles` pair), and `AgentConnection` — plus §14.5's
- * `RuntimeCapabilities`. Earlier (W1-RN-02), this file transcribed only the subset its two
- * consumers needed and left `putFiles`/`getFiles` out, because the `/files` half of the §14.3
- * HTTP contract that would carry them did not exist yet. That HTTP contract lands later in Wave
- * 3 (W3-CP-07); the two methods are declared here, now, as the interface §14.2 always specified,
- * and remain optional exactly as spec text has them — a driver that can mount a volume (§15.3)
- * implements neither.
+ * **whole** of §14.2 here — `RuntimeDriverId`, `RuntimeHandle`, `RuntimeDriver`, and
+ * `AgentConnection` — plus §14.5's `RuntimeCapabilities`. The optional `putFiles`/`getFiles` pair
+ * §14.2 once printed is gone: nothing called it, and how files reach a run is the
+ * `fileTransfer` capability (the storage design, §03).
  *
  * `packages/runtime/src/types.ts` carries §15.1's `RuntimeProfile`, the type this file's
  * `RuntimeConfig` now references (see the comment on `RuntimeConfig` below).
@@ -35,12 +31,6 @@
  * So the request and the event are type parameters rather than concrete imports. A driver is
  * still one abstraction, not two; the parameters are the seam where the caller — which *can*
  * import core — supplies the concrete types. `apps/runner/src/runtime.ts` is that caller.
- *
- * The same reasoning covers `putFiles`/`getFiles`: their `archive`/return-value type is
- * `ReadableStream`, a platform (WHATWG streams) global available without any dependency at all,
- * so widening the interface to include them does not reopen the §14.2-vs-`@agent-workspace/core`
- * question W1-RN-02 settled. Adding a `@agent-workspace/core` dependency to this package would be
- * a plan amendment, not a task decision — see `docs/adr/W1-RN-02-runtime-driver-is-generic.md`.
  */
 
 /**
@@ -55,6 +45,9 @@
  * (`create`/`destroy` mirror `docker`'s one-container-per-session shape) and forward the same §14.3
  * HTTP contract to it over HTTPS with a Cloud Run identity token, the same way `kubernetes` forwards
  * it to a pod. See `docs/adr/ADR-cloud-run-service-driver.md`.
+ *
+ * This package has no dependencies, so the union is spelled out; `apps/web/server/runtimes/driver-catalogue.test.ts`
+ * pins it to the contracts' `RUNTIME_DRIVERS`.
  */
 export type RuntimeDriverId =
   | 'local'
@@ -73,7 +66,7 @@ export type RuntimeDriverId =
 
 /**
  * §14.2's `RuntimeHandle`. Transcribed as a `type` rather than an `interface` to match
- * `packages/core/src/types.ts`, which does the same for every shape the spec prints; the fields,
+ * `packages/run-protocol/src/types.ts`, which does the same for every shape the spec prints; the fields,
  * their names and their optionality are unchanged.
  */
 export type RuntimeHandle = {
@@ -105,6 +98,13 @@ export type RuntimeCapabilities = {
   readonly gpu: boolean;
   readonly managedByProvider: boolean;
   readonly typicalStartMs: number | null;
+  /**
+   * How a run's files reach this driver. The storage design (§03) chose one answer for every
+   * sandbox: *"Stream one archive — works on every sandbox today with no new network access."*
+   * `push-archive` is that stream; `local-disk` is the one driver that shares the control plane's
+   * disk and is hydrated by extracting the archive there.
+   */
+  readonly fileTransfer: 'push-archive' | 'local-disk';
 };
 
 /**
@@ -195,13 +195,6 @@ export type AgentConnection<TEvent> = {
  * `capabilities` is a field, not a method, for the same reason §14.5 exists: it is a static
  * property of the driver that the UI can read before anything is created, and a driver that
  * computed it per call could quietly answer differently once a run was in flight.
- *
- * `putFiles`/`getFiles` are optional, exactly as §14.2 declares them, and exist for the reason
- * §15.3 states: *"Drivers that can mount a volume do so. Drivers that cannot (`aca-sessions`,
- * `aws-agentcore`, `external`) implement `putFiles`/`getFiles` over the runtime HTTP contract
- * instead. That is the entire reason those two optional methods exist."* Their `archive`
- * parameter and return value are `ReadableStream` — a platform global, not a type this package
- * would need a dependency to name (see this file's header).
  */
 export type RuntimeDriver<TRequest, TEvent> = {
   readonly id: RuntimeDriverId;
@@ -212,8 +205,4 @@ export type RuntimeDriver<TRequest, TEvent> = {
   startAgent(runtime: RuntimeHandle, request: TRequest): Promise<AgentConnection<TEvent>>;
 
   destroy(runtime: RuntimeHandle): Promise<void>;
-
-  /** Optional. Only implemented when the driver cannot mount a volume (§15.3). */
-  putFiles?(runtime: RuntimeHandle, archive: ReadableStream): Promise<void>;
-  getFiles?(runtime: RuntimeHandle, paths: string[]): Promise<ReadableStream>;
 };

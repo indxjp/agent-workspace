@@ -35,9 +35,8 @@ import { describe, expect, it } from 'vitest';
 
 import { HomeChat, type ComposerAgents } from '../composer/home-chat';
 import { MOCKUP_AGENTS } from '../composer/mockup-fixture';
-import { sharePublishPayload } from '../shares/share-dialog';
 import { MOCKUP_RUN, MOCKUP_RUN_COMPLETED } from './mockup-fixture';
-import { RunView, shareableTranscript, shareSubjectForSession } from './run-view';
+import { RunView, shareSubjectForSession } from './run-view';
 import {
   NotARunError,
   beginRun,
@@ -83,52 +82,6 @@ describe('session sharing', () => {
       type: 'session',
       id: 'd1111111-1111-4111-8111-111111111111',
       label: 'General',
-    });
-  });
-
-  it('publishes the visible conversation as the immutable session snapshot', () => {
-    const transcript = [
-      { kind: 'user', text: 'Can you hear me?' },
-      { kind: 'agent', text: 'Yes.' },
-    ];
-
-    expect(
-      sharePublishPayload(
-        {
-          type: 'session',
-          id: 'd1111111-1111-4111-8111-111111111111',
-          label: 'General',
-        },
-        'public',
-        '24 h',
-        '',
-        transcript,
-      ),
-    ).toEqual({
-      subjectType: 'session',
-      subjectId: 'd1111111-1111-4111-8111-111111111111',
-      subjectLabel: 'General',
-      visibility: 'public',
-      expiry: '24 h',
-      transcript,
-    });
-  });
-
-  it('removes user identity from the transcript before it reaches the sharing boundary', () => {
-    const transcript = shareableTranscript([
-      userMessage('user-1', { initials: 'A', name: 'alex@example.com' }, 'Keep this private.'),
-      MOCKUP_RUN_COMPLETED.messages.find((message) => message.kind === 'agent') ??
-        (() => {
-          throw new Error('the completed fixture has no agent message');
-        })(),
-    ]);
-
-    expect(JSON.stringify(transcript)).not.toContain('alex@example.com');
-    expect(JSON.stringify(transcript)).not.toContain('"speaker"');
-    expect(transcript[0]).toEqual({
-      kind: 'user',
-      id: 'user-1',
-      paragraphs: [[{ text: 'Keep this private.', strong: false, mono: false }]],
     });
   });
 });
@@ -233,6 +186,33 @@ describe('§19 — Show technical details is collapsed by default', () => {
   });
 });
 
+// ── Attach file (issue #1680) ───────────────────────────────────────────────────────────────────
+
+describe('Attach file is disabled with a reason the screen reader reads', () => {
+  const ATTACH = /<button[^>]*>Attach file<\/button>/u;
+
+  it('before the session starts, points aria-describedby at the visible reason', () => {
+    const html = renderToStaticMarkup(createElement(RunView, { run: MOCKUP_RUN, sessionId: null }));
+    const button = ATTACH.exec(html)?.[0] ?? '';
+    expect(button).toContain('aria-disabled="true"');
+    const describedBy = /aria-describedby="([^"]+)"/u.exec(button)?.[1] ?? '';
+    expect(describedBy).not.toBe('');
+    expect(html).toContain(
+      `<span id="${describedBy}" class="order-last basis-full text-[12.5px] text-muted">Files can be attached once the session has started.</span>`,
+    );
+  });
+
+  it('once a session id is given, is enabled and described by nothing', () => {
+    const html = renderToStaticMarkup(
+      createElement(RunView, { run: MOCKUP_RUN, sessionId: 'session-1' }),
+    );
+    const button = ATTACH.exec(html)?.[0] ?? '';
+    expect(button).toContain('aria-disabled="false"');
+    expect(button).not.toContain('aria-describedby');
+    expect(html).not.toContain('Files can be attached once the session has started.');
+  });
+});
+
 // ── One run component, one chat implementation ──────────────────────────────────────────────────
 
 describe('there is no second chat implementation', () => {
@@ -313,6 +293,8 @@ describe('there is no second chat implementation', () => {
     'apps/web/components/agents/agent-form.tsx',
     'apps/web/components/projects/project-form.tsx',
     'apps/web/components/resources/resource-screens.tsx',
+    'apps/web/components/storage/edit-connection-screen.tsx',
+    'apps/web/components/storage/new-connection-form.tsx',
   ];
 
   it('has exactly one composer per chat — the workspace chat and the hosted surface chat', () => {

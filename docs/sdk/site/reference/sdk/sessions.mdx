@@ -74,6 +74,26 @@ async update(sessionId: string, patch: UpdateSessionPatch, options?: RequestOpti
 
 **Route:** `PATCH /api/sessions/:sessionId`
 
+## attach
+
+Hand one file to a session you may write to (`POST /api/sessions/:id/attachments`); the answer
+names the catalogue row to send as `attachments: [{ fileId }]` on `runs.start`. The same
+concealed `404 file_not_found` answers a session you may not write to and an archived project.
+
+```ts
+attach(sessionId: string, file: File, options?: RequestOptions): Promise<SurfaceAttachmentResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `sessionId` | `string` | Yes |
+| `file` | `File` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SurfaceAttachmentResponse>`
+
+**Route:** `POST /api/sessions/:sessionId/attachments`
+
 ## transcript.read
 
 The stored transcript, one provider-native entry per JSONL line, in append order. Empty for

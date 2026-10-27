@@ -105,7 +105,11 @@ function harness(options: HarnessOptions = {}): Harness {
           connectionProvider: providerId,
           credential: CREDENTIAL,
           // `localhost` keeps the egress policy satisfied while the transport stays a stub.
-          settings: { baseUrl: 'http://localhost/v1', deployment: 'prod-deployment' },
+          settings: {
+            baseUrl: 'http://localhost/v1',
+            deployment: 'prod-deployment',
+            ...(providerId === 'azure-openai' ? { apiVersion: 'v1' } : {}),
+          },
         },
       ),
   };

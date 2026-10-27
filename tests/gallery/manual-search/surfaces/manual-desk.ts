@@ -12,4 +12,6 @@ export default defineSurface({
     toolTrace: 'collapsed',
     feedback: true,
   },
+  // Search hits render as cards. The key is the tool's bare name: a run's engine prefix is ignored.
+  toolResults: { search_files: 'card' },
 });

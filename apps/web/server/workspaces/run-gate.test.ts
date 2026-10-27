@@ -105,6 +105,7 @@ describe('guardSessionCreation', () => {
       update: () => Promise.resolve(notFound),
       archive: () => Promise.resolve(notFound),
       restore: () => Promise.resolve(notFound),
+      discardIfUnused: () => Promise.resolve(false),
     };
     return fake;
   }

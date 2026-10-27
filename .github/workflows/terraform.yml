@@ -16,8 +16,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: terraform-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: terraform-${{ github.event.pull_request.number || github.sha }}
+  # Only a pull request supersedes its own earlier run. A push to main has its own group (the SHA), so
+  # pushes never cancel or replace each other and every main commit gets a CI result (audit F-02).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -25,7 +27,8 @@ permissions:
 jobs:
   validate:
     name: validate · ${{ matrix.root }}
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev'
+    runs-on: [self-hosted, ms-a2]
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -43,7 +46,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          terraform_version: 1.15.8
+          terraform_version: 1.16.7
       - name: Format
         run: terraform -chdir=${{ matrix.root }} fmt -check -recursive
       - name: Init

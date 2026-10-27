@@ -210,7 +210,7 @@ type ParsedOperation =
   | { readonly ok: true; readonly operation: Operation }
   | { readonly ok: false; readonly because: string };
 
-function parseOperation(method: string, sub: string | null): ParsedOperation {
+function parseOperation(method: string, resource: string, sub: string | null): ParsedOperation {
   // `POST /api/agents/:id/runs` and `POST /api/sessions/:id/messages` are the two shapes in which
   // this control plane spends money and executes an agent, and §21 treats running as its own verb
   // — "Create/edit/**run** agents", "**Run** permitted agents". They are therefore not writes.
@@ -220,11 +220,27 @@ function parseOperation(method: string, sub: string | null): ParsedOperation {
   // `apps/web/server/rbac/declarations/SDK-03-RUN-CONTROL-235.ts`. `POST /api/runs/:id/feedback`
   // (issue #539, S2-05c) is the same verb: rating the answer you received is part of running it —
   // see `apps/web/server/rbac/declarations/DJ-S2-05C-RUN-FEEDBACK-539.ts`.
+  // `POST /api/runs/:id/approval` (issue #1301, ADR-0145 D2) is the same verb: deciding the call a
+  // paused run waits on is how that run continues — see
+  // `apps/web/server/rbac/declarations/P5-4-RUN-APPROVAL-1301.ts`.
   if (
     method === 'POST' &&
-    (sub === 'runs' || sub === 'messages' || sub === 'interrupt' || sub === 'feedback')
+    (sub === 'runs' ||
+      sub === 'messages' ||
+      sub === 'interrupt' ||
+      sub === 'feedback' ||
+      sub === 'approval')
   ) {
     return { ok: true, operation: 'run' };
+  }
+  // `POST /api/files/:id/download-urls` mints a URL to read a file; it changes nothing, so it is the
+  // `read` a Viewer holds and not the `write` every other POST is (issue #251, N-4).
+  if (method === 'POST' && sub === 'download-urls') return { ok: true, operation: 'read' };
+  // `POST /api/storage-connections/:id/test` (issue #1690) lists one page of an allowed folder and
+  // changes nothing, so a Member may run it as it may browse. Model connections' `test` is not this
+  // one: it spends a provider call and stays a write.
+  if (method === 'POST' && resource === 'storage-connections' && sub === 'test') {
+    return { ok: true, operation: 'read' };
   }
   switch (method) {
     case 'GET':
@@ -282,20 +298,26 @@ function applyGrant(grant: Grant, ownership: Ownership): { allowed: boolean; bec
       // The whole of Viewer's "Run permitted agents". `agent_grants` (issue #117) is the
       // mechanism W2-CP-06's header said did not exist yet; see
       // docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md for the record that closed it.
+      // ADR-0152: `permitted` is "own or granted", so it covers `own` and roles stay monotonic
+      // (Builder's `permitted` covers Viewer's, and a granted Builder runs what a granted Viewer
+      // runs).
       if (ownership === 'permitted') {
         return {
           allowed: true,
           because: 'this caller has been granted this agent',
         };
       }
+      if (ownership === 'own') {
+        return { allowed: true, because: 'the agent is the caller’s own' };
+      }
       return {
         allowed: false,
         because:
           ownership === 'other'
-            ? 'this role may do this only on agents it has been granted, and this agent is not one ' +
-              'of them'
-            : 'this role may do this only on agents it has been granted, and the grant could not ' +
-              'be confirmed, so the request is denied',
+            ? 'this role may do this only on agents it owns or has been permitted, and this agent ' +
+              'is neither'
+            : 'this role may do this only on agents it owns or has been permitted, and neither ' +
+              'could be confirmed, so the request is denied',
       };
     case 'none':
       return { allowed: false, because: 'the role has no grant over this resource' };
@@ -341,6 +363,15 @@ const TOKEN_SCOPE_GRAMMAR: Readonly<Record<TokenScopeKind, readonly ScopeGrammar
     { resource: 'runs', operation: 'read' },
     { resource: 'agents', operation: 'run' },
     { resource: 'runs', operation: 'run', sub: 'feedback' },
+    // Reading the session's own files straight from the object store (issue #251, N-4). Keyed by
+    // sub-resource, with no bare `files` cell, so the relay routes stay out of reach; the path being
+    // under `.attachments/<sessionId>/` is a row fact the files handler checks. There is no
+    // `upload-urls` cell: a visitor uploads through `sessions/:id/attachments`, whose flag, name,
+    // rate and quota rules a presigned PUT would skip (issue #1574).
+    { resource: 'files', operation: 'read', sub: 'download-urls' },
+    // A visitor handing one file to its own session (issue #1308, ADR-0146 D6). The `:id` must be the
+    // token's own session, which is the `sessions` clause of `checkTokenScope` below.
+    { resource: 'sessions', operation: 'write', sub: 'attachments' },
   ],
   // ADR-0134: an endpoint-scoped key runs the one agent its A2A client names, nothing else. The
   // agent identity is checked below; the A2A endpoint itself (`/api/a2a/agents/...`) is a later
@@ -349,6 +380,8 @@ const TOKEN_SCOPE_GRAMMAR: Readonly<Record<TokenScopeKind, readonly ScopeGrammar
   // An MCP project key reaches only the MCP endpoint (`/mcp/projects/...`), which is outside
   // `/api/`, so no control-plane route is in its grammar.
   'mcp-project': [],
+  // The Builder's MCP door is outside `/api/` too, and is a later slice's (#1846 5b).
+  builder: [],
 };
 
 /**
@@ -420,6 +453,16 @@ function checkTokenScope(
       because:
         `this run-scoped browser token is scoped to run ${scope.id}, and the ":id" segment of ` +
         `this request names a different row.`,
+    };
+  }
+  if (scope.kind === 'session' && resource === 'sessions' && !sameRow) {
+    return {
+      effect: 'deny',
+      code: 'token_out_of_scope',
+      facts: null,
+      because:
+        `this session-scoped browser token is scoped to session ${scope.id}, and the ":id" segment ` +
+        `of this request names a different row.`,
     };
   }
   if (scope.kind === 'a2a-agent' && resource === 'agents' && !sameRow) {
@@ -517,7 +560,7 @@ export function decide(query: AuthorisationQuery): Decision {
     };
   }
 
-  const operation = parseOperation(query.method, parsed.sub);
+  const operation = parseOperation(query.method, parsed.resource, parsed.sub);
   if (!operation.ok) return { effect: 'refuse', because: operation.because };
 
   if (query.scope !== null) {

@@ -57,6 +57,7 @@ describe('agent API contracts', () => {
         files: [{ fileId: 'file-1', access: 'read-write' }],
         skillIds: ['skill-1'],
         connectorIds: ['connector-1'],
+        storageGrants: [],
       },
     };
     expect(AgentResourceAssignmentsResponseSchema.parse(response)).toEqual(response);

@@ -5,11 +5,12 @@
  * piece (the body-size bound streamed rather than checked after buffering, the ordering of the
  * workspace gate before body parsing, and the total `switch` on `WorkspaceResolution`).
  */
-import { problem, type ApiResult } from './handlers';
+import { problem, type ApiResult } from '../http/result';
 import type { WorkspaceRuntimeProfileStore } from './store';
 import type { WorkspaceRuntimeConnectionStore } from './connections';
-import { currentRuntimesRuntime } from './runtime';
-import { apiResultResponse, readBoundedJson, readRouteParam } from '../http/json-transport';
+import type { RuntimesRuntime } from './runtime';
+import { applicationContext } from '../application-context';
+import { readBoundedJson, readRouteParam } from '../http/json-transport';
 
 /**
  * The largest request body these routes will read, in bytes. `driverConfig` is the one field with
@@ -25,8 +26,10 @@ export async function readJsonBody(
   return readBoundedJson(request, { maxBytes: MAX_REQUEST_BODY_BYTES, problem });
 }
 
-export function toResponse(result: ApiResult): Response {
-  return apiResultResponse(result);
+/** The installed runtimes routes, or `null` while they are not serving (their 503). */
+function servingRuntimes(): RuntimesRuntime | null {
+  const runtimes = applicationContext()?.runtimes;
+  return runtimes?.kind === 'serving' ? runtimes.runtime : null;
 }
 
 /**
@@ -39,7 +42,7 @@ export async function withWorkspaceProfileStore(
   run: (store: WorkspaceRuntimeProfileStore) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentRuntimesRuntime();
+  const runtime = servingRuntimes();
   if (runtime === null) {
     return problem(
       503,
@@ -78,7 +81,7 @@ export async function withWorkspaceConnectionStore(
   run: (store: WorkspaceRuntimeConnectionStore) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentRuntimesRuntime();
+  const runtime = servingRuntimes();
   if (runtime === null) {
     return problem(
       503,

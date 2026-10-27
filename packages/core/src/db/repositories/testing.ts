@@ -12,6 +12,13 @@
  * externally managed PostgreSQL server, its operator must therefore janitor orphaned `aw_*`
  * databases before subsequent runs; this helper can only guarantee cleanup after control returns
  * to the owning process.
+ *
+ * `DROP DATABASE` always waits on a forced, immediate checkpoint, so each close costs a full flush
+ * and fsync of the cluster. The harness clusters start with `fsync=off`; a CI job instead points
+ * `TEST_DATABASE_URL` at a throwaway service started with defaults. On such a server only, the first
+ * creator in each process relaxes `fsync` and `full_page_writes` with `ALTER SYSTEM` and a reload.
+ * That persists in `postgresql.auto.conf`, so it requires `GITHUB_ACTIONS=true` and a superuser,
+ * and a refusal is ignored.
  */
 import { randomBytes } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -212,6 +219,56 @@ function administrativeClient(
   );
 }
 
+/** Whether a server is a disposable CI service whose durability may be traded for faster drops. */
+export function relaxesDurability(state: {
+  readonly githubActions: boolean;
+  readonly superuser: boolean;
+  readonly fsync: string;
+  readonly fullPageWrites: string;
+}): boolean {
+  return (
+    state.githubActions &&
+    state.superuser &&
+    (state.fsync === 'on' || state.fullPageWrites === 'on')
+  );
+}
+
+let durabilityRelaxed: Promise<void> | undefined;
+
+/** Best effort, once per process: an optimisation must never fail or leak server text into a suite. */
+function relaxDisposableServerDurability(client: pg.Client): Promise<void> {
+  durabilityRelaxed ??= (async () => {
+    try {
+      const { rows } = await client.query<{
+        fsync: string;
+        full_page_writes: string;
+        superuser: boolean;
+      }>(
+        `select current_setting('fsync') as fsync,
+                current_setting('full_page_writes') as full_page_writes,
+                current_setting('is_superuser') = 'on' as superuser`,
+      );
+      const row = rows[0];
+      if (
+        row !== undefined &&
+        relaxesDurability({
+          githubActions: process.env['GITHUB_ACTIONS'] === 'true',
+          superuser: row.superuser,
+          fsync: row.fsync,
+          fullPageWrites: row.full_page_writes,
+        })
+      ) {
+        await client.query('alter system set fsync = off');
+        await client.query('alter system set full_page_writes = off');
+        await client.query('select pg_reload_conf()');
+      }
+    } catch {
+      // The drop stays correct, only slower.
+    }
+  })();
+  return durabilityRelaxed;
+}
+
 async function forceDropAfterCreationFailure(
   validatedAdminUrl: string,
   databaseName: string,
@@ -275,6 +332,7 @@ export async function createIsolatedTestDatabase(
   );
   try {
     await creator.connect();
+    await relaxDisposableServerDurability(creator);
     await creator.query(`create database "${databaseName}"`);
   } finally {
     await creator.end().catch((error: unknown) => {

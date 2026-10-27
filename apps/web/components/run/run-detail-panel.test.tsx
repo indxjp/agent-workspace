@@ -1,16 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { RunDetailPanel, fetchRunDetail } from './run-detail-panel';
+import { RunDetailPanel } from './run-detail-panel';
 import type { CatalogState } from './history';
 
 const LOADING: CatalogState = { kind: 'loading' };
 
 describe('RunDetailPanel', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it('renders the back link and a loading state, before any fetch resolves', () => {
     // `renderToStaticMarkup` never runs effects, so `GET /api/runs/:id` has not been called yet —
     // the same first-paint property `projects-screen.test.tsx` exercises.
@@ -39,13 +35,4 @@ describe('RunDetailPanel', () => {
     expect(detailSource).toContain('[overflow-wrap:anywhere]');
     expect(liveSource).toContain('[overflow-wrap:anywhere]');
   });
-
-  it.each(['../users', '../../api/workspaces', '%2e%2e/users'])(
-    'does not fetch for a non-UUID run id: %s',
-    async (runId) => {
-      const fetch = vi.spyOn(globalThis, 'fetch');
-      await expect(fetchRunDetail(runId)).resolves.toMatchObject({ kind: 'problem' });
-      expect(fetch).not.toHaveBeenCalled();
-    },
-  );
 });

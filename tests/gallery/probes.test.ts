@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { PROBES, type ProbeId } from './harness/probes.ts';
+import { PROBES, type Probe, type ProbeId } from './harness/probes.ts';
 import { loadUseCases } from './harness/registry.ts';
 
 const useCases = loadUseCases();
@@ -20,7 +20,8 @@ function citing(id: ProbeId): string[] {
 
 describe('gap probes', () => {
   it.each(Object.keys(PROBES) as ProbeId[])('%s is still absent', async (id) => {
-    const probe = PROBES[id];
+    // Widened to the port's type: a probe may answer asynchronously even when none listed does.
+    const probe: Probe = PROBES[id];
     const present = await probe.present();
     expect(
       present,

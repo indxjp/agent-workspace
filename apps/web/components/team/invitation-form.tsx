@@ -10,9 +10,9 @@
  * Two things about it are decisions rather than layout:
  *
  * - **The role options are `capability.invitableRoles` and nothing else.** That list is
- *   `conferRole`'s own answer, resolved on the server (`server/team/invitation-capability.ts`). §21
- *   is not a privilege ladder, so a `<select>` built from an ordering would offer an Admin the
- *   option to invite a Builder, which `POST /api/invitations` answers `403` to.
+ *   `conferRole`'s own answer, resolved on the server (`server/team/invitation-capability.ts`), so
+ *   the form never offers a role `POST /api/invitations` answers `403` to (an Admin inviting an
+ *   Owner).
  * - **The form does not render at all without `canCreateInvitation`.** #186 requires that Builder
  *   and Viewer *"cannot see or invoke invitation controls"*; the server refuses them either way, and
  *   this is the half that keeps a control they cannot use off the screen. The gate is on the grant,

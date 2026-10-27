@@ -9,7 +9,7 @@
  *
  * ## What the arm carries, and what it deliberately does not
  *
- * Two fields, and both are things only the Claude Agent SDK's grammar can express:
+ * Four fields, and each is something only the Claude Agent SDK's grammar can express:
  *
  *   * `tools` — the agent's **stored** narrowing (`AgentToolPolicySchema`), or `null` for an agent whose
  *     `policy` column is NULL. It is the stored value verbatim and *not* the effective policy: the
@@ -20,11 +20,17 @@
  *     the request's grants and de-duplicates the two, so the field can only ever narrow and never
  *     widen. `docs/adr/0072-the-claude-tool-mapping-and-skills-live-in-the-claude-adapter.md` records when
  *     it may be dropped: once no supported runner image predates ENG-04's own grant compilation.
+ *   * `requireApproval` and `approvedToolCalls` — the approval gate (ADR-0145 D2.1, D3): the tools
+ *     that stop the run, and the exact calls a person already approved.
  *
  * There is no `scope` and no `agent`. The tenant session scope is derived from `cwd` and
  * `request.projectKey` by `./scope.ts`, and everything portable is `RunRequest.portable`.
  */
-import { AgentToolPolicySchema, DenyingToolRuleSchema } from '@indx-workspace/contracts/agents';
+import {
+  AgentToolPolicySchema,
+  DenyingToolRuleSchema,
+  RequireApprovalRuleSchema,
+} from '@indx-workspace/contracts/agents';
 import { engineSettingsSchema } from '@indx-workspace/contracts/engines';
 import { z } from 'zod';
 
@@ -41,6 +47,15 @@ export const ClaudeRunPolicy = engineSettingsSchema('claude-agent-sdk')
      * policy's `deny` uses, so a malformed entry is refused here rather than handed to the SDK.
      */
     fileGrantDeny: z.array(DenyingToolRuleSchema).default([]),
+    /**
+     * Tools whose calls stop the run until a person approves them (ADR-0145). Names the whole tool;
+     * `./tools.ts`'s `splitApprovals` keeps every rule that could approve one out of `allowedTools`.
+     */
+    requireApproval: z.array(RequireApprovalRuleSchema).default([]),
+    /** Offer the `handoff_to_person` tool (ADR-0145 D4). The control plane sends the key only when it is on. */
+    handoff: z.boolean().default(false),
+    /** The canonical texts (`canonicalCall`) of the calls already approved for this run. */
+    approvedToolCalls: z.array(z.string().min(1)).default([]),
   })
   .strict();
 export type ClaudeRunPolicy = z.infer<typeof ClaudeRunPolicy>;

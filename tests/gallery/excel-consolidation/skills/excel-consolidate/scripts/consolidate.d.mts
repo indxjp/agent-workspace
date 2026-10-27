@@ -82,6 +82,13 @@ export function parseDate(value: CellValue | null, format: DateFormat): string;
 export function unitInLabel(label: string): Unit | null;
 export function applyPlan(plan: Plan, books: Readonly<Record<string, Book>>): Applied;
 export function compare(applied: Applied, from: string, to: string): Report;
+export interface WorkbookSpec {
+  readonly sheets: readonly {
+    readonly name: string;
+    readonly rows: readonly (readonly (CellValue | null)[])[];
+  }[];
+}
+export function workbookSpec(report: Report): WorkbookSpec;
 export function detectUnit(
   sheet: Book['sheets'][number],
   count?: number,

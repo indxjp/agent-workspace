@@ -8,6 +8,7 @@ import {
   closeIsolatedTestResources,
   createIsolatedTestDatabase,
   leakedSessions,
+  relaxesDurability,
   type IsolatedTestDatabase,
 } from './testing.js';
 
@@ -202,6 +203,22 @@ describe('leakedSessions', () => {
   });
 });
 
+describe('relaxesDurability', () => {
+  const disposable = { githubActions: true, superuser: true, fsync: 'on', fullPageWrites: 'on' };
+
+  it('relaxes a disposable superuser CI server that still has durability on', () => {
+    expect(relaxesDurability(disposable)).toBe(true);
+    expect(relaxesDurability({ ...disposable, fullPageWrites: 'off' })).toBe(true);
+    expect(relaxesDurability({ ...disposable, fsync: 'off' })).toBe(true);
+  });
+
+  it('leaves a server alone when any single condition fails', () => {
+    expect(relaxesDurability({ ...disposable, githubActions: false })).toBe(false);
+    expect(relaxesDurability({ ...disposable, superuser: false })).toBe(false);
+    expect(relaxesDurability({ ...disposable, fsync: 'off', fullPageWrites: 'off' })).toBe(false);
+  });
+});
+
 describe.skipIf(!hasDatabase)('isolated PostgreSQL teardown', () => {
   it('closes every resource before dropping the isolated database', async () => {
     const isolated = await createIsolatedTestDatabase('aw_rf002_resources');
@@ -373,15 +390,61 @@ describe.skipIf(!hasDatabase)('isolated PostgreSQL teardown', () => {
     await expect(databaseExists(name)).resolves.toBe(false);
   }, 180_000);
 
+  it('relaxes durability on a disposable CI superuser server', async () => {
+    const isolated = await createIsolatedTestDatabase('aw_rf002_durability');
+    try {
+      const read = async (): Promise<{
+        fsync: string;
+        full_page_writes: string;
+        superuser: boolean;
+      }> => {
+        const { rows } = await isolated.db.execute<{
+          fsync: string;
+          full_page_writes: string;
+          superuser: boolean;
+        }>(
+          sql`select current_setting('fsync') as fsync,
+                     current_setting('full_page_writes') as full_page_writes,
+                     current_setting('is_superuser') = 'on' as superuser`,
+        );
+        const row = rows[0];
+        if (row === undefined) throw new Error('The settings query returned no row.');
+        return row;
+      };
+      let state = await read();
+      if (process.env['GITHUB_ACTIONS'] === 'true' && state.superuser) {
+        // pg_reload_conf() only signals the postmaster, so give the reload a moment to land.
+        const deadline = Date.now() + 5_000;
+        while (state.fsync === 'on' && Date.now() < deadline) {
+          await delay(50);
+          state = await read();
+        }
+        expect(state.fsync).toBe('off');
+        expect(state.full_page_writes).toBe('off');
+      }
+    } finally {
+      await isolated.close();
+    }
+  }, 180_000);
+
   it('completes twenty create, query, and clean-close cycles', async () => {
+    const closeMs: number[] = [];
     for (let index = 0; index < 20; index += 1) {
       const isolated = await createIsolatedTestDatabase('aw_rf002_cycle');
       try {
         const result = await isolated.db.execute<{ value: number }>(sql`select 1::int as value`);
         expect(result.rows[0]?.value).toBe(1);
       } finally {
+        const started = performance.now();
         await isolated.close();
+        closeMs.push(performance.now() - started);
       }
     }
+    const sorted = [...closeMs].sort((a, b) => a - b);
+    const at = (fraction: number): number =>
+      Math.round(sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))] ?? 0);
+    console.info(
+      `[isolated-close] n=${String(sorted.length)} median=${String(at(0.5))} p90=${String(at(0.9))} max=${String(at(1))} ms`,
+    );
   }, 300_000);
 });

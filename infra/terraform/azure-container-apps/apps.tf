@@ -59,6 +59,12 @@ resource "azurerm_container_app" "gateway" {
         value = azurerm_user_assigned_identity.gateway.client_id
       }
       env {
+        # aw-control MCP calls go to web. The environment-derived address, not the web app's
+        # attribute: web already depends on this app for MODEL_GATEWAY_URL.
+        name  = "GATEWAY_CONTROL_PLANE_ORIGIN"
+        value = local.web_base_url
+      }
+      env {
         name  = "MASTER_KEY_PROVIDER"
         value = "key-vault"
       }
@@ -338,20 +344,17 @@ resource "azurerm_container_app" "web" {
         value = var.bootstrap_admin_email
       }
       env {
-        name  = "OBJECT_STORAGE_BACKEND"
-        value = "azure-blob"
+        # One setting for where files, skills and session transcripts live (the storage design, §04).
+        name  = "AW_STORAGE_URL"
+        value = "azblob://${azurerm_storage_account.workspace.name}/${azurerm_storage_container.workspace_objects.name}"
       }
-      env {
-        name  = "OBJECT_STORAGE_ENDPOINT"
-        value = azurerm_storage_account.workspace.primary_blob_endpoint
-      }
-      env {
-        name  = "OBJECT_STORAGE_BUCKET"
-        value = azurerm_storage_container.workspace_objects.name
-      }
-      env {
-        name  = "AW_SESSION_TRANSCRIPT_ROOT"
-        value = "${local.state_mount_path}/sessions"
+      dynamic "env" {
+        # Absent when unset, so the server default applies and an existing app gets no new revision.
+        for_each = var.storage_signed_upload_max_bytes == null ? [] : [var.storage_signed_upload_max_bytes]
+        content {
+          name  = "AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES"
+          value = tostring(env.value)
+        }
       }
       env {
         name  = "AW_RUNTIME_VERIFICATION_FILE"

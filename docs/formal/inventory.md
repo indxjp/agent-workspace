@@ -323,7 +323,7 @@ Conventions: **S** means `.strict()`, **R** means `.readonly()`, **opt** means `
 | Run (gateway) token | active → revoked/expired | HMAC claims `{version:1, tokenId, runId, sessionId, workspaceId, agentId, modelConnectionId, issuedAt, expiresAt>issuedAt}`, default TTL 300 s. The DB `run_tokens` row supports revoke/isActive. `finish` revokes all | `packages/gateway/src/tokens/run-token.ts` L5–L80; `repositories/run-tokens.ts` |
 | **Project archive** | `active` (`archived_at` null) ⇄ `archived` | `archive`: `archived_at = coalesce(archived_at, now())` (idempotent, keeps the first stamp). `restore`: `archived_at = null`. Both are routes under `projects/:id/{archive,restore}` (write) | `repositories/projects.ts` L98–L108, L267–L290 |
 | **Workspace archive** | same | `archive`/`restore` are idempotent (L226/L236). `isWorkspaceArchived` L248. Archive is via `PATCH /api/workspaces/:id {archived}` | `repositories/workspaces.ts` |
-| Archive gates | — | `isWorkspaceUsableForRuns(ws) = ws≠null ∧ archivedAt=null`; `guardSessionCreation` → `unknown-principal`. `isProjectUsableForNewWork`; `ProjectRunGate.isUsableForNewWork(null)=true`; `guardProjectSessionCreation`. Invitation acceptance filters archived workspaces into `invalid` | `apps/web/server/workspaces/run-gate.ts` L42–L95; `apps/web/server/projects/archive-gate.ts` L37–L90 |
+| Archive gates | — | `isWorkspaceUsableForRuns(ws) = ws≠null ∧ archivedAt=null`; `guardSessionCreation` → `unknown-principal`. `isProjectUsableForNewWork`; `ProjectRunGate.isUsableForNewWork(null)=true`; `guardProjectSessionCreation`. Invitation acceptance filters archived workspaces into `invalid` | `apps/web/server/workspaces/run-gate.ts` L42–L95; `apps/web/server/projects/archive-gate.ts` L33–L86 |
 | **Share** | `live`, `revoked`, `suspended`, `stopped`, `expired` (derived) | `revoke(id)`: sets `revoked_at` where it is null. `setSuspended(b)` and `setPublicSharingEnabled(false)` stamp `suspended_at` on **every non-revoked share** of the workspace, and `true` clears it. `stop(id)` sets `stopped` once. `reserveVisitorMessage` → `reserved \| rate-limited \| budget-exhausted{stoppedNow} \| unavailable` (unavailable if revoked, suspended, stopped or no budget). `linkRun` → `linked \| existing \| unavailable`. DB checks: `shares_agent_mode_only`, `shares_budget_nonnegative`, `shares_spend_nonnegative` | `packages/core/src/db/repositories/shares.ts` L30–L300; `schema/shares.ts` |
 | **Session status** | `active` ⇄ `archived` | `archive` and `restore` are unconditional updates. `resumable` is derived (active and `claudeSessionId` known). `ensure` is wrapped by both archive gates. Moving a session into a project is refused once it has runs (`409 project_session_has_runs`) | `repositories/runs.ts` L1146–L1230; `contracts/sessions.ts` |
 | SSE stream (per connection) | replay → live → end | Frames end with `done` (success), with `run-failed{status,message}` **followed by** `done` (terminal failure), or with `run-failed{status:'unknown'}` and **no** `done` (the producer threw). `classifyRunOutcome` maps `completed` → succeeded, `failed`/`cancelled` → failed, `queued`/`running`/`null` → indeterminate | `apps/web/server/runs/api.ts` L880–L930; `runs/sse.ts` L90–L110 |
@@ -464,7 +464,7 @@ The conferral matrix below was derived by reading the code; `conferral.test.ts` 
 | Project resources | ADR `W9-PROJ-125-project-resources-narrow-never-widen.md` | — |
 | Network policy | `apps/web/server/runtimes/network-policy.ts`: `networkPolicyIds` L43, `networkPolicyMapping` L105 (a driver × {none,restricted,open} cell table with `divergence`), `NONE_MEANING` L81 = `'the gateway and nothing else'`, `networkPolicyCellFor` L217 | — |
 | Egress | `packages/core/src/net/egress-policy.ts` `checkEgress` L202 | Refuses: unparseable URL; userinfo; DNS fail or no addresses; any address in a blocked category (`unspecified, loopback, private, link-local, unique-local`, …) unless the host is in `allowHosts` or it is loopback in non-production; non-`https:` unless non-production and all addresses are loopback. `guardedFetch` L280 uses `redirect:'error'` and pins the address for http |
-| Model config | `apps/web/server/models/contract.ts` `requiredConfigFields` L90, `isModelConnectionConfigComplete` L95, `PROVIDER_CONFIG_SPEC` ~L78 | Same table as contracts `MODEL_PROVIDER_CONFIG_RULES` (a T4 equality) |
+| Model config | `apps/web/server/models/contract.ts` `requiredConfigFields` L65, `isModelConnectionConfigComplete` L72, both read from `MODEL_PROVIDER_CONFIG_RULES` (imported at L4) | Same table as contracts `MODEL_PROVIDER_CONFIG_RULES` (a T4 equality) |
 
 ---
 
@@ -476,7 +476,7 @@ The conferral matrix below was derived by reading the code; `conferral.test.ts` 
 | `isWorkspaceScope` | scope.ts ~L140 | `#` brand ∧ frozen ∧ `workspaceId === #workspaceIdFromLookup` |
 | `requireWorkspaceScope(v, repo)` | L242 | Returns the scope or throws `ForgedWorkspaceScopeError`. It is called by every `forScope` |
 | `createScopedObjectStore(backend, wsId)` | `packages/core/src/storage/object-store.ts` L186 | Prefix `workspaces/${wsId}`; every key goes through `toObjectKey` and every prefix through `toObjectPrefix`; list output is stripped. ⚠ `wsId` is only checked to be a **non-empty trimmed string**, with no `/` or `..` check. This is a T3 target |
-| `validateTenantSessionScope` | `packages/core/src/schemas.ts` L530 (`TenantSessionScope` L575) | `configDir` a non-blank string; `projectKey` matches `/^[A-Za-z0-9_-]{1,64}$/` and is not a Windows device name |
+| `validateTenantSessionScope` | `packages/run-protocol/src/schemas.ts` L530 (`TenantSessionScope` L575) | `configDir` a non-blank string; `projectKey` matches `/^[A-Za-z0-9_-]{1,64}$/` and is not a Windows device name |
 | `requireResourceAccess(request, ownership)` | `apps/web/server/resources/authorise.ts` L16 | Wraps `rbac/http.ts#authorise`; returns `{ok, principal}` or a response |
 | `workspaceNotFound` / `apiKeyRefusal` / `memberOwnershipResolver` / `ownerOwnershipResolver` | `apps/web/server/workspaces/access.ts` L59/75/118/134 | Non-UUID id, non-member or vanished membership → the identical 404 `workspace_not_found`; `via==='api-key'` → 403 `api_key_not_permitted`; owner-only write gives `own` or `other` |
 | Cross-tenant run read | `runs/api.ts` `findRunForPrincipal` | A run outside the workspace → 404 `run_not_found` |
@@ -688,7 +688,7 @@ These are absent from the CLI (a coverage fact for T5): workspaces list/get/crea
 | `translate/openai.ts`, `translate/openai-stream.ts` | `packages/gateway/src/translate/` | Wire translation |
 | `checkEgress` | §3.3 | — |
 | `publicRunFailure` | §6.4 | — |
-| `requiredConfigFields` | `apps/web/server/models/contract.ts` L90 | — |
+| `requiredConfigFields` | `apps/web/server/models/contract.ts` L65 | — |
 | `compileRunRequest` | `packages/core/src/config.ts` L124 | — |
 | `classifyRunOutcome` | `apps/web/server/runs/api.ts` ~L886 | Total over status |
 | `invitationStateOf` | `apps/web/components/team/invitations-model.ts` L79 | Pure with an explicit `nowMs`; `≤` means expired |

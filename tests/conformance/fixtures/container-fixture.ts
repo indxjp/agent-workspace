@@ -55,6 +55,7 @@ export const CONTAINER_FIXTURE_CAPABILITIES: RuntimeCapabilities = {
   gpu: false,
   managedByProvider: false,
   typicalStartMs: 5,
+  fileTransfer: 'push-archive',
 };
 
 export function createContainerFixtureDriver(): RuntimeDriver<FixtureRequest, FixtureEvent> {

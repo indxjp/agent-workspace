@@ -30,9 +30,10 @@ export type RequiredProviderScenario = {
   run(provider: ModelProvider): Promise<string>;
 };
 
-function context(provider: ModelProvider, signal?: AbortSignal): RequestContext {
+function context(signal?: AbortSignal): RequestContext {
   return {
-    providerId: provider.id,
+    // Adapters never read the provider id; the harness profiles arbitrary ModelProviders.
+    providerId: 'anthropic',
     credential: 'compatibility-fixture-credential',
     requestId: `compat_${crypto.randomUUID()}`,
     settings: {},
@@ -66,7 +67,7 @@ async function successfulMessage(
   scenario: RequiredProviderScenario['id'],
   fields: Record<string, unknown> = {},
 ): Promise<Record<string, unknown>> {
-  const response = await provider.createMessage(request(scenario, fields), context(provider));
+  const response = await provider.createMessage(request(scenario, fields), context());
   if (!response.ok) throw new Error(`provider returned HTTP ${String(response.status)}`);
   const message = await body(response);
   if (
@@ -100,7 +101,7 @@ export function requiredProviderScenarios(): readonly RequiredProviderScenario[]
       async run(provider) {
         const response = await provider.createMessage(
           request('streaming', { stream: true }),
-          context(provider),
+          context(),
         );
         if (!response.ok) throw new Error(`provider returned HTTP ${String(response.status)}`);
         if (!response.headers.get('content-type')?.includes('text/event-stream')) {
@@ -180,7 +181,7 @@ export function requiredProviderScenarios(): readonly RequiredProviderScenario[]
     {
       id: 'errors',
       async run(provider) {
-        const response = await provider.createMessage(request('errors'), context(provider));
+        const response = await provider.createMessage(request('errors'), context());
         if (response.ok) throw new Error('error scenario returned a successful status');
         const error = await body(response);
         if (error['type'] !== 'error' || typeof error['error'] !== 'object') {
@@ -208,7 +209,7 @@ export function requiredProviderScenarios(): readonly RequiredProviderScenario[]
         try {
           const response = await provider.createMessage(
             request('cancellation'),
-            context(provider, controller.signal),
+            context(controller.signal),
           );
           if (response.status !== 499) {
             throw new Error(`cancelled request returned HTTP ${String(response.status)}`);

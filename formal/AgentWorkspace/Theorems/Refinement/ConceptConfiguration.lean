@@ -60,7 +60,7 @@ theorem encoded_connections_refine_the_typed_target (st : State)
 example : runtimeConnectionsTyped Witness.state = true :=
   encoded_connections_refine_the_typed_target Witness.state (by
     intro p hp s hs hid _
-    refine ⟨"docker", "primary", "RUNTIME_CONNECTION__DOCKER__PRIMARY", by decide, ?_⟩
+    refine ⟨"docker", "primary", "RUNTIME_CONNECTION__DOCKER__PRIMARY", by decide +kernel, ?_⟩
     simp only [Witness.state, List.mem_cons, List.not_mem_nil, or_false] at hp hs
     subst hp
     rcases hs with rfl | rfl | rfl <;> simp_all [Witness.secret, Witness.profile, Row.get,
@@ -71,7 +71,7 @@ example : runtimeConnectionsTyped Witness.state = true :=
 /-- Every runtime-profile `PATCH` body accepted today is accepted by the S-19 target. -/
 @[aw_spec (tier := T4)
   (doc := "docs/sdk/04-api-specification.md#8-server-changes-this-specification-requires")
-  (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 theorem patch_current_refines_target (b : List (String × RuntimeProfile.PatchValue))
     (h : RuntimeProfile.patchAcceptsCurrent b = true) :
     RuntimeProfile.patchAcceptsTarget b = true := by
@@ -85,7 +85,7 @@ theorem patch_current_refines_target (b : List (String × RuntimeProfile.PatchVa
   · exact Or.inr (by simpa using h2)
 
 example : RuntimeProfile.patchAcceptsTarget [("cpu", .value)] = true :=
-  patch_current_refines_target _ (by decide)
+  patch_current_refines_target _ (by decide +kernel)
 
 /-- The S-19 target strictly extends today's `PATCH`: clearing `memoryMb` or `runtimeConnectionId`
 is refused today and accepted by the target, while clearing a required field such as `driver` or
@@ -93,7 +93,7 @@ is refused today and accepted by the target, while clearing a required field suc
 @[aw_spec (tier := T4)
   (doc := "docs/sdk/04-api-specification.md#8-server-changes-this-specification-requires")
   (doc := "docs/sdk/04-api-specification.md#54-runtime-profiles-connections-and-drivers--awruntimes")
-  (ts := "packages/core/src/schemas.ts#UpdateRuntimeProfileInput")]
+  (ts := "packages/run-protocol/src/schemas.ts#UpdateRuntimeProfileInput")]
 theorem s19_target_clears_sizing_but_not_required_fields :
     RuntimeProfile.patchAcceptsCurrent [("memoryMb", .null)] = false ∧
       RuntimeProfile.patchAcceptsTarget [("memoryMb", .null)] = true ∧
@@ -101,6 +101,6 @@ theorem s19_target_clears_sizing_but_not_required_fields :
       RuntimeProfile.requiredCreateFields.all (fun k =>
         !RuntimeProfile.patchAcceptsTarget [(k, .null)]) = true ∧
       RuntimeProfile.s19ClearableFields.all RuntimeProfile.nullableFields.contains = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.ConceptConfiguration

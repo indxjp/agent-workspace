@@ -3,7 +3,7 @@ import AgentWorkspace.Authz.Decide
 /-!
 T1 — the documented authorisation rules, one theorem per rule:
 
-- one theorem per cell of the role table (4 roles × 29 resources), each pinning the grant
+- one theorem per cell of the role table (4 roles × 31 resources), each pinning the grant
   `permissions.ts` computes against this file's own transcription **and** against the independent
   transcription of `docs/sdk/04-api-specification.md` §3.3 (`documentedGrants`): the cell agrees on
   every reachable operation, disagrees, or the document is silent;
@@ -32,7 +32,7 @@ theorem revoke_capability_matches_roles :
         some "run_token_revoke_forbidden" := by
   intro path hp o
   simp only [List.mem_cons, List.not_mem_nil, or_false] at hp
-  rcases hp with h | h <;> subst path <;> cases o <;> decide
+  rcases hp with h | h <;> subst path <;> cases o <;> decide +kernel
 
 /-- `GET /api/engines` (ENG-02c, #319) is read by every one of §21's four roles and written by
 none of the three narrower ones, whatever ownership the handler reports.
@@ -56,7 +56,7 @@ theorem engine_catalogue_is_read_by_every_role :
       (decideAuth ⟨"builder", "POST", "/api/engines", o, none⟩).effect = .deny ∧
       (decideAuth ⟨"viewer", "POST", "/api/engines", o, none⟩).effect = .deny := by
   intro o
-  cases o <;> decide
+  cases o <;> decide +kernel
 
 /-! ## The role table, cell by cell -/
 
@@ -89,7 +89,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
         (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧
           (documentedGrants $roleE $resE).map (agreeOnReachable $resE ⟨$a, $b, $c⟩) = some true :=
-        by decide))
+        by decide +kernel))
   | "diverges" =>
     let doc := mkDocComment s!"Role table, {rs} × {xs}: `permissions.ts` grants {grants}, and \
       §3.3 prints a different grant on a reachable operation (a documentation finding)."
@@ -99,7 +99,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
         (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧
           (documentedGrants $roleE $resE).map (agreeOnReachable $resE ⟨$a, $b, $c⟩) = some false :=
-        by decide))
+        by decide +kernel))
   | "silent" =>
     let doc := mkDocComment s!"Role table, {rs} × {xs}: `permissions.ts` grants {grants}, and \
       §3.3 has no row for this resource."
@@ -108,7 +108,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
       @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
         (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧ documentedGrants $roleE $resE = none :=
-        by decide))
+        by decide +kernel))
   | t => throwError "unknown tag {t}"
 
 end Generator
@@ -138,15 +138,17 @@ aw_role_table_cell owner shares any any any agrees
 aw_role_table_cell owner sharingPolicies any any any agrees
 aw_role_table_cell owner skills any any any agrees
 aw_role_table_cell owner setup any any any silent
+aw_role_table_cell owner storageConnections any any any silent
 aw_role_table_cell owner toolBundles any any any silent
 aw_role_table_cell owner tokens any any any agrees
+aw_role_table_cell owner triggers any any any silent
 aw_role_table_cell owner users any any any agrees
 aw_role_table_cell owner workspaces own own none agrees
 
 aw_role_table_cell admin agents any any any agrees
 aw_role_table_cell admin apiKeys any any none agrees
 aw_role_table_cell admin auditEvents none none none diverges
-aw_role_table_cell admin connectors any any none agrees
+aw_role_table_cell admin connectors any any any agrees
 aw_role_table_cell admin endpointClients any any any silent
 aw_role_table_cell admin engines any none none agrees
 aw_role_table_cell admin files any any any agrees
@@ -157,7 +159,7 @@ aw_role_table_cell admin metrics any none none agrees
 aw_role_table_cell admin modelConnections any any none agrees
 aw_role_table_cell admin models any any none agrees
 aw_role_table_cell admin platforms any none none agrees
-aw_role_table_cell admin projects none none none diverges
+aw_role_table_cell admin projects any any none agrees
 aw_role_table_cell admin runs any none any agrees
 aw_role_table_cell admin runtimeConnections any any none agrees
 aw_role_table_cell admin runtimeProfiles any any none agrees
@@ -168,12 +170,14 @@ aw_role_table_cell admin shares any any none agrees
 aw_role_table_cell admin sharingPolicies any none none agrees
 aw_role_table_cell admin skills any any any agrees
 aw_role_table_cell admin setup none none none silent
+aw_role_table_cell admin storageConnections any any none silent
 aw_role_table_cell admin toolBundles any any none silent
 aw_role_table_cell admin tokens none any none agrees
+aw_role_table_cell admin triggers any any any silent
 aw_role_table_cell admin users any any none agrees
 aw_role_table_cell admin workspaces own own none agrees
 
-aw_role_table_cell builder agents any own own agrees
+aw_role_table_cell builder agents any own permitted agrees
 aw_role_table_cell builder apiKeys none none none agrees
 aw_role_table_cell builder auditEvents none none none diverges
 aw_role_table_cell builder connectors any own own agrees
@@ -198,8 +202,10 @@ aw_role_table_cell builder shares own own none agrees
 aw_role_table_cell builder sharingPolicies any none none agrees
 aw_role_table_cell builder skills any own own agrees
 aw_role_table_cell builder setup none none none silent
+aw_role_table_cell builder storageConnections any none none silent
 aw_role_table_cell builder toolBundles any any none silent
 aw_role_table_cell builder tokens none own none agrees
+aw_role_table_cell builder triggers any own own silent
 aw_role_table_cell builder users none none none agrees
 aw_role_table_cell builder workspaces own own none agrees
 
@@ -228,8 +234,10 @@ aw_role_table_cell viewer shares own own none agrees
 aw_role_table_cell viewer sharingPolicies any none none agrees
 aw_role_table_cell viewer skills none none none agrees
 aw_role_table_cell viewer setup none none none silent
+aw_role_table_cell viewer storageConnections none none none silent
 aw_role_table_cell viewer toolBundles none none none silent
 aw_role_table_cell viewer tokens none none none agrees
+aw_role_table_cell viewer triggers none none none silent
 aw_role_table_cell viewer users none none none agrees
 aw_role_table_cell viewer workspaces own own none agrees
 
@@ -240,7 +248,7 @@ denied. -/
   (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
 theorem only_owner_falls_back_to_everything :
     (policy .owner).fallback = EVERYTHING ∧ (policy .admin).fallback = NOTHING ∧
-      (policy .builder).fallback = NOTHING ∧ (policy .viewer).fallback = NOTHING := by decide
+      (policy .builder).fallback = NOTHING ∧ (policy .viewer).fallback = NOTHING := by decide +kernel
 
 /-! ## The path grammar (ADR-0026 decision 3) -/
 
@@ -283,7 +291,7 @@ theorem unknown_resource_is_refused_first (seg : String) (rest : List String)
   simp [parseSegments, h]
 
 example : parseSegments ["", "api", "widgets", "x", "y", "z"] = .unknownResource "widgets" :=
-  unknown_resource_is_refused_first "widgets" _ (by decide)
+  unknown_resource_is_refused_first "widgets" _ (by decide +kernel)
 
 /-- An unclassified sub-resource is refused, never given its parent's grant: `decide()` answers
 `refuse` for it whoever asks, whatever the method, ownership or scope. -/
@@ -298,12 +306,13 @@ theorem unclassified_sub_is_refused_not_inherited (q : Query) (role : Role) (r :
 
 example : decideOrdinary ⟨"viewer", "GET", "/api/agents/:id/secrets", .own, none⟩ =
     .refuse (.path (.unclassifiedSub .agents "secrets")) :=
-  unclassified_sub_is_refused_not_inherited _ .viewer _ _ (by decide) (by decide) (by decide)
+  unclassified_sub_is_refused_not_inherited _ .viewer _ _ (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 /-! ## The method -/
 
-/-- The method table: `GET`/`HEAD` read; `POST` on `runs`, `messages` or `interrupt` is §21's
-`run` verb and any other `POST` a write; `PUT`, `PATCH`, `DELETE` write whatever the sub;
+/-- The method table: `GET`/`HEAD` read; `POST` on `runs`, `messages`, `interrupt` or `feedback`
+is §21's `run` verb, `POST` on `download-urls` (minting a URL to read a file, issue #251) a read,
+and any other `POST` a write; `PUT`, `PATCH`, `DELETE` write whatever the sub;
 `OPTIONS` and every other string are refused. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md#decision")
@@ -315,20 +324,30 @@ theorem method_maps_to_operation (sub : Option String) :
       parseOperation "OPTIONS" sub = .refused .options ∧
       parseOperation "POST" none = .ok .write ∧
       (∀ s, parseOperation "POST" (some s) = .ok .run ↔
-        s = "runs" ∨ s = "messages" ∨ s = "interrupt" ∨ s = "feedback") ∧
-      (∀ s, parseOperation "POST" (some s) ≠ .ok .run → parseOperation "POST" (some s) = .ok .write) := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+        s = "runs" ∨ s = "messages" ∨ s = "interrupt" ∨ s = "feedback" ∨ s = "approval") ∧
+      parseOperation "POST" (some "download-urls") = .ok .read ∧
+      (∀ s, parseOperation "POST" (some s) ≠ .ok .run → s ≠ "download-urls" →
+        parseOperation "POST" (some s) = .ok .write) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   all_goals first
     | (cases sub <;> simp [parseOperation]; done)
     | (simp [parseOperation]; done)
+    | decide +kernel
     | (intro s
        by_cases h1 : s = "runs" <;> by_cases h2 : s = "messages" <;>
          by_cases h3 : s = "interrupt" <;> by_cases h4 : s = "feedback" <;>
+         by_cases h6 : s = "approval" <;> by_cases h5 : s = "download-urls" <;>
          simp_all [parseOperation, runSubs])
 
 example : parseOperation "POST" (some "interrupt") = .ok .run ∧
     parseOperation "POST" (some "feedback") = .ok .run ∧
-    parseOperation "POST" (some "events") = .ok .write := by decide
+    parseOperation "POST" (some "events") = .ok .write := by decide +kernel
+
+-- `POST` on a storage connection's `test` is a read (issue #1690); on a model connection's `test`
+-- it stays a write, and any other method on the storage `test` reads the method table unchanged.
+example : parseOperationFor "POST" .storageConnections (some "test") = .ok .read ∧
+    parseOperationFor "POST" .modelConnections (some "test") = .ok .write ∧
+    parseOperationFor "PUT" .storageConnections (some "test") = .ok .write := by decide +kernel
 
 /-- A method outside `METHODS` (lower-case `get`, `TRACE`, the empty string, …) yields no
 operation, so `decide()` refuses it. -/
@@ -340,7 +359,7 @@ theorem unknown_method_is_refused (m : String) (sub : Option String) (h : m ∉ 
   simp [parseOperation, h]
 
 example : parseOperation "TRACE" none = .refused .unknownMethod :=
-  unknown_method_is_refused _ _ (by decide)
+  unknown_method_is_refused _ _ (by decide +kernel)
 
 /-! ## Refusals and the evaluation order -/
 
@@ -353,7 +372,7 @@ theorem unknown_role_is_refused (q : Query) (h : parseRoleInput q.role = none) :
   simp [decideOrdinary, h]
 
 example : decideOrdinary ⟨"Viewer", "GET", "/p/x", .notApplicable, none⟩ = .refuse .unknownRole :=
-  unknown_role_is_refused _ (by decide)
+  unknown_role_is_refused _ (by decide +kernel)
 
 /-- "A role, or `null`. Positive: the value has to *be* one of the four … no default role": the
 role parse accepts exactly the four lower-case spellings and refuses every variant of case,
@@ -364,7 +383,7 @@ theorem role_parse_is_exact :
     (["owner", "admin", "builder", "viewer"].map parseRoleInput) =
         [some .owner, some .admin, some .builder, some .viewer] ∧
       (["Owner", "ADMIN", " owner", "owner ", "", "superuser", "member", "viewers"].all
-        fun s => parseRoleInput s == none) = true := by decide
+        fun s => parseRoleInput s == none) = true := by decide +kernel
 
 /-- Spec §34's public surface is allowed to every role with no route facts, whatever the method,
 ownership or scope; the page surface is refused (this table does not decide pages). -/
@@ -375,10 +394,10 @@ theorem public_allowed_page_refused (q : Query) (role : Role) (h : parseRoleInpu
   constructor <;> intro hs <;> simp [decideOrdinary, h, hs]
 
 example : decideOrdinary ⟨"viewer", "OPTIONS", "/p/:token", .unknown, some (.run ⟨"r"⟩)⟩ = .allow none :=
-  (public_allowed_page_refused _ .viewer (by decide)).1 (by decide)
+  (public_allowed_page_refused _ .viewer (by decide +kernel)).1 (by decide +kernel)
 
 example : decideOrdinary ⟨"viewer", "GET", "/agents", .own, none⟩ = .refuse .pageSurface :=
-  (public_allowed_page_refused _ .viewer (by decide)).2 (by decide)
+  (public_allowed_page_refused _ .viewer (by decide +kernel)).2 (by decide +kernel)
 
 /-- `decide()`'s evaluation order, witnessed by queries with two faults each, which answer the
 earlier step's result: role before surface, surface before path and method, resource before depth,
@@ -396,11 +415,11 @@ theorem decide_evaluation_order :
       decideOrdinary ⟨"owner", "OPTIONS", "/api/runs/x", .own, some (.session ⟨"s"⟩)⟩ =
         .refuse (.method .options) ∧
       decideOrdinary ⟨"viewer", "POST", "/api/tokens", .notApplicable, some (.run ⟨"r"⟩)⟩ =
-        .deny none (some .notInGrammar) := by decide
+        .deny none (some .notInGrammar) := by decide +kernel
 
 /-! ## Browser-token scope (§3.1.1) -/
 
-/-- §3.1.1's grammar table, read route by route through `parsePath` and `parseOperation`, agrees
+/-- §3.1.1's grammar table, read route by route through `parsePath` and `parseOperationFor`, agrees
 with `TOKEN_SCOPE_GRAMMAR` in both directions for each kind: every documented route lands in a cell
 of its kind's grammar (`inGrammar`), and every cell is witnessed by a documented route of that kind
 — same resource and operation, and, for a sub-keyed cell such as `(runs, run, "feedback")`, the
@@ -411,17 +430,17 @@ theorem scope_grammar_is_the_documented_route_table :
     ∀ k : ScopeKind,
       (documentedScopeRoutes.filter (·.1 == k)).all (fun (_, m, p) =>
           match parsePath p with
-          | .ok r sub _ => match parseOperation m sub with
+          | .ok r sub _ => match parseOperationFor m r sub with
             | .ok op => inGrammar k r op sub
             | .refused _ => false
           | _ => false) = true ∧
         (grammar k).all (fun (r, o, s) =>
           (documentedScopeRoutes.filter (·.1 == k)).any fun (_, m, p) =>
             match parsePath p with
-            | .ok r' sub _ => match parseOperation m sub with
+            | .ok r' sub _ => match parseOperationFor m r' sub with
               | .ok op => r' == r && op == o && (s.isNone || s == sub)
               | .refused _ => false
-            | _ => false) = true := by decide
+            | _ => false) = true := by decide +kernel
 
 /-- "A route inside the grammar's prefix but outside its cells reaches `decide()` and answers
 `403 token_out_of_scope`": a classified query whose `(resource, operation)` is outside the scope's
@@ -432,7 +451,7 @@ grant. -/
 theorem out_of_grammar_is_token_out_of_scope (q : Query) (role : Role) (s : Scope) (r : Resource)
     (sub id : Option String) (op : Operation) (hr : parseRoleInput q.role = some role)
     (hs : classifyPath q.path = .api) (hp : parsePath q.path = .ok r sub id)
-    (ho : parseOperation q.method sub = .ok op) (hq : q.scope = some s)
+    (ho : parseOperationFor q.method r sub = .ok op) (hq : q.scope = some s)
     (hg : inGrammar s.kind r op sub = false) :
     decideOrdinary q = .deny none (some .notInGrammar) := by
   simp [decideOrdinary, hr, hs, hp, ho, decideClassified, hq, checkTokenScope, hg]
@@ -440,7 +459,12 @@ theorem out_of_grammar_is_token_out_of_scope (q : Query) (role : Role) (s : Scop
 example : decideOrdinary ⟨"owner", "POST", "/api/runs/r/interrupt", .own, some (.run ⟨"r"⟩)⟩ =
     .deny none (some .notInGrammar) :=
   out_of_grammar_is_token_out_of_scope _ .owner (.run ⟨"r"⟩) .runs (some "interrupt") (some "r") .run
-    (by decide) (by decide) (by decide) (by decide) rfl (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl (by decide +kernel)
+
+example : decideOrdinary ⟨"owner", "POST", "/api/files/x/upload-urls", .own, some (.session ⟨"s"⟩)⟩ =
+    .deny none (some .notInGrammar) :=
+  out_of_grammar_is_token_out_of_scope _ .owner (.session ⟨"s"⟩) .files (some "upload-urls") (some "x")
+    .write (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) rfl (by decide +kernel)
 
 /-- "Problem codes: `token_out_of_scope` (403, the scope gate itself)": on a classified query the
 decision carries the code `token_out_of_scope` exactly when the scope check objected (and is then a
@@ -450,7 +474,7 @@ deny), and otherwise no code, so every other deny renders the default `forbidden
 theorem deny_code_is_token_out_of_scope_exactly_on_a_scope_objection (q : Query) {role : Role}
     {r : Resource} {sub id : Option String} {op : Operation} (hr : parseRoleInput q.role = some role)
     (hs : classifyPath q.path = .api) (hp : parsePath q.path = .ok r sub id)
-    (ho : parseOperation q.method sub = .ok op) :
+    (ho : parseOperationFor q.method r sub = .ok op) :
     ((q.scope.bind fun s => checkTokenScope s r op sub id).isSome = true →
         (decideOrdinary q).effect = .deny ∧ (decideOrdinary q).code = some "token_out_of_scope") ∧
       ((q.scope.bind fun s => checkTokenScope s r op sub id) = none →
@@ -469,12 +493,12 @@ example : (decideOrdinary ⟨"owner", "GET", "/api/runs/other", .own, some (.run
     (decideOrdinary ⟨"viewer", "GET", "/api/runs/r", .other, some (.run ⟨"r"⟩)⟩).code = none :=
   ⟨((deny_code_is_token_out_of_scope_exactly_on_a_scope_objection
       ⟨"owner", "GET", "/api/runs/other", .own, some (.run ⟨"r"⟩)⟩ (role := .owner) (r := .runs)
-      (sub := none) (id := some "other") (op := .read) (by decide) (by decide) (by decide)
-      (by decide)).1 (by decide)).2,
+      (sub := none) (id := some "other") (op := .read) (by decide +kernel) (by decide +kernel) (by decide +kernel)
+      (by decide +kernel)).1 (by decide +kernel)).2,
     (deny_code_is_token_out_of_scope_exactly_on_a_scope_objection
       ⟨"viewer", "GET", "/api/runs/r", .other, some (.run ⟨"r"⟩)⟩ (role := .viewer) (r := .runs)
-      (sub := none) (id := some "r") (op := .read) (by decide) (by decide) (by decide)
-      (by decide)).2 (by decide)⟩
+      (sub := none) (id := some "r") (op := .read) (by decide +kernel) (by decide +kernel) (by decide +kernel)
+      (by decide +kernel)).2 (by decide +kernel)⟩
 
 /-- "A scope reads one row, never a collection": a scoped `runs` read that names no `:id` is
 denied with `token_out_of_scope`, for both kinds. -/
@@ -494,6 +518,17 @@ theorem run_scope_needs_the_exact_run_id (run : RunId) (id : String) (sub : Opti
     checkTokenScope (.run run) .runs .read sub (some id) =
       if sameRunId (some id) run.val then none else some .runIdMismatch := by
   by_cases h : sameRunId (some id) run.val = true <;>
+    simp [checkTokenScope, inGrammar, grammar, Scope.kind, Scope.id, h]
+
+/-- A session scope reaching `POST /api/sessions/:id/attachments` (issue #1308) is admitted only for
+its own session — the one shape whose path `:id` is the scope's session — by exact spelling or
+equivalent valid UUID spelling, and otherwise denied as a different row. -/
+@[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
+  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+theorem session_scope_needs_its_own_session_id (session : SessionId) (id : String) :
+    checkTokenScope (.session session) .sessions .write (some "attachments") (some id) =
+      if sameRunId (some id) session.val then none else some .sessionIdMismatch := by
+  by_cases h : sameRunId (some id) session.val = true <;>
     simp [checkTokenScope, inGrammar, grammar, Scope.kind, Scope.id, h]
 
 /-- "A session scope's row identity … is checked where the row is read": the scope check admits a
@@ -520,14 +555,16 @@ theorem apply_grant_table :
     (WireEnum.all : List Grant).map (fun g => (WireEnum.all : List Ownership).map (applyGrant g)) =
       [ [false, false, false, false, false],
         [true, false, false, true, false],
-        [false, false, false, false, true],
-        [true, true, true, true, true] ] := by decide
+        [true, false, false, false, true],
+        [true, true, true, true, true] ] := by decide +kernel
 
-/-- "`applyGrant`'s `case 'permitted':` … allows exactly when `ownership === 'permitted'`". -/
+/-- "`applyGrant`'s `case 'permitted':`" allows exactly when the caller owns the agent or an
+`agent_grants` row names it: `permitted` is "own or granted" (ADR-0152). -/
 @[aw_spec (tier := T1) (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
+  (doc := "docs/adr/0152-roles-are-monotonic.md#decision")
   (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
-theorem permitted_grant_admits_exactly_permitted (o : Ownership) :
-    applyGrant .permitted o = true ↔ o = .permitted := by
+theorem permitted_grant_admits_own_and_permitted (o : Ownership) :
+    applyGrant .permitted o = true ↔ (o = .own ∨ o = .permitted) := by
   cases o <;> simp [applyGrant]
 
 /-! ## Run verbs (§3.3 runs row, §5.12, SDK-03-RUN-235) -/
@@ -555,12 +592,13 @@ theorem run_routes_read_and_interrupt_by_role :
           (decideOrdinary ⟨role, "POST", "/api/runs/:id/feedback", o, none⟩).effect) =
       [ [.allow, .allow, .allow, .allow, .allow], [.allow, .allow, .allow, .allow, .allow],
         [.allow, .deny, .deny, .allow, .deny], [.allow, .deny, .deny, .allow, .deny] ] := by
-  decide
+  decide +kernel
 
 /-! ## Capabilities derived from `decide()` (W9-UI-184) -/
 
 /-- "Capability is resolved on the server by the same `decide()` the routes call": archiving a
-project, own and other, per role — Owner both, Builder own only, Admin and Viewer neither. -/
+project, own and other, per role — Owner and Admin both (ADR-0152), Builder own only, Viewer
+neither. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/W9-UI-184-archive-capability-is-the-decision-table-not-a-role-table.md#decision")
   (ts := "apps/web/server/rbac/decide.ts#decide")]
@@ -568,7 +606,7 @@ theorem archive_capability_follows_decide :
     ["owner", "admin", "builder", "viewer"].map (fun role =>
       ((decideOrdinary ⟨role, "POST", "/api/projects/:id/archive", .own, none⟩).effect == .allow,
         (decideOrdinary ⟨role, "POST", "/api/projects/:id/archive", .other, none⟩).effect == .allow)) =
-      [(true, true), (false, false), (true, false), (false, false)] := by decide
+      [(true, true), (true, true), (true, false), (false, false)] := by decide +kernel
 
 /-! ## Sub-resource classification (ADR-0040) -/
 
@@ -584,13 +622,13 @@ theorem compose_refuses_a_duplicate_pair (base : SubTable) (d : SubDeclaration)
 
 example : composeSubResources spec34SubResources [⟨"W9-XX-99", .runs, "events"⟩] =
     .error ⟨"W9-XX-99", .runs, "events"⟩ :=
-  compose_refuses_a_duplicate_pair _ _ _ (by decide)
+  compose_refuses_a_duplicate_pair _ _ _ (by decide +kernel)
 
 /-- Uppercase path spelling of a valid run UUID is the same scoped row. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
 theorem uppercase_run_uuid_keeps_scope :
     sameRunId (some "123E4567-E89B-42D3-A456-426614174000")
       "123e4567-e89b-42d3-a456-426614174000" = true := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.AuthzDecide

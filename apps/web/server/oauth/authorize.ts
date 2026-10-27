@@ -9,8 +9,8 @@
  */
 import { isUuid } from '@indx-workspace/contracts';
 
+import { applicationContext } from '../application-context';
 import { checkRequestOrigin } from '../auth/origin';
-import { currentRbacRuntime } from '../rbac/runtime';
 import type { Principal } from '../rbac/principal';
 import {
   oauthError,
@@ -22,7 +22,7 @@ import {
 } from './http';
 import { admitOAuthSession } from './limits';
 import { publicOrigin, resourceUrl } from './resource';
-import { currentOAuthRuntime, type OAuthClient, type OAuthRuntime } from './runtime';
+import type { OAuthClient, OAuthRuntime } from './runtime';
 import { OAUTH_SCOPE } from './token';
 import { isPkceChallenge, mintOAuthToken, OAUTH_TOKEN_TTL_MS } from './tokens';
 
@@ -149,9 +149,14 @@ function consentPage(
     `<p><strong>${escapeHtml(evaluation.client.name)}</strong> asks to act as ` +
       `<strong>${escapeHtml(principal.label)}</strong> at <code>${escapeHtml(evaluation.resource)}</code> ` +
       `for one hour, renewable until you revoke it.</p>` +
-      `<p>It reaches these agents:</p><ul>` +
-      agentNames.map((name) => `<li>${escapeHtml(name)}</li>`).join('') +
-      `</ul><form method="post" action="/oauth/authorize">${hidden}` +
+      (evaluation.client.kind === 'builder'
+        ? `<p>It uses the Builder tools as you, with your role.</p>` +
+          `<p>Registered by <strong>${escapeHtml(evaluation.client.creatorLabel ?? 'a member who has left')}</strong>. ` +
+          `Approving sends you on to <code>${escapeHtml(new URL(evaluation.redirectUri).host)}</code>.</p>`
+        : `<p>It reaches these agents:</p><ul>` +
+          agentNames.map((name) => `<li>${escapeHtml(name)}</li>`).join('') +
+          `</ul>`) +
+      `<form method="post" action="/oauth/authorize">${hidden}` +
       `<button name="decision" value="approve">Authorize</button> ` +
       `<button name="decision" value="deny">Cancel</button></form>`,
   );
@@ -161,8 +166,8 @@ type Session = { readonly principal: Principal; readonly runtime: OAuthRuntime }
 
 async function session(request: Request): Promise<Session | Response> {
   if (publicOrigin() === null) return oauthNotConfigured();
-  const runtime = currentOAuthRuntime();
-  const rbac = currentRbacRuntime();
+  const runtime = applicationContext()?.oauth ?? null;
+  const rbac = applicationContext()?.rbac ?? null;
   if (runtime === null || rbac === null) return oauthUnavailable();
   const principal = await rbac.identify(request);
   if (principal === null) {

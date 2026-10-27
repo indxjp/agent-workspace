@@ -51,7 +51,7 @@ theorem another_sessions_blob_cannot_be_written (tok : RunToken) (pinned : Optio
 /-- **Another workspace's stream is refused the same way**, even when the session id matches. Two
 tenants can hold the same session id only by coincidence, and a check on one half is not a check. -/
 @[aw_spec (tier := T3) (doc := "docs/architecture.md#runtime-and-trust-boundaries")
-  (ts := "apps/web/server/sessions/state-store.ts#DatabaseSessionStateStore")]
+  (ts := "apps/web/server/sessions/store.ts#DatabaseSessionStateStore")]
 theorem another_workspaces_stream_is_refused (tok : RunToken) (pinned : Option String) (st : Store)
     (k : StreamKey) (batch : List Entry) (h : (tok.workspace == k.workspace) = false) :
     serveWrite tok pinned st k batch = .refused .notFound := by

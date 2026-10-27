@@ -8,11 +8,7 @@ import {
 
 import { PUT } from './route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../../../../../server/agents/runtime';
+import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
 import { MAX_POINTER_BODY_BYTES } from '../../../../../server/agent-versions/contract';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
@@ -20,14 +16,10 @@ import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
 } from '../../../../../server/agent-versions/memory-store';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../../../../../server/agent-versions/runtime';
-import { clearAuditRuntime, configureAuditRuntime } from '../../../../../server/audit/runtime';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
 
 /**
  * `PUT /api/agents/:id/pointers` (S1-06, issue #444) on the memory stores, driven with real
@@ -59,24 +51,28 @@ function isActor(value: string): value is Actor {
 }
 
 function installAudit(): void {
-  configureAuditRuntime({
-    scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'pointers' }]),
-    repositories: {
-      forScope: () => ({
-        write: (event) => {
-          auditWrites.push(event);
-          return Promise.resolve();
-        },
-        count: () => Promise.resolve(auditWrites.length),
-        list: () => Promise.reject(new Error('not read by these tests')),
-      }),
+  installTestDomains({
+    audit: {
+      scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'pointers' }]),
+      repositories: {
+        forScope: () => ({
+          write: (event) => {
+            auditWrites.push(event);
+            return Promise.resolve();
+          },
+          count: () => Promise.resolve(auditWrites.length),
+          list: () => Promise.reject(new Error('not read by these tests')),
+        }),
+      },
     },
   });
 }
 
+let agents: ReturnType<typeof createInMemoryAgentStoreProvider>;
+
 beforeEach(async () => {
   auditWrites = [];
-  const agents = createInMemoryAgentStoreProvider();
+  agents = createInMemoryAgentStoreProvider();
   const created = await agents.forWorkspace(WORKSPACE).create(
     {
       name: 'Support triage',
@@ -100,42 +96,51 @@ beforeEach(async () => {
   );
   AgentVersionResourceSchema.parse(saved.body);
 
-  configureAgentsRuntime({
-    agents,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
-    },
-  });
-  configureAgentVersionsRuntime({ versions });
+  installAgentsAndVersions();
   installAudit();
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
-      return Promise.resolve(
-        Principal.fromApiKey({
-          ...ACTORS[actor],
-          apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
-          workspaceId,
-          label: `${actor} pointers key`,
-        }),
-      );
-    },
-  });
+  installRbac();
 });
 
+function installRbac(): void {
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
+        return Promise.resolve(
+          Principal.fromApiKey({
+            ...ACTORS[actor],
+            apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
+            workspaceId,
+            label: `${actor} pointers key`,
+          }),
+        );
+      },
+    },
+  });
+}
+
+function installAgentsAndVersions(): void {
+  installTestDomains({
+    agents: {
+      agents,
+      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+            : { kind: 'workspace', workspaceId },
+        );
+      },
+    },
+    agentVersions: { versions },
+  });
+}
+
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearAuditRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 function put(options: { actor: Actor; id?: string; body: unknown }): Promise<Response> {
@@ -252,15 +257,22 @@ describe('PUT /api/agents/:id/pointers', () => {
     expect(response.status).toBe(413);
   });
 
-  it('answers 503 agent_policy_not_configured without the versions runtime', async () => {
-    clearAgentVersionsRuntime();
+  it('answers 503 rbac_runtime_not_configured with no application context installed, and moves nothing', async () => {
+    // The RBAC runtime lives in the context, so the gate refuses first (fail closed) before the
+    // version store is ever read.
+    clearApplicationContext();
     const response = await put({ actor: 'builderA', body: { environment: 'local', version: 1 } });
     expect(response.status).toBe(503);
-    expect(await errorOf(response)).toMatchObject({ code: 'agent_policy_not_configured' });
+    expect(await errorOf(response)).toMatchObject({ code: 'rbac_runtime_not_configured' });
+    expect(versions.pointerCount()).toBe(0);
   });
 
   it('moves and records exactly one row through the version store without the audit runtime (#478)', async () => {
-    clearAuditRuntime();
+    // Only the RBAC, agents and versions domains: the audit domain is unwired and throws if the
+    // route reads it.
+    clearApplicationContext();
+    installRbac();
+    installAgentsAndVersions();
     const response = await put({ actor: 'builderA', body: { environment: 'local', version: 1 } });
     expect(response.status).toBe(200);
     expect(versions.pointerCount()).toBe(1);

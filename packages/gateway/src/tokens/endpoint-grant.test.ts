@@ -62,7 +62,9 @@ describe('endpoint grant codec', () => {
       ok: false,
       reason: 'invalid',
     });
-    await expect(codec.verify(`awg.${payload}.${signature?.slice(0, -2)}AA`)).resolves.toEqual({
+    // Flip a character mid-signature, where all 6 bits are significant, so the bytes always change.
+    const flipped = `${signature?.slice(0, 5)}${signature?.[5] === 'A' ? 'B' : 'A'}${signature?.slice(6)}`;
+    await expect(codec.verify(`awg.${payload}.${flipped}`)).resolves.toEqual({
       ok: false,
       reason: 'invalid',
     });

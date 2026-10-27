@@ -4,11 +4,7 @@
  * why a header-driven test resolver is the strongest position to give an attacker, and what this
  * file cannot exercise (Next.js's own routing — `tests/route-inventory.test.ts` covers that).
  */
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resourcePathHeaders } from '../../contracts/files';
 import { GET as listRoute, POST as uploadRoute } from '../../app/api/files/route';
@@ -18,14 +14,15 @@ import {
   PATCH as renameRoute,
 } from '../../app/api/files/[id]/route';
 import { encodeFileId } from './file-id';
-import { createRepositoryObjectStoreProvider } from './store';
-import { createLocalFilesystemObjectStoreProvider } from './object-store-bridge';
-import { clearFilesRuntime, configureFilesRuntime, type WorkspaceResolution } from './runtime';
+import { createCatalogFilesWorld, type CatalogFilesWorld } from './catalog-runtime-fixtures';
+import { bytesToStream, createInMemoryObjectStore } from '@agent-workspace/core/storage';
+import type { WorkspaceResolution } from './runtime';
 import { createResourceCatalogStoreProvider } from '../resources/catalog-store';
+import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import {
-  createInMemoryWorkspaceScopeResolver,
   openDatabaseRoot,
   type DatabaseRoot,
+  createInMemoryWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import {
   apiKeys,
@@ -39,7 +36,8 @@ import {
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { createPostgresDirectory } from '../rbac/postgres-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
+import { installTestDomains } from '../application-context-fixtures';
+import { applicationContext, clearApplicationContext } from '../application-context';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
@@ -48,69 +46,71 @@ const WORKSPACE_HEADER = 'x-test-workspace';
 const ACTOR_HEADER = 'x-test-actor';
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
-let rootDir: string;
+/** The files runtime of the current test: the catalog service over in-memory stores. */
+let world: CatalogFilesWorld;
 
-beforeEach(async () => {
-  rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-routes-'));
-  const scopes = createInMemoryWorkspaceScopeResolver([
-    { id: WORKSPACE_A, slug: 'acme' },
-    { id: WORKSPACE_B, slug: 'globex' },
-  ]);
-  const store = createRepositoryObjectStoreProvider({
-    store: createLocalFilesystemObjectStoreProvider(rootDir),
-    scopes,
+/** The header-driven resolver the default harness uses: the workspace a test names. */
+function resolveWorkspaceFromHeader(request: Request): Promise<WorkspaceResolution> {
+  const workspaceId = request.headers.get(WORKSPACE_HEADER);
+  if (workspaceId === null) {
+    return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
+  }
+  return Promise.resolve({ kind: 'workspace', workspaceId });
+}
+
+const fixedWorkspaceA = (): Promise<WorkspaceResolution> =>
+  Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A });
+
+beforeEach(() => {
+  world = createCatalogFilesWorld({
+    catalogs: createInMemoryCatalogStore(),
+    scopes: createInMemoryWorkspaceScopeResolver(
+      [WORKSPACE_A, WORKSPACE_B].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+    ),
+    resolveWorkspace: resolveWorkspaceFromHeader,
   });
-  configureFilesRuntime({
-    store,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      if (workspaceId === null) {
-        return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-      }
-      return Promise.resolve({ kind: 'workspace', workspaceId });
-    },
-  });
-  configureRbacRuntime({
-    // Issue #117: every create/sync path resolves `created_by`, falling back to the workspace's
-    // oldest Owner when the caller cannot be matched by email (true of every request here, which
-    // authenticates as an API key) — so each fixture workspace needs at least one seeded member.
-    directory: createMemoryDirectory({
-      users: [
-        {
-          email: 'owner-a@example.test',
-          name: 'Owner A',
-          workspaceId: WORKSPACE_A,
-          role: 'owner',
-        },
-        {
-          email: 'owner-b@example.test',
-          name: 'Owner B',
-          workspaceId: WORKSPACE_B,
-          role: 'owner',
-        },
-      ],
-    }),
-    identify(request: Request) {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: '37d41bbb-42d1-4a16-8f5d-de3fef42eed0',
-              apiKeyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              workspaceId,
-              role: 'owner',
-              label: 'Files route test key',
-            }),
-      );
+  installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+  installTestDomains({
+    rbac: {
+      // Issue #117: every create/sync path resolves `created_by`, falling back to the workspace's
+      // oldest Owner when the caller cannot be matched by email (true of every request here, which
+      // authenticates as an API key) — so each fixture workspace needs at least one seeded member.
+      directory: createMemoryDirectory({
+        users: [
+          {
+            email: 'owner-a@example.test',
+            name: 'Owner A',
+            workspaceId: WORKSPACE_A,
+            role: 'owner',
+          },
+          {
+            email: 'owner-b@example.test',
+            name: 'Owner B',
+            workspaceId: WORKSPACE_B,
+            role: 'owner',
+          },
+        ],
+      }),
+      identify(request: Request) {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: '37d41bbb-42d1-4a16-8f5d-de3fef42eed0',
+                apiKeyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                workspaceId,
+                role: 'owner',
+                label: 'Files route test key',
+              }),
+        );
+      },
     },
   });
 });
 
-afterEach(async () => {
-  clearFilesRuntime();
-  clearRbacRuntime();
-  await rm(rootDir, { recursive: true, force: true });
+afterEach(() => {
+  clearApplicationContext();
 });
 
 function req(
@@ -141,7 +141,18 @@ function idContext(id: string): { params: Promise<{ id: string }> } {
 
 describe('files routes, unconfigured', () => {
   it('answers 503, not 401 and not an empty 200, while nothing is wired', async () => {
-    clearFilesRuntime(); // this suite's beforeEach already configured one — undo it for this case
+    // The role gate lives in the same context, so with none installed it answers first; the files
+    // runtime's own answer is the `unavailable` case below.
+    clearApplicationContext(); // this suite's beforeEach already configured one — undo it for this case
+    const response = await listRoute(req('GET', '/api/files', { workspace: WORKSPACE_A }));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'rbac_runtime_not_configured' },
+    });
+  });
+
+  it('answers the same 503 when the files storage is unavailable', async () => {
+    installTestDomains({ files: { kind: 'unavailable' } });
     const response = await listRoute(req('GET', '/api/files', { workspace: WORKSPACE_A }));
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
@@ -200,62 +211,6 @@ describe('POST /api/files then GET /api/files', () => {
   });
 });
 
-describe('POST /api/files when the catalog write fails', () => {
-  /** The default harness wires no catalog, so the compensation is unreachable without one. */
-  function useCatalog(putFile: () => Promise<{ id: string }>): void {
-    const scopes = createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_A, slug: 'acme' }]);
-    configureFilesRuntime({
-      store: createRepositoryObjectStoreProvider({
-        store: createLocalFilesystemObjectStoreProvider(rootDir),
-        scopes,
-      }),
-      catalog: {
-        forWorkspace: () =>
-          Promise.resolve({ putFile } as unknown as Awaited<
-            ReturnType<
-              NonNullable<Parameters<typeof configureFilesRuntime>[0]['catalog']>['forWorkspace']
-            >
-          >),
-      },
-      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
-    });
-  }
-
-  function put(filePath: string, text: string): Promise<Response> {
-    return uploadRoute(
-      req('POST', '/api/files', {
-        workspace: WORKSPACE_A,
-        body: new TextEncoder().encode(text),
-        headers: { 'x-file-path': filePath },
-        contentType: 'text/plain',
-      }),
-    );
-  }
-
-  const objectStore = (): ReturnType<
-    ReturnType<typeof createLocalFilesystemObjectStoreProvider>['forWorkspace']
-  > => createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A);
-
-  it('keeps an overwritten file when the catalog write fails', async () => {
-    useCatalog(() => Promise.resolve({ id: 'row-1' }));
-    expect((await put('a.txt', 'v1')).status).toBe(201);
-
-    useCatalog(() => Promise.reject(new Error('database blip')));
-    // The route rethrows; Next.js turns the unhandled error into the 500.
-    await expect(put('a.txt', 'v2')).rejects.toThrow('database blip');
-
-    const kept = await objectStore().get('a.txt');
-    expect(new TextDecoder().decode(kept?.body)).toBe('v2');
-  });
-
-  it('removes a new file when the catalog write fails', async () => {
-    useCatalog(() => Promise.reject(new Error('database blip')));
-    await expect(put('fresh.txt', 'v1')).rejects.toThrow('database blip');
-
-    expect(await objectStore().get('fresh.txt')).toBeNull();
-  });
-});
-
 describe('GET/DELETE/PATCH /api/files/:id', () => {
   async function uploadAndGetId(
     workspace: string,
@@ -269,8 +224,9 @@ describe('GET/DELETE/PATCH /api/files/:id', () => {
         headers: { 'x-file-path': filePath },
       }),
     );
-    const body = (await response.json()) as { file: { id: string } };
-    return body.file.id;
+    expect(response.status, await response.clone().text()).toBe(201);
+    // The `:id` routes take the path's own id, which is not the catalog row id the upload returns.
+    return encodeFileId(filePath);
   }
 
   it('downloads exactly the uploaded bytes', async () => {
@@ -346,7 +302,7 @@ describe('GET/DELETE/PATCH /api/files/:id', () => {
       req('DELETE', `/api/files/${idInA}`, { workspace: WORKSPACE_B }),
       idContext(idInA),
     );
-    expect(del.status).toBe(204); // ObjectStore delete is idempotent; nothing in B was ever there
+    expect(del.status).toBe(204); // a missing path is an idempotent delete; B's catalog holds no such row
 
     // Proof the file in A is untouched by B's no-op delete.
     const stillThere = await downloadRoute(
@@ -364,6 +320,211 @@ describe('GET/DELETE/PATCH /api/files/:id', () => {
       idContext(idInA),
     );
     expect(rename.status).toBe(404);
+  });
+
+  it('two concurrent renames to one destination: one wins, one 409s, no bytes are lost (FX-2)', async () => {
+    const idA = await uploadAndGetId(WORKSPACE_A, 'a.txt', 'bytes of a');
+    const idB = await uploadAndGetId(WORKSPACE_A, 'b.txt', 'bytes of b');
+    const rename = (id: string): Promise<Response> =>
+      renameRoute(
+        req('PATCH', `/api/files/${id}`, {
+          workspace: WORKSPACE_A,
+          body: JSON.stringify({ newPath: 'same.txt' }),
+          contentType: 'application/json',
+        }),
+        idContext(id),
+      );
+    const responses = await Promise.all([rename(idA), rename(idB)]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+
+    const texts: string[] = [];
+    for (const filePath of ['a.txt', 'b.txt', 'same.txt']) {
+      const id = encodeFileId(filePath);
+      const download = await downloadRoute(
+        req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }),
+        idContext(id),
+      );
+      if (download.status === 200) texts.push(await download.text());
+    }
+    expect(texts.sort()).toEqual(['bytes of a', 'bytes of b']);
+  });
+
+  it('two concurrent renames of one source: one wins, the other finds nothing to move (FX-2)', async () => {
+    const id = await uploadAndGetId(WORKSPACE_A, 'src.txt', 'bytes of src');
+    const rename = (newPath: string): Promise<Response> =>
+      renameRoute(
+        req('PATCH', `/api/files/${id}`, {
+          workspace: WORKSPACE_A,
+          body: JSON.stringify({ newPath }),
+          contentType: 'application/json',
+        }),
+        idContext(id),
+      );
+    const responses = await Promise.all([rename('d1.txt'), rename('d2.txt')]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 404]);
+
+    const present: string[] = [];
+    for (const filePath of ['src.txt', 'd1.txt', 'd2.txt']) {
+      const fileId = encodeFileId(filePath);
+      const download = await downloadRoute(
+        req('GET', `/api/files/${fileId}`, { workspace: WORKSPACE_A }),
+        idContext(fileId),
+      );
+      if (download.status === 200) present.push(filePath);
+    }
+    // No duplicate: exactly one destination holds the bytes.
+    expect(present).toHaveLength(1);
+  });
+
+  it('answers 413 to an oversized rename body before parsing it (FX-2)', async () => {
+    const id = await uploadAndGetId(WORKSPACE_A, 'a.txt', 'x');
+    const response = await renameRoute(
+      req('PATCH', `/api/files/${id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ newPath: 'b.txt', padding: 'x'.repeat(1024 * 1024) }),
+        contentType: 'application/json',
+      }),
+      idContext(id),
+    );
+    expect(response.status).toBe(413);
+  });
+
+  it('refuses a rename body with an unknown field (FX-2)', async () => {
+    const id = await uploadAndGetId(WORKSPACE_A, 'a.txt', 'x');
+    const response = await renameRoute(
+      req('PATCH', `/api/files/${id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ newPath: 'b.txt', extra: true }),
+        contentType: 'application/json',
+      }),
+      idContext(id),
+    );
+    expect(response.status).toBe(400);
+  });
+});
+
+describe('the reserved .attachments/ prefix (ADR-0146 D6, issue #1308)', () => {
+  const VISITOR_FILE = '.attachments/33333333-3333-4333-8333-333333333333/u1/scan.txt';
+
+  const visitorCtx = {
+    workspaceId: WORKSPACE_A,
+    principalId: '37d41bbb-42d1-4a16-8f5d-de3fef42eed0',
+    userId: null,
+  };
+
+  /** A visitor's upload is a catalog row like any other, saved by the surfaces through the service. */
+  async function seedVisitorFile(): Promise<string> {
+    const saved = await world.storage.save(visitorCtx, {
+      area: 'files',
+      path: VISITOR_FILE,
+      maxBytes: 1024,
+      replace: true,
+      body: bytesToStream(new TextEncoder().encode('visitor')),
+    });
+    if (!saved.ok) throw new Error(`the visitor file was refused: ${saved.code}`);
+    return encodeFileId(VISITOR_FILE);
+  }
+
+  const code = async (response: Response): Promise<string> =>
+    ((await response.json()) as { error: { code: string } }).error.code;
+
+  it('refuses a member writing into it: upload, folder and rename destination', async () => {
+    const upload = await uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        body: new Uint8Array([1]),
+        headers: { 'x-file-path': '.attachments/x/y.txt' },
+      }),
+    );
+    expect(upload.status).toBe(400);
+    expect(await code(upload)).toBe('reserved_path');
+
+    const folder = await uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        headers: { 'x-folder-path': '.attachments/x' },
+      }),
+    );
+    expect(folder.status).toBe(400);
+    expect(await code(folder)).toBe('reserved_path');
+
+    const plain = await uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        body: new Uint8Array([1]),
+        headers: { 'x-file-path': 'plain.txt' },
+      }),
+    );
+    expect(plain.status).toBe(201);
+    const plainId = encodeFileId('plain.txt');
+    const rename = await renameRoute(
+      req('PATCH', `/api/files/${plainId}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ newPath: '.attachments/x/plain.txt' }),
+        contentType: 'application/json',
+      }),
+      idContext(plainId),
+    );
+    expect(rename.status).toBe(400);
+    expect(await code(rename)).toBe('reserved_path');
+  });
+
+  it('conceals it from a member: download, list and the folder at the root', async () => {
+    const id = await seedVisitorFile();
+    const download = await downloadRoute(
+      req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }),
+      idContext(id),
+    );
+    expect(download.status).toBe(404);
+    expect(await code(download)).toBe('file_not_found');
+
+    const inside = await listRoute(
+      req('GET', '/api/files?path=.attachments', { workspace: WORKSPACE_A }),
+    );
+    expect(inside.status).toBe(404);
+
+    const root = await listRoute(req('GET', '/api/files', { workspace: WORKSPACE_A }));
+    expect(((await root.json()) as { files: unknown[] }).files).toEqual([]);
+  });
+
+  it('refuses a member deleting a visitor file or its folder, which stay stored', async () => {
+    const id = await seedVisitorFile();
+    for (const path of [
+      VISITOR_FILE,
+      '.attachments/33333333-3333-4333-8333-333333333333',
+      '.Attachments',
+    ]) {
+      const target = encodeFileId(path);
+      const refused = await deleteRoute(
+        req('DELETE', `/api/files/${target}?recursive=true`, { workspace: WORKSPACE_A }),
+        idContext(target),
+      );
+      expect(refused.status, path).toBe(400);
+      expect(await code(refused)).toBe('reserved_path');
+    }
+    expect(await world.storage.get(visitorCtx, 'files', VISITOR_FILE)).not.toBeNull();
+    expect(id).toBe(encodeFileId(VISITOR_FILE));
+  });
+
+  it('lets a member promote a visitor file by renaming it out, after which it is readable', async () => {
+    const id = await seedVisitorFile();
+    const rename = await renameRoute(
+      req('PATCH', `/api/files/${id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ newPath: 'kept/scan.txt' }),
+        contentType: 'application/json',
+      }),
+      idContext(id),
+    );
+    expect(rename.status, await rename.clone().text()).toBe(200);
+    expect(await rename.json()).toMatchObject({ file: { path: 'kept/scan.txt' } });
+    const keptId = encodeFileId('kept/scan.txt');
+    const download = await downloadRoute(
+      req('GET', `/api/files/${keptId}`, { workspace: WORKSPACE_A }),
+      idContext(keptId),
+    );
+    expect(download.status).toBe(200);
+    expect(await download.text()).toBe('visitor');
   });
 });
 
@@ -465,41 +626,13 @@ describe('verification round 1 counter-examples, driven through the real route h
     expect(body.files.map((f) => f.path).sort()).toEqual(['NOTETX~1.JSO', 'note.txt']);
   });
 
-  it('B1: an upload whose sidecar cannot be written still answers 201, and the file it wrote is readable', async () => {
-    // Verification round 5's two-POST reproduction, kept as a test. On NTFS the second key's
-    // metadata *directory* collides with the first key's sidecar *file* through that file's 8.3
-    // alias, and `put` used to let the resulting EEXIST out of the route as a framework 500 —
-    // with the upload already on disk. The store now treats the sidecar as best effort, so this
-    // answers 201 and the content type is simply unknown.
-    expect((await post('note.txt', 'hello', 'text/plain')).status).toBe(201);
-    const upload = await post('NOTETX~1.JSO/x.txt', 'PAYLOAD', 'text/html');
-    expect(upload.status).toBe(201);
-
-    const id = encodeFileId('NOTETX~1.JSO/x.txt');
-    const download = await downloadRoute(
-      req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }),
-      idContext(id),
-    );
-    expect(download.status).toBe(200);
-    expect(await download.text()).toBe('PAYLOAD');
-
-    // The victim is untouched, and both uploads are listed under their own paths.
-    const victimId = encodeFileId('note.txt');
-    const victim = await downloadRoute(
-      req('GET', `/api/files/${victimId}`, { workspace: WORKSPACE_A }),
-      idContext(victimId),
-    );
-    expect(victim.headers.get('content-type')).toBe('text/plain');
-    const listed = await listRoute(req('GET', '/api/files', { workspace: WORKSPACE_A }));
-    const body = (await listed.json()) as { files: Array<{ path: string }> };
-    expect(body.files.map((f) => f.path).sort()).toEqual(['NOTETX~1.JSO', 'note.txt']);
-  });
-
   it('F4: an uploaded script is not served back as active content from this origin', async () => {
     const payload = '<script>alert(document.domain)</script>';
-    expect((await post('pwn.txt', payload, 'text/html')).status).toBe(201);
+    // The catalog service types a file by its name, not by the uploader's header, so the name
+    // is what makes this an HTML file.
+    expect((await post('pwn.html', payload, 'text/html')).status).toBe(201);
 
-    const id = encodeFileId('pwn.txt');
+    const id = encodeFileId('pwn.html');
     const download = await downloadRoute(
       req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }),
       idContext(id),
@@ -510,7 +643,7 @@ describe('verification round 1 counter-examples, driven through the real route h
     expect(download.headers.get('content-type')).toBe('application/octet-stream');
     expect(download.headers.get('x-content-type-options')).toBe('nosniff');
     expect(download.headers.get('content-disposition')).toBe(
-      `attachment; filename="pwn.txt"; filename*=UTF-8''pwn.txt`,
+      `attachment; filename="pwn.html"; filename*=UTF-8''pwn.html`,
     );
   });
 
@@ -558,7 +691,7 @@ describe('verification round 1 counter-examples, driven through the real route h
 });
 
 /**
- * Verification round 2, finding 1: `ownershipOfPath` (`apps/web/app/api/files/[id]/route.ts`)
+ * Verification round 2, finding 1: `ownershipOfPath` (`apps/web/server/files/ownership.ts`)
  * compares a file's catalog `created_by` against the caller, but every test above runs as an
  * Owner, whose grant on `files` is `any` (`permissions.ts`) — wide enough that `decide()` never
  * even looks at what `ownershipOfPath` answered. This suite drives the same three routes as a
@@ -567,9 +700,9 @@ describe('verification round 1 counter-examples, driven through the real route h
  *
  * The comparison reads a real `ResourceCatalogRepository` (`created_by` is tenant-paired to
  * `memberships` by a composite foreign key — see `packages/core/src/db/schema/files.ts`), and
- * there is no in-memory implementation of that repository anywhere in the tree (only
- * `createDatabaseResourceCatalogRepositoryProvider`, over PostgreSQL). So this suite needs a real
- * `TEST_DATABASE_URL` and skips loudly, rather than being marked `.skip`, when one is not set —
+ * the in-memory catalog has no such foreign key, so only PostgreSQL can show the pairing
+ * hold. So this suite needs a real `TEST_DATABASE_URL` and skips loudly, rather than being
+ * marked `.skip`, when one is not set —
  * the same `describe.skipIf` shape `resource-catalogs.test.ts` and `postgres-directory.test.ts`
  * use, so CI's real PostgreSQL 17 is the authority on whether it ran.
  */
@@ -578,7 +711,6 @@ describe.skipIf(!hasDatabase)(
   () => {
     let isolated: IsolatedTestDatabase;
     let root: DatabaseRoot;
-    let dbRootDir: string;
     const workspace = {
       id: crypto.randomUUID(),
       slug: 'w9-117-files-ownership',
@@ -649,50 +781,46 @@ describe.skipIf(!hasDatabase)(
       await isolated.close();
     });
 
-    beforeEach(async () => {
-      dbRootDir = await mkdtemp(path.join(os.tmpdir(), 'w9-auth-117-files-ownership-'));
-      configureFilesRuntime({
-        store: createRepositoryObjectStoreProvider({
-          store: createLocalFilesystemObjectStoreProvider(dbRootDir),
-          scopes: root.scopes,
-        }),
-        catalog: createResourceCatalogStoreProvider({
-          repositories: root.resourceCatalogs,
-          scopes: root.scopes,
-        }),
-        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          return Promise.resolve(
-            workspaceId === null
-              ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-              : { kind: 'workspace', workspaceId },
-          );
+    beforeEach(() => {
+      installTestDomains({
+        files: {
+          kind: 'serving',
+          runtime: createCatalogFilesWorld({
+            scopes: createInMemoryWorkspaceScopeResolver(
+              [workspace.id].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+            ),
+            resolveWorkspace: resolveWorkspaceFromHeader,
+            catalogs: createResourceCatalogStoreProvider({
+              repositories: root.resourceCatalogs,
+              scopes: root.scopes,
+            }),
+          }).runtime,
         },
       });
-      configureRbacRuntime({
-        directory: createPostgresDirectory(root.directory),
-        identify(request: Request) {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          const actor = request.headers.get(ACTOR_HEADER);
-          return Promise.resolve(
-            workspaceId === null || actor === null
-              ? null
-              : Principal.fromApiKey({
-                  principalId: actor === builderA.email ? principalAId : principalBId,
-                  apiKeyId: actor === builderA.email ? apiKeyAId : apiKeyBId,
-                  workspaceId,
-                  role: 'builder',
-                  label: actor === builderA.email ? 'Builder A file key' : 'Builder B file key',
-                }),
-          );
+      installTestDomains({
+        rbac: {
+          directory: createPostgresDirectory(root.directory),
+          identify(request: Request) {
+            const workspaceId = request.headers.get(WORKSPACE_HEADER);
+            const actor = request.headers.get(ACTOR_HEADER);
+            return Promise.resolve(
+              workspaceId === null || actor === null
+                ? null
+                : Principal.fromApiKey({
+                    principalId: actor === builderA.email ? principalAId : principalBId,
+                    apiKeyId: actor === builderA.email ? apiKeyAId : apiKeyBId,
+                    workspaceId,
+                    role: 'builder',
+                    label: actor === builderA.email ? 'Builder A file key' : 'Builder B file key',
+                  }),
+            );
+          },
         },
       });
     });
 
-    afterEach(async () => {
-      clearFilesRuntime();
-      clearRbacRuntime();
-      await rm(dbRootDir, { recursive: true, force: true });
+    afterEach(() => {
+      clearApplicationContext();
     });
 
     it('a Builder may rename and delete the file it uploaded, and no other Builder may (issue #117)', async () => {
@@ -813,3 +941,425 @@ describe.skipIf(!hasDatabase)(
     });
   },
 );
+
+describe('GET /api/files with a catalog (F-05: a GET never writes)', () => {
+  it('answers catalogued rows by their catalog id and makes no catalog write', async () => {
+    const catalog = createInMemoryCatalogStore();
+    const rows = catalog.forWorkspaceSync(WORKSPACE_A);
+    const docs = await rows.putFile({
+      path: 'docs',
+      kind: 'folder',
+      storageKey: null,
+      sizeBytes: 0,
+      contentType: null,
+      ownerPrincipalId: 'owner-1',
+    });
+    const a = await rows.putFile({
+      path: 'a.txt',
+      kind: 'file',
+      storageKey: 'a.txt',
+      sizeBytes: 2,
+      contentType: 'text/plain',
+      ownerPrincipalId: 'owner-1',
+    });
+    const putFile = vi.spyOn(rows, 'putFile');
+    const fixture = createCatalogFilesWorld({
+      scopes: createInMemoryWorkspaceScopeResolver(
+        [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+      ),
+      resolveWorkspace: fixedWorkspaceA,
+      catalogs: catalog,
+    });
+    // No catalog row: written outside the catalogued paths (or before the catalog existed). The
+    // listing reads the catalog only, so it does not appear.
+    await fixture.legacy
+      .forWorkspace(WORKSPACE_A)
+      .write('legacy.txt', new TextEncoder().encode('old'), {});
+    installTestDomains({ files: { kind: 'serving', runtime: fixture.runtime } });
+
+    const response = await listRoute(req('GET', '/api/files', { workspace: WORKSPACE_A }));
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      files: Array<{ id: string; path: string; kind: string; sizeBytes: number | null }>;
+    };
+    expect(
+      body.files.map(({ id, path: filePath, kind, sizeBytes }) => ({
+        id,
+        path: filePath,
+        kind,
+        sizeBytes,
+      })),
+    ).toEqual([
+      { id: a.id, path: 'a.txt', kind: 'file', sizeBytes: 2 },
+      { id: docs.id, path: 'docs', kind: 'folder', sizeBytes: null },
+    ]);
+    expect(putFile).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * FX-1: the same own/other gate as the PostgreSQL suite above, on the shared in-memory catalog, for
+ * the two writes that suite does not cover — the relay upload (`POST /api/files`) over another
+ * member's file, and a recursive delete of an owned folder holding an object with no catalog row
+ * (what a signed upload leaves until the next list). Both must answer a plain 403.
+ */
+describe('Builder own/other on the relay upload and on row-less objects (FX-1)', () => {
+  const builderA = 'builder-a@example.test';
+  const principalIds = new Map([
+    [builderA, crypto.randomUUID()],
+    ['builder-b@example.test', crypto.randomUUID()],
+  ]);
+
+  beforeEach(() => {
+    world = createCatalogFilesWorld({
+      catalogs: createInMemoryCatalogStore(),
+      scopes: createInMemoryWorkspaceScopeResolver(
+        [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+      ),
+      resolveWorkspace: fixedWorkspaceA,
+    });
+    installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({
+          users: [
+            {
+              email: 'owner-a@example.test',
+              name: 'Owner A',
+              workspaceId: WORKSPACE_A,
+              role: 'owner',
+            },
+          ],
+        }),
+        identify(request: Request) {
+          const actor = request.headers.get(ACTOR_HEADER) ?? '';
+          const principalId = principalIds.get(actor);
+          return Promise.resolve(
+            principalId === undefined
+              ? null
+              : Principal.fromApiKey({
+                  principalId,
+                  apiKeyId: principalId,
+                  workspaceId: WORKSPACE_A,
+                  role: 'builder',
+                  label: actor,
+                }),
+          );
+        },
+      },
+    });
+  });
+
+  function upload(actor: string, filePath: string, text: string): Promise<Response> {
+    return uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        body: new TextEncoder().encode(text),
+        contentType: 'text/plain',
+        headers: { 'x-file-path': filePath, [ACTOR_HEADER]: actor },
+      }),
+    );
+  }
+
+  async function download(filePath: string): Promise<string> {
+    const id = encodeFileId(filePath);
+    const response = await downloadRoute(
+      req('GET', `/api/files/${id}`, {
+        workspace: WORKSPACE_A,
+        headers: { [ACTOR_HEADER]: builderA },
+      }),
+      idContext(id),
+    );
+    expect(response.status).toBe(200);
+    return response.text();
+  }
+
+  /** An object written straight to the store, as a signed upload does: no catalog row. */
+  async function putRowless(filePath: string, text: string): Promise<void> {
+    const files = applicationContext()?.files;
+    if (files?.kind !== 'serving') throw new Error('files runtime not installed');
+    await files.runtime.store
+      .forWorkspace(WORKSPACE_A)
+      .put(filePath, { body: new TextEncoder().encode(text), contentType: 'text/plain' });
+  }
+
+  it("a Builder cannot overwrite another Builder's file through POST /api/files", async () => {
+    expect((await upload(builderA, 'shared.txt', 'A bytes')).status).toBe(201);
+
+    const overwrite = await upload('builder-b@example.test', 'shared.txt', 'B bytes');
+
+    expect(overwrite.status).toBe(403);
+    expect(await download('shared.txt')).toBe('A bytes');
+    // The owner may still overwrite its own file.
+    expect((await upload(builderA, 'shared.txt', 'A again')).status).toBe(201);
+  });
+
+  const readerCtx = { workspaceId: WORKSPACE_A, principalId: crypto.randomUUID(), userId: null };
+
+  /** What the old per-area store holds at `filePath`, which no catalog row accounts for. */
+  async function readRowless(filePath: string): Promise<string | null> {
+    const stored = await world.runtime.store.forWorkspace(WORKSPACE_A).get(filePath);
+    return stored === null ? null : new TextDecoder().decode(stored.body);
+  }
+
+  it('a Builder cannot overwrite an object that has no catalog row', async () => {
+    await putRowless('signed.txt', 'signed bytes');
+
+    const overwrite = await upload(builderA, 'signed.txt', 'A bytes');
+
+    expect(overwrite.status).toBe(403);
+    expect(await readRowless('signed.txt')).toBe('signed bytes');
+    // No row was written either: the refused upload reserved nothing.
+    expect(await world.storage.get(readerCtx, 'files', 'signed.txt')).toBeNull();
+  });
+
+  it("a Builder cannot recursively delete a folder holding another member's row-less upload", async () => {
+    expect((await upload(builderA, 'team/a.txt', 'A bytes')).status).toBe(201);
+    await putRowless('team/b.txt', 'signed bytes');
+    const id = encodeFileId('team');
+
+    const deleted = await deleteRoute(
+      req('DELETE', `/api/files/${id}?recursive=true`, {
+        workspace: WORKSPACE_A,
+        headers: { [ACTOR_HEADER]: builderA },
+      }),
+      idContext(id),
+    );
+
+    expect(deleted.status).toBe(403);
+    expect(await readRowless('team/b.txt')).toBe('signed bytes');
+    expect(await download('team/a.txt')).toBe('A bytes');
+  });
+});
+
+describe('routes answer existence and metadata questions without reading object bytes (FX-3)', () => {
+  let getCalls: string[];
+
+  beforeEach(() => {
+    getCalls = [];
+    const inner = createInMemoryObjectStore();
+    world = createCatalogFilesWorld({
+      catalogs: createInMemoryCatalogStore(),
+      scopes: createInMemoryWorkspaceScopeResolver(
+        [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+      ),
+      resolveWorkspace: fixedWorkspaceA,
+      objects: {
+        ...inner,
+        read(key, options) {
+          getCalls.push(key);
+          return inner.read(key, options);
+        },
+      },
+    });
+    installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+  });
+
+  async function upload(filePath: string, text: string): Promise<Response> {
+    return uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        body: new TextEncoder().encode(text),
+        contentType: 'text/plain',
+        headers: { 'x-file-path': filePath },
+      }),
+    );
+  }
+
+  function rename(fromPath: string, newPath: string): Promise<Response> {
+    const id = encodeFileId(fromPath);
+    return renameRoute(
+      req('PATCH', `/api/files/${id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ newPath }),
+        contentType: 'application/json',
+      }),
+      idContext(id),
+    );
+  }
+
+  it('an upload answers its size and type without reading the object back', async () => {
+    const response = await upload('a.txt', 'hello');
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { file: { sizeBytes: number; contentType: string } };
+    expect(body.file).toMatchObject({ sizeBytes: 5, contentType: 'text/plain' });
+    expect(getCalls).toEqual([]);
+  });
+
+  it('DELETE of a file reads no object bytes', async () => {
+    expect((await upload('a.txt', 'hello')).status).toBe(201);
+    getCalls = [];
+    const id = encodeFileId('a.txt');
+    const response = await deleteRoute(
+      req('DELETE', `/api/files/${id}`, { workspace: WORKSPACE_A }),
+      idContext(id),
+    );
+    expect(response.status).toBe(204);
+    expect(getCalls).toEqual([]);
+  });
+
+  it('PATCH of a file reads no object bytes and keeps them intact', async () => {
+    expect((await upload('a.txt', 'hello')).status).toBe(201);
+    getCalls = [];
+    const response = await rename('a.txt', 'b.txt');
+    expect(response.status, await response.clone().text()).toBe(200);
+    const body = (await response.json()) as { file: { sizeBytes: number; contentType: string } };
+    expect(body.file).toMatchObject({ sizeBytes: 5, contentType: 'text/plain' });
+    expect(getCalls).toEqual([]);
+    const id = encodeFileId('b.txt');
+    const download = await downloadRoute(
+      req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }),
+      idContext(id),
+    );
+    expect(await download.text()).toBe('hello');
+  });
+
+  it('a folder move onto an existing destination is refused without reading bytes, and overwrites nothing', async () => {
+    expect((await upload('src/a.txt', 'AAAA')).status).toBe(201);
+    expect((await upload('src/b.txt', 'two')).status).toBe(201);
+    expect((await upload('dst/a.txt', 'BBBB')).status).toBe(201);
+    getCalls = [];
+    const refused = await rename('src', 'dst');
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: { code: 'name_conflict' } });
+    expect(getCalls).toEqual([]);
+
+    const id = encodeFileId('dst/a.txt');
+    const kept = await downloadRoute(
+      req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }),
+      idContext(id),
+    );
+    expect(await kept.text()).toBe('BBBB');
+  });
+});
+
+describe('a refused folder delete through DELETE /api/files/:id', () => {
+  it('answers 409 folder_not_empty without ?recursive and keeps the rows', async () => {
+    const catalogs = createInMemoryCatalogStore();
+    world = createCatalogFilesWorld({
+      scopes: createInMemoryWorkspaceScopeResolver(
+        [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+      ),
+      resolveWorkspace: fixedWorkspaceA,
+      catalogs,
+    });
+    installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+    const uploaded = await uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        body: new TextEncoder().encode('x'),
+        contentType: 'text/plain',
+        headers: { 'x-file-path': 'team/a.txt' },
+      }),
+    );
+    expect(uploaded.status).toBe(201);
+    const before = await catalogs.forWorkspaceSync(WORKSPACE_A).listFiles();
+    const id = encodeFileId('team');
+
+    const response = await deleteRoute(
+      req('DELETE', `/api/files/${id}`, { workspace: WORKSPACE_A }),
+      idContext(id),
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: 'folder_not_empty' } });
+    expect(await catalogs.forWorkspaceSync(WORKSPACE_A).listFiles()).toEqual(before);
+  });
+});
+
+/**
+ * FX-7: a pending catalog row is an upload in flight. Every route that would write over it, move
+ * it, or move a folder holding it answers `409 upload_in_progress` and leaves bytes and rows as
+ * they were.
+ */
+describe('an upload in flight answers 409 upload_in_progress (FX-7)', () => {
+  let catalogs: ReturnType<typeof createInMemoryCatalogStore>;
+
+  beforeEach(async () => {
+    catalogs = createInMemoryCatalogStore();
+    world = createCatalogFilesWorld({
+      scopes: createInMemoryWorkspaceScopeResolver(
+        [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+      ),
+      resolveWorkspace: fixedWorkspaceA,
+      catalogs,
+    });
+    installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+    await catalogs.forWorkspaceSync(WORKSPACE_A).reserve('docs/pending.txt', {
+      ownerPrincipalId: '37d41bbb-42d1-4a16-8f5d-de3fef42eed0',
+      sizeBytes: 3,
+      contentType: 'text/plain',
+    });
+  });
+
+  function upload(filePath: string, text: string): Promise<Response> {
+    return uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        body: new TextEncoder().encode(text),
+        contentType: 'text/plain',
+        headers: { 'x-file-path': filePath },
+      }),
+    );
+  }
+
+  function move(from: string, newPath: string): Promise<Response> {
+    const id = encodeFileId(from);
+    return renameRoute(
+      req('PATCH', `/api/files/${id}`, {
+        workspace: WORKSPACE_A,
+        body: JSON.stringify({ newPath }),
+        contentType: 'application/json',
+      }),
+      idContext(id),
+    );
+  }
+
+  async function download(filePath: string): Promise<Response> {
+    const id = encodeFileId(filePath);
+    return downloadRoute(req('GET', `/api/files/${id}`, { workspace: WORKSPACE_A }), idContext(id));
+  }
+
+  async function expectUploadInProgress(response: Response): Promise<void> {
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: 'upload_in_progress' } });
+  }
+
+  async function pendingRow(): Promise<unknown> {
+    return catalogs.forWorkspaceSync(WORKSPACE_A).get('docs/pending.txt', { includePending: true });
+  }
+
+  it('refuses a relay upload over the pending path and writes no bytes', async () => {
+    await expectUploadInProgress(await upload('docs/pending.txt', 'new'));
+    expect((await download('docs/pending.txt')).status).toBe(404);
+    expect(await pendingRow()).toMatchObject({ status: 'pending' });
+  });
+
+  it('refuses a folder created at the pending path and leaves no marker', async () => {
+    const response = await uploadRoute(
+      req('POST', '/api/files', {
+        workspace: WORKSPACE_A,
+        headers: { 'x-folder-path': 'docs/pending.txt' },
+      }),
+    );
+    await expectUploadInProgress(response);
+    expect(await pendingRow()).toMatchObject({ status: 'pending', kind: 'file' });
+  });
+
+  it('refuses a rename onto the pending path and keeps the source', async () => {
+    expect((await upload('other.txt', 'abc')).status).toBe(201);
+    await expectUploadInProgress(await move('other.txt', 'docs/pending.txt'));
+    expect(await (await download('other.txt')).text()).toBe('abc');
+    expect(await pendingRow()).toMatchObject({ status: 'pending' });
+  });
+
+  it('refuses a folder move while an upload under it is pending and copies nothing', async () => {
+    expect((await upload('docs/ready.txt', 'abc')).status).toBe(201);
+    await expectUploadInProgress(await move('docs', 'moved'));
+    expect(await (await download('docs/ready.txt')).text()).toBe('abc');
+    expect((await download('moved/ready.txt')).status).toBe(404);
+    const rows = await catalogs.forWorkspaceSync(WORKSPACE_A).listFiles();
+    expect(rows.map((row) => row.path)).toEqual(['docs', 'docs/ready.txt']);
+  });
+});

@@ -47,6 +47,11 @@ const REPOSITORY_SECTIONS = [
           'System shape, what each application and package owns and must not own, the dependency direction and the trust boundaries — enforced by dependency-cruiser.',
       },
       {
+        path: 'docs/testing-strategy.md',
+        description:
+          'Where a test goes, the CI gates that keep tests honest (no skips, coverage floors, ratchets) and how to run each lane locally.',
+      },
+      {
         path: 'docs/sdk/site/README.md',
         description:
           'How the docs site is previewed, checked and generated, and the Today / Target callout convention every page follows.',
@@ -98,7 +103,7 @@ const REPOSITORY_SECTIONS = [
       {
         path: 'docs/adr/README.md',
         description:
-          'The architecture decision log for the whole programme, with its generated index of every record.',
+          'The architecture decision log for the whole programme, and how to print its index of every record.',
       },
       {
         path: 'docs/adr/0052-the-sdk-is-contracts-first-and-the-application-is-its-first-consumer.md',

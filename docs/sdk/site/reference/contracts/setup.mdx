@@ -83,6 +83,16 @@ offer them.
 - `...HOSTED_PLATFORM_IDS`
 - `'none'`
 
+## SETUP_PROVIDERS
+
+The model providers first-run setup offers: `MODEL_PROVIDERS` without
+`anthropic-compatible`, which setup does not ask about.
+
+- `'anthropic'`
+- `'openai'`
+- `'azure-openai'`
+- `'openai-compatible'`
+
 ## SETUP_QUESTIONS
 
 The twelve setup questions, in the order they are asked; frozen throughout.
@@ -175,6 +185,13 @@ Answers given so far, keyed by question id; any may be missing, an unknown id is
 - `"agents/<agentName>.ts"`
 - `"surfaces/main.ts"`
 - `"tools/<name>.ts"`
+
+## SetupProvider
+
+- `"anthropic"`
+- `"openai"`
+- `"azure-openai"`
+- `"openai-compatible"`
 
 ## SetupQuestion
 

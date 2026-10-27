@@ -2,7 +2,7 @@ import { CONTRACTS_VERSION, parseContractsVersion } from '@indx-workspace/contra
 import type { ContractsVersionUnsupportedError } from '@indx-workspace/sdk';
 
 /** This binary's version; equal to `packages/aw/package.json`'s, pinned by `version.test.ts`. */
-export const AW_VERSION = '0.6.9';
+export const AW_VERSION = '0.6.11';
 
 /**
  * The npm name `aw` is published under, and the only place the install command takes it from. The

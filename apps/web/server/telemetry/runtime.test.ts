@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { propagation, type TextMapPropagator } from '@opentelemetry/api';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  activeTraceHeaders,
   configureTelemetryRuntime,
   RECENT_RUN_TELEMETRY_LIMIT,
   recentRunTelemetry,
@@ -116,5 +118,37 @@ describe('telemetry runtime', () => {
 
     expect(recentRunTelemetry('w1').some((run) => run.runId === runId)).toBe(false);
     expect(recentRunTelemetry('other-workspace').some((run) => run.runId === runId)).toBe(true);
+  });
+});
+
+/** A propagator that injects `traceparent` as given — the part this module owns is what it forwards. */
+function injecting(traceparent: string): TextMapPropagator {
+  return {
+    inject: (_context, carrier, setter) => {
+      setter.set(carrier, 'traceparent', traceparent);
+    },
+    extract: (context) => context,
+    fields: () => ['traceparent'],
+  };
+}
+
+describe('activeTraceHeaders', () => {
+  afterEach(() => {
+    propagation.disable();
+  });
+
+  it('sends nothing when telemetry is off', () => {
+    expect(activeTraceHeaders()).toEqual({});
+  });
+
+  it('forwards a valid traceparent', () => {
+    const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+    propagation.setGlobalPropagator(injecting(traceparent));
+    expect(activeTraceHeaders()).toEqual({ traceparent });
+  });
+
+  it('never forwards a malformed one', () => {
+    propagation.setGlobalPropagator(injecting('00-not-a-trace-01\r\nx-injected: 1'));
+    expect(activeTraceHeaders()).toEqual({});
   });
 });

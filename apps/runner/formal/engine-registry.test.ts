@@ -73,9 +73,9 @@ function adapterFor(id: string, version: string): AgentEngine {
   };
 }
 
-/** The export name `apps/runner/src/engines.ts` reads an adapter out of, per engine id. */
+/** The factory `apps/runner/src/engines.ts` builds an adapter with, per engine id. */
 const EXPORT_NAMES: Readonly<Record<string, string>> = {
-  'claude-agent-sdk': 'CLAUDE_AGENT_SDK_ENGINE_ADAPTER',
+  'claude-agent-sdk': 'createClaudeAgentSdkEngine',
 };
 
 describe('engine-compose: the registry this image really has', () => {
@@ -91,10 +91,10 @@ describe('engine-compose: the registry this image really has', () => {
     for (const row of rows(request['table'], id)) {
       const rowId = String(row['id']);
       const version = String(row['version']);
-      const exportName = EXPORT_NAMES[rowId] ?? 'CLAUDE_AGENT_SDK_ENGINE_ADAPTER';
+      const exportName = EXPORT_NAMES[rowId] ?? 'createClaudeAgentSdkEngine';
       table[rowId] =
         row['loads'] === true
-          ? () => Promise.resolve({ [exportName]: adapterFor(rowId, version) })
+          ? () => Promise.resolve({ [exportName]: () => adapterFor(rowId, version) })
           : () => Promise.reject(new Error(`Cannot find package for ${rowId}`));
     }
     configureEngineModulesForTests(table);

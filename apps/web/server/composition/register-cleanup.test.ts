@@ -6,6 +6,11 @@ import {
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
 
+import {
+  applicationContext,
+  clearApplicationContext,
+  type ApplicationContext,
+} from '../application-context';
 import { clearWebRuntimeRegistry } from '../runtimes/registry';
 import { register, type RegisteredComposition } from './register';
 
@@ -34,7 +39,10 @@ type ControlledEnv = (typeof CONTROLLED_ENV)[number];
 async function exerciseSkippedRunApi(
   prefix: string,
   configure: () => void,
-): Promise<RegisteredComposition | undefined> {
+): Promise<{
+  readonly composition: RegisteredComposition | undefined;
+  readonly context: ApplicationContext | null;
+}> {
   let isolated: IsolatedTestDatabase | undefined;
   let composition: RegisteredComposition | undefined;
   const previousEnv = Object.fromEntries(
@@ -51,11 +59,13 @@ async function exerciseSkippedRunApi(
     delete process.env['RUNNER_URL'];
     delete process.env['AW_RUNTIME_VERIFICATION_FILE'];
     clearWebRuntimeRegistry();
+    clearApplicationContext();
     configure();
 
     composition = await register();
-    return composition;
+    return { composition, context: applicationContext() };
   } finally {
+    clearApplicationContext();
     for (const key of CONTROLLED_ENV) {
       const value = previousEnv[key];
       if (value === undefined) delete process.env[key];
@@ -73,19 +83,44 @@ async function exerciseSkippedRunApi(
 
 describe.skipIf(!hasDatabase)('register composition cleanup ownership', () => {
   it('returns a cleanup handle when no runtime can install the run API', async () => {
-    const composition = await exerciseSkippedRunApi('aw_register_cleanup_runtime', () => {});
+    const { composition, context } = await exerciseSkippedRunApi(
+      'aw_register_cleanup_runtime',
+      () => {},
+    );
 
     expect(composition).toBeDefined();
+    // One install, after everything is built: the run domains are `disabled`, the rest serve.
+    expect(context).not.toBeNull();
+    expect({
+      a2a: context?.a2a,
+      runs: context?.runs,
+      surfaces: context?.surfaces,
+      tokens: context?.tokens,
+      toolEndpoint: context?.toolEndpoint,
+      triggers: context?.triggers,
+    }).toEqual({
+      a2a: { kind: 'disabled' },
+      runs: { kind: 'disabled' },
+      surfaces: { kind: 'disabled' },
+      tokens: { kind: 'disabled' },
+      toolEndpoint: { kind: 'disabled' },
+      triggers: { kind: 'disabled' },
+    });
+    expect(context?.projects).toBeDefined();
   }, 180_000);
 
   it('returns a cleanup handle when the runtime registry cannot be installed', async () => {
-    const composition = await exerciseSkippedRunApi('aw_register_cleanup_registry', () => {
-      process.env['RUNNER_URL'] = 'http://127.0.0.1:9';
-      // A directory is not a readable verification-cache document. `installDriverRegistry`
-      // reports the failure and intentionally leaves the registry absent.
-      process.env['AW_RUNTIME_VERIFICATION_FILE'] = process.cwd();
-    });
+    const { composition, context } = await exerciseSkippedRunApi(
+      'aw_register_cleanup_registry',
+      () => {
+        process.env['RUNNER_URL'] = 'http://127.0.0.1:9';
+        // A directory is not a readable verification-cache document. `installDriverRegistry`
+        // reports the failure and intentionally leaves the registry absent.
+        process.env['AW_RUNTIME_VERIFICATION_FILE'] = process.cwd();
+      },
+    );
 
     expect(composition).toBeDefined();
+    expect(context?.runs).toEqual({ kind: 'disabled' });
   }, 180_000);
 });

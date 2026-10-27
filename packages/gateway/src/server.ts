@@ -1,6 +1,15 @@
+import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+
+import {
+  createJsonLogger,
+  parseTraceparent,
+  traceHeaders,
+  type Logger,
+} from '@agent-workspace/core/telemetry';
+import { inServerSpan, SpanStatusCode } from '@agent-workspace/core/tracing';
 
 import type { GatewayRouter, RequestContext } from './types.js';
 
@@ -40,6 +49,28 @@ async function requestBody(req: IncomingMessage): Promise<Buffer | undefined> {
   return Buffer.concat(chunks);
 }
 
+/**
+ * Join the caller's W3C trace, or start a fresh one (F-04). The direct caller is the agent sandbox,
+ * whose code can send any trace id it likes, so an adopted id is for log correlation only and is
+ * never trusted for anything else. A well-formed `traceparent` (normally the one the runner passed
+ * the engine) is kept, rebuilt from its parsed fields, with its `tracestate`. Anything else is
+ * replaced by a new random trace and its `tracestate` dropped, so every request the router sees
+ * carries exactly one valid `traceparent` and nothing a caller wrote unvalidated. A fresh trace is
+ * marked sampled: the gateway is its root, so its span is the one to record. Returns the adopted
+ * trace id.
+ */
+export function adoptTrace(headers: Headers): string {
+  const joined = traceHeaders(headers.get('traceparent'), headers.get('tracestate'));
+  headers.delete('tracestate');
+  const traceparent =
+    joined['traceparent'] ??
+    `00-${randomBytes(16).toString('hex')}-${randomBytes(8).toString('hex')}-01`;
+  headers.set('traceparent', traceparent);
+  if (joined['tracestate'] !== undefined) headers.set('tracestate', joined['tracestate']);
+  // Cannot be null: the header was just set to a valid value.
+  return parseTraceparent(traceparent)?.traceId ?? '';
+}
+
 function requestUrl(req: IncomingMessage): URL {
   const authority = req.headers.host ?? 'gateway';
   return new URL(req.url ?? '/', `http://${authority}`);
@@ -55,6 +86,7 @@ async function toRequest(req: IncomingMessage, signal: AbortSignal): Promise<Req
       headers.set(name, value);
     }
   }
+  adoptTrace(headers);
   const init: RequestInit = {
     method: req.method ?? 'GET',
     headers,
@@ -119,12 +151,47 @@ function requestTooLarge(): Response {
 }
 
 /**
+ * `router.fetch` inside the request's SERVER span (ADR-0155), continuing the trace {@link adoptTrace}
+ * set, so the span and the request's log lines share one trace id. The span names the route only
+ * when it is one of the router's fixed paths; it never carries the URL, a header or the body.
+ */
+export function fetchInSpan(
+  router: GatewayRouter,
+  request: Request,
+  context?: RequestContext,
+): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  const route = router.routes.find((candidate) => candidate.path === pathname)?.path;
+  return inServerSpan(
+    `${request.method} ${route ?? 'other'}`,
+    request.headers.get('traceparent'),
+    {
+      'http.request.method': request.method,
+      ...(route === undefined ? {} : { 'http.route': route }),
+    },
+    async (span) => {
+      const response = await router.fetch(request, context);
+      span.setAttribute('http.response.status_code', response.status);
+      if (response.status >= 500) span.setStatus({ code: SpanStatusCode.ERROR });
+      return response;
+    },
+  );
+}
+
+/** `logger` joined to the trace `request` carries, once {@link adoptTrace} has run on it. */
+export function requestLogger(logger: Logger, request: Request | undefined): Logger {
+  const trace = parseTraceparent(request?.headers.get('traceparent'));
+  return trace === null ? logger : logger.child({ traceId: trace.traceId });
+}
+
+/**
  * Adapt the Fetch-style gateway router to Node HTTP. Context resolution is injected so this
  * server has no credential store and never falls back to the process environment.
  */
 export function createGatewayServer(
   router: GatewayRouter,
   resolveContext: RequestContextResolver = () => undefined,
+  logger: Logger = createJsonLogger({ service: 'gateway' }),
 ): Server {
   return createServer((incoming, outgoing) => {
     // A client hang-up or the upstream timeout aborts `request.signal`, which every provider passes
@@ -134,19 +201,20 @@ export function createGatewayServer(
     outgoing.once('close', () => hangUp.abort());
     const signal = AbortSignal.any([hangUp.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
     void (async () => {
+      let request: Request | undefined;
       try {
-        const request = await toRequest(incoming, signal);
+        request = await toRequest(incoming, signal);
         const resolved = await resolveContext(request);
         const context = resolved === undefined ? undefined : { ...resolved, signal };
-        await writeResponse(outgoing, await router.fetch(request, context));
+        await writeResponse(outgoing, await fetchInSpan(router, request, context));
       } catch (error) {
         if (outgoing.headersSent || outgoing.destroyed) {
           outgoing.destroy();
+        } else if (error instanceof RequestBodyTooLargeError) {
+          await writeResponse(outgoing, requestTooLarge());
         } else {
-          await writeResponse(
-            outgoing,
-            error instanceof RequestBodyTooLargeError ? requestTooLarge() : internalError(),
-          );
+          requestLogger(logger, request).error('gateway request failed', { error });
+          await writeResponse(outgoing, internalError());
         }
       }
     })();

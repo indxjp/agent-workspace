@@ -1,11 +1,30 @@
-import { RUNTIME_CAPACITY_EXHAUSTED, parseRunFailure } from '@indx-workspace/contracts/runs';
+import { log as webLogger } from '../telemetry/logger';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createInMemoryCatalog } from '@agent-workspace/core/db/unscoped';
+import { createInMemoryObjectStore, streamToBytes } from '@agent-workspace/core/storage';
+import { bytesToStream, encodeUstar } from '@agent-workspace/runtime/transfer';
+import {
+  OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+  RUNTIME_CAPACITY_EXHAUSTED,
+  parseRunFailure,
+} from '@indx-workspace/contracts/runs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { DomainError } from '../errors';
+import { createRuntimeWorkspaceLifecycle } from '../compose/workspace-lifecycle';
 import { createRunnerLauncher, RUN_STATUS_EVENT } from './launcher';
+import { relativeRuntimePath } from '../runtimes/contract';
 import type { LaunchContext } from './environment';
 import { resetLiveRuns, signalLiveRun } from './interrupt';
-import { InMemoryRunStore, type RunRecord } from './store';
+import { InMemoryRunStore } from './memory-store';
+import { createStorageService } from '../storage/service';
+import type { RunRecord } from './store';
 
+const quietLog = { info() {}, warn() {}, error() {}, child: () => quietLog };
 const RUN = '11111111-1111-4111-8111-111111111111';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
@@ -94,24 +113,25 @@ describe('createRunnerLauncher', () => {
             persistPaths: ['/workspace/output', 'report.txt'],
             runnerUrl: 'http://runtime:8080',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
       workspaceLifecycle: {
-        inputArchive: () => Promise.resolve(inputArchive),
+        inputArchive: () => Promise.resolve(bytesToStream(inputArchive)),
         promoteOutputs: (_context, _runtime, archive) => {
           order.push('promote');
           promoted = archive;
           return Promise.resolve();
         },
       },
-      fetch: (input, init) => {
+      fetch: async (input, init) => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
         if (url.endsWith('/files') && init?.method === 'POST') {
           order.push('hydrate');
-          expect(new Uint8Array(init.body as ArrayBuffer)).toEqual(inputArchive);
-          return Promise.resolve(Response.json({ hydrated: ['input.txt'] }));
+          expect(new Uint8Array(await new Response(init.body).arrayBuffer())).toEqual(inputArchive);
+          return Response.json({ hydrated: ['input.txt'] });
         }
         if (url.endsWith('/run')) {
           order.push('run');
@@ -133,9 +153,8 @@ describe('createRunnerLauncher', () => {
     expect(promoted).toEqual(outputArchive);
   });
 
-  // Issue #881: the in-process runner materialises `resources.files` itself; POST /files is not
-  // session-scoped there and failed with EACCES.
-  it('never hydrates a local target, and the run still completes', async () => {
+  // Issue #881: POST /files is not session-scoped on the in-process runner and failed with EACCES.
+  it("never calls a local target's /files, and the run still completes", async () => {
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const urls: string[] = [];
@@ -151,11 +170,12 @@ describe('createRunnerLauncher', () => {
             persistPaths: [],
             runnerUrl: 'http://runtime:8080',
             workspaceRoot: '/workspace',
+            fileTransfer: 'local-disk',
           }),
       },
       buildRunRequest,
       workspaceLifecycle: {
-        inputArchive: () => Promise.resolve(new Uint8Array([1, 2, 3])),
+        inputArchive: () => Promise.resolve(null),
         promoteOutputs: () => Promise.resolve(),
       },
       fetch: (input) => {
@@ -171,8 +191,153 @@ describe('createRunnerLauncher', () => {
     expect(urls).toEqual(['http://runtime:8080/run']);
   });
 
+  // Issue #1576: a local run gets its input archive written into its cwd on this host before
+  // launch, still without a runner /files call.
+  it('writes a local target input archive into the run cwd before the run starts', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'aw-local-attachments-'));
+    const attachment = join(root, 'workspace-1', SESSION, 'notes', 'brief.md');
+    try {
+      const store = new InMemoryRunStore();
+      const run = await newRun(store);
+      const urls: string[] = [];
+      let presentAtLaunch = false;
+      const launch = createRunnerLauncher({
+        store,
+        runtime: {
+          resolve: () =>
+            Promise.resolve({
+              runtimeProfileId: 'profile-local',
+              driver: 'local',
+              networkPolicy: 'none',
+              filesystem: 'read-write',
+              persistPaths: [],
+              runnerUrl: 'http://runtime:8080',
+              workspaceRoot: root,
+              fileTransfer: 'local-disk',
+            }),
+        },
+        buildRunRequest,
+        workspaceLifecycle: {
+          inputArchive: () =>
+            Promise.resolve(
+              bytesToStream(
+                encodeUstar([
+                  {
+                    path: `workspace-1/${SESSION}/notes/brief.md`,
+                    type: 'file',
+                    mode: 0o444,
+                    data: Buffer.from('brief'),
+                  },
+                ]),
+              ),
+            ),
+          promoteOutputs: () => Promise.resolve(),
+        },
+        fetch: async (input) => {
+          const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+          urls.push(url);
+          presentAtLaunch = (await readFile(attachment, 'utf8')) === 'brief';
+          return sse('event: run-done\ndata: {}\n\n');
+        },
+      });
+
+      launch(context(run));
+      expect((await settle(store)).status).toBe('completed');
+      expect(urls).toEqual(['http://runtime:8080/run']);
+      expect(presentAtLaunch).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  // @story US-STO-06
+  describe("[US-STO-06][unit][run] hydration follows the target's fileTransfer", () => {
+    const brief = () =>
+      bytesToStream(
+        encodeUstar([
+          {
+            path: `workspace-1/${SESSION}/notes/brief.md`,
+            type: 'file',
+            mode: 0o444,
+            data: Buffer.from('brief'),
+          },
+        ]),
+      );
+
+    async function hydrate(
+      driver: 'docker' | 'local',
+      fileTransfer: 'push-archive' | 'local-disk',
+      workspaceRoot: string,
+    ) {
+      const store = new InMemoryRunStore();
+      const run = await newRun(store);
+      const calls: string[] = [];
+      const launch = createRunnerLauncher({
+        store,
+        runtime: {
+          resolve: () =>
+            Promise.resolve({
+              runtimeProfileId: 'profile',
+              driver,
+              networkPolicy: 'none',
+              filesystem: 'read-write',
+              persistPaths: [],
+              runnerUrl: 'http://runtime:8080',
+              workspaceRoot,
+              fileTransfer,
+            }),
+        },
+        buildRunRequest,
+        workspaceLifecycle: {
+          inputArchive: () => Promise.resolve(brief()),
+          promoteOutputs: () => Promise.resolve(),
+        },
+        fetch: async (input, init) => {
+          const url =
+            typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+          calls.push(`${init?.method ?? 'GET'} ${url}`);
+          // A streamed request body must be drained, as the real runner does.
+          await new Response(init?.body).arrayBuffer();
+          return url.endsWith('/files')
+            ? new Response(null, { status: 204 })
+            : sse('event: run-done\ndata: {}\n\n');
+        },
+      });
+      launch(context(run));
+      expect((await settle(store)).status).toBe('completed');
+      return calls;
+    }
+
+    it('extracts on this host for local-disk, whatever the driver id', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'aw-filetransfer-'));
+      try {
+        const calls = await hydrate('docker', 'local-disk', root);
+        expect(calls).toEqual(['POST http://runtime:8080/run']);
+        expect(
+          await readFile(join(root, 'workspace-1', SESSION, 'notes', 'brief.md'), 'utf8'),
+        ).toBe('brief');
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+
+    it('pushes the archive to the runtime for push-archive, even for the local id', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'aw-filetransfer-'));
+      try {
+        const calls = await hydrate('local', 'push-archive', root);
+        expect(calls).toEqual(['POST http://runtime:8080/files', 'POST http://runtime:8080/run']);
+        await expect(
+          readFile(join(root, 'workspace-1', SESSION, 'notes', 'brief.md'), 'utf8'),
+        ).rejects.toThrow();
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
+  });
+
   it('preserves the run failure while also reporting output-promotion failure', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const launch = createRunnerLauncher({
@@ -187,6 +352,7 @@ describe('createRunnerLauncher', () => {
             persistPaths: ['output'],
             runnerUrl: 'http://runtime:8080',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
@@ -218,8 +384,249 @@ describe('createRunnerLauncher', () => {
     log.mockRestore();
   });
 
+  it('a persist path key-safety refuses fails the run', async () => {
+    const hostile = `a${String.fromCharCode(1)}b`;
+    expect(() => relativeRuntimePath(hostile)).toThrow(/is not workspace-relative/u);
+
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const urls: string[] = [];
+    const launch = createRunnerLauncher({
+      store,
+      runtime: {
+        resolve: () =>
+          Promise.resolve({
+            runtimeProfileId: 'profile-docker',
+            driver: 'docker',
+            networkPolicy: 'none',
+            filesystem: 'read-write',
+            persistPaths: [hostile],
+            runnerUrl: 'http://runtime:8080',
+            workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
+          }),
+      },
+      buildRunRequest,
+      workspaceLifecycle: {
+        inputArchive: () => Promise.resolve(null),
+        promoteOutputs: () => Promise.resolve(),
+      },
+      fetch: (input) => {
+        urls.push(
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+        );
+        return Promise.resolve(sse('event: run-done\ndata: {}\n\n'));
+      },
+    });
+
+    launch(context(run));
+    const settled = await settle(store);
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toContain('Run output could not be saved.');
+    expect(urls.filter((url) => url.includes('/files'))).toEqual([]);
+    expect(JSON.stringify(log.mock.calls)).toContain('collect-workspace-outputs');
+    log.mockRestore();
+  });
+
+  // @story US-STO-06
+  it('[US-STO-06][unit][run] hydrate sends a streaming body', async () => {
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const total = 4 * 1024 * 1024;
+    let pulled = 0;
+    let pulledWhenRunnerSawFirstByte = -1;
+    let received = 0;
+    let sawFirstByte = (): void => undefined;
+    const firstByte = new Promise<void>((resolve) => {
+      sawFirstByte = resolve;
+    });
+    // Pulled chunk by chunk, so the body is never held whole. The last chunk waits (at most 2 s)
+    // for the runner's first byte: socket buffers can take a 4 MiB body whole before the runner
+    // reads, so without the wait the order would be timing, not streaming. A launcher that buffers
+    // pulls every chunk before it sends one, so the runner still sees its first byte only after
+    // the last pull.
+    const archive = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          if (pulled === total) {
+            controller.close();
+            return;
+          }
+          if (pulled + 64 * 1024 === total) {
+            await Promise.race([
+              firstByte,
+              new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+            ]);
+          }
+          controller.enqueue(new Uint8Array(64 * 1024).fill(7));
+          pulled += 64 * 1024;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    let chunked = '';
+    const runner = createServer((req, res) => {
+      if (req.url === '/files') {
+        chunked = String(req.headers['transfer-encoding']);
+        req.on('data', (chunk: Buffer) => {
+          if (received === 0) {
+            pulledWhenRunnerSawFirstByte = pulled;
+            sawFirstByte();
+          }
+          received += chunk.byteLength;
+        });
+        req.on('end', () => res.writeHead(200).end('{}'));
+        return;
+      }
+      res
+        .writeHead(200, { 'Content-Type': 'text/event-stream' })
+        .end('event: run-done\ndata: {}\n\n');
+    });
+    await new Promise<void>((resolve) => runner.listen(0, '127.0.0.1', resolve));
+    try {
+      const launch = createRunnerLauncher({
+        store,
+        runtime: {
+          resolve: () =>
+            Promise.resolve({
+              runtimeProfileId: 'profile-docker',
+              driver: 'docker',
+              networkPolicy: 'none',
+              filesystem: 'read-write',
+              persistPaths: [],
+              runnerUrl: `http://127.0.0.1:${String((runner.address() as AddressInfo).port)}`,
+              workspaceRoot: '/workspace',
+              fileTransfer: 'push-archive',
+            }),
+        },
+        buildRunRequest,
+        workspaceLifecycle: {
+          inputArchive: () => Promise.resolve(archive),
+          promoteOutputs: () => Promise.resolve(),
+        },
+      });
+
+      launch(context(run));
+      expect((await settle(store)).status).toBe('completed');
+      expect(received).toBe(total);
+      // A streamed request body has no Content-Length; the runner saw bytes before the last pull.
+      expect(chunked).toBe('chunked');
+      expect(pulledWhenRunnerSawFirstByte).toBeLessThan(total);
+    } finally {
+      runner.closeAllConnections();
+      await new Promise<void>((resolve) => runner.close(() => resolve()));
+    }
+  });
+
+  // @story US-STO-06
+  it('[US-STO-06][unit][run] files over the run limit fail the run before a sandbox is created', async () => {
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const resolve = vi.fn();
+    const urls: string[] = [];
+    const launch = createRunnerLauncher({
+      store,
+      runtime: { resolve },
+      buildRunRequest,
+      workspaceLifecycle: {
+        inputArchive: () =>
+          Promise.reject(
+            new DomainError({
+              category: 'validation',
+              code: 'run_files_too_large',
+              publicMessage: 'run_files_too_large: the run is over the limit.',
+            }),
+          ),
+        promoteOutputs: () => Promise.resolve(),
+      },
+      fetch: (input) => {
+        urls.push(
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+        );
+        return Promise.resolve(sse('event: run-done\ndata: {}\n\n'));
+      },
+    });
+
+    launch(context(run));
+    const settled = await settle(store);
+    expect(settled.status).toBe('failed');
+    expect(parseRunFailure(settled.error)?.code).toBe('run_files_too_large');
+    // The runtime resolver allocates the sandbox; it was never asked, and nothing was sent.
+    expect(resolve).not.toHaveBeenCalled();
+    expect(urls).toEqual([]);
+  });
+
+  // @story US-STO-06
+  it('[US-STO-06][unit][run] a corrupt file fails the run with run_file_corrupt', async () => {
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const corrupt = new DomainError({
+      category: 'conflict',
+      code: 'run_file_corrupt',
+      publicMessage: 'run_file_corrupt: a granted file is corrupt.',
+    });
+    let first = true;
+    const runner = createServer((req, res) => {
+      req.resume();
+      req.on('end', () => res.writeHead(200).end('{}'));
+      req.on('error', () => undefined);
+    });
+    await new Promise<void>((resolve) => runner.listen(0, '127.0.0.1', resolve));
+    try {
+      const launch = createRunnerLauncher({
+        store,
+        runtime: {
+          resolve: () =>
+            Promise.resolve({
+              runtimeProfileId: 'profile-docker',
+              driver: 'docker',
+              networkPolicy: 'none',
+              filesystem: 'read-write',
+              persistPaths: [],
+              runnerUrl: `http://127.0.0.1:${String((runner.address() as AddressInfo).port)}`,
+              workspaceRoot: '/workspace',
+              fileTransfer: 'push-archive',
+            }),
+        },
+        buildRunRequest,
+        workspaceLifecycle: {
+          // One chunk, then the checksum check errors the archive part-way.
+          inputArchive: () =>
+            Promise.resolve(
+              new ReadableStream<Uint8Array>(
+                {
+                  pull(controller) {
+                    if (first) {
+                      first = false;
+                      controller.enqueue(new Uint8Array(512));
+                      return;
+                    }
+                    controller.error(corrupt);
+                  },
+                },
+                { highWaterMark: 0 },
+              ),
+            ),
+          promoteOutputs: () => Promise.resolve(),
+        },
+      });
+
+      launch(context(run));
+      const settled = await settle(store);
+      expect(settled.status).toBe('failed');
+      expect(parseRunFailure(settled.error)).toEqual({
+        code: 'run_file_corrupt',
+        message: 'a granted file is corrupt.',
+      });
+    } finally {
+      runner.closeAllConnections();
+      await new Promise<void>((resolve) => runner.close(() => resolve()));
+    }
+  });
+
   it("logs the runner's own reason when hydration is refused, and keeps it off the run", async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const launch = createRunnerLauncher({
@@ -234,11 +641,12 @@ describe('createRunnerLauncher', () => {
             persistPaths: [],
             runnerUrl: 'http://runtime:8080',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
       workspaceLifecycle: {
-        inputArchive: () => Promise.resolve(new Uint8Array([1])),
+        inputArchive: () => Promise.resolve(bytesToStream(new Uint8Array([1]))),
         promoteOutputs: () => Promise.resolve(),
       },
       fetch: () =>
@@ -254,7 +662,9 @@ describe('createRunnerLauncher', () => {
     const settled = await settle(store);
     expect(settled.error).toContain('The workspace could not be prepared.');
     expect(settled.error).not.toContain('EACCES');
-    const causes = log.mock.calls.map(([, error]) => String((error as Error | undefined)?.cause));
+    const causes = log.mock.calls.map(([, fields]) =>
+      String((fields as { error?: Error } | undefined)?.error?.cause),
+    );
     expect(causes.join('\n')).toContain('runtime returned HTTP 400');
     expect(causes.join('\n')).toContain('invalid_archive');
     expect(causes.join('\n')).toContain("EACCES: mkdir '/workspace'");
@@ -280,7 +690,7 @@ describe('createRunnerLauncher', () => {
         },
         fetch: () => Promise.resolve(sse('event: run-done\ndata: {}\n\n')),
       });
-      const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       launch(context(run));
       const settled = await settle(store);
       await vi.waitFor(() => expect(settledFor).toEqual([RUN]));
@@ -314,8 +724,68 @@ describe('createRunnerLauncher', () => {
     expect(seen).toHaveLength(1);
   });
 
+  describe('the run output (ADR-0143)', () => {
+    const launchWith = async (
+      frames: string,
+      outputSchema?: Record<string, unknown>,
+    ): Promise<RunRecord> => {
+      const store = new InMemoryRunStore();
+      const run = await newRun(store);
+      createRunnerLauncher({
+        baseUrl: 'http://runner:8080',
+        store,
+        buildRunRequest,
+        fetch: () => Promise.resolve(sse(frames)),
+      })({ ...context(run), ...(outputSchema === undefined ? {} : { outputSchema }) });
+      return settle(store);
+    };
+
+    it('stores the agent.result output on the completed run', async () => {
+      const output = { text: '{"ok":true}', structured: { ok: true } };
+      const frame = `event: agent.result\ndata: ${JSON.stringify({ stopReason: 'end_turn', output })}\n\n`;
+      const settled = await launchWith(`${frame}event: run-done\ndata: {}\n\n`);
+      expect(settled.status).toBe('completed');
+      expect(settled.output).toEqual(output);
+    });
+
+    it('fails a completed run that carries a schema but no structured value (ADR-0143)', async () => {
+      const output = { text: 'prose only', structured: null };
+      const frame = `event: agent.result
+data: ${JSON.stringify({ stopReason: 'end_turn', output })}
+
+`;
+      const settled = await launchWith(
+        `${frame}event: run-done
+data: {}
+
+`,
+        {
+          type: 'object',
+        },
+      );
+      expect(settled.status).toBe('failed');
+      expect(settled.output).toBeNull();
+      expect(parseRunFailure(settled.error)).toEqual({
+        code: 'output_schema_unsatisfied',
+        message: OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+      });
+    });
+
+    it('stores output_schema_unsatisfied with the contract’s fixed sentence and no output', async () => {
+      const settled = await launchWith(
+        'event: run-error\ndata: {"message":"output_schema_unsatisfied: the model could not produce an answer that matches the requested output schema."}\n\n',
+      );
+      expect(settled.status).toBe('failed');
+      expect(settled.output).toBeNull();
+      expect(parseRunFailure(settled.error)).toEqual({
+        code: 'output_schema_unsatisfied',
+        message: OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+      });
+    });
+  });
+
   it('keeps untrusted runtime failure text out of the run record and replayable status', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     try {
       const store = new InMemoryRunStore();
       const run = await newRun(store);
@@ -353,6 +823,7 @@ describe('createRunnerLauncher', () => {
             timeoutSeconds: 60,
             runnerUrl: 'http://selected-runner:9090',
             workspaceRoot: '/selected-workspace',
+            fileTransfer: 'local-disk',
           }),
       },
       buildRunRequest: (_context, target) => ({ profile: target?.runtimeProfileId }),
@@ -407,8 +878,37 @@ describe('createRunnerLauncher', () => {
     ]);
   });
 
+  it('appends run.warning attachments_removed_shell before the first agent frame when the run has attachments (ADR-0146)', async () => {
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const launch = createRunnerLauncher({
+      baseUrl: 'http://runner:8080/',
+      store,
+      buildRunRequest,
+      fetch: () =>
+        Promise.resolve(
+          sse('event: assistant\ndata: {"text":"hi"}\n\nevent: run-done\ndata: {}\n\n'),
+        ),
+    });
+
+    launch({
+      ...context(run),
+      attachments: [
+        { fileId: 'a0000000-0000-4000-8000-000000000001', path: 'brief.md', kind: 'file' },
+      ],
+    });
+    expect((await settle(store)).status).toBe('completed');
+    expect((await transcript(store)).map((event) => event.type)).toEqual([
+      RUN_STATUS_EVENT,
+      'run.warning',
+      'assistant',
+      RUN_STATUS_EVENT,
+    ]);
+    expect((await transcript(store))[1]?.data).toEqual({ code: 'attachments_removed_shell' });
+  });
+
   it('records the failure on the run when the runtime cannot be reached', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const launch = createRunnerLauncher({
@@ -430,9 +930,9 @@ describe('createRunnerLauncher', () => {
     const data = last?.data as { status: string; error: string };
     expect(data.status).toBe('failed');
     expect(data.error).toBe('The runtime could not be reached.');
-    const loggedFailure = log.mock.calls[0]?.[1] as unknown;
+    const loggedFailure = (log.mock.calls[0]?.[1] as { error: Error } | undefined)?.error;
     expect(loggedFailure).toMatchObject({ operation: 'start-runtime-run' });
-    expect((loggedFailure as Error | undefined)?.cause).toEqual(new Error('ECONNREFUSED'));
+    expect(loggedFailure?.cause).toEqual(new Error('ECONNREFUSED'));
     log.mockRestore();
   });
 
@@ -522,6 +1022,43 @@ describe('createRunnerLauncher', () => {
     expect(statuses).toEqual(['running', 'cancelled']);
   });
 
+  it('pauses the run, with the frame and the call, when the runner stops for approval (ADR-0145)', async () => {
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const data = {
+      code: 'awaiting_approval',
+      outcome: 'awaiting_approval',
+      message: 'stopped for approval',
+      approvalRequest: { toolName: 'send_email', toolUseId: 'toolu_1', canonicalCall: '{}' },
+    };
+    const launch = createRunnerLauncher({
+      baseUrl: 'http://runner:8080',
+      store,
+      buildRunRequest,
+      fetch: () => Promise.resolve(sse(`event: run-error\ndata: ${JSON.stringify(data)}\n\n`)),
+    });
+    launch(context(run));
+    const settled = await settle(store);
+    expect(settled.status).toBe('awaiting_approval');
+    expect(settled.error).toBeNull();
+    expect(settled.pendingApproval).toEqual({ toolName: 'send_email', canonicalCall: '{}' });
+    const events = await transcript(store);
+    expect(events.map((event) => event.type)).toEqual([
+      RUN_STATUS_EVENT,
+      'agent.approval.requested',
+      RUN_STATUS_EVENT,
+    ]);
+    expect(events[1]?.data).toEqual({
+      frame: 'agent.approval.requested',
+      engine: 'claude-agent-sdk',
+      raw: null,
+      toolCallId: 'toolu_1',
+      toolName: 'send_email',
+      canonicalCall: '{}',
+    });
+    expect((events[2]?.data as { status: string }).status).toBe('awaiting_approval');
+  });
+
   it('registers this run in the live-run registry while it holds the runtime connection, and releases it once settled', async () => {
     resetLiveRuns();
     const store = new InMemoryRunStore();
@@ -573,7 +1110,7 @@ describe('createRunnerLauncher', () => {
   });
 
   it('fails the run when the runtime does not answer within the connect timeout', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const launch = createRunnerLauncher({
@@ -632,7 +1169,7 @@ describe('createRunnerLauncher', () => {
   });
 
   it('fails the run, and posts nothing, when the run request cannot be built', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     let posted = 0;
@@ -676,7 +1213,7 @@ describe('createRunnerLauncher', () => {
   });
 
   it("redacts the run's short declared secret from the preparation log and keeps it out of the problem (issue #827)", async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const secret = 'shortsecret1';
     const store = new InMemoryRunStore();
     const run = await newRun(store);
@@ -696,12 +1233,12 @@ describe('createRunnerLauncher', () => {
     expect(log).toHaveBeenCalledWith(
       '[runs] run preparation failed at the compose step (Error): tool host refused key [redacted] for agent 3333',
     );
-    expect(log.mock.calls.flat().join(' ')).not.toContain(secret);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
     log.mockRestore();
   });
 
   it('withholds the preparation log message when the run secrets cannot be read (issue #827)', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const launch = createRunnerLauncher({
@@ -896,6 +1433,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
             filesystem: 'read-write',
             runnerUrl: 'http://manager:8080/runtimes/sealed-1',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
@@ -924,7 +1462,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
   // only the refused run, and the manager ends only the sandboxes that run started: none, since it
   // reused the first run's (apps/runner/src/tool-sandbox.test.ts holds the manager's side).
   it('releases only the refused run itself when the runtime answers 409 session_in_flight', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { settled, releases } = await launchWith({
       fetch: () =>
         Promise.resolve(
@@ -955,6 +1493,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
             filesystem: 'read-write',
             runnerUrl: 'http://manager:8080/runtimes/sealed-1',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
@@ -1012,6 +1551,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
             filesystem: 'read-write',
             runnerUrl: 'http://manager:8080/runtimes/sealed-1',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
@@ -1050,7 +1590,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
   });
 
   it('releases when the runtime cannot be reached', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { settled, releases } = await launchWith({
       fetch: () => Promise.reject(new Error('connect ECONNREFUSED')),
     });
@@ -1060,10 +1600,10 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
   });
 
   it('releases when the workspace cannot be hydrated', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { settled, releases } = await launchWith({
       workspaceLifecycle: {
-        inputArchive: () => Promise.resolve(new Uint8Array([1])),
+        inputArchive: () => Promise.resolve(bytesToStream(new Uint8Array([1]))),
         promoteOutputs: () => Promise.resolve(),
       },
       fetch: () => Promise.resolve(Response.json({ error: 'invalid_archive' }, { status: 400 })),
@@ -1074,7 +1614,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
   });
 
   it('releases when the run request cannot be built, once the target is known', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { settled, releases } = await launchWith({
       buildRunRequest: () => {
         throw new Error('compose failed');
@@ -1102,6 +1642,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
             filesystem: 'read-write',
             runnerUrl: 'http://manager:8080/runtimes/sealed-1',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest: async () => {
@@ -1123,7 +1664,7 @@ describe('createRunnerLauncher releases the run sandboxes (issue #832)', () => {
   });
 
   it('still concludes the run, and keeps the failure off it, when the release fails', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { settled } = await launchWith({
       releaseRunSandboxes: () =>
         Promise.reject(new Error('runner manager answered HTTP 500 e2b_SECRET')),
@@ -1195,7 +1736,7 @@ describe('createRunnerLauncher runtime capacity wait (issue #557)', () => {
   });
 
   it('fails with the coded, retryable capacity error once the wait budget is spent, and collects nothing', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const calls: string[] = [];
@@ -1211,6 +1752,7 @@ describe('createRunnerLauncher runtime capacity wait (issue #557)', () => {
             persistPaths: ['output'],
             runnerUrl: 'http://runtime:8080',
             workspaceRoot: '/workspace',
+            fileTransfer: 'push-archive',
           }),
       },
       buildRunRequest,
@@ -1247,7 +1789,7 @@ describe('createRunnerLauncher runtime capacity wait (issue #557)', () => {
     ['an HTML 429 from a proxy', () => new Response('<html>Too Many</html>', { status: 429 })],
     ['a 503', () => Response.json(CAPACITY_BODY, { status: 503 })],
   ])('does not hide a real error: %s fails after one POST, as before', async (_name, answer) => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     let posts = 0;
@@ -1318,7 +1860,7 @@ describe('createRunnerLauncher runtime capacity wait (issue #557)', () => {
   });
 
   it('fails with the credential-lifetime message when the lifetime runs out during the wait', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     let interrupts = 0;
@@ -1373,7 +1915,7 @@ describe('createRunnerLauncher runtime capacity wait (issue #557)', () => {
   });
 
   it('keeps the backoff when the runtime sends Retry-After: 0, so a full runtime is not hammered', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     // Pin the jitter to its ceiling so the backoff is deterministic: 40, 80, 100, 100, … ms.
     const random = vi.spyOn(Math, 'random').mockReturnValue(1);
     const store = new InMemoryRunStore();
@@ -1402,7 +1944,7 @@ describe('createRunnerLauncher runtime capacity wait (issue #557)', () => {
   });
 
   it('fails the run, revokes its tokens and posts nothing more when the store cannot be read during the wait', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     let failNextGet = false;
     class FlakyStore extends InMemoryRunStore {
       override get(runId: string): Promise<RunRecord | null> {
@@ -1479,6 +2021,7 @@ describe('createRunnerLauncher on a host with a function limit (issue #830)', ()
       persistPaths: [],
       runnerUrl: 'http://runtime:8080',
       workspaceRoot: '/workspace',
+      fileTransfer: 'push-archive',
       ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
     };
   }
@@ -1517,7 +2060,7 @@ describe('createRunnerLauncher on a host with a function limit (issue #830)', ()
   });
 
   it('refuses a profile deadline longer than the host allows, before the runtime is contacted', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const fetchSpy = vi.fn(() => Promise.resolve(sse('event: run-done\ndata: {}\n\n')));
@@ -1565,7 +2108,7 @@ describe('createRunnerLauncher on a host with a function limit (issue #830)', ()
     });
 
     it('refuses a profile deadline of 886 s before the runtime is contacted', async () => {
-      const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
       const store = new InMemoryRunStore();
       const run = await newRun(store);
       const fetchSpy = vi.fn(() => Promise.resolve(sse('event: run-done\ndata: {}\n\n')));
@@ -1661,7 +2204,7 @@ describe('createRunnerLauncher on a host with a function limit (issue #830)', ()
 
   it('refuses a run whose preparation used the whole host budget, before the runtime is contacted', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const store = new InMemoryRunStore();
     const run = await newRun(store);
     const fetchSpy = vi.fn(() => Promise.resolve(sse('event: run-done\ndata: {}\n\n')));
@@ -1712,5 +2255,269 @@ describe('createRunnerLauncher on a host with a function limit (issue #830)', ()
     launch(context(run));
     const settled = await settle(store);
     expect(settled.error).toBe('The run exceeded its credential-bounded lifetime of 25ms.');
+  });
+});
+
+describe('createRunnerLauncher collects outputs/ (issue #1274)', () => {
+  const OUTPUTS = 'workspace-1/session-1/outputs';
+  const CWD = '/workspace/workspace-1/session-1';
+  const urlOf = (input: Parameters<typeof globalThis.fetch>[0]) =>
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+  function outputsArchive(): Uint8Array {
+    return encodeUstar([
+      { path: OUTPUTS, type: 'directory', mode: 0o755 },
+      { path: `${OUTPUTS}/report.md`, type: 'file', mode: 0o644, data: Buffer.from('# report') },
+    ]);
+  }
+
+  async function launchOutputs(input: {
+    readonly writeFiles?: boolean;
+    readonly cwd?: string;
+    readonly driver?: 'docker' | 'local';
+    readonly workspaceRoot?: string;
+    readonly runFrame?: string;
+    readonly files?: () => Response;
+    readonly maxOutputArchiveBytes?: number;
+    readonly persistPaths?: readonly string[];
+    readonly persisted?: () => Response;
+  }) {
+    const store = new InMemoryRunStore();
+    const run = await newRun(store);
+    const catalog = createInMemoryCatalog().forWorkspace(run.workspaceId);
+    const storage = createStorageService({
+      catalog: () => Promise.resolve(catalog),
+      objects: createInMemoryObjectStore(),
+      log: quietLog,
+    });
+    const urls: string[] = [];
+    const launch = createRunnerLauncher({
+      store,
+      runtime: {
+        resolve: () =>
+          Promise.resolve({
+            runtimeProfileId: 'profile',
+            driver: input.driver ?? 'docker',
+            networkPolicy: 'none',
+            filesystem: 'read-write',
+            runnerUrl: 'http://runtime:8080',
+            workspaceRoot: input.workspaceRoot ?? '/workspace',
+            fileTransfer: input.driver === 'local' ? 'local-disk' : 'push-archive',
+            ...(input.persistPaths === undefined ? {} : { persistPaths: input.persistPaths }),
+          }),
+      },
+      buildRunRequest: () => ({
+        runId: RUN,
+        cwd: input.cwd ?? CWD,
+        portable: { permissions: { writeFiles: input.writeFiles ?? true } },
+      }),
+      ...(input.maxOutputArchiveBytes === undefined
+        ? {}
+        : { maxOutputArchiveBytes: input.maxOutputArchiveBytes }),
+      workspaceLifecycle: createRuntimeWorkspaceLifecycle({
+        storage,
+        granted: () => Promise.resolve({ files: [], skills: [] }),
+        resources: { load: () => Promise.resolve({ files: [], skills: [], mcpServers: {} }) },
+      }),
+      fetch: (request) => {
+        const url = urlOf(request);
+        urls.push(url);
+        return Promise.resolve(
+          url.endsWith('/run')
+            ? sse(input.runFrame ?? 'event: run-done\ndata: {}\n\n')
+            : input.persisted !== undefined && !url.includes(encodeURIComponent(OUTPUTS))
+              ? input.persisted()
+              : (input.files?.() ?? new Response(Uint8Array.from(outputsArchive()))),
+        );
+      },
+    });
+    launch(context(run));
+    const settled = await settle(store);
+    const ctx = {
+      workspaceId: run.workspaceId,
+      principalId: '77777777-7777-4777-8777-777777777777',
+      userId: '66666666-6666-4666-8666-666666666666',
+    };
+    const keys = (await catalog.listFiles())
+      .filter((row) => row.kind === 'file')
+      .map((row) => row.path);
+    /** The saved text at `path`, or null when the catalog holds no such file. */
+    const read = async (path: string): Promise<string | null> => {
+      const row = await storage.get(ctx, 'files', path);
+      const opened = row === null ? null : await storage.open(ctx, row);
+      return opened === null ? null : new TextDecoder().decode(await streamToBytes(opened.body));
+    };
+    return { settled, urls, keys, read };
+  }
+
+  it('promotes the files under outputs/ to runs/<runId>/outputs/ without a profile setting', async () => {
+    const { settled, urls, read } = await launchOutputs({});
+    expect(settled.status).toBe('completed');
+    expect(urls).toEqual([
+      'http://runtime:8080/run',
+      `http://runtime:8080/files?path=${encodeURIComponent(OUTPUTS)}`,
+    ]);
+    expect(await read(`runs/${RUN}/outputs/report.md`)).toBe('# report');
+  });
+
+  it('collects nothing from a failed run', async () => {
+    const { settled, urls, keys } = await launchOutputs({
+      runFrame: 'event: run-error\ndata: {"message":"sdk failed"}\n\n',
+    });
+    expect(settled.status).toBe('failed');
+    expect(urls).toEqual(['http://runtime:8080/run']);
+    expect(keys).toEqual([]);
+  });
+
+  it('does not collect for an agent without writeFiles', async () => {
+    const { settled, urls, keys } = await launchOutputs({ writeFiles: false });
+    expect(settled.status).toBe('completed');
+    expect(urls).toEqual(['http://runtime:8080/run']);
+    expect(keys).toEqual([]);
+  });
+
+  // Issue #1576: a local runner writes on this host, so its outputs/ is read from disk directly.
+  it('promotes a local target outputs/ from the run cwd on disk, without a /files call', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'aw-local-outputs-'));
+    try {
+      await mkdir(join(root, OUTPUTS), { recursive: true });
+      await writeFile(join(root, OUTPUTS, 'report.md'), '# local report');
+      const { settled, urls, read } = await launchOutputs({
+        driver: 'local',
+        workspaceRoot: root,
+        cwd: `${root}/workspace-1/session-1`,
+      });
+      expect(settled.status).toBe('completed');
+      expect(urls).toEqual(['http://runtime:8080/run']);
+      expect(await read(`runs/${RUN}/outputs/report.md`)).toBe('# local report');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves a local run completed when the agent wrote no outputs/', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'aw-local-outputs-'));
+    try {
+      const { settled, urls, keys } = await launchOutputs({
+        driver: 'local',
+        workspaceRoot: root,
+        cwd: `${root}/workspace-1/session-1`,
+      });
+      expect(settled.status).toBe('completed');
+      expect(urls).toEqual(['http://runtime:8080/run']);
+      expect(keys).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('fails a local run with the public message when outputs/ exceeds the size cap', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const root = await mkdtemp(join(tmpdir(), 'aw-local-outputs-'));
+    try {
+      await mkdir(join(root, OUTPUTS), { recursive: true });
+      await writeFile(join(root, OUTPUTS, 'report.md'), 'x'.repeat(64));
+      const { settled, keys } = await launchOutputs({
+        driver: 'local',
+        workspaceRoot: root,
+        cwd: `${root}/workspace-1/session-1`,
+        maxOutputArchiveBytes: 16,
+      });
+      expect(settled.status).toBe('failed');
+      expect(settled.error).toBe('Run output could not be saved.');
+      expect(keys).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      log.mockRestore();
+    }
+  });
+
+  it('leaves the run completed when the agent wrote no outputs/', async () => {
+    const { settled, keys } = await launchOutputs({
+      files: () =>
+        Response.json({ error: 'file_not_found', message: 'no such file' }, { status: 404 }),
+    });
+    expect(settled.status).toBe('completed');
+    expect(keys).toEqual([]);
+  });
+
+  it('fails with the public message for any other collection failure', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const { settled } = await launchOutputs({
+      files: () => Response.json({ error: 'internal_error' }, { status: 500 }),
+    });
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toBe('Run output could not be saved.');
+    log.mockRestore();
+  });
+
+  it('fails with the public message for a 404 that is not file_not_found', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const { settled } = await launchOutputs({
+      files: () => Response.json({ error: 'not_found' }, { status: 404 }),
+    });
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toBe('Run output could not be saved.');
+    log.mockRestore();
+  });
+
+  it('fails with the public message when the archive exceeds the size cap', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const { settled, keys } = await launchOutputs({ maxOutputArchiveBytes: 16 });
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toBe('Run output could not be saved.');
+    expect(keys).toEqual([]);
+    log.mockRestore();
+  });
+
+  // FX-4: a chunked archive has no Content-Length, so the cap must count the bytes as they arrive.
+  it('cancels a chunked archive once it passes the size cap, without buffering the rest', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    let pulls = 0;
+    let cancelled = false;
+    const { settled, keys } = await launchOutputs({
+      maxOutputArchiveBytes: 16,
+      files: () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              pulls += 1;
+              if (pulls > 100) controller.close();
+              else controller.enqueue(new Uint8Array(8));
+            },
+            cancel() {
+              cancelled = true;
+            },
+          }),
+        ),
+    });
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toBe('Run output could not be saved.');
+    expect(cancelled).toBe(true);
+    expect(pulls).toBeLessThan(10);
+    expect(keys).toEqual([]);
+    log.mockRestore();
+  });
+
+  // FX-4: persistPaths and outputs/ are collected independently.
+  it('still promotes outputs/ when a persistPaths entry fails, and reports the failure', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const { settled, read } = await launchOutputs({
+      persistPaths: ['missing'],
+      persisted: () => Response.json({ error: 'internal_error' }, { status: 500 }),
+    });
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toBe('Run output could not be saved.');
+    expect(await read(`runs/${RUN}/outputs/report.md`)).toBe('# report');
+    log.mockRestore();
+  });
+
+  it('fails safely, without collecting, when the run directory is outside the workspace root', async () => {
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+    const { settled, urls } = await launchOutputs({ cwd: '/elsewhere/session-1' });
+    expect(settled.status).toBe('failed');
+    expect(settled.error).toBe('Run output could not be saved.');
+    expect(urls).toEqual(['http://runtime:8080/run']);
+    log.mockRestore();
   });
 });

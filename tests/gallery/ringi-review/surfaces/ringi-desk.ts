@@ -18,8 +18,6 @@ export default defineSurface({
     history: true,
     feedback: true,
   },
-  // No `toolResults`: the surface matches a tool by its exact run name, and a Claude run names this
-  // server's tools `mcp__<connector-name>__search_ringi`, which holds only if the connector keeps a
-  // slug name (else the `mcp__connector-<uuid>__` form, 65 characters, past the 64-character key
-  // limit). The tool trace still shows each call.
+  // Hits render as cards. The key is the tool's bare name: a run's engine prefix is ignored.
+  toolResults: { search_files: 'card' },
 });

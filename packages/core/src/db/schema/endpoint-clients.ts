@@ -1,12 +1,16 @@
 /**
  * `endpoint_clients` — what an external agent platform may reach
- * (ADR-0134). A client names exactly one resource: an MCP project tool endpoint or one agent's
- * A2A endpoint. Credentials are bound to a client (`endpoint_client_api_keys`), never
+ * (ADR-0134). A client names exactly one resource: an MCP project tool endpoint, one agent's
+ * A2A endpoint, or the Builder's MCP door (`builder`, no agent). Credentials are bound to a client (`endpoint_client_api_keys`), never
  * free-floating, so revoking the client revokes everything that could reach the resource.
  *
  * `acts_for_principal_id` is the membership principal that created the client. A credential bound
  * to the client acts for that member, the same acts-for mechanism ADR-0105's surface publisher uses.
  */
+import {
+  ENDPOINT_CLIENT_KINDS,
+  type EndpointClientKind,
+} from '@indx-workspace/contracts/endpoint-clients';
 import {
   check,
   foreignKey,
@@ -24,8 +28,8 @@ import { oneOf } from './one-of.js';
 import { workspacePrincipals } from './workspace-principals.js';
 import { workspaces } from './workspaces.js';
 
-export const endpointClientKinds = ['mcp-project', 'a2a-agent'] as const;
-export type EndpointClientKind = (typeof endpointClientKinds)[number];
+/** The kinds live in contracts and the CHECK below derives from them, as `audit-events.ts` does. */
+export type { EndpointClientKind };
 
 export const endpointClients = pgTable(
   'endpoint_clients',
@@ -34,9 +38,9 @@ export const endpointClients = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
-    /** For `mcp-project` the project name in `/mcp/projects/{name}`; for `a2a-agent` the agent name. */
+    /** For `mcp-project` the project name in `/mcp/projects/{name}`; for `a2a-agent` the agent name; for `builder` a label. */
     name: text('name').notNull(),
-    kind: text('kind', { enum: endpointClientKinds }).notNull(),
+    kind: text('kind', { enum: ENDPOINT_CLIENT_KINDS }).notNull(),
     /** `mcp-project` only: tool-name allow-list. NULL means every code tool of the listed agents. */
     toolNames: text('tool_names').array(),
     actsForPrincipalId: uuid('acts_for_principal_id').notNull(),
@@ -73,7 +77,7 @@ export const endpointClients = pgTable(
       foreignColumns: [workspacePrincipals.workspaceId, workspacePrincipals.id],
       name: 'endpoint_clients_created_by_workspace_fk',
     }).onDelete('cascade'),
-    oneOf('endpoint_clients_kind_valid', table.kind, endpointClientKinds),
+    oneOf('endpoint_clients_kind_valid', table.kind, ENDPOINT_CLIENT_KINDS),
     check(
       'endpoint_clients_tool_names_mcp_only',
       sql`${table.toolNames} is null or ${table.kind} = 'mcp-project'`,

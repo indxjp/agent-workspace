@@ -35,7 +35,7 @@
  * mentioned. Nothing on this branch calls it outside the harness, which is exactly why it is
  * worth fixing before something does. It now takes the workspace as `{ id, slug }` and asserts,
  * positively, that `slug` is the one the verified session carries; a mismatch is
- * {@link SessionPrincipal} `ok: false` and no `Principal` at all, never a downgraded one.
+ * {@link SessionPrincipalResult} `ok: false` and no `Principal` at all, never a downgraded one.
  *
  * ## Who acted, and who owns what was written (issue #509, S1-24)
  *
@@ -67,7 +67,7 @@ export interface SessionWorkspace {
 }
 
 /** A principal built from a session, or the reason none was. */
-export type SessionPrincipal =
+export type SessionPrincipalResult =
   | { readonly ok: true; readonly principal: Principal }
   | { readonly ok: false; readonly because: string };
 
@@ -219,7 +219,7 @@ export class Principal {
     workspace: SessionWorkspace,
     role: Role,
     identity: SessionPrincipalIdentity,
-  ): SessionPrincipal {
+  ): SessionPrincipalResult {
     // The positive assertion, and the whole reason this returns a result rather than a value: the
     // workspace whose id is about to be written into the Principal must be the workspace the
     // verified session names. Two arguments that are never compared are two arguments that can
@@ -425,7 +425,9 @@ export class Principal {
         : value.via === 'oauth-token'
           ? value.scope !== null && isEndpointScope(value.scope.kind)
           : value.via === 'api-key'
-            ? value.scope === null || isEndpointScope(value.scope.kind)
+            ? // A builder scope is a consented member's, so it rides on an OAuth token only.
+              value.scope === null ||
+              (isEndpointScope(value.scope.kind) && value.scope.kind !== 'builder')
             : value.scope === null;
     if (!scopeInvariant) return false;
     // A grant rides on an OAuth token and on nothing else.

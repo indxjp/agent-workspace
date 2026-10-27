@@ -45,7 +45,12 @@ export {
 // can migrate and seed before opening listeners without gaining a raw Database handle.
 export { prepareDatabase } from '../bootstrap.js';
 
-export { openDatabaseRoot, type DatabaseRoot, type WorkspaceMembership } from './root.js';
+export {
+  openDatabaseRoot,
+  type DatabaseRoot,
+  type LockOutcome,
+  type WorkspaceMembership,
+} from './root.js';
 export {
   type AcceptInvitationOutcome,
   type DirectoryApiKeyRecord,
@@ -64,6 +69,7 @@ export { type KeysetPage, type KeysetPosition } from './keyset.js';
 export { type AgentGrantRepository, type AgentGrantRepositoryProvider } from './agent-grants.js';
 export {
   type AgentResourceAssignments,
+  type AgentResourceAssignmentsInput,
   type AgentResourceRepository,
   type AgentResourceRepositoryProvider,
   type ReplaceAgentResourcesOutcome,
@@ -80,6 +86,8 @@ export {
   bodyHasDescription,
   bodySubagentNames,
   narrowFileGrants,
+  narrowStorageGrants,
+  storageGrantChange,
   resolveFromRows,
   type AgentDefinitionReferenceKind,
   type AgentVersionEnvironment,
@@ -110,14 +118,40 @@ export {
   type ReferenceNames,
   type ResolveDefinitionOutcome,
   type ResolvedReferences,
+  type StorageGrantRef,
 } from './agent-versions.js';
 export {
+  FILE_TEXT_MAX_CHARS,
+  type FileTextHit,
+  type FileTextPassage,
+  type FileTextRepository,
+  type FileTextRepositoryProvider,
+  type FileTextSource,
+  type StaleFile,
+} from './file-texts.js';
+export {
+  CatalogPathPendingError,
+  CatalogPathTakenError,
+  renamedKey,
   type CatalogFile,
+  type CatalogPort,
   type CatalogSkill,
+  type CatalogSkillRevision,
   type DeleteCatalogSkillOutcome,
+  type MarkSkillDeletingOutcome,
+  type PendingSkillDelete,
+  parsePendingSkillDelete,
+  type ReserveOutcome,
   type ResourceCatalogRepository,
   type ResourceCatalogRepositoryProvider,
 } from './resource-catalogs.js';
+export { createInMemoryCatalog } from './memory-catalog.js';
+export {
+  createInMemoryStorageMigrationRuns,
+  type StorageMigrationRun,
+  type StorageMigrationRunInput,
+  type StorageMigrationRunRepository,
+} from './storage-migration-runs.js';
 export { type ProjectFileRepository, type ProjectFileRepositoryProvider } from './project-files.js';
 export {
   type ProjectMcpServerRepository,
@@ -153,6 +187,7 @@ export {
   type AgentStoredPolicy,
   type CreateAgentInput,
   type CreateAgentOutcome,
+  type CreateAgentWithAssignmentsOutcome,
   type DeleteAgentOutcome,
   type ReplaceAgentPolicyOutcome,
   type UpdateAgentOutcome,
@@ -169,6 +204,7 @@ export {
   type CreateRunOutcome,
   type EnsureSessionInput,
   type EnsureSessionOutcome,
+  type RunOutput,
   type RunRecord,
   type RecordRunUsageInput,
   type RecordRunUsageOutcome,
@@ -197,6 +233,15 @@ export {
   type EndpointClientRepositoryProvider,
   type NewEndpointClientInput,
 } from './endpoint-clients.js';
+export {
+  type NewTriggerInput,
+  type TriggerForIngress,
+  type TriggerRecord,
+  type TriggerRepository,
+  type TriggerRepositoryProvider,
+} from './triggers.js';
+// #1845: the Builder tool-call journal.
+export { type BuilderToolCallRepositoryProvider } from './builder-tool-calls.js';
 // #539 (S2-05c, C19): the core copies of the contracts' RUN_FEEDBACK_RATINGS and comment cap.
 export {
   RUN_FEEDBACK_COMMENT_MAX_LENGTH,
@@ -244,6 +289,7 @@ export {
 
 export {
   SESSION_STATE_PAGE_LIMIT,
+  type LegacySessionStateBlob,
   type SessionStateBlobInput,
   type SessionStateEntryInput,
   type SessionStateRepository,
@@ -292,6 +338,17 @@ export {
   type UpdateModelConnectionOutcome,
   type UpdateModelConnectionPatch,
 } from './model-connections.js';
+
+export {
+  type CreateStorageConnectionOutcome,
+  type CreateStorageConnectionRecordInput,
+  type StorageConnectionRecord,
+  type StorageConnectionRepository,
+  type StorageConnectionRepositoryProvider,
+  type UpdateStorageConnectionOutcome,
+  type UpdateStorageConnectionRecordInput,
+} from './storage-connections.js';
+export { createInMemoryStorageConnectionRepositoryProvider } from './memory-storage-connections.js';
 
 export {
   type CreateRuntimeProfileInput,

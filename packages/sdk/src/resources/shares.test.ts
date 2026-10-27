@@ -7,6 +7,8 @@ import { SharesClient } from './shares.js';
 
 const SHARE = '99999999-9999-4999-8999-999999999999';
 const SESSION = '55555555-5555-4555-8555-555555555555';
+const RUN_1 = '11111111-1111-4111-8111-111111111111';
+const RUN_2 = '22222222-2222-4222-8222-222222222222';
 const AGENT = '11111111-1111-4111-8111-111111111111';
 
 const share = {
@@ -167,7 +169,7 @@ describe('SharesClient.publish', () => {
       subjectId: SESSION,
       subjectLabel: 'Incident review',
       visibility: 'workspace' as const,
-      transcript: [{ role: 'user', content: 'hi' }],
+      transcript: { runIds: [RUN_1], turns: [{ prompt: 'hi', answer: 'I never said this.' }] },
       snapshot: { messages: [] },
       definition: { name: 'x', instructions: '' },
     };
@@ -177,7 +179,20 @@ describe('SharesClient.publish', () => {
       subjectId: SESSION,
       subjectLabel: 'Incident review',
       visibility: 'workspace',
+      transcript: { runIds: [RUN_1] },
     });
+  });
+
+  it('sends a session transcript as the run ids it chose', async () => {
+    const { shares, calls } = client(() => json(201, share));
+    await shares.publish({
+      subjectType: 'session',
+      subjectId: SESSION,
+      subjectLabel: 'Incident review',
+      visibility: 'workspace',
+      transcript: { runIds: [RUN_2, RUN_1] },
+    });
+    expect(calls[0]?.json).toMatchObject({ transcript: { runIds: [RUN_2, RUN_1] } });
   });
 
   it('surfaces the route refusals by code: an invalid share and a forbidden subject', async () => {

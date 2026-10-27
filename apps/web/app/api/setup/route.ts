@@ -1,12 +1,10 @@
+import { SETUP_PROVIDERS } from '@indx-workspace/contracts/setup';
 import { NextResponse } from 'next/server';
 
 import { admitSignInAttempt } from '../../../server/auth/sign-in-limit';
 import { setupSecretsOf, setupStepFailure } from '../../../server/setup/failure';
-import {
-  currentSetupRuntime,
-  type SetupInput,
-  type SetupResult,
-} from '../../../server/setup/runtime';
+import { applicationContext } from '../../../server/application-context';
+import type { SetupInput, SetupResult } from '../../../server/setup/runtime';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -48,9 +46,8 @@ function inputOf(value: unknown): SetupInput | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   const provider = row['provider'];
-  if (!['anthropic', 'openai', 'azure-openai', 'openai-compatible'].includes(String(provider))) {
-    return null;
-  }
+  const setupProvider = SETUP_PROVIDERS.find((candidate) => candidate === provider);
+  if (setupProvider === undefined) return null;
   const names = [
     'providerApiKey',
     'runtime',
@@ -66,7 +63,7 @@ function inputOf(value: unknown): SetupInput | null {
   const runtimeConnection = runtimeConnectionOf(row);
   if (runtimeConnection === null) return null;
   return {
-    provider: provider as SetupInput['provider'],
+    provider: setupProvider,
     providerApiKey: row['providerApiKey'] as string,
     runtime: row['runtime'] as string,
     adminEmail: row['adminEmail'] as string,
@@ -87,10 +84,11 @@ function refuse(status: number, code: string, message: string): NextResponse {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const runtime = currentSetupRuntime();
-  if (runtime === null) {
+  const setup = applicationContext()?.setup;
+  if (setup?.kind !== 'serving') {
     return refuse(503, 'setup_unavailable', 'Setup persistence is not configured.');
   }
+  const { runtime } = setup;
   // Setup checks the bootstrap administrator's password, so it shares sign-in's attempt budget.
   const admission = admitSignInAttempt(request.headers);
   if (!admission.admitted) {

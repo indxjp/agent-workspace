@@ -20,33 +20,7 @@ import {
 } from './contract';
 import type { RuntimeNetworkPolicyLookup } from './registry';
 import type { WorkspaceRuntimeProfileStore } from './store';
-
-/** A status and a body, before either becomes an HTTP response. `body: null` means "no content". */
-export interface ApiResult {
-  readonly status: number;
-  readonly body: unknown;
-}
-
-export interface ApiProblem {
-  readonly error: {
-    readonly code: string;
-    readonly message: string;
-    readonly details?: readonly string[];
-  };
-}
-
-export function problem(
-  status: number,
-  code: string,
-  message: string,
-  details?: readonly string[],
-): ApiResult {
-  const error =
-    details === undefined || details.length === 0
-      ? { code, message }
-      : { code, message, details: [...details] };
-  return { status, body: { error } satisfies ApiProblem };
-}
+import { problem, type ApiResult } from '../http/result';
 
 /** `runtime_profiles.id` is a `uuid` column, so a non-UUID cannot match a row (ADR-0015). */
 export function requireRuntimeProfileId(

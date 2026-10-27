@@ -16,6 +16,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agents } from '../schema/agents.js';
+import { files } from '../schema/files.js';
 import { mcpServers } from '../schema/mcp-servers.js';
 import { memberships } from '../schema/memberships.js';
 import { projects } from '../schema/projects.js';
@@ -30,7 +31,9 @@ import {
   type ProjectRecord,
   type ProjectRepository,
 } from './projects.js';
+import { createDatabaseProjectFileRepositoryProvider } from './project-files.js';
 import { createDatabaseProjectMcpServerRepositoryProvider } from './project-mcp-servers.js';
+import { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
 import { createDatabaseRunRepositoryProvider } from './runs.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
@@ -374,5 +377,130 @@ describe.skipIf(!hasDatabase)('ProjectRepository archive lifecycle', () => {
     ).rejects.toMatchObject(refused);
     await expect(bindings.add(project.id, toolId)).rejects.toMatchObject(refused);
     expect(await bindings.list(project.id)).toEqual([mcpId]);
+  });
+
+  // ADR-0146 D6: a visitor upload under `.attachments/` is renamed out before it is bound; every
+  // project_files write path refuses it and writes no row.
+  it('refuses to bind a file under .attachments/ on every write path', async () => {
+    const plainId = crypto.randomUUID();
+    const uploadId = crypto.randomUUID();
+    await isolated.db.insert(files).values([
+      {
+        id: plainId,
+        workspaceId,
+        path: `docs/${plainId}.pdf`,
+        kind: 'file',
+        storageKey: `docs/${plainId}.pdf`,
+        ownerPrincipalId: principalId,
+        createdBy: userId,
+      },
+      {
+        id: uploadId,
+        workspaceId,
+        path: `.attachments/s/${uploadId}/a.pdf`,
+        kind: 'file',
+        storageKey: `.attachments/s/${uploadId}/a.pdf`,
+        ownerPrincipalId: principalId,
+        createdBy: userId,
+      },
+    ]);
+    const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+      workspaceId,
+    );
+    if (scope === null) throw new Error('fixture workspace did not resolve');
+    const bindings = createDatabaseProjectFileRepositoryProvider(isolated.db).forScope(scope);
+    const refused = { name: 'ProjectFileReservedError' };
+    const input = {
+      name: `files-${crypto.randomUUID()}`,
+      ownerPrincipalId: principalId,
+      createdBy: userId,
+    };
+
+    await expect(
+      repository.createWithAssociations(input, [plainId, uploadId], []),
+    ).rejects.toMatchObject(refused);
+    const names = (await repository.list('all')).map((project) => project.name);
+    expect(names).not.toContain(input.name);
+
+    const project = await repository.createWithAssociations(input, [plainId], []);
+    await expect(
+      repository.updateWithAssociations(project.id, {}, [uploadId], undefined),
+    ).rejects.toMatchObject(refused);
+    await expect(bindings.add(project.id, uploadId)).rejects.toMatchObject(refused);
+    expect(await bindings.list(project.id)).toEqual([plainId]);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] refuses to bind a pending upload on every write path', async () => {
+    const plainId = crypto.randomUUID();
+    const pendingId = crypto.randomUUID();
+    const row = (id: string, status: 'ready' | 'pending') => ({
+      id,
+      workspaceId,
+      path: `bind/${id}.pdf`,
+      kind: 'file' as const,
+      storageKey: `bind/${id}.pdf`,
+      status,
+      ownerPrincipalId: principalId,
+      createdBy: userId,
+    });
+    await isolated.db.insert(files).values([row(plainId, 'ready'), row(pendingId, 'pending')]);
+    const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+      workspaceId,
+    );
+    if (scope === null) throw new Error('fixture workspace did not resolve');
+    const bindings = createDatabaseProjectFileRepositoryProvider(isolated.db).forScope(scope);
+    const refused = { name: 'ProjectFileReservedError' };
+    const input = {
+      name: `pending-${crypto.randomUUID()}`,
+      ownerPrincipalId: principalId,
+      createdBy: userId,
+    };
+
+    await expect(
+      repository.createWithAssociations(input, [plainId, pendingId], []),
+    ).rejects.toMatchObject(refused);
+    const project = await repository.createWithAssociations(input, [plainId], []);
+    await expect(
+      repository.updateWithAssociations(project.id, {}, [pendingId], undefined),
+    ).rejects.toMatchObject(refused);
+    await expect(bindings.add(project.id, pendingId)).rejects.toMatchObject(refused);
+    expect(await bindings.list(project.id)).toEqual([plainId]);
+  });
+
+  // @story US-STO-14
+  it('[US-STO-14][contract][sdk] a project file follows its path to the replacement row, and a removed row is not listed', async () => {
+    const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+      workspaceId,
+    );
+    if (scope === null) throw new Error('fixture workspace did not resolve');
+    const catalog = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scope);
+    const bindings = createDatabaseProjectFileRepositoryProvider(isolated.db).forScope(scope);
+    const old = await catalog.putFile({
+      path: 'swap/report.pdf',
+      kind: 'file',
+      storageKey: 'swap/report.pdf',
+      sizeBytes: 1,
+      contentType: null,
+      ownerPrincipalId: principalId,
+      createdBy: userId,
+    });
+    const project = await repository.createWithAssociations(
+      { name: `swap-${crypto.randomUUID()}`, ownerPrincipalId: principalId, createdBy: userId },
+      [old.id],
+      [],
+    );
+
+    const reserved = await catalog.reserve('swap/report.pdf', {
+      ownerPrincipalId: principalId,
+      sizeBytes: 2,
+      contentType: null,
+      objectId: crypto.randomUUID(),
+    });
+    await catalog.confirm(reserved.row, { sizeBytes: 2, contentType: null });
+    expect(await bindings.list(project.id)).toEqual([reserved.row.id]);
+
+    await catalog.remove('swap/report.pdf');
+    expect(await bindings.list(project.id)).toEqual([]);
   });
 });

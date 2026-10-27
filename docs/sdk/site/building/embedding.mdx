@@ -150,7 +150,7 @@ export async function startChat(
 ```ts title="backend/relay-run.ts" claim="compile"
 import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
 import type { RunEventFrame } from '@indx-workspace/sdk/events';
-import { RUN_STATUS_EVENT } from '@indx-workspace/contracts/run-events';
+import { RUN_STATUS_EVENT, RUN_WARNING_EVENT } from '@indx-workspace/contracts/run-events';
 
 /** One frame, re-encoded as the SSE text the control plane itself would have sent. */
 export function encodeFrame(frame: RunEventFrame): string {
@@ -164,6 +164,10 @@ export function encodeFrame(frame: RunEventFrame): string {
     case 'run-status': {
       const id = frame.id === null ? '' : `id: ${frame.id}\n`;
       return `event: ${RUN_STATUS_EVENT}\n${id}data: ${JSON.stringify(frame.data)}\n\n`;
+    }
+    case 'run-warning': {
+      const id = frame.id === null ? '' : `id: ${frame.id}\n`;
+      return `event: ${RUN_WARNING_EVENT}\n${id}data: ${JSON.stringify(frame.data)}\n\n`;
     }
     case 'runtime': {
       const id = frame.id === null ? '' : `id: ${frame.id}\n`;
@@ -200,6 +204,7 @@ Your UI is a reducer over it.
 | Frame or event                     | Meaning                                                                                                                | What a UI does with it                                         |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `run-status` (`kind`)              | The run moved to `queued`, `running`, `completed`, `failed` or `cancelled`; `data.error` carries the safe failure text | Status pill, enable/disable the composer, show the error       |
+| `run-warning` (`kind`)             | A notice about the run start: a stable `data.code` (e.g. `attachments_removed_shell`) and optional `message`           | Show a dismissible notice, even for an unknown `code`          |
 | `runtime` (`kind`)                 | One neutral `agent.*` frame; parse it with `toAgentEvent`                                                              | Everything below                                               |
 | `agent.session`                    | The engine opened or resumed its session                                                                               | Show "connected"; remember `engineSessionId` if you display it |
 | `agent.message` (role `assistant`) | A turn's `blocks` of `text` and `reasoning`; `messageId` repeats when a grown snapshot of the same turn arrives        | Replace the bubble with that `messageId`, never append         |
@@ -253,9 +258,14 @@ A canvas reduces the same stream into **artifacts** — what the agent produced 
 
 Give each embedded surface its own folder (`canvas/<user>/<session>/`) and assign that folder to
 the agent with `read-write` access, so one user's output never lands in another's view;
-[Files](/resources/files) has the path grammar and the assignment shape. Every file byte still
-passes through your backend today; presigned URLs that let the browser move bytes directly are
-tracked as [N-4](/concepts/roadmap#n-4-presigned-file-transfer-for-browsers).
+[Files](/resources/files) has the path grammar and the assignment shape. A canvas's own files pass
+through your backend. The user's uploads go through `POST /api/sessions/:id/attachments`, which
+applies the surface's attachment rules; a session-scoped browser token is refused
+`aw.files.createUploadUrl`. It can call `aw.files.createDownloadUrl` for paths under
+`.attachments/<sessionId>/` only, then fetch the bytes straight from the object store. The bucket
+needs a CORS rule allowing `GET` from your origin, and a deployment on a local-filesystem store
+answers `501 direct_transfer_unsupported`; see
+[`createDownloadUrl`](/resources/files#createdownloadurl).
 
 <Accordion title="backend/artifacts.ts: collect a run's files">
 

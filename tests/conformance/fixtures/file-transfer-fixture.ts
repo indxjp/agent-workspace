@@ -53,6 +53,7 @@ export const FILE_TRANSFER_FIXTURE_CAPABILITIES: RuntimeCapabilities = {
   gpu: false,
   managedByProvider: true,
   typicalStartMs: 1500,
+  fileTransfer: 'push-archive',
 };
 
 export function createFileTransferFixtureDriver(): RuntimeDriver<FixtureRequest, FixtureEvent> {

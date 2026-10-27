@@ -1,0 +1,309 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "品質管理システム（QMS）過去トラ API",
+    "version": "1.0.0",
+    "description": "不具合解析エージェントが読む過去トラ（過去の不具合報告）の検索・全文・4M集計と、DR が承認した 8D の登録。"
+  },
+  "servers": [{ "url": "https://qms.example.co.jp/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Process": { "type": "string", "enum": ["プレス", "溶接", "塗装", "組立"] },
+      "FourM": { "type": "string", "enum": ["人", "機械", "材料", "方法"] },
+      "DefectHit": {
+        "type": "object",
+        "required": ["id", "partNo", "process", "phenomenon", "causeCode", "fourM", "recurred"],
+        "properties": {
+          "id": { "type": "string", "description": "不具合番号（Q-1234）" },
+          "partNo": { "type": "string" },
+          "process": { "$ref": "#/components/schemas/Process" },
+          "phenomenon": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "causeCode": { "type": "string" },
+          "fourM": { "$ref": "#/components/schemas/FourM" },
+          "recurred": { "type": "string", "enum": ["有", "無"] },
+          "cause": { "type": "string" },
+          "citation": { "type": "string" },
+          "score": { "type": "number" }
+        }
+      },
+      "NoMatch": {
+        "type": "object",
+        "required": ["noMatch", "message"],
+        "properties": {
+          "noMatch": { "type": "boolean", "const": true },
+          "message": { "type": "string", "description": "そのまま回答する定型文" }
+        }
+      },
+      "Defect": {
+        "type": "object",
+        "required": [
+          "id",
+          "partNo",
+          "process",
+          "phenomenon",
+          "cause",
+          "causeCode",
+          "fourM",
+          "whys"
+        ],
+        "properties": {
+          "id": { "type": "string" },
+          "partNo": { "type": "string" },
+          "partName": { "type": "string" },
+          "process": { "$ref": "#/components/schemas/Process" },
+          "phenomenon": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "lot": { "type": "string" },
+          "count": { "type": "integer" },
+          "outflow": { "type": ["string", "null"] },
+          "cause": { "type": "string" },
+          "causeCode": { "type": "string" },
+          "fourM": { "$ref": "#/components/schemas/FourM" },
+          "whys": { "type": "array", "items": { "type": "string" } },
+          "countermeasure": { "type": "string" },
+          "horizontalDeployment": { "type": "string" },
+          "recurred": { "type": "string", "enum": ["有", "無"] },
+          "related": { "type": "array", "items": { "type": "string" } },
+          "citation": { "type": "string", "description": "引用にそのまま使う〔過去トラ Q-xxxx〕" }
+        }
+      },
+      "CauseStats": {
+        "type": "object",
+        "required": ["matched", "fourM", "byCause", "ids", "line"],
+        "properties": {
+          "query": { "type": "string" },
+          "process": { "type": ["string", "null"] },
+          "partNo": { "type": ["string", "null"] },
+          "matched": { "type": "integer" },
+          "fourM": {
+            "type": "object",
+            "additionalProperties": { "type": "integer" }
+          },
+          "byCause": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["causeCode", "fourM", "count", "recurred", "ids"],
+              "properties": {
+                "causeCode": { "type": "string" },
+                "fourM": { "$ref": "#/components/schemas/FourM" },
+                "count": { "type": "integer" },
+                "recurred": { "type": "integer" },
+                "ids": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          },
+          "ids": { "type": "array", "items": { "type": "string" } },
+          "line": { "type": "string", "description": "8D にそのまま写す 4M集計の行" }
+        }
+      },
+      "NewCase": {
+        "type": "object",
+        "required": [
+          "report",
+          "title",
+          "partNo",
+          "process",
+          "lot",
+          "count",
+          "cause",
+          "causeCode",
+          "fourM",
+          "whys",
+          "countermeasure",
+          "horizontalDeployment"
+        ],
+        "properties": {
+          "report": { "type": "string", "description": "8Dレポートの全文" },
+          "title": { "type": "string", "description": "現象（件名）" },
+          "partNo": { "type": "string", "description": "品番（BRK-2201 の形式）" },
+          "process": { "$ref": "#/components/schemas/Process" },
+          "lot": { "type": "string" },
+          "count": { "type": "integer", "minimum": 1 },
+          "cause": { "type": "string", "description": "根本原因" },
+          "causeCode": { "type": "string" },
+          "fourM": { "$ref": "#/components/schemas/FourM" },
+          "whys": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "D4 のなぜなぜ（根本原因まで）"
+          },
+          "countermeasure": { "type": "string", "description": "恒久対策（D5）" },
+          "horizontalDeployment": { "type": "string", "description": "水平展開（D7）" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" },
+          "code": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/defects": {
+      "get": {
+        "operationId": "searchDefects",
+        "summary": "過去トラを現象・原因の語で検索する（類似の高い順）",
+        "description": "呼び出し元が見てよい工程の過去トラだけを探す。一致がなければ { noMatch: true, message }（類似なし。8D を作らず message をそのまま回答する）。",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "現象や原因の語（例: バリ、塗装ムラ、金型摩耗）",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "process",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/Process" }
+          },
+          {
+            "name": "partNo",
+            "in": "query",
+            "required": false,
+            "description": "品番（前方一致）",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "一致した過去トラの配列。なければ noMatch。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    { "type": "array", "items": { "$ref": "#/components/schemas/DefectHit" } },
+                    { "$ref": "#/components/schemas/NoMatch" }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "q が空、または process が工程名ではない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCase",
+        "summary": "DR が承認した 8D を過去トラとして登録する（承認した呼び出しだけが実行される）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/NewCase" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "登録した",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["qNo", "citation"],
+                  "properties": {
+                    "qNo": { "type": "string", "description": "登録した不具合番号（Q-1234）" },
+                    "citation": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "入力が形式に合わない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
+          "403": {
+            "description": "その工程は呼び出し元が登録できない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/defects/stats": {
+      "get": {
+        "operationId": "causeStats",
+        "summary": "searchDefects と同じ条件で一致した全件の 4M・原因区分の件数を数える",
+        "description": "8D に書く件数は必ずこの line をそのまま写す。",
+        "parameters": [
+          {
+            "name": "groupBy",
+            "in": "query",
+            "required": false,
+            "description": "集計の軸。4M だけ。",
+            "schema": { "type": "string", "enum": ["4m"] }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "process",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/Process" }
+          },
+          {
+            "name": "partNo",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "4M と原因区分の件数",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/CauseStats" } }
+            }
+          },
+          "400": {
+            "description": "q が空、または process が工程名ではない",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/defects/{qNo}": {
+      "get": {
+        "operationId": "getDefect",
+        "summary": "不具合番号（Q-xxxx）の報告を全文で読む（なぜなぜ・対策・水平展開を含む）",
+        "parameters": [
+          { "name": "qNo", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "過去トラの全文",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Defect" } }
+            }
+          },
+          "404": {
+            "description": "その不具合番号はない（呼び出し元が見られない工程の番号も同じ答え）",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

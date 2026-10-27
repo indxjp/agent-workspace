@@ -4,7 +4,7 @@
  * This is the file that makes `apps/runner` stop knowing what Claude is. Everything Claude-shaped
  * that used to be reachable from the runner — the compile step, the `query()` call, the event
  * classification, the `agent.*` mapping, the durability verdict — is behind
- * {@link CLAUDE_AGENT_SDK_ENGINE_ADAPTER}, and the runner reaches it through
+ * the adapter {@link createClaudeAgentSdkEngine} builds, and the runner reaches it through
  * `@agent-workspace/engine`'s {@link AgentEngine} and nothing else.
  *
  * ## What `compile` translates, and what it refuses
@@ -24,9 +24,15 @@
  * directory"*, and only the engine knows which directory that is. So the adapter declares it and
  * the runner asks.
  */
-import { toAgentFrames, type ClassifiedSdkEvent, type RunRequest } from '@agent-workspace/core';
+import {
+  toAgentFrames,
+  type ClassifiedSdkEvent,
+  type RunRequest,
+} from '@agent-workspace/run-protocol';
 import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import {
+  approvalsRefusal,
+  capFrameRaw,
   createEngineAdapter,
   credentialRejectedError,
   forkRefusal,
@@ -41,11 +47,12 @@ import {
   type EngineSessionStore,
 } from '@agent-workspace/engine';
 
-import { startRun, type TranscriptMirror } from './boundary.js';
+import { startRun, structuredOutputFailure, type TranscriptMirror } from './boundary.js';
 import { compileRunRequest, SubagentToolRemovedError } from './compile.js';
-import type { CompiledSdkOptions } from './options.js';
+import type { CompiledClaudeRun } from './options.js';
 import { ClaudeRunPolicy } from './policy.js';
 import { CLAUDE_PROTECTED_CONFIG_DIRECTORY } from './scope.js';
+import { fileSearchSetup } from './file-search.js';
 import { CLAUDE_SKILL_SCRIPT_SERVER } from './skill-script.js';
 import { claudeFileGrantDenials } from './tools.js';
 
@@ -63,7 +70,7 @@ export const CLAUDE_AGENT_SDK_ENGINE_ID = 'claude-agent-sdk';
  * `docs/adr/W2-CP-07-a-restatement-across-a-package-boundary-is-watched-by-a-replay-not-a-comment.md`
  * states.
  */
-export const CLAUDE_AGENT_SDK_VERSION = '0.3.296';
+export const CLAUDE_AGENT_SDK_VERSION = '0.3.310';
 
 /**
  * The Claude Agent SDK's capabilities, as R-01 measured them.
@@ -320,11 +327,11 @@ export type ClaudeRunStarter = typeof startRun;
  * `compile`: the checks in the order the port documents (policy arm, fork, file grants, sandbox
  * environment), then `./compile.ts`'s `compileRunRequest`. A refusal is a value, never a throw.
  */
-function compileClaude(request: EngineRunRequest): EngineCompileResult<CompiledSdkOptions> {
+function compileClaude(request: EngineRunRequest): EngineCompileResult<CompiledClaudeRun> {
   const parsed = parsePolicyArm(
     CLAUDE_AGENT_SDK_ENGINE_ID,
     ClaudeRunPolicy,
-    '{ tools, fileGrantDeny? }',
+    '{ tools, fileGrantDeny?, requireApproval?, handoff?, approvedToolCalls? }',
     request.policy,
   );
   if (!parsed.ok) return parsed;
@@ -334,6 +341,12 @@ function compileClaude(request: EngineRunRequest): EngineCompileResult<CompiledS
     request.session,
   );
   if (forked !== null) return forked;
+  const unapproved = approvalsRefusal(
+    CLAUDE_AGENT_SDK_ENGINE_ID,
+    ENGINE_CATALOGUE['claude-agent-sdk'].approvals,
+    parsed.policy.requireApproval,
+  );
+  if (unapproved !== null) return unapproved;
   const granted = withFileGrants(request, parsed.policy);
   if (!granted.ok) return refuse('engine_policy_invalid', granted.reason);
   // Spec A.11, decided from the typed verdict before anything is compiled — never by reading an
@@ -354,15 +367,22 @@ function compileClaude(request: EngineRunRequest): EngineCompileResult<CompiledS
   if (sandbox !== null) return sandbox;
   if (
     CLAUDE_SKILL_SCRIPT_SERVER in request.portable.mcpServers &&
-    skillScriptSetup(request, CLAUDE_PROTECTED_CONFIG_DIRECTORY) !== null
+    (skillScriptSetup(request, CLAUDE_PROTECTED_CONFIG_DIRECTORY) !== null || parsed.policy.handoff)
   ) {
     return refuse(
       'engine_policy_invalid',
-      `a connector may not be named ${JSON.stringify(CLAUDE_SKILL_SCRIPT_SERVER)}: that server carries run_skill_script.`,
+      `a connector may not be named ${JSON.stringify(CLAUDE_SKILL_SCRIPT_SERVER)}: that server carries run_skill_script and handoff_to_person.`,
     );
   }
   try {
-    return { ok: true, compiled: compileRunRequest(toRunRequest(request, granted.policy)) };
+    const compiled = compileRunRequest(toRunRequest(request, granted.policy));
+    return {
+      ok: true,
+      compiled:
+        request.outputSchema === undefined
+          ? compiled
+          : { ...compiled, outputFormat: { type: 'json_schema', schema: request.outputSchema } },
+    };
   } catch (error) {
     if (error instanceof SubagentToolRemovedError) {
       return refuse('engine_capability_unsupported', error.message);
@@ -375,17 +395,18 @@ function compileClaude(request: EngineRunRequest): EngineCompileResult<CompiledS
 }
 
 /**
- * Build the adapter. {@link CLAUDE_AGENT_SDK_ENGINE_ADAPTER} is this with the real starter.
+ * Build the adapter — the package root's only export (W3-8). With no arguments it runs the real SDK.
  * `probe` is the `fetch` that asks the gateway who refused an auth retry (issue #661).
  */
 export function createClaudeAgentSdkEngine(
   runStarter: ClaudeRunStarter = startRun,
   probe: typeof fetch = fetch,
-): AgentEngine<CompiledSdkOptions> {
-  return createEngineAdapter<CompiledSdkOptions, ClassifiedSdkEvent>({
+): AgentEngine<CompiledClaudeRun> {
+  return createEngineAdapter<CompiledClaudeRun, ClassifiedSdkEvent>({
     id: CLAUDE_AGENT_SDK_ENGINE_ID,
     version: CLAUDE_AGENT_SDK_VERSION,
     capabilities: CLAUDE_AGENT_SDK_CAPABILITIES,
+    structuredOutput: ENGINE_CATALOGUE['claude-agent-sdk'].structuredOutput,
     protectedConfigDirectory: CLAUDE_PROTECTED_CONFIG_DIRECTORY,
 
     // Spelled out rather than taken from the kit's default: `${CLAUDE_CONFIG_DIR}/skills/<name>/`
@@ -395,39 +416,63 @@ export function createClaudeAgentSdkEngine(
 
     compile: compileClaude,
 
-    plan: (_compiled, request, { sessionStore, abortController }) => {
-      // The kit calls `plan` only after `compile` answered `ok`, so neither throw below is
-      // reachable; they keep the parse result typed without a cast.
-      const parsed = ClaudeRunPolicy.safeParse(request.policy);
-      if (!parsed.success) {
-        throw new Error(
-          `startRun: the ${CLAUDE_AGENT_SDK_ENGINE_ID} policy arm did not parse. Call compile() first and act on its refusal.`,
-        );
-      }
-      const granted = withFileGrants(request, parsed.data);
-      if (!granted.ok) {
-        throw new Error(`startRun: ${granted.reason} Call compile() first and act on its refusal.`);
-      }
+    plan: (compiled, request, { sessionStore, abortController, fileSearch: link }) => {
+      // The kit calls `plan` only after `compile` answered `ok`, with that result for this request.
       // `ClaudeRun.abort` is `abortController.abort`, so the kit's controller is the run's.
       const skillScript = skillScriptSetup(request, CLAUDE_PROTECTED_CONFIG_DIRECTORY);
-      const run = runStarter(toRunRequest(request, granted.policy), {
-        abortController,
-        ...(skillScript === null ? {} : { skillScript }),
-        ...(sessionStore === undefined ? {} : { sessionStore: toTranscriptMirror(sessionStore) }),
-      });
+      const fileSearch = fileSearchSetup(request, link);
+      const run = runStarter(
+        {
+          runId: request.runId,
+          projectKey: request.projectKey,
+          prompt: request.prompt,
+          options: compiled,
+          approval: compiled.approval,
+          handoff: compiled.handoff,
+        },
+        {
+          abortController,
+          ...(skillScript === null ? {} : { skillScript }),
+          ...(fileSearch === null ? {} : { fileSearch }),
+          ...(sessionStore === undefined ? {} : { sessionStore: toTranscriptMirror(sessionStore) }),
+        },
+      );
 
       return {
         identity: { kind: 'reported' },
         events: async function* () {
-          for await (const event of run.events) {
-            // The frames of a rejecting event are emitted before the run fails.
-            yield event;
-            const rejected = rejectedKeyStatus(event);
-            if (rejected !== null) {
-              const failure = await rejectionFailure(rejected, request.gateway, probe);
-              run.abort(failure);
-              throw failure;
+          // A failure this loop raises itself is a real failure even with a request recorded.
+          let raised: unknown = undefined;
+          try {
+            for await (const event of run.events) {
+              // The deny-and-interrupt that stops a run for approval ends the SDK's turn with its
+              // own `result`. That is the stop working, not a model failure, so it is not reported.
+              if (
+                run.approvalRequest() !== null &&
+                (event.kind === 'result' || event.kind === 'result-unknown')
+              ) {
+                continue;
+              }
+              // The frames of a rejecting event are emitted before the run fails.
+              yield event;
+              const rejected = rejectedKeyStatus(event);
+              if (rejected !== null) {
+                const failure = await rejectionFailure(rejected, request.gateway, probe);
+                run.abort(failure);
+                raised = failure;
+                throw failure;
+              }
+              const unsatisfied = structuredOutputFailure(event);
+              if (unsatisfied !== null) {
+                run.abort(unsatisfied);
+                raised = unsatisfied;
+                throw unsatisfied;
+              }
             }
+          } catch (error) {
+            // The SDK may also end an interrupted run by throwing; with a request recorded, that
+            // is the stop, not a failure.
+            if (error === raised || run.approvalRequest() === null) throw error;
           }
         },
         // `toAgentFrames` is `packages/core`'s, and deliberately still is: the control plane runs
@@ -435,17 +480,31 @@ export function createClaudeAgentSdkEngine(
         // (`apps/web/server/runs/agent-frames.ts`), and `apps/web` may not import an engine
         // adapter. It is built on the port's `engineFrameBuilder` (ADR-0070 D4, amended by #958)
         // and finishes its move with ADR-0070's Deviation 2.
-        map: (event) => toAgentFrames(event, CLAUDE_AGENT_SDK_ENGINE_ID),
+        map: (event) => {
+          const frames = toAgentFrames(event, CLAUDE_AGENT_SDK_ENGINE_ID);
+          const handoff = run.handoff();
+          // The SDK's `result` ends the turn the tool asked the model to end, so the handoff frame
+          // follows it and is the run's last agent frame (ADR-0145 D4).
+          if (handoff === null || (event.kind !== 'result' && event.kind !== 'result-unknown')) {
+            return frames;
+          }
+          return [
+            ...frames,
+            {
+              frame: 'agent.handoff',
+              engine: CLAUDE_AGENT_SDK_ENGINE_ID,
+              raw: capFrameRaw(event.event),
+              reason: handoff.reason,
+            },
+          ];
+        },
         // Claude's verdict reads the run's own state, not a terminal event.
         isTerminal: () => false,
         // The SDK watches the abort signal itself.
         cancelled: null,
         durability: () => run.sessionDurability(),
+        approvalRequest: () => run.approvalRequest(),
       };
     },
   });
 }
-
-/** The adapter. One value, because there is nothing per-deployment to configure. */
-export const CLAUDE_AGENT_SDK_ENGINE_ADAPTER: AgentEngine<CompiledSdkOptions> =
-  createClaudeAgentSdkEngine();

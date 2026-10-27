@@ -1,48 +1,34 @@
 /**
  * `DELETE`/`PATCH /api/files/:id` against a folder path, driven through the real route handlers —
- * issue #131's verifier attacks, reproduced against the code that ships. No catalog is wired in
- * (`configureFilesRuntime` below omits it, the same way `routes.test.ts`'s first suite does), so
- * every assertion here is about the `ObjectStore`-level subtree behaviour the route exposes; the
- * catalog-preservation half of the same requirement is proven in
- * `packages/core/src/db/repositories/resource-catalogs.test.ts` and in `routes.test.ts`'s own
- * PostgreSQL-backed suite. Named `subtree.test.ts`, not `route.test.ts`:
- * `tests/route-inventory.test.ts` treats any `apps/web/app/**` file named `route.<anything>` as a
- * route Next.js serves.
+ * issue #131's verifier attacks, reproduced against the code that ships, over the catalog service
+ * (in-memory catalog and object store; the files routes answer 503 without it). Named
+ * `subtree.test.ts`, not `route.test.ts`: `tests/route-inventory.test.ts` treats any
+ * `apps/web/app/**` file named `route.<anything>` as a route Next.js serves.
  */
-import { mkdtemp, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-
+// @story US-STO-02
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
+import { createInMemoryCatalogStore } from '../../../server/resources/catalog-store.memory';
 
 import { GET as listRoute, POST as uploadRoute } from './route';
 import { DELETE as deleteRoute, GET as downloadRoute, PATCH as renameRoute } from './[id]/route';
+import { createCatalogFilesWorld } from '../../../server/files/catalog-runtime-fixtures';
 import { encodeFileId } from '../../../server/files/file-id';
-import { createRepositoryObjectStoreProvider } from '../../../server/files/store';
-import { createLocalFilesystemObjectStoreProvider } from '../../../server/files/object-store-bridge';
-import {
-  clearFilesRuntime,
-  configureFilesRuntime,
-  type WorkspaceResolution,
-} from '../../../server/files/runtime';
-import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
+import { type WorkspaceResolution } from '../../../server/files/runtime';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../server/rbac/runtime';
+import { installTestDomains } from '../../../server/application-context-fixtures';
+import { clearApplicationContext } from '../../../server/application-context';
 
 const WORKSPACE_A = '66666666-6666-4666-8666-666666666666';
 const WORKSPACE_HEADER = 'x-test-workspace';
 
-let rootDir: string;
-
-beforeEach(async () => {
-  rootDir = await mkdtemp(path.join(os.tmpdir(), 'w9-files-131-routes-'));
-  const scopes = createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE_A, slug: 'acme' }]);
-  configureFilesRuntime({
-    store: createRepositoryObjectStoreProvider({
-      store: createLocalFilesystemObjectStoreProvider(rootDir),
-      scopes,
-    }),
+beforeEach(() => {
+  const world = createCatalogFilesWorld({
+    catalogs: createInMemoryCatalogStore(),
+    scopes: createInMemoryWorkspaceScopeResolver(
+      [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+    ),
     resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
       const workspaceId = request.headers.get(WORKSPACE_HEADER);
       return Promise.resolve(
@@ -52,33 +38,34 @@ beforeEach(async () => {
       );
     },
   });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({
-      users: [
-        { email: 'owner@example.test', name: 'Owner', workspaceId: WORKSPACE_A, role: 'owner' },
-      ],
-    }),
-    identify(request: Request) {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: 'd67565b8-5eed-4378-bc0e-62d807a93567',
-              apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-              workspaceId,
-              role: 'owner',
-              label: 'File subtree test key',
-            }),
-      );
+  installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({
+        users: [
+          { email: 'owner@example.test', name: 'Owner', workspaceId: WORKSPACE_A, role: 'owner' },
+        ],
+      }),
+      identify(request: Request) {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: 'd67565b8-5eed-4378-bc0e-62d807a93567',
+                apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                workspaceId,
+                role: 'owner',
+                label: 'File subtree test key',
+              }),
+        );
+      },
     },
   });
 });
 
-afterEach(async () => {
-  clearFilesRuntime();
-  clearRbacRuntime();
-  await rm(rootDir, { recursive: true, force: true });
+afterEach(() => {
+  clearApplicationContext();
 });
 
 function req(
@@ -118,6 +105,118 @@ async function listPaths(prefix?: string): Promise<string[]> {
   const body = (await response.json()) as { files: Array<{ path: string }> };
   return body.files.map((f) => f.path);
 }
+
+async function createFolder(folderPath: string): Promise<Response> {
+  return uploadRoute(req('POST', '/api/files', { headers: { 'x-folder-path': folderPath } }));
+}
+
+async function move(from: string, newPath: string): Promise<Response> {
+  const id = encodeFileId(from);
+  return renameRoute(
+    req('PATCH', `/api/files/${id}`, {
+      body: JSON.stringify({ newPath }),
+      contentType: 'application/json',
+    }),
+    idContext(id),
+  );
+}
+
+async function status(filePath: string): Promise<number> {
+  const id = encodeFileId(filePath);
+  return (await downloadRoute(req('GET', `/api/files/${id}`), idContext(id))).status;
+}
+
+const errorCode = async (response: Response): Promise<string> =>
+  ((await response.json()) as { error: { code: string } }).error.code;
+
+describe('folder delete and move, the cases beyond the two verifier attacks', () => {
+  it('recursive delete removes every descendant and reports them all', async () => {
+    await upload('a/b/c.txt', 'c');
+    await upload('a/b/d.txt', 'd');
+    const id = encodeFileId('a');
+    const deleted = await deleteRoute(
+      req('DELETE', `/api/files/${id}?recursive=true`),
+      idContext(id),
+    );
+    expect(deleted.status).toBe(200);
+    const body = (await deleted.json()) as { status: string; deleted: string[] };
+    expect(body.status).toBe('ok');
+    expect(body.deleted.sort()).toEqual(['a/b/c.txt', 'a/b/d.txt']);
+    expect(await status('a/b/c.txt')).toBe(404);
+    expect(await status('a/b/d.txt')).toBe(404);
+  });
+
+  it('an explicit empty folder is deleted without needing ?recursive=true', async () => {
+    await createFolder('empty');
+    const id = encodeFileId('empty');
+    const result = await deleteRoute(req('DELETE', `/api/files/${id}`), idContext(id));
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ status: 'ok' });
+    expect(await listPaths()).toEqual([]);
+  });
+
+  it('moves an explicit empty folder', async () => {
+    await createFolder('a/empty');
+    const result = await move('a/empty', 'moved-empty');
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ status: 'ok' });
+    expect(await listPaths('moved-empty')).toEqual([]);
+    expect(await listPaths()).toContain('moved-empty');
+    expect(await listPaths('a')).toEqual([]);
+  });
+
+  it('a no-op rename to the identical path succeeds trivially', async () => {
+    await upload('a/b.txt', 'x');
+    const result = await move('a', 'a');
+    expect(result.status).toBe(200);
+    expect(await status('a/b.txt')).toBe(200);
+  });
+
+  it('refuses a destination that already exists, changing neither side', async () => {
+    await upload('a/b.txt', 'x');
+    await upload('z/existing.txt', 'taken');
+    const result = await move('a', 'z');
+    expect(result.status).toBe(409);
+    expect(await errorCode(result)).toBe('name_conflict');
+    expect(await status('a/b.txt')).toBe(200);
+    expect(await listPaths('z')).toEqual(['z/existing.txt']);
+  });
+
+  it('refuses a rename that differs only by letter case', async () => {
+    await upload('Docs/readme.txt', 'x');
+    const result = await move('Docs', 'docs');
+    expect(result.status).toBe(409);
+    expect(await errorCode(result)).toBe('name_conflict');
+    expect(await status('Docs/readme.txt')).toBe(200);
+  });
+
+  it('reserves the runner-private directory as both a source and a destination', async () => {
+    await upload('a/b.txt', 'x');
+    for (const [from, to] of [
+      ['a', '.claude/stolen'],
+      ['.claude', 'exfiltrated'],
+    ] as const) {
+      const result = await move(from, to);
+      expect(result.status, `${from} -> ${to}`).toBe(400);
+      expect(await errorCode(result)).toBe('reserved_path');
+    }
+  });
+
+  it('a folder that does not exist is 404', async () => {
+    expect((await move('nope', 'also-nope')).status).toBe(404);
+  });
+
+  it('refuses a destination that names the empty-folder marker in any segment', async () => {
+    await upload('a/b.txt', 'x');
+    const marker = '.agent-workspace-empty-folder';
+    for (const newPath of [marker, `z/${marker}`, `${marker}/z`]) {
+      const result = await move('a', newPath);
+      expect(result.status, newPath).toBe(400);
+      expect(await errorCode(result)).toBe('reserved_path');
+    }
+    expect(await status('a/b.txt')).toBe(200);
+  });
+});
 
 describe('DELETE /api/files/:id on a folder (issue #131, verifier attack 1)', () => {
   it('refuses a non-empty folder without ?recursive=true, then deletes it fully with the flag', async () => {
@@ -173,7 +272,7 @@ describe('PATCH /api/files/:id on a folder (issue #131, verifier attack 2)', () 
       idContext(id),
     );
     expect(renamed.status, await renamed.clone().text()).toBe(200);
-    expect(await renamed.json()).toMatchObject({ status: 'ok', moved: 1 });
+    expect(await renamed.json()).toMatchObject({ status: 'ok', moved: 3 }); // the rows renamed: a, a/b and a/b/c.txt
 
     const newFileId = encodeFileId('z/b/c.txt');
     const download = await downloadRoute(

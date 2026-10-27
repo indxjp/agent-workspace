@@ -17,16 +17,17 @@ import {
 } from '@indx-workspace/contracts/a2a';
 
 import { upgradeEventStream } from '../../runs/agent-frames';
-import {
-  findRunForPrincipal,
-  interruptRunFor,
-  MAX_PROMPT_CHARS,
-  startRunOnSession,
-} from '../../runs/api';
-import type { AgentRef, Principal, RunApiEnvironment, SessionRef } from '../../runs/environment';
+import { findRunForPrincipal, interruptRunFor } from '../../runs/api';
+import type { AgentRef, RunPrincipal, RunApiEnvironment, SessionRef } from '../../runs/environment';
 import { publicRunFailure } from '../../runs/failures';
 import { apiError, isUuid, json } from '../../runs/http';
-import { isTerminalRunStatus, type RunRecord, type RunStore } from '../../runs/store';
+import { MAX_PROMPT_CHARS, startRunOnSession } from '../../runs/service';
+import {
+  isStoppedRunStatus,
+  isTerminalRunStatus,
+  type RunRecord,
+  type RunStore,
+} from '../../runs/store';
 import type { PublishedAgent } from '../env';
 import { admitA2aMessage } from '../limits';
 import {
@@ -50,7 +51,7 @@ const KEEPALIVE_MS = 15_000;
 export interface A2aCall {
   readonly request: Request;
   readonly runs: RunApiEnvironment;
-  readonly principal: Principal;
+  readonly principal: RunPrincipal;
   readonly credentialId: string;
   readonly agent: PublishedAgent;
   readonly agentRef: AgentRef;
@@ -276,7 +277,7 @@ async function* streamFrames(
   // A client that left cancelled nothing: the run carries on and `tasks/get` still answers.
   if (signal.aborted) return;
   const latest = (await store.get(run.id)) ?? run;
-  yield frame(statusUpdate(latest, true, !isTerminalRunStatus(latest.status)));
+  yield frame(statusUpdate(latest, true, !isStoppedRunStatus(latest.status)));
 }
 
 function sseResponse(

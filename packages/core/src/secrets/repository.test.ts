@@ -110,6 +110,16 @@ function describeSecretsRepositoryConformance(label: string, makeFixture: MakeFi
       expect(outcome).toEqual({ kind: 'name-conflict', name: 'GITHUB_TOKEN' });
     });
 
+    it('refuses a name outside secrets_name_shape and stores nothing', async () => {
+      const fixture = await makeFixture();
+      const scope = await fixture.resolver.forWorkspaceId(fixture.workspaceAId);
+      if (scope === null) throw new Error('fixture workspace A does not resolve');
+      const repo = fixture.provider.forScope(scope);
+
+      await expect(repo.create({ name: 'lower_case', envelope: envelope('v1') })).rejects.toThrow();
+      expect(await repo.list()).toEqual([]);
+    });
+
     it('allows the same name in two different workspaces', async () => {
       const fixture = await makeFixture();
       const scopeA = await fixture.resolver.forWorkspaceId(fixture.workspaceAId);

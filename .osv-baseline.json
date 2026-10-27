@@ -1,0 +1,5 @@
+{
+  "comment": "Known osv-scanner findings on main when the gate was added (engineering audit W1-4, F-03). Entries may only be removed: a finding missing from this list fails CI, and so does a listed finding that is no longer reported.",
+  "findings": [],
+  "justifications": {}
+}

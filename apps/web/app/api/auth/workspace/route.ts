@@ -40,6 +40,7 @@
  * form path's bare `{ error: '<code>' }`. The form path is unchanged, byte for byte, for one
  * release (spec §3.2 of `docs/sdk/04-api-specification.md`, playbook §3).
  */
+import { log } from '../../../../server/telemetry/logger';
 import { NextResponse } from 'next/server';
 
 import { WorkspaceSwitchRequestSchema } from '@indx-workspace/contracts/workspaces';
@@ -60,10 +61,9 @@ import {
 } from '../../../../server/auth';
 import { cookieValue } from '../../../../server/auth/cookies';
 import { pickerQuery, selectionPageHtml } from '../../../../server/auth/workspace-picker';
+import { applicationContext } from '../../../../server/application-context';
 import { PAGE_SECURITY_HEADERS } from '../../../../server/cli-auth/verify-page';
-import { currentRbacRuntime } from '../../../../server/rbac/runtime';
 import { getWorkspace } from '../../../../server/workspaces/handlers';
-import { currentWorkspacesRuntime } from '../../../../server/workspaces/runtime';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -98,7 +98,7 @@ export async function GET(request: Request): Promise<Response> {
   const selection = await readSelection(request, secret.secret);
   if (!selection.ok) return redirectTo('/signin', '?error=session_expired');
 
-  const runtime = currentRbacRuntime();
+  const runtime = applicationContext()?.rbac ?? null;
   const memberships =
     runtime === null ? [] : await runtime.directory.membershipsForUser(selection.claims.userId);
   const url = new URL(request.url);
@@ -140,14 +140,14 @@ export async function POST(request: Request): Promise<Response> {
     forwardedHost: request.headers.get('x-forwarded-host'),
   });
   if (!origin.ok) {
-    console.warn(`[auth] cross-origin workspace selection refused: ${origin.reason}`);
+    log.warn(`[auth] cross-origin workspace selection refused`, { reason: origin.reason });
     return isJson
       ? jsonProblem(403, 'cross_origin', 'Cross-origin workspace switch requests are refused.')
       : NextResponse.json({ error: 'cross_origin' }, { status: 403 });
   }
 
   const secret = readSessionSecret(process.env);
-  const runtime = currentRbacRuntime();
+  const runtime = applicationContext()?.rbac ?? null;
   if (!secret.ok || runtime === null) {
     return isJson
       ? jsonProblem(503, 'server_not_configured', 'The workspace switch is not configured.')
@@ -236,7 +236,7 @@ export async function POST(request: Request): Promise<Response> {
   const token = await mintSessionToken(newSessionClaims(email, match.workspaceSlug), secret.secret);
 
   if (isJson) {
-    const workspacesRuntime = currentWorkspacesRuntime();
+    const workspacesRuntime = applicationContext()?.workspaces ?? null;
     if (workspacesRuntime === null) {
       return jsonProblem(503, 'server_not_configured', 'The workspace switch is not configured.');
     }

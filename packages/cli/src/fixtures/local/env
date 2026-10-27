@@ -21,17 +21,20 @@ DATABASE_URL=postgres://agent_workspace:postgres-password@postgres:5432/agent_wo
 # Object store: s3://agent-workspace
 SEAWEEDFS_ACCESS_KEY_ID=agent_workspace
 SEAWEEDFS_SECRET_ACCESS_KEY=object-store-secret
+# The loopback host port SeaweedFS is published on. Change it to run beside another project
+# that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.
+SEAWEEDFS_PORT=8333
 COMPOSE_PROFILES=object-storage
-OBJECT_STORAGE_BACKEND=
-OBJECT_STORAGE_ENDPOINT=http://seaweedfs:8333
-OBJECT_STORAGE_BUCKET=agent-workspace
+# Where files, skills and session transcripts live, in one URL. No key or password belongs in
+# it: the credential lines below, or the workload identity, supply those.
+AW_STORAGE_URL=s3://agent-workspace?endpoint=http://seaweedfs:8333&publicEndpoint=http://localhost:8333&pathStyle=true
+# The bundled SeaweedFS starts empty: the server creates the bucket on first boot.
+AW_STORAGE_CREATE_BUCKET=true
+# Largest signed upload in bytes. Blank keeps the server default, 5 GiB.
+AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES=
 OBJECT_STORAGE_ACCESS_KEY_ID=agent_workspace
 OBJECT_STORAGE_SECRET_ACCESS_KEY=object-store-secret
-OBJECT_STORAGE_FORCE_PATH_STYLE=true
 AWS_REGION=us-east-1
-AW_FILE_STORAGE_ROOT=/var/lib/agent-workspace/files
-AW_SKILL_STORAGE_ROOT=/var/lib/agent-workspace/skills
-AW_SESSION_TRANSCRIPT_ROOT=/var/lib/agent-workspace/sessions
 # Runtime: docker
 RUNTIME_DRIVER=docker
 RUNNER_URL=http://runner:8080

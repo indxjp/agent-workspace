@@ -58,17 +58,31 @@ import {
   type Database,
 } from '../client.js';
 import { agents } from '../schema/agents.js';
+import type { MembershipRole } from '../schema/memberships.js';
 import { auditEvents, type NewAuditEvent } from '../schema/audit-events.js';
 import { workspaces } from '../schema/workspaces.js';
 import {
+  checkedAuditEvent,
   createDatabaseAuditEventRepositoryProvider,
   type AuditEventRepositoryProvider,
 } from './audit-events.js';
 import { createDatabaseAgentRepositoryProvider, type AgentRepositoryProvider } from './agents.js';
 import {
+  createDatabaseBuilderToolCallRepositoryProvider,
+  type BuilderToolCallRepositoryProvider,
+} from './builder-tool-calls.js';
+import {
   createDatabaseAgentGrantRepositoryProvider,
   type AgentGrantRepositoryProvider,
 } from './agent-grants.js';
+import {
+  createDatabaseStorageMigrationRunRepository,
+  type StorageMigrationRunRepository,
+} from './storage-migration-runs.js';
+import {
+  createDatabaseFileTextRepositoryProvider,
+  type FileTextRepositoryProvider,
+} from './file-texts.js';
 import {
   createDatabaseResourceCatalogRepositoryProvider,
   type ResourceCatalogRepositoryProvider,
@@ -109,6 +123,10 @@ import {
   type ModelConnectionRepositoryProvider,
 } from './model-connections.js';
 import {
+  createDatabaseStorageConnectionRepositoryProvider,
+  type StorageConnectionRepositoryProvider,
+} from './storage-connections.js';
+import {
   createDatabaseRunRepositoryProvider,
   createDatabaseRunEventRepositoryProvider,
   createDatabaseSessionRepositoryProvider,
@@ -130,6 +148,12 @@ import {
   createDatabaseEndpointClientRepositoryProvider,
   type EndpointClientRepositoryProvider,
 } from './endpoint-clients.js';
+import {
+  createDatabaseTriggerRepositoryProvider,
+  findTriggerForIngress,
+  type TriggerForIngress,
+  type TriggerRepositoryProvider,
+} from './triggers.js';
 import {
   createDatabaseAgentVersionEvaluationRepositoryProvider,
   type AgentVersionEvaluationRepositoryProvider,
@@ -191,15 +215,15 @@ export interface WorkspaceMembership {
   readonly userLabel: string;
   /** `workspaces.id`. */
   readonly workspaceId: string;
-  readonly role: 'owner' | 'admin' | 'builder' | 'viewer';
+  readonly role: MembershipRole;
 }
 
 interface MaintenanceLease {
   release(): Promise<void>;
 }
 
-/** What {@link DatabaseRoot.withWorkspaceSetupLock} answers. */
-type WorkspaceSetupLockOutcome<T> =
+/** What {@link DatabaseRoot.withWorkspaceSetupLock} and {@link DatabaseRoot.withNamedLock} answer. */
+export type LockOutcome<T> =
   { readonly acquired: true; readonly value: T } | { readonly acquired: false };
 
 /** How long a waiter sleeps between two tries of the setup lock: short at first, then capped. */
@@ -223,6 +247,10 @@ export interface DatabaseRoot {
    */
   readonly agentVersions: AgentVersionRepositoryProvider;
   readonly resourceCatalogs: ResourceCatalogRepositoryProvider;
+  /** `file_texts` — the text a file search extracted, cached with its `tsvector` (ADR-0147). */
+  readonly fileTexts: FileTextRepositoryProvider;
+  /** `storage_migration_runs` — the verify passes of the move off the old object naming (§06). */
+  readonly storageMigrationRuns: StorageMigrationRunRepository;
   /** Run rows, for one scope at a time. */
   readonly runs: RunRepositoryProvider;
   /** Replayable SSE events, retained durably and scoped to the run's workspace. */
@@ -231,7 +259,11 @@ export interface DatabaseRoot {
   readonly runTokens: RunTokenRepositoryProvider;
   /** Append-only thumbs up/down on a run, scoped by workspace (issue #539, C19). */
   readonly runFeedback: RunFeedbackRepositoryProvider;
+  /** The Builder's tool-call journal, one row per `aw-control` call (issue #1845). */
+  readonly builderToolCalls: BuilderToolCallRepositoryProvider;
   readonly endpointClients: EndpointClientRepositoryProvider;
+  /** Inbound triggers and their delivery claims, scoped by workspace (ADR-0144). */
+  readonly triggers: TriggerRepositoryProvider;
   /** Append-only scored evaluations of an agent version, scoped by workspace (issue #618). */
   readonly agentVersionEvaluations: AgentVersionEvaluationRepositoryProvider;
   /** Issued browser-token digests and revocation state, scoped by workspace (issue #236). */
@@ -252,6 +284,8 @@ export interface DatabaseRoot {
   readonly mcpServers: McpServerRepositoryProvider;
   /** Model-provider connections, scoped to one workspace (spec §13). */
   readonly modelConnections: ModelConnectionRepositoryProvider;
+  /** Storage connections (the non-secret half), scoped to one workspace (the storage design, §05). */
+  readonly storageConnections: StorageConnectionRepositoryProvider;
   /** Runtime-profile rows (spec §15.1), for one scope at a time. Added by W3-CP-06. */
   readonly runtimeProfiles: RuntimeProfileRepositoryProvider;
   readonly projects: ProjectRepositoryProvider;
@@ -299,6 +333,11 @@ export interface DatabaseRoot {
    * checks. Unscoped for the same reason: the client id is the only thing the caller sends.
    */
   findOAuthClient(clientId: string): Promise<OAuthClientRecord | null>;
+  /**
+   * The trigger a fire URL names, with its secret hash, before the caller knows the workspace: the
+   * trigger id is the only thing the public ingress receives (ADR-0144 D2). `null` for an unknown id.
+   */
+  findTriggerForIngress(triggerId: string): Promise<TriggerForIngress | null>;
   /**
    * `aw login`'s approvals and tokens (issue #242, SDK-10, S-22). Unscoped for the reason
    * {@link findBrowserTokenByHash} is: a user code or a token hash names its workspace, not the
@@ -360,11 +399,55 @@ export interface DatabaseRoot {
     workspaceId: string,
     waitMs: number,
     work: () => Promise<T>,
-  ): Promise<WorkspaceSetupLockOutcome<T>>;
+  ): Promise<LockOutcome<T>>;
+  /**
+   * Run `work` while holding the PostgreSQL advisory lock named `name`, for a job that must run on
+   * one server at a time. It tries once and never waits: `{ acquired: false }` means another server
+   * holds it and `work` never ran. The lock is session-level, on a pool client held for the
+   * duration, and is released however `work` ends.
+   */
+  withNamedLock<T>(name: string, work: () => Promise<T>): Promise<LockOutcome<T>>;
   /** Append one immutable §36 row without exposing the unscoped database handle. */
   recordAuditEvent(event: RootAuditEvent): Promise<void>;
   /** Release every pooled connection. Idempotent. */
   close(): Promise<void>;
+}
+
+/** Try the session-level advisory lock `key` on a held pool client until `waitMs` has passed. */
+async function withAdvisoryLock<T>(
+  pool: ReturnType<typeof createPool>,
+  key: string,
+  waitMs: number,
+  work: () => Promise<T>,
+): Promise<LockOutcome<T>> {
+  const deadline = Date.now() + Math.max(0, waitMs);
+  const client = await pool.connect();
+  // Only a client whose unlock failed may still hold the lock; it is destroyed, not pooled.
+  let unlockFailure: Error | undefined;
+  try {
+    for (let attempt = 0; ; attempt += 1) {
+      const tried = await client.query<{ acquired: boolean }>(
+        'select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired',
+        [key],
+      );
+      if (tried.rows[0]?.acquired === true) break;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return { acquired: false };
+      const pause = SETUP_LOCK_RETRY_MS[Math.min(attempt, SETUP_LOCK_RETRY_MS.length - 1)];
+      await new Promise((resolve) => setTimeout(resolve, Math.min(pause ?? 250, remaining)));
+    }
+    try {
+      return { acquired: true, value: await work() };
+    } finally {
+      await client
+        .query('select pg_advisory_unlock(hashtextextended($1, 0))', [key])
+        .catch((error: unknown) => {
+          unlockFailure = error instanceof Error ? error : new Error(String(error));
+        });
+    }
+  } finally {
+    client.release(unlockFailure);
+  }
 }
 
 /**
@@ -404,11 +487,15 @@ export async function openDatabaseRoot(
     agentResources: createDatabaseAgentResourceRepositoryProvider(db),
     agentVersions: createDatabaseAgentVersionRepositoryProvider(db),
     resourceCatalogs: createDatabaseResourceCatalogRepositoryProvider(db),
+    fileTexts: createDatabaseFileTextRepositoryProvider(db),
+    storageMigrationRuns: createDatabaseStorageMigrationRunRepository(db),
     runs: createDatabaseRunRepositoryProvider(db),
     runEvents: createDatabaseRunEventRepositoryProvider(db),
     runTokens: createDatabaseRunTokenRepositoryProvider(db),
     runFeedback: createDatabaseRunFeedbackRepositoryProvider(db),
+    builderToolCalls: createDatabaseBuilderToolCallRepositoryProvider(db),
     endpointClients: createDatabaseEndpointClientRepositoryProvider(db),
+    triggers: createDatabaseTriggerRepositoryProvider(db),
     agentVersionEvaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(db),
     browserTokens: createDatabaseBrowserTokenRepositoryProvider(db),
     oauthTokens: createDatabaseOAuthTokenRepositoryProvider(db),
@@ -419,6 +506,7 @@ export async function openDatabaseRoot(
     sessionState: createDatabaseSessionStateRepositoryProvider(db),
     mcpServers: createDatabaseMcpServerRepositoryProvider(db),
     modelConnections: createDatabaseModelConnectionRepositoryProvider(db),
+    storageConnections: createDatabaseStorageConnectionRepositoryProvider(db),
     runtimeProfiles: createDatabaseRuntimeProfileRepositoryProvider(db),
     projects: createDatabaseProjectRepositoryProvider(db),
     projectFiles: createDatabaseProjectFileRepositoryProvider(db),
@@ -472,6 +560,8 @@ export async function openDatabaseRoot(
     ): Promise<ActiveOAuthAccessToken | null> => findActiveOAuthAccessToken(db, tokenHash, now),
     findOAuthClient: (clientId: string): Promise<OAuthClientRecord | null> =>
       findOAuthClient(db, clientId),
+    findTriggerForIngress: (triggerId: string): Promise<TriggerForIngress | null> =>
+      findTriggerForIngress(db, triggerId),
     cliSessions: createDatabaseCliSessionRepository(db),
     findShareWorkspace: async (token: string): Promise<string | null> =>
       (
@@ -584,39 +674,14 @@ export async function openDatabaseRoot(
       workspaceId: string,
       waitMs: number,
       work: () => Promise<T>,
-    ): Promise<WorkspaceSetupLockOutcome<T>> {
-      const key = `agent-workspace:setup:${workspaceId}`;
-      const deadline = Date.now() + Math.max(0, waitMs);
-      const client = await pool.connect();
-      // Only a client whose unlock failed may still hold the lock; it is destroyed, not pooled.
-      let unlockFailure: Error | undefined;
-      try {
-        for (let attempt = 0; ; attempt += 1) {
-          const tried = await client.query<{ acquired: boolean }>(
-            'select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired',
-            [key],
-          );
-          if (tried.rows[0]?.acquired === true) break;
-          const remaining = deadline - Date.now();
-          if (remaining <= 0) return { acquired: false };
-          const pause = SETUP_LOCK_RETRY_MS[Math.min(attempt, SETUP_LOCK_RETRY_MS.length - 1)];
-          await new Promise((resolve) => setTimeout(resolve, Math.min(pause ?? 250, remaining)));
-        }
-        try {
-          return { acquired: true, value: await work() };
-        } finally {
-          await client
-            .query('select pg_advisory_unlock(hashtextextended($1, 0))', [key])
-            .catch((error: unknown) => {
-              unlockFailure = error instanceof Error ? error : new Error(String(error));
-            });
-        }
-      } finally {
-        client.release(unlockFailure);
-      }
+    ): Promise<LockOutcome<T>> {
+      return withAdvisoryLock(pool, `agent-workspace:setup:${workspaceId}`, waitMs, work);
+    },
+    withNamedLock<T>(name: string, work: () => Promise<T>): Promise<LockOutcome<T>> {
+      return withAdvisoryLock(pool, `agent-workspace:lock:${name}`, 0, work);
     },
     async recordAuditEvent(event: RootAuditEvent): Promise<void> {
-      await db.insert(auditEvents).values(event);
+      await db.insert(auditEvents).values(checkedAuditEvent(event));
     },
     async close(): Promise<void> {
       if (closed) return;

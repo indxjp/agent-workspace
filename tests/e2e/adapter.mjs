@@ -160,7 +160,7 @@ export const runners = {
     if (!response.ok)
       return observation(
         false,
-        `setup returned ${response.status}: ${String(record(body['error'])['code'] ?? 'unknown')}`,
+        `setup returned ${response.status}: ${String(record(body['error'])['code'] ?? 'unknown')} (${String(record(body['error'])['message'] ?? '')})`,
       );
     state.cookie = (response.headers.get('set-cookie') ?? '').split(';', 1)[0] ?? '';
     state.agentId = String(body['agentId'] ?? '');

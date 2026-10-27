@@ -34,7 +34,7 @@
  * `composerAgents()` asks the real question and answers with what it found, never with an assumed
  * default:
  *
- *   1. **No store is installed** — `currentAgentsRuntime()` is `null` outside a configured
+ *   1. **No store is installed** — `applicationContext()?.agents` is absent outside a configured
  *      deployment (tests, or a real one with `register()` run). Answered before anything else,
  *      because every later question needs the runtime to ask it.
  *   2. **No session, or a session for an account this workspace does not recognise** —
@@ -67,15 +67,16 @@
  * nor a cost — two of the four things a Recent row shows. There is no honest Recent list to build in
  * this wave, and an empty list renders no section at all.
  */
+import { log } from '../../server/telemetry/logger';
 import { cookies } from 'next/headers';
 
 import { initialsFrom } from '../../components/shell/identity';
 import { HomeChat, type ComposerAgents } from '../../components/composer/home-chat';
-import type { RecentSession } from '../../components/composer/model';
+import { pinnedAgentFrom, type RecentSession } from '../../components/composer/model';
 import type { Speaker } from '@indx-workspace/react/run-model';
 import type { AgentPermissions } from '../../contracts/agents';
 import { getSession } from '../../server/auth';
-import { currentAgentsRuntime, type WorkspaceResolution } from '../../server/agents/runtime';
+import type { WorkspaceResolution } from '../../server/agents/runtime';
 import type { AgentRecord } from '../../server/agents/contract';
 import type {
   ComposerAgent,
@@ -85,7 +86,7 @@ import type {
 import { registeredEngine } from '../../server/engines/registry';
 import { providersReachableBy } from '../../server/engines/protocol';
 import { engineForStoredPolicy } from '../../server/engines/session-engine';
-import { currentModelsRuntime } from '../../server/models/runtime';
+import { applicationContext } from '../../server/application-context';
 import {
   getRunApi,
   type RunTargetDescription,
@@ -93,9 +94,9 @@ import {
 } from '../../server/runs/environment';
 
 // W1-UI-04: without this, Next prerenders this route once at BUILD TIME — before
-// `configureAgentsRuntime` has ever run — and serves that one render to every request forever
+// the application context is installed — and serves that one render to every request forever
 // (measured: `x-nextjs-cache: HIT`, an identical `ETag` across requests, no matter what
-// `currentAgentsRuntime()` would answer if asked again). `composerAgents()` below reads
+// `applicationContext()?.agents` would answer if asked again). `composerAgents()` below reads
 // process-global state that changes after a deployment starts (`register()` in
 // `instrumentation.ts` installs the runtime once, at boot, in every real deployment), so a route
 // that reads it must render per-request, not once at build time. See
@@ -193,7 +194,7 @@ async function composerRunTargets(
   } catch (error) {
     // One agent whose configuration cannot be read is shown as `unknown` — the run itself still
     // decides — rather than failing the home page for every other agent (#403 follow-up).
-    console.error(`[home] the run target of agent ${agentId} could not be described`, error);
+    log.error(`[home] the run target of agent ${agentId} could not be described`, { error });
   }
   if (description === null) return { runTarget: { kind: 'unknown' }, runTargetByProject: {} };
   return {
@@ -226,8 +227,9 @@ async function composerViewer(
 }
 
 async function composerModelConnections(): Promise<readonly ComposerModelConnection[]> {
-  const runtime = currentModelsRuntime();
-  if (runtime === null) return [];
+  const models = applicationContext()?.models;
+  if (models?.kind !== 'serving') return [];
+  const runtime = models.runtime;
   const request = await requestCarryingThisSessionCookie();
   const resolution = await runtime.resolveActor(request);
   if (resolution.kind !== 'workspace') return [];
@@ -251,7 +253,7 @@ function permissionExtras(permissions: AgentPermissions): string {
  * skipped. See this file's own header for what changed here in W1-UI-05 and why.
  */
 async function composerAgents(): Promise<ComposerAgents> {
-  const runtime = currentAgentsRuntime();
+  const runtime = applicationContext()?.agents ?? null;
   if (runtime === null) return { kind: 'no-agents', reason: NO_AGENT_STORE };
 
   const request = await requestCarryingThisSessionCookie();
@@ -310,13 +312,26 @@ async function composerUser(): Promise<Speaker | null> {
 /** No source of Recent rows exists in this wave. See the module header. */
 const RECENT: readonly RecentSession[] = [];
 
-export default async function HomePage() {
-  const [agents, user, modelConnections] = await Promise.all([
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ agent?: string | string[]; version?: string | string[] }>;
+}) {
+  const [agents, user, modelConnections, pinned] = await Promise.all([
     composerAgents(),
     composerUser(),
     composerModelConnections(),
+    searchParams.then(pinnedAgentFrom),
   ]);
   return (
-    <HomeChat agents={agents} modelConnections={modelConnections} recent={RECENT} user={user} />
+    <HomeChat
+      agents={agents}
+      modelConnections={modelConnections}
+      recent={RECENT}
+      user={user}
+      {...(pinned === null
+        ? {}
+        : { agent: { id: pinned.agentId, locked: true as const }, version: pinned.version })}
+    />
   );
 }

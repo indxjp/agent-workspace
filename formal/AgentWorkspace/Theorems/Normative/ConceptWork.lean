@@ -86,8 +86,8 @@ elab "aw_work_cardinality_theorems" : command => do
             (∃ r', References catalogue st $tIdent (workFk $tIdent $n) r r') ∧
               ∀ r1 r2, References catalogue st $tIdent (workFk $tIdent $n) r r1 →
                 References catalogue st $tIdent (workFk $tIdent $n) r r2 → r1 = r2 :=
-          ⟨required_reference_has_a_target catalogue st hc (by decide) (by decide) hr,
-            fun _ _ h1 h2 => reference_has_one_target catalogue st hc (by decide) h1 h2⟩))
+          ⟨required_reference_has_a_target catalogue st hc (by decide +kernel) (by decide +kernel) hr,
+            fun _ _ h1 h2 => reference_has_one_target catalogue st hc (by decide +kernel) h1 h2⟩))
     | .atMostOne =>
       let thm := mkIdent (Name.mkSimple s!"{fk.name}_links_at_most_one_parent")
       let doc := mkDocComment s!"In every consistent state, a `{sql}` row references at most one \
@@ -101,8 +101,8 @@ elab "aw_work_cardinality_theorems" : command => do
             (∃ r', References catalogue st $tIdent (workFk $tIdent $n) r r') ∧
               ∀ r1 r2, References catalogue st $tIdent (workFk $tIdent $n) r r1 →
                 References catalogue st $tIdent (workFk $tIdent $n) r r2 → r1 = r2 :=
-          ⟨set_reference_has_a_target catalogue st hc (by decide) hr hset,
-            fun _ _ h1 h2 => reference_has_one_target catalogue st hc (by decide) h1 h2⟩))
+          ⟨set_reference_has_a_target catalogue st hc (by decide +kernel) hr hset,
+            fun _ _ h1 h2 => reference_has_one_target catalogue st hc (by decide +kernel) h1 h2⟩))
 
 end Generator
 
@@ -184,7 +184,7 @@ theorem run_join_refuses_another_workspace_or_session :
       Witness.run.ownerVia { Witness.session with workspace := ⟨"w2"⟩ } = none ∧
       Witness.run.agentVia { Witness.session with id := ⟨"s2"⟩ } = none ∧
       Witness.run.ownerVia { Witness.session with id := ⟨"s2"⟩ } = none := by
-  decide
+  decide +kernel
 
 private theorem id_eq_of_val {k : IdKind} {a b : Id k} (h : a.val = b.val) : a = b := by
   cases a; cases b; cases h; rfl
@@ -200,9 +200,9 @@ theorem run_join_agrees_with_the_row_reference (st : State) (r : Run) (s : Sessi
       (ofCells (runCells r)) (ofCells (sessionCells s))) :
     r.agentVia s = some s.agent ∧ r.ownerVia s = some s.ownerPrincipal := by
   have hcols : (workFk .runs "runs_session_workspace_fk").columns =
-      ["session_id", "workspace_id"] := by decide
+      ["session_id", "workspace_id"] := by decide +kernel
   have hrefs : (workFk .runs "runs_session_workspace_fk").refColumns =
-      ["id", "workspace_id"] := by decide
+      ["id", "workspace_id"] := by decide +kernel
   have hp := h.2.2.2.2
   rw [hcols, hrefs] at hp
   simp [Row.project, Row.get, ofCells, runCells, sessionCells, List.lookup_cons] at hp
@@ -223,20 +223,20 @@ theorem session_user_is_a_member_of_its_workspace (st : State)
       m.get "user_id" = some u := by
   have hws : (r.get "workspace_id").isSome = true :=
     AgentWorkspace.Theorems.Invariants.ErCore.tenant_row_has_workspace catalogue st hc
-      (t := .sessions) (tc := "workspace_id") rfl (by decide) hr
+      (t := .sessions) (tc := "workspace_id") rfl (by decide +kernel) hr
   have hset : r.present (workFk .sessions "sessions_member_workspace_fk").columns = true := by
     have : (workFk .sessions "sessions_member_workspace_fk").columns =
-        ["workspace_id", "user_id"] := by decide
+        ["workspace_id", "user_id"] := by decide +kernel
     rw [this]
     simp [Row.present, hu, hws]
   obtain ⟨⟨m, hm⟩, _⟩ := sessions_member_workspace_fk_links_at_most_one_parent st hc hr hset
   obtain ⟨_, _, hmem, _, hproj⟩ := hm
   have hcols : (workFk .sessions "sessions_member_workspace_fk").columns =
-      ["workspace_id", "user_id"] := by decide
+      ["workspace_id", "user_id"] := by decide +kernel
   have hrcols : (workFk .sessions "sessions_member_workspace_fk").refColumns =
-      ["workspace_id", "user_id"] := by decide
+      ["workspace_id", "user_id"] := by decide +kernel
   have href : (workFk .sessions "sessions_member_workspace_fk").refTable = .memberships := by
-    decide
+    decide +kernel
   rw [hcols, hrcols] at hproj
   rw [href] at hmem
   simp only [Row.project, List.map_cons, List.map_nil, List.cons.injEq] at hproj
@@ -257,13 +257,14 @@ private theorem work_check_holds_on_every_row (st : State) (hc : workConsistent 
   exact hc.2 t ht n hn r hr
 
 /-- "A finished run has an end time and an unfinished one does not": in every consistent state a
-run row has `ended_at` exactly when its status is terminal. -/
+run row has `ended_at` exactly when its status is stopped, terminal or the database-only
+`awaiting_approval` (ADR-0145 D1). -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")]
 theorem run_row_has_ended_at_iff_terminal (st : State) (hc : workConsistent st = true) {r : Row}
     (hr : r ∈ st .runs) {s : String} (hs : r.get "status" = some s) :
-    terminalWires.contains s = (r.get "ended_at").isSome := by
+    stoppedWires.contains s = (r.get "ended_at").isSome := by
   have h := work_check_holds_on_every_row st hc (t := .runs) (n := "runs_ended_at_iff_terminal")
-    (by decide) (by decide) hr
+    (by decide +kernel) (by decide +kernel) hr
   simpa [workCheckHolds, workCheck, hs] using h
 
 /-- In every consistent state a run row never ends before it starts. -/
@@ -272,7 +273,7 @@ theorem run_row_ends_after_it_starts (st : State) (hc : workConsistent st = true
     (hr : r ∈ st .runs) {a b : Nat} (hs : natCell? r "started_at" = some a)
     (he : natCell? r "ended_at" = some b) : a ≤ b := by
   have h := work_check_holds_on_every_row st hc (t := .runs) (n := "runs_ended_after_started")
-    (by decide) (by decide) hr
+    (by decide +kernel) (by decide +kernel) hr
   simp only [workCheckHolds, workCheck, notBefore] at h
   cases hge : r.get "ended_at" with
   | none => simp [natCell?, hge] at he
@@ -292,7 +293,7 @@ theorem run_row_price_version_iff_priced (st : State) (hc : workConsistent st = 
     (hr : r ∈ st .runs) {a : String} (ha : r.get "accounting_state" = some a) :
     pricedWires.contains a = (r.get "price_table_version").isSome := by
   have h := work_check_holds_on_every_row st hc (t := .runs)
-    (n := "runs_price_version_matches_accounting_state") (by decide) (by decide) hr
+    (n := "runs_price_version_matches_accounting_state") (by decide +kernel) (by decide +kernel) hr
   simpa [workCheckHolds, workCheck, ha] using h
 
 /-- In every consistent state a run row whose usage is not priced costs exactly zero. -/
@@ -303,7 +304,7 @@ theorem unpriced_run_row_costs_zero (st : State) (hc : workConsistent st = true)
     (hunpriced : pricedWires.contains a = false) (hcost : r.get "cost_usd" = some c) :
     isZeroDecimal c = true := by
   have h := work_check_holds_on_every_row st hc (t := .runs) (n := "runs_unpriced_cost_zero")
-    (by decide) (by decide) hr
+    (by decide +kernel) (by decide +kernel) hr
   simpa only [workCheckHolds, workCheck, ha, hcost, hunpriced, Bool.false_or] using h
 
 /-- In every consistent state every run row and every ledger row settles in USD. -/
@@ -314,10 +315,10 @@ theorem work_rows_settle_in_usd (st : State) (hc : workConsistent st = true) {r 
     (hr : r ∈ st .runs ∨ r ∈ st .runUsageRecords) : c = "USD" := by
   rcases hr with hr | hr
   · have h := work_check_holds_on_every_row st hc (t := .runs) (n := "runs_cost_currency_usd")
-      (by decide) (by decide) hr
+      (by decide +kernel) (by decide +kernel) hr
     simpa [workCheckHolds, workCheck, hcur] using h
   · have h := work_check_holds_on_every_row st hc (t := .runUsageRecords)
-      (n := "run_usage_records_currency_usd") (by decide) (by decide) hr
+      (n := "run_usage_records_currency_usd") (by decide +kernel) (by decide +kernel) hr
     simpa [workCheckHolds, workCheck, hcur] using h
 
 /-- In every consistent state every token counter of a run row or a ledger row is a
@@ -330,10 +331,10 @@ theorem work_row_counters_are_natural (st : State) (hc : workConsistent st = tru
   have h : countersNonNegative r = true := by
     rcases hr with hr | hr
     · simpa [workCheckHolds, workCheck] using work_check_holds_on_every_row st hc (t := .runs)
-        (n := "runs_counters_non_negative") (by decide) (by decide) hr
+        (n := "runs_counters_non_negative") (by decide +kernel) (by decide +kernel) hr
     · simpa [workCheckHolds, workCheck] using work_check_holds_on_every_row st hc
-        (t := .runUsageRecords) (n := "run_usage_records_counters_non_negative") (by decide)
-        (by decide) hr
+        (t := .runUsageRecords) (n := "run_usage_records_counters_non_negative") (by decide +kernel)
+        (by decide +kernel) hr
   simp only [countersNonNegative, Bool.and_eq_true, List.all_eq_true] at h
   simpa [hv] using h.1 col hcol
 
@@ -344,7 +345,7 @@ theorem run_token_row_expires_after_creation (st : State) (hc : workConsistent s
     {r : Row} (hr : r ∈ st .runTokens) {c e : Nat} (hcr : natCell? r "created_at" = some c)
     (hex : natCell? r "expires_at" = some e) : c < e := by
   have h := work_check_holds_on_every_row st hc (t := .runTokens)
-    (n := "run_tokens_expiry_after_created") (by decide) (by decide) hr
+    (n := "run_tokens_expiry_after_created") (by decide +kernel) (by decide +kernel) hr
   simp only [workCheckHolds, workCheck] at h
   cases hge : r.get "expires_at" with
   | none => simp [natCell?, hge] at hex
@@ -364,9 +365,9 @@ theorem project_row_invariants (st : State) (hc : workConsistent st = true) {r :
     (r.get "name").all hasNonSpace = true ∧
       ((r.get "default_model_connection_id").isNone = (r.get "default_model").isNone) := by
   have h1 := work_check_holds_on_every_row st hc (t := .projects) (n := "projects_name_not_blank")
-    (by decide) (by decide) hr
+    (by decide +kernel) (by decide +kernel) hr
   have h2 := work_check_holds_on_every_row st hc (t := .projects)
-    (n := "projects_default_model_pair") (by decide) (by decide) hr
+    (n := "projects_default_model_pair") (by decide +kernel) (by decide +kernel) hr
   simp only [workCheckHolds, workCheck] at h1 h2
   exact ⟨h1, by simpa using h2⟩
 
@@ -379,11 +380,11 @@ theorem audit_row_invariants (st : State) (hc : workConsistent st = true) {r : R
     (r.get "actor_label").all hasNonSpace = true ∧ (r.get "subject_label").all hasNonSpace = true ∧
       (r.get "subject_id").all Uuid.isCanonical = true := by
   have h1 := work_check_holds_on_every_row st hc (t := .auditEvents)
-    (n := "audit_events_actor_label_not_blank") (by decide) (by decide) hr
+    (n := "audit_events_actor_label_not_blank") (by decide +kernel) (by decide +kernel) hr
   have h2 := work_check_holds_on_every_row st hc (t := .auditEvents)
-    (n := "audit_events_subject_label_not_blank") (by decide) (by decide) hr
+    (n := "audit_events_subject_label_not_blank") (by decide +kernel) (by decide +kernel) hr
   have h3 := work_check_holds_on_every_row st hc (t := .auditEvents)
-    (n := "audit_events_subject_id_shape") (by decide) (by decide) hr
+    (n := "audit_events_subject_id_shape") (by decide +kernel) (by decide +kernel) hr
   simp only [workCheckHolds, workCheck] at h1 h2 h3
   exact ⟨h1, h2, h3⟩
 
@@ -392,13 +393,15 @@ theorem audit_row_invariants (st : State) (hc : workConsistent st = true) {r : R
 private def sampleRun (s : RunStatus) (a : AccountingState) : Run :=
   { Run.create ⟨"r"⟩ ⟨"w"⟩ ⟨"s"⟩ 0 with
     status := s, startedAt := if s = .queued then none else some 1,
-    endedAt := if s.isTerminal then some 2 else none, accountingState := a,
+    endedAt := if s.isStopped then some 2 else none, accountingState := a,
+    pendingApproval := if s = .awaitingApproval then some "call" else none,
+    approvalDeadlineAt := if s = .awaitingApproval then some 3 else none,
     priceTableVersion := if a.isPriced then some "v1" else none,
     costUsd := if a.isPriced then "0.500000" else zeroCost }
 
 /-- "A run's `status` reaching a terminal value and its `accountingState` reaching `'complete'`
-are two separate facts", at the level of the row checks only: every one of the 25 combinations of
-status and accounting state passes the six `runs` checks, so no check ties one to the other (this
+are two separate facts", at the level of the row checks only: every one of the 30 combinations of
+status and accounting state passes the eight `runs` checks, so no check ties one to the other (this
 says nothing about which combinations a store path reaches; the document itself only says a
 completed run's accounting may still be `pending` or `partial`). -/
 @[aw_spec (tier := T1)
@@ -406,14 +409,14 @@ completed run's accounting may still be `pending` or `partial`). -/
   (ts := "packages/core/src/db/schema/runs.ts#accountingStates")]
 theorem status_and_accounting_are_independent (s : RunStatus) (a : AccountingState) :
     ∃ r : Run, r.wellFormed = true ∧ r.status = s ∧ r.accountingState = a :=
-  ⟨sampleRun s a, by cases s <;> cases a <;> decide, rfl, rfl⟩
+  ⟨sampleRun s a, by cases s <;> cases a <;> decide +kernel, rfl, rfl⟩
 
 /-- A run exists as soon as it is started, as `queued` ("the run already exists, with
 `status: 'queued'`"), with zero usage, the zero cost `'0.000000'` in USD, no price table version
 and accounting `pending`, and it passes every check. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")]
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")]
 theorem new_run_is_queued_unpriced_and_well_formed (id : RunId) (ws : WorkspaceId)
     (session : SessionId) (now : Nat) :
     let r := Run.create id ws session now
@@ -422,8 +425,9 @@ theorem new_run_is_queued_unpriced_and_well_formed (id : RunId) (ws : WorkspaceI
       r.wellFormed = true := by
   refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, ?_⟩
   simp only [Run.create, Run.wellFormed, Run.endedAtIffTerminal, Run.endedAfterStarted,
-    Run.costNonNegative, Run.currencyUsd, Run.priceVersionMatches, Run.unpricedCostZero]
-  decide
+    Run.costNonNegative, Run.currencyUsd, Run.priceVersionMatches, Run.unpricedCostZero,
+    Run.pendingWhenAwaiting, Run.deadlineWhenAwaiting]
+  decide +kernel
 
 /-- A well-formed run carries a price table version exactly when its usage is priced
 (`priceTableVersion` "`null` until priced"), and a run whose usage is not priced costs zero. -/
@@ -435,18 +439,19 @@ theorem unpriced_run_has_no_version_and_costs_zero (r : Run) (hwf : r.wellFormed
     r.priceTableVersion = none ∧ isZeroDecimal r.costUsd = true := by
   simp only [Run.wellFormed, Run.priceVersionMatches, Run.unpricedCostZero, hun,
     Bool.and_eq_true, Bool.false_or] at hwf
-  refine ⟨?_, hwf.2⟩
-  have h := hwf.1.2
+  refine ⟨?_, hwf.1.1.2⟩
+  have h := hwf.1.1.1.2
   cases hv : r.priceTableVersion
   · rfl
   · simp [hv] at h
 
-/-- A well-formed run has an end time exactly when its status is terminal. -/
+/-- A well-formed run has an end time exactly when it has stopped: its status is terminal or the
+`awaiting_approval` pause (ADR-0145 D1). -/
 @[aw_spec (tier := T1) (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")]
 theorem well_formed_run_ends_iff_terminal (r : Run) (hwf : r.wellFormed = true) :
-    r.endedAt.isSome = r.status.isTerminal := by
+    r.endedAt.isSome = r.status.isStopped := by
   simp only [Run.wellFormed, Run.endedAtIffTerminal, Bool.and_eq_true, beq_iff_eq] at hwf
-  exact hwf.1.1.1.1.1.symm
+  exact hwf.1.1.1.1.1.1.1.symm
 
 /-- `totalTokens` is "the sum of the four" token counters: it never counts tool calls, and it
 adds up across settlements (the total of a sum of counters is the sum of their totals). -/
@@ -488,7 +493,7 @@ every settled state is priced, and `'partial'` is priced without being settled. 
 theorem only_complete_is_settled (a : AccountingState) :
     (a.isSettled = true ↔ a = .complete) ∧ (a.isSettled = true → a.isPriced = true) ∧
       (AccountingState.«partial».isPriced = true ∧ AccountingState.«partial».isSettled = false) := by
-  cases a <;> decide
+  cases a <;> decide +kernel
 
 /-! ## Decimal amounts -/
 
@@ -525,7 +530,7 @@ theorem run_checks_refuse_unpriced_or_negative_cost :
       ({ Witness.run with costUsd := "-0.001000" } : Run).wellFormed = false ∧
       ({ Witness.queuedRun with costUsd := "-0.0" } : Run).wellFormed = true ∧
       Witness.run.wellFormed = true := by
-  decide
+  decide +kernel
 
 /-- The ledger's accounting state: no settlement is `pending`; after one, it is priced exactly
 when some ledger row is priced, `complete` when every row is and `unavailable` when none is. -/
@@ -583,7 +588,7 @@ theorem mixed_ledger_is_partial (records : List UsageRecord)
 
 /-- One priced and one unpriced settlement make a `partial` ledger. -/
 example : ledgerAccounting [Witness.usage, { Witness.usage with priceTableVersion := none }] = .«partial» :=
-  mixed_ledger_is_partial _ (by decide) (by decide)
+  mixed_ledger_is_partial _ (by decide +kernel) (by decide +kernel)
 
 /-! ## Sessions and transcripts -/
 
@@ -620,7 +625,7 @@ theorem reported_identity_must_be_the_platform_id (s : Session) (reported : Stri
 theorem main_transcript_has_no_wire_subpath :
     mainSubpath = "" ∧ isWireSubpath mainSubpath = false ∧
       ∀ s, isWireSubpath s = true → s.length ≤ 128 := by
-  refine ⟨rfl, by decide, fun s h => ?_⟩
+  refine ⟨rfl, by decide +kernel, fun s h => ?_⟩
   simp only [isWireSubpath, subpathMaxLength, Bool.and_eq_true] at h
   exact of_decide_eq_true h.1
 
@@ -642,9 +647,9 @@ private theorem key_char_of_hex (c : Char) (h : Uuid.isHexDigit c = true ∨ c =
     simp only [isKeyChar, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq]
     rcases h with (h | h) | h
     · exact Or.inl (Or.inl (Or.inr h))
-    · exact Or.inl (Or.inl (Or.inl (Or.inr ⟨h.1, Char.le_trans h.2 (by decide)⟩)))
-    · exact Or.inl (Or.inl (Or.inl (Or.inl ⟨h.1, Char.le_trans h.2 (by decide)⟩)))
-  · decide
+    · exact Or.inl (Or.inl (Or.inl (Or.inr ⟨h.1, Char.le_trans h.2 (by decide +kernel)⟩)))
+    · exact Or.inl (Or.inl (Or.inl (Or.inl ⟨h.1, Char.le_trans h.2 (by decide +kernel)⟩)))
+  · decide +kernel
 
 private theorem device_name_is_short (s : String) (h : isWindowsDeviceName s = true) :
     s.toList.length ≤ 4 := by
@@ -659,12 +664,12 @@ safe: every canonical UUID matches `PROJECT_KEY_PATTERN` (the SDK's own validato
 Windows device name, so a workspace id never makes the SDK silently fall back to a key shared
 across tenants. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN")
-  (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+  (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/sdk/04-api-specification.md#511-sessions-and-transcripts--awsessions")]
 theorem workspace_id_is_a_safe_project_key (s : String) (h : Uuid.isCanonical s = true) :
     isProjectKey s = true ∧ isWindowsDeviceName s = false := by
   simp only [Uuid.isCanonical, Bool.and_eq_true, beq_iff_eq] at h
-  have hlen : s.toList.length = 36 := by rw [h.1]; decide
+  have hlen : s.toList.length = 36 := by rw [h.1]; decide +kernel
   refine ⟨?_, ?_⟩
   · simp only [isProjectKey, hlen, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true]
     exact ⟨⟨by omega, by omega⟩, fun c hc => key_char_of_hex c (zip_all h.1 h.2 c hc)⟩
@@ -674,7 +679,7 @@ theorem workspace_id_is_a_safe_project_key (s : String) (h : Uuid.isCanonical s 
 
 /-- With a non-blank configuration directory, the tenant session scope keyed by a workspace id is
 always accepted by `validateTenantSessionScope`. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem tenant_scope_accepts_a_workspace_key (ws configDir : String)
     (hws : Uuid.isCanonical ws = true) (hdir : Concepts.ModelConnection.isBlank configDir = false) :
@@ -686,7 +691,7 @@ theorem tenant_scope_accepts_a_workspace_key (ws configDir : String)
 key is one directory name of 1 to 64 characters with no path separator and no `.` (so no `..`
 and no hidden or relative path), it is not a Windows device name, and the configuration directory
 is not blank. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (ts := "packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem tenant_scope_refuses_unsafe_keys (k d : String) (h : tenantScopeOk k d = true) :
@@ -698,14 +703,14 @@ theorem tenant_scope_refuses_unsafe_keys (k d : String) (h : tenantScopeOk k d =
   rw [← String.length_toList]
   refine ⟨h1, h64, fun c hc => ?_, hdev, hd⟩
   have hk := hall c hc
-  refine ⟨?_, ?_, ?_⟩ <;> (rintro rfl; revert hk; decide)
+  refine ⟨?_, ?_, ?_⟩ <;> (rintro rfl; revert hk; decide +kernel)
 
 /-- The refusals, by case: a device-name key (`con`, `COM1`, `lpt9`), an empty or 65-character
 key, a key with a `/` or `.`, and a blank configuration directory (ASCII blanks, or the Unicode
 blanks `String.prototype.trim` also strips: U+3000, U+2028, U+205F, U+1680, U+FEFF) are all
 refused, while a 64-character key under a real directory is accepted, and a directory holding a
 zero-width space (U+200B, not whitespace to ECMAScript) is not blank. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem tenant_scope_refusals :
     (["con", "COM1", "lpt9", "", "a/b", "..", String.ofList (List.replicate 65 'k')].all
@@ -715,7 +720,7 @@ theorem tenant_scope_refusals :
         fun d => !tenantScopeOk "workspace-1" d) = true ∧
       tenantScopeOk "workspace-1" "\u200B" = true ∧
       tenantScopeOk (String.ofList (List.replicate 64 'k')) "/var/lib/aw" = true := by
-  decide
+  decide +kernel
 
 /-- A redelivered transcript entry keeps the position of its first delivery, so a message whose
 position is at most its sequence keeps that shape at every later sequence; a position after the
@@ -746,7 +751,7 @@ theorem frame_kinds_are_disjoint_and_only_control_is_transient :
       (controlFrameNames ++ runStatusEvent :: relayedEventNames).Nodup ∧
       FrameKind.durable .control = false ∧ FrameKind.durable .platform = true ∧
       FrameKind.durable .relayed = true := by
-  decide
+  decide +kernel
 
 private theorem window_facts : ∀ (l : List Nat), isWindow l = true → l.Nodup ∧ ∀ n ∈ l, 1 ≤ n
   | [], _ => by simp
@@ -777,15 +782,15 @@ theorem contiguous_log_has_distinct_positive_sequences (events : List RunEvent) 
       logContiguous (interleaved.filter (·.key.sequence != 2)) ⟨"ra"⟩ = false ∧
       isWindow [3, 4, 5] = true ∧ isWindow [1, 3] = false ∧ isWindow [2, 2] = false ∧
       isWindow [2, 1] = false ∧ isWindow [0, 1] = false :=
-  ⟨(window_facts _ h).1, (window_facts _ h).2, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, by decide, by decide⟩
+  ⟨(window_facts _ h).1, (window_facts _ h).2, by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel,
+    by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel, by decide⟩
 
 /-- Every listed frame name satisfies `EVENT_NAME_PATTERN`, the grammar every `event:` name must
 satisfy. -/
 @[aw_spec (tier := T1) (ts := "packages/contracts/src/run-events.ts#EVENT_NAME_PATTERN")]
 theorem listed_frame_names_are_well_formed :
     (controlFrameNames ++ runStatusEvent :: relayedEventNames).all isEventName = true := by
-  decide
+  decide +kernel
 
 /-- `EVENT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/` on its edges: a one-letter name and
 a 64-character name pass, a 65-character name fails, and a name that is empty, starts with a
@@ -798,7 +803,7 @@ theorem event_name_pattern_edges :
       isEventName "Z.b_c-9" = true ∧
       (["", "1abc", "_abc", "-abc", ".abc", "a b", "a:b", "é"].all (!isEventName ·)) = true ∧
       ∀ s, isEventName s = true → s.length ≤ 64 := by
-  refine ⟨by decide, by decide, by decide, by decide, by decide, fun s h => ?_⟩
+  refine ⟨by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel, by decide +kernel, fun s h => ?_⟩
   unfold isEventName at h
   rw [← String.length_toList]
   split at h
@@ -842,7 +847,7 @@ private theorem witness : consistent catalogue Witness.state = true := by
 private theorem witness_work : workConsistent Witness.state = true :=
   work_constraints_are_satisfiable.1
 
-example : terminalWires.contains "completed" = (
+example : stoppedWires.contains "completed" = (
     (ofCells (runCells Witness.run)).get "ended_at").isSome :=
   run_row_has_ended_at_iff_terminal Witness.state witness_work (by decide +kernel) (by decide +kernel)
 
@@ -855,8 +860,8 @@ example : pricedWires.contains "complete" =
   run_row_price_version_iff_priced Witness.state witness_work (by decide +kernel) (by decide +kernel)
 
 example : isZeroDecimal "0.000000" = true :=
-  unpriced_run_row_costs_zero Witness.state witness_work (r := ofCells (runCells Witness.queuedRun))
-    (a := "pending") (c := "0.000000") (by decide +kernel) (by decide +kernel) (by decide) (by decide +kernel)
+  unpriced_run_row_costs_zero Witness.state witness_work (r := ofCells Witness.queuedRunCells)
+    (a := "pending") (c := "0.000000") (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : "USD" = "USD" :=
   work_rows_settle_in_usd Witness.state witness_work (r := ofCells (usageCells Witness.usage))
@@ -864,7 +869,7 @@ example : "USD" = "USD" :=
 
 example : (parseNat? "10").isSome = true :=
   work_row_counters_are_natural Witness.state witness_work (r := ofCells (runCells Witness.run))
-    (.inl (by decide +kernel)) (col := "input_tokens") (by decide) (by decide +kernel)
+    (.inl (by decide +kernel)) (col := "input_tokens") (by decide +kernel) (by decide +kernel)
 
 example : 4 < 100 :=
   run_token_row_expires_after_creation Witness.state witness_work
@@ -896,33 +901,33 @@ example := run_join_agrees_with_the_row_reference Witness.state Witness.run Witn
 example := session_user_is_a_member_of_its_workspace Witness.state witness
   (r := ofCells (sessionCells Witness.session)) (u := "u1") (by decide +kernel) (by decide +kernel)
 
-example := unpriced_run_has_no_version_and_costs_zero Witness.queuedRun (by decide) (by decide)
+example := unpriced_run_has_no_version_and_costs_zero Witness.queuedRun (by decide +kernel) (by decide +kernel)
 
-example := well_formed_run_ends_iff_terminal Witness.run (by decide)
+example := well_formed_run_ends_iff_terminal Witness.run (by decide +kernel)
 
-example := project_default_model_travels_with_its_connection Witness.project (by decide)
+example := project_default_model_travels_with_its_connection Witness.project (by decide +kernel)
 
 example := duration_is_end_minus_start Witness.run 5 9 rfl rfl
 
-example := zero_decimal_has_no_nonzero_digit "0.000000" (by decide)
+example := zero_decimal_has_no_nonzero_digit "0.000000" (by decide +kernel)
 
-example := negative_nonzero_decimal_is_refused "-0.001000" (by decide) (by decide)
+example := negative_nonzero_decimal_is_refused "-0.001000" (by decide +kernel) (by decide +kernel)
 
 example := tenant_scope_refuses_unsafe_keys "0f8fad5b-d9cb-469f-a165-70867728950e"
-  "/var/lib/aw/config" (by decide)
+  "/var/lib/aw/config" (by decide +kernel)
 
-example := redelivery_keeps_an_earlier_position Witness.message 4 (by decide) (by decide)
+example := redelivery_keeps_an_earlier_position Witness.message 4 (by decide +kernel) (by decide +kernel)
 
-example := contiguous_log_has_distinct_positive_sequences interleaved ⟨"rb"⟩ (by decide)
+example := contiguous_log_has_distinct_positive_sequences interleaved ⟨"rb"⟩ (by decide +kernel)
 
 example := tenant_scope_accepts_a_workspace_key "0f8fad5b-d9cb-469f-a165-70867728950e"
-  "/var/lib/aw/config" (by decide) (by decide)
+  "/var/lib/aw/config" (by decide +kernel) (by decide +kernel)
 
 /-- The acceptance needs a directory that is not blank to ECMAScript: U+3000 alone is refused. -/
-example : tenantScopeOk "0f8fad5b-d9cb-469f-a165-70867728950e" "\u3000" = false := by decide
+example : tenantScopeOk "0f8fad5b-d9cb-469f-a165-70867728950e" "\u3000" = false := by decide +kernel
 
-example := workspace_id_is_a_safe_project_key "0f8fad5b-d9cb-469f-a165-70867728950e" (by decide)
+example := workspace_id_is_a_safe_project_key "0f8fad5b-d9cb-469f-a165-70867728950e" (by decide +kernel)
 
-example := (ledger_accounting_follows_the_priced_rows [Witness.usage]).2.2.1 (by simp) (by decide)
+example := (ledger_accounting_follows_the_priced_rows [Witness.usage]).2.2.1 (by simp) (by decide +kernel)
 
 end AgentWorkspace.Theorems.Normative.ConceptWork

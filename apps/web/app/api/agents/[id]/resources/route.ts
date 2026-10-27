@@ -1,14 +1,14 @@
-import type { AgentResourceAssignments } from '../../../../../contracts/agents';
-
-import { agentNotFound, problem } from '../../../../../server/agents/handlers';
-import { isUuid } from '../../../../../server/agents/contract';
+import { applicationContext } from '../../../../../server/application-context';
+import { agentNotFound, refuseBuiltinWrite } from '../../../../../server/agents/handlers';
+import type { BuiltinAgentOperation } from '../../../../../contracts/agents';
+import { problem, type ApiResult } from '../../../../../server/http/result';
+import { isUuid, parseAssignments } from '../../../../../server/agents/contract';
 import {
   readAgentIdParam,
   readJsonBody,
-  toResponse,
   withWorkspaceStore,
 } from '../../../../../server/agents/http';
-import { currentAgentsRuntime } from '../../../../../server/agents/runtime';
+import { route } from '../../../../../server/http/route';
 import { saveConsoleEdit } from '../../../../../server/agent-versions/http';
 import { judgeAgent } from '../../../../../server/policy-ceiling/ceiling';
 import { requireResourceAccess } from '../../../../../server/resources/authorise';
@@ -23,14 +23,16 @@ import type { OwnershipResolver } from '../../../../../server/rbac/http';
  * installed agents runtime once the resolver is handed the verified `principal`'s workspace,
  * rather than from a store closed over one.
  */
-function ownershipOf(id: unknown): OwnershipResolver {
+function ownershipOf(id: unknown, operation: BuiltinAgentOperation): OwnershipResolver {
   return async (principal) => {
-    const runtime = currentAgentsRuntime();
+    const runtime = applicationContext()?.agents ?? null;
     if (runtime === null || !isUuid(id)) {
       return { kind: 'refuse', result: agentNotFound() };
     }
     const row = await runtime.agents.forWorkspace(principal.workspaceId).get(id);
     if (row === null) return { kind: 'refuse', result: agentNotFound() };
+    const readOnly = refuseBuiltinWrite(row, operation);
+    if (readOnly !== null) return { kind: 'refuse', result: readOnly };
     return {
       kind: 'ownership',
       ownership: principal.ownerPrincipalId === row.ownerPrincipalId ? 'own' : 'other',
@@ -41,47 +43,14 @@ function ownershipOf(id: unknown): OwnershipResolver {
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export function parseAssignments(raw: unknown): AgentResourceAssignments | null {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
-  const body = raw as Record<string, unknown>;
-  if (
-    !Array.isArray(body['files']) ||
-    !Array.isArray(body['skillIds']) ||
-    !Array.isArray(body['connectorIds'])
-  )
-    return null;
-  const files = body['files'];
-  if (
-    !files.every(
-      (entry) =>
-        typeof entry === 'object' &&
-        entry !== null &&
-        typeof (entry as Record<string, unknown>)['fileId'] === 'string' &&
-        ((entry as Record<string, unknown>)['access'] === 'read' ||
-          (entry as Record<string, unknown>)['access'] === 'read-write'),
-    )
-  )
-    return null;
-  if (
-    !body['skillIds'].every((id) => typeof id === 'string') ||
-    !body['connectorIds'].every((id) => typeof id === 'string')
-  )
-    return null;
-  return {
-    files: files as unknown as AgentResourceAssignments['files'],
-    skillIds: body['skillIds'],
-    connectorIds: body['connectorIds'],
-  };
-}
-
-export async function GET(
+async function serveGet(
   request: Request,
   context: { params: Promise<{ id: string }> },
-): Promise<Response> {
+): Promise<ApiResult | Response> {
   const id = await readAgentIdParam(context);
-  const access = await requireResourceAccess(request, ownershipOf(id));
+  const access = await requireResourceAccess(request, ownershipOf(id, 'read'));
   if (!access.ok) return access.response;
-  const result = await withWorkspaceStore(
+  return withWorkspaceStore(
     request,
     async (_agents, installed, workspaceId) => {
       if (typeof id !== 'string')
@@ -99,17 +68,18 @@ export async function GET(
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
 }
 
-export async function PUT(
+export const GET = route({ component: 'agents', operation: 'get-resources' }, serveGet);
+
+async function servePut(
   request: Request,
   context: { params: Promise<{ id: string }> },
-): Promise<Response> {
+): Promise<ApiResult | Response> {
   const id = await readAgentIdParam(context);
-  const access = await requireResourceAccess(request, ownershipOf(id));
+  const access = await requireResourceAccess(request, ownershipOf(id, 'replace-resources'));
   if (!access.ok) return access.response;
-  const result = await withWorkspaceStore(
+  return withWorkspaceStore(
     request,
     async (agents, installed, workspaceId) => {
       if (typeof id !== 'string')
@@ -127,7 +97,7 @@ export async function PUT(
         return problem(
           400,
           'invalid_assignments',
-          'files, skillIds, and connectorIds are required assignment arrays.',
+          'files, skillIds, and connectorIds are required assignment arrays; skillRevisions, when sent, pins only assigned skills to published revisions.',
         );
       // Issue #133: the agent's own `writeFiles` permission is a ceiling on a `'read-write'` file
       // grant. Applied inside `AgentResourceRepository.replace` (`packages/core/src/db/
@@ -137,7 +107,10 @@ export async function PUT(
       //
       // Issue #535: the agent with these connectors is judged against the deployment's ceiling.
       // ponytail: check-then-write race until V-2, same as SD11
-      const ceiling = installed.ceilingFor?.(request, workspaceId) ?? null;
+      const ceiling =
+        installed.ceiling.kind === 'enforced'
+          ? installed.ceiling.ceilingFor(request, workspaceId)
+          : null;
       const agent = await agents.get(id);
       if (agent === null) return agentNotFound();
       if (ceiling !== null) {
@@ -150,7 +123,7 @@ export async function PUT(
       // Issue #616: a console edit is saved as a version (`via: 'ui'`) and `local` points at it.
       const unsaved = await saveConsoleEdit(
         agent,
-        { kind: 'resources', assignments },
+        { kind: 'resources', assignments: { ...assignments, storageGrants: [] } },
         access.principal,
         ceiling,
       );
@@ -160,5 +133,6 @@ export async function PUT(
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
 }
+
+export const PUT = route({ component: 'agents', operation: 'replace-resources' }, servePut);

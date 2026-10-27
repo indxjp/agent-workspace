@@ -5,6 +5,8 @@
  * semantics of the real token repository are covered against PostgreSQL in
  * `packages/core/src/db/repositories/oauth-tokens.postgres.test.ts`.
  */
+import { captureLog } from '../telemetry/capture-log';
+import { log as webLogger } from '../telemetry/logger';
 import type {
   IssueOAuthTokenInput,
   OAuthConsumeOutcome,
@@ -17,10 +19,12 @@ import { POST as REVOKE } from '../../app/oauth/revoke/route';
 import { POST as TOKEN } from '../../app/oauth/token/route';
 import { GET as AS_METADATA } from '../../app/.well-known/oauth-authorization-server/route';
 import { GET as MCP_METADATA } from '../../app/.well-known/oauth-protected-resource/mcp/projects/[name]/route';
+import { GET as BUILDER_METADATA } from '../../app/.well-known/oauth-protected-resource/mcp/builder/route';
 import { GET as A2A_METADATA } from '../../app/.well-known/oauth-protected-resource/api/a2a/agents/[agentName]/route';
+import { clearApplicationContext, applicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { conferredBy } from '../rbac/conferral';
 import { Principal } from '../rbac/principal';
-import { configureRbacRuntime, currentRbacRuntime } from '../rbac/runtime';
 import {
   callerHeaders,
   installRbacHarness,
@@ -28,23 +32,16 @@ import {
   type RbacHarness,
 } from '../rbac/testing';
 import { admitOAuthAddress, OAUTH_RATE_LIMITS, resetOAuthLimits } from './limits';
-import {
-  clearOAuthRuntime,
-  configureOAuthRuntime,
-  type OAuthAuditEvent,
-  type OAuthClient,
-} from './runtime';
-import {
-  installToolEndpoint,
-  resetToolEndpoint,
-  type ToolEndpointEnvironment,
-} from '../tool-endpoint/env';
+import { BUILDER_RESOURCE_PATH } from './resource';
+import type { OAuthAuditEvent, OAuthClient } from './runtime';
+import type { ToolEndpointEnvironment } from '../tool-endpoint/env';
 import { mintClientSecret, parseOAuthToken } from './tokens';
 
 const ORIGIN = 'https://aw.example';
 const REDIRECT = 'https://app.example/callback';
 const MCP_RESOURCE = `${ORIGIN}/mcp/projects/docs`;
 const A2A_RESOURCE = `${ORIGIN}/api/a2a/agents/helper`;
+const BUILDER_RESOURCE = `${ORIGIN}/mcp/builder`;
 const OTHER_WORKSPACE = 'some-other-workspace';
 const PROXY_TEST_SECRET = 'a-secure-test-secret-with-at-least-32-characters';
 const VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
@@ -132,6 +129,8 @@ let agentGone: boolean;
 let secret: string;
 let mcp: OAuthClient;
 let a2a: OAuthClient;
+let builder: OAuthClient;
+let builderConfidential: OAuthClient;
 let foreign: OAuthClient;
 /** Every body any handler returned, for the plaintext scan. */
 let bodies: string[];
@@ -175,36 +174,49 @@ beforeEach(async () => {
     kind: 'a2a-agent',
     resourcePath: '/api/a2a/agents/helper',
   });
+  builder = client({
+    id: crypto.randomUUID(),
+    name: 'Claude Code',
+    kind: 'builder',
+    agentIds: [],
+    resourcePath: BUILDER_RESOURCE_PATH,
+  });
+  builderConfidential = {
+    ...builder,
+    id: crypto.randomUUID(),
+    clientSecretHash: minted.secretHash,
+  };
   foreign = client({
     id: crypto.randomUUID(),
     name: 'Foreign',
     workspaceId: OTHER_WORKSPACE,
     clientSecretHash: minted.secretHash,
   });
-  clients = new Map([mcp, a2a, foreign].map((c) => [c.id, c]));
+  clients = new Map([mcp, a2a, builder, builderConfidential, foreign].map((c) => [c.id, c]));
   rows = [];
   audits = [];
   cannotRun = new Set();
   agentGone = false;
   bodies = [];
   const repo = fakeTokens(rows);
-  configureOAuthRuntime({
-    findClient: (id) => Promise.resolve(clients.get(id) ?? null),
-    canRunAll: (principal: Principal) => Promise.resolve(!cannotRun.has(principal.principalId)),
-    agentNames: (_workspaceId, agentIds) =>
-      Promise.resolve(agentGone ? null : agentIds.map((id) => `<i>${id}</i>`)),
-    tokens: () => Promise.resolve(repo),
-    audit: (workspaceId, actor, event) => {
-      audits.push({ workspaceId, actor, event });
-      return Promise.resolve();
+  installTestDomains({
+    oauth: {
+      findClient: (id) => Promise.resolve(clients.get(id) ?? null),
+      canRunAll: (principal: Principal) => Promise.resolve(!cannotRun.has(principal.principalId)),
+      agentNames: (_workspaceId, agentIds) =>
+        Promise.resolve(agentGone ? null : agentIds.map((id) => `<i>${id}</i>`)),
+      tokens: () => Promise.resolve(repo),
+      audit: (workspaceId, actor, event) => {
+        audits.push({ workspaceId, actor, event });
+        return Promise.resolve();
+      },
     },
   });
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  clearOAuthRuntime();
-  resetToolEndpoint();
+  clearApplicationContext();
   harness.teardown();
 });
 
@@ -314,12 +326,14 @@ describe('discovery documents', () => {
   });
 
   it('serves RFC 9728 metadata for both resource kinds without touching the database', async () => {
-    configureOAuthRuntime({
-      findClient: () => Promise.reject(new Error('no database')),
-      canRunAll: () => Promise.reject(new Error('no database')),
-      agentNames: () => Promise.reject(new Error('no database')),
-      tokens: () => Promise.reject(new Error('no database')),
-      audit: () => Promise.reject(new Error('no database')),
+    installTestDomains({
+      oauth: {
+        findClient: () => Promise.reject(new Error('no database')),
+        canRunAll: () => Promise.reject(new Error('no database')),
+        agentNames: () => Promise.reject(new Error('no database')),
+        tokens: () => Promise.reject(new Error('no database')),
+        audit: () => Promise.reject(new Error('no database')),
+      },
     });
     const mcpOut = await send(
       new Request(`${ORIGIN}/.well-known/oauth-protected-resource/mcp/projects/docs`),
@@ -337,6 +351,24 @@ describe('discovery documents', () => {
       resource: A2A_RESOURCE,
       authorization_servers: [ORIGIN],
     });
+    const builderOut = await send(
+      new Request(`${ORIGIN}/.well-known/oauth-protected-resource/mcp/builder`),
+      BUILDER_METADATA,
+    );
+    expect(builderOut.json()).toMatchObject({
+      resource: `${ORIGIN}/mcp/builder`,
+      authorization_servers: [ORIGIN],
+    });
+  });
+
+  it('publishes the Builder resource at its exact path only', async () => {
+    for (const path of ['mcp/builder/x', 'mcp/builders', 'mcp/Builder']) {
+      const out = await send(
+        new Request(`${ORIGIN}/.well-known/oauth-protected-resource/${path}`),
+        BUILDER_METADATA,
+      );
+      expect(out.response.status, path).toBe(404);
+    }
   });
 
   it('answers 404 for a path that is not a resource', async () => {
@@ -395,7 +427,7 @@ describe('GET /oauth/authorize', () => {
     ['a browser token', 'browser-token'],
     ['a user token', 'user-token'],
   ] as const)('refuses %s: only a browser session consents', async (_name, via) => {
-    const rbac = currentRbacRuntime();
+    const rbac = applicationContext()?.rbac ?? null;
     if (rbac === null) throw new Error('no rbac runtime');
     const session = await rbac.identify(
       new Request(`${ORIGIN}/`, { headers: callerHeaders(ownerCaller) }),
@@ -410,7 +442,7 @@ describe('GET /oauth/authorize', () => {
             label: session.label,
           });
     expect(principal.via).toBe(via);
-    configureRbacRuntime({ ...rbac, identify: () => Promise.resolve(principal) });
+    installTestDomains({ rbac: { ...rbac, identify: () => Promise.resolve(principal) } });
 
     const get = await authorizeGet(authorizeParams());
     expect(get.response.status).toBe(403);
@@ -773,6 +805,120 @@ describe('POST /oauth/token: audience', () => {
   });
 });
 
+describe('a builder client (#1846 slice 5a)', () => {
+  const params = (over: Record<string, string> = {}) =>
+    authorizeParams({ client_id: builder.id, resource: BUILDER_RESOURCE, ...over });
+  const errorOf = (out: { response: Response }) =>
+    new URL(out.response.headers.get('location') ?? '').searchParams.get('error');
+
+  it('issues a code and tokens whose audience is /mcp/builder, for the consenting member', async () => {
+    const { response } = await authorizePost({ ...params(), decision: 'approve' });
+    expect(response.status).toBe(303);
+    const code = new URL(response.headers.get('location') ?? '').searchParams.get('code') ?? '';
+    expect(rows[0]).toMatchObject({
+      clientId: builder.id,
+      kind: 'code',
+      subjectPrincipalId: ownerId,
+      resource: BUILDER_RESOURCE,
+    });
+    const out = await send(
+      tokenRequest(codeGrant(code, { client_id: builder.id, resource: BUILDER_RESOURCE })),
+      TOKEN,
+    );
+    expect(out.response.status).toBe(200);
+    const access = rows.find((r) => r.kind === 'access');
+    expect(access).toMatchObject({
+      clientId: builder.id,
+      subjectPrincipalId: ownerId,
+      resource: BUILDER_RESOURCE,
+    });
+  });
+
+  it('is consented to by a member with no agent grant: the consent page names no agent', async () => {
+    const out = await authorizeGet(params(), viewerCaller);
+    expect(out.response.status).toBe(200);
+    expect(out.text).toContain(BUILDER_RESOURCE);
+    expect(out.text).toContain('as you, with your role');
+    expect(out.text).not.toContain('It reaches these agents');
+  });
+
+  it('shows the redirect host and the member who registered the client on the consent page', async () => {
+    clients.set(builder.id, { ...builder, creatorLabel: 'Ada <i>Lovelace</i>' });
+    const out = await authorizeGet(params());
+    expect(out.text).toContain(
+      'Registered by <strong>Ada &#60;i&#62;Lovelace&#60;/i&#62;</strong>',
+    );
+    expect(out.text).toContain(`<code>${new URL(REDIRECT).host}</code>`);
+  });
+
+  it.each([
+    ['an mcp-project client', () => mcp],
+    ['an a2a-agent client', () => a2a],
+  ])('cannot obtain the /mcp/builder audience as %s', async (_name, pick) => {
+    const other = pick();
+    const authorize = await authorizeGet(
+      authorizeParams({ client_id: other.id, resource: BUILDER_RESOURCE }),
+    );
+    expect(errorOf(authorize)).toBe('invalid_target');
+    const code = await approvedCode({ client_id: other.id });
+    const exchange = await send(
+      tokenRequest(
+        codeGrant(code, { client_id: other.id, resource: BUILDER_RESOURCE }),
+        other === mcp ? basic(mcp.id, secret) : {},
+      ),
+      TOKEN,
+    );
+    expect(exchange.json()).toMatchObject({ error: 'invalid_target' });
+    const credentials = await send(
+      tokenRequest(
+        { grant_type: 'client_credentials', resource: BUILDER_RESOURCE },
+        basic(mcp.id, secret),
+      ),
+      TOKEN,
+    );
+    expect(credentials.json()).toMatchObject({ error: 'invalid_target' });
+    expect(rows.filter((r) => r.resource === BUILDER_RESOURCE)).toEqual([]);
+  });
+
+  it.each([MCP_RESOURCE, A2A_RESOURCE])('cannot obtain another audience (%s)', async (resource) => {
+    expect(errorOf(await authorizeGet(params({ resource })))).toBe('invalid_target');
+    const code = await approvedCode({ client_id: builder.id, resource: BUILDER_RESOURCE });
+    const out = await send(
+      tokenRequest(codeGrant(code, { client_id: builder.id, resource })),
+      TOKEN,
+    );
+    expect(out.json()).toMatchObject({ error: 'invalid_target' });
+    const refresh = await send(
+      tokenRequest(
+        codeGrant(await approvedCode({ client_id: builder.id, resource: BUILDER_RESOURCE }), {
+          client_id: builder.id,
+        }),
+      ),
+      TOKEN,
+    );
+    const refreshOut = await send(
+      tokenRequest({
+        grant_type: 'refresh_token',
+        client_id: builder.id,
+        refresh_token: String(refresh.json()['refresh_token']),
+        resource,
+      }),
+      TOKEN,
+    );
+    expect(refreshOut.json()).toMatchObject({ error: 'invalid_target' });
+  });
+
+  it('has no client_credentials grant: its subject would be a member who never consented', async () => {
+    const out = await send(
+      tokenRequest({ grant_type: 'client_credentials' }, basic(builderConfidential.id, secret)),
+      TOKEN,
+    );
+    expect(out.response.status).toBe(400);
+    expect(out.json()).toMatchObject({ error: 'unauthorized_client' });
+    expect(rows).toEqual([]);
+  });
+});
+
 describe('POST /oauth/token: client_credentials', () => {
   it('issues an access token only, acting as the client’s principal, and audits it', async () => {
     const out = await send(
@@ -882,6 +1028,15 @@ describe('POST /oauth/token: refresh_token', () => {
 
 describe('client authentication', () => {
   const grant = { grant_type: 'client_credentials' };
+
+  it('answers 503 server_error at /oauth/token and /oauth/authorize while no context is installed', async () => {
+    clearApplicationContext();
+    const token = await send(tokenRequest(grant, basic(mcp.id, secret)), TOKEN);
+    expect(token.response.status).toBe(503);
+    expect(token.json()).toMatchObject({ error: 'server_error' });
+    const authorize = await authorizeGet(authorizeParams(), ownerCaller);
+    expect(authorize.response.status).toBe(503);
+  });
 
   it('accepts client_secret_basic and client_secret_post', async () => {
     expect((await send(tokenRequest(grant, basic(mcp.id, secret)), TOKEN)).response.status).toBe(
@@ -1175,7 +1330,9 @@ describe('POST /oauth/revoke', () => {
 describe('revoking a project client grant closes its tool sandbox', () => {
   let closed: [string, string][];
   const install = (closeSandbox: ToolEndpointEnvironment['closeSandbox']): void =>
-    installToolEndpoint({ closeSandbox } as ToolEndpointEnvironment);
+    installTestDomains({
+      toolEndpoint: { kind: 'serving', environment: { closeSandbox } as ToolEndpointEnvironment },
+    });
   const asProject = (): void => {
     clients.set(a2a.id, { ...a2a, kind: 'mcp-project' });
   };
@@ -1238,7 +1395,7 @@ describe('revoking a project client grant closes its tool sandbox', () => {
   it('still answers 200 when the close fails', async () => {
     asProject();
     install(() => Promise.reject(new Error('manager down')));
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const { access } = await issueTokens();
     const out = await send(
       tokenRequest({ client_id: a2a.id, token: access }, {}, '/oauth/revoke'),
@@ -1250,9 +1407,7 @@ describe('revoking a project client grant closes its tool sandbox', () => {
 
 describe('secrets and tokens stay out of everything but the issuing response', () => {
   it('writes no credential to a log, an error body or the audit trail', async () => {
-    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
-      vi.spyOn(console, method).mockImplementation(() => undefined),
-    );
+    const capture = captureLog();
     try {
       const code = await approvedCode();
       const issued = await send(tokenRequest(codeGrant(code)), TOKEN);
@@ -1278,9 +1433,7 @@ describe('secrets and tokens stay out of everything but the issuing response', (
         (v): v is string => typeof v === 'string',
       );
       const others = bodies.filter((b) => b !== issued.text);
-      const logs = spies
-        .flatMap((spy) => spy.mock.calls.map((args) => JSON.stringify(args)))
-        .join(' ');
+      const logs = capture.text();
       for (const credential of credentials) {
         expect(logs).not.toContain(credential);
         expect(JSON.stringify(audits)).not.toContain(credential);
@@ -1291,7 +1444,7 @@ describe('secrets and tokens stay out of everything but the issuing response', (
       }
       expect(issued.text).toContain(String(access));
     } finally {
-      for (const spy of spies) spy.mockRestore();
+      capture.restore();
     }
   });
 

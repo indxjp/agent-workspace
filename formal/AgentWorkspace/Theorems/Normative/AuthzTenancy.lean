@@ -422,7 +422,7 @@ theorem run_lookup_is_scoped_to_the_caller (st : State) (ws runId : String)
   funext r
   have : rowTenant .runs r = r.get "workspace_id" := rfl
   simp only [this, colIs]
-  cases r.get "id" == some runId <;> cases r.get "workspace_id" == some ws <;> decide
+  cases r.get "id" == some runId <;> cases r.get "workspace_id" == some ws <;> decide +kernel
 
 /-- Once a run route's own preflight has passed (for `revoke-tokens` its scope gate, role gate and
 id check; for the other three routes the id check), it answers `404 run_not_found` with the message
@@ -641,14 +641,14 @@ theorem key_guard_refuses_each_named_traversal :
   (ts := "apps/web/server/rbac/principal.ts#Via")]
 theorem via_wire_spellings :
     (WireEnum.all (α := Via)).map WireEnum.toWire = ["session", "api-key", "browser-token"] := by
-  decide
+  decide +kernel
 
 /-! ## The tenant session scope -/
 
 /-- `validateTenantSessionScope` names the first field that fails, in order: not an object; a
 `configDir` that is missing or not a string; a blank `configDir`; a `projectKey` that is missing or
 not a string; a key failing the SDK pattern; a Windows device name. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")]
 theorem tenant_scope_rejections_follow_the_field_order (fs : List (String × JValue)) (cd pk : String) :
     validateTenantSessionScope (.str cd) = .rejected .notAnObject ∧
@@ -689,7 +689,7 @@ is an object whose `configDir` is a non-blank string and whose `projectKey` is a
 own validator accepts and that names no Windows device, and then it returns both unchanged. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")
-  (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")]
+  (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")]
 theorem tenant_scope_verdict_has_two_arms (j : JValue) (pk cd : String) :
     validateTenantSessionScope j = .ok pk cd ↔
       ∃ fs, j = .obj fs ∧ JValue.lookup "configDir" fs = some (.str cd) ∧
@@ -728,18 +728,18 @@ private theorem hex_is_alnum (c : Char) (h : Uuid.isHexDigit c = true) : Text.is
     Text.isAsciiDigit, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq]
   rcases h with (h | h) | h
   · exact Or.inr h
-  · exact Or.inl (Or.inl ⟨h.1, Char.le_trans h.2 (by decide)⟩)
-  · exact Or.inl (Or.inr ⟨h.1, Char.le_trans h.2 (by decide)⟩)
+  · exact Or.inl (Or.inl ⟨h.1, Char.le_trans h.2 (by decide +kernel)⟩)
+  · exact Or.inl (Or.inr ⟨h.1, Char.le_trans h.2 (by decide +kernel)⟩)
 
 private theorem uuid_length (s : String) (h : Uuid.isCanonical s = true) : s.toList.length = 36 := by
   simp only [Uuid.isCanonical, Bool.and_eq_true, beq_iff_eq] at h
-  rw [h.1]; decide
+  rw [h.1]; decide +kernel
 
 /-- A workspace id (a canonical UUID) is always an accepted project key: `sandboxFor` uses the
 workspace id as `projectKey`, and the SDK's validator accepts its 36 characters unchanged, so no
 run's tenant session key is ever silently dropped. -/
 @[aw_spec (tier := T1) (ts := "apps/web/server/compose/run-request.ts#sandboxFor")
-  (ts := "packages/core/src/schemas.ts#validateTenantSessionScope")
+  (ts := "packages/run-protocol/src/schemas.ts#validateTenantSessionScope")
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")]
 theorem workspace_id_is_a_valid_project_key (ws configDir : String)
     (hws : Uuid.isCanonical ws = true) (hcd : Text.isBlank configDir = false) :
@@ -769,18 +769,18 @@ private def rep (n : Nat) : String := String.join (List.replicate n "a")
 
 /-- A project key is 1 to 64 characters (`{1,64}`): the empty key and a 65-character key are
 refused as `projectKeyPattern`, a 1-character and a 64-character key are accepted. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#SDK_PROJECT_DIR_NAME")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#SDK_PROJECT_DIR_NAME")
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")]
 theorem project_key_is_one_to_sixty_four_characters :
     withKey "" = .rejected .projectKeyPattern ∧ withKey (rep 65) = .rejected .projectKeyPattern ∧
       withKey (rep 1) = .ok (rep 1) "/sandbox/.claude" ∧
       withKey (rep 64) = .ok (rep 64) "/sandbox/.claude" := by
-  decide
+  decide +kernel
 
 /-- A project key's characters are `[A-Za-z0-9_-]` and nothing else: every one of the 128 ASCII
 characters is accepted as a one-character key exactly when it is a letter, a digit, `_` or `-`
 (ranges transcribed independently of `Text`). -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#SDK_PROJECT_DIR_NAME")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#SDK_PROJECT_DIR_NAME")
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")]
 theorem project_key_character_class :
     (List.range 128).all (fun n =>
@@ -788,12 +788,12 @@ theorem project_key_character_class :
       sdkProjectDirName (String.singleton c) ==
         ((48 ≤ n && n ≤ 57) || (65 ≤ n && n ≤ 90) || (97 ≤ n && n ≤ 122) || n == 95 || n == 45))
       = true := by
-  decide
+  decide +kernel
 
 /-- The Windows device names (`con`, `prn`, `aux`, `nul`, `com0`–`com9`, `lpt0`–`lpt9`) are refused
 as project keys in any letter case, while near misses (`com10`, `console`, `nul_`, `lpt`, `coma`)
 are accepted. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")
+@[aw_spec (tier := T1) (ts := "packages/run-protocol/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")
   (doc := "docs/adr/W1-CORE-01-tenant-project-key-validated-before-the-run.md#decision")]
 theorem windows_device_names_are_refused_in_any_case :
     ["con", "CON", "prn", "Prn", "aux", "AUX", "nul", "NUL", "nUl",
@@ -802,7 +802,7 @@ theorem windows_device_names_are_refused_in_any_case :
         (fun k => withKey k == .rejected .projectKeyDevice) = true ∧
     ["com10", "console", "nul_", "lpt", "coma", "auxx"].all
         (fun k => withKey k == .ok k "/sandbox/.claude") = true := by
-  decide
+  decide +kernel
 
 /-! ## Witnesses -/
 
@@ -863,25 +863,25 @@ example : ∃ p, resolveBrowserToken small "ef56" 1000 = some p ∧ p.scope = so
 
 /- The four ways a browser token stops selecting a workspace: expiry, a terminal run, an archived
 session, a revoked minter. -/
-example : resolveBrowserToken small "ef56" 1300 = none := by decide
+example : resolveBrowserToken small "ef56" 1300 = none := by decide +kernel
 example : resolveBrowserToken (small' .runs [⟨[("id", "r1"), ("workspace_id", "w1"),
-    ("status", "completed")]⟩]) "ef56" 1000 = none := by decide
+    ("status", "completed")]⟩]) "ef56" 1000 = none := by decide +kernel
 example : resolveBrowserToken (small' .sessions [⟨[("id", "s1"), ("workspace_id", "w1"),
-    ("status", "archived")]⟩]) "gh78" 1000 = none := by decide
+    ("status", "archived")]⟩]) "gh78" 1000 = none := by decide +kernel
 example : resolveBrowserToken (small' .workspacePrincipals
     [⟨[("id", "p1"), ("workspace_id", "w1"), ("kind", "membership"), ("membership_id", "m1"),
-      ("revoked_at", "900")]⟩]) "ef56" 1000 = none := by decide
+      ("revoked_at", "900")]⟩]) "ef56" 1000 = none := by decide +kernel
 
 /- A revoked key, an expired key, and a live key of a revoked principal select nothing. -/
 example : authenticateApiKey (small' .apiKeys [⟨[("id", "k1"), ("workspace_id", "w1"),
     ("name", "CI"), ("role", "builder"), ("key_hash", "ab12"), ("revoked_at", "900")]⟩]) "ab12" 1000
-    = none := by decide
+    = none := by decide +kernel
 example : authenticateApiKey (small' .apiKeys [⟨[("id", "k1"), ("workspace_id", "w1"),
     ("name", "CI"), ("role", "builder"), ("key_hash", "ab12"), ("expires_at", "1000")]⟩]) "ab12"
-    1000 = none := by decide
+    1000 = none := by decide +kernel
 example : authenticateApiKey (small' .workspacePrincipals
     [⟨[("id", "p3"), ("workspace_id", "w1"), ("kind", "api_key"), ("api_key_id", "k1"),
-      ("revoked_at", "900")]⟩]) "ab12" 1000 = none := by decide
+      ("revoked_at", "900")]⟩]) "ab12" 1000 = none := by decide +kernel
 
 example : fromSession ⟨"ada@example.com", "one"⟩ ⟨"w1", "one"⟩ "owner" ⟨"p1", "u1", "  "⟩ =
     .error .incompleteIdentity := rfl
@@ -890,9 +890,9 @@ example : fromSession ⟨"ada@example.com", "one"⟩ ⟨"w1", "two"⟩ "owner" �
 
 example : ("viewer" ≠ "owner" ∧ "viewer" ≠ "admin") ∧
     runPreflight .revokeTokens ⟨"w1", "admin", false⟩ "not-a-uuid" =
-      some ⟨400, "invalid_run_id", "the run id in the path is not a UUID."⟩ := by decide
+      some ⟨400, "invalid_run_id", "the run id in the path is not a UUID."⟩ := by decide +kernel
 
-example : Uuid.isCanonical "not-a-uuid" = false := by decide
+example : Uuid.isCanonical "not-a-uuid" = false := by decide +kernel
 
 /-- A viewer's session principal in `w1`. -/
 private def viewer : RequestPrincipal :=
@@ -900,10 +900,10 @@ private def viewer : RequestPrincipal :=
     actor := "ada@example.com", role := "viewer", via := .session, userId := some "u1",
     apiKeyId := none, scope := none }
 
-example : authoriseFlow true (some viewer) (fun _ => .ownership .own) (fun _ _ => .deny none none) = .problem 403 "forbidden" := by decide
+example : authoriseFlow true (some viewer) (fun _ => .ownership .own) (fun _ _ => .deny none none) = .problem 403 "forbidden" := by decide +kernel
 
 example : forWorkspaceSlug small "one" = some ⟨"w1"⟩ ∧ forWorkspaceId small "w2" = some ⟨"w2"⟩ := by
-  decide
+  decide +kernel
 
 example : ∃ p, identifySessionCurrent small ⟨"ada@example.com", "one"⟩ = .workspace p :=
   ⟨_, rfl⟩
@@ -913,11 +913,11 @@ example : ∃ i, authenticateApiKey small "ab12" 1000 = some i := ⟨_, rfl⟩
 example : ∃ p, resolveBrowserToken small "ef56" 1000 = some p := ⟨_, rfl⟩
 
 example : IdsDistinct (small .runs) ∧ runPreflight .read ⟨"w1", "owner", false⟩ "r2" ≠ none := by
-  decide
+  decide +kernel
 
 example : IdsDistinct (small .runs) ∧
     runPreflight .read ⟨"w1", "owner", false⟩ "22222222-2222-4222-8222-222222222222" = none := by
-  decide
+  decide +kernel
 
 example : resolveMembershipView ⟨["7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff"],
     [⟨"7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff", "u2", "viewer"⟩]⟩
@@ -927,31 +927,31 @@ example : resolveMembershipView ⟨["7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff"],
       apiKeyId := none, scope := none } [⟨"bob@example.com", "u2"⟩] = .ok "viewer" := by rfl
 
 example : Uuid.isCanonical "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" = true ∧
-    Text.isBlank "/sandbox/.claude" = false := by decide
+    Text.isBlank "/sandbox/.claude" = false := by decide +kernel
 
 example : validateTenantSessionScope (.obj [("projectKey", .str "w1"), ("configDir", .str "/x")]) =
-    .ok "w1" "/x" := by decide
+    .ok "w1" "/x" := by decide +kernel
 
 /- The field-order hypotheses, each met: a blank `configDir`, a missing `projectKey`. -/
 example : JValue.lookup "configDir" [("configDir", .str " ")] = some (.str " ") ∧
     Text.isBlank " " = true ∧
     validateTenantSessionScope (.obj [("configDir", .str " ")]) = .rejected .configDirBlank := by
-  decide
+  decide +kernel
 example : validateTenantSessionScope (.obj [("configDir", .str "/x")]) =
-    .rejected .projectKeyNotString := by decide
+    .rejected .projectKeyNotString := by decide +kernel
 
 /- A non-member (the workspace exists, the caller holds no membership) and an absent workspace. -/
 example : Uuid.isCanonical "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" = true ∧
     getForMember ⟨["7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff"],
       [⟨"7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff", "u2", "viewer"⟩]⟩
       "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" "u9" = none ∧
-    getForMember ⟨[], []⟩ "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" "u2" = none := by decide
+    getForMember ⟨[], []⟩ "7a2e98e6-dd85-4fef-a38e-ee176fbdb0ff" "u2" = none := by decide +kernel
 
-example : objectWorkspaceIdCurrent "w1" = true := by decide
+example : objectWorkspaceIdCurrent "w1" = true := by decide +kernel
 
 /- A browser token minted by the API-key principal `p3` stops at the key's expiry instant. -/
 example : resolveBrowserToken (small' .browserTokens [⟨[("id", "bt3"), ("workspace_id", "w1"),
     ("minted_by_principal_id", "p3"), ("scope_kind", "run"), ("run_id", "r1"), ("token_hash", "kt"),
-    ("expires_at", "1300")]⟩]) "kt" 1000 ≠ none := by decide
+    ("expires_at", "1300")]⟩]) "kt" 1000 ≠ none := by decide +kernel
 
 end AgentWorkspace.Theorems.Normative.AuthzTenancy

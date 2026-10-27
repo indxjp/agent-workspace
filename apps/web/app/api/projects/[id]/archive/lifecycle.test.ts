@@ -30,12 +30,9 @@ import { GET as GET_PROJECT } from '../route';
 import { GET as LIST_PROJECTS } from '../../route';
 import { createPostgresDirectory } from '../../../../../server/rbac/postgres-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../../../server/rbac/runtime';
-import {
-  clearProjectsRuntime,
-  configureProjectsRuntime,
-} from '../../../../../server/projects/runtime';
 import type { Role } from '../../../../../server/rbac/roles';
+import { clearApplicationContext } from '../../../../../server/application-context';
+import { installTestDomains } from '../../../../../server/application-context-fixtures';
 
 const WORKSPACE_HEADER = 'x-test-workspace';
 const ACTOR_HEADER = 'x-test-actor';
@@ -240,54 +237,58 @@ describe.skipIf(!hasDatabase)(
     });
 
     beforeEach(async () => {
-      configureProjectsRuntime({
-        resolveActor: (request) => {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          const actor = request.headers.get(ACTOR_HEADER);
-          return Promise.resolve(
-            workspaceId === null || actor === null || !ROLES.has(actor)
-              ? { kind: 'unauthenticated' as const, reason: 'no test workspace header' }
-              : {
-                  kind: 'workspace' as const,
-                  workspaceId,
-                  principalId: principalIdFor(actor),
-                  ownerPrincipalId: principalIdFor(actor),
-                  userId: actor,
-                  userLabel: actor,
-                },
-          );
-        },
-        forWorkspace: async (workspaceId) => {
-          const scope = await root.scopes.forWorkspaceId(workspaceId);
-          if (scope === null) throw new Error(`fixture workspace ${workspaceId} did not resolve`);
-          return {
-            projects: root.projects.forScope(scope),
-            files: root.projectFiles.forScope(scope),
-            mcpServers: root.projectMcpServers.forScope(scope),
-            audit: root.auditEventRepository.forScope(scope),
-            agents: root.agents.forScope(scope),
-            sessions: root.sessions.forScope(scope),
-            agentVersions: root.agentVersions.forScope(scope),
-          };
+      installTestDomains({
+        projects: {
+          resolveActor: (request) => {
+            const workspaceId = request.headers.get(WORKSPACE_HEADER);
+            const actor = request.headers.get(ACTOR_HEADER);
+            return Promise.resolve(
+              workspaceId === null || actor === null || !ROLES.has(actor)
+                ? { kind: 'unauthenticated' as const, reason: 'no test workspace header' }
+                : {
+                    kind: 'workspace' as const,
+                    workspaceId,
+                    principalId: principalIdFor(actor),
+                    ownerPrincipalId: principalIdFor(actor),
+                    userId: actor,
+                    userLabel: actor,
+                  },
+            );
+          },
+          forWorkspace: async (workspaceId) => {
+            const scope = await root.scopes.forWorkspaceId(workspaceId);
+            if (scope === null) throw new Error(`fixture workspace ${workspaceId} did not resolve`);
+            return {
+              projects: root.projects.forScope(scope),
+              files: root.projectFiles.forScope(scope),
+              mcpServers: root.projectMcpServers.forScope(scope),
+              audit: root.auditEventRepository.forScope(scope),
+              agents: root.agents.forScope(scope),
+              sessions: root.sessions.forScope(scope),
+              agentVersions: root.agentVersions.forScope(scope),
+            };
+          },
         },
       });
-      configureRbacRuntime({
-        directory: createPostgresDirectory(root.directory),
-        identify(request: Request) {
-          const workspaceId = request.headers.get(WORKSPACE_HEADER);
-          const actor = request.headers.get(ACTOR_HEADER);
-          const role = actor === null ? undefined : ROLES.get(actor);
-          return Promise.resolve(
-            workspaceId === null || actor === null || role === undefined
-              ? null
-              : Principal.fromApiKey({
-                  principalId: principalIdFor(actor),
-                  apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-                  workspaceId,
-                  role,
-                  label: 'Project lifecycle test key',
-                }),
-          );
+      installTestDomains({
+        rbac: {
+          directory: createPostgresDirectory(root.directory),
+          identify(request: Request) {
+            const workspaceId = request.headers.get(WORKSPACE_HEADER);
+            const actor = request.headers.get(ACTOR_HEADER);
+            const role = actor === null ? undefined : ROLES.get(actor);
+            return Promise.resolve(
+              workspaceId === null || actor === null || role === undefined
+                ? null
+                : Principal.fromApiKey({
+                    principalId: principalIdFor(actor),
+                    apiKeyId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                    workspaceId,
+                    role,
+                    label: 'Project lifecycle test key',
+                  }),
+            );
+          },
         },
       });
 
@@ -303,8 +304,7 @@ describe.skipIf(!hasDatabase)(
     });
 
     afterEach(() => {
-      clearProjectsRuntime();
-      clearRbacRuntime();
+      clearApplicationContext();
     });
 
     /** The row's own column, read directly — independent of what any route reports. */
@@ -369,18 +369,27 @@ describe.skipIf(!hasDatabase)(
       expect(await storedArchivedAt()).toBeNull();
     });
 
+    it('lets a workspace Admin archive and restore any project (ADR-0152)', async () => {
+      const archived = await archive(adminA.id);
+      expect(archived.status, await archived.clone().text()).toBe(200);
+      expect(await storedArchivedAt()).not.toBeNull();
+
+      const restored = await restore(adminA.id);
+      expect(restored.status, await restored.clone().text()).toBe(200);
+      expect(await storedArchivedAt()).toBeNull();
+    });
+
     /**
      * The concealment criterion, asserted as an equality rather than as "some 4xx": every refused
      * caller receives the byte-identical response an id that names nothing at all produces. A 403
      * here — the answer `GET`/`PATCH /api/projects/:id` give — fails this test by name.
      */
-    it('conceals a refused Builder, Admin, Viewer and foreign-workspace caller exactly like a nonexistent id', async () => {
+    it('conceals a refused Builder, Viewer and foreign-workspace caller exactly like a nonexistent id', async () => {
       const nonexistent = await asProblem(await archive(ownerA.id, crypto.randomUUID()));
       expect(nonexistent.status).toBe(404);
 
       const refusals = [
         ['non-creator Builder', await asProblem(await archive(otherBuilder.id))],
-        ['Admin', await asProblem(await archive(adminA.id))],
         ['Viewer', await asProblem(await archive(viewerA.id))],
         [
           'foreign-workspace Owner',

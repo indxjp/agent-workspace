@@ -1,8 +1,17 @@
-import { command, integerValue, isOn, value, type Command } from '../command.js';
+import { AUDIT_ACTIONS } from '@indx-workspace/contracts/observability';
+
+import { command, enumValue, integerValue, isOn, value, type Command } from '../command.js';
 import { notice } from '../output.js';
 
 const TELEMETRY_COLUMNS = ['runId', 'agentId', 'status', 'durationMs', 'costUsd'];
-const AUDIT_COLUMNS = ['createdAt', 'actorLabel', 'action', 'subjectLabel', 'subjectId'];
+const AUDIT_COLUMNS = [
+  'createdAt',
+  'actorLabel',
+  'action',
+  'subjectLabel',
+  'subjectId',
+  'builderRunId',
+];
 
 /** §5.14 — `aw metrics` and `aw audit`. */
 export const observabilityCommands: readonly Command[] = [
@@ -17,14 +26,16 @@ export const observabilityCommands: readonly Command[] = [
   ),
   command(
     'audit list',
-    '[--limit <1-500>] [--cursor <cursor>] [--all]',
-    'The audit trail, newest first: one page, or every page with --all',
+    '[--limit <1-500>] [--cursor <cursor>] [--action <action>] [--all]',
+    'The audit trail, newest first: one page, or every page with --all; --action keeps one action (for example file-deleted)',
     async (context) => {
       const limit = integerValue(context, 'limit');
       const cursor = value(context, 'cursor');
+      const action = enumValue(context, 'action', AUDIT_ACTIONS);
       const query = {
         ...(limit === undefined ? {} : { limit }),
         ...(cursor === undefined ? {} : { cursor }),
+        ...(action === undefined ? {} : { action }),
       };
       const { client, signal, mode, io } = context;
       if (isOn(context, 'all')) {

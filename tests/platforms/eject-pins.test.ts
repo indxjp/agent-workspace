@@ -7,7 +7,7 @@ import {
   PORTABLE_AGENT_KIND,
   PortableProjectSchema,
 } from '@indx-workspace/contracts/portable-agent';
-import { MASTRA_DEFAULT_MODELS } from '@agent-workspace/engine-mastra';
+import { MASTRA_DEFAULT_MODELS } from '@agent-workspace/engine-mastra/testing';
 import { compileForPlatform, platformTarget } from '@indx-workspace/platforms';
 import { SAMPLE_PORTABLE_PROJECT } from '@indx-workspace/platforms/testing';
 import { describe, expect, it } from 'vitest';

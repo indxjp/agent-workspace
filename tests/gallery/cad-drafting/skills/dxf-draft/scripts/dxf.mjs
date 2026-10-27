@@ -1,16 +1,20 @@
 /* global process */ // The root ESLint config declares no environment globals.
-// dxf-draft: read an ASCII DXF (R12 style) into a JSON summary, and write a draft derived from it.
+// dxf-draft: derive a draft drawing from a base drawing and a change set, and write it as a DXF.
 // Plain Node, no dependency, so it runs inside a run's sandbox with `runCommands: true`.
 //
-//   node dxf.mjs summary <drawing.dxf>                       → summary JSON on stdout
-//   node dxf.mjs draft <base.dxf> <changes.json> <out.dxf>   → writes out.dxf, summary + changeSet on stdout
+//   node dxf.mjs draft <base.json> <changes.json> <out.dxf>   → writes out.dxf, summary + changeSet on stdout
+//
+// `<base.json>` is what the built-in office-reader skill prints for the base drawing
+// (`dxf.mjs <base.dxf>`): this script never opens a DXF, it only works on that JSON.
 //
 // The drawing conventions it reads (layer names are the company's CAD standard, not DXF's):
 //   OUTLINE  LINE entities forming the part's outer edge
 //   HOLE     CIRCLE entities, the mounting holes
 //   TITLE    TEXT entities "<項目> <値>" making the title block (図番, 品名, 材質, 板厚, …)
 //   NOTE     TEXT entities, drawing notes, copied unchanged into a draft
-// Anything else is kept in a draft as written and counted in the summary, never dropped silently.
+// Other LINE, CIRCLE and TEXT entities are kept in a draft as written. A drawing holding any other
+// entity type (ARC, LWPOLYLINE, INSERT, …) or a block definition is refused, because office-reader
+// reads no coordinates for it and a draft would drop it without a word.
 //
 // A draft changes only what the change set names. It refuses, instead of guessing, when the base
 // outline is not a plain rectangle (stretching a notch would change dimensions nobody asked for),
@@ -29,73 +33,47 @@ export class DraftRefused extends Error {
 const TITLE_KEYS = ['図番', '品名', '材質', '板厚', '尺度', '作成', '検図', '状態', '派生元'];
 const EPSILON = 1e-6;
 
-/** Group code / value pairs, tolerant of CRLF and indented codes. */
-function pairsOf(text) {
-  const lines = text.replace(/^\uFEFF/u, '').split(/\r?\n/u);
-  const pairs = [];
-  for (let index = 0; index + 1 < lines.length; index += 2) {
-    const code = Number(lines[index].trim());
-    if (!Number.isInteger(code)) {
-      throw new Error(`line ${String(index + 1)}: expected a group code, got "${lines[index]}"`);
-    }
-    pairs.push([code, lines[index + 1]]);
-  }
-  return pairs;
-}
+const SUPPORTED_TYPES = new Set(['LINE', 'CIRCLE', 'TEXT']);
 
-/** Parse the HEADER variables and the ENTITIES section; other sections are skipped. */
-export function parseDxf(text) {
-  const pairs = pairsOf(text);
-  const header = {};
-  const entities = [];
-  let section = null;
-  let current = null;
-  let variable = null;
-  for (let index = 0; index < pairs.length; index += 1) {
-    const [code, value] = pairs[index];
-    if (code === 0 && value === 'SECTION') {
-      section = pairs[index + 1]?.[1] ?? null;
-      index += 1;
-      continue;
-    }
-    if (code === 0 && (value === 'ENDSEC' || value === 'EOF')) {
-      if (current) entities.push(current);
-      current = null;
-      section = null;
-      continue;
-    }
-    if (section === 'HEADER') {
-      if (code === 9) variable = value;
-      else if (variable !== null) header[variable] = value.trim();
-      continue;
-    }
-    if (section !== 'ENTITIES') continue;
-    if (code === 0) {
-      if (current) entities.push(current);
-      current = { type: value.trim(), groups: [] };
-      continue;
-    }
-    current?.groups.push([code, value]);
-  }
-  if (section !== null) throw new Error(`section ${section} is not closed with ENDSEC`);
-  return { header, entities: entities.map(toEntity) };
-}
+/**
+ * The drawing's own LINE, CIRCLE and TEXT entities from office-reader's output, in the shape the
+ * draft works on, and the entity types it cannot carry over.
+ */
+const NOT_OFFICE_READER =
+  'the base must be the JSON that the office-reader skill prints for a DXF (with lines and circles)';
 
-function toEntity({ type, groups }) {
-  const first = (code) => groups.find(([groupCode]) => groupCode === code)?.[1];
-  const number = (code) => {
-    const value = first(code);
-    return value === undefined ? undefined : Number(value);
-  };
-  const layer = first(8)?.trim() ?? '0';
-  if (type === 'LINE') {
-    return { type, layer, x1: number(10), y1: number(20), x2: number(11), y2: number(21) };
+function entitiesOf(drawing) {
+  const fields = ['counts', 'blocks', 'lines', 'circles', 'texts'];
+  if (typeof drawing !== 'object' || drawing === null || !fields.every((key) => key in drawing)) {
+    throw new Error(NOT_OFFICE_READER);
   }
-  if (type === 'CIRCLE') return { type, layer, x: number(10), y: number(20), r: number(40) };
-  if (type === 'TEXT') {
-    return { type, layer, x: number(10), y: number(20), height: number(40), text: first(1) ?? '' };
-  }
-  return { type, layer, groups };
+  const own = (entity) => entity.block === undefined;
+  const entities = [
+    ...drawing.lines.filter(own).map(({ layer, x1, y1, x2, y2 }) => ({
+      type: 'LINE',
+      layer: layer ?? '0',
+      x1,
+      y1,
+      x2,
+      y2,
+    })),
+    ...drawing.circles
+      .filter(own)
+      .map(({ layer, x, y, r }) => ({ type: 'CIRCLE', layer: layer ?? '0', x, y, r })),
+    ...drawing.texts
+      .filter((entity) => own(entity) && entity.type === 'TEXT')
+      .map(({ layer, x, y, height, text }) => ({
+        type: 'TEXT',
+        layer: layer ?? '0',
+        x,
+        y,
+        height,
+        text,
+      })),
+  ];
+  const unread = Object.keys(drawing.counts).filter((type) => !SUPPORTED_TYPES.has(type));
+  if (drawing.blocks.length > 0) unread.push('BLOCK');
+  return { entities, unread };
 }
 
 const round = (value) => Math.round(value / EPSILON) * EPSILON;
@@ -132,12 +110,7 @@ function splitTitle(text) {
   return match ? [match[1], match[2].trim()] : [text.trim(), ''];
 }
 
-/**
- * The summary an agent and a backend read: the title block, the outline's size from its lower-left
- * corner, and the holes as diameters at positions measured from that corner.
- */
-export function summarise(text) {
-  const { header, entities } = parseDxf(text);
+function summaryOf({ entities, unread, entityCount, version }) {
   const outline = entities.filter((entity) => entity.type === 'LINE' && entity.layer === 'OUTLINE');
   if (outline.length === 0)
     throw new Error('no LINE entities on layer OUTLINE; not a part drawing');
@@ -158,9 +131,8 @@ export function summarise(text) {
       y: clean(circle.y - bounds.minY),
       diameter: clean(circle.r * 2),
     }));
-  const known = new Set(['LINE', 'CIRCLE', 'TEXT']);
   return {
-    version: header.$ACADVER ?? null,
+    version,
     drawingNo: title['図番'] ?? null,
     partName: title['品名'] ?? null,
     material: title['材質'] ?? null,
@@ -174,11 +146,21 @@ export function summarise(text) {
     rectangular: isRectangle(outline, bounds),
     holes,
     notes,
-    entityCount: entities.length,
-    unreadEntities: entities
-      .filter((entity) => !known.has(entity.type))
-      .map((entity) => entity.type),
+    entityCount,
+    unreadEntities: unread,
   };
+}
+
+/**
+ * The summary an agent and a backend read: the title block, the outline's size from its lower-left
+ * corner, and the holes as diameters at positions measured from that corner.
+ *
+ * @param drawing what the office-reader skill's `readDxf` returns.
+ */
+export function summarise(drawing) {
+  const { entities, unread } = entitiesOf(drawing);
+  const entityCount = Object.values(drawing.counts).reduce((sum, count) => sum + count, 0);
+  return summaryOf({ entities, unread, entityCount, version: drawing.version });
 }
 
 /** Problems with a set of holes in a `width` × `height` rectangle; empty when all is well. */
@@ -269,14 +251,15 @@ export function describeChanges(base, next) {
 const DRAWING_NO = /^[A-Z]{2,4}-\d{4}$/u;
 
 /**
- * Derive a draft from `baseText`. `changes`: `{ base, drawingNo, width, height, material?,
+ * Derive a draft from `baseDrawing`, what office-reader prints for the base DXF. `changes`: `{ base, drawingNo, width, height, material?,
  * thickness?, partName?, holes?: [{ x, y, diameter }], drafter?, date? }`, positions from the
  * outline's lower-left corner. Holes left out keep the base's holes where they are.
  *
  * @throws {DraftRefused} with every problem found, never a partial draft.
  */
-export function draft(baseText, changes) {
-  const base = summarise(baseText);
+export function draft(baseDrawing, changes) {
+  const { entities: baseEntities, unread } = entitiesOf(baseDrawing);
+  const base = summarise(baseDrawing);
   const problems = [];
   if (typeof changes.base === 'string' && /[/\\]|\.dxf$/iu.test(changes.base)) {
     problems.push(`base must be the drawing number "${String(base.drawingNo)}", not a file path`);
@@ -298,6 +281,11 @@ export function draft(baseText, changes) {
   ) {
     problems.push('thickness must be a positive number');
   }
+  if (unread.length > 0) {
+    problems.push(
+      `${String(base.drawingNo)} には ${unread.join(', ')} が含まれます。座標を読めないため下書きに写せません。手で作図してください`,
+    );
+  }
   if (!base.rectangular) {
     problems.push(
       `${String(base.drawingNo)} の外形は矩形ではありません。伸縮すると指示のない寸法が変わるため、手で作図してください`,
@@ -307,7 +295,7 @@ export function draft(baseText, changes) {
   if (problems.length === 0) problems.push(...holeProblems(changes.width, changes.height, holes));
   if (problems.length > 0) throw new DraftRefused(problems);
 
-  const { header, entities } = parseDxf(baseText);
+  const entities = baseEntities;
   const { x: ox, y: oy } = base.origin;
   const W = clean(changes.width);
   const H = clean(changes.height);
@@ -373,8 +361,14 @@ export function draft(baseText, changes) {
     height: 5,
     text: `未検図 ${String(base.drawingNo)} から派生した下書き。出図前に設計者が検図すること`,
   };
-  const dxf = writeDxf({ header, entities: [...outline, ...circles, ...kept, ...title, note] });
-  const summary = summarise(dxf);
+  const drafted = [...outline, ...circles, ...kept, ...title, note];
+  const dxf = writeDxf(drafted);
+  const summary = summaryOf({
+    entities: drafted,
+    unread: [],
+    entityCount: drafted.length,
+    version: DXF_VERSION,
+  });
   return {
     dxf,
     summary,
@@ -414,15 +408,16 @@ function real(value) {
   return Number.isInteger(number) ? `${String(number)}.0` : String(number);
 }
 
-/** Write an ASCII DXF with a HEADER, a LAYER table and the entities. */
-export function writeDxf({ header = {}, entities }) {
+const DXF_VERSION = 'AC1027';
+
+/** Write an ASCII DXF (AutoCAD 2013, so its text is UTF-8) with a HEADER, a LAYER table and the entities. */
+export function writeDxf(entities) {
   const out = [];
   const pair = (code, value) => out.push(String(code).padStart(3, ' '), String(value));
   pair(0, 'SECTION');
   pair(2, 'HEADER');
-  // Only $ACADVER is carried: AC1009 is R12. Text is written as UTF-8 (see SKILL.md on Shift_JIS).
   pair(9, '$ACADVER');
-  pair(1, header.$ACADVER ?? 'AC1009');
+  pair(1, DXF_VERSION);
   pair(0, 'ENDSEC');
   const layers = [...new Set(entities.map((entity) => entity.layer))];
   pair(0, 'SECTION');
@@ -456,14 +451,12 @@ export function writeDxf({ header = {}, entities }) {
       pair(20, real(entity.y));
       pair(30, '0.0');
       pair(40, real(entity.r));
-    } else if (entity.type === 'TEXT') {
+    } else {
       pair(10, real(entity.x));
       pair(20, real(entity.y));
       pair(30, '0.0');
       pair(40, real(entity.height ?? 3.5));
       pair(1, entity.text);
-    } else {
-      for (const [code, value] of entity.groups) pair(code, value);
     }
   }
   pair(0, 'ENDSEC');
@@ -474,13 +467,11 @@ export function writeDxf({ header = {}, entities }) {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const [command, ...args] = process.argv.slice(2);
   try {
-    if (command === 'summary' && args.length === 1) {
-      process.stdout.write(
-        `${JSON.stringify(summarise(readFileSync(args[0], 'utf8')), null, 2)}\n`,
-      );
-    } else if (command === 'draft' && args.length === 3) {
+    if (command === 'draft' && args.length === 3) {
       const changes = JSON.parse(readFileSync(args[1], 'utf8'));
-      const result = draft(readFileSync(args[0], 'utf8'), changes);
+      const base = readFileSync(args[0], 'utf8');
+      if (!base.startsWith('{')) throw new Error(NOT_OFFICE_READER);
+      const result = draft(JSON.parse(base), changes);
       writeFileSync(args[2], result.dxf);
       const { summary, changeSet, changes: changed, kept } = result;
       process.stdout.write(
@@ -488,7 +479,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       );
     } else {
       process.stderr.write(
-        'usage: node dxf.mjs summary <file.dxf> | draft <base.dxf> <changes.json> <out.dxf>\n',
+        'usage: node dxf.mjs draft <base.json> <changes.json> <out.dxf>  (base.json: office-reader output)\n',
       );
       process.exit(2);
     }

@@ -4,23 +4,18 @@
 // least one report with at least one test, and fails on any test that neither passed nor failed,
 // printing each by full name. ci.yml says why the rule is strict.
 import console from 'node:console';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 
+// A report lives in the root of every project whose Nx test target writes one: the workspace root
+// and each directory under apps/ and packages/. Discover them rather than list them, so a new
+// package's report is read by default (a hard-coded list once left nine packages unread, and a run
+// that touched only those failed with "no report" although every test had passed).
 const roots = [
   '.',
-  'apps/web',
-  'apps/runner',
-  'packages/aw',
-  'packages/cli',
-  'packages/contracts',
-  'packages/core',
-  'packages/create',
-  'packages/egress-proxy',
-  'packages/embedded',
-  'packages/gateway',
-  'packages/runtime',
-  'packages/sdk',
+  ...['apps', 'packages'].flatMap((dir) =>
+    existsSync(dir) ? readdirSync(dir).map((name) => `${dir}/${name}`) : [],
+  ),
 ];
 const reports = roots.map((r) => `${r}/.vitest-report.json`).filter((p) => existsSync(p));
 if (reports.length === 0) {

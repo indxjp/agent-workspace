@@ -11,7 +11,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { McpArgs, parseMcpArgs } from './mcp-servers.js';
+import {
+  credentialedMcpAuthTypes,
+  mcpAuthTypes,
+  mcpTransports,
+  McpArgs,
+  parseMcpArgs,
+  remoteMcpTransports,
+} from './mcp-servers.js';
 
 describe('parseMcpArgs', () => {
   it("accepts §8's own example and returns it", () => {
@@ -40,5 +47,15 @@ describe('parseMcpArgs', () => {
     // compile-time hint would stop describing what the parse accepts.
     expect(McpArgs.safeParse(['-y']).success).toBe(true);
     expect(McpArgs.safeParse(['-y', 1]).success).toBe(false);
+  });
+});
+
+describe('connector catalogue subsets', () => {
+  it('remoteMcpTransports is every transport except stdio', () => {
+    expect([...remoteMcpTransports]).toEqual(mcpTransports.filter((t) => t !== 'stdio'));
+  });
+
+  it('credentialedMcpAuthTypes is every auth type except none', () => {
+    expect([...credentialedMcpAuthTypes]).toEqual(mcpAuthTypes.filter((a) => a !== 'none'));
   });
 });

@@ -2,10 +2,13 @@ import {
   CONTROL_FRAME_NAMES,
   EVENT_NAME_PATTERN,
   RELAYED_EVENT_NAMES,
+  PLATFORM_EVENT_NAMES,
   RUN_STATUS_EVENT,
+  RUN_WARNING_EVENT,
   RelayedEventDataSchema,
   RunFailedFrameDataSchema,
   RunStatusEventDataSchema,
+  RunWarningEventDataSchema,
   StreamResetFrameDataSchema,
 } from '@indx-workspace/contracts/run-events';
 import {
@@ -34,6 +37,8 @@ describe('Lean run-event contract vectors', () => {
     expect(CONTROL_FRAME_NAMES).toEqual(names['control']);
     expect(RELAYED_EVENT_NAMES).toEqual(names['relayed']);
     expect(RUN_STATUS_EVENT).toBe(names['status']);
+    expect(RUN_WARNING_EVENT).toBe(names['warning']);
+    expect(PLATFORM_EVENT_NAMES).toEqual(names['platform']);
     for (const vector of loadVectors(FAMILY, 'names.json')) {
       expect(EVENT_NAME_PATTERN.test(asString(vector.input, vector.id)), vector.id).toBe(
         asRecord(vector.expected, vector.id)['pattern'],
@@ -49,11 +54,13 @@ describe('Lean run-event contract vectors', () => {
       const actual =
         schema === 'status'
           ? RunStatusEventDataSchema.safeParse(input['body']).success
-          : schema === 'failed'
-            ? RunFailedFrameDataSchema.safeParse(input['body']).success
-            : schema === 'reset'
-              ? StreamResetFrameDataSchema.safeParse(input['body']).success
-              : RelayedEventDataSchema.safeParse(input['body']).success;
+          : schema === 'warning'
+            ? RunWarningEventDataSchema.safeParse(input['body']).success
+            : schema === 'failed'
+              ? RunFailedFrameDataSchema.safeParse(input['body']).success
+              : schema === 'reset'
+                ? StreamResetFrameDataSchema.safeParse(input['body']).success
+                : RelayedEventDataSchema.safeParse(input['body']).success;
       expect(actual).toBe(asRecord(vector.expected, vector.id)['valid']);
     },
   );

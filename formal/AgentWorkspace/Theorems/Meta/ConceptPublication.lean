@@ -47,13 +47,13 @@ specification says every ownable row carries, and neither column reaches the wir
 (finding 2). -/
 @[aw_spec (tier := T5) (doc := "docs/sdk/04-api-specification.md#2-resource-model")
   (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (ts := "apps/web/app/api/shares/route.ts#toShareResource")]
+  (ts := "apps/web/server/shares/core/resource.ts#toShareResource")]
 theorem shares_carry_a_publisher_not_an_owner (v : Visibility) (withViewCount : Bool) :
     (catalogue .shares).hasColumn "owner_principal_id" = false ∧
       (catalogue .shares).hasColumn "publisher_principal_id" = true ∧
       (resourceKeys v withViewCount).contains "ownerPrincipalId" = false ∧
       (resourceKeys v withViewCount).contains "publisherPrincipalId" = false := by
-  cases v <;> cases withViewCount <;> decide
+  cases v <;> cases withViewCount <;> decide +kernel
 
 /-- A subject id of one space is non-empty, so the request and resource schemas' `min(1)` accept
 it, yet the database's `length(btrim(subject_id)) > 0` refuses it, so the insert fails after
@@ -62,7 +62,7 @@ validation passed (finding 3). A tab, which `btrim` keeps, passes both. -/
   (ts := "packages/core/src/db/schema/shares.ts#shares")]
 theorem a_space_subject_id_passes_validation_but_not_the_database :
     " ".length ≥ 1 ∧ notBlankSql " " = false ∧ notBlankSql "\t" = true ∧ notBlankSql " a " = true := by
-  decide
+  decide +kernel
 
 /-- The specification's column list for `shares` omits six columns of today's table (`token`,
 `subject_label`, `stopped`, `publisher_principal_id`, `suspended_at`, `created_at`), and today's
@@ -77,15 +77,15 @@ theorem specification_column_list_is_a_strict_subset :
       (catalogue .shares).columnNames.filter (fun c => !specified.contains c) =
         ["token", "subject_label", "stopped", "publisher_principal_id", "suspended_at",
           "created_at"] := by
-  decide
+  decide +kernel
 
 private def workspaceShare : Share :=
   { (default : Share) with visibility := .workspace, publisher := ⟨"p1"⟩ }
 
-example := a_member_cannot_read_another's_workspace_share workspaceShare ⟨"p2"⟩ rfl (by decide) 0
-example := private_and_workspace_shares_never_open workspaceShare 0 (by decide)
+example := a_member_cannot_read_another's_workspace_share workspaceShare ⟨"p2"⟩ rfl (by decide +kernel) 0
+example := private_and_workspace_shares_never_open workspaceShare 0 (by decide +kernel)
 example : workspaceShare.visibility ≠ .«public» ∧ workspaceShare.publiclyOpen 0 = false :=
-  ⟨by decide, private_and_workspace_shares_never_open workspaceShare 0 (by decide)⟩
+  ⟨by decide +kernel, private_and_workspace_shares_never_open workspaceShare 0 (by decide +kernel)⟩
 
 /-- A project share with a budget cap and no mode. -/
 private def budgetedProjectShare : Share :=
@@ -103,6 +103,6 @@ documents reserve `budget_cap_usd` for runnable links and the service never writ
   (ts := "packages/core/src/db/schema/shares.ts#shares")]
 theorem budget_is_not_tied_to_runnable_mode_in_the_database :
     budgetedProjectShare.dbValid = true ∧ budgetedProjectShare.wellPublished = false := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Meta.ConceptPublication

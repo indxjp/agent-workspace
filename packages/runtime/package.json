@@ -4,12 +4,50 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
+    "./driver": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./driver/local": {
+      "types": "./dist/local.d.ts",
+      "default": "./dist/local.js"
+    },
+    "./driver/docker": {
+      "types": "./dist/docker.d.ts",
+      "default": "./dist/docker.js"
+    },
+    "./driver/kubernetes": {
+      "types": "./dist/kubernetes.d.ts",
+      "default": "./dist/kubernetes.js"
+    },
+    "./driver/cloud-run": {
+      "types": "./dist/cloud-run.d.ts",
+      "default": "./dist/cloud-run.js"
+    },
+    "./driver/external": {
+      "types": "./dist/external/index.d.ts",
+      "default": "./dist/external/index.js"
+    },
+    "./driver/vercel-sandbox": {
+      "types": "./dist/vercel-sandbox.d.ts",
+      "default": "./dist/vercel-sandbox.js"
+    },
+    "./driver/cloudflare-sandbox": {
+      "types": "./dist/cloudflare-sandbox.d.ts",
+      "default": "./dist/cloudflare-sandbox.js"
+    },
+    "./driver/aca-sessions": {
+      "types": "./dist/aca-sessions.d.ts",
+      "default": "./dist/aca-sessions.js"
+    },
+    "./engine-images": {
+      "types": "./dist/engine-images.d.ts",
+      "default": "./dist/engine-images.js"
+    },
+    "./transfer": {
+      "types": "./dist/transfer.d.ts",
+      "default": "./dist/transfer.js"
     }
   },
   "scripts": {
@@ -19,12 +57,12 @@
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "dependencies": {
-    "@azure/identity": "4.13.3",
-    "@kubernetes/client-node": "2.0.0",
-    "google-auth-library": "11.2.0"
+    "@azure/identity": "4.14.0",
+    "@kubernetes/client-node": "2.0.1",
+    "google-auth-library": "11.3.1"
   },
   "nx": {
     "targets": {

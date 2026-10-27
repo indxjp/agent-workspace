@@ -48,6 +48,43 @@ describe('aw metrics / audit', () => {
     expect(bad.code).toBe(EXIT_CODE.usage);
   });
 
+  // @story US-STO-04
+  it('[US-STO-04][api][cli] aw audit list --action file-deleted lists only deletes', async () => {
+    const deleted = { ...FIXTURES.auditEvent, action: 'file-deleted' as const };
+    const listed = await runCli(['audit', 'list', '--action', 'file-deleted', '--json'], {
+      route: (request) =>
+        json(200, {
+          events: request.url.searchParams.get('action') === 'file-deleted' ? [deleted] : [],
+          nextCursor: null,
+        }),
+    });
+    expect(listed.calls[0]?.url.search).toBe('?action=file-deleted');
+    expect(AuditEventListResponseSchema.parse(stdoutJson(listed))).toEqual({
+      events: [deleted],
+      nextCursor: null,
+    });
+    const bad = await runCli(['audit', 'list', '--action', 'no-such-action']);
+    expect(bad.code).toBe(EXIT_CODE.usage);
+    expect(bad.stderr).toContain('--action must be one of');
+  });
+
+  it('[US-BLD-05][api][cli] aw audit list prints the agent-created row of a Builder save', async () => {
+    const created = {
+      ...FIXTURES.auditEvent,
+      action: 'agent-created' as const,
+      builderRunId: 'run-1',
+    };
+    const route = () => json(200, { events: [created], nextCursor: null });
+    const listed = await runCli(['audit', 'list', '--action', 'agent-created'], { route });
+    expect(listed.stdout).toContain('agent-created');
+    expect(listed.stdout).toContain('builderRunId');
+    expect(listed.stdout).toContain('run-1');
+    const raw = await runCli(['audit', 'list', '--action', 'agent-created', '--json'], { route });
+    expect(AuditEventListResponseSchema.parse(stdoutJson(raw)).events[0]?.builderRunId).toBe(
+      'run-1',
+    );
+  });
+
   it('audit list --all walks every page and prints the rows of all of them', async () => {
     const second = { ...FIXTURES.auditEvent, id: '88888888-8888-4888-8888-888888888888' };
     const all = await runCli(['audit', 'list', '--all', '--limit', '1', '--json'], {

@@ -44,10 +44,9 @@
  * nominal class — `#private` fields, a frozen instance, a run-time brand check — specifically so a
  * repository cannot be handed a tenant a caller fabricated. Reusing it here was the first design of
  * this module, and it was reverted after it broke in exactly the way ADR-0015 warns about: this
- * task cannot add `"./storage"` to `packages/core/package.json`'s `exports` (see
- * `apps/web/server/files/object-store-bridge.ts`'s header for why), so `apps/web` reaches this
- * module by a *relative* import while it reaches `@agent-workspace/core/db` by the package
- * specifier — and those two resolve to **two different module instantiations** of the same source
+ * task could not add `"./storage"` to `packages/core/package.json`'s `exports`, so `apps/web`
+ * reached this module by a *relative* import while it reached `@agent-workspace/core/db` by the
+ * package specifier — and those two resolve to **two different module instantiations** of the same source
  * (one via `packages/core/dist/**`, one transpiled straight from `packages/core/src/**`). A
  * `#private`-field brand check is scoped to the class *instantiation* that created it, not to the
  * source text, so a `WorkspaceScope` minted by one instantiation and checked by the other was
@@ -64,7 +63,16 @@
  * repository-facing `forScope` — for the same reason: no method on the returned `ObjectStore`
  * takes a workspace id, so there is no parameter at which the tenant could be forgotten.
  */
+import {
+  PRESIGNED_URL_DEFAULT_TTL_SECONDS,
+  PRESIGNED_URL_MAX_TTL_SECONDS,
+  PRESIGNED_URL_MIN_TTL_SECONDS,
+} from '@indx-workspace/contracts/files';
+
 import { toObjectKey, toObjectPrefix } from './key-safety.js';
+
+/** Re-exported so a backend read of a bare request falls back to the one definition, not a copy. */
+export { PRESIGNED_URL_DEFAULT_TTL_SECONDS };
 
 /** One entry `list` returns: either a file with bytes, or a folder with none. */
 export type ObjectListEntry =
@@ -103,6 +111,172 @@ export interface ObjectContent {
   readonly contentType: string | null;
   readonly sizeBytes: number;
   readonly lastModified: Date;
+}
+
+/** What a backend can do natively. A backend that cannot do something says so; it does not fake it. */
+export interface ObjectStoreCapabilities {
+  /** `createSignedUrl` is offered. */
+  readonly sign: boolean;
+  /** A signed PUT can bind the upload's byte length into the signature. */
+  readonly boundLengthSign: boolean;
+  /** `read` honours `range`. */
+  readonly range: boolean;
+  /** `write` honours `ifNoneMatch` / `ifMatch`. */
+  readonly conditionalPut: boolean;
+  /** A key can be both an object and a folder prefix (object stores: true; a file system cannot). */
+  readonly fileAndFolderShareKey: boolean;
+}
+
+/** Size, type and version of one stored object. `etag` is opaque: pass it back as `ifMatch`. */
+export interface ObjectMeta {
+  readonly sizeBytes: number;
+  readonly contentType: string | null;
+  readonly etag: string;
+  readonly lastModified: Date;
+}
+
+/** Inclusive byte range, as in HTTP `Range: bytes=start-end`; omit `end` to read to the end. */
+export interface ByteRange {
+  readonly start: number;
+  readonly end?: number;
+}
+
+/** What `read` returns: the whole object's meta, and the requested bytes as a stream. */
+export interface ObjectStream {
+  readonly meta: ObjectMeta;
+  readonly body: ReadableStream<Uint8Array>;
+  /** The inclusive range `body` covers; `null` when the whole object is streamed. */
+  readonly range: { readonly start: number; readonly end: number } | null;
+}
+
+/** At most one precondition: `ifNoneMatch` and `ifMatch` together could never both hold. */
+export type WriteOptions = {
+  readonly contentType?: string | null;
+} & (
+  | {
+      /** `'*'`: write only if the key does not exist. */
+      readonly ifNoneMatch?: '*';
+      readonly ifMatch?: never;
+    }
+  | {
+      /** Write only if the object's current etag is this one. */
+      readonly ifMatch?: string;
+      readonly ifNoneMatch?: never;
+    }
+);
+
+/**
+ * The key `toKey` returns for a write, refusing both preconditions at once with
+ * {@link ObjectConflictError}. On either refusal the body is cancelled: it will never be read.
+ */
+export async function validatedWriteKey(
+  body: ReadableStream<Uint8Array> | Uint8Array,
+  options: WriteOptions,
+  toKey: () => string,
+): Promise<string> {
+  try {
+    if (options.ifNoneMatch !== undefined && options.ifMatch !== undefined) {
+      throw new ObjectConflictError('A write takes ifNoneMatch or ifMatch, not both.');
+    }
+    return toKey();
+  } catch (error) {
+    if (!(body instanceof Uint8Array)) await body.cancel(error);
+    throw error;
+  }
+}
+
+export interface ListPageOptions {
+  /** `true`: every file beneath the prefix, however deep. Default: one level, folders included. */
+  readonly recursive?: boolean;
+  readonly cursor?: string;
+  readonly limit?: number;
+  /** Stops the listing once aborted; a backend whose SDK takes no signal checks it between calls. */
+  readonly signal?: AbortSignal;
+}
+
+/** One page of a listing; `cursor` is `null` on the last page, otherwise pass it back. */
+export interface ObjectPage {
+  readonly entries: readonly ObjectListEntry[];
+  readonly cursor: string | null;
+}
+
+/** A conditional `write` found the object in a different state than its precondition named. */
+export class ObjectConflictError extends Error {
+  public constructor(message = 'The object does not match the write precondition.') {
+    super(message);
+    this.name = 'ObjectConflictError';
+  }
+}
+
+/** A `read` range is malformed, or starts at or past the end of the object. Same on every backend. */
+export class RangeNotSatisfiableError extends Error {
+  public constructor(message = 'The requested byte range cannot be satisfied.') {
+    super(message);
+    this.name = 'RangeNotSatisfiableError';
+  }
+}
+
+const DEFAULT_LIST_PAGE_LIMIT = 1000;
+
+/** The listing page size every backend honours: 1 to 1000, whatever the caller asked for. */
+export function clampListLimit(limit: number | undefined): number {
+  return limit === undefined || !Number.isFinite(limit)
+    ? DEFAULT_LIST_PAGE_LIMIT
+    : Math.min(DEFAULT_LIST_PAGE_LIMIT, Math.max(1, Math.trunc(limit)));
+}
+
+/** Refuse a range that is malformed, whatever the object. */
+export function assertRangeShape(range: ByteRange | undefined): void {
+  if (range === undefined) return;
+  const { start, end } = range;
+  if (
+    !Number.isSafeInteger(start) ||
+    start < 0 ||
+    (end !== undefined && (!Number.isSafeInteger(end) || end < start))
+  ) {
+    throw new RangeNotSatisfiableError('The byte range is malformed.');
+  }
+}
+
+/** What {@link ObjectStore.createSignedUrl} is asked to authorise: one method on one key. */
+export interface SignedUrlRequest {
+  readonly method: 'GET' | 'PUT';
+  /**
+   * How long the store accepts the URL; the store, not the caller, enforces the expiry. The scoped
+   * store defaults it to 300 s and refuses a value outside 60..900 s before the backend is reached.
+   */
+  readonly expiresInSeconds?: number;
+  /** PUT: the content type the upload must carry. Recorded as known, like {@link PutObjectInput}. */
+  readonly contentType?: string | null;
+  /** PUT: the byte length the upload must carry, bound into the signature where the store can. */
+  readonly contentLength?: number;
+  /**
+   * PUT: refuse to sign unless the store binds {@link contentLength} into the signature. A store
+   * that cannot (Azure Blob: a SAS has no length field) rejects with {@link SignedUrlUnsupportedError}
+   * before any store I/O.
+   */
+  readonly requireBoundContentLength?: boolean;
+  /** GET: the content type the store answers with, whatever was stored. */
+  readonly responseContentType?: string;
+  /** GET: the `Content-Disposition` the store answers with. */
+  readonly responseDisposition?: string;
+  /** Test seam: the instant the URL is signed at. */
+  readonly now?: Date;
+}
+
+/** The store cannot sign a URL that satisfies the {@link SignedUrlRequest} it was given. */
+export class SignedUrlUnsupportedError extends Error {
+  public constructor(message: string) {
+    super(message);
+    this.name = 'SignedUrlUnsupportedError';
+  }
+}
+
+/** A short-lived URL on the store itself, and the headers the caller must send with it. */
+export interface SignedUrl {
+  readonly url: string;
+  /** Headers that are part of the signature; a request without them is refused by the store. */
+  readonly headers: Readonly<Record<string, string>>;
 }
 
 /**
@@ -154,11 +328,52 @@ export interface ObjectStore {
    * Overwrites whatever was at `destinationKey`, matching {@link put}.
    */
   copyObject(sourceKey: string, destinationKey: string): Promise<void>;
+  /**
+   * A URL on the object store itself that lets its holder `GET` or `PUT` exactly `key` until it
+   * expires, without the control plane relaying the bytes. Optional: the S3, GCS and Azure Blob
+   * backends sign; the local-filesystem and in-memory backends have no URL a browser could use,
+   * so a caller treats an absent method as "direct transfer is unsupported". Performs no store I/O.
+   */
+  createSignedUrl?(key: string, request: SignedUrlRequest): Promise<SignedUrl>;
+}
+
+/**
+ * {@link ObjectStore} grown to the v2 port: capabilities, `head`, streaming `read`/`write`, range
+ * and conditional write. `head(key) !== null` is the "exists" check.
+ */
+// storage-bridge(#1702): v2 shape beside the buffered ObjectStore until every caller has moved
+export interface ObjectStoreV2 extends ObjectStore {
+  readonly capabilities: ObjectStoreCapabilities;
+  /** Size, content type and etag of the object at `key`, or `null` if there is none. */
+  head(key: string): Promise<ObjectMeta | null>;
+  /** Stream the object (or a byte range of it), or `null` if there is none. */
+  read(key: string, options?: { readonly range?: ByteRange }): Promise<ObjectStream | null>;
+  /**
+   * Write `body` at `key`, replacing whatever was there unless a precondition says otherwise; a
+   * failed precondition rejects with {@link ObjectConflictError}. Streams are never buffered whole.
+   */
+  write(
+    key: string,
+    body: ReadableStream<Uint8Array> | Uint8Array,
+    options: WriteOptions,
+  ): Promise<ObjectMeta>;
+  /**
+   * One page of the listing under `prefix`, sorted by key: one level with folders, or every file
+   * beneath it (`recursive`). Pass the returned `cursor` back to continue; it is opaque.
+   */
+  // storage-bridge(#1702): paged listing beside the array-returning list/listPrefix until callers move
+  listPage(prefix: string, options?: ListPageOptions): Promise<ObjectPage>;
 }
 
 /** Hands out an {@link ObjectStore} bound to one workspace. See this file's header. */
 export interface ObjectStoreProvider {
   forWorkspace(workspaceId: string): ObjectStore;
+}
+
+/** The v2 provider; assignable to {@link ObjectStoreProvider}. */
+// storage-bridge(#1702): provider for ObjectStoreV2
+export interface ObjectStoreProviderV2 extends ObjectStoreProvider {
+  forWorkspace(workspaceId: string): ObjectStoreV2;
 }
 
 /** Thrown by {@link createScopedObjectStore} for a workspace id that is not a non-empty string. */
@@ -177,6 +392,7 @@ export class InvalidWorkspaceIdError extends Error {
  * root directory; for a future S3 backend, the object key). `createScopedObjectStore` is
  * the only thing that turns a workspace id plus a caller's relative key into one of these.
  */
+// storage-bridge(#1699): legacy scoped keys for rows without an object ID
 function workspaceKeyPrefix(workspaceId: string): string {
   return `workspaces/${workspaceId}`;
 }
@@ -191,7 +407,13 @@ function joinPrefixed(prefix: string, relative: string): string {
  * it. See this file's header for the two-call-site design and for why `workspaceId` is a plain
  * string rather than the repository layer's `WorkspaceScope`.
  */
-export function createScopedObjectStore(backend: ObjectStore, workspaceId: string): ObjectStore {
+export function createScopedObjectStore(backend: ObjectStoreV2, workspaceId: string): ObjectStoreV2;
+// storage-bridge(#1702): a legacy backend has no v2 members to scope
+export function createScopedObjectStore(backend: ObjectStore, workspaceId: string): ObjectStore;
+export function createScopedObjectStore(
+  backend: ObjectStore | ObjectStoreV2,
+  workspaceId: string,
+): ObjectStore | ObjectStoreV2 {
   // A positive assertion, not a class-brand check (see this file's header for why there is no
   // class here to check): a workspace id this module will accept is a non-empty string, full
   // stop. The caller-exists check spec §25 wants is made one layer up, in
@@ -201,7 +423,7 @@ export function createScopedObjectStore(backend: ObjectStore, workspaceId: strin
   }
   const prefix = workspaceKeyPrefix(workspaceId);
 
-  return {
+  const scoped: ObjectStore = {
     async put(key, input) {
       const relative = toObjectKey(key);
       await backend.put(joinPrefixed(prefix, relative), input);
@@ -243,12 +465,114 @@ export function createScopedObjectStore(backend: ObjectStore, workspaceId: strin
       );
     },
   };
+  const withV2 = isV2(backend) ? { ...scoped, ...scopeV2(backend, prefix) } : scoped;
+  const sign = backend.createSignedUrl?.bind(backend);
+  if (sign === undefined) return withV2;
+  return {
+    ...withV2,
+    async createSignedUrl(key, request) {
+      const fullKey = joinPrefixed(prefix, toObjectKey(key));
+      const bounded = boundSignedUrlRequest(request, isV2(backend) ? backend.capabilities : null);
+      return sign(fullKey, bounded);
+    },
+  };
+}
+
+/**
+ * The lifetime and length bound every signed link carries (the storage design, §04 "Large uploads
+ * with a signed link" and §05 "A signed link leaks"), applied here once so no backend or caller
+ * can mint a longer-lived link or claim a length that is not actually bound. Runs before any I/O.
+ */
+function boundSignedUrlRequest(
+  request: SignedUrlRequest,
+  capabilities: ObjectStoreCapabilities | null,
+): SignedUrlRequest {
+  // @story US-STO-02
+  // @story US-STO-05
+  const expiresInSeconds = request.expiresInSeconds ?? PRESIGNED_URL_DEFAULT_TTL_SECONDS;
+  if (
+    !Number.isInteger(expiresInSeconds) ||
+    expiresInSeconds < PRESIGNED_URL_MIN_TTL_SECONDS ||
+    expiresInSeconds > PRESIGNED_URL_MAX_TTL_SECONDS
+  ) {
+    throw new SignedUrlUnsupportedError('The signed link expiry is out of range.');
+  }
+  if (request.requireBoundContentLength === true) {
+    if (request.contentLength === undefined) {
+      throw new SignedUrlUnsupportedError('A bound upload length needs a contentLength.');
+    }
+    if (capabilities !== null && !capabilities.boundLengthSign) {
+      throw new SignedUrlUnsupportedError('This store cannot bind an upload length.');
+    }
+  }
+  return { ...request, expiresInSeconds };
+}
+
+function isV2(backend: ObjectStore | ObjectStoreV2): backend is ObjectStoreV2 {
+  return 'capabilities' in backend;
+}
+
+function scopeV2(
+  backend: ObjectStoreV2,
+  prefix: string,
+): Pick<ObjectStoreV2, 'capabilities' | 'head' | 'read' | 'write' | 'listPage'> {
+  return {
+    capabilities: backend.capabilities,
+    async head(key) {
+      return backend.head(joinPrefixed(prefix, toObjectKey(key)));
+    },
+    async read(key, options) {
+      const relative = toObjectKey(key);
+      assertRangeShape(options?.range);
+      return backend.read(joinPrefixed(prefix, relative), options);
+    },
+    async write(key, body, options) {
+      const relative = await validatedWriteKey(body, options, () => toObjectKey(key));
+      return backend.write(joinPrefixed(prefix, relative), body, options);
+    },
+    async listPage(rawPrefix, options) {
+      const fullPrefix = joinPrefixed(prefix, toObjectPrefix(rawPrefix));
+      const stripLen = prefix.length + 1; // `${prefix}/`
+      // A `<kind>:<key>` cursor carries a backend key: the caller never sees the workspace
+      // prefix, so strip it going out and restore it coming in. Any other shape is a provider
+      // continuation token and stays opaque.
+      const cursorKey = (cursor: string, map: (key: string) => string): string => {
+        const sep = cursor.indexOf(':');
+        return sep < 0 ? cursor : `${cursor.slice(0, sep + 1)}${map(cursor.slice(sep + 1))}`;
+      };
+      const inbound = options?.cursor;
+      const page = await backend.listPage(fullPrefix, {
+        ...options,
+        limit: clampListLimit(options?.limit),
+        ...(inbound === undefined
+          ? {}
+          : { cursor: cursorKey(inbound, (key) => joinPrefixed(prefix, key)) }),
+      });
+      return {
+        cursor:
+          page.cursor === null
+            ? null
+            : cursorKey(page.cursor, (key) =>
+                key.startsWith(`${prefix}/`) ? key.slice(stripLen) : key,
+              ),
+        entries: page.entries.map((entry) => ({ ...entry, key: entry.key.slice(stripLen) })),
+      };
+    },
+  };
 }
 
 /** Build an {@link ObjectStoreProvider} from any raw backend. Every backend module uses this. */
-export function scopedObjectStoreProvider(backend: ObjectStore): ObjectStoreProvider {
+export function scopedObjectStoreProvider(backend: ObjectStoreV2): ObjectStoreProviderV2;
+// storage-bridge(#1702): a legacy backend has no v2 members to scope
+export function scopedObjectStoreProvider(backend: ObjectStore): ObjectStoreProvider;
+export function scopedObjectStoreProvider(
+  backend: ObjectStore | ObjectStoreV2,
+): ObjectStoreProvider | ObjectStoreProviderV2 {
   return {
-    forWorkspace: (workspaceId: string): ObjectStore =>
-      createScopedObjectStore(backend, workspaceId),
+    // Both arms are the same call: the guard only lets overload resolution see which backend it has.
+    forWorkspace: (workspaceId: string) =>
+      isV2(backend)
+        ? createScopedObjectStore(backend, workspaceId)
+        : createScopedObjectStore(backend, workspaceId),
   };
 }

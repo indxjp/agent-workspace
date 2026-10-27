@@ -9,6 +9,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { prepareDatabase } from '@agent-workspace/core/db';
 import { startGateway } from '@agent-workspace/gateway/start';
@@ -23,6 +24,10 @@ import {
   LOCAL_RUNTIME_GATEWAY_PORT,
   LOCAL_RUNTIME_RUNNER_PORT,
 } from '@indx-workspace/contracts/project-file';
+import {
+  IGNORED_STORAGE_VARIABLES,
+  ignoredStorageSettingsWarning,
+} from '@indx-workspace/contracts/storage-settings';
 
 import { dockerGatewayHost, startDockerSandbox, type DockerSandbox } from './docker-sandbox.js';
 import { resolveEmbeddedDatabasePort, startEmbeddedDatabase } from './embedded-db.js';
@@ -37,9 +42,7 @@ const managedEnvironmentKeys = [
   'SESSION_SECRET',
   'MASTER_ENCRYPTION_KEY',
   'GATEWAY_TOKEN_SECRET',
-  'AW_FILE_STORAGE_ROOT',
-  'AW_SKILL_STORAGE_ROOT',
-  'AW_SESSION_TRANSCRIPT_ROOT',
+  'AW_STORAGE_URL',
   'RUNNER_WORKSPACE_ROOT',
   'RUNTIME_DRIVER',
   'AW_SESSION_MIRROR_URL',
@@ -48,13 +51,14 @@ const managedEnvironmentKeys = [
   'RUNNER_MANAGER_URL',
   'RUNNER_MANAGER_TOKEN',
   'RUNTIME_VERIFICATION_NETWORK_POLICY',
-] as const;
+  // The old storage variables `defaultStorage` removes once it has warned about them.
+  ...IGNORED_STORAGE_VARIABLES,
+];
 
 /** Where the local runner keeps each session's working directory, under the project. */
 export const LOCAL_RUN_WORKSPACE_ROOT = '.agent-workspace/workspaces';
 
-type ManagedEnvironmentKey = (typeof managedEnvironmentKeys)[number];
-type EnvironmentSnapshot = ReadonlyMap<ManagedEnvironmentKey, string | undefined>;
+type EnvironmentSnapshot = ReadonlyMap<string, string | undefined>;
 
 function captureEnvironment(): EnvironmentSnapshot {
   return new Map(managedEnvironmentKeys.map((key) => [key, process.env[key]] as const));
@@ -173,6 +177,28 @@ export interface RunningWorkspace {
   close(): Promise<void>;
 }
 
+const EMBEDDED_STORAGE_ROOT = '.agent-workspace/storage';
+
+const isSet = (key: string): boolean => (process.env[key]?.trim() ?? '') !== '';
+
+/**
+ * Points the control plane at `EMBEDDED_STORAGE_ROOT` unless the user's `AW_STORAGE_URL` says where.
+ * An old storage variable with no `AW_STORAGE_URL` keeps storage off instead, because a default
+ * would quietly move new writes away from where that variable put them. The one warning, which
+ * names variables and never a value, goes to stderr here, and the old variables are removed so the
+ * server does not repeat it.
+ */
+function defaultStorage(): void {
+  const warning = ignoredStorageSettingsWarning(process.env);
+  if (warning !== null) {
+    process.stderr.write(`${warning}\n`);
+    for (const name of IGNORED_STORAGE_VARIABLES) delete process.env[name];
+    return;
+  }
+  if (isSet('AW_STORAGE_URL')) return;
+  process.env['AW_STORAGE_URL'] = pathToFileURL(path.resolve(EMBEDDED_STORAGE_ROOT)).href;
+}
+
 export async function startWorkspace(options: WorkspaceOptions = {}): Promise<RunningWorkspace> {
   loadDotEnv();
   const environmentSnapshot = captureEnvironment();
@@ -196,9 +222,7 @@ export async function startWorkspace(options: WorkspaceOptions = {}): Promise<Ru
     process.env['SESSION_SECRET'] ??= randomBytes(32).toString('hex');
     process.env['MASTER_ENCRYPTION_KEY'] ??= randomBytes(32).toString('hex');
     process.env['GATEWAY_TOKEN_SECRET'] ??= randomBytes(32).toString('hex');
-    process.env['AW_FILE_STORAGE_ROOT'] ??= '.agent-workspace/storage/files';
-    process.env['AW_SKILL_STORAGE_ROOT'] ??= '.agent-workspace/storage/skills';
-    process.env['AW_SESSION_TRANSCRIPT_ROOT'] ??= '.agent-workspace/storage/sessions';
+    defaultStorage();
     // The web side puts each run's `cwd` under this root and the runner creates it. Unset, it is
     // `/workspace`, a container path: on a host the runner's user cannot create it, so every local
     // run was refused with HTTP 422 before it started (S1-19). Absolute, because it becomes a cwd.
@@ -261,6 +285,8 @@ export async function startWorkspace(options: WorkspaceOptions = {}): Promise<Ru
       ...process.env,
       PORT: process.env['GATEWAY_PORT'] ?? String(LOCAL_RUNTIME_GATEWAY_PORT),
       HOST: gatewayHost,
+      // aw-control calls go to the web process this launcher starts below, on loopback.
+      GATEWAY_CONTROL_PLANE_ORIGIN: `http://127.0.0.1:${process.env['PORT'] ?? '3000'}`,
     });
     process.env['MODEL_GATEWAY_URL'] = `${gatewayOrigin}:${String(gateway.port)}`;
     web = await startWeb({ ...process.env, PORT: process.env['PORT'] ?? '3000' }, options.web);

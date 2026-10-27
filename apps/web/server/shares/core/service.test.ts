@@ -40,17 +40,14 @@ function sharing(found: ShareRecord) {
       getPublicSharingEnabled,
       setPublicSharingEnabled: vi.fn(),
       revoke: vi.fn(),
-      setSuspended: vi.fn(),
       stop: vi.fn(),
       reserveVisitorMessage: vi.fn(),
-      linkRun: vi.fn(),
     },
     views: {
       record: recordView,
       count: vi.fn(),
-      countVisitorSince: vi.fn(),
     },
-    audit: { write: vi.fn(), count: vi.fn(), list: vi.fn() },
+    audit: { write: vi.fn() },
   };
   return { repositories, recordView, getPublicSharingEnabled, createShare };
 }

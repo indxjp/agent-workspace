@@ -60,31 +60,33 @@ export const MEMBERSHIP_ROLES = ['owner', 'admin', 'builder', 'viewer'] as const
 
 The SDK does not encode what each role may do — it surfaces whatever the server decides, as a
 `403 forbidden` `ApiProblemError`. The following table is API specification §3.3's own, reproduced
-as of its date, with the Admin `skills, files` cell updated to ADR-0116 (it is documentation of current server behaviour, not a contract the SDK
+as of its date, with the cells ADR-0116 and ADR-0152 changed (it is documentation of current server behaviour, not a contract the SDK
 enforces — always branch on the `403` you actually receive, not on this table):
 
-| Resource                                                 | Owner                                                                 | Admin          | Builder                 | Viewer                    |
-| -------------------------------------------------------- | --------------------------------------------------------------------- | -------------- | ----------------------- | ------------------------- |
-| agents                                                   | all                                                                   | all            | read any, write/run own | read any, run _permitted_ |
-| skills, files                                            | all                                                                   | all (ADR-0116) | read any, write own     | none                      |
-| connectors                                               | all                                                                   | manage         | read any, write own     | none                      |
-| model-connections, models, runtime-connections, runtimes | all                                                                   | manage         | none                    | none                      |
-| runtime-profiles                                         | all                                                                   | manage         | read                    | none                      |
-| secrets                                                  | all                                                                   | none           | none                    | none                      |
-| projects                                                 | all                                                                   | none           | own                     | none                      |
-| sessions                                                 | all                                                                   | own            | own                     | own (read)                |
-| runs                                                     | all                                                                   | read/run any   | read/run own            | read/run own              |
-| memberships, users, invitations, api-keys                | all                                                                   | manage         | none                    | none                      |
-| shares                                                   | all                                                                   | manage         | own                     | own                       |
-| sharing-policies                                         | all                                                                   | read           | read                    | read                      |
-| metrics                                                  | all                                                                   | read           | read                    | read                      |
-| audit-events                                             | all                                                                   | none           | none                    | none                      |
-| me                                                       | all                                                                   | read           | read                    | read                      |
-| setup                                                    | all                                                                   | none           | none                    | none                      |
-| workspaces                                               | member-scoped: read any membership, write only as Owner of the target |                |                         |                           |
+| Resource                                                 | Owner                                                                 | Admin          | Builder                              | Viewer                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------- | -------------- | ------------------------------------ | ------------------------- |
+| agents                                                   | all                                                                   | all            | read any, write own, run _permitted_ | read any, run _permitted_ |
+| skills, files                                            | all                                                                   | all (ADR-0116) | read any, write own                  | none                      |
+| connectors                                               | all                                                                   | all (ADR-0152) | read any, write own                  | none                      |
+| model-connections, models, runtime-connections, runtimes | all                                                                   | manage         | none                                 | none                      |
+| runtime-profiles                                         | all                                                                   | manage         | read                                 | none                      |
+| secrets                                                  | all                                                                   | none           | none                                 | none                      |
+| projects                                                 | all                                                                   | manage         | own                                  | none                      |
+| sessions                                                 | all                                                                   | own            | own                                  | own (read)                |
+| runs                                                     | all                                                                   | read/run any   | read/run own                         | read/run own              |
+| memberships, users, invitations, api-keys                | all                                                                   | manage         | none                                 | none                      |
+| shares                                                   | all                                                                   | manage         | own                                  | own                       |
+| sharing-policies                                         | all                                                                   | read           | read                                 | read                      |
+| metrics                                                  | all                                                                   | read           | read                                 | read                      |
+| audit-events                                             | all                                                                   | none           | none                                 | none                      |
+| me                                                       | all                                                                   | read           | read                                 | read                      |
+| setup                                                    | all                                                                   | none           | none                                 | none                      |
+| workspaces                                               | member-scoped: read any membership, write only as Owner of the target |                |                                      |                           |
 
-"Permitted" for a Viewer running an agent means an explicit `agent_grants` row. Manage those rows
+"Permitted" for running an agent means one the caller owns or an explicit `agent_grants` row names. Manage those rows
 with `aw.agents.getGrants` and `aw.agents.replaceGrants`, using membership principal ids.
+
+The roles are monotonic (ADR-0152): each role can do at least everything the roles below it can.
 
 [Ownership and sharing](/concepts/ownership-and-sharing) is the full statement of this table plus
 the sharing vocabulary it implies — the catalog → assignment → grant verbs that decide what a

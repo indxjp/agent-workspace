@@ -1,16 +1,14 @@
 import { requireResourceAccess, type ResourceAccess } from '../../resources/authorise';
+import { problemBody } from '../../http/result';
 import { ownerPrincipalIdOf } from '../../rbac/owner-principal';
 import { DomainError } from '../../errors';
 import { ShareService } from './service';
-import {
-  currentSharesRuntime,
-  type ShareActor,
-  type SharesRuntime,
-  type WorkspaceSharing,
-} from './runtime';
+import { applicationContext } from '../../application-context';
+import type { ShareActor, SharesRuntime, WorkspaceSharing } from './runtime';
+import type { SharedRun } from '../session-snapshot/snapshot';
 
 export function shareProblem(status: number, code: string, message: string): Response {
-  return Response.json({ error: { code, message } }, { status });
+  return Response.json(problemBody(code, message), { status });
 }
 export async function shareJson(request: Request): Promise<unknown> {
   if (!request.headers.get('content-type')?.startsWith('application/json')) {
@@ -38,13 +36,14 @@ export async function withShares(
     sharing: WorkspaceSharing;
     service: ShareService;
     sharingMaterials(): Promise<{ values: readonly string[]; referenceIds: readonly string[] }>;
+    sessionRuns: (runIds: readonly string[]) => Promise<readonly (SharedRun | null)[]>;
     subjectOwnership(
       subjectType: unknown,
       subjectId: unknown,
     ): Promise<import('../../rbac/decide').Ownership>;
   }) => Promise<Response> | Response,
 ): Promise<Response> {
-  const runtime = currentSharesRuntime();
+  const runtime = applicationContext()?.shares;
   if (!runtime)
     return shareProblem(503, 'shares_runtime_not_configured', 'The sharing API is not configured.');
   const actor = await runtime.resolveActor(request);
@@ -56,6 +55,7 @@ export async function withShares(
     sharing,
     service: new ShareService(sharing),
     sharingMaterials: () => runtime.sharingMaterials(actor.workspaceId),
+    sessionRuns: (runIds) => runtime.sessionRuns(actor.workspaceId, runIds),
     subjectOwnership: (subjectType, subjectId) =>
       runtime.subjectOwnership({
         workspaceId: actor.workspaceId,
@@ -97,7 +97,7 @@ export async function withPublicShare(
     runPublic: SharesRuntime['runPublic'];
   }) => Promise<Response> | Response,
 ): Promise<Response> {
-  const runtime = currentSharesRuntime();
+  const runtime = applicationContext()?.shares;
   if (!runtime)
     return shareProblem(503, 'shares_runtime_not_configured', 'The sharing API is not configured.');
   const resolved = await runtime.resolvePublic(token);

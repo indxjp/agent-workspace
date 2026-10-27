@@ -23,11 +23,10 @@
  */
 import { createWorkspace, listWorkspaces } from '../../../server/workspaces/handlers';
 import { apiKeyRefusal } from '../../../server/workspaces/access';
-import {
-  currentWorkspacesRuntime,
-  type WorkspaceRepositoryPort,
-} from '../../../server/workspaces/runtime';
-import { problem, readJsonBody, toResponse, type ApiResult } from '../../../server/rbac/http';
+import type { WorkspaceRepositoryPort } from '../../../server/workspaces/runtime';
+import { applicationContext } from '../../../server/application-context';
+import { readJsonBody, type ApiResult } from '../../../server/http/result';
+import { problem, toResponse } from '../../../server/rbac/http';
 import { resolveSessionActorUserIdForWorkspace } from '../../../server/rbac/ownership';
 import { requireResourceAccess, type ResourceAccess } from '../../../server/resources/authorise';
 
@@ -49,7 +48,7 @@ async function withIdentity(
   // `apiKeyRefusal` keeps this membership-administration surface session-only.
   const refusal = apiKeyRefusal(access.principal);
   if (refusal !== null) return toResponse(refusal);
-  const workspaces = currentWorkspacesRuntime();
+  const workspaces = applicationContext()?.workspaces ?? null;
   if (workspaces === null) {
     return toResponse(
       problem(503, 'workspaces_runtime_not_configured', 'The workspaces API is not configured.'),

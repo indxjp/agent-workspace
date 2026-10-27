@@ -4,7 +4,7 @@ import AgentWorkspace.Contracts.Runs
 # The run status machine
 
 The observable transitions of a run's `status`, as the two run stores implement them
-(`InMemoryRunStore` in `apps/web/server/runs/store.ts` and the PostgreSQL repository in
+(`InMemoryRunStore` in `apps/web/server/runs/memory-store.ts` and the PostgreSQL repository in
 `packages/core/src/db/repositories/runs.ts`, whose guards are the `WHERE` clauses of the two
 updates):
 
@@ -40,7 +40,7 @@ inductive RunStepOutcome where
 
 /-- One operation on a run whose current status is `current`. -/
 @[aw_spec (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
-  (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+  (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/repositories/runs.ts#markRunning")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")]
 def runStep (current : RunStatus) : RunOp → RunStepOutcome
@@ -94,9 +94,9 @@ inductive RunAction where
 
 /-- One store/control-plane operation. An append is allowed until `finish` closes the log.
 The repository revokes gateway run tokens in the same transaction as terminal `finish`. -/
-@[aw_spec (ts := "apps/web/server/runs/store.ts#InMemoryRunStore")
+@[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
   (ts := "packages/core/src/db/repositories/runs.ts#finish")
-  (ts := "apps/web/server/composition/register.ts#interruptRun")]
+  (ts := "apps/web/server/composition/wiring/run-api.ts#interruptRun")]
 def runAction (s : RunState) : RunAction → RunState
   | .markRunning elapsed =>
     if s.status = .queued then

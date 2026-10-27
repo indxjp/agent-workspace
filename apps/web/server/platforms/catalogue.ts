@@ -6,7 +6,7 @@
 import type { PlatformListResponse } from '@indx-workspace/contracts/platforms';
 import { PLATFORM_TARGETS } from '@indx-workspace/platforms';
 
-import type { ApiResult } from '../agents/handlers';
+import type { ApiResult } from '../http/result';
 
 /** Every target, in catalogue order, without its `optionsSchema` and `compile` (code, not wire). */
 export function listPlatforms(): ApiResult {

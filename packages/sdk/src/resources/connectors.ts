@@ -12,6 +12,7 @@ import {
   type TestConnectionOutcome,
   type UpdateConnectorInput,
 } from '@indx-workspace/contracts/connectors';
+import type { ConnectorIdentity } from '@indx-workspace/contracts/identity-assertion';
 import type {
   CreateOpenApiConnectorInput,
   CreatePostgresConnectorInput,
@@ -34,6 +35,7 @@ interface ConnectorWireBody {
   readonly url?: string;
   readonly authType?: ConnectorAuthType;
   readonly credential?: string;
+  readonly identity?: ConnectorIdentity;
   readonly dryRun?: true;
 }
 
@@ -48,6 +50,7 @@ function connectorWireBody(input: CreateConnectorInput): ConnectorWireBody {
     ...endpoint,
     ...(input.authType === undefined ? {} : { authType: input.authType }),
     ...(input.credential === undefined ? {} : { credential: input.credential }),
+    ...(input.identity === undefined ? {} : { identity: input.identity }),
   };
 }
 
@@ -61,6 +64,7 @@ function mcpPatchBody(patch: UpdateConnectorInput): UpdateConnectorInput {
     ...(patch.args === undefined ? {} : { args: patch.args === null ? null : [...patch.args] }),
     ...(patch.authType === undefined ? {} : { authType: patch.authType }),
     ...(patch.credential === undefined ? {} : { credential: patch.credential }),
+    ...(patch.identity === undefined ? {} : { identity: patch.identity }),
   };
 }
 
@@ -85,6 +89,7 @@ function toolWireBody(input: ToolConnectorBody): ToolConnectorBody {
       allow: input.allow,
       ...(input.auth === undefined ? {} : { auth: input.auth }),
       ...(input.credential === undefined ? {} : { credential: input.credential }),
+      ...(input.identity === undefined ? {} : { identity: input.identity }),
     };
   }
   return {

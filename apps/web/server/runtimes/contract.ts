@@ -3,17 +3,19 @@
  * §15.1, validated with Zod.
  *
  * Unlike `apps/web/server/agents/contract.ts`, which hand-rolls its parsers, this file validates
- * through the Zod schemas `packages/core/src/schemas.ts` already builds for exactly this purpose
+ * through the Zod schemas `packages/run-protocol/src/schemas.ts` already builds for exactly this purpose
  * (`RuntimeProfile`, `CreateRuntimeProfileInput`, `UpdateRuntimeProfileInput` — spec §15.1,
  * ADR-0042). Re-deriving the same validation by hand here would be the second copy ADR-0042
  * exists to prevent, in the one package that already has `zod` resolving (`@agent-workspace/core`,
  * which `apps/web/package.json` already depends on).
  */
+import { toObjectKey, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
 import {
   CreateRuntimeProfileInput as CreateRuntimeProfileInputSchema,
   UpdateRuntimeProfileInput as UpdateRuntimeProfileInputSchema,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 
+import { formatIssues } from '../http/result';
 import type {
   CreateRuntimeProfileInput,
   RuntimeProfileRecord,
@@ -30,24 +32,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** `runtime_profiles.id` is a `uuid` column, so a non-UUID cannot match a row (ADR-0015). */
 export function isUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
-}
-
-/**
- * `apps/web` does not depend on `zod` directly — only transitively, through
- * `@agent-workspace/core`, which already builds the schemas this file validates through (see this
- * file's header). So the error shape is read structurally rather than by importing `ZodError`'s
- * type, which would need a direct dependency this task may not add (ADR-0041).
- */
-interface ZodLikeIssue {
-  readonly path: ReadonlyArray<string | number | symbol>;
-  readonly message: string;
-}
-
-function issuesToStrings(error: { readonly issues: readonly ZodLikeIssue[] }): string[] {
-  return error.issues.map((issue) => {
-    const path = issue.path.length === 0 ? '(root)' : issue.path.map(String).join('.');
-    return `${path}: ${issue.message}`;
-  });
 }
 
 /**
@@ -194,15 +178,44 @@ function refuseDriverConfigCredentials(
   );
 }
 
+/**
+ * A runtime path as the runner's workspace-relative form: `/workspace/` is stripped, and an empty,
+ * absolute, `.` or `..` path is refused. The launcher maps `persistPaths` through this after a run,
+ * so a profile write checks every entry with it first.
+ */
+export function relativeRuntimePath(value: string): string {
+  try {
+    return toObjectKey(value.replaceAll('\\', '/').replace(/^\/workspace\/?/u, ''));
+  } catch (cause) {
+    if (!(cause instanceof UnsafeObjectKeyError)) throw cause;
+    throw new Error(`persist path ${JSON.stringify(value)} is not workspace-relative`, { cause });
+  }
+}
+
+/** One error per `persistPaths` entry {@link relativeRuntimePath} refuses, named by index. */
+function refuseUnusablePersistPaths(persistPaths: readonly string[] | null | undefined): string[] {
+  return (persistPaths ?? []).flatMap((path, index) => {
+    try {
+      relativeRuntimePath(path);
+      return [];
+    } catch {
+      return [`persistPaths.${String(index)}: must be a relative path inside the workspace`];
+    }
+  });
+}
+
 /** `POST /api/runtime-profiles`'s body, parsed and reshaped to the store's null-based fields. */
 export function parseCreateRuntimeProfileInput(
   raw: unknown,
 ): ParseResult<CreateRuntimeProfileInput> {
   const result = CreateRuntimeProfileInputSchema.safeParse(raw);
-  if (!result.success) return { ok: false, errors: issuesToStrings(result.error) };
+  if (!result.success) return { ok: false, errors: formatIssues(result.error.issues) };
   const value = result.data;
-  const credentials = refuseDriverConfigCredentials(value.driverConfig);
-  if (credentials.length > 0) return { ok: false, errors: credentials };
+  const refusals = [
+    ...refuseDriverConfigCredentials(value.driverConfig),
+    ...refuseUnusablePersistPaths(value.persistPaths),
+  ];
+  if (refusals.length > 0) return { ok: false, errors: refusals };
   const image = value.driverConfig?.['image'];
   if (
     image !== undefined &&
@@ -242,10 +255,13 @@ export function parseUpdateRuntimeProfilePatch(
   raw: unknown,
 ): ParseResult<UpdateRuntimeProfilePatch> {
   const result = UpdateRuntimeProfileInputSchema.safeParse(raw);
-  if (!result.success) return { ok: false, errors: issuesToStrings(result.error) };
+  if (!result.success) return { ok: false, errors: formatIssues(result.error.issues) };
   const value = result.data;
-  const credentials = refuseDriverConfigCredentials(value.driverConfig);
-  if (credentials.length > 0) return { ok: false, errors: credentials };
+  const refusals = [
+    ...refuseDriverConfigCredentials(value.driverConfig),
+    ...refuseUnusablePersistPaths(value.persistPaths),
+  ];
+  if (refusals.length > 0) return { ok: false, errors: refusals };
   const patch: {
     name?: string;
     driver?: CreateRuntimeProfileInput['driver'];

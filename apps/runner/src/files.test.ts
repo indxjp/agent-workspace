@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 
 import { describe, expect, it } from 'vitest';
 
-import { decodeUstar, normalizeArchivePath } from '@agent-workspace/runtime';
+import { decodeUstar, normalizeArchivePath } from '@agent-workspace/runtime/transfer';
 
 import { collectWorkspace, hydrateWorkspace } from './files.js';
 
@@ -71,6 +71,30 @@ describe('runner file hydration and collection', () => {
           decoded.find((entry) => entry.path === 'nested/without.txt')?.data ?? [],
         ).toString(),
       ).toBe('without newline');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  // Issue #1274: the web launcher collects `<workspace>/<session>/outputs`, relative to the runtime root.
+  it("collects one session's outputs/ from the runtime root, not its siblings or the root", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-runner-session-outputs-'));
+    try {
+      await mkdir(path.join(root, 'ws', 's1', 'outputs'), { recursive: true });
+      await mkdir(path.join(root, 'ws', 's2', 'outputs'), { recursive: true });
+      await writeFile(path.join(root, 'ws', 's1', 'outputs', 'report.md'), '# one');
+      await writeFile(path.join(root, 'ws', 's1', 'notes.md'), 'not an output');
+      await writeFile(path.join(root, 'ws', 's2', 'outputs', 'other.md'), '# two');
+      await writeFile(path.join(root, 'root.txt'), 'root');
+
+      const files = decodeUstar(await collectWorkspace(root, ['ws/s1/outputs']))
+        .filter((entry) => entry.type === 'file')
+        .map((entry) => entry.path);
+
+      expect(files).toEqual(['ws/s1/outputs/report.md']);
+      await expect(collectWorkspace(root, ['ws/s3/outputs'])).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

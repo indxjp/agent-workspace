@@ -36,7 +36,10 @@
  * `failed`, carrying that rejection message instead of the SDK's own outcome. See
  * `docs/adr/W1-COMP-01-the-runners-own-terminal-frame-collided-with-the-relays-reserved-names.md`.
  */
-import type { AppendResult, RunStore } from './store';
+import { RunOutputSchema } from '@indx-workspace/contracts/runs';
+import { z } from 'zod';
+
+import type { AppendResult, ApprovalCall, RunOutput, RunStore } from './store';
 import { publicRunFailure } from './failures';
 
 /**
@@ -193,8 +196,23 @@ export async function* parseSseStream(
  * error. `launcher.ts` concludes the two kinds with different terminal statuses.
  */
 export type RelayOutcome =
-  | { readonly kind: 'completed'; readonly events: number }
+  | {
+      readonly kind: 'completed';
+      readonly events: number;
+      /** The run's answer (ADR-0143), or `null` when the engine streamed none. */
+      readonly output: RunOutput | null;
+    }
   | { readonly kind: 'cancelled'; readonly reason: string; readonly events: number }
+  /**
+   * The engine stopped before a tool call the agent requires approval for (ADR-0145). `call` is
+   * what the run stores as pending; `toolCallId` is the engine's id for the call it declined.
+   */
+  | {
+      readonly kind: 'awaiting_approval';
+      readonly call: ApprovalCall;
+      readonly toolCallId: string;
+      readonly events: number;
+    }
   | { readonly kind: 'failed'; readonly reason: string; readonly events: number };
 
 const SSE_MIME = 'text/event-stream';
@@ -214,6 +232,60 @@ const SSE_MIME = 'text/event-stream';
  * consumed, not forwarded.
  */
 const RUNNER_TERMINAL_FRAMES = new Set(['run-done', 'run-error', 'run-interrupted']);
+
+/**
+ * What the run answered, read from its frames as they pass (ADR-0143): the `output` of the last
+ * `agent.result` that carries one, else the text of the last assistant message with text.
+ */
+class OutputTracker {
+  #fromResult: RunOutput | null = null;
+  #lastText: string | null = null;
+
+  observe(type: string, data: unknown): void {
+    if (typeof data !== 'object' || data === null) return;
+    const frame = data as Record<string, unknown>;
+    if (type === 'agent.result') {
+      const parsed = RunOutputSchema.safeParse(frame['output']);
+      if (parsed.success) this.#fromResult = parsed.data;
+    } else if (type === 'agent.message' && frame['role'] === 'assistant') {
+      const blocks = Array.isArray(frame['blocks']) ? (frame['blocks'] as unknown[]) : [];
+      const text = blocks
+        .flatMap((block) => {
+          const b = block as { type?: unknown; text?: unknown } | null;
+          return b?.type === 'text' && typeof b.text === 'string' ? [b.text] : [];
+        })
+        .join('');
+      if (text.length > 0) this.#lastText = text;
+    }
+  }
+
+  output(): RunOutput | null {
+    if (this.#fromResult !== null) return this.#fromResult;
+    return this.#lastText === null ? null : { text: this.#lastText, structured: null };
+  }
+}
+
+const RunnerApprovalRequestSchema = z.object({
+  toolName: z.string().min(1),
+  canonicalCall: z.string().min(1),
+  toolUseId: z.string().min(1),
+});
+
+/**
+ * The call a runner `run-error` frame stopped on for want of approval, `'malformed'` when it
+ * claims to have stopped for approval without a usable request, and `null` for any other failure.
+ */
+function approvalOf(
+  data: unknown,
+): { readonly call: ApprovalCall; readonly toolCallId: string } | 'malformed' | null {
+  if (typeof data !== 'object' || data === null) return null;
+  const frame = data as Record<string, unknown>;
+  if (frame['code'] !== 'awaiting_approval') return null;
+  const request = RunnerApprovalRequestSchema.safeParse(frame['approvalRequest']);
+  if (!request.success) return 'malformed';
+  const { toolName, canonicalCall, toolUseId } = request.data;
+  return { call: { toolName, canonicalCall }, toolCallId: toolUseId };
+}
 
 /** The `message` field of a runner terminal frame's summary object, if it has a usable one. */
 function terminalFailureMessage(data: unknown): string | null {
@@ -274,6 +346,7 @@ export async function relayRunnerStream(
     return { kind: 'failed', reason: classified.reason, events: 0 };
   }
   let events = 0;
+  const answer = new OutputTracker();
   try {
     for await (const message of parseSseStream(classified.body)) {
       let data: unknown;
@@ -309,7 +382,7 @@ export async function relayRunnerStream(
             await onSessionIdentified?.(sessionId);
           }
         }
-        if (type === 'run-done') return { kind: 'completed', events };
+        if (type === 'run-done') return { kind: 'completed', events, output: answer.output() };
         if (type === 'run-interrupted') {
           return {
             kind: 'cancelled',
@@ -317,11 +390,21 @@ export async function relayRunnerStream(
             events,
           };
         }
+        const approval = approvalOf(data);
+        if (approval === 'malformed') {
+          return {
+            kind: 'failed',
+            reason: 'the runtime stopped for approval without a usable approval request',
+            events,
+          };
+        }
+        if (approval !== null) return { kind: 'awaiting_approval', ...approval, events };
         const reason =
           terminalFailureMessage(data) ?? 'the runtime reported a run failure with no message';
         return { kind: 'failed', reason, events };
       }
 
+      answer.observe(type, data);
       const appended: AppendResult = await store.append(runId, { type, data });
       if (appended.kind !== 'appended') {
         return {

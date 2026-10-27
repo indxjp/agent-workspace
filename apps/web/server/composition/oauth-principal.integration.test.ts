@@ -7,7 +7,7 @@
  */
 import crypto from 'node:crypto';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   agents,
@@ -21,6 +21,7 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import { openDatabaseRoot, type DatabaseRoot } from '@agent-workspace/core/db';
 
+import { serveExternalBuilderMcp } from '../builder/transport/external';
 import { mintOAuthToken } from '../oauth/tokens';
 import { installRbacApi, type InstalledRbacApi } from './session-rbac';
 
@@ -36,6 +37,7 @@ if (!hasDatabase) {
 const SESSION_SECRET = 'oauth-principal-test-secret-at-least-32-characters';
 const RESOURCE = 'https://aw.example/api/a2a/agents/helper';
 const A2A_PATH = 'https://aw.example/api/a2a/agents/helper';
+const BUILDER_RESOURCE = 'https://aw.example/mcp/builder';
 
 describe.skipIf(!hasDatabase)('the OAuth access-token verifier, against PostgreSQL', () => {
   let isolated: IsolatedTestDatabase | undefined;
@@ -48,7 +50,7 @@ describe.skipIf(!hasDatabase)('the OAuth access-token verifier, against PostgreS
     root = undefined;
   });
 
-  async function fixture(kind: 'a2a-agent' | 'mcp-project' = 'a2a-agent') {
+  async function fixture(kind: 'a2a-agent' | 'mcp-project' | 'builder' = 'a2a-agent') {
     const db = await createIsolatedTestDatabase('aw_oauth_principal');
     isolated = db;
     const workspaceId = crypto.randomUUID();
@@ -93,7 +95,7 @@ describe.skipIf(!hasDatabase)('the OAuth access-token verifier, against PostgreS
     const created = await opened.endpointClients.forScope(scope).create({
       name: 'bot',
       kind,
-      agentIds: [agentId],
+      agentIds: kind === 'builder' ? [] : [agentId],
       actsForPrincipalId: principalId,
       createdByPrincipalId: principalId,
     });
@@ -107,7 +109,7 @@ describe.skipIf(!hasDatabase)('the OAuth access-token verifier, against PostgreS
         kind: 'access',
         tokenHash: minted.tokenHash,
         subjectPrincipalId: principalId,
-        resource: RESOURCE,
+        resource: kind === 'builder' ? BUILDER_RESOURCE : RESOURCE,
         familyId: over.familyId ?? crypto.randomUUID(),
         expiresAt: over.expiresAt ?? new Date(Date.now() + 5 * 60_000),
       });
@@ -228,6 +230,81 @@ describe.skipIf(!hasDatabase)('the OAuth access-token verifier, against PostgreS
     await f.opened.endpointClients.forScope(f.scope).revoke(f.client.id, new Date());
     await expect(identify(f.installed, token)).resolves.toBeNull();
   }, 180_000);
+
+  it('resolves a builder token to scope builder on /mcp/builder, and refuses it once revoked', async () => {
+    const f = await fixture('builder');
+    const token = await f.issue();
+    expect(await identify(f.installed, token, BUILDER_RESOURCE)).toMatchObject({
+      role: 'builder',
+      principalId: f.principalId,
+      scope: { kind: 'builder', id: f.client.id },
+      oauth: { clientId: f.client.id, audience: BUILDER_RESOURCE },
+    });
+    await expect(
+      identify(f.installed, token, 'https://aw.example/api/agents', 'GET'),
+    ).resolves.toBeNull();
+    await f.opened.endpointClients.forScope(f.scope).revoke(f.client.id, new Date());
+    await expect(identify(f.installed, token, BUILDER_RESOURCE)).resolves.toBeNull();
+  }, 180_000);
+
+  describe('at the /mcp/builder route boundary', () => {
+    beforeEach(() => {
+      vi.stubEnv('AW_PUBLIC_URL', 'https://aw.example');
+    });
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    const call = (installed: InstalledRbacApi, token: string, method: string, params?: unknown) =>
+      serveExternalBuilderMcp(
+        new Request(BUILDER_RESOURCE, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        }),
+        { identify: (r) => installed.identify(r), ports: null },
+      );
+
+    it('lists the three read tools and refuses draft_save to a real builder token', async () => {
+      const f = await fixture('builder');
+      const token = await f.issue();
+      const listed = (await (await call(f.installed, token, 'tools/list')).json()) as {
+        result: { tools: { name: string }[] };
+      };
+      expect(listed.result.tools.map((t) => t.name)).toEqual([
+        'catalog_list',
+        'examples_get',
+        'draft_check',
+      ]);
+      const saved = await call(f.installed, token, 'tools/call', {
+        name: 'draft_save',
+        arguments: {},
+      });
+      expect(JSON.stringify(await saved.json())).toContain('read_only_client');
+    }, 180_000);
+
+    it('refuses an expired token and a revoked client', async () => {
+      const f = await fixture('builder');
+      const expiring = await f.issue({ expiresAt: new Date(Date.now() + 1_000) });
+      const live = await f.issue();
+      expect((await call(f.installed, expiring, 'tools/list')).status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      expect((await call(f.installed, expiring, 'tools/list')).status).toBe(401);
+      expect((await call(f.installed, live, 'tools/list')).status).toBe(200);
+      await f.opened.endpointClients.forScope(f.scope).revoke(f.client.id, new Date());
+      expect((await call(f.installed, live, 'tools/list')).status).toBe(401);
+    }, 180_000);
+
+    it.each(['a2a-agent', 'mcp-project'] as const)(
+      'refuses an %s token',
+      async (kind) => {
+        const f = await fixture(kind);
+        const response = await call(f.installed, await f.issue(), 'tools/list');
+        expect(response.status).toBe(401);
+      },
+      180_000,
+    );
+  });
 
   it('re-reads the consenting member on every request: a role change bites at once', async () => {
     const f = await fixture();

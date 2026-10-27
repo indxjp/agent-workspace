@@ -8,7 +8,9 @@ import {
 } from './retention';
 
 /** A state store that removes nothing, for the cases that are about the legacy half. */
-const NO_STATE = { purgeBefore: () => Promise.resolve({ entries: 0, blobs: 0 }) };
+const NO_STATE = {
+  purgeBefore: () => Promise.resolve({ entries: 0, blobs: 0, sessionIds: [] as string[] }),
+};
 
 describe('session retention maintenance', () => {
   it('defaults to a safe dry run and validates configuration', () => {
@@ -73,7 +75,7 @@ describe('session retention maintenance', () => {
   });
 
   it('purges the engine-scoped store under the same cutoff and reports its counts (ENG-06)', async () => {
-    const statePurge = vi.fn(() => Promise.resolve({ entries: 12, blobs: 2 }));
+    const statePurge = vi.fn(() => Promise.resolve({ entries: 12, blobs: 2, sessionIds: [] }));
     const result = await runSessionRetention({
       workspaceId: 'workspace-a',
       store: { purgeBefore: () => Promise.resolve(1) },
@@ -88,8 +90,36 @@ describe('session retention maintenance', () => {
       transcripts: 1,
       stateEntries: 12,
       stateBlobs: 2,
+      attachments: 0,
     });
     expect(statePurge).toHaveBeenCalledWith('workspace-a', new Date('2026-08-31T00:00:00Z'));
+  });
+
+  it("deletes the attachments of each session the state purge emptied, and no other's (ADR-0146 D6)", async () => {
+    const purgeSessions = vi.fn(() => Promise.resolve(3));
+    const result = await runSessionRetention({
+      workspaceId: 'workspace-a',
+      store: { purgeBefore: () => Promise.resolve(0) },
+      stateStore: {
+        purgeBefore: () => Promise.resolve({ entries: 4, blobs: 0, sessionIds: ['session-a'] }),
+      },
+      attachments: { purgeSessions },
+      lease: { tryAcquire: () => Promise.resolve({ release: () => Promise.resolve() }) },
+      policy: { transcriptDays: 10, leaseTtlMs: 1_000, dryRun: false },
+    });
+    expect(result).toMatchObject({ kind: 'purged', attachments: 3 });
+    expect(purgeSessions).toHaveBeenCalledExactlyOnceWith('workspace-a', ['session-a']);
+
+    purgeSessions.mockClear();
+    await runSessionRetention({
+      workspaceId: 'workspace-a',
+      store: { purgeBefore: () => Promise.resolve(0) },
+      stateStore: NO_STATE,
+      attachments: { purgeSessions },
+      lease: { tryAcquire: () => Promise.resolve({ release: () => Promise.resolve() }) },
+      policy: { transcriptDays: 10, leaseTtlMs: 1_000, dryRun: false },
+    });
+    expect(purgeSessions).not.toHaveBeenCalled();
   });
 
   it('touches neither store on a dry run', async () => {
@@ -132,7 +162,7 @@ describe('startSessionRetentionScheduler', () => {
       stateStore: {
         purgeBefore: (workspaceId) => {
           statePurged.push(workspaceId);
-          return Promise.resolve({ entries: 3, blobs: 1 });
+          return Promise.resolve({ entries: 3, blobs: 1, sessionIds: [] });
         },
       },
       onResult: (workspaceId, result) => {

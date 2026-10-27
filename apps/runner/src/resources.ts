@@ -37,15 +37,22 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { RunRequest } from '@agent-workspace/core';
+import type {
+  RunFileReference,
+  RunFileResource,
+  RunRequest,
+  RunSkillReference,
+} from '@agent-workspace/run-protocol';
 import {
   skillPlacementVerdict,
   type EngineRunRequest,
   type EngineSkillFile,
+  type EngineSkillGrant,
 } from '@agent-workspace/engine';
-import { normalizeArchivePath } from '@agent-workspace/runtime';
+import { normalizeArchivePath } from '@agent-workspace/runtime/transfer';
 
 const MANIFEST = 'agent-workspace-materialized-resources.json';
 
@@ -154,6 +161,35 @@ function removeTree(root: string, target: string): void {
   rmSync(target, { force: true, recursive: true });
 }
 
+/**
+ * Remove a revoked path, except what is still granted beneath it: a revoked directory that holds a
+ * current path (a folder grant narrowed to one of its files) keeps that path and loses the rest.
+ */
+function removeAllButCurrent(
+  root: string,
+  target: string,
+  relative: string,
+  currentFiles: ReadonlySet<string>,
+): void {
+  const holdsCurrent = [...currentFiles].some((current) => current.startsWith(`${relative}/`));
+  if (
+    !holdsCurrent ||
+    !existsSync(target) ||
+    lstatSync(target).isSymbolicLink() ||
+    !statSync(target).isDirectory()
+  ) {
+    removeTree(root, target);
+    return;
+  }
+  makeParentsRemovable(root, target);
+  chmodSync(target, 0o700);
+  for (const name of readdirSync(target)) {
+    const child = `${relative}/${name}`;
+    if (currentFiles.has(child)) continue;
+    removeAllButCurrent(root, path.join(target, name), child, currentFiles);
+  }
+}
+
 /** Remove the now-empty directories a deleted skill file left behind, stopping at `stopAt`. */
 function pruneEmptyDirectories(root: string, target: string, stopAt: string): void {
   const boundary = path.resolve(stopAt);
@@ -201,7 +237,7 @@ function readManifest(configDir: string): PriorManifest {
 }
 
 function removeRevoked(
-  request: RunRequest,
+  request: ResolvedRunRequest,
   configDir: string,
   previous: PriorManifest,
   currentFiles: ReadonlySet<string>,
@@ -211,7 +247,7 @@ function removeRevoked(
     if (currentFiles.has(relative)) continue;
     const target = within(request.cwd, relative);
     refuseSymlinkPath(request.cwd, target);
-    removeTree(request.cwd, target);
+    removeAllButCurrent(request.cwd, target, relative, currentFiles);
   }
   if (previous.skillFiles === null) {
     // A pre-ENG-04b manifest: remove every tree the old layout wrote. Without this, the first turn
@@ -247,40 +283,136 @@ function ensureWritableParents(root: string, target: string): void {
   }
 }
 
-function materializeFiles(
+/**
+ * Resolve one granted file's path inside `cwd`, the one way both the writer and the reference
+ * verifier (`./verify-files.ts`) do it. Throws for a path outside `cwd`, through a symlink, or under
+ * the engine's protected configuration directory — before the caller opens anything there.
+ */
+export function resolveGrantedPath(
+  cwd: string,
+  relative: string,
+  protectedConfigDirectory: string,
+): string {
+  // Normalised **once**, and the guard judges the very string the writer then resolves: a guard
+  // on any other normalisation can be walked around by a spelling only the writer folds —
+  // `.claude\settings.json` and `%2Eclaude/settings.json` both land in `<cwd>/.claude/`.
+  // `normalizeArchivePath` throws for everything the writer would refuse (`..`, absolute, malformed
+  // encoding) and strips `./` and a trailing `/`. Compared case-insensitively, and ignoring the
+  // trailing dots and spaces Windows drops from a name, because `.ClAuDe` and `.claude.` are the
+  // same directory there and the engine reads whatever the filesystem hands it.
+  const safe = normalizeArchivePath(relative);
+  const first = safe.split('/', 1)[0] ?? '';
+  if (
+    first.replace(/[. ]+$/u, '').toLowerCase() ===
+    protectedConfigDirectory.replace(/[. ]+$/u, '').toLowerCase()
+  ) {
+    throw new Error(
+      `assigned file ${JSON.stringify(relative)} targets the private ${protectedConfigDirectory} directory`,
+    );
+  }
+  const target = resolveNormalised(cwd, safe, relative);
+  refuseSymlinkPath(cwd, target);
+  return target;
+}
+
+/** Where `POST /files` places the files of a skill granted by reference (the storage design, §04). */
+const SKILL_INBOX = '.aw-inbox';
+
+const skillInboxPath = (name: string, file: string): string =>
+  `${SKILL_INBOX}/skills/${name}/${file}`;
+
+/** Each skill file reference as the file reference the verifier checks, under the inbox. */
+// @story US-STO-06
+export function skillInboxReferences(skills: readonly RunSkillReference[]): RunFileReference[] {
+  return skills.flatMap((skill) =>
+    skill.files.map((file) => ({
+      kind: 'file' as const,
+      path: skillInboxPath(skill.name, file.path),
+      access: 'read' as const,
+      size: file.size,
+      sha256: file.sha256,
+    })),
+  );
+}
+
+/**
+ * A `/run` request once its skill references have been read from the inbox: the skills carry their
+ * bytes so the engine port and {@link materializeSkills} can place them. The bytes never travel
+ * on the wire; the wire schema (`RunRequest`) names skill files by reference only.
+ */
+export type ResolvedRunRequest = Omit<RunRequest, 'resources'> & {
+  readonly resources?: {
+    readonly files: readonly RunFileResource[];
+    readonly skills: readonly EngineSkillGrant[];
+  };
+};
+
+/** A request that grants no skills, as a {@link ResolvedRunRequest} (there is no inbox to read). */
+export function withoutSkills(request: RunRequest): ResolvedRunRequest {
+  const { resources, ...rest } = request;
+  if (resources === undefined) return rest;
+  if (resources.skills.length > 0) {
+    throw new Error('withoutSkills: the request grants skills; read the inbox');
+  }
+  return { ...rest, resources: { files: resources.files, skills: [] } };
+}
+
+/**
+ * Replace every skill reference with the verified bytes from the inbox, so the engine port and
+ * {@link materializeSkills} receive the content (in the sandbox only).
+ */
+// @story US-STO-06
+// @story US-STO-11
+export async function readSkillInbox(
   request: RunRequest,
+  protectedConfigDirectory: string,
+): Promise<ResolvedRunRequest> {
+  const resources = request.resources;
+  if (resources === undefined) return withoutSkills(request);
+  const readInbox = async (name: string, file: string): Promise<string> =>
+    (
+      await readFile(
+        resolveGrantedPath(request.cwd, skillInboxPath(name, file), protectedConfigDirectory),
+      )
+    ).toString('base64');
+  return {
+    ...request,
+    resources: {
+      ...resources,
+      skills: await Promise.all(
+        resources.skills.map(async (skill) => ({
+          name: skill.name,
+          files: await Promise.all(
+            skill.files.map(async (file) => ({
+              path: file.path,
+              contentBase64: await readInbox(skill.name, file.path),
+            })),
+          ),
+        })),
+      ),
+    },
+  };
+}
+
+/** Remove the inbox, so no agent ever sees it; the bytes it held are already in memory. */
+export function removeSkillInbox(cwd: string, protectedConfigDirectory: string): void {
+  removeTree(cwd, resolveGrantedPath(cwd, SKILL_INBOX, protectedConfigDirectory));
+}
+
+function materializeFiles(
+  request: ResolvedRunRequest,
   protectedConfigDirectory: string,
 ): readonly string[] {
   const resources = request.resources?.files ?? [];
   for (const resource of resources) {
-    // Normalised **once**, and the guard judges the very string the writer then resolves: a guard
-    // on any other normalisation can be walked around by a spelling only the writer folds —
-    // `.claude\settings.json` and `%2Eclaude/settings.json` both land in `<cwd>/.claude/`.
-    // `normalizeArchivePath` throws for everything the writer would refuse (`..`, absolute, malformed
-    // encoding) and strips `./` and a trailing `/`. Compared case-insensitively, and ignoring the
-    // trailing dots and spaces Windows drops from a name, because `.ClAuDe` and `.claude.` are the
-    // same directory there and the engine reads whatever the filesystem hands it.
-    const safe = normalizeArchivePath(resource.path);
-    const first = safe.split('/', 1)[0] ?? '';
-    if (
-      first.replace(/[. ]+$/u, '').toLowerCase() ===
-      protectedConfigDirectory.replace(/[. ]+$/u, '').toLowerCase()
-    ) {
-      throw new Error(
-        `assigned file ${JSON.stringify(resource.path)} targets the private ${protectedConfigDirectory} directory`,
-      );
-    }
-    const target = resolveNormalised(request.cwd, safe, resource.path);
-    refuseSymlinkPath(request.cwd, target);
+    const target = resolveGrantedPath(request.cwd, resource.path, protectedConfigDirectory);
     ensureWritableParents(request.cwd, target);
-    if (resource.kind === 'directory') {
-      mkdirSync(target, { recursive: true, mode: 0o755 });
-    } else {
-      if (existsSync(target)) chmodSync(target, 0o644);
-      writeFileSync(target, Buffer.from(resource.contentBase64, 'base64'), { mode: 0o644 });
-    }
+    // A file has no bytes to write: they arrived through `POST /files` and were verified before
+    // this point; only the guards above and the mode pass below apply.
+    if (resource.kind === 'directory') mkdirSync(target, { recursive: true, mode: 0o755 });
   }
 
+  // @story US-STO-06
   // Apply restrictive modes only after every descendant has been created.
   for (const resource of [...resources].sort((a, b) => b.path.length - a.path.length)) {
     const target = within(request.cwd, resource.path);
@@ -307,7 +439,7 @@ function materializeFiles(
  * whose skill surface nobody chose (ADR-0015's explicit `else`).
  */
 function materializeSkills(
-  request: RunRequest,
+  request: ResolvedRunRequest,
   placements: readonly EngineSkillFile[],
   paths: readonly string[],
   configDir: string,
@@ -350,7 +482,7 @@ function materializeSkills(
  * port deliberately does not carry them.
  */
 export function materializeRunResources(
-  request: RunRequest,
+  request: ResolvedRunRequest,
   engineRequest: EngineRunRequest,
   engine: SkillPlacingEngine,
 ): MaterializationManifest {

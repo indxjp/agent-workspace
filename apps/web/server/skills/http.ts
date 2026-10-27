@@ -3,21 +3,25 @@
  * "turn a `Request` into what a handler needs" and "turn a handler's `ApiResult` into a
  * `Response`".
  *
- * Every skills route carries its payload as a JSON body — `contentBase64` per file, never raw
- * bytes in the request body — so this file's bounded reader produces *text*, not bytes, unlike
+ * Every skills route but one carries its payload as a JSON body — `contentBase64` per file, never
+ * raw bytes in the request body — so this file's bounded reader produces *text*, not bytes, unlike
  * `files/http.ts`'s. That choice, and why it is what makes the byte-identical round trip a property
  * of `handlers.ts` alone rather than of anything this file does, is `docs/adr/
  * W2-CP-04-skill-storage-keys.md`'s "Why a JSON manifest, not a multipart or archive upload".
+ * The exception is `POST /api/skills`, which also takes `multipart/form-data` and reads it as a
+ * stream (`multipart.ts`), so no file is held whole or base64-encoded.
  */
 import { MAX_SKILL_REQUEST_BODY_BYTES } from '@indx-workspace/contracts/skills';
 
-import { problem, type ApiResult } from './handlers';
-import { currentSkillsRuntime } from './runtime';
+import type { ApiResult } from '../http/result';
+import { problem } from './handlers';
+import type { SkillRowsAccess } from './tree';
+import { applicationContext } from '../application-context';
 import { jsonBodyResponse, readRouteParam } from '../http/json-transport';
-import type { ObjectStore } from './object-store-bridge';
+import type { SkillObjects } from '../storage/store';
 import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
 
-function tooLarge(observed: string): ApiResult {
+export function tooLarge(observed: string): ApiResult {
   return problem(
     413,
     'request_body_too_large',
@@ -25,33 +29,34 @@ function tooLarge(observed: string): ApiResult {
   );
 }
 
+/** The refusal for a declared `Content-Length` that is not a byte count or is over the limit, else `null`. */
+export function declaredLengthRefusal(request: Request): ApiResult | null {
+  const declared = request.headers.get('content-length');
+  if (declared === null) return null;
+  const length = Number(declared);
+  if (!Number.isInteger(length) || length < 0) {
+    return problem(
+      400,
+      'malformed_body',
+      `The Content-Length header is ${JSON.stringify(declared)}, which is not a byte count.`,
+    );
+  }
+  return length > MAX_SKILL_REQUEST_BODY_BYTES
+    ? tooLarge(`declared a Content-Length of ${String(length)}`)
+    : null;
+}
+
 /**
- * Read a request body as UTF-8 text, bounded while it streams. Mirrors `files/http.ts`'s
- * `readBoundedBodyBytes`, decoding to text at the end rather than never — every skills route's body
- * is a JSON envelope, and the file bytes inside it travel as base64 text, so nothing here decodes
+ * Read a request body as UTF-8 text, bounded while it streams. Every skills route's body is a JSON
+ * envelope, and the file bytes inside it travel as base64 text, so nothing here decodes
  * or re-encodes a skill file's own bytes (that happens once, in `handlers.ts`, from the base64
  * string straight to a `Uint8Array`).
  */
 export async function readBoundedBodyText(
   request: Request,
 ): Promise<{ ok: true; text: string } | { ok: false; result: ApiResult }> {
-  const declared = request.headers.get('content-length');
-  if (declared !== null) {
-    const length = Number(declared);
-    if (!Number.isInteger(length) || length < 0) {
-      return {
-        ok: false,
-        result: problem(
-          400,
-          'malformed_body',
-          `The Content-Length header is ${JSON.stringify(declared)}, which is not a byte count.`,
-        ),
-      };
-    }
-    if (length > MAX_SKILL_REQUEST_BODY_BYTES) {
-      return { ok: false, result: tooLarge(`declared a Content-Length of ${String(length)}`) };
-    }
-  }
+  const refusal = declaredLengthRefusal(request);
+  if (refusal !== null) return { ok: false, result: refusal };
 
   const body = request.body;
   if (body === null || body === undefined) return { ok: true, text: '' };
@@ -130,37 +135,38 @@ export function toResponse(result: ApiResult): Response {
  */
 export async function withWorkspaceSkillsStore(
   request: Request,
-  run: (store: ObjectStore, catalog: ResourceCatalogRepository | null) => Promise<ApiResult>,
+  run: (
+    store: SkillObjects,
+    catalog: ResourceCatalogRepository | null,
+    rows: SkillRowsAccess,
+  ) => Promise<ApiResult>,
   authenticatedWorkspaceId?: string,
 ): Promise<ApiResult> {
-  const runtime = currentSkillsRuntime();
-  if (runtime === null) {
+  const skills = applicationContext()?.skills;
+  const runtime = skills?.kind === 'serving' ? skills.runtime : null;
+  if (runtime === null || runtime.storage === undefined) {
     return problem(
       503,
       'skills_runtime_not_configured',
-      'The skills API has no store or workspace resolver wired into it. This deployment cannot ' +
-        'serve skill requests; it is not that the request was rejected.',
+      'The skills API has no catalog service or workspace resolver wired into it. This deployment ' +
+        'cannot serve skill requests; it is not that the request was rejected.',
     );
   }
+  const { storage } = runtime;
 
-  if (authenticatedWorkspaceId !== undefined) {
-    return run(
-      runtime.store.forWorkspace(authenticatedWorkspaceId),
-      runtime.catalog === undefined
-        ? null
-        : await runtime.catalog.forWorkspace(authenticatedWorkspaceId),
+  const runIn = async (workspaceId: string): Promise<ApiResult> =>
+    run(
+      runtime.store.forWorkspace(workspaceId),
+      runtime.catalog === undefined ? null : await runtime.catalog.forWorkspace(workspaceId),
+      { storage, workspaceId },
     );
-  }
+
+  if (authenticatedWorkspaceId !== undefined) return runIn(authenticatedWorkspaceId);
 
   const resolution = await runtime.resolveWorkspace(request);
   switch (resolution.kind) {
     case 'workspace':
-      return run(
-        runtime.store.forWorkspace(resolution.workspaceId),
-        runtime.catalog === undefined
-          ? null
-          : await runtime.catalog.forWorkspace(resolution.workspaceId),
-      );
+      return runIn(resolution.workspaceId);
     case 'unauthenticated':
       return problem(401, 'unauthenticated', resolution.reason);
     case 'forbidden':

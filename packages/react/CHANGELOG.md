@@ -3,15 +3,24 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts` and
 `@indx-workspace/sdk`, with the same version; the deprecation rule is theirs.
 
-## Unreleased
+## 0.6.11 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.
+
+## 0.6.10 — unreleased
 
 ### Added
 
+- `<Chat/>` offers a native file input when the surface sets `parts.attachments` (ADR-0146,
+  #1308). Images are downscaled in the browser (2048 px long edge) before they are uploaded with
+  the session token to `POST /api/sessions/:id/attachments`; the message then starts the run with
+  `attachments: [{ fileId }]`.
 - `<AssistantProse text/>`, and `<Chat/>` renders assistant replies through it as Markdown
   (headings, emphasis, lists, code blocks, links, GFM tables) with `react-markdown` and
   `remark-gfm` (ADR-0141, #1131). Raw HTML is dropped, images are not rendered, unsafe link
   schemes are emptied and links open in a new tab with `rel="noopener noreferrer nofollow"`.
   Visitor messages stay literal. Style it through `.aw-prose` in `styles.css`.
+- The chat shows a localized notice (English and Japanese) once a run has handed the conversation to a person. The reason never reaches the visitor: the server omits it from a session-scoped stream, so the turn model's `handoff.reason` is `null` there.
 
 ### Changed
 

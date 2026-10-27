@@ -1,6 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
-import { RUN_STATUSES } from '@indx-workspace/contracts/runs';
+import { UUID_PATTERN } from '@indx-workspace/contracts';
+import { outputSchemaViolation, RUN_STATUSES } from '@indx-workspace/contracts/runs';
 import type { RunResource } from '@indx-workspace/contracts/runs';
 import { runFailure, type RunEventsOptions, type StartRunInput } from '@indx-workspace/sdk';
 import { toAgentEvent } from '@indx-workspace/sdk/events';
@@ -13,6 +15,7 @@ import {
   positional,
   singleValue,
   value,
+  values,
   type Command,
   type CommandContext,
   type CommandResult,
@@ -22,6 +25,7 @@ import { notice } from '../output.js';
 import { printStream } from '../stream.js';
 import { buildTrace, costText, renderTrace, type TimedEvent } from './runs-trace.js';
 
+const OUTPUT_COLUMNS = ['name', 'sizeBytes', 'contentType', 'lastModified'];
 const RUN_COLUMNS = ['id', 'agentId', 'sessionId', 'status', 'createdAt', 'endedAt', 'durationMs'];
 
 /**
@@ -51,6 +55,60 @@ async function promptOf(context: CommandContext): Promise<string> {
   }
 }
 
+/** `--output-schema <path>`: a JSON Schema file, judged by the contracts' rule before any request. */
+async function outputSchemaOf(
+  context: CommandContext,
+): Promise<Exclude<StartRunInput['outputSchema'], undefined> | undefined> {
+  const file = value(context, 'output-schema');
+  if (file === undefined) return undefined;
+  let text: string;
+  try {
+    text = await readFile(file, 'utf8');
+  } catch {
+    throw new UsageError(`could not read ${file}`);
+  }
+  let schema: unknown;
+  try {
+    schema = JSON.parse(text);
+  } catch {
+    throw new UsageError(`--output-schema must be a JSON file: ${file} is not valid JSON`);
+  }
+  const found = outputSchemaViolation(schema);
+  if (found !== null) throw new UsageError(`--output-schema ${file}: ${found.message}`);
+  // The rule above has established a plain object at the root.
+  return schema as Record<string, unknown>;
+}
+
+/**
+ * `--attach <file>`: a workspace file id, or a workspace path (a leading `./` or `/` allowed, `..`
+ * refused) resolved to its id from its folder's listing. The server grants every attachment
+ * read-only (ADR-0146); uploading a local file is not part of it.
+ */
+// @story US-STO-06
+async function attachmentsOf(context: CommandContext): Promise<{ readonly fileId: string }[]> {
+  const attachments: { readonly fileId: string }[] = [];
+  for (const file of values(context, 'attach')) {
+    if (UUID_PATTERN.test(file)) {
+      attachments.push({ fileId: file });
+      continue;
+    }
+    // `./reports/q3.txt` and `/reports/q3.txt` name the workspace path `reports/q3.txt`.
+    const wanted = file.replace(/^\.?\//u, '');
+    if (wanted.split('/').includes('..'))
+      throw new UsageError(`--attach ${file}: a workspace path may not contain ".."`);
+    const slash = wanted.lastIndexOf('/');
+    const listed = await context.client.files.list(
+      slash === -1 ? {} : { path: wanted.slice(0, slash) },
+      { signal: context.signal },
+    );
+    const found = listed.find((entry) => entry.path === wanted);
+    if (found === undefined)
+      throw new UsageError(`--attach ${file}: no workspace file at that path`);
+    attachments.push({ fileId: found.id });
+  }
+  return attachments;
+}
+
 /** `--model <connection-id>:<model>`: a connection and a model, always together (§5.3). */
 function modelOverride(
   context: CommandContext,
@@ -71,6 +129,11 @@ function eventsOptions(context: CommandContext): RunEventsOptions {
   return { signal: context.signal, ...(after === undefined ? {} : { after }) };
 }
 
+function commentOf(context: CommandContext): { readonly comment?: string } {
+  const comment = value(context, 'comment');
+  return comment === undefined ? {} : { comment };
+}
+
 /** `--fail-on-error`: a settled run that failed becomes the command's failure, with its code. */
 function assertRunSucceeded(run: RunResource): void {
   const failure = runFailure(run);
@@ -88,12 +151,19 @@ async function start(context: CommandContext): Promise<CommandResult | undefined
     );
   }
   const { client, signal, mode, io } = context;
+  const prompt = await promptOf(context);
+  const outputSchema = await outputSchemaOf(context);
+  const fileScope = values(context, 'file-scope');
+  const attachments = await attachmentsOf(context);
   const started = await client.runs.start(
     positional(context, 0, 'agent'),
     {
-      prompt: await promptOf(context),
+      prompt,
       sessionId: value(context, 'session') ?? null,
       modelOverride: modelOverride(context),
+      ...(outputSchema === undefined ? {} : { outputSchema }),
+      ...(fileScope.length === 0 ? {} : { fileScope }),
+      ...(attachments.length === 0 ? {} : { attachments }),
     },
     { signal },
   );
@@ -109,11 +179,42 @@ async function start(context: CommandContext): Promise<CommandResult | undefined
   return undefined;
 }
 
+/** Where `--download <dir>` puts a file; a name that climbs out of `<dir>` is refused. */
+function downloadTarget(directory: string, name: string): string {
+  const root = path.resolve(directory);
+  const target = path.resolve(root, name);
+  if (!target.startsWith(root + path.sep)) throw new UsageError(`refusing to write ${name}`);
+  return target;
+}
+
+async function outputs(context: CommandContext): Promise<CommandResult> {
+  const { client, signal } = context;
+  const files = await client.runs.outputs(positional(context, 0, 'id'), { signal });
+  const directory = value(context, 'download');
+  if (directory === undefined) return { value: files, columns: OUTPUT_COLUMNS };
+  // Every name is checked before the first byte is written.
+  const planned = files.map((file) => ({ file, target: downloadTarget(directory, file.name) }));
+  const saved = [];
+  for (const { file, target } of planned) {
+    const downloaded = await client.files.download(file.path, { signal });
+    if (downloaded.kind === 'folder') continue;
+    try {
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, downloaded.bytes);
+    } catch {
+      throw new UsageError(`could not write ${target}`);
+    }
+    notice(context.io, context.mode, `saved ${file.name} to ${target}`);
+    saved.push({ ...file, savedTo: target });
+  }
+  return { value: saved, columns: [...OUTPUT_COLUMNS, 'savedTo'] };
+}
+
 /** §5.12 — `aw runs`. `revoke-tokens` has no CLI command (§7.2 lists only `interrupt`). */
 export const runCommands: readonly Command[] = [
   command(
     'runs start',
-    '<agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--wait|--follow] [--fail-on-error]',
+    '<agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait|--follow] [--fail-on-error]',
     'Queue a run, and optionally wait for or follow it',
     start,
   ),
@@ -122,7 +223,12 @@ export const runCommands: readonly Command[] = [
       signal: context.signal,
     });
     const { mode } = context;
-    return { value: mode.json || mode.jsonl ? run : { ...run, cost: costText(run) } };
+    if (mode.json || mode.jsonl) return { value: run };
+    const shown = Object.entries(run).map(([key, field]) => [
+      key === 'agentVersion' ? 'version' : key,
+      field,
+    ]);
+    return { value: { ...Object.fromEntries(shown), cost: costText(run) } };
   }),
   command(
     'runs list',
@@ -165,6 +271,12 @@ export const runCommands: readonly Command[] = [
     },
   ),
   command(
+    'runs outputs',
+    '<id> [--download <dir>]',
+    'The files a run wrote, optionally saved under a local directory',
+    outputs,
+  ),
+  command(
     'runs trace',
     '<id>',
     "A run's steps and tool calls as a tree, with inputs, outputs, tokens and cost",
@@ -174,7 +286,10 @@ export const runCommands: readonly Command[] = [
       const events: TimedEvent[] = [];
       for await (const frame of client.runs.events(id, { signal })) {
         const event = toAgentEvent(frame);
-        const at = frame.kind === 'run-status' || frame.kind === 'runtime' ? frame.at : undefined;
+        const at =
+          frame.kind === 'run-status' || frame.kind === 'run-warning' || frame.kind === 'runtime'
+            ? frame.at
+            : undefined;
         if (event !== null) events.push({ event, at: at ?? null });
       }
       // Read after the stream: the metered usage and cost settle as the run ends.
@@ -215,6 +330,26 @@ export const runCommands: readonly Command[] = [
       signal: context.signal,
     }),
   })),
+  command(
+    'runs approve',
+    '<id> [--comment <text>]',
+    'Approve the tool call a paused run is waiting on; starts the continuation run',
+    async (context) => ({
+      value: await context.client.runs.approve(positional(context, 0, 'id'), commentOf(context), {
+        signal: context.signal,
+      }),
+    }),
+  ),
+  command(
+    'runs reject',
+    '<id> [--comment <text>]',
+    'Reject the tool call a paused run is waiting on; starts the continuation run',
+    async (context) => ({
+      value: await context.client.runs.reject(positional(context, 0, 'id'), commentOf(context), {
+        signal: context.signal,
+      }),
+    }),
+  ),
   command(
     'runs rate',
     '<id> --up|--down [--comment <text>]',

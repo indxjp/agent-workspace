@@ -178,3 +178,9 @@ source file, a type definition or a specification is graded `documented`, never 
 Retrieved 2026-09-05 against Node v24.19.0 (`process.versions.undici` = `7.29.0`) on Windows 11 and
 in `node:24.19.0-bookworm-slim` under Docker 29.7.2 (`OSType=linux`). See the note's own
 "Re-verify after" for the 90-day freshness deadline.
+
+## The key in git history
+
+Commit `0d903b4f1` briefly committed a `key.pem` here (removed one commit later, `0b064f134`). It
+was generated for this fixture, protected nothing, and was never used for anything real, so it needs
+no rotation. A full-history secret scan reports it; `.gitleaksignore` ignores that one fingerprint.

@@ -36,7 +36,7 @@ import {
   type MastraModelConnection,
   type MastraProviderSpec,
   type MastraWireProtocol,
-} from '@agent-workspace/engine-mastra';
+} from '@agent-workspace/engine-mastra/testing';
 import type { AgentPermissions } from '@indx-workspace/contracts/agents';
 import type { AgentStopReason } from '@indx-workspace/contracts/run-events';
 import type { EngineTranscriptEntry } from '@agent-workspace/engine';

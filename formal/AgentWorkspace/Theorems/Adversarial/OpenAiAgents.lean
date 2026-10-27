@@ -47,7 +47,7 @@ example :
         tracingDisabled := true }
     writeAllowed c "docs/a.md" = false ∧ writeAllowed c "x/../docs/a.md" = false ∧
       writeAllowed c ".openai-agents/settings.json" = false ∧
-      writeAllowed c "docs-private/a.md" = true := by decide
+      writeAllowed c "docs-private/a.md" = true := by decide +kernel
 
 /-- Every model request an accepted configuration can issue targets the gateway's base URL plus
 `/v1`, carries the run token as `Authorization: Bearer`, and there is exactly one such endpoint. -/
@@ -71,7 +71,7 @@ theorem every_model_request_goes_to_the_gateway_with_the_run_token {r : Request}
 /-- Witness: a base URL with a trailing slash still yields one `/v1` request under it. -/
 example :
     modelRequests (connectionFor .anthropicMessages "http://gateway:8080/" "run-token") =
-      [("http://gateway:8080/v1/messages", "Bearer run-token")] := by decide
+      [("http://gateway:8080/v1/messages", "Bearer run-token")] := by decide +kernel
 
 /-- Every compiled run has tracing disabled. The SDK's side — `setTracingDisabled(true)` before
 `run`, and no trace export after it — is the declared hypothesis the boundary suite enforces. -/

@@ -10,7 +10,7 @@ fallback plus an override per named resource. Owner's fallback is `EVERYTHING` (
 `workspaces` override); every other role's fallback is `NOTHING`.
 
 The model transcribes `POLICY` **literally**, as the same fallback-plus-override shape with the
-same named constants, so each of the 4 × 29 × 3 = 348 cells is computed the way `grantsFor`
+same named constants, so each of the 4 × 31 × 3 = 372 cells is computed the way `grantsFor`
 computes it. The per-cell theorems (`Theorems.Normative.AuthzDecide`) pin every cell against an
 independent transcription of the document table in `docs/sdk/04-api-specification.md` §3.3.
 -/
@@ -105,9 +105,13 @@ def policy : Role → RolePolicy
       byResource := [
         (.agents, EVERYTHING),
         (.apiKeys, MANAGE),
-        (.connectors, MANAGE),
+        -- ADR-0152: roles are monotonic, so Admin runs connectors as Builder runs its own.
+        (.connectors, EVERYTHING),
         -- Issue #949 (ADR-0134): an endpoint client is credential-bearing configuration.
         (.endpointClients, EVERYTHING),
+        -- Issue #1293 (ADR-0144): a trigger starts runs as its owner; Admin manages every one.
+        -- ADR-0152: `EVERYTHING`, so Admin covers Builder's `run: own` (unreachable by any path).
+        (.triggers, EVERYTHING),
         (.memberships, MANAGE),
         (.invitations, MANAGE),
         (.me, READ_ONLY),
@@ -116,10 +120,14 @@ def policy : Role → RolePolicy
         -- Issue #968: the platform catalogue, same cell and reading as `engines`.
         (.platforms, READ_ONLY),
         (.modelConnections, MANAGE),
+        -- Issue #1690 (storage design Q-22): Owner and Admin connect and change a bucket.
+        (.storageConnections, MANAGE),
         (.models, MANAGE),
         (.runtimeProfiles, MANAGE),
         (.runtimes, MANAGE),
         (.runtimeConnections, MANAGE),
+        -- ADR-0152: every project, as Builder holds its own.
+        (.projects, MANAGE),
         (.shares, MANAGE),
         (.sharingPolicies, READ_ONLY),
         (.users, MANAGE),
@@ -135,13 +143,18 @@ def policy : Role → RolePolicy
   | .builder =>
     { fallback := NOTHING
       byResource := [
-        (.agents, OWN_WRITES),
+        -- ADR-0152: `run` permitted (own or granted), so Builder covers Viewer's `permitted`.
+        (.agents, { OWN_WRITES with run := .permitted }),
         (.skills, OWN_WRITES),
         (.files, OWN_WRITES),
         (.connectors, OWN_WRITES),
         (.endpointClients, OWN_WRITES),
+        -- Issue #1293: a Builder edits, rotates and removes the triggers it owns.
+        (.triggers, OWN_WRITES),
         (.toolBundles, MANAGE),
         (.runtimeProfiles, READ_ONLY),
+        -- Issue #1690 (Q-22): a Member reads the connections an agent can be granted; never writes.
+        (.storageConnections, READ_ONLY),
         (.projects, OWN_ONLY),
         (.sessions, OWN_ONLY),
         (.shares, OWN_ONLY),
@@ -180,11 +193,12 @@ def grantsFor (role : Role) (resource : Resource) : Grants :=
 def grantFor (role : Role) (resource : Resource) (op : Operation) : Grant :=
   (grantsFor role resource).get op
 
-/-- The breadth order on grants: `none` is narrowest, `any` widest, and `own` and `permitted`
-are incomparable (they admit different ownership facts). -/
+/-- The breadth order on grants: `none` is narrowest, `any` widest, and `own` is within
+`permitted`, which admits the caller's own rows as well as granted ones (ADR-0152). -/
 def Grant.le : Grant → Grant → Bool
   | .none, _ => true
   | .own, .own => true
+  | .own, .permitted => true
   | .own, .any => true
   | .permitted, .permitted => true
   | .permitted, .any => true
@@ -205,10 +219,10 @@ inductive DocPhrase where
   | manage
   /-- "none" -/
   | none
-  /-- "read any, write/run own" -/
-  | readAnyWriteRunOwn
   /-- "read any, run _permitted_" -/
   | readAnyRunPermitted
+  /-- "read any, write own, run own or _permitted_" -/
+  | readAnyWriteOwnRunPermitted
   /-- "read any, write own" -/
   | readAnyWriteOwn
   /-- "own" -/
@@ -234,8 +248,8 @@ def DocPhrase.grants (resource : Resource) : DocPhrase → Grants
   | .all => EVERYTHING
   | .manage => MANAGE
   | .none => NOTHING
-  | .readAnyWriteRunOwn => ⟨.any, .own, .own⟩
   | .readAnyRunPermitted => ⟨.any, .none, .permitted⟩
+  | .readAnyWriteOwnRunPermitted => ⟨.any, .own, .permitted⟩
   | .readAnyWriteOwn => ⟨.any, .own, .none⟩
   | .own => OWN_ONLY
   | .sessionsOwnRead => if resource = .sessions then OWN_READS else NOTHING
@@ -247,18 +261,19 @@ def DocPhrase.grants (resource : Resource) : DocPhrase → Grants
   | .memberScoped => ⟨.own, .own, .none⟩
 
 /-- §3.3's rows: the (Owner, Admin, Builder, Viewer) phrases for each resource the table names;
-`none` for the four resources it does not name (`endpoint-clients`, `me`, `setup`,
-`tool-bundles`). The "audit" of
+`none` for the six resources it does not name (`endpoint-clients`, `me`, `setup`,
+`storage-connections`, `tool-bundles`, `triggers`). The "audit" of
 "metrics, audit" is `audit-events`. -/
 @[aw_spec (doc := "docs/sdk/04-api-specification.md#33-roles")]
 def docRow : Resource → Option (DocPhrase × DocPhrase × DocPhrase × DocPhrase)
-  | .agents => some (.all, .all, .readAnyWriteRunOwn, .readAnyRunPermitted)
+  | .agents => some (.all, .all, .readAnyWriteOwnRunPermitted, .readAnyRunPermitted)
   | .skills | .files => some (.all, .all, .readAnyWriteOwn, .none)
-  | .connectors => some (.all, .manage, .readAnyWriteOwn, .none)
+  | .connectors => some (.all, .all, .readAnyWriteOwn, .none)
   | .runtimeProfiles => some (.all, .manage, .read, .none)
   | .modelConnections | .models | .runtimeConnections | .runtimes
   | .secrets => some (.all, .manage, .none, .none)
-  | .projects | .sessions => some (.all, .own, .own, .sessionsOwnRead)
+  | .projects => some (.all, .manage, .own, .none)
+  | .sessions => some (.all, .own, .own, .sessionsOwnRead)
   | .runs => some (.all, .readRunAny, .readRunOwn, .readRunOwn)
   | .memberships | .users | .invitations | .apiKeys => some (.all, .manage, .none, .none)
   | .tokens => some (.all, .writeAny, .writeOwn, .none)
@@ -267,7 +282,7 @@ def docRow : Resource → Option (DocPhrase × DocPhrase × DocPhrase × DocPhra
   | .metrics | .auditEvents => some (.all, .read, .read, .read)
   | .engines | .platforms => some (.all, .read, .read, .read)
   | .workspaces => some (.memberScoped, .memberScoped, .memberScoped, .memberScoped)
-  | .endpointClients | .me | .setup | .toolBundles => Option.none
+  | .endpointClients | .me | .setup | .storageConnections | .toolBundles | .triggers => Option.none
 
 /-- The grants §3.3 prints for a role over a resource, or `none` where it is silent. -/
 def documentedGrants (role : Role) (resource : Resource) : Option Grants :=

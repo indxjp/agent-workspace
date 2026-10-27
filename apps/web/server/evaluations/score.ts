@@ -4,6 +4,7 @@
  */
 import type { EvalExpect } from '@indx-workspace/contracts/evaluations';
 import type { AgentFrame } from '@indx-workspace/contracts/run-events';
+import { z } from 'zod';
 
 /**
  * The run's answer: the text of its last assistant message. An engine re-sends a growing turn under
@@ -32,6 +33,27 @@ export function toolCalls(frames: readonly AgentFrame[]): readonly ToolCall[] {
   );
 }
 
+const CanonicalCallSchema = z.object({ input: z.unknown() });
+
+/**
+ * The call a run paused on (ADR-0145), as a tool call: its name, and its input read back from the
+ * canonical call text (`{"input":…,"name":…}`). The run row is persisted JSON, so a text that does
+ * not parse still yields the name, with no input. `[]` when the run waits on nothing.
+ */
+export function pausedCall(
+  pending: { readonly toolName: string; readonly canonicalCall: string } | null | undefined,
+): readonly ToolCall[] {
+  if (pending === null || pending === undefined) return [];
+  let input: unknown;
+  try {
+    const parsed = CanonicalCallSchema.safeParse(JSON.parse(pending.canonicalCall));
+    if (parsed.success) input = parsed.data.input;
+  } catch {
+    // Not JSON: the name alone still lets `tool` match.
+  }
+  return [{ name: pending.toolName, input }];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -58,14 +80,16 @@ function containsValue(actual: unknown, expected: unknown): boolean {
 }
 
 /**
- * Why the answer fails `contains`, `notContains`, `tool` and `toolInput`; empty when it passes all
- * that are set. Substrings are case-sensitive and `tool` is one exact name. With `toolInput`, one
- * call of that tool must have arguments that contain it. `judge` is not checked here.
+ * Why the answer fails `contains`, `notContains`, `tool`, `toolInput` and `output`; empty when it
+ * passes all that are set. Substrings are case-sensitive and `tool` is one exact name. With
+ * `toolInput`, one call of that tool must have arguments that contain it; `output` must be contained
+ * in `structured`, the run's structured output (`null` when it has none). `judge` is not checked here.
  */
 export function checkCase(
   expect: EvalExpect,
   answer: string,
   calls: readonly ToolCall[],
+  structured: unknown,
 ): readonly string[] {
   const named = expect.tool === undefined ? [] : calls.filter((call) => call.name === expect.tool);
   const toolFailure = (): readonly string[] => {
@@ -87,6 +111,9 @@ export function checkCase(
       .filter((needle) => answer.includes(needle))
       .map((needle) => `notContains: ${JSON.stringify(needle)} is in the answer`),
     ...toolFailure(),
+    ...(expect.output === undefined || containsValue(structured, expect.output)
+      ? []
+      : [`output: the structured output did not have ${JSON.stringify(expect.output)}`]),
   ];
 }
 

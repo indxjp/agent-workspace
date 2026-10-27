@@ -50,7 +50,7 @@ theorem profile_cannot_name_another_workspaces_connection (st : State) {r s : Ro
   · rfl
   · exfalso; apply hws
     have := runtime_profiles_runtime_connection_id_secrets_id_fk_preserves_tenant st hc
-      (pointer_is_reference (by decide) (by decide) (by decide) hr hs hid hsome)
+      (pointer_is_reference (by decide +kernel) (by decide +kernel) (by decide +kernel) hr hs hid hsome)
     rwa [tenant_of_scoped rfl, tenant_of_scoped rfl] at this
 
 /-- Whatever model-connection id a writer puts on an agent, naming a connection of another
@@ -65,7 +65,7 @@ theorem agent_cannot_use_another_workspaces_model_connection (st : State) {r m :
   · rfl
   · exfalso; apply hws
     have := agents_model_connection_id_model_connections_id_fk_preserves_tenant st hc
-      (pointer_is_reference (by decide) (by decide) (by decide) hr hm hid hsome)
+      (pointer_is_reference (by decide +kernel) (by decide +kernel) (by decide +kernel) hr hm hid hsome)
     rwa [tenant_of_scoped rfl, tenant_of_scoped rfl] at this
 
 /-- Whatever runtime-profile id a writer puts on an agent, naming a profile of another workspace
@@ -80,7 +80,7 @@ theorem agent_cannot_use_another_workspaces_runtime_profile (st : State) {r p : 
   · rfl
   · exfalso; apply hws
     have := agents_runtime_profile_id_runtime_profiles_id_fk_preserves_tenant st hc
-      (pointer_is_reference (by decide) (by decide) (by decide) hr hp hid hsome)
+      (pointer_is_reference (by decide +kernel) (by decide +kernel) (by decide +kernel) hr hp hid hsome)
     rwa [tenant_of_scoped rfl, tenant_of_scoped rfl] at this
 
 /-- Whatever default connection a writer puts on a project, naming a connection of another
@@ -95,7 +95,7 @@ theorem project_cannot_default_to_another_workspaces_connection (st : State) {r 
   · rfl
   · exfalso; apply hws
     have := projects_default_model_connection_id_model_connections_id_fk_preserves_tenant st hc
-      (pointer_is_reference (by decide) (by decide) (by decide) hr hm hid hsome)
+      (pointer_is_reference (by decide +kernel) (by decide +kernel) (by decide +kernel) hr hm hid hsome)
     rwa [tenant_of_scoped rfl, tenant_of_scoped rfl] at this
 
 /-- Whatever connection a writer records on a run, naming a connection of another workspace makes
@@ -110,7 +110,7 @@ theorem run_cannot_record_another_workspaces_connection (st : State) {r m : Row}
   · rfl
   · exfalso; apply hws
     have := runs_model_connection_id_model_connections_id_fk_preserves_tenant st hc
-      (pointer_is_reference (by decide) (by decide) (by decide) hr hm hid hsome)
+      (pointer_is_reference (by decide +kernel) (by decide +kernel) (by decide +kernel) hr hm hid hsome)
     rwa [tenant_of_scoped rfl, tenant_of_scoped rfl] at this
 
 /-- Whatever default connection a writer puts on a workspace, naming a connection of another
@@ -125,7 +125,7 @@ theorem workspace_cannot_default_to_another_workspaces_connection (st : State) {
   · rfl
   · exfalso; apply hws
     have := workspaces_default_model_connection_id_model_connections_id_fk_preserves_tenant st hc
-      (pointer_is_reference (by decide) (by decide) (by decide) hw hm hid hsome)
+      (pointer_is_reference (by decide +kernel) (by decide +kernel) (by decide +kernel) hw hm hid hsome)
     simpa [tenantOf, TableSpec.tenantColumn?, catalogue, Tenancy.column?] using this
 
 private theorem table_consistent {st : State} (hc : consistent catalogue st = true)
@@ -145,15 +145,15 @@ theorem connector_cannot_use_another_workspaces_secret (st : State) {k s : Row}
   · rfl
   · exfalso; apply hws
     have hfk : fkOf .mcpServers "mcp_servers_credential_secret_workspace_fk" ∈
-        (catalogue .mcpServers).foreignKeys := by decide
+        (catalogue .mcpServers).foreignKeys := by decide +kernel
     have hcols : (fkOf .mcpServers "mcp_servers_credential_secret_workspace_fk").columns =
-        ["credential_secret_id", "workspace_id"] := by decide
+        ["credential_secret_id", "workspace_id"] := by decide +kernel
     have hrcols : (fkOf .mcpServers "mcp_servers_credential_secret_workspace_fk").refColumns =
-        ["id", "workspace_id"] := by decide
+        ["id", "workspace_id"] := by decide +kernel
     have hnn : (k.get "workspace_id").isSome = true := by
       have h := table_consistent hc .mcpServers
       simp only [tableConsistent, Bool.and_eq_true, List.all_eq_true] at h
-      have := h.1.1.1.1 ⟨"workspace_id", .uuid, true⟩ (by decide)
+      have := h.1.1.1.1 ⟨"workspace_id", .uuid, true⟩ (by decide +kernel)
       simp only [notNullHolds, Bool.not_true, Bool.false_or, List.all_eq_true] at this
       exact this k hk
     have hh : fkHolds st .mcpServers (fkOf .mcpServers "mcp_servers_credential_secret_workspace_fk")
@@ -165,7 +165,7 @@ theorem connector_cannot_use_another_workspaces_secret (st : State) {k s : Row}
     simp only [Row.present, hcols, List.all_cons, List.all_nil, Bool.and_true, hid, hsome,
       hnn, Bool.not_true, Bool.false_or, List.any_eq_true,
       show (fkOf .mcpServers "mcp_servers_credential_secret_workspace_fk").refTable = .secrets
-        from by decide] at this
+        from by decide +kernel] at this
     obtain ⟨p, hp, hpv⟩ := this
     simp only [Row.project, hrcols, List.map_cons, List.map_nil, beq_iff_eq,
       List.cons.injEq, and_true] at hpv
@@ -211,7 +211,7 @@ example : consistent catalogue
   profile_cannot_name_another_workspaces_connection _
     (r := repoint Witness.profile "runtime_connection_id" "s3")
     (s := Witness.secret "s3" "w2" "GITHUB_TOKEN")
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 /-- The same forgery, refused directly by the constraint predicates. -/
 example : consistent catalogue
@@ -222,7 +222,7 @@ example : consistent catalogue
     (with_ .agents [repoint Witness.agent "model_connection_id" "c2"]) = false :=
   agent_cannot_use_another_workspaces_model_connection _
     (r := repoint Witness.agent "model_connection_id" "c2") (m := Witness.connection "c2" "w2")
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : consistent catalogue (fun t =>
       if t = .runtimeProfiles then [Witness.profile, otherProfile]
@@ -230,33 +230,33 @@ example : consistent catalogue (fun t =>
       else Witness.state t) = false :=
   agent_cannot_use_another_workspaces_runtime_profile _
     (r := repoint Witness.agent "runtime_profile_id" "rp2") (p := otherProfile)
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : consistent catalogue
     (with_ .projects [repoint Witness.project "default_model_connection_id" "c2"]) = false :=
   project_cannot_default_to_another_workspaces_connection _
     (r := repoint Witness.project "default_model_connection_id" "c2")
     (m := Witness.connection "c2" "w2")
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : consistent catalogue (with_ .runs [repoint Witness.run "model_connection_id" "c2"]) =
     false :=
   run_cannot_record_another_workspaces_connection _
     (r := repoint Witness.run "model_connection_id" "c2") (m := Witness.connection "c2" "w2")
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : consistent catalogue (with_ .workspaces
       [repoint Witness.workspace1 "default_model_connection_id" "c2"]) = false :=
   workspace_cannot_default_to_another_workspaces_connection _
     (w := repoint Witness.workspace1 "default_model_connection_id" "c2")
     (m := Witness.connection "c2" "w2")
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 example : consistent catalogue
     (with_ .mcpServers [repoint Witness.connector "credential_secret_id" "s3"]) = false :=
   connector_cannot_use_another_workspaces_secret _
     (k := repoint Witness.connector "credential_secret_id" "s3")
     (s := Witness.secret "s3" "w2" "GITHUB_TOKEN")
-    (by decide +kernel) (by decide +kernel) (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 end AgentWorkspace.Theorems.Adversarial.ConceptConfiguration

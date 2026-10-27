@@ -12,6 +12,18 @@ import { IsoDateTimeSchema } from './identifiers.js';
 export const SKILL_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 export const SKILL_NAME_MAX_LENGTH = 64;
 
+/**
+ * The skills the platform ships with every workspace. A definition names one with the SDK's
+ * `builtinSkill()`; the control plane installs its files into the workspace on demand, as an
+ * ordinary skill, so the run path needs no special case.
+ */
+export const BUILTIN_SKILL_NAMES = ['office-reader'] as const;
+export type BuiltinSkillName = (typeof BUILTIN_SKILL_NAMES)[number];
+
+export function isBuiltinSkillName(name: string): name is BuiltinSkillName {
+  return (BUILTIN_SKILL_NAMES as readonly string[]).includes(name);
+}
+
 /** The one file every skill directory must contain; `removeFiles` may never name it. */
 export const SKILL_MD_FILENAME = 'SKILL.md';
 
@@ -24,11 +36,29 @@ export const SKILL_MD_FILENAME = 'SKILL.md';
 export const SKILL_FILE_PATH_MAX_BYTES = 4096;
 
 /**
- * The most bytes one `POST` or `PATCH /api/skills` request body may carry, base64 included; a
- * larger body is a `413 request_body_too_large`, refused while it streams. There is no per-file
- * or file-count bound: the body ceiling is the only size limit.
+ * The most bytes one `POST` or `PATCH /api/skills` request body may carry: the whole multipart
+ * body of an import, or the whole JSON body of the deprecated form (where the base64 text counts,
+ * not the bytes it encodes). A larger body is a `413 request_body_too_large`, refused while it
+ * streams. There is no per-file or file-count bound: the body ceiling is the only size limit.
  */
 export const MAX_SKILL_REQUEST_BODY_BYTES = 16 * 1024 * 1024;
+
+// @story US-STO-08
+/**
+ * The wire shape of `POST /api/skills` as `multipart/form-data`: first a text part `name`, then
+ * one `file` part per skill file, `SKILL.md` first, each part's filename the file's relative path.
+ */
+export const SKILL_IMPORT_MULTIPART = {
+  mediaType: 'multipart/form-data',
+  nameField: 'name',
+  fileField: 'file',
+} as const;
+
+/**
+ * When the JSON + base64 form of `POST /api/skills` was deprecated (RFC 9745 `Deprecation` header
+ * value is `@` plus these seconds since the epoch). Its removal waits for the next major release.
+ */
+export const SKILL_IMPORT_JSON_DEPRECATED_AT_SECONDS = Date.UTC(2026, 9, 24) / 1000;
 
 /**
  * Standard, padded base64 — the empty string included — as `contentBase64` must be encoded. The
@@ -91,6 +121,56 @@ export const SKILLS_PROBLEM_CODES = {
 
 export type SkillsProblemCode = keyof typeof SKILLS_PROBLEM_CODES;
 
+/**
+ * The most revisions one skill can have, and the largest number a pin can name: the database
+ * column is a 32-bit integer.
+ */
+export const SKILL_REVISION_MAX_NUMBER = 2_147_483_647;
+
+/** The most skills one assignment set or agent definition can pin to a revision. */
+export const SKILL_REVISION_PINS_MAX = 1_000;
+
+/** A revision number: 1, 2, 3 … per skill, allocated by `POST /api/skills/:name/revisions`. */
+export const SkillRevisionNumberSchema = z.number().int().min(1).max(SKILL_REVISION_MAX_NUMBER);
+
+/**
+ * One immutable, published revision of a skill: a frozen copy of its files that an agent can
+ * pin. `number` counts from 1 per skill; the bytes never change once published.
+ */
+export const SkillRevisionSchema = z
+  .object({
+    number: SkillRevisionNumberSchema,
+    /** Every file of the revision, `SKILL.md` included. */
+    fileCount: z.number().int().min(1),
+    publishedAt: IsoDateTimeSchema,
+  })
+  .strict()
+  .readonly();
+
+export type SkillRevision = z.infer<typeof SkillRevisionSchema>;
+
+const pinCountWithinBound = (pins: Readonly<Record<string, number>>): boolean =>
+  Object.keys(pins).length <= SKILL_REVISION_PINS_MAX;
+const pinCountMessage = {
+  message: `at most ${String(SKILL_REVISION_PINS_MAX)} skills can be pinned`,
+};
+
+/**
+ * The revisions an agent's assignments pin, keyed by skill id (`/api/agents/:id/resources`). A
+ * skill with no key follows `latest`: the skill's current files. There is no `"latest"` literal
+ * on the wire.
+ */
+export const SkillRevisionPinsByIdSchema = z
+  .record(z.string().min(1), SkillRevisionNumberSchema)
+  .refine(pinCountWithinBound, pinCountMessage)
+  .readonly();
+
+/** The same pins in an agent definition, keyed by skill name (`agent.json`). */
+export const SkillRevisionPinsByNameSchema = z
+  .record(z.string().regex(SKILL_NAME_PATTERN), SkillRevisionNumberSchema)
+  .refine(pinCountWithinBound, pinCountMessage)
+  .readonly();
+
 const skillSummaryFields = {
   /**
    * The resource-catalog row's id, opaque. Required (K-4, issue #234): a route with no catalog
@@ -147,6 +227,12 @@ export const SkillDetailSchema = z
     instructions: z.string().nullable(),
     allowedTools: z.array(z.string()).readonly().nullable(),
     files: z.array(SkillFileStatSchema).readonly(),
+    /**
+     * The published revisions, newest first. Present on `GET /api/skills/:name` and the `POST`
+     * and `PATCH` answers; absent when a server predates revisions, so a newer client still
+     * parses an older server's answer.
+     */
+    revisions: z.array(SkillRevisionSchema).readonly().optional(),
   })
   .strict()
   .readonly();
@@ -167,6 +253,27 @@ export const SkillFileSchema = z
   .readonly();
 
 export type SkillFile = z.infer<typeof SkillFileSchema>;
+
+/**
+ * The body of `POST /api/skills/:name/revisions`. `files` is validated exactly as an import's is
+ * (`SKILL.md` required, admissible and non-colliding paths, the {@link MAX_SKILL_REQUEST_BODY_BYTES}
+ * body ceiling): it replaces the skill's current files, and the result is frozen as the next
+ * revision.
+ */
+export const PublishSkillRevisionRequestSchema = z
+  .object({ files: z.array(SkillFileSchema).readonly() })
+  .strict()
+  .readonly();
+
+export type PublishSkillRevisionRequest = z.infer<typeof PublishSkillRevisionRequestSchema>;
+
+/** The `201` of `POST /api/skills/:name/revisions`. */
+export const SkillRevisionResponseSchema = z
+  .object({ revision: SkillRevisionSchema })
+  .strict()
+  .readonly();
+
+export type SkillRevisionResponse = z.infer<typeof SkillRevisionResponseSchema>;
 
 /** The body of `GET /api/skills`: every skill of the workspace, by name, each in full detail. */
 export const SkillListResponseSchema = z
@@ -206,6 +313,10 @@ export type SkillExportResponse = z.infer<typeof SkillExportResponseSchema>;
  * whole directory. `files` must be non-empty, contain a `SKILL.md` entry, and hold no two paths
  * that are equal once letter case is folded (`409 colliding_paths`); the name must be free in
  * the workspace (`409 skill_already_exists`).
+ *
+ * @deprecated Send `multipart/form-data` ({@link SKILL_IMPORT_MULTIPART}) instead of this JSON +
+ * base64 body. The JSON form is removed in the next major release (#1700; removals deferred
+ * to the next major release: #1944).
  */
 export interface ImportSkillInput {
   readonly name: string;

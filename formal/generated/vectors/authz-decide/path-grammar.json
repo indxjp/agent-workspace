@@ -1296,7 +1296,7 @@
    "expected":
    {"outcomes":
     {"facts": {"resource": "agents", "operation": "run", "grant": "permitted"},
-     "effects": {"unknown": "deny", "permitted": "allow", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "effects": {"unknown": "deny", "permitted": "allow", "own": "allow", "other": "deny", "not-applicable": "deny"},
      "code": null,
      "because": null}}},
   {"witnesses":

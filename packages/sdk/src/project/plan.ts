@@ -356,7 +356,12 @@ function planConnectors(
     if (state === 'unset') continue;
     const withSecret = secret === undefined ? {} : { secret };
     if (current === undefined) {
-      const input = { name, transport, url: declared.url };
+      const input = {
+        name,
+        transport,
+        url: declared.url,
+        ...(declared.identity === undefined ? {} : { identity: declared.identity }),
+      };
       planning.creates.push({
         kind: 'connector',
         path,
@@ -369,6 +374,9 @@ function planConnectors(
     const patch = {
       ...(current.url === declared.url ? {} : { url: declared.url }),
       ...(current.authType === authType ? {} : { authType }),
+      ...(current.identity?.secret === declared.identity?.secret
+        ? {}
+        : { identity: declared.identity ?? null }),
     };
     if (Object.keys(patch).length > 0) {
       planning.updates.push({ kind: 'connector', path, id: current.id, patch, ...withSecret });
@@ -393,6 +401,7 @@ export function toolConnectorBody(tool: PlannedTool): WithoutCredential<ToolConn
       ...(definition.baseUrl === undefined ? {} : { baseUrl: definition.baseUrl }),
       allow: definition.allow,
       auth: definition.auth,
+      ...(definition.identity === undefined ? {} : { identity: definition.identity }),
     };
   }
   const { definition } = tool;
@@ -426,6 +435,7 @@ function toolDiffers(tool: PlannedTool, current: ConnectorResource): boolean {
       tool.digest !== saved.spec.digest ||
       !sameList(definition.allow, saved.allow) ||
       !sameAuth ||
+      definition.identity?.secret !== current.identity?.secret ||
       (definition.baseUrl !== undefined && definition.baseUrl !== saved.baseUrl)
     );
   }

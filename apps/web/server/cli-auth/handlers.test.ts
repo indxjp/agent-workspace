@@ -14,12 +14,7 @@ import { hashCliTokenSecret, parsePresentedCliToken } from '../rbac/cli-token';
 import type { DirectoryRoot, UserMembershipSummary } from '../rbac/directory';
 import { Principal } from '../rbac/principal';
 import { createMemoryDirectory } from '../rbac/memory-directory';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
-import {
-  clearWorkspacesRuntime,
-  configureWorkspacesRuntime,
-  type WorkspaceRepositoryPort,
-} from '../workspaces/runtime';
+import type { WorkspaceRepositoryPort } from '../workspaces/runtime';
 import { mintDeviceCode, normaliseUserCode, verifyDeviceCode } from './device-code';
 import {
   cliPollMemorySize,
@@ -31,8 +26,9 @@ import {
 } from './handlers';
 import { BoundedRecencyMap, FixedWindowLimiter } from '../http/rate-limit';
 import { CLI_AUTH_LIMITS } from './rate-limit';
-import { clearCliAuthRuntime, configureCliAuthRuntime } from './runtime';
 import { renderVerifyPage, submitVerifyPage } from './verify-page';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const SECRET = 'a-session-secret-that-is-long-enough-for-tests';
 const WORKSPACE_ID = '44444444-4444-4444-8444-444444444444';
@@ -134,6 +130,7 @@ function workspaceRepository(): WorkspaceRepositoryPort {
   };
   return {
     listForUser: notUsed,
+    ownerPrincipalId: notUsed,
     get: notUsed,
     getForMember: (id, userId) =>
       Promise.resolve(
@@ -167,14 +164,25 @@ let sessions: ReturnType<typeof memorySessions>;
 beforeEach(() => {
   resetCliPollMemory();
   sessions = memorySessions();
-  configureCliAuthRuntime({ sessions, secret: SECRET });
-  configureWorkspacesRuntime({ repository: workspaceRepository() });
+  installTestDomains({
+    cliAuth: { sessions, secret: SECRET },
+    workspaces: { repository: workspaceRepository() },
+  });
 });
 
 afterEach(() => {
-  clearCliAuthRuntime();
-  clearWorkspacesRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
+});
+
+describe('with no application context installed', () => {
+  it('answers 503 cli_auth_not_configured from the device route and the verify page', async () => {
+    clearApplicationContext();
+    const started = startDeviceAuthorization(post('/api/auth/cli-device', {}), NOW);
+    expect(started.status).toBe(503);
+    expect(errorCode(started.body)).toBe('cli_auth_not_configured');
+    const page = await renderVerifyPage(new Request('http://localhost/api/auth/cli-verify'));
+    expect(page.status).toBe(503);
+  });
 });
 
 describe('the device code', () => {
@@ -351,22 +359,26 @@ describe('POST /api/auth/cli-workspace', () => {
   }
 
   function withPrincipal(principal: Principal | null): void {
-    configureRbacRuntime({
-      directory: directoryWith(MEMBERSHIPS),
-      identify: () => Promise.resolve(principal),
+    installTestDomains({
+      rbac: {
+        directory: directoryWith(MEMBERSHIPS),
+        identify: () => Promise.resolve(principal),
+      },
     });
   }
 
   /** Record every `moveToWorkspace`, answering `answer`. */
   function spyMoves(answer: boolean): string[] {
     const moved: string[] = [];
-    configureCliAuthRuntime({
-      secret: SECRET,
-      sessions: {
-        ...sessions,
-        moveToWorkspace: (_hash: string, workspaceId: string) => {
-          moved.push(workspaceId);
-          return Promise.resolve(answer);
+    installTestDomains({
+      cliAuth: {
+        secret: SECRET,
+        sessions: {
+          ...sessions,
+          moveToWorkspace: (_hash: string, workspaceId: string) => {
+            moved.push(workspaceId);
+            return Promise.resolve(answer);
+          },
         },
       },
     });
@@ -379,9 +391,11 @@ describe('POST /api/auth/cli-workspace', () => {
     );
 
   it('refuses any caller that is not a signed-in CLI token', async () => {
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ workspaces: [], users: [] }),
-      identify: () => Promise.resolve(null),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ workspaces: [], users: [] }),
+        identify: () => Promise.resolve(null),
+      },
     });
     const result = await switchCliWorkspace(post('/api/auth/cli-workspace', { workspace: 'acme' }));
     expect(result.status).toBe(401);
@@ -472,9 +486,11 @@ describe('rate limits and the bounded slow_down memory (review round 1)', () => 
 
   it('refuses the approval POST with 429 once the limit is spent', async () => {
     delete process.env['AW_TRUSTED_PROXY_HOPS'];
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ workspaces: [], users: [] }),
-      identify: () => Promise.resolve(null),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ workspaces: [], users: [] }),
+        identify: () => Promise.resolve(null),
+      },
     });
     const submit = () =>
       submitVerifyPage(
@@ -561,9 +577,11 @@ describe('/api/auth/cli-verify', () => {
   });
 
   it('will not let a bearer credential approve a sign-in — only a browser session', async () => {
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ workspaces: [], users: [] }),
-      identify: () => Promise.resolve(cliPrincipal),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ workspaces: [], users: [] }),
+        identify: () => Promise.resolve(cliPrincipal),
+      },
     });
     const page = await renderVerifyPage(
       new Request('http://127.0.0.1:3000/api/auth/cli-verify?code=BCDF-GHJK'),
@@ -601,9 +619,11 @@ describe('/api/auth/cli-verify', () => {
   describe('with a signed-in browser session', () => {
     beforeEach(async () => {
       const session = await browserSessionPrincipal();
-      configureRbacRuntime({
-        directory: createMemoryDirectory({ workspaces: [], users: [] }),
-        identify: () => Promise.resolve(session),
+      installTestDomains({
+        rbac: {
+          directory: createMemoryDirectory({ workspaces: [], users: [] }),
+          identify: () => Promise.resolve(session),
+        },
       });
     });
     const submit = (body: string) =>

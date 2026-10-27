@@ -52,8 +52,10 @@ read from it rather than retyped. RBAC's `forbidden` stays in `COMMON_PROBLEM_CO
 | `agent_not_found` | `AGENT_POLICY_PROBLEM_CODES.agent_not_found` |
 | `agent_policy_not_configured` | `AGENT_POLICY_PROBLEM_CODES.agent_policy_not_configured` |
 | `agent_version_not_found` | `404` |
+| `agent_version_number_taken` | `409` |
 | `no_pointer` | `409` |
 | `nothing_to_roll_back` | `409` |
+| `pointer_moved` | `409` |
 | `promotion_not_evaluated` | `409` |
 | `promotion_gate_failed` | `409` |
 | `code_tool_needs_host` | `422` |
@@ -69,6 +71,12 @@ read from it rather than retyped. RBAC's `forbidden` stays in `COMMON_PROBLEM_CO
 | `policy_cannot_widen` | `AGENT_POLICY_PROBLEM_CODES.policy_cannot_widen` |
 | `surface_name_taken` | `409` |
 | `agent_name_conflict` | `409` |
+| `unknown_file` | `400` |
+| `unknown_skill` | `400` |
+| `skill_deleting` | `409` |
+| `unknown_connector` | `400` |
+| `storage_connection_prefix_not_allowed` | `STORAGE_CONNECTION_PROBLEM_CODES.storage_connection_prefix_not_allowed` |
+| `storage_connection_write_not_allowed` | `STORAGE_CONNECTION_PROBLEM_CODES.storage_connection_write_not_allowed` |
 
 ## AGENT_VERSION_SUMMARY_MAX_LENGTH
 
@@ -86,13 +94,14 @@ Value: `16`
 
 Issue #440 (S1-02): the vocabulary of agent versions (ADR-0101). A version is an immutable,
 numbered snapshot of one agent's definition and its surfaces (ADR-0108); an environment's
-pointer names the version it runs. `aw push` (`via: 'aw-push'`), the browser (`via: 'ui'`) and
-a plain API client (`via: 'api'`) all save one the same way. The routes arrive with S1-05 and
-S1-06; this module is their shared shape.
+pointer names the version it runs. `aw push` (`via: 'aw-push'`), the browser (`via: 'ui'`),
+a plain API client (`via: 'api'`) and the Builder (`via: 'builder'`) all save one the same
+way. The routes arrive with S1-05 and S1-06; this module is their shared shape.
 
 - `'ui'`
 - `'aw-push'`
 - `'api'`
+- `'builder'`
 
 ## AgentEnvironment
 
@@ -166,8 +175,8 @@ A parsed version body; `surfaces` is always present (ADR-0101; issue #440).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; }>; }>` | Yes |  |
-| `surfaces` | `readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | Yes |  |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; skillRevisions?: Readonly<Record<string, number>> \| undefined; }>; }>` | Yes |  |
+| `surfaces` | `readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; attachments?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | Yes |  |
 | `toolBundles` | `undefined \| readonly AgentVersionToolBundle[]` | No |  |
 | `description` | `undefined \| string` | No | ADR-0133 D2: what the agent is for, shown to platforms and to a parent agent choosing it. |
 | `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No | ADR-0133 D14: other agents of this workspace this agent may delegate to, by name; one level. |
@@ -179,8 +188,8 @@ What `AgentVersionBodySchema` accepts; `surfaces` and `policySource` may be left
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions?: boolean \| undefined; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; }>; policySource?: "stored" \| "compiled" \| undefined; }>` | Yes |  |
-| `surfaces` | `undefined \| readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | No |  |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions?: boolean \| undefined; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; skillRevisions?: Readonly<Record<string, number>> \| undefined; }>; policySource?: "stored" \| "compiled" \| undefined; }>` | Yes |  |
+| `surfaces` | `undefined \| readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; attachments?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | No |  |
 | `toolBundles` | `undefined \| readonly AgentVersionToolBundle[]` | No |  |
 | `description` | `undefined \| string` | No | ADR-0133 D2: what the agent is for, shown to platforms and to a parent agent choosing it. |
 | `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No | ADR-0133 D14: other agents of this workspace this agent may delegate to, by name; one level. |
@@ -207,8 +216,8 @@ These rules hold across the body, each refused at the offending entry's path:
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; }>; }>` | Yes |  |
-| `surfaces` | `readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | Yes |  |
+| `definition` | `Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; skillRevisions?: Readonly<Record<string, number>> \| undefined; }>; }>` | Yes |  |
+| `surfaces` | `readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; attachments?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]` | Yes |  |
 | `toolBundles` | `undefined \| readonly AgentVersionToolBundle[]` | No |  |
 | `description` | `undefined \| string` | No | ADR-0133 D2: what the agent is for, shown to platforms and to a parent agent choosing it. |
 | `subagents` | `undefined \| readonly Readonly<{ name: string; }>[]` | No | ADR-0133 D14: other agents of this workspace this agent may delegate to, by name; one level. |
@@ -329,8 +338,10 @@ Which version an environment runs, and when that last changed (ADR-0101; issue #
 - `"agent_not_found"`
 - `"agent_policy_not_configured"`
 - `"agent_version_not_found"`
+- `"agent_version_number_taken"`
 - `"no_pointer"`
 - `"nothing_to_roll_back"`
+- `"pointer_moved"`
 - `"promotion_not_evaluated"`
 - `"promotion_gate_failed"`
 - `"code_tool_needs_host"`
@@ -346,6 +357,12 @@ Which version an environment runs, and when that last changed (ADR-0101; issue #
 - `"policy_cannot_widen"`
 - `"surface_name_taken"`
 - `"agent_name_conflict"`
+- `"unknown_file"`
+- `"unknown_skill"`
+- `"skill_deleting"`
+- `"unknown_connector"`
+- `"storage_connection_prefix_not_allowed"`
+- `"storage_connection_write_not_allowed"`
 
 ## AgentVersionResource
 
@@ -356,7 +373,7 @@ Which version an environment runs, and when that last changed (ADR-0101; issue #
 | `workspaceId` | `string` | Yes |  |
 | `number` | `number` | Yes |  |
 | `summary` | `string` | Yes |  |
-| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api" \| "builder"` | Yes |  |
 | `body` | `AgentVersionBody` | Yes |  |
 | `createdByPrincipalId` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
@@ -373,7 +390,7 @@ A version is immutable: it has a `createdAt` and no `updatedAt` (ADR-0101; issue
 | `workspaceId` | `string` | Yes |  |
 | `number` | `number` | Yes |  |
 | `summary` | `string` | Yes |  |
-| `via` | `"ui" \| "aw-push" \| "api"` | Yes |  |
+| `via` | `"ui" \| "aw-push" \| "api" \| "builder"` | Yes |  |
 | `body` | `AgentVersionBody` | Yes |  |
 | `createdByPrincipalId` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
@@ -428,10 +445,34 @@ hosted sandbox.
 - `"ui"`
 - `"aw-push"`
 - `"api"`
+- `"builder"`
 
 ## AgentVersionViaSchema
 
 `AGENT_VERSION_VIAS` as a schema (ADR-0101; issue #440).
+
+- `"ui"`
+- `"aw-push"`
+- `"api"`
+- `"builder"`
+
+## CLIENT_AGENT_VERSION_VIAS
+
+The `via` values a client may send: every one but `'builder'`. The Builder saves a version
+in-process, so a request body that named it would only let a member pose as the Builder in the
+version history (issue #1847). Derived from `AGENT_VERSION_VIAS`, never a second list.
+
+Value: `AGENT_VERSION_VIAS.filter( (via): via is Exclude<AgentVersionVia, 'builder'> => via !== 'builder', )`
+
+## ClientAgentVersionVia
+
+- `"ui"`
+- `"aw-push"`
+- `"api"`
+
+## ClientAgentVersionViaSchema
+
+`CLIENT_AGENT_VERSION_VIAS` as a schema, for every request and draft a client sends.
 
 - `"ui"`
 - `"aw-push"`
@@ -466,7 +507,7 @@ two request shapes never overlap (ADR-0101; issue #440).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; builtin?: "builder" \| undefined; createdByAgent?: Readonly<{ agentId: string \| null; version: number; runId: string; }> \| undefined; archivedAt?: string \| undefined; }>` | Yes |  |
 | `version` | `AgentVersionResource` | Yes |  |
 
 ## CreateAgentFromVersionResponseSchema
@@ -475,7 +516,7 @@ The `201` of a create-from-version: the agent and its version `1` (ADR-0101; iss
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; builtin?: "builder" \| undefined; createdByAgent?: Readonly<{ agentId: string \| null; version: number; runId: string; }> \| undefined; archivedAt?: string \| undefined; }>` | Yes |  |
 | `version` | `AgentVersionResource` | Yes |  |
 
 ## CreateAgentVersionRequest
@@ -560,21 +601,26 @@ back, never forward again. `dryRun` is as on `PromoteAgentRequestSchema`.
 | --- | --- | --- | --- |
 | `environment` | `"local" \| "production"` | Yes |  |
 | `version` | `number` | Yes |  |
+| `expectedVersion` | `undefined \| null \| number` | No |  |
 
 ## SetAgentPointerRequestSchema
 
-Points an environment at a saved version (S1-06; ADR-0101; issue #440).
+Points an environment at a saved version (S1-06; ADR-0101; issue #440). `expectedVersion` makes
+the move a compare-and-set (#1847): the number the environment must point at when the move runs,
+or `null` for "must be unset". Another pointer answers `409 pointer_moved` and moves nothing;
+absent, the move is unconditional.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `environment` | `"local" \| "production"` | Yes |  |
 | `version` | `number` | Yes |  |
+| `expectedVersion` | `undefined \| null \| number` | No |  |
 
 ## SetAgentPointerResponse
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; builtin?: "builder" \| undefined; createdByAgent?: Readonly<{ agentId: string \| null; version: number; runId: string; }> \| undefined; archivedAt?: string \| undefined; }>` | Yes |  |
 | `pointer` | `AgentVersionPointer` | Yes |  |
 
 ## SetAgentPointerResponseSchema
@@ -583,7 +629,7 @@ The `200` of a pointer move: the agent as it now runs, and the pointer (ADR-0101
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; }>` | Yes |  |
+| `agent` | `Readonly<{ id: string; workspaceId: string; name: string; instructions: string; modelConnectionId: string \| null; model: string \| null; runtimeProfileId: string \| null; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; createdBy: string \| null; ownerPrincipalId: string; createdAt: string; updatedAt: string; builtin?: "builder" \| undefined; createdByAgent?: Readonly<{ agentId: string \| null; version: number; runId: string; }> \| undefined; archivedAt?: string \| undefined; }>` | Yes |  |
 | `pointer` | `AgentVersionPointer` | Yes |  |
 
 ## TOOL_BUNDLE_DIGEST_PATTERN

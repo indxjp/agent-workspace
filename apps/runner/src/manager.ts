@@ -1,25 +1,42 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import path from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 
+import { withCleanup, withCompensation } from '@agent-workspace/core';
 import {
   RuntimeRefusalError,
   type RuntimeConfig,
   type RuntimeHandle,
-} from '@agent-workspace/runtime';
+} from '@agent-workspace/runtime/driver';
+import {
+  RUN_FILES_MAX_ARCHIVE_BYTES,
+  RUN_FILES_MAX_BYTES,
+} from '@agent-workspace/runtime/transfer';
 
-import { parseRuntimeRunSpec } from './runtime-run-spec.js';
+import {
+  allocationBody,
+  assertSomePolicyDeclared,
+  authorized,
+  body,
+  configFor,
+  forward,
+  isHandleProbe,
+  json,
+  ManagerRequestError,
+  providerCredentialOf,
+  requestUrlOf,
+  RunnerShuttingDownError,
+  segment,
+  toolSessionOf,
+  waitUntilInvocable,
+  type Allocation,
+  type ManagedRuntimeDriver,
+} from './manager-support.js';
 import {
   parseToolSandboxRequest,
   ToolSandboxUnavailableError,
   type ToolSandboxes,
-  type ToolSandboxSession,
 } from './tool-sandbox.js';
 
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
-const MAX_PROXY_BODY_BYTES = 128 * 1024 * 1024;
 // An allocation may carry a session's tool bundles, base64 inside JSON (ADR-0118 TS2).
 const MAX_ALLOCATION_BODY_BYTES = 128 * 1024 * 1024;
 // The gateway caps a tool request at 4 MiB (ADR-0118 TS3); the manager route accepts no more.
@@ -31,30 +48,6 @@ const TOOL_SANDBOX_HEADERS = ['mcp-protocol-version', 'x-aw-agent', 'x-aw-run-id
  * tool host's per-run bearer here; it is passed on as the host's `authorization` (ADR-0132).
  */
 const TOOL_RUN_AUTHORIZATION = 'x-aw-tool-authorization';
-const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]*$/u;
-
-export interface ManagedRuntimeDriver {
-  /** `providerCredential` is the caller's provider key for this call only (ADR-0120 LC6). */
-  create(
-    config: RuntimeConfig,
-    providerCredential?: string,
-    /** Recorded with a provider-hosted sandbox so its workspace can find it; never a secret. */
-    tags?: Readonly<Record<string, string>>,
-  ): Promise<RuntimeHandle>;
-  destroy(runtime: RuntimeHandle, providerCredential?: string): Promise<void>;
-  isLive(runtime: RuntimeHandle): Promise<boolean>;
-  /** Throws what `create` would refuse, so a refusal can leave an existing runtime untouched. */
-  assertCreatable?(config: RuntimeConfig, providerCredential?: string): void;
-  /**
-   * A stateless driver (ADR-0126) has both. `find` returns the live sandbox the provider holds for
-   * this session, and `recover` the handle a sealed id stands for, so this manager keeps no
-   * allocation table and any instance can serve any request.
-   */
-  find?(config: RuntimeConfig, providerCredential?: string): Promise<RuntimeHandle | undefined>;
-  recover?(id: string): RuntimeHandle | undefined;
-  /** An empty `networkPolicies` refuses every run, so `/verify` refuses before reading the body. */
-  capabilities?: Readonly<{ networkPolicies: readonly string[] }>;
-}
 
 export type RunnerManagerOptions = Readonly<{
   token: string;
@@ -107,361 +100,6 @@ export type RunnerManagerOptions = Readonly<{
   /** Why an allocation carrying `toolSandbox` is refused when {@link toolSandboxes} is unset. */
   toolSandboxRefusal?: string;
 }>;
-
-type Allocation = Readonly<{
-  handle: RuntimeHandle;
-  sessionKey: string;
-}>;
-
-/**
- * A sandbox was asked for after this manager began shutting down. Answered as `503`: the request
- * was well formed, and another manager (or this one, restarted) can serve it.
- */
-class RunnerShuttingDownError extends Error {
-  public constructor() {
-    super('the runner manager is shutting down and starts no new runtimes');
-    this.name = 'RunnerShuttingDownError';
-  }
-}
-
-/** A driver that refuses new creates once {@link ShutdownGate.close} is called. */
-export type ShutdownGate = Readonly<{
-  driver: ManagedRuntimeDriver;
-  /**
-   * Refuse every later `create`, then wait at most `timeoutMs` for the creates already in flight
-   * to settle. Resolves `true` when every one settled in time, `false` otherwise.
-   */
-  close(timeoutMs: number): Promise<boolean>;
-}>;
-
-/**
- * Close the race between a shutdown's reap and a `create` already in flight (#406 follow-up).
- *
- * A reap lists the sandboxes that exist when it runs. A `create` that started before the shutdown
- * and finishes after that listing would start a sandbox nothing removes, and it would keep the
- * project's runtime-control network alive after `docker compose down`. Through this gate, a create
- * asked for after `close` never reaches the driver, and `close` waits for the creates already in
- * flight. A create that finishes after the gate closed destroys its sandbox at once and fails
- * with {@link RunnerShuttingDownError}; if that destroy fails, it names the container on stderr.
- * The reap that follows `close` covers only the creates that settled before it ran: one that
- * outlasts `close`'s wait may still start a sandbox after the reap, or after the process has
- * exited, which is why the shutdown then reports `sandboxes-left`.
- */
-export function createShutdownGate(driver: ManagedRuntimeDriver): ShutdownGate {
-  let closed = false;
-  const inFlight = new Set<Promise<unknown>>();
-
-  async function create(config: RuntimeConfig, credential?: string): Promise<RuntimeHandle> {
-    const handle = await driver.create(config, credential);
-    if (!closed) return handle;
-    await driver.destroy(handle, credential).catch((error: unknown) => {
-      process.stderr.write(
-        `runner manager: could not remove ${handle.externalId}, started during shutdown: ` +
-          `${error instanceof Error ? error.message : String(error)}\n`,
-      );
-    });
-    throw new RunnerShuttingDownError();
-  }
-
-  return {
-    driver: {
-      create(config, credential) {
-        if (closed) return Promise.reject(new RunnerShuttingDownError());
-        const pending = create(config, credential);
-        const tracked = pending.then(
-          () => undefined,
-          () => undefined,
-        );
-        inFlight.add(tracked);
-        void tracked.then(() => inFlight.delete(tracked));
-        return pending;
-      },
-      destroy: (runtime, credential) => driver.destroy(runtime, credential),
-      isLive: (runtime) => driver.isLive(runtime),
-      ...(driver.assertCreatable === undefined
-        ? {}
-        : { assertCreatable: driver.assertCreatable.bind(driver) }),
-      ...(driver.find === undefined ? {} : { find: driver.find.bind(driver) }),
-      ...(driver.recover === undefined ? {} : { recover: driver.recover.bind(driver) }),
-      ...(driver.capabilities === undefined ? {} : { capabilities: driver.capabilities }),
-    },
-    async close(timeoutMs) {
-      closed = true;
-      if (inFlight.size === 0) return true;
-      let timer: NodeJS.Timeout | undefined;
-      const timedOut = new Promise<false>((resolve) => {
-        timer = setTimeout(() => {
-          resolve(false);
-        }, timeoutMs);
-      });
-      const settled = Promise.all([...inFlight]).then(() => true as const);
-      try {
-        return await Promise.race([settled, timedOut]);
-      } finally {
-        clearTimeout(timer);
-      }
-    },
-  };
-}
-
-/**
- * A body field the caller got wrong. `code` is the stable public token the 400 answers with; it
- * names the field and never a value, so the control plane can show it without leaking anything.
- */
-type ManagerRequestCode =
-  | 'invalid_workspace_id'
-  | 'invalid_session_id'
-  | 'invalid_run_id'
-  | 'invalid_engine'
-  | 'invalid_run_spec'
-  | 'invalid_tool_sandbox'
-  | 'invalid_body'
-  | 'request_too_large';
-
-class ManagerRequestError extends Error {
-  public constructor(
-    public readonly code: ManagerRequestCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ManagerRequestError';
-  }
-}
-
-function json(res: ServerResponse, status: number, body: unknown): void {
-  const payload = Buffer.from(JSON.stringify(body));
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': String(payload.byteLength),
-    'cache-control': 'no-store',
-  });
-  res.end(payload);
-}
-
-function authorized(req: IncomingMessage, expected: Buffer): boolean {
-  const match = /^Bearer\s+(.+)$/u.exec(req.headers.authorization ?? '');
-  if (match === null) return false;
-  const actual = Buffer.from(match[1] ?? '');
-  return actual.byteLength === expected.byteLength && timingSafeEqual(actual, expected);
-}
-
-async function body(
-  req: IncomingMessage,
-  limit = MAX_BODY_BYTES,
-): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const value of req) {
-    const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
-    size += chunk.byteLength;
-    if (size > limit)
-      throw new ManagerRequestError('request_too_large', 'request body is too large');
-    chunks.push(chunk);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
-  } catch {
-    throw new ManagerRequestError('invalid_body', 'request body must contain valid JSON');
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new ManagerRequestError('invalid_body', 'request body must be a JSON object');
-  }
-  return parsed as Record<string, unknown>;
-}
-
-/** The provider key a caller sends for one call (LC6); it is passed on and never stored or logged. */
-function providerCredentialOf(req: IncomingMessage): string | undefined {
-  const value = req.headers['x-provider-credential'];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function segment(
-  value: unknown,
-  name: string,
-  code: Extract<
-    ManagerRequestCode,
-    'invalid_workspace_id' | 'invalid_session_id' | 'invalid_run_id' | 'invalid_engine'
-  >,
-): string {
-  if (typeof value !== 'string' || !SAFE_SEGMENT.test(value)) {
-    throw new ManagerRequestError(code, `${name} must be a safe path segment`);
-  }
-  return value;
-}
-
-function configFor(
-  value: Record<string, unknown>,
-  root: string,
-  expectedDriver: string,
-): RuntimeConfig {
-  const workspaceId = segment(value['workspaceId'], 'workspaceId', 'invalid_workspace_id');
-  const sessionId = segment(value['sessionId'], 'sessionId', 'invalid_session_id');
-  // ENG-07 (#306): which engine this run is for, so the driver can pick its image. Validated here
-  // like every other body field rather than defaulted — a body that omits it is a caller this
-  // manager does not understand, and guessing `claude-agent-sdk` would start the run in whatever
-  // image happened to be first. The manager does not decide *whether* the engine is installed; the
-  // driver answers that from the map, with the same sentence the control plane already gave.
-  const engine = segment(value['engine'], 'engine', 'invalid_engine');
-  let spec: ReturnType<typeof parseRuntimeRunSpec>;
-  try {
-    spec = parseRuntimeRunSpec(value['runSpec'], expectedDriver);
-  } catch (error) {
-    throw new ManagerRequestError(
-      'invalid_run_spec',
-      error instanceof Error ? error.message : 'invalid runSpec',
-    );
-  }
-  return {
-    sessionId,
-    engine,
-    workspacePath: path.join(root, workspaceId, sessionId),
-    runtimeProfileId: spec.runtimeProfileId,
-    runSpec: spec,
-  };
-}
-
-/**
- * ADR-0131: a driver that declares no network policy refuses every run, so its `/verify` is that
- * typed refusal whatever the probe body says; no body field can change the answer.
- */
-function assertSomePolicyDeclared(driver: ManagedRuntimeDriver, expectedDriver: string): void {
-  if (driver.capabilities?.networkPolicies.length === 0) {
-    throw new RuntimeRefusalError(
-      'network_policy_unsupported',
-      `${expectedDriver} runtime refuses every network policy until its live lane proves egress denial (ADR-0131).`,
-    );
-  }
-}
-
-/** A status read of a handle a stateless manager (one that can recover handles) cannot open. */
-function isHandleProbe(
-  method: string | undefined,
-  operation: string | undefined,
-  stateless: boolean,
-): boolean {
-  return operation === undefined && method === 'GET' && stateless;
-}
-
-/**
- * The tool sandbox session of an allocation. The handle's workspace path is
- * `<root>/<workspaceId>/<sessionId>` (`configFor`), and a stateless manager's handle seals it, so
- * the session is known even when the run profile is not.
- */
-function toolSessionOf(root: string, allocation: Allocation): ToolSandboxSession {
-  const [workspaceId = '', sessionId = ''] = path
-    .relative(root, allocation.handle.workspacePath)
-    .split(path.sep);
-  return { key: allocation.sessionKey, workspaceId, sessionId };
-}
-
-function allocationBody(allocation: Allocation, requestUrl: URL): Record<string, unknown> {
-  return {
-    handle: allocation.handle,
-    runnerUrl: `${requestUrl.protocol}//${requestUrl.host}/runtimes/${allocation.handle.id}`,
-  };
-}
-
-/**
- * Block until a runtime answers `readinessPath` with an authenticated 2xx, or throw once
- * `deadlineMs` passes.
- *
- * `docker`/`kubernetes` runtimes sit on a private network the manager already trusts, so this
- * settles on the first poll once the container is live. `cloud-run-service` runtimes are private
- * Cloud Run services: the deploy can report `ready` before the IAM invoker binding this driver
- * just granted has propagated (a documented GCP eventual-consistency window, up to roughly a
- * minute), during which even a request carrying a valid identity token is refused with 401. Both
- * `/verify` and `POST /runtimes` call this before handing a runtime to a caller, so the first real
- * `/run` a client sends — which gets no retry of its own — never races that window.
- */
-async function waitUntilInvocable(
-  handle: RuntimeHandle,
-  isLive: (handle: RuntimeHandle) => Promise<boolean>,
-  runtimeRequestUrl: (handle: RuntimeHandle, path: string) => string,
-  readinessPath: string,
-  authHeaders: (handle: RuntimeHandle) => Promise<Record<string, string>>,
-  doFetch: typeof globalThis.fetch,
-  deadlineMs: number,
-): Promise<void> {
-  const deadline = Date.now() + deadlineMs;
-  let loggedFailureOnce = false;
-  while (Date.now() < deadline) {
-    if (await isLive(handle)) {
-      try {
-        const healthUrl = runtimeRequestUrl(handle, readinessPath);
-        const health = await doFetch(healthUrl, {
-          headers: await authHeaders(handle),
-          redirect: 'error',
-        });
-        if (health.ok) return;
-        if (!loggedFailureOnce) {
-          loggedFailureOnce = true;
-          process.stderr.write(
-            `readiness: ${readinessPath} returned ${String(health.status)} for ${healthUrl}\n`,
-          );
-        }
-      } catch (error) {
-        if (!loggedFailureOnce) {
-          loggedFailureOnce = true;
-          process.stderr.write(
-            `readiness: ${readinessPath} probe failed for ${runtimeRequestUrl(handle, readinessPath)}: ${error instanceof Error ? error.message : String(error)}\n`,
-          );
-        }
-      }
-    }
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error('runtime did not become invocable before the readiness timeout');
-}
-
-async function forward(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: string,
-  doFetch: typeof globalThis.fetch,
-  extraHeaders: Record<string, string> = {},
-  limit = MAX_PROXY_BODY_BYTES,
-): Promise<void> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const value of req) {
-    const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value as Uint8Array);
-    size += chunk.byteLength;
-    if (size > limit)
-      throw new ManagerRequestError('request_too_large', 'proxied request body is too large');
-    chunks.push(chunk);
-  }
-  const headers = new Headers();
-  if (req.headers['content-type'] !== undefined)
-    headers.set('content-type', req.headers['content-type']);
-  if (req.headers.accept !== undefined) headers.set('accept', req.headers.accept);
-  for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
-  // Runtime endpoints are an authenticated isolation boundary. Following a redirect could send
-  // the manager's provider bearer to a different origin (or silently turn a POST into a GET), so
-  // every upstream operation rejects 3xx instead.
-  const init: RequestInit = { method: req.method ?? 'GET', headers, redirect: 'error' };
-  if (chunks.length > 0) init.body = Buffer.concat(chunks);
-  const response = await doFetch(url, init);
-  res.statusCode = response.status;
-  response.headers.forEach((value, name) => {
-    if (name !== 'content-length' && name !== 'transfer-encoding') res.setHeader(name, value);
-  });
-  if (response.body === null) res.end();
-  else await pipeline(Readable.fromWeb(response.body), res);
-}
-
-function requestUrlOf(req: IncomingMessage): URL {
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const protocol = (
-    typeof forwardedProto === 'string' ? forwardedProto : (forwardedProto?.[0] ?? '')
-  )
-    .split(',')[0]
-    ?.trim();
-  return new URL(
-    req.url ?? '/',
-    `${protocol !== undefined && protocol.length > 0 ? protocol : 'http'}://${req.headers.host ?? 'runner-manager'}`,
-  );
-}
 
 /** `POST /tool-sandboxes/<id>/mcp`: true when the path was this route's, whatever the answer. */
 async function serveToolSandbox(
@@ -525,6 +163,7 @@ async function openEndpointToolSandbox(input: {
     throw new ManagerRequestError(
       'invalid_tool_sandbox',
       error instanceof Error ? error.message : 'invalid toolSandbox',
+      { cause: error },
     );
   }
   const clientId = segment(raw['clientId'], 'clientId', 'invalid_session_id');
@@ -661,6 +300,7 @@ async function allocateRuntime(input: {
       throw new ManagerRequestError(
         'invalid_tool_sandbox',
         error instanceof Error ? error.message : 'invalid toolSandbox',
+        { cause: error },
       );
     }
     if (input.options.toolSandboxes === undefined) {
@@ -714,27 +354,21 @@ async function allocateRuntime(input: {
     const handle = await input.options.driver.create(config, credential, {
       awWorkspace: segment(raw['workspaceId'], 'workspaceId', 'invalid_workspace_id'),
     });
-    try {
-      await waitUntilInvocable(
-        handle,
-        (candidate) => input.options.driver.isLive(candidate),
-        input.runtimeRequestUrl,
-        input.readinessPath,
-        input.authHeaders,
-        input.doFetch,
-        input.options.verificationTimeoutMs ?? 30_000,
-      );
-    } catch (error) {
-      await input.options.driver.destroy(handle, credential).catch(() => undefined);
-      throw error;
-    }
-    let tools: Record<string, unknown>;
-    try {
-      tools = await openTools();
-    } catch (error) {
-      await input.options.driver.destroy(handle, credential).catch(() => undefined);
-      throw error;
-    }
+    const tools = await withCompensation(
+      async () => {
+        await waitUntilInvocable(
+          handle,
+          (candidate) => input.options.driver.isLive(candidate),
+          input.runtimeRequestUrl,
+          input.readinessPath,
+          input.authHeaders,
+          input.doFetch,
+          input.options.verificationTimeoutMs ?? 30_000,
+        );
+        return openTools();
+      },
+      () => input.options.driver.destroy(handle, credential),
+    );
     const allocation = { handle, sessionKey };
     if (input.options.driver.recover === undefined) {
       input.allocations.set(handle.id, allocation);
@@ -841,33 +475,34 @@ export function createRunnerManagerListener(
         const credential = providerCredentialOf(req);
         const handle = await options.driver.create(config, credential);
         const nonce = randomUUID();
-        try {
-          await waitUntilInvocable(
-            handle,
-            (h) => options.driver.isLive(h),
-            runtimeRequestUrl,
-            readinessPath,
-            authHeaders,
-            doFetch,
-            options.verificationTimeoutMs ?? 30_000,
-          );
-          const echoed = await doFetch(runtimeRequestUrl(handle, '/verify/echo'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', ...(await authHeaders(handle)) },
-            body: JSON.stringify({ nonce }),
-            redirect: 'error',
-          });
-          const value = (await echoed.json()) as { nonce?: unknown };
-          if (!echoed.ok || value.nonce !== nonce)
-            throw new Error('runtime echo verification failed');
-          json(res, 200, {
-            fingerprint,
-            verifiedAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1_000).toISOString(),
-          });
-        } finally {
-          await options.driver.destroy(handle, credential);
-        }
+        await withCleanup(
+          async () => {
+            await waitUntilInvocable(
+              handle,
+              (h) => options.driver.isLive(h),
+              runtimeRequestUrl,
+              readinessPath,
+              authHeaders,
+              doFetch,
+              options.verificationTimeoutMs ?? 30_000,
+            );
+            const echoed = await doFetch(runtimeRequestUrl(handle, '/verify/echo'), {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', ...(await authHeaders(handle)) },
+              body: JSON.stringify({ nonce }),
+              redirect: 'error',
+            });
+            const value = (await echoed.json()) as { nonce?: unknown };
+            if (!echoed.ok || value.nonce !== nonce)
+              throw new Error('runtime echo verification failed');
+            json(res, 200, {
+              fingerprint,
+              verifiedAt: new Date().toISOString(),
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1_000).toISOString(),
+            });
+          },
+          () => options.driver.destroy(handle, credential),
+        );
         return;
       }
 
@@ -919,12 +554,19 @@ export function createRunnerManagerListener(
             runtimeRequestUrl(allocation.handle, `/${operation}${requestUrl.search}`),
             doFetch,
             await authHeaders(allocation.handle),
+            // A `/files` body is a tar archive: its framing is on top of the payload limit.
+            operation === 'files' ? RUN_FILES_MAX_ARCHIVE_BYTES : RUN_FILES_MAX_BYTES,
           );
           return;
         }
       }
       json(res, 404, { error: 'not_found' });
-    })().catch((error: unknown) => {
+    })().catch((thrown: unknown) => {
+      // A cleanup that failed too is logged here; the status is the operation's own failure's.
+      const error = thrown instanceof AggregateError ? (thrown.errors[0] as unknown) : thrown;
+      if (thrown instanceof AggregateError) {
+        process.stderr.write(`runner manager request failed: ${messagesOf(thrown)}\n`);
+      }
       if (res.headersSent) {
         res.destroy();
         return;
@@ -946,12 +588,20 @@ export function createRunnerManagerListener(
         json(res, 503, { error: 'runner_shutting_down', message: error.message });
         return;
       }
-      process.stderr.write(
-        `runner manager request failed: ${error instanceof Error ? error.message : String(error)}\n`,
-      );
+      if (!(thrown instanceof AggregateError)) {
+        process.stderr.write(`runner manager request failed: ${messagesOf(error)}\n`);
+      }
       json(res, 500, { error: 'internal_error' });
     });
   };
+}
+
+/** Every message an error carries, an `AggregateError`'s own and each of its errors'. */
+function messagesOf(error: unknown): string {
+  if (error instanceof AggregateError) {
+    return [error.message, ...(error.errors as unknown[]).map(messagesOf)].join('; ');
+  }
+  return error instanceof Error ? error.message : String(error);
 }
 
 function runtimeVerificationFingerprint(

@@ -1,9 +1,10 @@
 import crypto from 'node:crypto';
 
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agents } from '../schema/agents.js';
+import { runs } from '../schema/runs.js';
 import { sessions } from '../schema/sessions.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
@@ -261,5 +262,65 @@ describe.skipIf(!hasDatabase)('SessionRepository lifecycle against PostgreSQL', 
 
     const everyone = await repository.list({ visibility: { kind: 'all' } });
     expect(everyone.items.map((row) => row.id)).toEqual(expect.arrayContaining([mine, theirs]));
+  });
+
+  describe('discardIfUnused (issue #1263)', () => {
+    const scopeOf = async (workspaceId: string) => {
+      const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+        workspaceId,
+      );
+      if (scope === null) throw new Error('workspace does not resolve');
+      return scope;
+    };
+    const repositoryOf = async (workspaceId: string) =>
+      createDatabaseSessionRepositoryProvider(isolated.db).forScope(await scopeOf(workspaceId));
+    const open = async () => {
+      const id = crypto.randomUUID();
+      await (
+        await repositoryOf(workspace.id)
+      ).ensure({ id, agentId: agent.id, ownerPrincipalId: principalId });
+      return id;
+    };
+
+    it('deletes a session that has no run', async () => {
+      const repository = await repositoryOf(workspace.id);
+      const id = await open();
+
+      await expect(repository.discardIfUnused(id)).resolves.toBe(true);
+      await expect(repository.get(id)).resolves.toBeNull();
+      await expect(repository.discardIfUnused(id)).resolves.toBe(false);
+    });
+
+    it('keeps a session that has a run, and the run with it', async () => {
+      const repository = await repositoryOf(workspace.id);
+      const id = await open();
+      const runId = crypto.randomUUID();
+      await isolated.db
+        .insert(runs)
+        .values({ id: runId, workspaceId: workspace.id, sessionId: id });
+
+      await expect(repository.discardIfUnused(id)).resolves.toBe(false);
+      await expect(repository.get(id)).resolves.not.toBeNull();
+      const surviving = await isolated.db
+        .select({ id: runs.id })
+        .from(runs)
+        .where(eq(runs.id, runId));
+      expect(surviving).toHaveLength(1);
+    });
+
+    it("cannot delete another workspace's session, or a malformed id", async () => {
+      const otherWorkspace = {
+        id: crypto.randomUUID(),
+        slug: 'session-discard-other',
+        name: 'Other',
+      };
+      await isolated.db.insert(workspaces).values(otherWorkspace);
+      const id = await open();
+      const foreign = await repositoryOf(otherWorkspace.id);
+
+      await expect(foreign.discardIfUnused(id)).resolves.toBe(false);
+      await expect(foreign.discardIfUnused('not-a-uuid')).resolves.toBe(false);
+      await expect((await repositoryOf(workspace.id)).get(id)).resolves.not.toBeNull();
+    });
   });
 });

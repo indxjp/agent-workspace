@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { EngineIdSchema } from './engines.js';
-import { RUN_STATUSES } from './runs.js';
+import { RUN_STATUSES, RunOutputSchema } from './runs.js';
 
 /**
  * The vocabulary of `GET /api/runs/:id/events` — a `text/event-stream` in which every frame
@@ -9,8 +9,9 @@ import { RUN_STATUSES } from './runs.js';
  *
  *   1. **Control frames** ({@link CONTROL_FRAME_NAMES}) written by the stream itself. They carry
  *      no `id:` and never move the resume cursor.
- *   2. **The platform's lifecycle event** ({@link RUN_STATUS_EVENT}), a durable, replayable event
- *      the control plane appends when a run changes status.
+ *   2. **The platform's own events** ({@link PLATFORM_EVENT_NAMES}): {@link RUN_STATUS_EVENT}, a
+ *      durable, replayable event the control plane appends when a run changes status, and
+ *      {@link RUN_WARNING_EVENT}, appended when a run start has something to tell the caller.
  *   3. **Neutral agent frames** ({@link AGENT_FRAME_NAMES}) — one engine-neutral vocabulary,
  *      produced once by the engine's adapter in the runner (ADR-0065 D5) and read unchanged by
  *      the UI, the SDK, `aw` and webhooks. Every frame names its `engine` and carries the
@@ -36,6 +37,17 @@ export type ControlFrameName = (typeof CONTROL_FRAME_NAMES)[number];
 
 /** The durable event the platform appends on every run status change. */
 export const RUN_STATUS_EVENT = 'run.status';
+
+/**
+ * The durable event the platform appends when a run start has something to tell the caller
+ * (ADR-0146 Decision 3), written before the run's first agent frame. It is not an agent frame and
+ * says nothing about the run's outcome: a client shows it as a notice and keeps reading.
+ */
+export const RUN_WARNING_EVENT = 'run.warning';
+
+/** The durable event names only the platform writes, in wire order. */
+export const PLATFORM_EVENT_NAMES = [RUN_STATUS_EVENT, RUN_WARNING_EVENT] as const;
+export type PlatformEventName = (typeof PLATFORM_EVENT_NAMES)[number];
 
 /**
  * The `event:` names the runner relayed **before ENG-03 (#302)**: its *classification* of one
@@ -71,6 +83,22 @@ export const RunStatusEventDataSchema = z
   .readonly();
 
 export type RunStatusEventData = z.infer<typeof RunStatusEventDataSchema>;
+
+/**
+ * `data` of a {@link RUN_WARNING_EVENT} frame. `code` is stable and machine-readable
+ * (`attachments_removed_shell`: the run's attachments are read-only grants, so it cannot run
+ * commands); `message` is optional human text. A client that does not know a `code` still shows
+ * the notice.
+ */
+export const RunWarningEventDataSchema = z
+  .object({
+    code: z.string().min(1),
+    message: z.string().optional(),
+  })
+  .strict()
+  .readonly();
+
+export type RunWarningEventData = z.infer<typeof RunWarningEventDataSchema>;
 
 /**
  * `data` of a `run-failed` frame. `status` is the run's own terminal status, or `"unknown"` when
@@ -134,6 +162,8 @@ export const AGENT_FRAME_NAMES = [
   'agent.result',
   'agent.native',
   'agent.malformed',
+  'agent.approval.requested',
+  'agent.handoff',
 ] as const;
 export type AgentFrameName = (typeof AGENT_FRAME_NAMES)[number];
 
@@ -400,6 +430,11 @@ export const AgentResultFrameSchema = z
     stopReason: AgentStopReasonSchema,
     turns: z.number().int().nonnegative().nullable(),
     engineCostUsd: z.number().nonnegative().nullable(),
+    /**
+     * What the engine produced for its turn (ADR-0143), present when it returned a final answer.
+     * Authoritative only once the run is `completed`; `RunResource.output` is the record.
+     */
+    output: RunOutputSchema.optional(),
   })
   .strict()
   .readonly();
@@ -442,6 +477,44 @@ export const AgentMalformedFrameSchema = z
   .readonly();
 export type AgentMalformedFrame = z.infer<typeof AgentMalformedFrameSchema>;
 
+/**
+ * `agent.approval.requested` — the engine stopped before a tool call the agent requires approval
+ * for (ADR-0145). It is the last frame of the paused run, followed by `run.status`
+ * `awaiting_approval`.
+ *
+ * `toolName` and `canonicalCall` are what `RunResource.pendingApproval` carries; `toolCallId` is
+ * the engine's id for the call it declined to run.
+ */
+export const AgentApprovalRequestedFrameSchema = z
+  .object({
+    frame: z.literal('agent.approval.requested'),
+    ...agentFrameBase,
+    toolCallId: z.string().min(1),
+    toolName: z.string().min(1),
+    canonicalCall: z.string().min(1),
+  })
+  .strict()
+  .readonly();
+export type AgentApprovalRequestedFrame = z.infer<typeof AgentApprovalRequestedFrameSchema>;
+
+/**
+ * `agent.handoff` — the agent handed the conversation to a person by calling its
+ * `handoff_to_person` tool (ADR-0145 D4). It is the last agent frame of a run that still ends
+ * `completed`; the session continues with an ordinary next prompt.
+ *
+ * `reason` is the model's own words and is for the operator, not for the visitor: an operator's
+ * stream carries it, and a visitor's (a session-scoped browser token's) omits it.
+ */
+export const AgentHandoffFrameSchema = z
+  .object({
+    frame: z.literal('agent.handoff'),
+    ...agentFrameBase,
+    reason: z.string().min(1).optional(),
+  })
+  .strict()
+  .readonly();
+export type AgentHandoffFrame = z.infer<typeof AgentHandoffFrameSchema>;
+
 /** Every neutral frame, discriminated by the `frame` field that repeats its `event:` name. */
 export const AgentFrameSchema = z.discriminatedUnion('frame', [
   AgentSessionFrameSchema,
@@ -453,6 +526,8 @@ export const AgentFrameSchema = z.discriminatedUnion('frame', [
   AgentResultFrameSchema,
   AgentNativeFrameSchema,
   AgentMalformedFrameSchema,
+  AgentApprovalRequestedFrameSchema,
+  AgentHandoffFrameSchema,
 ]);
 export type AgentFrame = z.infer<typeof AgentFrameSchema>;
 

@@ -1,0 +1,311 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  createInMemoryCatalog,
+  createInMemoryStorageMigrationRuns,
+} from '@agent-workspace/core/db';
+import {
+  createInMemoryObjectStore,
+  createInMemoryObjectStoreProvider,
+} from '@agent-workspace/core/storage';
+
+import { deleteSkill } from '../skills/delete';
+import { skillDeleteMarkerKey, skillFileKey } from '../skills/keys';
+import {
+  createSkillRowsWorld,
+  ROWS_PRINCIPAL,
+  ROWS_WORKSPACE_ID,
+  seedBareSkill,
+} from '../skills/rows-fixture';
+import { ensureSkillRows, skillFiles } from '../skills/tree';
+import { runSkillsAdoptStage, type SkillsAdoptDependencies } from './migrate-skills';
+
+const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
+const SKILL_MD = '---\nname: demo\ndescription: A demo.\n---\n\nbody\n';
+const b64 = (text: string) => Buffer.from(text).toString('base64');
+
+function world(owner: string | null = 'owner') {
+  const catalogs = createInMemoryCatalog();
+  const catalog = catalogs.forWorkspace(ROWS_WORKSPACE_ID);
+  const old = createInMemoryObjectStoreProvider().forWorkspace(ROWS_WORKSPACE_ID);
+  const { storage } = createSkillRowsWorld(createInMemoryObjectStore(), ROWS_WORKSPACE_ID, catalog);
+  const runs = createInMemoryStorageMigrationRuns();
+  const deps: SkillsAdoptDependencies = {
+    workspaceIds: () => Promise.resolve([ROWS_WORKSPACE_ID]),
+    objects: () => old,
+    catalog: () => Promise.resolve(catalog),
+    ownerPrincipalId: () => Promise.resolve(owner),
+    storage,
+    runs,
+    log: noLog,
+  };
+  const rowPaths = async (folder: string) =>
+    (await storage.list({ workspaceId: ROWS_WORKSPACE_ID }, 'skills', folder)).rows
+      .map((row) => row.path)
+      .toSorted();
+  const seedDemo = () =>
+    seedBareSkill(old, {
+      name: 'demo',
+      files: [
+        { path: 'SKILL.md', contentBase64: b64(SKILL_MD) },
+        { path: 's/run.sh', contentBase64: b64('run') },
+      ],
+    });
+  const putDemo = () =>
+    catalog.putSkill({
+      name: 'demo',
+      skillMd: SKILL_MD,
+      enabled: true,
+      ownerPrincipalId: 'owner',
+      createdBy: null,
+    });
+  const putRevision = (revision: number) =>
+    old.put(`skill-revisions/demo/${revision}/SKILL.md`, {
+      body: new TextEncoder().encode(SKILL_MD),
+      contentType: null,
+    });
+  return { catalog, old, storage, runs, deps, rowPaths, seedDemo, putDemo, putRevision };
+}
+
+// @story US-STO-13
+describe('the skills adopt stage', () => {
+  it('[US-STO-13][unit][cli] moves every old skill form into rows and records a clean pass', async () => {
+    const { catalog, old, runs, deps, rowPaths, seedDemo, putDemo, putRevision } = world();
+    await seedDemo();
+    await putDemo();
+    await catalog.publishSkillRevision('demo', {
+      fileCount: 1,
+      write: () => Promise.resolve(undefined),
+    });
+    await putRevision(1);
+
+    const report = await runSkillsAdoptStage(deps);
+
+    expect(report).toEqual({ workspaces: 1, skills: 1, moved: 3, remaining: 0, failed: 0 });
+    expect(await rowPaths('.skills/demo')).toEqual([
+      '.skills/demo/SKILL.md',
+      '.skills/demo/s/run.sh',
+    ]);
+    expect(await rowPaths('.skills/demo@1')).toEqual(['.skills/demo@1/SKILL.md']);
+    expect((await catalog.listSkills()).map((skill) => [skill.name, skill.meta !== null])).toEqual([
+      ['demo', true],
+    ]);
+    expect(await old.list('skills/demo')).toEqual([]);
+    expect(await runs.latest('skills')).toMatchObject({
+      rowsChecked: 1,
+      legacyRows: 0,
+      mismatches: 0,
+    });
+    // The pass that gates deleting old objects is not touched.
+    expect(await runs.latest()).toBeNull();
+  });
+
+  it('[US-STO-13][unit][cli] never replaces a row and is safe to repeat', async () => {
+    const { storage, old, deps, seedDemo } = world();
+    await seedDemo();
+    const row = {
+      area: 'skills' as const,
+      path: '.skills/demo/SKILL.md',
+      maxBytes: 1024,
+      replace: true,
+      body: new Blob(['newer']).stream(),
+    };
+    await storage.save({ workspaceId: ROWS_WORKSPACE_ID, principalId: 'owner', userId: null }, row);
+
+    await runSkillsAdoptStage(deps);
+    await runSkillsAdoptStage(deps);
+
+    const files = await skillFiles(
+      old,
+      { storage, workspaceId: ROWS_WORKSPACE_ID },
+      '.skills/demo',
+      'skills/demo',
+    );
+    const skillMd = files.find((file) => file.relativePath === 'SKILL.md');
+    expect(new TextDecoder().decode((await skillMd?.read()) ?? undefined)).toBe('newer');
+    expect(files.map((file) => file.relativePath)).toEqual(['SKILL.md', 's/run.sh']);
+  });
+
+  it('[US-STO-13][unit][cli] two instances running together leave one complete set of rows', async () => {
+    const { catalog, runs, deps, rowPaths, seedDemo } = world();
+    await seedDemo();
+
+    const reports = await Promise.all([runSkillsAdoptStage(deps), runSkillsAdoptStage(deps)]);
+
+    expect(reports.map((report) => report.failed)).toEqual([0, 0]);
+    expect(await rowPaths('.skills/demo')).toEqual([
+      '.skills/demo/SKILL.md',
+      '.skills/demo/s/run.sh',
+    ]);
+    expect(await catalog.listSkills()).toHaveLength(1);
+    expect(await runs.latest('skills')).toMatchObject({ legacyRows: 0, mismatches: 0 });
+  });
+
+  it('[US-STO-13][unit][cli] reports what it cannot convert instead of claiming completion', async () => {
+    const { old, deps, runs, rowPaths } = world();
+    // Bytes whose skill record is gone are not a skill: no row is made for them.
+    await old.put(skillFileKey('ghost', 'SKILL.md'), {
+      body: new Uint8Array([1]),
+      contentType: null,
+    });
+
+    await runSkillsAdoptStage(deps);
+    expect(await rowPaths('.skills/ghost')).toEqual([]);
+    expect(await runs.latest('skills')).toMatchObject({ legacyRows: 1, mismatches: 0 });
+
+    // A workspace with no owner has nobody to own the rows; its skills stay old and are counted.
+    const ownerless = world(null);
+    await ownerless.seedDemo();
+    await runSkillsAdoptStage(ownerless.deps);
+    expect(await ownerless.runs.latest('skills')).toMatchObject({ rowsChecked: 0, legacyRows: 3 });
+  });
+
+  it('[US-STO-13][unit][cli] leaves the bare files of a skill whose delete is pending alone', async () => {
+    const { catalog, old, deps, rowPaths, seedDemo, putDemo } = world();
+    await seedDemo();
+    await putDemo();
+    await catalog.markSkillDeleting('demo');
+
+    await runSkillsAdoptStage(deps);
+
+    expect(await rowPaths('.skills/demo')).toEqual([]);
+    expect((await old.list('skills/demo')).length).toBeGreaterThan(0);
+  });
+
+  it('[US-STO-13][unit][cli] leaves a skill alone whose delete an earlier release recorded as a marker', async () => {
+    const { old, deps, rowPaths, seedDemo, putDemo } = world();
+    await seedDemo();
+    await putDemo();
+    await old.put(skillDeleteMarkerKey('demo'), {
+      body: new TextEncoder().encode(JSON.stringify({ ownerPrincipalId: 'owner', revisions: [] })),
+      contentType: 'application/json',
+    });
+
+    await runSkillsAdoptStage(deps);
+
+    expect(await rowPaths('.skills/demo')).toEqual([]);
+    expect((await old.list('skills/demo')).length).toBeGreaterThan(0);
+  });
+
+  it('[US-STO-13][unit][cli] does not move a revision prefix that has no revision record', async () => {
+    const { old, deps, runs, rowPaths, seedDemo, putRevision } = world();
+    await seedDemo();
+    await putRevision(2);
+
+    await runSkillsAdoptStage(deps);
+
+    expect(await rowPaths('.skills/demo')).toEqual([
+      '.skills/demo/SKILL.md',
+      '.skills/demo/s/run.sh',
+    ]);
+    expect(await rowPaths('.skills/demo@2')).toEqual([]);
+    expect(await old.list('skill-revisions/demo/2')).toHaveLength(1);
+    // The orphan bytes are reported, not claimed converted.
+    expect(await runs.latest('skills')).toMatchObject({ legacyRows: 1 });
+  });
+
+  it('[US-STO-13][unit][cli] an adopt that copies between the delete steps leaves no rows behind the delete', async () => {
+    const { catalog, old, storage, rowPaths, seedDemo, putDemo } = world();
+    await seedDemo();
+    await putDemo();
+    const writer = { storage, workspaceId: ROWS_WORKSPACE_ID, principal: ROWS_PRINCIPAL };
+    let copied = false;
+    const rows = {
+      workspaceId: ROWS_WORKSPACE_ID,
+      storage: {
+        ...storage,
+        remove: async (...args: Parameters<typeof storage.remove>) => {
+          const gone = await storage.remove(...args);
+          // An adopt that read the skill before the mark copies its bare prefix now, after the
+          // delete swept the rows and before it walks the prefix.
+          if (!copied) {
+            copied = true;
+            await ensureSkillRows(old, writer, 'demo');
+          }
+          return gone;
+        },
+      },
+    };
+
+    const deleted = await deleteSkill(old, catalog, 'demo', rows);
+
+    expect(copied).toBe(true);
+    expect(deleted.status).toBe(204);
+    expect(await rowPaths('.skills/demo')).toEqual([]);
+    expect(await catalog.listSkills()).toEqual([]);
+  });
+
+  it('[US-STO-13][unit][cli] a delete that starts while adopt copies wins: adopt removes what it wrote', async () => {
+    const { catalog, old, storage, deps, rowPaths, seedDemo, putDemo } = world();
+    await seedDemo();
+    await putDemo();
+    let marked = false;
+    const racing = {
+      ...storage,
+      save: async (...args: Parameters<typeof storage.save>) => {
+        if (!marked) {
+          marked = true;
+          await catalog.markSkillDeleting('demo');
+        }
+        return storage.save(...args);
+      },
+    };
+
+    await runSkillsAdoptStage({ ...deps, storage: racing });
+
+    expect(marked).toBe(true);
+    expect(await rowPaths('.skills/demo')).toEqual([]);
+    const deleted = await deleteSkill(old, catalog, 'demo', {
+      storage,
+      workspaceId: ROWS_WORKSPACE_ID,
+    });
+    expect(deleted.status).toBe(204);
+    expect(await rowPaths('.skills/demo')).toEqual([]);
+  });
+
+  it('[US-STO-13][unit][cli] a pass that moves nothing and finds what the last one found is not recorded again', async () => {
+    const { runs, deps, seedDemo } = world();
+    const recorded = vi.spyOn(runs, 'record');
+
+    await runSkillsAdoptStage(deps);
+    await runSkillsAdoptStage(deps);
+    expect(recorded).toHaveBeenCalledTimes(1);
+
+    await seedDemo();
+    await runSkillsAdoptStage(deps);
+    expect(recorded).toHaveBeenCalledTimes(2);
+  });
+
+  it('[US-STO-13][unit][cli] a workspace whose skill list is refused is counted as failed', async () => {
+    const { old, deps, runs } = world();
+    // An unreadable SKILL.md makes the list answer 500 store_inconsistent without throwing.
+    await seedBareSkill(old, {
+      name: 'broken',
+      files: [{ path: 'SKILL.md', contentBase64: Buffer.from([0x80]).toString('base64') }],
+    });
+    const warnings: unknown[] = [];
+
+    await runSkillsAdoptStage({
+      ...deps,
+      log: { ...noLog, warn: (...args) => warnings.push(args) },
+    });
+
+    expect(await runs.latest('skills')).toMatchObject({ mismatches: 1 });
+    expect(warnings).toEqual([
+      [expect.any(String), { stage: 'skills', code: 'store_inconsistent' }],
+    ]);
+  });
+
+  it('[US-STO-13][unit][cli] a workspace that fails is counted and does not stop the run', async () => {
+    const { deps, runs } = world();
+    await runSkillsAdoptStage({
+      ...deps,
+      workspaceIds: () => Promise.resolve(['gone', ROWS_WORKSPACE_ID]),
+      objects: (workspaceId) => {
+        if (workspaceId === 'gone') throw new Error('the workspace is gone');
+        return deps.objects(workspaceId);
+      },
+    });
+    expect(await runs.latest('skills')).toMatchObject({ mismatches: 1 });
+  });
+});

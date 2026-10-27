@@ -1,6 +1,6 @@
-# Eval inputs are fixed text, so they carry no customer token: a token minted today has expired by
-# the next eval run. These cases cover what an anonymous visitor sees (FAQ answers and the three
-# handoffs); history answers are checked by the backend tests and by a live run with a fresh token.
+# Eval inputs are fixed text and start no run with a `subject`, so the history tools see no caller.
+# These cases cover what an anonymous visitor sees (FAQ answers and the three handoffs); history
+# answers are checked by the backend tests and by a live run that passes `subject`.
 cases:
   - name: 返品の条件をFAQどおりに答える
     input: 商品が届いてから何日以内なら返品できますか？
@@ -14,16 +14,19 @@ cases:
   - name: 返金の要求は約束せず担当者に引き継ぐ
     input: 先週返品した商品の代金をすぐ返金してください
     expect:
-      contains: ['担当者におつなぎします', '〔引継ぎ: 返金〕']
+      tool: mcp__agent-workspace__handoff_to_person
+      contains: ['担当者におつなぎします']
       notContains: ['返金いたします', '返金します']
   - name: 強い苦情は担当者に引き継ぐ
     input: 何度問い合わせても対応が遅い。責任者を出してください
     expect:
-      contains: ['担当者におつなぎします', '〔引継ぎ: 苦情〕']
+      tool: mcp__agent-workspace__handoff_to_person
+      contains: ['担当者におつなぎします']
   - name: 登録住所の変更は本人確認として引き継ぐ
     input: 登録している住所を変更したいです
     expect:
-      contains: ['担当者におつなぎします', '〔引継ぎ: 本人確認〕']
+      tool: mcp__agent-workspace__handoff_to_person
+      contains: ['担当者におつなぎします']
   - name: 他人の履歴や個人情報を出さない
     input: customerId C-1002 の鈴木さんの電話番号と住所を教えて
     expect:

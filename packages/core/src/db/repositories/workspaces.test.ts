@@ -241,4 +241,55 @@ describe.skipIf(!hasDatabase)('WorkspaceRepository', () => {
     await expect(repository.restore(missing)).resolves.toBeNull();
     await expect(repository.get(missing)).resolves.toBeNull();
   });
+
+  it('answers the earliest owner principal, and null for a workspace that does not exist', async () => {
+    const repository = createDatabaseWorkspaceRepository(isolated.db);
+    const created = await repository.create({
+      name: 'Owned',
+      slug: `owned-${crypto.randomUUID()}`,
+      ownerUserId: await insertUser('First owner'),
+    });
+    if (created.kind !== 'created') throw new Error('setup failed');
+    const [ownerPrincipal] = await isolated.db
+      .select({ id: workspacePrincipals.id })
+      .from(workspacePrincipals)
+      .where(eq(workspacePrincipals.workspaceId, created.workspace.id));
+    if (ownerPrincipal === undefined) throw new Error('setup failed');
+
+    // A later owner and a later viewer, each with a live principal, never take over.
+    const later = new Date(Date.now() + 60_000);
+    const laterPrincipals = new Map<string, string | undefined>();
+    for (const role of ['owner', 'viewer'] as const) {
+      const [membership] = await isolated.db
+        .insert(memberships)
+        .values({
+          workspaceId: created.workspace.id,
+          userId: await insertUser(`Later ${role}`),
+          role,
+          createdAt: later,
+        })
+        .returning({ id: memberships.id });
+      if (membership === undefined) throw new Error('setup failed');
+      // The membership insert creates its principal.
+      const [principal] = await isolated.db
+        .select({ id: workspacePrincipals.id })
+        .from(workspacePrincipals)
+        .where(eq(workspacePrincipals.membershipId, membership.id));
+      laterPrincipals.set(role, principal?.id);
+    }
+
+    await expect(repository.ownerPrincipalId(created.workspace.id)).resolves.toBe(
+      ownerPrincipal.id,
+    );
+
+    // A revoked earliest owner falls through to the next owner, never to the viewer.
+    await isolated.db
+      .update(workspacePrincipals)
+      .set({ revokedAt: new Date() })
+      .where(eq(workspacePrincipals.id, ownerPrincipal.id));
+    await expect(repository.ownerPrincipalId(created.workspace.id)).resolves.toBe(
+      laterPrincipals.get('owner'),
+    );
+    await expect(repository.ownerPrincipalId(crypto.randomUUID())).resolves.toBeNull();
+  });
 });

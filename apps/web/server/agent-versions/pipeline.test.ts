@@ -8,7 +8,7 @@ import {
 } from '@indx-workspace/contracts/agent-versions';
 
 import type { AgentRecord } from '../agents/contract';
-import type { ApiResult } from '../agents/handlers';
+import type { ApiResult } from '../http/result';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import {
   clearEnginesRegisteredForTests,
@@ -291,6 +291,7 @@ describe('validateAgentVersion', () => {
       skillIds: [],
       connectorIds: [],
       files: [],
+      storageGrants: [],
     });
   });
 

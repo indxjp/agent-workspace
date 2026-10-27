@@ -1,5 +1,6 @@
-import { currentModelsRuntime, type ModelsAuditEvent } from './runtime';
-import { problem, type ApiResult } from './handlers';
+import type { ModelsAuditEvent } from './runtime';
+import { applicationContext } from '../application-context';
+import { problem, type ApiResult } from '../http/result';
 import type { DiscoverModelsResult } from './discovery';
 import type { WorkspaceModelsStore } from './store';
 import type { TestConnectionResult } from './probe';
@@ -75,9 +76,10 @@ export async function withModelsRuntime(
   run: (context: ModelsRequestContext) => Promise<ApiResult>,
   write?: ModelsWriteAuthorisation,
 ): Promise<ApiResult> {
-  const runtime = currentModelsRuntime();
-  if (runtime === null)
+  const models = applicationContext()?.models;
+  if (models?.kind !== 'serving')
     return problem(503, 'models_runtime_not_configured', 'The models API is not configured.');
+  const runtime = models.runtime;
   const actor = await runtime.resolveActor(request);
   if (actor.kind === 'unauthenticated') return problem(401, 'unauthenticated', actor.reason);
   if (actor.kind === 'forbidden') return problem(403, 'forbidden', actor.reason);

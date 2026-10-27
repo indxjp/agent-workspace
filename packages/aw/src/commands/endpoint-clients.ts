@@ -74,15 +74,17 @@ export const endpointClientCommands: readonly Command[] = [
   command(
     'endpoint-clients create',
     '[--file <json>] [--name <name>] [--kind <kind>] [--agent <name>] [--tool <tool>]',
-    'Create a client for an MCP project or one agent (a2a-agent takes exactly one --agent)',
+    'Create a client for an MCP project, one agent (a2a-agent takes exactly one --agent) or the Builder (no --agent)',
     async (context) => {
       const kind = enumValue(context, 'kind', ENDPOINT_CLIENT_KINDS);
+      const fields = await agentAndToolFields(context);
       return {
         value: await context.client.endpointClients.create(
           await readBody(context, CreateEndpointClientRequestSchema, {
             name: value(context, 'name'),
             kind,
-            ...(await agentAndToolFields(context)),
+            ...fields,
+            ...(kind === 'builder' && fields['agentIds'] === undefined ? { agentIds: [] } : {}),
           }),
           { signal: context.signal },
         ),

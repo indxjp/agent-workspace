@@ -2,17 +2,31 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { SETUP_PROVIDERS, type SetupProvider } from '@indx-workspace/contracts/setup';
+
 import { CREDENTIAL_INPUT_PROPS, ONE_TIME_CODE_INPUT_PROPS } from '../shell/credential-input';
 import { DriverBanner } from '../shell/driver-banner';
+import {
+  detectionOf,
+  SETUP_REQUEST_HEADERS,
+  setupOutcomeOf,
+  setupUnanswered,
+  type RuntimeDetection,
+} from './setup-requests-model';
 
-type Driver = { id: string; available: boolean; reason: string };
-type Detection = { defaultDriver: string; drivers: Driver[] };
+const SETUP_PROVIDER_LABELS: Readonly<Record<SetupProvider, string>> = {
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+  'azure-openai': 'Azure OpenAI',
+  'openai-compatible': 'OpenAI-compatible',
+};
 
 const STEPS = ['Provider', 'Credentials', 'Runtime', 'Administrator', 'First agent'] as const;
 
 export function SetupWizard() {
   const [step, setStep] = useState(0);
-  const [detection, setDetection] = useState<Detection | null>(null);
+  const [detection, setDetection] = useState<RuntimeDetection | null>(null);
+  const [detectionFailed, setDetectionFailed] = useState(false);
   const [runtime, setRuntime] = useState('local');
   const [provider, setProvider] = useState('anthropic');
   const [providerApiKey, setProviderApiKey] = useState('');
@@ -26,41 +40,35 @@ export function SetupWizard() {
   const finish = async (): Promise<void> => {
     setSubmission('saving');
     setSubmissionError(null);
-    try {
-      const response = await fetch('/api/setup', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          provider,
-          providerApiKey,
-          runtime,
-          adminEmail,
-          adminPassword,
-          agentName,
-          agentInstructions,
-        }),
-      });
-      const body = (await response.json()) as {
-        agentId?: unknown;
-        error?: { code?: unknown; message?: unknown } | null;
-      };
-      if (!response.ok || typeof body.agentId !== 'string') {
-        throw new Error(setupFailureMessage(response.status, body.error));
-      }
-      window.location.assign(`/agents/${encodeURIComponent(body.agentId)}`);
-    } catch (error) {
-      setSubmissionError(error instanceof Error ? error.message : 'Setup could not be completed.');
-      setSubmission('idle');
+    const outcome = await fetch('/api/setup', {
+      method: 'POST',
+      headers: { ...SETUP_REQUEST_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        providerApiKey,
+        runtime,
+        adminEmail,
+        adminPassword,
+        agentName,
+        agentInstructions,
+      }),
+    }).then(setupOutcomeOf, setupUnanswered);
+    if (outcome.ok) {
+      window.location.assign(`/agents/${encodeURIComponent(outcome.agentId)}`);
+      return;
     }
+    setSubmissionError(outcome.message);
+    setSubmission('idle');
   };
 
   useEffect(() => {
-    void fetch('/api/setup/runtime-detect', { cache: 'no-store' })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`runtime detection returned ${String(response.status)}`);
-        return (await response.json()) as Detection;
-      })
+    void fetch('/api/setup/runtime-detect', { cache: 'no-store', headers: SETUP_REQUEST_HEADERS })
+      .then(detectionOf, () => null)
       .then((result) => {
+        if (result === null) {
+          setDetectionFailed(true);
+          return;
+        }
         setDetection(result);
         setRuntime(result.defaultDriver);
       });
@@ -75,7 +83,10 @@ export function SetupWizard() {
     <main className="min-h-screen bg-bg">
       <DriverBanner
         driver={runtime}
-        reason={selected?.reason ?? 'Detecting host capabilities…'}
+        reason={
+          selected?.reason ??
+          (detectionFailed ? DETECTION_FAILED_MESSAGE : 'Detecting host capabilities…')
+        }
         warning={runtime === 'local'}
       />
       <div className="mx-auto max-w-3xl px-6 py-12">
@@ -103,6 +114,7 @@ export function SetupWizard() {
             {stepContent({
               step,
               detection,
+              detectionFailed,
               runtime,
               setRuntime,
               provider,
@@ -160,7 +172,8 @@ export function SetupWizard() {
 
 interface StepContentProps {
   step: number;
-  detection: Detection | null;
+  detection: RuntimeDetection | null;
+  detectionFailed: boolean;
   runtime: string;
   setRuntime: (value: string) => void;
   provider: string;
@@ -239,20 +252,9 @@ export const ADMIN_EMAIL_HINT =
   'The administrator email the generator printed (BOOTSTRAP_ADMIN in .env).';
 export const ADMIN_PASSWORD_HINT =
   'The one-time setup password: BOOTSTRAP_ADMIN_PASSWORD in the project .env file. Not a new password.';
-export const INVALID_ADMIN_CREDENTIALS_MESSAGE =
-  'The administrator email or one-time setup password did not match. Use the values the ' +
-  'generator printed: BOOTSTRAP_ADMIN and BOOTSTRAP_ADMIN_PASSWORD in the project .env file, ' +
-  'not a password your browser suggested or saved.';
-
-/** The text shown when `POST /api/setup` refuses: the server's own message, made actionable. */
-export function setupFailureMessage(
-  status: number,
-  error: { code?: unknown; message?: unknown } | null | undefined,
-): string {
-  if (error?.code === 'invalid_credentials') return INVALID_ADMIN_CREDENTIALS_MESSAGE;
-  const message = error?.message;
-  return typeof message === 'string' ? message : `Setup returned ${String(status)}.`;
-}
+/** Shown when the host could not be asked which runtimes it can run; setup keeps `local`. */
+export const DETECTION_FAILED_MESSAGE =
+  'Could not detect which runtimes this host can run, so setup uses the local driver.';
 
 export function AdministratorFields(props: {
   adminEmail: string;
@@ -290,6 +292,40 @@ export function ProviderKeyField(props: {
   });
 }
 
+/** Step 3: the drivers the host offers, or why there are none to choose from. */
+export function RuntimeChoices(props: {
+  detection: RuntimeDetection | null;
+  detectionFailed: boolean;
+  runtime: string;
+  setRuntime: (value: string) => void;
+}) {
+  return (
+    <fieldset className="space-y-3">
+      <legend className="mb-3 text-sm text-text-2">Runtime driver</legend>
+      {(props.detection?.drivers ?? []).map((driver) => (
+        <label className="flex gap-3 rounded border border-border p-3" key={driver.id}>
+          <input
+            checked={props.runtime === driver.id}
+            disabled={!driver.available}
+            name="runtime"
+            onChange={() => props.setRuntime(driver.id)}
+            type="radio"
+          />
+          <span>
+            <b className="block text-sm text-text">{driver.id}</b>
+            <span className="text-xs text-muted">{driver.reason}</span>
+          </span>
+        </label>
+      ))}
+      {props.detection === null ? (
+        <p className="text-sm text-muted">
+          {props.detectionFailed ? DETECTION_FAILED_MESSAGE : 'Detecting this host…'}
+        </p>
+      ) : null}
+    </fieldset>
+  );
+}
+
 function stepContent(props: StepContentProps) {
   const { step } = props;
   switch (step) {
@@ -303,10 +339,11 @@ function stepContent(props: StepContentProps) {
             onChange={(event) => props.setProvider(event.currentTarget.value)}
             value={props.provider}
           >
-            <option value="anthropic">Anthropic</option>
-            <option value="openai">OpenAI</option>
-            <option value="azure-openai">Azure OpenAI</option>
-            <option value="openai-compatible">OpenAI-compatible</option>
+            {SETUP_PROVIDERS.map((provider) => (
+              <option key={provider} value={provider}>
+                {SETUP_PROVIDER_LABELS[provider]}
+              </option>
+            ))}
           </select>
         </label>
       );
@@ -319,27 +356,12 @@ function stepContent(props: StepContentProps) {
       );
     case 2:
       return (
-        <fieldset className="space-y-3">
-          <legend className="mb-3 text-sm text-text-2">Runtime driver</legend>
-          {(props.detection?.drivers ?? []).map((driver) => (
-            <label className="flex gap-3 rounded border border-border p-3" key={driver.id}>
-              <input
-                checked={props.runtime === driver.id}
-                disabled={!driver.available}
-                name="runtime"
-                onChange={() => props.setRuntime(driver.id)}
-                type="radio"
-              />
-              <span>
-                <b className="block text-sm text-text">{driver.id}</b>
-                <span className="text-xs text-muted">{driver.reason}</span>
-              </span>
-            </label>
-          ))}
-          {props.detection === null ? (
-            <p className="text-sm text-muted">Detecting this host…</p>
-          ) : null}
-        </fieldset>
+        <RuntimeChoices
+          detection={props.detection}
+          detectionFailed={props.detectionFailed}
+          runtime={props.runtime}
+          setRuntime={props.setRuntime}
+        />
       );
     case 3:
       return (

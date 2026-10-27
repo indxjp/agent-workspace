@@ -44,20 +44,21 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    if: github.repository_owner == 'INDXDev'
+    runs-on: [self-hosted, ms-a2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          terraform_version: 1.15.8
+          terraform_version: 1.16.7
       - name: Validate Terraform and deployment script
         shell: pwsh
         run: ./scripts/deploy/azure-container-apps.ps1 -Action Validate
 
   deploy:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.repository_owner == 'INDXDev' && (github.event_name == 'workflow_dispatch')
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ms-a2]
     timeout-minutes: 120
     environment: azure-preview
     permissions:
@@ -88,7 +89,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
-          terraform_version: 1.15.8
+          terraform_version: 1.16.7
 
       - name: Build four immutable images in ACR
         if: inputs.action == 'apply'
@@ -172,7 +173,7 @@ jobs:
 
       - name: Set up Node for live browser validation
         if: inputs.action == 'apply'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
 

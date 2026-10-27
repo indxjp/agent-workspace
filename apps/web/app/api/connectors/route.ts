@@ -6,13 +6,10 @@
  * gives: the alias is a bundler setting Vitest does not resolve, and a relative specifier is what
  * lets `routes.test.ts` exercise this file directly.
  */
-import {
-  createConnector,
-  isDryRunBody,
-  listConnectors,
-  problem,
-} from '../../../server/connectors/handlers';
-import { readConnectorBody, toResponse, withWorkspaceStore } from '../../../server/connectors/http';
+import { createConnector, isDryRunBody, listConnectors } from '../../../server/connectors/handlers';
+import { problem } from '../../../server/http/result';
+import { readConnectorBody, withWorkspaceStore } from '../../../server/connectors/http';
+import { apiResultResponse } from '../../../server/http/json-transport';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 
 // The repository-wide route invariant (`tests/route-inventory.test.ts`): every route runs on the
@@ -35,7 +32,7 @@ export async function GET(request: Request): Promise<Response> {
     (store) => listConnectors(store),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /**
@@ -81,5 +78,5 @@ export async function POST(request: Request): Promise<Response> {
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

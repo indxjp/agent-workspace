@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_TRACED_RUNS,
   PROJECTS,
+  STAND_IN,
   devEnvironment,
   chatFailedRunId,
   failedRuns,
@@ -17,7 +18,6 @@ import {
   parseArguments,
   pointApisAtLoopback,
   serverCommands,
-  sharedSkills,
 } from './use-cases.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -65,7 +65,7 @@ describe('the ten use cases', () => {
       const ports = [...yaml.matchAll(/url: http:\/\/127\.0\.0\.1:(\d+)\/mcp/gu)].map((match) =>
         Number(match[1]),
       );
-      const mcp = servers.filter((server) => !server.script.endsWith('fake-erp.mjs'));
+      const mcp = servers.filter((server) => !STAND_IN.test(server.script));
       expect(mcp.map((server) => server.port).sort(), id).toEqual(ports.sort());
       for (const server of servers) {
         expect(Object.values(server.env).join(' '), id).not.toMatch(/\.\.\.|…/u);
@@ -78,7 +78,17 @@ describe('the ten use cases', () => {
     const yaml = read('quotation', 'agent-workspace.yaml');
     const devEnv = devEnvironment(yaml, () => 'ONE');
     expect(serverCommands(yaml, () => 'TWO', devEnv)).toEqual([
-      { env: { ERP_TOKEN: 'ONE', PORT: '8790' }, script: 'erp/fake-erp.mjs', port: 8790 },
+      {
+        env: {
+          ERP_TOKEN: 'ONE',
+          ERP_IDENTITY_SECRET: 'TWO',
+          IDENTITY_AUDIENCE: '<tool-id>',
+          IDENTITY_WORKSPACE: '<workspace-id>',
+          PORT: '8790',
+        },
+        script: 'erp/fake-erp.mjs',
+        port: 8790,
+      },
     ]);
   });
 
@@ -113,7 +123,9 @@ describe('what a project needs before aw check', () => {
     expect(fileSetupCommands(dir('manual-search'))).toEqual([
       "aw files mkdir 'manuals'",
       "aw files upload 'manuals/hydraulic-unit.md' 'data/manuals/hydraulic-unit.md'",
+      "aw files upload 'manuals/hydraulic-unit.pdf' 'data/manuals/hydraulic-unit.pdf'",
       "aw files upload 'manuals/safety-rules.md' 'data/manuals/safety-rules.md'",
+      "aw files upload 'manuals/safety-rules.pdf' 'data/manuals/safety-rules.pdf'",
     ]);
     const playbook = fileSetupCommands(dir('contract-review')).filter((c) =>
       c.includes('playbook'),
@@ -125,14 +137,19 @@ describe('what a project needs before aw check', () => {
     );
   });
 
-  it('uploads the three Word drafts into contracts/, which the agent reviews', () => {
-    expect(
-      fileSetupCommands(dir('contract-review')).filter((c) => c.includes("'contracts")),
-    ).toEqual([
+  it('uploads the three Word drafts into contracts/<deal-team>/ and a .gitkeep into each drafts/<deal-team>/', () => {
+    const commands = fileSetupCommands(dir('contract-review'));
+    expect(commands.filter((c) => c.includes("'contracts"))).toEqual([
       "aw files mkdir 'contracts'",
-      "aw files upload 'contracts/売買基本契約書_北陸精工株式会社案.docx' 'data/contracts/売買基本契約書_北陸精工株式会社案.docx'",
-      "aw files upload 'contracts/業務委託契約書_株式会社ミナトシステムズ案.docx' 'data/contracts/業務委託契約書_株式会社ミナトシステムズ案.docx'",
-      "aw files upload 'contracts/秘密保持契約書_Harborline Japan案.docx' 'data/contracts/秘密保持契約書_Harborline Japan案.docx'",
+      "aw files upload 'contracts/営業一部/業務委託契約書_株式会社ミナトシステムズ案.docx' 'data/contracts/営業一部/業務委託契約書_株式会社ミナトシステムズ案.docx'",
+      "aw files upload 'contracts/営業一部/秘密保持契約書_Harborline Japan案.docx' 'data/contracts/営業一部/秘密保持契約書_Harborline Japan案.docx'",
+      "aw files upload 'contracts/購買部/売買基本契約書_北陸精工株式会社案.docx' 'data/contracts/購買部/売買基本契約書_北陸精工株式会社案.docx'",
+    ]);
+    // A run scoped to drafts/<team> writes there only once the folder exists, and a folder exists once a file is in it.
+    expect(commands.filter((c) => c.includes("'drafts"))).toEqual([
+      "aw files mkdir 'drafts'",
+      "aw files upload 'drafts/営業一部/.gitkeep' 'data/drafts/営業一部/.gitkeep'",
+      "aw files upload 'drafts/購買部/.gitkeep' 'data/drafts/購買部/.gitkeep'",
     ]);
   });
 
@@ -152,13 +169,6 @@ describe('what a project needs before aw check', () => {
         if (folder !== undefined)
           expect(commands.indexOf(`aw files mkdir '${folder}'`), id).toBeLessThan(at);
       });
-    }
-  });
-
-  it('copies a shared skill an agent names into the project, and only that', () => {
-    expect(sharedSkills(dir('excel-consolidation'))).toEqual(['office-reader']);
-    for (const id of PROJECTS.filter((id) => id !== 'excel-consolidation')) {
-      expect(sharedSkills(dir(id)), id).toEqual([]);
     }
   });
 });

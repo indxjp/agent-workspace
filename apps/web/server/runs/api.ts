@@ -34,77 +34,50 @@
  * gap G-7 of `docs/adr/W9-RUNS-135-durable-run-list.md`. See
  * `docs/adr/W9-AUTH-165-admin-reads-workspace-run-history.md`.
  */
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { createHash } from 'node:crypto';
+
 import {
   AGENT_VERSION_NUMBER_MAX,
   AGENT_VERSION_PROBLEM_CODES,
 } from '@indx-workspace/contracts/agent-versions';
+import { IDENTITY_SUBJECT_MAX_LENGTH } from '@indx-workspace/contracts/identity-assertion';
 import {
-  MODEL_PROVIDERS,
+  isCanonicalFileScopePath,
+  MAX_RUN_ATTACHMENTS,
+  MAX_RUN_FILE_SCOPE_PATHS,
+  outputSchemaViolation,
+  RUN_IDEMPOTENCY_PROBLEM_CODES,
   RUN_START_PROBLEM_CODES,
-  type ModelProvider,
 } from '@indx-workspace/contracts/runs';
 import { SURFACE_LIMIT_PROBLEM_CODES } from '@indx-workspace/contracts/surfaces';
 
-import { upgradeEventStream } from './agent-frames';
-import { digitGroup, instantOfUtcFields, isKeysetTimestamp } from '../pagination/keyset-timestamp';
+import { forVisitor, upgradeEventStream } from './agent-frames';
+import { resolveRunAttachments } from './attachments';
 import { readResumeCursor } from './cursor';
 import {
   getRunApi,
   RUN_API_NOT_CONFIGURED_MESSAGE,
   type AgentRef,
-  type Principal,
+  type RunPrincipal,
   type RunApiEnvironment,
-  type SessionRef,
 } from './environment';
 import { apiError, isUuid, json, readJsonBody } from './http';
+import { encodeRunListCursor, parseRunListQuery } from './list-query';
+import { MAX_PROMPT_CHARS, startRunOnSession, type StartRunBody } from './service';
 import { sseStreamResponse, type SseControlFrame, type StreamOutcome } from './sse';
 import {
+  IdempotencyKeyTakenError,
   isTerminalRunStatus,
-  runStatuses,
-  SessionBusyError,
-  type ListRunsInput,
+  type RunIdempotency,
   type RunRecord,
-  type RunStatus,
   type RunStore,
 } from './store';
 import { decide, type Ownership } from '../rbac/decide';
 import type { Grant } from '../rbac/permissions';
 import { parseRole } from '../rbac/roles';
 import { resolveAgentRunOwnership } from '../agents/run-ownership';
-import { engineIsInstalled, engineNotInstalledMessage } from '../engines/images';
-import {
-  pinSessionEngine,
-  publishedEngineId,
-  sessionEngineMismatchMessage,
-} from '../engines/session-engine';
+import { publishedEngineId } from '../engines/session-engine';
 import { enforceCeiling } from '../policy-ceiling/ceiling';
-
-/**
- * The largest prompt one run may carry.
- *
- * The specification sets no limit. This is the smallest reading that still works: it is far above
- * any hand-typed message and far below anything that would let one unauthenticated-looking
- * request pin a control-plane process. See
- * `docs/adr/W1-CP-04-start-run-request-shape.md`.
- */
-export const MAX_PROMPT_CHARS = 100_000;
-
-/** The JSON body of `POST /api/agents/:id/runs`. */
-export interface StartRunBody {
-  readonly prompt: string;
-  /** Continue an existing session, or omit to start one (spec §19.5 rule 4). */
-  readonly sessionId: string | null;
-  /**
-   * Override the agent's default without mutating its definition (spec §48). Issue #129: a
-   * connection and a model are supplied together or not at all — no layer of the resolution
-   * ladder may mix a connection from one level with a model from another, and the run override is
-   * the top of that ladder.
-   */
-  readonly modelOverride: { readonly connectionId: string; readonly model: string } | null;
-  /** Run a new session on this numbered version instead of `local`'s (issue #697). */
-  readonly version?: number;
-}
 
 export type StartRunBodyVerdict =
   | { readonly kind: 'ok'; readonly body: StartRunBody }
@@ -116,12 +89,118 @@ const START_RUN_KEYS: ReadonlySet<string> = new Set([
   'modelConnectionId',
   'model',
   'version',
+  'attachments',
+  'outputSchema',
+  'subject',
+  'fileScope',
 ]);
+
+type AttachmentsParse =
+  | { readonly kind: 'ok'; readonly attachments: StartRunBody['attachments'] }
+  | { readonly kind: 'rejected'; readonly reason: string };
+
+/** The same rules as `StartRunRequestSchema.attachments`: 1 to 10 strict `{ fileId }`, no repeats. */
+function parseAttachments(raw: unknown): AttachmentsParse {
+  if (raw === undefined) return { kind: 'ok', attachments: undefined };
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > MAX_RUN_ATTACHMENTS) {
+    return {
+      kind: 'rejected',
+      reason: `"attachments" must be an array of 1 to ${String(MAX_RUN_ATTACHMENTS)} items when it is present`,
+    };
+  }
+  const seen = new Set<string>();
+  const attachments: { readonly fileId: string }[] = [];
+  for (const item of raw as unknown[]) {
+    const fileId =
+      typeof item === 'object' && item !== null && !Array.isArray(item)
+        ? (item as Record<string, unknown>)['fileId']
+        : undefined;
+    if (
+      typeof fileId !== 'string' ||
+      fileId.length === 0 ||
+      Object.keys(item as object).length !== 1
+    ) {
+      return {
+        kind: 'rejected',
+        reason: 'each "attachments" item must be an object with only a non-empty "fileId"',
+      };
+    }
+    if (seen.has(fileId)) {
+      return { kind: 'rejected', reason: '"attachments" must not name the same "fileId" twice' };
+    }
+    seen.add(fileId);
+    attachments.push({ fileId });
+  }
+  return { kind: 'ok', attachments };
+}
+
+function parseOutputSchema(
+  raw: unknown,
+):
+  | { readonly kind: 'ok'; readonly schema: Readonly<Record<string, unknown>> | undefined }
+  | { readonly kind: 'rejected'; readonly reason: string } {
+  if (raw === undefined) return { kind: 'ok', schema: undefined };
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { kind: 'rejected', reason: '"outputSchema" must be a JSON Schema object' };
+  }
+  const violation = outputSchemaViolation(raw);
+  if (violation !== null) {
+    return { kind: 'rejected', reason: `"outputSchema" is not accepted: ${violation.message}` };
+  }
+  return { kind: 'ok', schema: raw as Readonly<Record<string, unknown>> };
+}
+
+function parseSubject(
+  raw: unknown,
+):
+  | { readonly kind: 'ok'; readonly field: { readonly subject?: string } }
+  | { readonly kind: 'rejected'; readonly reason: string } {
+  if (raw === undefined) return { kind: 'ok', field: {} };
+  if (typeof raw === 'string' && raw.length > 0 && raw.length <= IDENTITY_SUBJECT_MAX_LENGTH) {
+    return { kind: 'ok', field: { subject: raw } };
+  }
+  return {
+    kind: 'rejected',
+    reason: `"subject" must be a string of 1 to ${String(IDENTITY_SUBJECT_MAX_LENGTH)} characters when it is present`,
+  };
+}
+
+/** The same rules as `StartRunRequestSchema.fileScope`: 1 to 100 canonical paths, no repeats. */
+function parseFileScope(
+  raw: unknown,
+):
+  | { readonly kind: 'ok'; readonly field: { readonly fileScope?: readonly string[] } }
+  | { readonly kind: 'rejected'; readonly reason: string } {
+  if (raw === undefined) return { kind: 'ok', field: {} };
+  if (
+    Array.isArray(raw) &&
+    raw.length >= 1 &&
+    raw.length <= MAX_RUN_FILE_SCOPE_PATHS &&
+    (raw as unknown[]).every(
+      (path) => typeof path === 'string' && isCanonicalFileScopePath(path),
+    ) &&
+    new Set(raw as string[]).size === raw.length
+  ) {
+    return { kind: 'ok', field: { fileScope: raw as string[] } };
+  }
+  return {
+    kind: 'rejected',
+    reason: `"fileScope" must be an array of 1 to ${String(MAX_RUN_FILE_SCOPE_PATHS)} distinct canonical workspace-relative paths when it is present`,
+  };
+}
+
+/** The start-run keys this server refuses, or `null` when every key is one it honours. */
+function refuseStartRunKeys(record: Record<string, unknown>): StartRunBodyVerdict | null {
+  const unknown = Object.keys(record).find((key) => !START_RUN_KEYS.has(key));
+  return unknown === undefined
+    ? null
+    : { kind: 'rejected', reason: `unknown field ${JSON.stringify(unknown)} in the request body` };
+}
 
 /**
  * Parse the start-run body. **Never throws**, and never returns `ok` for a shape it did not
  * positively recognise — an unknown key is rejected rather than ignored, for the reason
- * `packages/core/src/schemas.ts` already gives about `.strict()`: a setting the server does not
+ * `packages/run-protocol/src/schemas.ts` already gives about `.strict()`: a setting the server does not
  * know how to honour, accepted silently, is a request the caller believes was obeyed.
  */
 export function parseStartRunBody(input: unknown): StartRunBodyVerdict {
@@ -129,14 +208,8 @@ export function parseStartRunBody(input: unknown): StartRunBodyVerdict {
     return { kind: 'rejected', reason: 'the request body must be a JSON object' };
   }
   const record = input as Record<string, unknown>;
-  for (const key of Object.keys(record)) {
-    if (!START_RUN_KEYS.has(key)) {
-      return {
-        kind: 'rejected',
-        reason: `unknown field ${JSON.stringify(key)} in the request body`,
-      };
-    }
-  }
+  const keyRefusal = refuseStartRunKeys(record);
+  if (keyRefusal !== null) return keyRefusal;
   const prompt = record['prompt'];
   if (typeof prompt !== 'string') {
     return { kind: 'rejected', reason: '"prompt" is required and must be a string' };
@@ -176,6 +249,35 @@ export function parseStartRunBody(input: unknown): StartRunBodyVerdict {
     };
   }
   const modelOverride = connectionId === null || model === null ? null : { connectionId, model };
+  const options = parseRunOptions(record);
+  if (options.kind === 'rejected') return options;
+  const { version, ...perRun } = options.fields;
+  const rawSession = record['sessionId'];
+  if (rawSession === undefined || rawSession === null) {
+    return { kind: 'ok', body: { prompt, sessionId: null, modelOverride, ...options.fields } };
+  }
+  if (!isUuid(rawSession)) {
+    return { kind: 'rejected', reason: '"sessionId" must be a UUID when it is present' };
+  }
+  if (version !== undefined) {
+    return {
+      kind: 'rejected',
+      reason: '"version" applies to a new session: omit "sessionId"',
+    };
+  }
+  return { kind: 'ok', body: { prompt, sessionId: rawSession, modelOverride, ...perRun } };
+}
+
+/** The optional `version`, `outputSchema`, `attachments`, `subject` and `fileScope` of a start-run body, each checked. */
+function parseRunOptions(record: Record<string, unknown>):
+  | {
+      readonly kind: 'ok';
+      readonly fields: Pick<
+        StartRunBody,
+        'version' | 'outputSchema' | 'attachments' | 'subject' | 'fileScope'
+      >;
+    }
+  | { readonly kind: 'rejected'; readonly reason: string } {
   const rawVersion = record['version'];
   if (
     rawVersion !== undefined &&
@@ -186,21 +288,24 @@ export function parseStartRunBody(input: unknown): StartRunBodyVerdict {
   ) {
     return { kind: 'rejected', reason: '"version" must be a positive integer when it is present' };
   }
-  const targeting = rawVersion === undefined ? {} : { version: rawVersion };
-  const rawSession = record['sessionId'];
-  if (rawSession === undefined || rawSession === null) {
-    return { kind: 'ok', body: { prompt, sessionId: null, modelOverride, ...targeting } };
-  }
-  if (!isUuid(rawSession)) {
-    return { kind: 'rejected', reason: '"sessionId" must be a UUID when it is present' };
-  }
-  if (rawVersion !== undefined) {
-    return {
-      kind: 'rejected',
-      reason: '"version" applies to a new session: omit "sessionId"',
-    };
-  }
-  return { kind: 'ok', body: { prompt, sessionId: rawSession, modelOverride } };
+  const attached = parseAttachments(record['attachments']);
+  if (attached.kind === 'rejected') return attached;
+  const parsedSchema = parseOutputSchema(record['outputSchema']);
+  if (parsedSchema.kind === 'rejected') return parsedSchema;
+  const parsedSubject = parseSubject(record['subject']);
+  if (parsedSubject.kind === 'rejected') return parsedSubject;
+  const parsedScope = parseFileScope(record['fileScope']);
+  if (parsedScope.kind === 'rejected') return parsedScope;
+  return {
+    kind: 'ok',
+    fields: {
+      ...(rawVersion === undefined ? {} : { version: rawVersion }),
+      ...(parsedSchema.schema === undefined ? {} : { outputSchema: parsedSchema.schema }),
+      ...(attached.attachments === undefined ? {} : { attachments: attached.attachments }),
+      ...parsedSubject.field,
+      ...parsedScope.field,
+    },
+  };
 }
 
 /** The JSON shape a run is rendered as. Dates are ISO 8601 strings; `bigint` never appears. */
@@ -216,6 +321,8 @@ export function renderRun(run: RunRecord): Record<string, unknown> {
     projectId: run.projectId ?? null,
     initiatingUserId: run.initiatingUserId ?? null,
     sessionId: run.sessionId,
+    // #612, ADR-0101: the version the session pins; `null` for a legacy unversioned session.
+    agentVersion: run.agentVersion ?? null,
     status: run.status,
     createdAt: run.createdAt.toISOString(),
     startedAt: run.startedAt === null ? null : run.startedAt.toISOString(),
@@ -248,6 +355,11 @@ export function renderRun(run: RunRecord): Record<string, unknown> {
       priceTableVersion: run.priceTableVersion ?? null,
     },
     error: run.error,
+    // ADR-0143: `null` until the run is `completed`, and for a failed or cancelled one.
+    output: run.output ?? null,
+    // ADR-0145: the call being waited on, only while the run is paused; `approvedToolCalls` is a
+    // continuation's private input and is never rendered.
+    pendingApproval: run.status === 'awaiting_approval' ? (run.pendingApproval ?? null) : null,
     // Issue #134's ledger-recomputed aggregate. The fallback matches the column's own default;
     // both `RunStore` implementations always set it, and the field is optional on `RunRecord`
     // only because most of this interface's fields are (see that type's own comment).
@@ -267,7 +379,7 @@ export const unauthenticated = (): Response =>
 
 export function requireRunPermission(
   request: Request,
-  principal: Principal,
+  principal: RunPrincipal,
   ownership: Ownership,
 ): Response | null {
   const role = parseRole(principal.role);
@@ -301,7 +413,7 @@ export function requireRunPermission(
  * halves of the same rule apart.
  */
 export function requireSessionScopeMatch(
-  principal: Principal,
+  principal: RunPrincipal,
   sessionId: string | null,
 ): Response | null {
   const scope = principal.scope;
@@ -324,7 +436,7 @@ export function requireSessionScopeMatch(
  */
 export async function refuseOverVisitorLimit(
   env: RunApiEnvironment,
-  principal: Principal,
+  principal: RunPrincipal,
   kind: 'turn' | 'feedback',
   headers: Headers,
 ): Promise<Response | null> {
@@ -360,7 +472,7 @@ const NO_PERMISSIONS = {
 async function modelOverrideRefusal(
   request: Request,
   env: RunApiEnvironment,
-  principal: Principal,
+  principal: RunPrincipal,
   agent: AgentRef,
   body: StartRunBody,
 ): Promise<Response | null> {
@@ -382,146 +494,66 @@ async function modelOverrideRefusal(
   return refused === null ? null : json(refused.body, RUN_START_PROBLEM_CODES.policy_cannot_widen);
 }
 
-/** A start {@link startRunOnSession} refused, with the status and code `startRun` answers. */
-interface RunStartRefused {
-  readonly kind: 'refused';
-  readonly status: number;
-  readonly code: string;
-  readonly message: string;
+/** The longest `Idempotency-Key` a run start accepts; the trigger firing's bound. */
+export const MAX_IDEMPOTENCY_KEY_CHARS = 255;
+
+/** A start's answer: `202` with the run and its stream URL, for a new run and a replay alike. */
+function accepted(run: RunRecord): Response {
+  // 202, not 201: the run is accepted and queued, and what the caller actually wants is the
+  // stream, whose URL is in the body and in Location.
+  const events = `/api/runs/${run.id}/events`;
+  return json({ run: renderRun(run), events }, 202, { Location: events });
 }
 
-export type RunOnSessionStart =
-  | { readonly kind: 'started'; readonly run: RunRecord; readonly session: SessionRef }
-  | RunStartRefused;
-
-const refused = (status: number, code: string, message: string): RunStartRefused => ({
-  kind: 'refused',
-  status,
-  code,
-  message,
-});
+/**
+ * The start key of this request (ADR-0151, #250): `undefined` when absent, `invalid`, or the key with the acting
+ * principal and the SHA-256 of what was asked: the parsed body's JSON with every object's members
+ * sorted, so a retry that lists the same members in another order (an `outputSchema` rebuilt by
+ * the client) is the same request. Arrays keep their order; it is part of what was asked.
+ */
+function readIdempotencyKey(
+  request: Request,
+  principal: RunPrincipal,
+  agentId: string,
+  body: StartRunBody,
+): RunIdempotency | 'invalid' | undefined {
+  const header = request.headers.get('idempotency-key');
+  if (header === null) return undefined;
+  const key = header.trim();
+  if (key === '' || key.length > MAX_IDEMPOTENCY_KEY_CHARS) return 'invalid';
+  const canonical = JSON.stringify({ agentId, body }, (_key, value: unknown) =>
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => (left < right ? -1 : 1)))
+      : value,
+  );
+  const requestHash = createHash('sha256').update(canonical).digest('hex');
+  return { principalId: principal.principalId, key, requestHash };
+}
 
 /**
- * Start one run of `agent` for `principal`: the preflight, the session, the engine pin, the run row
- * and the launch. The one run starter behind `POST /api/agents/:id/runs` and the evaluation
- * handler (issue #618), so both meet the same refusals. The caller has already authenticated and
- * authorised the principal and found the agent; a refusal creates no run and opens no new session.
- * `agentVersionId` pins a new session to that version rather than `local`'s (issue #618).
+ * The answer to a start whose key is already held: the original run whatever its status — a
+ * paused run never frees its key — or `409 run_idempotency_conflict` for a different request.
+ * `null` when the key is not held.
  */
-export async function startRunOnSession(
-  env: RunApiEnvironment,
-  principal: Principal,
-  agent: AgentRef,
-  input: StartRunBody & { readonly agentVersionId?: string },
-): Promise<RunOnSessionStart> {
-  // Issue #393: a run whose agent has no runtime profile, or whose model cannot resolve, is refused
-  // with a code that names the missing piece, before `store.create`. A run that would open a new
-  // session is checked before `openSession` too (PR #403 review), so a refused first message leaves
-  // no empty session behind. A follow-up in an existing session is checked below, once the session
-  // is known to be usable, because its project default depends on that session.
-  const checkRunStart = async (sessionId: string | null): Promise<RunStartRefused | null> => {
-    const refusal =
-      env.preflight === undefined
-        ? null
-        : await env.preflight(
-            principal,
-            agent,
-            sessionId,
-            input.modelOverride,
-            sessionId === null ? input.agentVersionId : undefined,
-          );
-    return refusal === null
-      ? null
-      : refused(RUN_START_PROBLEM_CODES[refusal.code], refusal.code, refusal.message);
-  };
-  // Every refusal a run that opens its own session can meet is decided before that session is
-  // opened (PR #403 review): the preflight, and the engine image a new session would pin
-  // (`pinSessionEngine` gives a session with no engine the agent's). So the only sessions this route
-  // creates are ones a run is then created in, and it never deletes a session — a session a client
-  // opened itself (`projects.startSession`) stays the client's, refused start or not.
-  if (input.sessionId === null) {
-    const refusal = await checkRunStart(null);
-    if (refusal !== null) return refusal;
-    const fresh = pinSessionEngine({ sessionEngine: null, agentEngine: agent.engine });
-    if (fresh.kind === 'pinned' && !engineIsInstalled(fresh.engine)) {
-      return refused(422, 'engine_not_installed', engineNotInstalledMessage(fresh.engine));
-    }
-  }
-
-  const session = await env.openSession(
-    principal,
-    agent,
-    input.sessionId,
-    input.sessionId === null ? input.agentVersionId : undefined,
+async function replayStart(
+  store: RunStore,
+  principal: RunPrincipal,
+  idempotency: RunIdempotency,
+): Promise<Response | null> {
+  const held = await store.findByIdempotencyKey(
+    principal.workspaceId,
+    idempotency.principalId,
+    idempotency.key,
   );
-  if (session === null) {
-    return refused(
-      409,
-      'session_not_usable',
-      'the requested session cannot run this agent; omit sessionId to start a new session (spec §19.5 rule 4).',
+  if (held === null) return null;
+  if (held.requestHash !== idempotency.requestHash) {
+    return apiError(
+      RUN_IDEMPOTENCY_PROBLEM_CODES.run_idempotency_conflict,
+      'run_idempotency_conflict',
+      'this Idempotency-Key was already used with a different request; send a new key.',
     );
   }
-
-  // ADR-0065 D8: a session stays on the engine it started with. Checked *before* `store.create`,
-  // so a refused run leaves no row behind — a queued run that can never be launched is worse than
-  // no run, because it is indistinguishable from one the runtime has not reached yet.
-  // A pinned session runs its version's engine, which may not be the agent row's (issue #612).
-  const pin = pinSessionEngine({
-    sessionEngine: session.engine,
-    agentEngine: session.versionEngine ?? agent.engine,
-  });
-  if (pin.kind === 'mismatch') {
-    return refused(409, 'session_engine_mismatch', sessionEngineMismatchMessage(pin));
-  }
-
-  // ENG-07 (#306): a run needs a sandbox, and a sandbox needs an image that carries this engine's
-  // adapter. Checked here — after the engine is pinned and *before* `store.create` — for the reason
-  // the pin above is: a queued run that can never be launched is worse than no run, because it is
-  // indistinguishable from one the runtime has not reached yet. `installed` on `GET /api/engines`
-  // reads the same map, so a client that checked the catalogue first never sees this.
-  if (!engineIsInstalled(pin.engine)) {
-    return refused(422, 'engine_not_installed', engineNotInstalledMessage(pin.engine));
-  }
-
-  // The follow-up's preflight (see `checkRunStart` above), before `store.create` for the reason the
-  // two checks above give.
-  if (input.sessionId !== null) {
-    const refusal = await checkRunStart(session.id);
-    if (refusal !== null) return refusal;
-  }
-
-  let run: RunRecord;
-  try {
-    run = await env.store.create({
-      id: crypto.randomUUID(),
-      workspaceId: principal.workspaceId,
-      agentId: agent.id,
-      sessionId: session.id,
-      initiatingUserId: principal.userId,
-      ownerPrincipalId: ownerPrincipalIdOf(principal),
-      // The engine the session is pinned to, or — for a session this run is the first of — the
-      // one the agent's policy names. A record, never a default (ADR-0065).
-      engine: pin.engine,
-      prompt: input.prompt,
-    });
-  } catch (error) {
-    // Two runs resuming one engine session would interleave its transcript.
-    if (!(error instanceof SessionBusyError)) throw error;
-    return refused(
-      409,
-      'session_busy',
-      'this session already has a run in progress; wait for it to finish or interrupt it.',
-    );
-  }
-  env.launch({
-    run,
-    agent,
-    session,
-    principal,
-    prompt: input.prompt,
-    modelOverride: input.modelOverride,
-  });
-  return { kind: 'started', run, session };
+  return accepted(held.run);
 }
 
 /** POST /api/agents/:id/runs */
@@ -544,22 +576,51 @@ export async function startRun(request: Request, agentId: string): Promise<Respo
   if (raw.kind !== 'ok') return apiError(400, 'invalid_body', raw.reason);
   const parsed = parseStartRunBody(raw.value);
   if (parsed.kind !== 'ok') return apiError(400, 'invalid_body', parsed.reason);
+  // ADR-0142 D2: only a backend acting for its own users names a subject. A session or a browser
+  // token states who it is already, so it cannot assert someone else.
+  if (parsed.body.subject !== undefined && principal.via !== 'api-key') {
+    return apiError(
+      RUN_START_PROBLEM_CODES.run_subject_forbidden,
+      'run_subject_forbidden',
+      '"subject" may only be set by an API key; remove it from the request.',
+    );
+  }
   // §3.1's session scope: "start runs in that session", never a new one and never another. A body
   // that omits `sessionId` is refused the same way a body naming a different session is, rather
   // than silently starting a fresh session the token was never scoped to.
   const scopeMismatch = requireSessionScopeMatch(principal, parsed.body.sessionId);
   if (scopeMismatch !== null) return scopeMismatch;
+  // ADR-0151: a replay is answered before anything a fresh start would do — no visitor turn, no
+  // preflight, no session — so it returns the original run even when a new start would be refused.
+  const idempotency = readIdempotencyKey(request, principal, agentId, parsed.body);
+  if (idempotency === 'invalid') {
+    return apiError(
+      RUN_IDEMPOTENCY_PROBLEM_CODES.invalid_idempotency_key,
+      'invalid_idempotency_key',
+      `Idempotency-Key must be 1 to ${String(MAX_IDEMPOTENCY_KEY_CHARS)} characters.`,
+    );
+  }
+  if (idempotency !== undefined) {
+    const replay = await replayStart(env.store, principal, idempotency);
+    if (replay !== null) return replay;
+  }
   const overLimit = await refuseOverVisitorLimit(env, principal, 'turn', request.headers);
   if (overLimit !== null) return overLimit;
 
   // A follow-up's agent carries its conversation's pinned engine (issue #612), which the model
-  // override's ceiling check below and the engine pin in `startRunOnSession` read.
+  // override's ceiling check below and the engine pin in `startRunOnSession` (`service.ts`) read.
   const agent = await env.findAgent(principal, agentId, parsed.body.sessionId);
   // 404 rather than 403 when the agent belongs to another workspace: §25's isolation rule is not
   // satisfied by a status code that confirms the row exists.
   if (agent === null) {
     return apiError(404, 'agent_not_found', `no agent ${agentId} in this workspace.`);
   }
+
+  const attachments =
+    parsed.body.attachments === undefined
+      ? ({ kind: 'ok', files: [] } as const)
+      : await resolveRunAttachments(principal, parsed.body.attachments, parsed.body.sessionId);
+  if (attachments.kind === 'refused') return attachments.response;
 
   const overCeiling = await modelOverrideRefusal(request, env, principal, agent, parsed.body);
   if (overCeiling !== null) return overCeiling;
@@ -579,21 +640,25 @@ export async function startRun(request: Request, agentId: string): Promise<Respo
     agentVersionId = found.id;
   }
 
-  const started = await startRunOnSession(
-    env,
-    principal,
-    agent,
-    agentVersionId === undefined ? parsed.body : { ...parsed.body, agentVersionId },
-  );
-  if (started.kind === 'refused') {
-    return apiError(started.status, started.code, started.message);
+  let started: Awaited<ReturnType<typeof startRunOnSession>>;
+  try {
+    started = await startRunOnSession(env, principal, agent, {
+      ...parsed.body,
+      attachments: attachments.files,
+      ...(agentVersionId === undefined ? {} : { agentVersionId }),
+      ...(idempotency === undefined ? {} : { idempotency }),
+    });
+  } catch (error) {
+    // Two starts with one key raced and the other committed first: answer with its run.
+    if (!(error instanceof IdempotencyKeyTakenError) || idempotency === undefined) throw error;
+    const replay = await replayStart(env.store, principal, idempotency);
+    if (replay === null) throw error;
+    return replay;
   }
-  const { run } = started;
-
-  // 202, not 201: the run is accepted and queued, and what the caller actually wants is the
-  // stream, whose URL is in the body and in Location.
-  const events = `/api/runs/${run.id}/events`;
-  return json({ run: renderRun(run), events }, 202, { Location: events });
+  if (started.kind === 'refused') {
+    return apiError(started.status, started.code, started.message, started.details);
+  }
+  return accepted(started.run);
 }
 
 /**
@@ -604,7 +669,7 @@ export async function startRun(request: Request, agentId: string): Promise<Respo
  */
 export async function findRunForPrincipal(
   store: RunStore,
-  principal: Principal,
+  principal: RunPrincipal,
   runId: string,
 ): Promise<RunRecord | null> {
   const run = await store.get(runId);
@@ -634,146 +699,6 @@ export async function readRun(request: Request, runId: string): Promise<Response
   return json({ run: renderRun(run) }, 200);
 }
 
-// ── GET /api/runs — issue #135 ──────────────────────────────────────────────────────────────
-
-/** The default page size when `limit` is omitted. */
-const DEFAULT_RUN_LIST_LIMIT = 20;
-/** The largest page a caller may request. Matches `MAX_RUN_LIST_LIMIT` in the core repository. */
-const MAX_RUN_LIST_LIMIT = 200;
-
-/**
- * A `(created_at, id)` pagination boundary, opaque to every client: base64url of a small JSON
- * object. Never a raw offset — an offset is exactly what stops being stable the moment a row is
- * inserted or deleted ahead of it, which is the property issue #135 asks this pagination to have.
- *
- * `cursor.createdAt` is carried through **as the string the store minted it as** — never parsed
- * into, or built from, a `Date`. `./store.ts`'s `RunListCursor` doc comment says why: a `Date`
- * only survives to millisecond precision, `runs.created_at` is microsecond precision, and this
- * function used to call `.toISOString()` here, which is exactly where round 2 finding 1's
- * truncation happened — silently, on every single cursor this route ever minted.
- */
-function encodeRunListCursor(cursor: { readonly createdAt: string; readonly id: string }): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: cursor.createdAt, id: cursor.id }),
-    'utf8',
-  ).toString('base64url');
-}
-
-/**
- * The exact text a `from`/`to` query parameter may take: `YYYY-MM-DDTHH:MM:SS`, an optional
- * fractional part of one to three digits, then a mandatory zone — `Z` or `±HH:MM`. Three digits
- * because a `Date` (the type both stores compare against) carries nothing finer, and a fourth
- * digit silently dropped would move `from` onto rows the caller asked to exclude. A mandatory
- * zone because a zone-less timestamp is read in the web process's own time zone, so the same
- * request answered different rows on instances configured differently (round 4 finding 5).
- */
-const RUN_LIST_BOUND =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(?:(Z)|([+-])(\d{2}):(\d{2}))$/;
-
-/**
- * The instants a `from`/`to` bound may name: years 0001–9999 UTC. PostgreSQL reads further in
- * both directions, but every `Date` the query binds is serialised by `toISOString`, which prints
- * a year outside that range in the signed six-digit form (`+010000-…`) PostgreSQL refuses — the
- * cause of round 4 finding 2's thrown queries. Checked on the UTC instant, after any offset is
- * applied, because `9999-12-31T23:00:00-02:00` is already year 10000.
- */
-const EARLIEST_RUN_LIST_BOUND = ((): number => {
-  const instant = new Date(0);
-  instant.setUTCFullYear(1, 0, 1);
-  instant.setUTCHours(0, 0, 0, 0);
-  return instant.getTime();
-})();
-const LATEST_RUN_LIST_BOUND = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
-
-/** The one sentence `invalid_from` and `invalid_to` both explain the shape with. */
-const RUN_LIST_BOUND_REQUIREMENT =
-  'must be an ISO-8601 timestamp with an explicit zone (YYYY-MM-DDTHH:MM:SS[.fff]Z or ' +
-  '±HH:MM) in years 0001–9999.';
-
-/**
- * Parse a `from`/`to` query parameter, or `null` for anything outside {@link RUN_LIST_BOUND} and
- * {@link EARLIEST_RUN_LIST_BOUND}–{@link LATEST_RUN_LIST_BOUND}. A positive assertion in the
- * ADR-0015 shape: the value is admitted because it names an instant the query can bind, never
- * because `new Date(text)` happened not to be `NaN` — that gate admitted `"1"`, `"2026"`, a
- * signed six-digit year, year 0 and a zone-less timestamp (round 4 findings 2 and 5).
- */
-function parseRunListBound(text: string): Date | null {
-  const match = RUN_LIST_BOUND.exec(text);
-  if (match === null) return null;
-  const fraction = match[7];
-  const utc = instantOfUtcFields({
-    year: digitGroup(match, 1),
-    month: digitGroup(match, 2),
-    day: digitGroup(match, 3),
-    hour: digitGroup(match, 4),
-    minute: digitGroup(match, 5),
-    second: digitGroup(match, 6),
-    millisecond: fraction === undefined ? 0 : Number(fraction.padEnd(3, '0')),
-  });
-  if (utc === null) return null;
-  let offsetMinutes = 0;
-  if (match[8] === undefined) {
-    // Not `Z`, so the `±HH:MM` alternative matched and all three of its groups are present.
-    const sign = match[9];
-    if (sign === undefined) throw new Error('timestamp zone sign is absent');
-    const hours = digitGroup(match, 10);
-    const minutes = digitGroup(match, 11);
-    if (hours > 23 || minutes > 59) return null;
-    offsetMinutes = (sign === '-' ? -1 : 1) * (hours * 60 + minutes);
-  }
-  const instant = utc.getTime() - offsetMinutes * 60_000;
-  if (instant < EARLIEST_RUN_LIST_BOUND || instant > LATEST_RUN_LIST_BOUND) return null;
-  return new Date(instant);
-}
-
-type CursorParseResult =
-  | { readonly kind: 'absent' }
-  | { readonly kind: 'ok'; readonly cursor: { readonly createdAt: string; readonly id: string } }
-  | { readonly kind: 'invalid'; readonly reason: string };
-
-/**
- * Decode a `cursor` query parameter. **Never falls back to "start over"**: the same ADR-0015
- * shape `./cursor.ts`'s resume cursor uses — a malformed cursor a client believes is valid must be
- * refused by name, not silently answered with page one re-served as if it were the next page.
- */
-function decodeRunListCursor(raw: string | null): CursorParseResult {
-  if (raw === null) return { kind: 'absent' };
-  let text: string;
-  try {
-    text = Buffer.from(raw, 'base64url').toString('utf8');
-  } catch {
-    return { kind: 'invalid', reason: 'the cursor is not valid base64url.' };
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return { kind: 'invalid', reason: 'the cursor does not decode to JSON.' };
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return { kind: 'invalid', reason: 'the cursor must decode to a JSON object.' };
-  }
-  const record = value as Record<string, unknown>;
-  const createdAtRaw = record['createdAt'];
-  const id = record['id'];
-  if (typeof createdAtRaw !== 'string' || !isUuid(id)) {
-    return {
-      kind: 'invalid',
-      reason: 'the cursor must carry a "createdAt" timestamp string and an "id" UUID.',
-    };
-  }
-  // Validated against the exact shape the stores mint, and then passed on as the raw string, at
-  // whatever precision the minting store actually used — never re-rendered through a `Date`.
-  if (!isKeysetTimestamp(createdAtRaw)) {
-    return {
-      kind: 'invalid',
-      reason:
-        'the cursor "createdAt" is not a UTC timestamp of the form YYYY-MM-DDTHH:MM:SS.ffffffZ.',
-    };
-  }
-  return { kind: 'ok', cursor: { createdAt: createdAtRaw, id } };
-}
-
 type RunListAccess =
   | { readonly kind: 'allowed'; readonly grant: Grant }
   | { readonly kind: 'denied'; readonly response: Response };
@@ -786,7 +711,7 @@ type RunListAccess =
  * (`rbac/decide.ts`'s comment on `applyGrant`'s `own` arm) is that the width is returned so the
  * caller can filter the result set itself, which {@link parseRunListQuery} then does.
  */
-function decideRunListAccess(request: Request, principal: Principal): RunListAccess {
+function decideRunListAccess(request: Request, principal: RunPrincipal): RunListAccess {
   const role = parseRole(principal.role);
   if (role === null) {
     return {
@@ -824,148 +749,13 @@ function decideRunListAccess(request: Request, principal: Principal): RunListAcc
   return { kind: 'allowed', grant: decision.facts.grant };
 }
 
-type RunListQueryResult =
-  | { readonly kind: 'ok'; readonly input: ListRunsInput }
-  | {
-      readonly kind: 'rejected';
-      readonly status: number;
-      readonly code: string;
-      readonly reason: string;
-    };
-
-/**
- * Parse and validate every `GET /api/runs` query parameter, including the authorisation rule
- * issue #135 states as a "deliberately not built": the `user` filter exists only for a caller
- * whose grant is `any` (Owner and Admin, under the current `runs` classification — see this
- * file's header).
- * A grant of `own` gets the same filter applied, but as an unconditional fact about the query
- * rather than an offered parameter: {@link decideRunListAccess} already established that this
- * caller may only ever see their own rows, so nothing here trusts the caller to ask correctly.
- */
-function parseRunListQuery(url: URL, grant: Grant, principal: Principal): RunListQueryResult {
-  const params = url.searchParams;
-  const reject = (status: number, code: string, reason: string): RunListQueryResult => ({
-    kind: 'rejected',
-    status,
-    code,
-    reason,
-  });
-
-  const rawLimit = params.get('limit');
-  let limit = DEFAULT_RUN_LIST_LIMIT;
-  if (rawLimit !== null) {
-    if (!/^[1-9]\d{0,3}$/.test(rawLimit)) {
-      return reject(400, 'invalid_limit', 'limit must be a positive integer.');
-    }
-    limit = Number(rawLimit);
-    if (limit > MAX_RUN_LIST_LIMIT) {
-      return reject(400, 'invalid_limit', `limit must not exceed ${String(MAX_RUN_LIST_LIMIT)}.`);
-    }
-  }
-
-  const cursor = decodeRunListCursor(params.get('cursor'));
-  if (cursor.kind === 'invalid') return reject(400, 'invalid_cursor', cursor.reason);
-
-  const filter: {
-    status?: RunStatus;
-    agentId?: string;
-    projectId?: string;
-    provider?: ModelProvider;
-    model?: string;
-    createdFrom?: Date;
-    createdTo?: Date;
-    initiatingUserId?: string;
-    ownerPrincipalId?: string;
-  } = {};
-
-  const status = params.get('status');
-  if (status !== null) {
-    if (!(runStatuses as readonly string[]).includes(status)) {
-      return reject(400, 'invalid_status', `status must be one of: ${runStatuses.join(', ')}.`);
-    }
-    filter.status = status as RunStatus;
-  }
-
-  const agent = params.get('agent');
-  if (agent !== null) {
-    if (!isUuid(agent)) return reject(400, 'invalid_agent', 'agent must be a UUID.');
-    filter.agentId = agent;
-  }
-
-  const project = params.get('project');
-  if (project !== null) {
-    if (!isUuid(project)) return reject(400, 'invalid_project', 'project must be a UUID.');
-    filter.projectId = project;
-  }
-
-  const provider = params.get('provider');
-  if (provider !== null) {
-    if (!(MODEL_PROVIDERS as readonly string[]).includes(provider)) {
-      return reject(
-        400,
-        'invalid_provider',
-        `provider must be one of: ${MODEL_PROVIDERS.join(', ')}.`,
-      );
-    }
-    filter.provider = provider as ModelProvider;
-  }
-
-  const model = params.get('model');
-  if (model !== null) {
-    if (model.trim().length === 0) return reject(400, 'invalid_model', 'model must not be empty.');
-    filter.model = model;
-  }
-
-  const from = params.get('from');
-  if (from !== null) {
-    const createdFrom = parseRunListBound(from);
-    if (createdFrom === null) {
-      return reject(400, 'invalid_from', `from ${RUN_LIST_BOUND_REQUIREMENT}`);
-    }
-    filter.createdFrom = createdFrom;
-  }
-
-  const to = params.get('to');
-  if (to !== null) {
-    const createdTo = parseRunListBound(to);
-    if (createdTo === null) return reject(400, 'invalid_to', `to ${RUN_LIST_BOUND_REQUIREMENT}`);
-    if (filter.createdFrom !== undefined && createdTo.getTime() < filter.createdFrom.getTime()) {
-      return reject(400, 'invalid_date_range', 'to must not be before from.');
-    }
-    filter.createdTo = createdTo;
-  }
-
-  const user = params.get('user');
-  if (user !== null) {
-    if (grant !== 'any') {
-      return reject(
-        403,
-        'user_filter_forbidden',
-        'the "user" filter is available only to a role with workspace-wide run read access.',
-      );
-    }
-    if (!isUuid(user)) return reject(400, 'invalid_user', 'user must be a UUID.');
-    filter.initiatingUserId = user;
-  } else if (grant !== 'any') {
-    // `decide()`'s own words for `own` on a collection route: the caller "owes the result set the
-    // filter" (`rbac/decide.ts`). Paid unconditionally, so a Builder or Viewer request can never
-    // widen past their own runs no matter what else it asks for.
-    filter.ownerPrincipalId = ownerPrincipalIdOf(principal);
-  }
-
-  return {
-    kind: 'ok',
-    input: { filter, limit, cursor: cursor.kind === 'ok' ? cursor.cursor : null },
-  };
-}
-
 /**
  * GET /api/runs — a workspace-scoped, filtered, cursor-paginated run list (issue #135). Every
  * item is rendered by the exact {@link renderRun} `readRun` uses, so list and detail cannot drift.
  */
 export async function listRuns(request: Request): Promise<Response> {
   const env = getRunApi();
-  if (env === null || env.store.listRuns === undefined) return notConfigured();
+  if (env === null) return notConfigured();
   const principal = await env.authenticate(request);
   if (principal === null) return unauthenticated();
 
@@ -1023,7 +813,7 @@ export async function revokeRunTokens(request: Request, runId: string): Promise<
  */
 export async function interruptRunFor(
   env: RunApiEnvironment,
-  principal: Principal,
+  principal: RunPrincipal,
   run: RunRecord,
 ): Promise<'stopped' | 'terminal'> {
   if (isTerminalRunStatus(run.status)) return 'terminal';
@@ -1103,6 +893,8 @@ export function classifyRunOutcome(run: RunRecord | null, runId: string): Stream
         status: 'cancelled',
         message: run.error ?? `run ${runId} was cancelled`,
       };
+    case 'awaiting_approval':
+      return { kind: 'paused' };
     case 'queued':
     case 'running':
       return {
@@ -1195,7 +987,11 @@ export async function streamRunEvents(request: Request, runId: string): Promise<
   return sseStreamResponse({
     // ENG-03: the stream serves one vocabulary. A row recorded before it is upgraded here, on read,
     // into the neutral `agent.*` frames — never migrated in place. `agent-frames.ts` says why.
-    source: upgradeEventStream(handle.events, resumedWithin),
+    // ADR-0145 D4: a session-scoped token is a visitor, and is never served operator-only fields.
+    source:
+      principal.scope?.kind === 'session'
+        ? forVisitor(upgradeEventStream(handle.events, resumedWithin))
+        : upgradeEventStream(handle.events, resumedWithin),
     prelude,
     signal: request.signal,
     // Re-read the record after the source is exhausted rather than closing over the one fetched

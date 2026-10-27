@@ -5,6 +5,8 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { DatabaseRoot } from '@agent-workspace/core/db';
+
 import {
   DELETE as deleteRoute,
   GET as getRoute,
@@ -12,16 +14,14 @@ import {
 } from '../../app/api/connectors/[id]/route';
 import { POST as testSavedRoute } from '../../app/api/connectors/[id]/test-connection/route';
 import { GET as listRoute, POST as createRoute } from '../../app/api/connectors/route';
+import { installConnectorsApi } from '../composition/services';
 import { createInMemoryConnectorsStoreProvider } from './memory-store';
-import {
-  clearConnectorsRuntime,
-  configureConnectorsRuntime,
-  type WorkspaceResolution,
-} from './runtime';
+import type { WorkspaceResolution } from './runtime';
 import type { ConnectorResource } from './contract';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
+import { installTestDomains } from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
@@ -36,8 +36,7 @@ const connectorAudits: Array<{ subjectId: string; subjectLabel: string }> = [];
 let memoryConnectors = createInMemoryConnectorsStoreProvider();
 
 afterEach(() => {
-  clearConnectorsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 function useMemoryRuntime(
@@ -52,37 +51,44 @@ function useMemoryRuntime(
 ): void {
   connectorAudits.length = 0;
   memoryConnectors = createInMemoryConnectorsStoreProvider();
-  configureConnectorsRuntime({
-    connectors: memoryConnectors,
-    recordAudit: (_request, event) => {
-      connectorAudits.push(event);
-      return Promise.resolve();
-    },
-    // issue #117: every test request is "authenticated" enough to create a connector.
-    identifyActor,
-    resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      if (workspaceId === null) {
-        return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-      }
-      return Promise.resolve({ kind: 'workspace', workspaceId });
+  installTestDomains({
+    connectors: {
+      kind: 'serving',
+      runtime: {
+        connectors: memoryConnectors,
+        recordAudit: (_request, event) => {
+          connectorAudits.push(event);
+          return Promise.resolve();
+        },
+        // issue #117: every test request is "authenticated" enough to create a connector.
+        identifyActor,
+        resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          if (workspaceId === null) {
+            return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
+          }
+          return Promise.resolve({ kind: 'workspace', workspaceId });
+        },
+      },
     },
   });
-  configureRbacRuntime({
-    directory: createMemoryDirectory(),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: request.headers.get(PRINCIPAL_HEADER) ?? CREATOR_PRINCIPAL,
-              apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-              workspaceId,
-              role: parseTestRole(request.headers.get(ROLE_HEADER)),
-              label: 'Connector route test',
-            }),
-      );
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory(),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: request.headers.get(PRINCIPAL_HEADER) ?? CREATOR_PRINCIPAL,
+                apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                workspaceId,
+                role: parseTestRole(request.headers.get(ROLE_HEADER)),
+                label: 'Connector route test',
+              }),
+        );
+      },
     },
   });
 }
@@ -154,14 +160,35 @@ async function createIn(workspace: string, body: string = stdioBody()): Promise<
 
 describe('the connector routes serve real responses once a runtime is wired', () => {
   it('answers 503, not 401 and not an empty 200, while nothing is wired', async () => {
-    // The role gate (issue #388) is wired, so this is the connectors runtime's own answer.
+    // The role gate (issue #388) lives in the same context, so with none installed it answers
+    // first; the connectors runtime's own answer is the `unavailable` case below.
     useMemoryRuntime();
-    clearConnectorsRuntime();
+    clearApplicationContext();
+    const response = await listRoute(request('GET', '/api/connectors', { workspace: WORKSPACE_A }));
+    expect(response.status).toBe(503);
+    expect(await bodyOf(response)).toMatchObject({
+      error: { code: 'rbac_runtime_not_configured' },
+    });
+  });
+
+  it('answers the same 503 while connectors are unavailable', async () => {
+    useMemoryRuntime();
+    installTestDomains({ connectors: { kind: 'unavailable' } });
     const response = await listRoute(request('GET', '/api/connectors', { workspace: WORKSPACE_A }));
     expect(response.status).toBe(503);
     expect(await bodyOf(response)).toMatchObject({
       error: { code: 'connectors_runtime_not_configured' },
     });
+  });
+
+  it('builds no connectors runtime without the encrypted secrets service', async () => {
+    const connectors = await installConnectorsApi(
+      () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_A }),
+      () => Promise.resolve(null),
+      {} as unknown as DatabaseRoot,
+      null,
+    );
+    expect(connectors).toEqual({ kind: 'unavailable' });
   });
 
   it('answers 401 for a request with no workspace, once wired', async () => {
@@ -881,5 +908,69 @@ describe('the tool connector kinds through the routes (ADR-0113 C15)', () => {
       }),
     );
     expect(openapi.status, await openapi.clone().text()).toBe(201);
+  });
+});
+
+describe('the aw-control connector name is reserved for the platform (#1846)', () => {
+  const postgresBody = (name: string): string =>
+    JSON.stringify({
+      kind: 'postgres',
+      name,
+      credential: 'postgres://reader:pw@93.184.216.34:5432/shop',
+      tables: ['public.orders'],
+      readOnly: true,
+    });
+
+  async function expectConflict(response: Response): Promise<void> {
+    expect(response.status).toBe(409);
+    expect(((await bodyOf(response)) as { error: { code: string } }).error.code).toBe(
+      'connector_name_conflict',
+    );
+  }
+
+  async function connectorNames(): Promise<string[]> {
+    const list = await listRoute(request('GET', '/api/connectors', { workspace: WORKSPACE_A }));
+    return ((await bodyOf(list)) as { connectors: Array<{ name: string }> }).connectors.map(
+      (connector) => connector.name,
+    );
+  }
+
+  it('refuses to create an mcp or a tool connector with that name, and stores nothing', async () => {
+    useMemoryRuntime();
+    for (const name of ['aw-control', 'AW-Control', ' aw-control ']) {
+      for (const body of [stdioBody({ name }), postgresBody(name)]) {
+        await expectConflict(
+          await createRoute(request('POST', '/api/connectors', { workspace: WORKSPACE_A, body })),
+        );
+      }
+    }
+    expect(await connectorNames()).toEqual([]);
+  });
+
+  it('refuses to rename an mcp or a tool connector to that name', async () => {
+    useMemoryRuntime();
+    const mcp = await createIn(WORKSPACE_A, stdioBody());
+    const tool = await createIn(WORKSPACE_A, postgresBody('shop'));
+    for (const [id, body] of [
+      [mcp.id, { name: 'aw-control' }],
+      [tool.id, { name: 'aw-control' }],
+      [tool.id, JSON.parse(postgresBody('aw-control')) as unknown],
+    ] as const) {
+      const response = await rotateRoute(
+        request('PATCH', `/api/connectors/${id}`, {
+          workspace: WORKSPACE_A,
+          body: JSON.stringify(body),
+        }),
+        idContext(id),
+      );
+      await expectConflict(response);
+    }
+    expect((await connectorNames()).sort()).toEqual(['Filesystem', 'shop']);
+  });
+
+  it('still creates aw-dev-tools, which aw dev and aw push register', async () => {
+    useMemoryRuntime();
+    const created = await createIn(WORKSPACE_A, stdioBody({ name: 'aw-dev-tools' }));
+    expect(created.name).toBe('aw-dev-tools');
   });
 });

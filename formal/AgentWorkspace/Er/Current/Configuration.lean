@@ -3,9 +3,10 @@ import AgentWorkspace.Concepts.ModelConnection
 import AgentWorkspace.Concepts.RuntimeProfile
 
 /-!
-# Today's configuration tables: `model_connections`, `runtime_profiles`, `secrets`
+# Today's configuration tables: `model_connections`, `runtime_profiles`, `secrets`,
+`storage_connections`
 
-The three tables of the configuration cluster are rows of `Er.Core.catalogue`; this module adds
+The four tables of the configuration cluster are rows of `Er.Core.catalogue`; this module adds
 what the shared foundation leaves to the owning cluster:
 
 * **the foreign keys that touch the cluster**, outbound and inbound, by name (`clusterForeignKeys`);
@@ -33,7 +34,8 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts
 /-- The tables of the configuration cluster. -/
 @[aw_spec (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
-def clusterTables : List TableName := [.modelConnections, .runtimeProfiles, .secrets]
+def clusterTables : List TableName :=
+  [.modelConnections, .runtimeProfiles, .secrets, .storageConnections]
 
 /-- The foreign key named `n` of table `t` in today's schema (a default key if there is none). -/
 def fkOf (t : TableName) (n : String) : ForeignKey := ((catalogue t).foreignKey? n).getD default
@@ -64,7 +66,11 @@ def clusterForeignKeys : List (TableName × String × TableName) :=
    (.workspaces, "workspaces_default_model_connection_id_model_connections_id_fk",
      .modelConnections),
    (.workspaces, "workspaces_default_model_connection_workspace_fk", .modelConnections),
-   (.mcpServers, "mcp_servers_credential_secret_workspace_fk", .secrets)]
+   (.mcpServers, "mcp_servers_credential_secret_workspace_fk", .secrets),
+   (.storageConnections, "storage_connections_workspace_id_workspaces_id_fk", .workspaces),
+   (.agentStorageGrants, "agent_storage_grants_connection_workspace_fk", .storageConnections),
+   (.agentVersionStorageGrants, "agent_version_storage_grants_connection_workspace_fk",
+     .storageConnections)]
 
 /-- `clusterForeignKeys` is exactly the set of today's foreign keys that start or end in a cluster
 table: every listed key exists with the listed target, and no other key touches the cluster. -/
@@ -287,7 +293,7 @@ def run : Row :=
     ("model_connection_id", "c1"), ("provider", "anthropic"), ("input_tokens", "0"),
     ("output_tokens", "0"), ("cache_read_input_tokens", "0"),
     ("cache_creation_input_tokens", "0"), ("cost_usd", "0"), ("cost_currency", "USD"),
-    ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}"),
+    ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}"), ("file_grants", "{}"), ("approved_tool_calls", "[]"), ("consumed_tool_calls", "[]"),
     ("created_at", "t0"),
     ("updated_at", "t0")]⟩
 
@@ -298,6 +304,12 @@ def connector : Row :=
     ("url", "https://mcp.example.com"), ("auth_type", "bearer"), ("credential_secret_id", "s2"),
     ("enabled", "true"), ("owner_principal_id", "p1"), ("created_at", "t0"),
     ("updated_at", "t0")]⟩
+
+/-- The storage connection of the first workspace: a read-only bucket (the storage design, §05). -/
+def storageConnection : Row :=
+  ⟨[("id", "sc1"), ("workspace_id", "w1"), ("name", "archive"), ("provider", "s3"),
+    ("url", "s3://archive/"), ("allowed_prefixes", "{}"), ("write_allowed", "false"),
+    ("created_at", "t0"), ("updated_at", "t0")]⟩
 
 /-- The witness state. -/
 def state : State
@@ -326,6 +338,7 @@ def state : State
        ("status", "active"), ("created_at", "t0"), ("updated_at", "t0")]⟩]
   | .runs => [run]
   | .mcpServers => [connector]
+  | .storageConnections => [storageConnection]
   | _ => []
 
 end Witness

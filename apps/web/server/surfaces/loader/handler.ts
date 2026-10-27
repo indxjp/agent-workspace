@@ -18,7 +18,7 @@
  */
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 
-import { toResponse } from '../../rbac/http';
+import { noStoreResultResponse } from '../../http/result';
 import type { SurfaceConditionEnvironment } from '../public/conditions';
 import { readSurfacePage, surfaceModeOfQuery, surfaceNotFound } from '../public/handlers';
 import { renderWidgetLoader, type WidgetLook } from './render';
@@ -55,7 +55,7 @@ export async function serveWidgetLoader(
 ): Promise<Response> {
   const mode = surfaceModeOfQuery(new URL(request.url).searchParams.get('environment'));
   const page = await readSurfacePage(name, request.headers, env, mode);
-  if (page === null) return toResponse(surfaceNotFound());
+  if (page === null) return noStoreResultResponse(surfaceNotFound());
   const body = renderWidgetLoader(
     page.branch === 'loopback' ? requestedOrigin(request) : null,
     page.surfaceName,

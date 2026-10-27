@@ -7,17 +7,20 @@ import AgentWorkspace.Concepts.Agent
 /-!
 # Today's catalog tables
 
-The catalog cluster's fourteen tables, as `Er.Core` rows: the four catalogued resources and their
-owner (`agents`, `skills`, `files`, `mcp_servers`), the three assignment tables (`agent_files`,
-`agent_skills`, `agent_mcp_servers`), the grant table (`agent_grants`), an agent's version history
+The catalog cluster's eighteen tables, as `Er.Core` rows: the four catalogued resources and their
+owner (`agents`, `skills`, `files`, `mcp_servers`), the text extracted from a file for search
+(`file_texts`, ADR-0147), a skill's published, immutable revisions
+(`skill_revisions`, SDK-19), the four assignment tables (`agent_files`,
+`agent_skills`, `agent_storage_grants`, `agent_mcp_servers`), the grant table (`agent_grants`), an agent's version history
 and the pointer that says which version is live in an environment (`agent_versions`,
-`agent_version_pointers`, #442), every move of that pointer (`agent_pointer_moves`, #615), the
+`agent_version_pointers`, #442), the storage folders each version grants
+(`agent_version_storage_grants`, #1694), every move of that pointer (`agent_pointer_moves`, #615), the
 server-scored evaluations of a version (`agent_version_evaluations`, #618), and the two project link tables (`project_files`,
 `project_mcp_servers`). Their columns, keys and closed-set checks are
 `Er.Core.catalogue`'s (transcribed from the Drizzle schema and pinned to the latest snapshot there);
 this module adds what `Er.Core` leaves to the owning cluster:
 
-* the semantics of the 23 non-closed-set checks on these tables (`clusterCheckHolds`), refining
+* the semantics of the 29 non-closed-set checks on these tables (`clusterCheckHolds`), refining
   `Er.Core.otherCheckHolds`, and `consistent`, the states PostgreSQL can hold once they are
   enforced too;
 * the encoding of the typed concepts (`Concepts/*`) as rows, so that a concept's invariant and
@@ -30,13 +33,14 @@ namespace AgentWorkspace.Er.Current.Catalog
 
 open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts
 
-/-- The fourteen tables of the catalog cluster, in barrel order. -/
+/-- The eighteen tables of the catalog cluster, in barrel order. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 def tables : List TableName :=
-  [.agentFiles, .agentGrants, .agentMcpServers, .agentSkills, .agentPointerMoves,
-    .agentVersionEvaluations, .agentVersionPointers,
-    .agentVersions, .agents, .files, .mcpServers, .projectFiles, .projectMcpServers, .skills]
+  [.agentFiles, .agentGrants, .agentMcpServers, .agentSkills, .agentStorageGrants,
+    .agentVersionStorageGrants, .agentPointerMoves, .agentVersionEvaluations, .agentVersionPointers,
+    .agentVersions, .agents, .fileTexts, .files, .mcpServers, .projectFiles, .projectMcpServers,
+    .skillRevisions, .skills]
 
 /-- The catalogued resources a principal owns (`owner_principal_id`). -/
 def resourceTables : List TableName := [.agents, .skills, .files, .mcpServers]
@@ -68,20 +72,30 @@ def kindMayBe (r : Row) (v : String) : Bool := (r.get "kind").all (· == v)
 
 /-- The semantics of every check on the cluster's tables that is not a closed set, read from the
 check bodies in
-`packages/core/src/db/schema/{agent-versions,agent-version-evaluations,agents,skills,files,mcp-servers}.ts`. A check
+`packages/core/src/db/schema/{agent-versions,agent-version-evaluations,agents,skill-revisions,skills,files,file-texts,mcp-servers}.ts`. A check
 passes unless it is false, so a comparison with a `NULL` column passes (SQL's three-valued
 reading), and a disjunction passes when one of its disjuncts is not false. That is how the MCP
 checks of `mcp_servers`, guarded by `kind <> 'mcp' or …`, pass on a tool connector's `NULL`
 transport. The other guard columns are `NOT NULL`, so their `NULL` case only arises in states
 `consistent` already refuses. `size_bytes` is compared as the text PostgreSQL renders a `bigint`
-in, a version's `number` and an evaluation's `passed` and `total` as the text of an `integer`
-(`positiveNumeral`, `numeralValue`), and `tool_config` as the
+in, a version's `number`, an evaluation's `passed` and `total` and a skill revision's `number` and
+`file_count` and a file text's `page` as the text of an `integer` (`positiveNumeral`, `numeralValue`; `x >= 1` on an
+`integer` is `x > 0`; `ordinal` and `source_size_bytes` are non-negative when they do not start with `-`),
+a passage's `text` by its number of characters, a file's `sha256` as matching
+`^[0-9a-f]{64}$` exactly when it is 64 characters, each a digit or `a`–`f`, a file's side path as
+one whose first segment is `%aside`, and `tool_config` as the
 text of a `jsonb` value (`Connector.jsonbObject`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/agent-versions.ts#agent_versions_number_positive")
   (ts := "packages/core/src/db/schema/agent-version-evaluations.ts#agent_version_evaluations_counts")
   (ts := "packages/core/src/db/schema/agents.ts#agents")
+  (ts := "packages/core/src/db/schema/skill-revisions.ts#skill_revisions_number_positive")
+  (ts := "packages/core/src/db/schema/skill-revisions.ts#skill_revisions_file_count_positive")
   (ts := "packages/core/src/db/schema/skills.ts#skills")
   (ts := "packages/core/src/db/schema/files.ts#files")
+  (ts := "packages/core/src/db/schema/file-texts.ts#file_texts_ordinal_non_negative")
+  (ts := "packages/core/src/db/schema/file-texts.ts#file_texts_page_positive")
+  (ts := "packages/core/src/db/schema/file-texts.ts#file_texts_text_length")
+  (ts := "packages/core/src/db/schema/file-texts.ts#file_texts_source_size_non_negative")
   (ts := "packages/core/src/db/schema/mcp-servers.ts#mcpServers")]
 def clusterCheckHolds (n : String) (r : Row) : Bool :=
   if n == "agent_versions_number_positive" then
@@ -94,8 +108,24 @@ def clusterCheckHolds (n : String) (r : Row) : Bool :=
         | some p, some t => numeralValue p ≤ numeralValue t
         | _, _ => true)
   else if n == "agents_name_not_blank" then rowNotBlank (r.get "name")
+  -- Both conjuncts compare `is null` tests, which are never `NULL`: the version and the run are
+  -- set together, and a creator id needs them.
+  else if n == "agents_created_by_agent_lineage_check" then
+    (r.get "created_by_agent_version").isNone == (r.get "created_by_run_id").isNone &&
+      ((r.get "created_by_agent_id").isNone || (r.get "created_by_agent_version").isSome)
+  else if n == "skill_revisions_number_positive" then (r.get "number").all positiveNumeral
+  else if n == "skill_revisions_file_count_positive" then
+    (r.get "file_count").all positiveNumeral
+  else if n == "file_texts_ordinal_non_negative" then
+    (r.get "ordinal").all fun s => s.toList.head? != some '-'
+  else if n == "file_texts_page_positive" then (r.get "page").all positiveNumeral
+  else if n == "file_texts_text_length" then (r.get "text").all fun t => t.toList.length ≤ 20000
+  else if n == "file_texts_source_size_non_negative" then
+    (r.get "source_size_bytes").all fun s => s.toList.head? != some '-'
   else if n == "skills_name_shape" then (r.get "name").all Skill.nameShape
   else if n == "skills_skill_md_not_blank" then rowNotBlank (r.get "skill_md")
+  else if n == "files_folder_is_ready" then
+    (r.get "kind").all fun k => k != "folder" || (r.get "status").all (· == "ready")
   else if n == "files_path_shape" then (r.get "path").all File.pathShape
   else if n == "files_path_no_dot_segments" then (r.get "path").all File.noDotSegments
   else if n == "files_storage_key_iff_file" then
@@ -103,6 +133,14 @@ def clusterCheckHolds (n : String) (r : Row) : Bool :=
   else if n == "files_storage_key_not_blank" then rowNotBlank (r.get "storage_key")
   else if n == "files_size_non_negative" then
     (r.get "size_bytes").all fun s => s.toList.head? != some '-'
+  -- `split_part(path, '/', 1)` is the path up to its first `/`, or all of it.
+  else if n == "files_side_path_target" then
+    (r.get "path").all (fun p =>
+      (r.get "target_path").isSome == (p.toList.takeWhile (· != '/') == "%aside".toList)) &&
+      ((r.get "target_path").isNone || (r.get "status").all (· != "ready"))
+  else if n == "files_sha256_shape" then
+    (r.get "sha256").all fun h =>
+      h.length == 64 && h.all fun ch => ('0' ≤ ch && ch ≤ '9') || ('a' ≤ ch && ch ≤ 'f')
   else if n == "files_folder_has_no_content" then
     (r.get "kind").all fun k =>
       k != "folder" || (r.get "size_bytes" == some "0" && (r.get "content_type").isNone)
@@ -133,6 +171,10 @@ def clusterCheckHolds (n : String) (r : Row) : Bool :=
     kindIsNot r "mcp" || (r.get "auth_type").all fun a =>
       ["api-key", "bearer", "oauth"].contains a == (r.get "credential_secret_id").isSome
   else if n == "mcp_servers_name_not_blank" then rowNotBlank (r.get "name")
+  else if n == "mcp_servers_identity_transport" then
+    (r.get "identity_secret_name").isNone ||
+      (rowNotBlank (r.get "identity_secret_name") && (r.get "kind").all fun k =>
+        k == "openapi" || (k == "mcp" && (r.get "transport").all ["http", "sse"].contains))
   else true
 
 /-- The SQL body of each check `clusterCheckHolds` gives a meaning to, as `drizzle-kit` rendered it in
@@ -146,8 +188,17 @@ def checkSql : List (String × String) :=
     ("agent_version_evaluations_counts",
       "\"agent_version_evaluations\".\"total\" > 0 and \"agent_version_evaluations\".\"passed\" >= 0 and \"agent_version_evaluations\".\"passed\" <= \"agent_version_evaluations\".\"total\""),
     ("agents_name_not_blank", "length(btrim(\"agents\".\"name\")) > 0"),
+    ("agents_created_by_agent_lineage_check",
+      "(\"agents\".\"created_by_agent_version\" is null) = (\"agents\".\"created_by_run_id\" is null) and (\"agents\".\"created_by_agent_id\" is null or \"agents\".\"created_by_agent_version\" is not null)"),
+    ("skill_revisions_number_positive", "\"skill_revisions\".\"number\" >= 1"),
+    ("skill_revisions_file_count_positive", "\"skill_revisions\".\"file_count\" >= 1"),
+    ("file_texts_ordinal_non_negative", "\"file_texts\".\"ordinal\" >= 0"),
+    ("file_texts_page_positive", "\"file_texts\".\"page\" is null or \"file_texts\".\"page\" >= 1"),
+    ("file_texts_text_length", "char_length(\"file_texts\".\"text\") <= 20000"),
+    ("file_texts_source_size_non_negative", "\"file_texts\".\"source_size_bytes\" >= 0"),
     ("skills_name_shape", "\"skills\".\"name\" ~ '^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$'"),
     ("skills_skill_md_not_blank", "length(btrim(\"skills\".\"skill_md\")) > 0"),
+    ("files_folder_is_ready", "\"files\".\"kind\" <> 'folder' or \"files\".\"status\" = 'ready'"),
     ("files_path_shape", "\"files\".\"path\" ~ '^[^/[:cntrl:]]+(/[^/[:cntrl:]]+)*$'"),
     ("files_path_no_dot_segments", "\"files\".\"path\" !~ '(^|/)[.][.]?(/|$)'"),
     ("files_storage_key_iff_file",
@@ -155,6 +206,10 @@ def checkSql : List (String × String) :=
     ("files_storage_key_not_blank",
       "\"files\".\"storage_key\" is null or length(btrim(\"files\".\"storage_key\")) > 0"),
     ("files_size_non_negative", "\"files\".\"size_bytes\" >= 0"),
+    ("files_side_path_target",
+      "(\"files\".\"target_path\" is not null) = (split_part(\"files\".\"path\", '/', 1) = '%aside') and (\"files\".\"target_path\" is null or \"files\".\"status\" <> 'ready')"),
+    ("files_sha256_shape",
+      "\"files\".\"sha256\" is null or \"files\".\"sha256\" ~ '^[0-9a-f]{64}$'"),
     ("files_folder_has_no_content",
       "\"files\".\"kind\" <> 'folder' or (\"files\".\"size_bytes\" = 0 and \"files\".\"content_type\" is null)"),
     ("mcp_servers_transport_by_kind",
@@ -179,17 +234,26 @@ def checkSql : List (String × String) :=
       "\"mcp_servers\".\"url\" is null or \"mcp_servers\".\"url\" ~ '^https?://'"),
     ("mcp_servers_credential_required",
       "\"mcp_servers\".\"kind\" <> 'mcp' or ((\"mcp_servers\".\"auth_type\" in ('api-key', 'bearer', 'oauth')) = (\"mcp_servers\".\"credential_secret_id\" is not null))"),
-    ("mcp_servers_name_not_blank", "length(btrim(\"mcp_servers\".\"name\")) > 0")]
+    ("mcp_servers_name_not_blank", "length(btrim(\"mcp_servers\".\"name\")) > 0"),
+    ("mcp_servers_identity_transport",
+      "\"mcp_servers\".\"identity_secret_name\" is null or (length(btrim(\"mcp_servers\".\"identity_secret_name\")) > 0 and (\"mcp_servers\".\"kind\" = 'openapi' or (\"mcp_servers\".\"kind\" = 'mcp' and \"mcp_servers\".\"transport\" in ('http', 'sse'))))")]
 
 /-- The checks `clusterCheckHolds` gives a meaning to, table by table. -/
 def modelledChecks : List (TableName × String) :=
   [(.agentVersions, "agent_versions_number_positive"),
     (.agentVersionEvaluations, "agent_version_evaluations_counts"),
-    (.agents, "agents_name_not_blank"),
+    (.agents, "agents_name_not_blank"), (.agents, "agents_created_by_agent_lineage_check"),
+    (.skillRevisions, "skill_revisions_number_positive"),
+    (.skillRevisions, "skill_revisions_file_count_positive"),
+    (.fileTexts, "file_texts_ordinal_non_negative"), (.fileTexts, "file_texts_page_positive"),
+    (.fileTexts, "file_texts_text_length"), (.fileTexts, "file_texts_source_size_non_negative"),
     (.skills, "skills_name_shape"), (.skills, "skills_skill_md_not_blank"),
+    (.files, "files_folder_is_ready"),
     (.files, "files_path_shape"), (.files, "files_path_no_dot_segments"),
     (.files, "files_storage_key_iff_file"), (.files, "files_storage_key_not_blank"),
-    (.files, "files_size_non_negative"), (.files, "files_folder_has_no_content"),
+    (.files, "files_size_non_negative"), (.files, "files_side_path_target"),
+    (.files, "files_sha256_shape"),
+    (.files, "files_folder_has_no_content"),
     (.mcpServers, "mcp_servers_transport_by_kind"), (.mcpServers, "mcp_servers_tool_kind_fields"),
     (.mcpServers, "mcp_servers_tool_config_by_kind"),
     (.mcpServers, "mcp_servers_tool_config_is_object"),
@@ -197,7 +261,8 @@ def modelledChecks : List (TableName × String) :=
     (.mcpServers, "mcp_servers_stdio_has_command"), (.mcpServers, "mcp_servers_remote_has_url"),
     (.mcpServers, "mcp_servers_args_are_stdio_only"),
     (.mcpServers, "mcp_servers_command_not_blank"), (.mcpServers, "mcp_servers_url_shape"),
-    (.mcpServers, "mcp_servers_credential_required"), (.mcpServers, "mcp_servers_name_not_blank")]
+    (.mcpServers, "mcp_servers_credential_required"), (.mcpServers, "mcp_servers_name_not_blank"),
+    (.mcpServers, "mcp_servers_identity_transport")]
 
 /-- The non-closed-set checks of the cluster's tables hold on every row. -/
 def clusterChecksHold (st : State) : Bool :=
@@ -215,7 +280,8 @@ def consistent (st : State) : Bool := Er.Core.consistent catalogue st && cluster
 or a total unique key, in the same order), so a child row names at most one parent. -/
 def targetIsExactKey (S : Schema) (fk : ForeignKey) : Bool :=
   (S fk.refTable).primaryKey == fk.refColumns ||
-    (S fk.refTable).uniques.any fun u => u.partialNullColumns.isEmpty && u.columns == fk.refColumns
+    (S fk.refTable).uniques.any fun u =>
+      u.partialNullColumns.isEmpty && u.partialNotNullColumns.isEmpty && u.columns == fk.refColumns
 
 /-- Every foreign key of the cluster's tables, with its table. -/
 def clusterForeignKeys : List (TableName × ForeignKey) :=
@@ -314,10 +380,11 @@ def row (cells : List (String × String)) : Row := ⟨cells⟩
 
 /-- Two workspaces, two users; `u1` owns `w1` and `w2`, `u2` is a Viewer of `w1`; each membership
 has its principal; in `w1` a secret, a model connection, a runtime profile, a project, an agent
-that uses all three and has one version pointed at the `local` environment (one recorded move), two files (a folder and a file in it), a skill, a remote connector
-authenticated by the secret and a `stdio` connector; the agent is assigned the file, the skill and
-the remote connector, and granted to `u2`; the project links the file and the connector; `w2` has
-an agent of its own. -/
+that uses all three and has one version pointed at the `local` environment (one recorded move), two files (a folder and a file in it), a skill with one published revision, a remote connector
+authenticated by the secret and a `stdio` connector; the agent is assigned the file, the skill
+(pinned to its revision), the remote connector and a folder of a storage connection, which its
+version grants too, and granted to `u2`; the project links the file and the connector; the agent
+created a second agent in `w1` (its lineage set); `w2` has an agent of its own. -/
 @[aw_spec (doc := "docs/sdk/site/concepts/ownership-and-sharing.mdx#catalog-assignment-grant")]
 def state : State
   | .workspaces =>
@@ -353,6 +420,10 @@ def state : State
   | .modelConnections =>
     [row [("id", "mc1"), ("workspace_id", "w1"), ("name", "default"), ("provider", "anthropic"),
         ("config", "{}"), ("created_at", "t0"), ("updated_at", "t0")]]
+  | .storageConnections =>
+    [row [("id", "sc1"), ("workspace_id", "w1"), ("name", "archive"), ("provider", "s3"),
+        ("url", "s3://archive/"), ("allowed_prefixes", "{}"), ("write_allowed", "false"),
+        ("created_at", "t0"), ("updated_at", "t0")]]
   | .runtimeProfiles =>
     [row [("id", "rp1"), ("workspace_id", "w1"), ("name", "standard"), ("driver", "docker"),
         ("network_policy", "restricted"), ("filesystem", "read-write"), ("created_at", "t0"),
@@ -369,15 +440,24 @@ def state : State
         ("updated_at", "t0")],
      row [("id", "a2"), ("workspace_id", "w2"), ("name", "General"), ("instructions", ""),
         ("permissions", "{}"), ("owner_principal_id", "p3"), ("created_at", "t0"),
+        ("updated_at", "t0")],
+     row [("id", "a3"), ("workspace_id", "w1"), ("name", "Drafted"), ("instructions", ""),
+        ("permissions", "{}"), ("owner_principal_id", "p1"), ("created_by_agent_id", "a1"),
+        ("created_by_agent_version", "1"), ("created_by_run_id", "run1"), ("created_at", "t0"),
         ("updated_at", "t0")]]
   | .files =>
     [row [("id", "f1"), ("workspace_id", "w1"), ("path", "contracts"), ("kind", "folder"),
-        ("size_bytes", "0"), ("created_by", "u1"), ("owner_principal_id", "p1"),
-        ("created_at", "t0"), ("updated_at", "t0")],
+        ("size_bytes", "0"), ("created_by", "u1"), ("status", "ready"), ("area", "files"),
+        ("owner_principal_id", "p1"), ("created_at", "t0"), ("updated_at", "t0")],
      row [("id", "f2"), ("workspace_id", "w1"), ("path", "contracts/agreement.pdf"),
         ("kind", "file"), ("storage_key", "files/w1/contracts/agreement.pdf"),
         ("size_bytes", "1024"), ("content_type", "application/pdf"), ("created_by", "u1"),
-        ("owner_principal_id", "p1"), ("created_at", "t0"), ("updated_at", "t0")]]
+        ("status", "ready"), ("area", "files"), ("owner_principal_id", "p1"),
+        ("created_at", "t0"), ("updated_at", "t0")]]
+  | .fileTexts =>
+    [row [("id", "ft1"), ("workspace_id", "w1"), ("file_id", "f2"), ("ordinal", "0"),
+        ("page", "1"), ("text", "Agreement"), ("tsv", "'agreement':1"), ("source_size_bytes", "1024"),
+        ("source_updated_at", "t0"), ("created_at", "t0")]]
   | .skills =>
     [row [("id", "k1"), ("workspace_id", "w1"), ("name", "release-notes"),
         ("skill_md", "---\nname: release-notes\n---\nWrite notes."), ("enabled", "true"),
@@ -398,7 +478,13 @@ def state : State
         ("access", "read-write"), ("created_at", "t0"), ("updated_at", "t0")]]
   | .agentSkills =>
     [row [("id", "as1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("skill_id", "k1"),
-        ("created_at", "t0")]]
+        ("revision", "1"), ("created_at", "t0")]]
+  | .agentStorageGrants =>
+    [row [("id", "asg1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("connection_id", "sc1"),
+        ("prefix", "reports/"), ("access", "read"), ("created_at", "t0")]]
+  | .skillRevisions =>
+    [row [("id", "kr1"), ("workspace_id", "w1"), ("skill_id", "k1"), ("number", "1"),
+        ("file_count", "1"), ("pending", "false"), ("created_at", "t0")]]
   | .agentMcpServers =>
     [row [("id", "am1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("mcp_server_id", "c1"),
         ("created_at", "t0")]]
@@ -409,6 +495,10 @@ def state : State
     [row [("id", "av1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("number", "1"),
         ("summary", "First version"), ("via", "ui"), ("body", "{}"),
         ("created_by_principal_id", "p1"), ("created_at", "t0")]]
+  | .agentVersionStorageGrants =>
+    [row [("id", "avsg1"), ("workspace_id", "w1"), ("version_id", "av1"),
+        ("connection_id", "sc1"), ("prefix", "reports/"), ("access", "read"),
+        ("created_at", "t0")]]
   | .agentPointerMoves =>
     [row [("id", "apm1"), ("workspace_id", "w1"), ("agent_id", "a1"), ("environment", "local"),
         ("version_id", "av1"), ("moved_by", "p1"), ("moved_at", "t0"), ("reason", "set")]]

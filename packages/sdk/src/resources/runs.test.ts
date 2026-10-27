@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { z } from 'zod';
 
-import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
+import {
+  ApiProblemError,
+  ContractViolationError,
+  InvalidArgumentError,
+  TransportError,
+} from '../errors.js';
+import { toAgentEvent } from '../events/agent-event.js';
 import { HttpClient } from '../http.js';
 import {
   drain,
@@ -16,13 +23,14 @@ import { RunsClient, runFailure } from './runs.js';
 const AGENT = '11111111-1111-4111-8111-111111111111';
 const RUN = '33333333-3333-4333-8333-333333333333';
 
-const run = (status: string) => ({
+const run = (status: string, output: unknown = null) => ({
   id: RUN,
   workspaceId: '44444444-4444-4444-8444-444444444444',
   agentId: AGENT,
   projectId: null,
   initiatingUserId: null,
   sessionId: '55555555-5555-4555-8555-555555555555',
+  agentVersion: null,
   status,
   createdAt: '2026-09-21T10:00:00.000Z',
   startedAt: null,
@@ -43,6 +51,9 @@ const run = (status: string) => ({
   },
   cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
   error: null,
+  output,
+  pendingApproval:
+    status === 'awaiting_approval' ? { toolName: 'send_email', canonicalCall: '{}' } : null,
   accountingState: 'pending',
   accountingError: null,
 });
@@ -89,6 +100,135 @@ describe('RunsClient.start', () => {
     await runs.start(AGENT, { prompt: 'Hello' });
     expect(calls[0]?.json).toMatchObject({ version: 3 });
     expect(calls[1]?.json).not.toHaveProperty('version');
+  });
+
+  it('sends the subject a run acts for, and only when given (ADR-0142 D2)', async () => {
+    const { runs, calls } = client(() =>
+      json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` }),
+    );
+    await runs.start(AGENT, { prompt: 'Hello', subject: 'customer-17' });
+    await runs.start(AGENT, { prompt: 'Hello' });
+    expect(calls[0]?.json).toMatchObject({ subject: 'customer-17' });
+    expect(calls[1]?.json).not.toHaveProperty('subject');
+  });
+
+  it('sends the file scope a run is narrowed to, and only when given (issue #1539)', async () => {
+    const { runs, calls } = client(() =>
+      json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` }),
+    );
+    await runs.start(AGENT, { prompt: 'Hello', fileScope: ['docs/alice', 'docs/b.md'] });
+    await runs.start(AGENT, { prompt: 'Hello' });
+    expect(calls[0]?.json).toMatchObject({ fileScope: ['docs/alice', 'docs/b.md'] });
+    expect(calls[1]?.json).not.toHaveProperty('fileScope');
+  });
+
+  it('sends idempotencyKey as the Idempotency-Key header, not in the body, and only when given (ADR-0151)', async () => {
+    const { runs, calls } = client(() =>
+      json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` }),
+    );
+    await runs.start(AGENT, { prompt: 'Hello', idempotencyKey: 'order-17-reply' });
+    await runs.start(AGENT, { prompt: 'Hello' });
+    expect(calls[0]?.headers.get('idempotency-key')).toBe('order-17-reply');
+    expect(calls[0]?.json).not.toHaveProperty('idempotencyKey');
+    expect(calls[1]?.headers.has('idempotency-key')).toBe(false);
+  });
+
+  it('surfaces run_idempotency_conflict (409) by code (ADR-0151)', async () => {
+    const { runs } = client(() =>
+      json(409, { error: { code: 'run_idempotency_conflict', message: 'send a new key' } }),
+    );
+    const failure = await runs
+      .start(AGENT, { prompt: 'x', idempotencyKey: 'k' })
+      .catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiProblemError);
+    expect((failure as ApiProblemError).code).toBe('run_idempotency_conflict');
+  });
+
+  it('surfaces run_subject_forbidden (403) by code (ADR-0142 D2)', async () => {
+    const { runs } = client(() =>
+      json(403, { error: { code: 'run_subject_forbidden', message: 'only an API key' } }),
+    );
+    const failure = await runs.start(AGENT, { prompt: 'x', subject: 'a' }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiProblemError);
+    expect((failure as ApiProblemError).code).toBe('run_subject_forbidden');
+  });
+
+  it('sends attachments as file ids, and only when given (issue #1307)', async () => {
+    const { runs, calls } = client(() =>
+      json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` }),
+    );
+    await runs.start(AGENT, {
+      prompt: 'Hello',
+      attachments: [{ fileId: 'f-1' }, { fileId: 'f-2' }],
+    });
+    await runs.start(AGENT, { prompt: 'Hello' });
+    expect(calls[0]?.json).toMatchObject({ attachments: [{ fileId: 'f-1' }, { fileId: 'f-2' }] });
+    expect(calls[1]?.json).not.toHaveProperty('attachments');
+  });
+
+  it.each([
+    [404, 'file_not_found'],
+    [422, 'run_attachments_unreadable'],
+    [422, 'run_attachments_too_large'],
+    [422, 'run_attachments_unsupported_runtime'],
+    [422, 'run_attachments_untranscribable'],
+  ])('surfaces the %i attachment refusal by code (issue #1307)', async (status, code) => {
+    const { runs } = client(() => json(status, { error: { code, message: 'refused' } }));
+    const failure = await runs
+      .start(AGENT, { prompt: 'x', attachments: [{ fileId: 'f-1' }] })
+      .catch((e: unknown) => e);
+    expect((failure as ApiProblemError).code).toBe(code);
+  });
+
+  it('sends a Zod outputSchema as JSON Schema 2020-12, and a JSON Schema as it is (ADR-0143)', async () => {
+    const { runs, calls } = client(() =>
+      json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` }),
+    );
+    await runs.start(AGENT, {
+      prompt: 'Hello',
+      outputSchema: z.object({ verdict: z.string() }),
+    });
+    const plain = { type: 'object', properties: { n: { type: 'number' } } };
+    await runs.start(AGENT, { prompt: 'Hello', outputSchema: plain });
+    await runs.start(AGENT, { prompt: 'Hello' });
+    expect(calls[0]?.json).toMatchObject({
+      outputSchema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { verdict: { type: 'string' } },
+        required: ['verdict'],
+      },
+    });
+    expect(calls[1]?.json).toMatchObject({ outputSchema: plain });
+    expect(calls[2]?.json).not.toHaveProperty('outputSchema');
+  });
+
+  it('refuses a Zod schema with no JSON Schema form as InvalidArgumentError, keeping the cause', async () => {
+    const { runs, calls } = client(() => json(202, { run: run('queued'), events: '' }));
+    const refusal: unknown = await runs
+      .start(AGENT, { prompt: 'x', outputSchema: z.object({ d: z.date() }) })
+      .catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(InvalidArgumentError);
+    expect(refusal).toMatchObject({ code: 'unconvertible_output_schema', value: null });
+    expect((refusal as Error).cause).toBeInstanceOf(Error);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('surfaces engine_capability_unsupported (422) with its capability (ADR-0143)', async () => {
+    const { runs } = client(() =>
+      json(422, {
+        error: {
+          code: 'engine_capability_unsupported',
+          message: 'no structured output',
+          details: ['structuredOutput'],
+        },
+      }),
+    );
+    const failure = await runs
+      .start(AGENT, { prompt: 'x', outputSchema: { type: 'object' } })
+      .catch((e: unknown) => e);
+    expect((failure as ApiProblemError).code).toBe('engine_capability_unsupported');
+    expect((failure as ApiProblemError).details).toEqual(['structuredOutput']);
   });
 
   it('surfaces agent_version_not_found (404) by code (issue #697)', async () => {
@@ -217,6 +357,43 @@ describe('RunsClient.events', () => {
     ]);
     expect(calls[0]?.headers.get('accept')).toBe('text/event-stream');
     expect(calls[0]?.headers.has('last-event-id')).toBe(false);
+  });
+
+  it('classifies run.warning before the first agent frame as a platform notice, never an agent event (ADR-0146)', async () => {
+    const { runs } = client(() =>
+      stream(
+        'event: run.status\nid: 1\ndata: {"status":"running","error":null}\n\n' +
+          'event: run.warning\nid: 2\ndata: {"code":"attachments_removed_shell"}\n\n' +
+          'event: agent.message\nid: 3\ndata: {"frame":"agent.message","engine":"claude-agent-sdk","raw":null,"messageId":"m1","role":"assistant","blocks":[{"type":"text","text":"hi"}]}\n\n' +
+          'event: done\ndata: null\n\n',
+      ),
+    );
+    const frames = [];
+    const iterator = runs.events(RUN);
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) {
+        expect(next.value).toEqual({ lastEventId: '3' });
+        break;
+      }
+      frames.push(next.value);
+    }
+    expect(frames[1]).toEqual({
+      kind: 'run-warning',
+      id: '2',
+      data: { code: 'attachments_removed_shell' },
+    });
+    expect(frames.map((frame) => toAgentEvent(frame)?.frame ?? null)).toEqual([
+      null,
+      null,
+      'agent.message',
+    ]);
+  });
+
+  it('refuses a run.warning without a code as a contract violation', async () => {
+    const { runs } = client(() => stream('event: run.warning\nid: 1\ndata: {}\n\n'));
+    const failure = await drain(runs.events(RUN)).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ContractViolationError);
   });
 
   it('sends Last-Event-ID when resuming', async () => {
@@ -570,6 +747,47 @@ describe('RunsClient.interrupt (issue #235, S-14)', () => {
   });
 });
 
+describe('RunsClient.approve and reject (ADR-0145, P5-4)', () => {
+  const accepted = () => json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` });
+
+  it('posts the decision, and the comment when there is one, and reads the 202', async () => {
+    const { runs, calls } = client(accepted);
+    const response = await runs.approve(RUN, { comment: 'go ahead' });
+    expect(response.run.status).toBe('queued');
+    expect(response.events).toBe(`/api/runs/${RUN}/events`);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url.pathname).toBe(`/api/runs/${RUN}/approval`);
+    expect(calls[0]?.json).toEqual({ decision: 'approve', comment: 'go ahead' });
+  });
+
+  it('sends reject without a comment key when none is given', async () => {
+    const { runs, calls } = client(accepted);
+    await runs.reject(RUN);
+    expect(calls[0]?.json).toEqual({ decision: 'reject' });
+  });
+
+  it('surfaces a second decision as an ApiProblemError', async () => {
+    const { runs } = client(() =>
+      json(409, { error: { code: 'approval_already_decided', message: 'already decided' } }),
+    );
+    const failure = await runs.approve(RUN).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ApiProblemError);
+    expect((failure as ApiProblemError).code).toBe('approval_already_decided');
+    expect((failure as ApiProblemError).status).toBe(409);
+  });
+
+  it('waitForOutcome returns a run paused for approval instead of failing', async () => {
+    const { runs } = client((request) =>
+      request.url.pathname.endsWith('/events')
+        ? stream('event: done\n\n')
+        : json(200, { run: run('awaiting_approval') }),
+    );
+    const paused = await runs.waitForOutcome(RUN);
+    expect(paused.status).toBe('awaiting_approval');
+    expect(paused.pendingApproval).toEqual({ toolName: 'send_email', canonicalCall: '{}' });
+  });
+});
+
 describe('RunsClient.revokeTokens (issue #235, S-15)', () => {
   it('posts to the named path with tokenId null when omitted, and reads the outcome', async () => {
     const { runs, calls } = client(() => json(200, { revoked: 3, outcome: 'revoked' }));
@@ -593,5 +811,144 @@ describe('RunsClient.revokeTokens (issue #235, S-15)', () => {
     const failure = await runs.revokeTokens(RUN).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(ApiProblemError);
     expect((failure as ApiProblemError).status).toBe(403);
+  });
+});
+
+describe('RunsClient.result (ADR-0143)', () => {
+  const answer = { text: '{"verdict":"ok"}', structured: { verdict: 'ok' } };
+  const settledWith = (status: string, output: unknown) =>
+    client((call) =>
+      call.url.pathname.endsWith('/events')
+        ? stream('event: done\n\n')
+        : json(200, { run: run(status, output) }),
+    ).runs;
+
+  it('returns the text and the structured output of a completed run', async () => {
+    const result = await settledWith('completed', answer).result(RUN);
+    expect(result.text).toBe(answer.text);
+    expect(result.output).toEqual({ verdict: 'ok' });
+    expect(result.run.status).toBe('completed');
+  });
+
+  it('parses the output with the schema and types it', async () => {
+    const schema = z.object({ verdict: z.string() });
+    const result = await settledWith('completed', answer).result(RUN, { schema });
+    expectTypeOf(result.output).toEqualTypeOf<{ verdict: string } | null>();
+    expect(result.output?.verdict).toBe('ok');
+  });
+
+  it('raises ContractViolationError when the output does not match the schema', async () => {
+    const schema = z.object({ verdict: z.number() });
+    const failure = await settledWith('completed', answer)
+      .result(RUN, { schema })
+      .catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(ContractViolationError);
+    expect((failure as ContractViolationError).message).toContain('runs.result');
+    expect((failure as ContractViolationError).issues[0]).toContain('verdict');
+  });
+
+  it('returns a null structured output as null, with the text, when the run asked for none', async () => {
+    const plain = { text: 'hello', structured: null };
+    const result = await settledWith('completed', plain).result(RUN, {
+      schema: z.object({ verdict: z.string() }),
+    });
+    expect(result).toMatchObject({ text: 'hello', output: null });
+  });
+
+  it('resolves a failed or cancelled run with no text and no output', async () => {
+    for (const status of ['failed', 'cancelled']) {
+      const result = await settledWith(status, null).result(RUN);
+      expect(result).toMatchObject({ text: null, output: null });
+      expect(result.run.status).toBe(status);
+    }
+  });
+});
+
+describe('RunsClient.outputs', () => {
+  const file = (
+    path: string,
+    kind: 'file' | 'folder' = 'file',
+    contentType: string | null = null,
+  ) => ({
+    id: `id:${path}`,
+    path,
+    kind,
+    sizeBytes: kind === 'file' ? 4 : null,
+    contentType,
+    lastModified: kind === 'file' ? '2026-10-17T10:00:00.000Z' : null,
+  });
+  const root = `runs/${RUN}/outputs`;
+  const tree: Record<string, readonly unknown[]> = {
+    [root]: [
+      file(`${root}/BRK-1101.dxf`),
+      file(`${root}/report.pdf`, 'file', 'application/pdf'),
+      file(`${root}/reports`, 'folder'),
+    ],
+    [`${root}/reports`]: [file(`${root}/reports/summary.md`)],
+  };
+  const served = (request: RecordedRequest): Response =>
+    json(200, { files: tree[request.url.searchParams.get('path') ?? ''] ?? [] });
+
+  // @story US-STO-07
+  it('[US-STO-07][api][sdk] outputs appear with the right type', async () => {
+    const { runs } = client(served);
+    const files = await runs.outputs(RUN);
+    expect(files.find((f) => f.name === 'report.pdf')?.contentType).toBe('application/pdf');
+  });
+
+  it('lists the run prefix only, walks folders and names files relative to outputs/', async () => {
+    const { runs, calls } = client(served);
+    const files = await runs.outputs(RUN);
+    expect(files.map((f) => [f.name, f.path])).toEqual([
+      ['BRK-1101.dxf', `${root}/BRK-1101.dxf`],
+      ['report.pdf', `${root}/report.pdf`],
+      ['reports/summary.md', `${root}/reports/summary.md`],
+    ]);
+    expect(calls.map((c) => [c.method, c.url.pathname, c.url.searchParams.get('path')])).toEqual([
+      ['GET', '/api/files', root],
+      ['GET', '/api/files', `${root}/reports`],
+    ]);
+  });
+
+  it('answers an empty list for a run that wrote nothing', async () => {
+    const { runs } = client(() => json(200, { files: [] }));
+    expect(await runs.outputs(RUN)).toEqual([]);
+  });
+
+  it('passes the signal on every request, so aborting mid-walk stops it', async () => {
+    const controller = new AbortController();
+    const { runs, calls } = client((request) => {
+      if (request.init.signal?.aborted === true)
+        return Promise.reject(new DOMException('aborted', 'AbortError'));
+      // The caller aborts once the first level has been listed.
+      controller.abort();
+      return served(request);
+    });
+    const failure = await runs.outputs(RUN, { signal: controller.signal }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(TransportError);
+    expect((failure as TransportError).aborted).toBe(true);
+    expect(calls.map((c) => c.url.searchParams.get('path'))).toEqual([root, `${root}/reports`]);
+  });
+
+  it('reports a pre-aborted signal as an aborted transport failure', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const { runs } = client(() => Promise.reject(new DOMException('aborted', 'AbortError')));
+    const failure = await runs.outputs(RUN, { signal: controller.signal }).catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(TransportError);
+    expect((failure as TransportError).aborted).toBe(true);
+  });
+
+  it('surfaces a problem as an ApiProblemError and drift as a contract violation', async () => {
+    const problem = client(() =>
+      json(400, { error: { code: 'invalid_path', message: 'not a valid path' } }),
+    );
+    expect(await problem.runs.outputs(RUN).catch((e: unknown) => e)).toBeInstanceOf(
+      ApiProblemError,
+    );
+    const drift = client(() => json(200, { entries: [] }));
+    expect(await drift.runs.outputs(RUN).catch((e: unknown) => e)).toBeInstanceOf(
+      ContractViolationError,
+    );
   });
 });

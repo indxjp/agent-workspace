@@ -15,7 +15,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import type { AgentStarter } from '@agent-workspace/runtime';
+import type { AgentStarter } from '@agent-workspace/runtime/driver/local';
 import type {
   A12AgentAction,
   A12AgentOutcome,

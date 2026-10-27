@@ -24,10 +24,10 @@
  *
  * `PATCH /api/memberships/:id` does not merely check that the caller may write memberships: it
  * routes the requested role through `readConferredRole` → `conferRole`, which compares grants over
- * every resource and operation (`../rbac/conferral.ts`). §21 is **not** a privilege ladder — Admin
- * has no grant over `projects` and cannot run a connector while Builder can — so the set of roles
- * an Admin may confer is `['admin','viewer']` and cannot be derived from any ordering. Offering a
- * `<select>` built from anything but `conferRole` would offer options the route answers `403` to.
+ * every resource and operation (`../rbac/conferral.ts`). The set of roles an Admin may confer is
+ * `['admin','builder','viewer']` — the roles below it, since ADR-0152 made the table monotonic —
+ * but it is still `conferRole`'s answer and not an ordering's, so the table stays the one place a
+ * grant is written.
  *
  * ## Why not a probe
  *

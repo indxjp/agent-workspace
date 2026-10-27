@@ -21,14 +21,11 @@
 /**
  * §21's four roles, in the order §21 prints them.
  *
- * The order is §21's presentation order and **not** a containment order. An earlier revision of
- * this comment claimed `owner` ⊃ `admin` ⊃ `builder` ⊃ `viewer`, and `permissions.ts` contradicts
- * it: §21's Admin clause is read literally where it is silent, so Admin has no grant over
- * `projects` and cannot run a connector while Builder holds both over its own rows (ADR-0116 gave
- * Admin `skills` and `files`, superseding Decision 2 of
- * `docs/adr/W2-CP-06-the-four-roles-and-their-permission-split.md`).
- * Nothing in this program may treat this tuple as a privilege ladder — `conferral.ts` compares
- * grants in `permissions.ts` instead, precisely because this list cannot answer the question.
+ * The order is §21's presentation order, most- to least-privileged, and since ADR-0152 it is also
+ * a containment order: every role holds at least every grant of the roles after it, and
+ * `permissions.test.ts` asserts that over every cell of `permissions.ts`. Code still asks the
+ * table, not this tuple — `conferral.ts` compares grants in `permissions.ts` — so the table stays
+ * the one place a grant is written.
  */
 export const ROLES = ['owner', 'admin', 'builder', 'viewer'] as const;
 

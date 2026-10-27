@@ -83,12 +83,12 @@ Under the development default image map only `claude-agent-sdk` has an image, so
 installed. -/
 def shippedRegistry : List Descriptor :=
   [{ id := EngineId.toWire .claudeAgentSdk, displayName := "Claude Agent SDK",
-     version := "0.3.296", installed := true },
+     version := "0.3.310", installed := true },
    { id := EngineId.toWire .openaiAgents, displayName := "OpenAI Agents SDK",
-     version := "0.20.0", installed := false },
+     version := "0.21.0", installed := false },
    { id := EngineId.toWire .pi, displayName := "pi coding agent",
-     version := "1.1.0", installed := false },
+     version := "1.4.0", installed := false },
    { id := EngineId.toWire .mastra, displayName := "Mastra",
-     version := "1.76.0", installed := false }]
+     version := "1.79.0", installed := false }]
 
 end AgentWorkspace.Sdk.Engines

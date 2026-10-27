@@ -1,3 +1,4 @@
+import { BUILDER_MODEL } from '@indx-workspace/contracts/builder';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { describe, expect, it } from 'vitest';
 
@@ -34,6 +35,8 @@ const PERMISSIONS = {
 /** One workspace with a ready `anthropic` connection whose discovery offers `claude-sonnet-4-5`. */
 async function fixture(options: {
   readonly withProfile: boolean;
+  /** The runtime profile's driver; `'docker'` when omitted. */
+  readonly driver?: 'docker' | 'local';
   readonly agentModel: boolean;
   readonly workspaceDefault: boolean;
   /** A second ready connection set as the default of {@link PROJECT}. */
@@ -54,11 +57,17 @@ async function fixture(options: {
   readonly agentModelWithoutConnection?: boolean;
   /** The deployment's policy ceiling (S2-04c); none when omitted. */
   readonly policyCeiling?: ProjectPolicy;
+  /** The ready connection's provider; `'anthropic'` when omitted. */
+  readonly provider?: 'anthropic' | 'openai';
+  /** The one model the connection's discovery offers; `'claude-sonnet-4-5'` when omitted. */
+  readonly offeredModel?: string;
+  /** Discovery fails with this instead of listing models (a rejected key, an unreachable provider). */
+  readonly discoveryFailure?: Extract<DiscoverModelsResult, { ok: false }>;
 }) {
   const models = createInMemoryModelsStoreProvider([WORKSPACE]);
   const connection = await models.forWorkspace(WORKSPACE).create({
     name: options.connectionName ?? 'anthropic default',
-    provider: 'anthropic',
+    provider: options.provider ?? 'anthropic',
     apiKey: 'sk-test',
     config: {},
   });
@@ -68,7 +77,7 @@ async function fixture(options: {
   const profiles = createInMemoryRuntimeProfileStoreProvider();
   const profile = await profiles.forWorkspace(WORKSPACE).create({
     name: 'docker default',
-    driver: 'docker',
+    driver: options.driver ?? 'docker',
     runtimeConnectionId: null,
     cpu: null,
     memoryMb: null,
@@ -92,7 +101,7 @@ async function fixture(options: {
         options.agentModel || options.agentConnectionOnly === true ? connectionId : null,
       model:
         options.agentModel || options.agentModelWithoutConnection === true
-          ? 'claude-sonnet-4-5'
+          ? (options.offeredModel ?? 'claude-sonnet-4-5')
           : null,
       runtimeProfileId: options.withProfile ? profile.profile.id : null,
       permissions: PERMISSIONS,
@@ -105,27 +114,29 @@ async function fixture(options: {
     ? { connectionId, model: 'claude-sonnet-4-5' }
     : null;
   const discover = (): Promise<DiscoverModelsResult> =>
-    Promise.resolve({
-      ok: true,
-      stale: false,
-      models: [
-        {
-          connectionId,
-          providerModelId: 'claude-sonnet-4-5',
-          displayName: 'Claude Sonnet 4.5',
-          capabilities: {
-            streaming: true,
-            toolUse: true,
-            thinking: true,
-            promptCaching: false,
-            structuredOutput: true,
-            contextManagement: true,
-            webSearch: true,
-            tokenCounting: false,
+    Promise.resolve(
+      options.discoveryFailure ?? {
+        ok: true,
+        stale: false,
+        models: [
+          {
+            connectionId,
+            providerModelId: options.offeredModel ?? 'claude-sonnet-4-5',
+            displayName: 'Claude Sonnet 4.5',
+            capabilities: {
+              streaming: true,
+              toolUse: true,
+              thinking: true,
+              promptCaching: false,
+              structuredOutput: true,
+              contextManagement: true,
+              webSearch: true,
+              tokenCounting: false,
+            },
           },
-        },
-      ],
-    });
+        ],
+      },
+    );
   const projectDefaults = new Map<string, ModelSelection>();
   if (options.projectDefault === true) {
     const projectConnection = await models.forWorkspace(WORKSPACE).create({
@@ -737,6 +748,76 @@ describe('createRunPreflight meets the policy ceiling (S2-04c)', () => {
     await expect(preflight.check(query(agentId))).resolves.toBeNull();
   });
 
+  it('refuses attachments with run_attachments_unreadable when the ceiling caps readFiles (issue #1307)', async () => {
+    const capped = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      policyCeiling: { permissions: { readFiles: false } },
+    });
+    const refusal = await capped.preflight.check({ ...query(capped.agentId), attachmentCount: 1 });
+    expect(refusal?.code).toBe('run_attachments_unreadable');
+    expect(refusal?.message).toContain('readFiles');
+    // No attachments, no refusal: the narrowed permission alone never blocks a run.
+    await expect(capped.preflight.check(query(capped.agentId))).resolves.toBeNull();
+    await expect(
+      capped.preflight.check({ ...query(capped.agentId), attachmentCount: 0 }),
+    ).resolves.toBeNull();
+  });
+
+  it('refuses attachments on a local-driver profile with run_attachments_unsupported_runtime (issue #1307)', async () => {
+    const local = await fixture({
+      withProfile: true,
+      driver: 'local',
+      agentModel: true,
+      workspaceDefault: false,
+    });
+    const refusal = await local.preflight.check({ ...query(local.agentId), attachmentCount: 1 });
+    expect(refusal?.code).toBe('run_attachments_unsupported_runtime');
+    expect(refusal?.message).toContain('local driver');
+    await expect(local.preflight.check(query(local.agentId))).resolves.toBeNull();
+  });
+
+  it('queues attachments when the agent keeps readFiles (issue #1307)', async () => {
+    const { preflight, agentId } = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+    });
+    await expect(preflight.check({ ...query(agentId), attachmentCount: 3 })).resolves.toBeNull();
+  });
+
+  it('refuses an audio attachment on a provider that cannot transcribe it, by name (issue #1313)', async () => {
+    const { preflight, agentId } = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+    });
+    const refusal = await preflight.check({
+      ...query(agentId),
+      attachmentCount: 1,
+      audioAttachmentCount: 1,
+    });
+    expect(refusal?.code).toBe('run_attachments_untranscribable');
+    expect(refusal?.message).toContain('anthropic provider');
+    // A text transcript on the same connection is not audio.
+    await expect(
+      preflight.check({ ...query(agentId), attachmentCount: 1, audioAttachmentCount: 0 }),
+    ).resolves.toBeNull();
+  });
+
+  it('queues an audio attachment on an openai connection (issue #1313)', async () => {
+    const { preflight, agentId } = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      provider: 'openai',
+    });
+    await expect(
+      preflight.check({ ...query(agentId), attachmentCount: 1, audioAttachmentCount: 1 }),
+    ).resolves.toBeNull();
+  });
+
   it('is unchanged without a ceiling', async () => {
     const { preflight, agents, agentId } = await fixture({
       withProfile: true,
@@ -745,5 +826,73 @@ describe('createRunPreflight meets the policy ceiling (S2-04c)', () => {
     });
     await agents.forWorkspace(WORKSPACE).replacePolicy(agentId, openaiAgents);
     await expect(preflight.check(query(agentId))).resolves.toBeNull();
+  });
+});
+
+describe('createRunPreflight — the built-in Builder (#1848)', () => {
+  /** The same query, with the stored agent marked as the Builder (the memory store keeps no marker). */
+  async function builderQuery(setup: Awaited<ReturnType<typeof fixture>>) {
+    const row = await setup.agents.forWorkspace(WORKSPACE).get(setup.agentId);
+    if (row === null) throw new Error('fixture agent');
+    return { ...query(setup.agentId), agent: { ...row, builtin: 'builder' as const } };
+  }
+
+  it('refuses a Builder run no connection can serve, naming the model and the docs page', async () => {
+    const setup = await fixture({ withProfile: true, agentModel: false, workspaceDefault: false });
+
+    const refusal = await setup.preflight.check(await builderQuery(setup));
+
+    expect(refusal).toEqual({
+      code: 'builder_model_unavailable',
+      message: expect.stringContaining(BUILDER_MODEL) as unknown,
+    });
+    expect(refusal?.message).toContain('/resources/models');
+  });
+
+  it('refuses a Builder run that would fall through to another model', async () => {
+    const setup = await fixture({ withProfile: true, agentModel: false, workspaceDefault: true });
+
+    const refusal = await setup.preflight.check(await builderQuery(setup));
+
+    expect(refusal?.code).toBe('builder_model_unavailable');
+  });
+
+  it('keeps the credential refusal when the Builder connection rejects its key', async () => {
+    const setup = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      discoveryFailure: {
+        ok: false,
+        reason: 'rejected',
+        failure: { kind: 'credential-rejected', status: 401 },
+      },
+    });
+
+    const refusal = await setup.preflight.check(await builderQuery(setup));
+
+    expect(refusal?.code).toBe('model_credential_rejected');
+    expect(refusal?.message).not.toContain(BUILDER_MODEL);
+  });
+
+  it('queues a Builder run when a connection serves the Builder model', async () => {
+    const setup = await fixture({
+      withProfile: true,
+      agentModel: true,
+      workspaceDefault: false,
+      offeredModel: BUILDER_MODEL,
+    });
+
+    await expect(setup.preflight.check(await builderQuery(setup))).resolves.toBeNull();
+  });
+
+  it('leaves every other agent with the refusal it always had', async () => {
+    const setup = await fixture({ withProfile: true, agentModel: false, workspaceDefault: false });
+
+    const refusal = await setup.preflight.check(query(setup.agentId));
+
+    expect(refusal?.code).toBe('model_connection_unresolved');
+    expect(refusal?.message).toContain('workspace default');
+    expect(refusal?.message).not.toContain(BUILDER_MODEL);
   });
 });

@@ -34,10 +34,12 @@
  * skills/<name>/<relativePath>     the skill's own files — SKILL.md and supporting files
  * skill-meta/<name>.json           this platform's own record — never a byte a caller supplied
  * skill-deletes/<name>.json        a pending delete's marker and the owner it recorded (ADR-0077 D3)
+ * skill-builtin/<name>.json        the digest of the built-in skill this platform last installed
  * ```
  *
- * The third prefix, `"skill-deletes/"`, is as fixed as the other two and differs from both before
- * `<name>` begins, so the argument below covers it the same way.
+ * The third and fourth prefixes, `"skill-deletes/"` and `"skill-builtin/"`, are as fixed as the
+ * other two and differ from every other prefix before `<name>` begins, so the argument below
+ * covers them the same way.
  *
  * `<name>` is caller-controlled (see {@link isValidSkillName} for what a caller may spell it as),
  * but the two literal prefixes — `"skills/"` and `"skill-meta/"` — are not. They are written here,
@@ -59,6 +61,7 @@
  * guard's own judgement, and it does not know or care which backend is behind the `ObjectStore` it
  * is handed.
  */
+import { toObjectKey, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
 import { SKILL_FILE_PATH_MAX_BYTES, SKILL_NAME_PATTERN } from '@indx-workspace/contracts/skills';
 
 /** The top-level prefix under which a skill's own files live. Never derived from a caller's key. */
@@ -67,8 +70,27 @@ export const SKILL_FILES_PREFIX = 'skills';
 /** The top-level prefix under which this platform's own record about a skill lives. See header. */
 export const SKILL_META_PREFIX = 'skill-meta';
 
-/** The top-level prefix under which a pending delete's marker lives (ADR-0077 D3). */
+/**
+ * The top-level prefix under which a pending delete's marker lived (ADR-0077 D3). Nothing writes it
+ * now: `skills.pending_delete` holds the record.
+ */
+// storage-bridge(#1699): read-only until the marker objects are removed (#1676)
 export const SKILL_DELETE_PREFIX = 'skill-deletes';
+
+/**
+ * The top-level prefix under which the record of an installed built-in skill lived. Nothing writes
+ * it now: `skills.builtin_digest` holds the digest.
+ */
+// storage-bridge(#1699): read-only until the marker objects are removed (#1676)
+export const SKILL_BUILTIN_PREFIX = 'skill-builtin';
+
+/**
+ * The top-level prefix under which a published revision's bytes live (SDK-19, N-1). Nothing but
+ * `publishSkillRevisionWithId` writes there, and no mutable builder in this module can produce it:
+ * `skills/<name>/<n>/…` would have collided with a legal supporting file called `<n>/…`, so a
+ * revision gets a fourth literal prefix, disjoint from the others before `<name>` begins.
+ */
+export const SKILL_REVISIONS_PREFIX = 'skill-revisions';
 
 /**
  * A skill's directory name, exactly as spec §7 shows it — `.claude/skills/<name>/`. Slug-shaped
@@ -145,22 +167,29 @@ export function isValidSkillName(name: string): boolean {
 const PATH_SEGMENT_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
- * `true` when every segment of `relativePath` (split on `/`) matches the grammar documented above.
+ * `true` when `relativePath` passes key-safety (`toObjectKey`, the storage design, §02: the one path
+ * checker, which owns empty, `.`/`..`, absolute and control-character refusals) and every segment
+ * (split on `/`) matches the grammar documented above.
  * `false` for anything else — there is no branch that returns `true` because no rule happened to
  * fire; every rule is checked and the path is admitted only once every one of them has passed
  * (ADR-0015: a positive assertion, not the absence of a match).
  *
- * This is the *only* check this task runs before deciding whether to hand a caller's path to
- * `skillFileKey`; `key-safety.ts`'s own guard still runs after, unconditionally, as defence in
- * depth (see this task's `handlers.ts`), but this function is what actually closes B1/B2, because
- * it refuses `:` and `$` outright rather than trying to name the alias they spell.
+ * This is the check this task runs before deciding whether to hand a caller's path to
+ * `skillFileKey`. Key-safety (`toObjectKey`) runs first, inside this function; `skillFileKey`'s
+ * guard runs again later, unconditionally, as defence in depth (see this task's `handlers.ts`). The
+ * segment grammar here is what actually closes B1/B2, because it refuses `:` and `$` outright
+ * rather than trying to name the alias they spell.
  */
 export function isAdmissibleRelativePath(relativePath: string): boolean {
-  if (relativePath === '') return false;
+  try {
+    toObjectKey(relativePath);
+  } catch (error) {
+    if (error instanceof UnsafeObjectKeyError) return false;
+    throw error;
+  }
   if (Buffer.byteLength(relativePath, 'utf8') > SKILL_FILE_PATH_MAX_BYTES) return false;
   const segments = relativePath.split('/');
   for (const segment of segments) {
-    if (segment === '.' || segment === '..') return false;
     if (segment.endsWith('.') || segment.endsWith(' ')) return false;
     if (!PATH_SEGMENT_SHAPE.test(segment)) return false;
   }
@@ -253,18 +282,61 @@ export function skillFilesPrefix(name: string): string {
   return `${SKILL_FILES_PREFIX}/${name}`;
 }
 
+/** The full store key for one file of a published revision. */
+export function skillRevisionKey(name: string, revision: number, relativePath: string): string {
+  return `${SKILL_REVISIONS_PREFIX}/${name}/${String(revision)}/${relativePath}`;
+}
+
+/** The list prefix for every file of one published revision. */
+export function skillRevisionPrefix(name: string, revision: number): string {
+  return `${SKILL_REVISIONS_PREFIX}/${name}/${String(revision)}`;
+}
+
+/**
+ * The reserved root of the files catalog under which skill files live as `skills`-area rows. The
+ * catalog's unique key has no area, so a bare `<name>/…` path would collide with a user's own file
+ * of that path; the files API refuses this root, as it does `.attachments/`.
+ */
+export const SKILL_ROWS_ROOT = '.skills';
+
+/** The catalog folder of one skill's current files: `.skills/<name>`. */
+export function skillRowFolder(name: string): string {
+  return `${SKILL_ROWS_ROOT}/${name}`;
+}
+
+/**
+ * The catalog folder of one published revision: `.skills/<name>@<revision>`. `@` is outside the
+ * skill name grammar, so it never lists under `skillRowFolder` of another name.
+ */
+export function skillRevisionRowFolder(name: string, revision: number): string {
+  return `${SKILL_ROWS_ROOT}/${name}@${String(revision)}`;
+}
+
+/** The list prefix for every revision of one skill, for the skill's delete. */
+export function skillRevisionsPrefix(name: string): string {
+  return `${SKILL_REVISIONS_PREFIX}/${name}`;
+}
+
 /** The full store key for this platform's own record about one skill. See this module's header. */
 export function skillMetaKey(name: string): string {
   return `${SKILL_META_PREFIX}/${name}.json`;
 }
 
 /**
- * The store key of a pending delete's marker. `DELETE /api/skills/:name` writes it before the
- * catalog row goes and removes it last; while it exists no catalog sync may create the row again,
- * and it records the owner so the owning Builder can finish an interrupted delete.
+ * The store key of the marker an earlier release wrote for a pending delete. It is only read, and
+ * removed when its skill's delete finishes; while it exists no catalog sync may create the row
+ * again, and it records the owner so the owning Builder can finish an interrupted delete.
  */
 export function skillDeleteMarkerKey(name: string): string {
   return `${SKILL_DELETE_PREFIX}/${name}.json`;
+}
+
+/**
+ * The store key of the record an earlier release wrote of what it last installed for a built-in
+ * skill (its digest). It is only read, to fill the row's `builtin_digest`.
+ */
+export function skillBuiltinMarkerKey(name: string): string {
+  return `${SKILL_BUILTIN_PREFIX}/${name}.json`;
 }
 
 /** The list prefix under which every skill's metadata record lives, for `GET /api/skills`. */

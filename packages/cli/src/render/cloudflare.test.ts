@@ -61,7 +61,7 @@ describe('the Cloudflare platform Worker', () => {
     }
     const env = { CONTROL_PLANE_URL: 'https://app.example', CRON_SECRET: 'cron-secret' };
 
-    it('calls the retention route with the bearer', async () => {
+    it('calls the retention and schedule trigger routes with the bearer', async () => {
       const fetchStub = vi.fn<typeof fetch>(() => Promise.resolve(new Response('{}')));
       vi.stubGlobal('fetch', fetchStub);
       try {
@@ -71,9 +71,32 @@ describe('the Cloudflare platform Worker', () => {
       } finally {
         vi.unstubAllGlobals();
       }
-      const [url, init] = fetchStub.mock.calls[0] ?? [];
-      expect(url).toBe('https://app.example/api/cron/retention');
-      expect(init?.headers).toEqual({ authorization: 'Bearer cron-secret' });
+      expect(fetchStub.mock.calls.map(([url]) => url)).toEqual([
+        'https://app.example/api/cron/retention',
+        'https://app.example/api/cron/triggers',
+      ]);
+      expect(fetchStub.mock.calls[0]?.[1]?.headers).toEqual({
+        authorization: 'Bearer cron-secret',
+      });
+    });
+
+    it('still calls the schedule trigger route when the retention route fails', async () => {
+      // The retention route is called first.
+      const fetchStub = vi
+        .fn<typeof fetch>(() => Promise.resolve(new Response('{}')))
+        .mockResolvedValueOnce(new Response('', { status: 500 }));
+      vi.stubGlobal('fetch', fetchStub);
+      try {
+        await expect((await handler())(undefined, env)).rejects.toThrow(
+          'The /api/cron/retention route answered 500',
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(fetchStub.mock.calls.map(([url]) => url)).toEqual([
+        'https://app.example/api/cron/retention',
+        'https://app.example/api/cron/triggers',
+      ]);
     });
 
     it('fails the invocation when the route refuses, and when it is unconfigured', async () => {

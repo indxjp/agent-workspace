@@ -15,11 +15,12 @@ import { AGENT_VERSION_PROBLEM_CODES } from '@indx-workspace/contracts/agent-ver
 
 import type { AgentRecord } from '../agents/contract';
 import { isUuid } from '../agents/contract';
-import { agentNotFound, problem, type ApiResult } from '../agents/handlers';
-import { readAgentIdParam, toResponse } from '../agents/http';
-import type { AgentPolicy } from '../../contracts/agents';
+import { agentNotFound, refuseBuiltinWrite } from '../agents/handlers';
+import { problem, type ApiResult } from '../http/result';
+import { readAgentIdParam } from '../agents/http';
+import { apiResultResponse } from '../http/json-transport';
+import type { AgentPolicy, BuiltinAgentOperation } from '../../contracts/agents';
 import { connectorNamesOf, storedConnectorServers } from '../agents/policy';
-import { currentAgentsRuntime } from '../agents/runtime';
 import { readBoundedJson } from '../http/json-transport';
 import type { OwnershipResolver } from '../rbac/http';
 import type { Principal } from '../rbac/principal';
@@ -27,12 +28,14 @@ import type { RequestCeiling } from '../policy-ceiling/ceiling';
 import { requireResourceAccess } from '../resources/authorise';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import { openToolBundleLookup } from '../tool-bundles/http';
+import { storageConnectionLookup, type StorageConnectionLookup } from './storage-grants';
 import {
   MAX_AGENT_VERSION_BODY_BYTES,
   MAX_CREATE_AGENT_BODY_BYTES,
   MAX_POINTER_BODY_BYTES,
 } from './contract';
-import { currentAgentVersionsRuntime, type AgentVersionsRuntime } from './runtime';
+import { applicationContext } from '../application-context';
+import type { AgentVersionsRuntime } from './runtime';
 import type { WorkspaceAgentVersionStore } from './store';
 import { saveUiEdit, type UiEdit } from './ui-edit';
 
@@ -45,20 +48,33 @@ export interface AgentVersionRouteScope {
   readonly ceiling: RequestCeiling | null;
   /** The caller's tool bundles, or `null` when the deployment keeps none (issue #790). */
   readonly toolBundles: ToolBundleLookup | null;
+  /** The caller's storage connections, or `null` when the deployment keeps none (step 4a). */
+  readonly storageConnections: StorageConnectionLookup | null;
   /** Whether the deployment has a tool host, so a code-tool version may leave `local`. */
   readonly toolHost: boolean;
   /** Why the tool sandbox cannot enforce a code tool's `allowedDomains`, or `null` when it can. */
   readonly toolDomainsRefusal: string | null;
 }
 
+/** The version pipeline's lookup over `workspaceId`'s storage connections, or `null` without them. */
+export function openStorageConnectionLookup(workspaceId: string): StorageConnectionLookup | null {
+  const connections = applicationContext()?.storageConnections;
+  return connections?.kind === 'serving'
+    ? storageConnectionLookup(connections.runtime.store.forWorkspace(workspaceId))
+    : null;
+}
+
 /** A resolver that also keeps the row it read, for the handler to use. */
-function loadingOwnership(id: unknown): {
+function loadingOwnership(
+  id: unknown,
+  operation: BuiltinAgentOperation,
+): {
   readonly resolver: OwnershipResolver;
   readonly loaded: { agent: AgentRecord | null };
 } {
   const loaded: { agent: AgentRecord | null } = { agent: null };
   const resolver: OwnershipResolver = async (principal) => {
-    const agents = currentAgentsRuntime();
+    const agents = applicationContext()?.agents ?? null;
     if (agents === null) return { kind: 'refuse', result: agentNotFound() };
     if (!isUuid(id)) {
       return {
@@ -72,6 +88,8 @@ function loadingOwnership(id: unknown): {
     }
     loaded.agent = await agents.agents.forWorkspace(principal.workspaceId).get(id);
     if (loaded.agent === null) return { kind: 'refuse', result: agentNotFound() };
+    const readOnly = refuseBuiltinWrite(loaded.agent, operation);
+    if (readOnly !== null) return { kind: 'refuse', result: readOnly };
     const ownership =
       principal.ownerPrincipalId === loaded.agent.ownerPrincipalId ? 'own' : 'other';
     return { kind: 'ownership', ownership };
@@ -85,15 +103,16 @@ export type Authorised =
   | { readonly ok: true; readonly scope: AgentVersionRouteScope };
 
 /**
- * Authorise the request onto the agent `:id` names and open the caller's version store.
- * Unconfigured, the routes answer `503 agent_policy_not_configured`.
+ * Authorise the request onto the agent `:id` names and open the caller's version store. With no
+ * application context installed, the ownership check answers the concealed `404` first.
  */
 export async function authoriseAgentVersionRoute(
   request: Request,
   context: { params: Promise<{ id: string }> },
+  operation: BuiltinAgentOperation,
 ): Promise<Authorised> {
   const id = await readAgentIdParam(context);
-  const { resolver, loaded } = loadingOwnership(id);
+  const { resolver, loaded } = loadingOwnership(id, operation);
   const access = await requireResourceAccess(request, resolver);
   if (!access.ok) return { ok: false, response: access.response };
   if (loaded.agent === null) {
@@ -103,8 +122,12 @@ export async function authoriseAgentVersionRoute(
   }
   const { workspaceId } = access.principal;
   const opened = await openAgentVersionStore(workspaceId);
-  if (!opened.ok) return { ok: false, response: toResponse(opened.result) };
-  const ceiling = opened.runtime.ceilingFor?.(request, workspaceId) ?? null;
+  if (!opened.ok) return { ok: false, response: apiResultResponse(opened.result) };
+  const { ceiling: deploymentCeiling } = opened.runtime;
+  const ceiling =
+    deploymentCeiling.kind === 'enforced'
+      ? deploymentCeiling.ceilingFor(request, workspaceId)
+      : null;
   return {
     ok: true,
     scope: {
@@ -113,8 +136,9 @@ export async function authoriseAgentVersionRoute(
       store: opened.store,
       ceiling,
       toolBundles: openToolBundleLookup(workspaceId),
-      toolHost: opened.runtime.toolHost === true,
-      toolDomainsRefusal: opened.runtime.toolDomainsRefusal ?? null,
+      storageConnections: openStorageConnectionLookup(workspaceId),
+      toolHost: opened.runtime.toolHost,
+      toolDomainsRefusal: opened.runtime.toolDomainsRefusal,
     },
   };
 }
@@ -132,7 +156,7 @@ export async function saveConsoleEdit(
 ): Promise<ApiResult | null> {
   const opened = await openAgentVersionStore(principal.workspaceId);
   if (!opened.ok) return opened.result;
-  const resources = currentAgentsRuntime()?.agentResources;
+  const resources = applicationContext()?.agents.agentResources;
   if (resources === undefined) {
     return problem(
       503,
@@ -144,6 +168,7 @@ export async function saveConsoleEdit(
     store: opened.store,
     ceiling,
     toolBundles: openToolBundleLookup(principal.workspaceId),
+    storageConnections: openStorageConnectionLookup(principal.workspaceId),
     assignments: () => resources.forWorkspace(principal.workspaceId).get(agent.id),
   });
 }
@@ -158,15 +183,15 @@ export async function policyConnectorNames(
   policy: AgentPolicy,
 ): Promise<Record<string, string>> {
   if (storedConnectorServers(policy).length === 0) return {};
-  const runtime = currentAgentVersionsRuntime();
-  if (runtime === null) return {};
+  const runtime = applicationContext()?.agentVersions;
+  if (runtime === undefined) return {};
   const store = await runtime.versions.forWorkspace(workspaceId);
   return store === null ? {} : connectorNamesOf(store, policy);
 }
 
 /**
- * Open the version store of `workspaceId`, the authenticated principal's. Unconfigured, it answers
- * `503 agent_policy_not_configured`.
+ * Open the version store of `workspaceId`, the authenticated principal's. Every caller has already
+ * read the agents runtime from the installed context, and the versions runtime is installed with it.
  */
 async function openAgentVersionStore(workspaceId: string): Promise<
   | {
@@ -176,16 +201,9 @@ async function openAgentVersionStore(workspaceId: string): Promise<
     }
   | { readonly ok: false; readonly result: ApiResult }
 > {
-  const runtime = currentAgentVersionsRuntime();
-  if (runtime === null) {
-    return {
-      ok: false,
-      result: problem(
-        503,
-        'agent_policy_not_configured',
-        'Agent versions are not configured for this deployment.',
-      ),
-    };
+  const runtime = applicationContext()?.agentVersions;
+  if (runtime === undefined) {
+    throw new Error('The application context has an agents runtime but no versions runtime.');
   }
   const store = await runtime.versions.forWorkspace(workspaceId);
   if (store === null) return { ok: false, result: agentNotFound() };
@@ -194,18 +212,19 @@ async function openAgentVersionStore(workspaceId: string): Promise<
 
 /**
  * Authorise the request onto the agent `:id` names, open the caller's version store, and answer
- * `run`'s result. Unconfigured, the routes answer `503 agent_policy_not_configured`. The pointer
+ * `run`'s result. With no application context installed, the concealed `404` answers. The pointer
  * route needs nothing more: its `agent-changed` audit row is written by the version store inside
  * the pointer transaction (`pointers.ts`), so there is no separate audit writer to open.
  */
 export async function serveAgentVersionRoute(
   request: Request,
   context: { params: Promise<{ id: string }> },
+  operation: BuiltinAgentOperation,
   run: (scope: AgentVersionRouteScope) => Promise<ApiResult>,
 ): Promise<Response> {
-  const authorised = await authoriseAgentVersionRoute(request, context);
+  const authorised = await authoriseAgentVersionRoute(request, context, operation);
   if (!authorised.ok) return authorised.response;
-  return toResponse(await run(authorised.scope));
+  return apiResultResponse(await run(authorised.scope));
 }
 
 /** Read a create-version body within {@link MAX_AGENT_VERSION_BODY_BYTES}. */

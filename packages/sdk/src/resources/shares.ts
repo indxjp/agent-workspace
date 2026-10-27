@@ -14,7 +14,8 @@ const NoContentSchema = z.null();
 
 /**
  * Exactly the fields the route accepts, and no absent ones: the route is strict, and a wider
- * object a caller happens to hold (a transcript, a snapshot) must never become part of the body.
+ * object a caller happens to hold (transcript text, a snapshot) must never become part of the body:
+ * a transcript travels only as the run ids it chose (ADR-0158).
  */
 function publishBody(command: PublishShareCommand): PublishShareCommand {
   return {
@@ -24,6 +25,9 @@ function publishBody(command: PublishShareCommand): PublishShareCommand {
     visibility: command.visibility,
     ...(command.mode === undefined ? {} : { mode: command.mode }),
     ...(command.include === undefined ? {} : { include: command.include }),
+    ...(command.transcript === undefined
+      ? {}
+      : { transcript: { runIds: command.transcript.runIds } }),
     ...(command.expiry === undefined ? {} : { expiry: command.expiry }),
     ...(command.passphrase === undefined ? {} : { passphrase: command.passphrase }),
     ...(command.budgetCapUsd === undefined ? {} : { budgetCapUsd: command.budgetCapUsd }),
@@ -58,7 +62,8 @@ export class SharesClient {
   /**
    * Publish a share of a subject the caller may share. `400 invalid_share` names what the route
    * refused: a field outside the contract, an option the subject type does not take, a public
-   * share while the workspace's policy has public sharing off, or `runnable` mode.
+   * share while the workspace's policy has public sharing off, `runnable` mode, or a `transcript`
+   * naming a run outside the shared session.
    *
    * The command is sent exactly as given — the server owns every default (`mode`, `expiry`, the
    * runnable budget) and the share's content.

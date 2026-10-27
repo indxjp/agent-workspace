@@ -33,7 +33,8 @@ import {
   sessionForLaunch,
 } from '../server/composition/session-launch';
 import { renderRun } from '../server/runs/api';
-import { InMemoryRunStore, type RunRecord } from '../server/runs/store';
+import { InMemoryRunStore } from '../server/runs/memory-store';
+import type { RunRecord } from '../server/runs/store';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 
 const storeVectors = loadVectors('concept-work', 'run-store.json');
@@ -160,6 +161,7 @@ function recordingRepository(
     list: unused,
     archive: unused,
     restore: unused,
+    discardIfUnused: () => Promise.resolve(false),
     update(sessionId, input): Promise<SessionMutationOutcome> {
       updates.push([
         sessionId,

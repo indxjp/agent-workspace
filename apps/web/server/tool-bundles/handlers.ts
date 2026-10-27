@@ -18,8 +18,8 @@ import {
   type UploadToolBundleResponse,
 } from '@indx-workspace/contracts/agent-versions';
 
-import { problem, type ApiResult } from '../agents/handlers';
-import type { ObjectStore } from '../skills/object-store-bridge';
+import { formatIssues, problem, type ApiResult } from '../http/result';
+import type { ObjectStore } from '@agent-workspace/core/storage';
 
 /** The key of the bundle with `digest`, which the caller has already matched against the pattern. */
 function bundleKey(digest: string): string {
@@ -61,9 +61,7 @@ export async function uploadToolBundle(store: ObjectStore, raw: unknown): Promis
       TOOL_BUNDLE_PROBLEM_CODES.invalid_tool_bundle,
       'invalid_tool_bundle',
       'The body is not a tool bundle upload.',
-      parsed.error.issues.map(
-        (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
-      ),
+      formatIssues(parsed.error.issues),
     );
   }
   const bytes = Buffer.from(parsed.data.contentBase64, 'base64');

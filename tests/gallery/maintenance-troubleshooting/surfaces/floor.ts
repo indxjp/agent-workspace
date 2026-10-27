@@ -8,7 +8,8 @@ export default defineSurface({
   layout: 'page',
   parts: {
     greeting:
-      '設備番号（または設備名）と、起きている現象を入力してください。1つずつ確認していきます。',
+      '設備番号（または設備名）と、起きている現象を入力してください。故障部位の写真を添付すると、写真を見て次の手順を出します。',
+    attachments: true,
     suggestedPrompts: [
       'プレス2号機 油圧が上がらない',
       'マシニングセンタ5号機 主軸から異音',

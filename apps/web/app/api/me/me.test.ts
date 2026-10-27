@@ -43,7 +43,6 @@ import {
 } from '../../../server/rbac/api-key';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../../../server/rbac/runtime';
 import {
   installRbacHarness,
   TEST_WORKSPACE_ID,
@@ -52,6 +51,8 @@ import {
 } from '../../../server/rbac/testing';
 
 import { GET } from './route';
+import { clearApplicationContext } from '../../../server/application-context';
+import { installTestDomains } from '../../../server/application-context-fixtures';
 
 const MEMBER = { email: 'member@example.test' };
 const SECRET = 'a-me-route-test-session-secret-that-is-long-enough';
@@ -61,7 +62,7 @@ let live: RbacHarness | null = null;
 afterEach(() => {
   live?.teardown();
   live = null;
-  clearRbacRuntime();
+  clearApplicationContext();
 });
 
 function harness(): RbacHarness {
@@ -196,40 +197,42 @@ describe('GET /api/me refuses a credential that stopped being usable', () => {
     });
     // The production shape of `installRbacApi`'s resolver, over the in-memory directory: a bearer
     // key first, else the session cookie, and `null` for any verification failure.
-    configureRbacRuntime({
-      directory,
-      identify: async (request: Request): Promise<Principal | null> => {
-        const attempt = readBearerApiKeyAttempt(request.headers.get('authorization'));
-        if (attempt.kind === 'invalid') return null;
-        if (attempt.kind === 'presented') {
-          const identity = await directory.authenticateApiKey(
-            presentedKeyText(attempt.key),
-            new Date(),
+    installTestDomains({
+      rbac: {
+        directory,
+        identify: async (request: Request): Promise<Principal | null> => {
+          const attempt = readBearerApiKeyAttempt(request.headers.get('authorization'));
+          if (attempt.kind === 'invalid') return null;
+          if (attempt.kind === 'presented') {
+            const identity = await directory.authenticateApiKey(
+              presentedKeyText(attempt.key),
+              new Date(),
+            );
+            return identity === null ? null : Principal.fromApiKey(identity);
+          }
+          const verified = await verifySessionToken(
+            sessionCookieValue(request.headers.get('cookie')),
+            SECRET,
           );
-          return identity === null ? null : Principal.fromApiKey(identity);
-        }
-        const verified = await verifySessionToken(
-          sessionCookieValue(request.headers.get('cookie')),
-          SECRET,
-        );
-        if (!verified.ok) return null;
-        const role = await directory.resolveRole(verified.claims.sub, TEST_WORKSPACE_ID);
-        if (role === null) return null;
-        const membership = (await directory.forWorkspace(TEST_WORKSPACE_ID).listMemberships()).find(
-          (candidate) => candidate.email === verified.claims.sub,
-        );
-        if (membership === undefined) return null;
-        const built = Principal.fromSession(
-          verified.claims,
-          { id: TEST_WORKSPACE_ID, slug: TEST_WORKSPACE_SLUG },
-          role,
-          {
-            principalId: membership.principalId,
-            userId: membership.userId,
-            label: membership.name,
-          },
-        );
-        return built.ok ? built.principal : null;
+          if (!verified.ok) return null;
+          const role = await directory.resolveRole(verified.claims.sub, TEST_WORKSPACE_ID);
+          if (role === null) return null;
+          const membership = (
+            await directory.forWorkspace(TEST_WORKSPACE_ID).listMemberships()
+          ).find((candidate) => candidate.email === verified.claims.sub);
+          if (membership === undefined) return null;
+          const built = Principal.fromSession(
+            verified.claims,
+            { id: TEST_WORKSPACE_ID, slug: TEST_WORKSPACE_SLUG },
+            role,
+            {
+              principalId: membership.principalId,
+              userId: membership.userId,
+              label: membership.name,
+            },
+          );
+          return built.ok ? built.principal : null;
+        },
       },
     });
 

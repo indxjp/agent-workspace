@@ -1,3 +1,4 @@
+import { log } from '../../../server/telemetry/logger';
 import {
   json,
   parseProject,
@@ -77,14 +78,13 @@ export async function POST(request: Request) {
         // The project and its associations have already committed atomically. Reporting a 4xx
         // here would invite a retry that creates a duplicate project; auditing is best effort at
         // this boundary until it can participate in the repository transaction.
-        console.error(
-          '[projects] project-created audit write failed',
-          new InfrastructureError({
+        log.error('[projects] project-created audit write failed', {
+          error: new InfrastructureError({
             component: 'projects',
             operation: 'write-create-audit',
             cause: error,
           }),
-        );
+        });
       }
       return Response.json(toProjectResource(created, input.fileIds, input.mcpServerIds), {
         status: 201,

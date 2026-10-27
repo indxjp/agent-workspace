@@ -8,6 +8,7 @@ import { surfaceStrings } from './locale.js';
 import type { ToolResultProps } from './parts.js';
 import {
   Chat,
+  type ComposerAttachments,
   type ComposerProps,
   type MessageListProps,
   type MessageProps,
@@ -167,6 +168,7 @@ describe('Chat history, switcher, feedback and tool results (#540)', () => {
         isError: false,
       },
     ],
+    handoff: null,
   };
 
   function render(surface: SurfaceDefinition): string {
@@ -186,6 +188,51 @@ describe('Chat history, switcher, feedback and tool results (#540)', () => {
     expect(html.indexOf('aria-label="Good answer"')).toBeGreaterThan(html.indexOf('It shipped.'));
     expect(html).toContain('aria-label="Bad answer"');
     expect(render(PLAIN)).not.toContain('aria-label="Good answer"');
+  });
+
+  it('tells the visitor, and only then, that a person has the conversation (ADR-0145 D4)', () => {
+    const handedOff = (locale: 'en' | 'ja', reason: string | null): string =>
+      renderToStaticMarkup(
+        createElement(Chat, {
+          surface: 'main',
+          agentName: 'Support triage',
+          definition: { ...PLAIN, theme: { locale } },
+          initialRun: answered,
+          initialTurns: [{ ...turn, handoff: reason === null ? null : { reason } }],
+        }),
+      );
+    const html = handedOff('en', 'Wants a refund.');
+    expect(html).toContain('This conversation has been handed to a person.');
+    expect(html).not.toContain('Wants a refund.');
+    expect(handedOff('ja', 'x')).toContain('担当者におつなぎします。');
+    expect(handedOff('en', null)).not.toContain('handed to a person');
+  });
+
+  it('drops the handoff notice once the session continues with a later turn (ADR-0145 D4)', () => {
+    const html = renderToStaticMarkup(
+      createElement(Chat, {
+        surface: 'main',
+        agentName: 'Support triage',
+        definition: PLAIN,
+        initialRun: answered,
+        initialTurns: [
+          { ...turn, handoff: { reason: 'Wants a refund.' } },
+          { ...turn, runId: 'run-2', answerIds: [] },
+        ],
+      }),
+    );
+    expect(html).not.toContain('handed to a person');
+  });
+
+  it('renders the attach control only when the surface has the attachments part (#1308)', () => {
+    const html = render({ ...PLAIN, parts: { attachments: true } });
+    expect(html).toContain('Attach files');
+    expect(html).toContain('type="file"');
+    // The control is a real button in the tab order; the file input it opens is hidden.
+    expect(html).toMatch(/<button type="button" class="aw-attach">Attach files<\/button>/u);
+    expect(html).not.toContain('<label class="aw-attach"');
+    expect(html.match(/<textarea/gu)).toHaveLength(1);
+    expect(render(PLAIN)).not.toContain('type="file"');
   });
 
   it('renders a switcher, and still exactly one message box', () => {
@@ -212,6 +259,21 @@ describe('Chat history, switcher, feedback and tool results (#540)', () => {
     const plain = render(PLAIN);
     expect(plain).not.toContain('<details');
     expect(plain).not.toContain('<table');
+  });
+
+  it('matches an engine-prefixed tool name by its bare name (#1276)', () => {
+    const prefixed = (name: string): string =>
+      renderToStaticMarkup(
+        createElement(Chat, {
+          surface: 'main',
+          agentName: 'Support triage',
+          definition: { ...PLAIN, toolResults: { lookup_order: 'table' } },
+          initialRun: answered,
+          initialTurns: [{ ...turn, tools: turn.tools.map((step) => ({ ...step, name })) }],
+        }),
+      );
+    expect(prefixed('mcp__orders__lookup_order')).toContain('<table');
+    expect(prefixed('mcp__orders__lookup_order_v2')).not.toContain('<table');
   });
 });
 
@@ -284,6 +346,7 @@ describe('Chat parts are replaceable, and each receives its documented props (#6
       readonly canSend: boolean;
       readonly label: string;
       readonly sendLabel: string;
+      readonly attachments?: ComposerAttachments;
     }>();
     const composer = spy<ComposerProps>();
     const html = renderToStaticMarkup(
@@ -354,6 +417,7 @@ describe('Chat parts are replaceable, and each receives its documented props (#6
             runId: 'run-1',
             answerIds: ['assistant-msg_1'],
             tools: [{ id: 'call_1', name: 'lookup_order', input: {}, output, isError: false }],
+            handoff: null,
           },
         ],
         components: { MessageList: list.Part, Message: message.Part, ToolResult: result.Part },

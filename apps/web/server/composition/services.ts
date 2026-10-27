@@ -1,24 +1,30 @@
+import { log } from '../telemetry/logger';
 import { createHash } from 'node:crypto';
 
-import type { RuntimeDriverId } from '@agent-workspace/core';
+import { loadEgressPolicyFromEnv } from '@agent-workspace/core';
+import type { RuntimeDriverId } from '@agent-workspace/run-protocol';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import { DEPLOYMENT_POSTURE_ENV, readDeploymentPosture } from '@agent-workspace/core/posture';
 import type { SecretsService } from '@agent-workspace/core/secrets';
-import type { RuntimeRunSpec } from '@agent-workspace/runtime';
+import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
+import { STORAGE_CONNECTION_FILE_ROOTS_ENV } from '@indx-workspace/contracts/storage-connections';
 
 import type { AgentsRuntime, WorkspaceResolution } from '../agents/runtime';
-import { configureConnectorsRuntime } from '../connectors/runtime';
-import { configureEndpointClientsRuntime } from '../endpoint-clients/runtime';
+import type { Connectors } from '../connectors/runtime';
+import type { EndpointClientsRuntime } from '../endpoint-clients/runtime';
 import { createRepositoryEndpointClientsRuntime } from '../endpoint-clients/store';
 import { registeredEngines } from '../engines/registry';
-import { configureModelsRuntime } from '../models/runtime';
-import { configureOAuthRuntime } from '../oauth/runtime';
+import type { Models } from '../models/runtime';
+import type { OAuthRuntime } from '../oauth/runtime';
 import { createRepositoryOAuthRuntime } from '../oauth/store';
-import { configureSecretsRuntime } from '../secrets/runtime';
+import type { Secrets } from '../secrets/runtime';
 import { createRepositorySecretsStoreProvider } from '../secrets/store';
+import type { StorageConnections } from '../storage-connections/runtime';
+import { createRepositoryStorageConnectionsStoreProvider } from '../storage-connections/store';
 import type { RuntimeManagerClient } from '../compose/runtime-manager-client';
 import type { ProviderCredentialSpec } from '../compose/runtime-provider-credential';
 import type { RuntimeProbeConfig } from '../runtimes/registry';
+import type { Runtimes } from '../runtimes/runtime';
 import type { Principal } from '../rbac/principal';
 import {
   configuredPath,
@@ -33,13 +39,13 @@ export async function installModelsApi(
   identifyActor: (request: Request) => Promise<Principal | null>,
   root: DatabaseRoot,
   secretsService: SecretsService | null,
-): Promise<InstalledModelsApi | null> {
+): Promise<{ readonly models: Models; readonly modelsApi: InstalledModelsApi | null }> {
   if (secretsService === null) {
-    console.error(
+    log.error(
       '[compose] models API NOT installed: provider credentials require the encrypted secrets service. ' +
         'Every /api/models and /api/model-connections route answers 503 models_runtime_not_configured.',
     );
-    return null;
+    return { models: { kind: 'unavailable' }, modelsApi: null };
   }
 
   const [
@@ -60,98 +66,146 @@ export async function installModelsApi(
   // `GET /api/models` and by every run's model resolution — a run started moments after a
   // `GET /api/models` call should not repeat an identical, still-fresh discovery round trip.
   const discover = createModelDiscovery();
-  configureModelsRuntime({
-    async resolveActor(request) {
-      const resolution = await resolveWorkspace(request);
-      if (resolution.kind !== 'workspace') return resolution;
-      const actor = await identifyActor(request);
-      if (actor === null)
-        return { kind: 'forbidden', reason: 'The session no longer has a workspace membership.' };
-      return {
-        kind: 'workspace',
-        workspaceId: actor.workspaceId,
-        principalId: actor.principalId,
-        userId: actor.userId,
-        userLabel: actor.label,
-        // issue #149: the membership's role, carried through rather than discarded — every write
-        // on a model connection now reaches `decide()` with it (`server/models/http.ts`).
-        role: actor.role,
-        scope: actor.scope,
-      };
+  const runtime: Models = {
+    kind: 'serving',
+    runtime: {
+      async resolveActor(request) {
+        const resolution = await resolveWorkspace(request);
+        if (resolution.kind !== 'workspace') return resolution;
+        const actor = await identifyActor(request);
+        if (actor === null)
+          return { kind: 'forbidden', reason: 'The session no longer has a workspace membership.' };
+        return {
+          kind: 'workspace',
+          workspaceId: actor.workspaceId,
+          principalId: actor.principalId,
+          userId: actor.userId,
+          userLabel: actor.label,
+          // issue #149: the membership's role, carried through rather than discarded — every write
+          // on a model connection now reaches `decide()` with it (`server/models/http.ts`).
+          role: actor.role,
+          scope: actor.scope,
+        };
+      },
+      models,
+      probe: probeModelConnection,
+      discover,
+      audit: (event) => root.recordAuditEvent(event),
+      log: (message) => log.info(`[models] ${message}`),
     },
-    models,
-    probe: probeModelConnection,
-    discover,
-    audit: (event) => root.recordAuditEvent(event),
-    log: (message) => console.log(`[models] ${message}`),
-  });
-  console.log(
+  };
+  log.info(
     '[compose] models API installed: PostgreSQL connection metadata → encrypted provider credential',
   );
-  return { models, discover };
+  return { models: runtime, modelsApi: { models, discover } };
 }
 
-/** Install `/api/connectors*` (spec §8) over PostgreSQL rows and encrypted secret references. */
+/** Build `/api/connectors*` (spec §8) over PostgreSQL rows and encrypted secret references. */
 export async function installConnectorsApi(
   resolveWorkspace: (request: Request) => Promise<WorkspaceResolution>,
   identifyAuditActor: (request: Request) => Promise<Principal | null>,
   root: DatabaseRoot,
   secretsService: SecretsService | null,
-): Promise<void> {
+): Promise<Connectors> {
   if (secretsService === null) {
-    console.error(
+    log.error(
       '[compose] connectors API NOT installed: connector credentials require the encrypted ' +
         'secrets service. Every /api/connectors* route answers 503 ' +
         'connectors_runtime_not_configured.',
     );
-    return;
+    return { kind: 'unavailable' };
   }
 
   const { createRepositoryConnectorsStoreProvider } = await import('../connectors/store');
-  configureConnectorsRuntime({
-    resolveWorkspace,
-    async recordAudit(request, event) {
-      const actor = await identifyAuditActor(request);
-      if (actor === null) throw new Error('connector mutation completed without an audit actor');
-      const scope = await root.scopes.forWorkspaceId(actor.workspaceId);
-      if (scope === null) throw new Error('connector audit workspace no longer exists');
-      await root.auditEventRepository.forScope(scope).write({
-        actorPrincipalId: actor.principalId,
-        actorUserId: actor.userId,
-        actorLabel: actor.label,
-        action: 'connector-changed',
-        subjectId: event.subjectId,
-        subjectLabel: event.subjectLabel,
-      });
+  const runtime: Connectors = {
+    kind: 'serving',
+    runtime: {
+      resolveWorkspace,
+      async recordAudit(request, event) {
+        const actor = await identifyAuditActor(request);
+        if (actor === null) throw new Error('connector mutation completed without an audit actor');
+        const scope = await root.scopes.forWorkspaceId(actor.workspaceId);
+        if (scope === null) throw new Error('connector audit workspace no longer exists');
+        await root.auditEventRepository.forScope(scope).write({
+          actorPrincipalId: actor.principalId,
+          actorUserId: actor.userId,
+          actorLabel: actor.label,
+          action: 'connector-changed',
+          subjectId: event.subjectId,
+          subjectLabel: event.subjectLabel,
+        });
+      },
+      connectors: createRepositoryConnectorsStoreProvider({
+        mcpServers: root.mcpServers,
+        secrets: secretsService,
+        scopes: root.scopes,
+      }),
+      // issue #117: `POST /api/connectors` stamps `created_by` from the same identity `recordAudit`
+      // above already requires — reused, not re-derived.
+      async identifyActor(request) {
+        const actor = await identifyAuditActor(request);
+        // The connector's owner: a local runtime key's writes are owned by the member it acts for.
+        return actor === null
+          ? null
+          : { principalId: actor.ownerPrincipalId, userId: actor.userId };
+      },
     },
-    connectors: createRepositoryConnectorsStoreProvider({
-      mcpServers: root.mcpServers,
-      secrets: secretsService,
-      scopes: root.scopes,
-    }),
-    // issue #117: `POST /api/connectors` stamps `created_by` from the same identity `recordAudit`
-    // above already requires — reused, not re-derived.
-    async identifyActor(request) {
-      const actor = await identifyAuditActor(request);
-      // The connector's owner: a local runtime key's writes are owned by the member it acts for.
-      return actor === null ? null : { principalId: actor.ownerPrincipalId, userId: actor.userId };
-    },
-  });
-  console.log(
+  };
+  log.info(
     '[compose] connectors API installed: PostgreSQL metadata → encrypted credential reference',
   );
+  return runtime;
 }
 
-/** Install `/api/endpoint-clients*` (ADR-0134) over the PostgreSQL repository and key directory. */
-export function installEndpointClientsApi(root: DatabaseRoot): void {
-  configureEndpointClientsRuntime(createRepositoryEndpointClientsRuntime(root));
-  console.log('[compose] endpoint clients API installed: PostgreSQL endpoint-scoped API keys');
+/** Build `/api/endpoint-clients*` (ADR-0134) over the PostgreSQL repository and key directory. */
+export function installEndpointClientsApi(root: DatabaseRoot): EndpointClientsRuntime {
+  const endpointClients = createRepositoryEndpointClientsRuntime(root);
+  log.info('[compose] endpoint clients API installed: PostgreSQL endpoint-scoped API keys');
+  return endpointClients;
 }
 
-/** Install the OAuth 2.1 server for endpoint clients (ADR-0134 part 3). */
-export function installOAuthApi(root: DatabaseRoot): void {
-  configureOAuthRuntime(createRepositoryOAuthRuntime(root));
-  console.log('[compose] OAuth server installed: PostgreSQL codes, access and refresh tokens');
+/** Storage connections (the storage design §05): credentials need the encrypted secrets service. */
+export function installStorageConnectionsApi(
+  root: DatabaseRoot,
+  secretsService: SecretsService | null,
+): StorageConnections {
+  if (secretsService === null) {
+    log.error(
+      '[compose] storage connections API NOT installed: credentials require the encrypted secrets service. ' +
+        'Every /api/storage-connections route answers 503 storage_connections_not_configured.',
+    );
+    return { kind: 'unavailable' };
+  }
+  const fileRoots = (process.env[STORAGE_CONNECTION_FILE_ROOTS_ENV] ?? '')
+    .split(',')
+    .map((root) => root.trim())
+    .filter((root) => root !== '');
+  return {
+    kind: 'serving',
+    runtime: {
+      store: createRepositoryStorageConnectionsStoreProvider({
+        repositories: root.storageConnections,
+        scopes: root.scopes,
+        secrets: secretsService,
+      }),
+      fileRoots,
+      egress: loadEgressPolicyFromEnv(),
+      isConnectionGranted: async (workspaceId, connectionId) => {
+        const scope = await root.scopes.forWorkspaceId(workspaceId);
+        return (
+          scope !== null && root.agentVersions.forScope(scope).isConnectionGranted(connectionId)
+        );
+      },
+      audit: (event) => root.recordAuditEvent(event),
+    },
+  };
+}
+
+/** Build the OAuth 2.1 server for endpoint clients (ADR-0134 part 3); the root installs it. */
+export function installOAuthApi(root: DatabaseRoot): OAuthRuntime {
+  const oauth = createRepositoryOAuthRuntime(root);
+  log.info('[compose] OAuth server installed: PostgreSQL codes, access and refresh tokens');
+  return oauth;
 }
 
 // ── The sub-wave 2b-1 installers ────────────────────────────────────────────────────────────────
@@ -165,21 +219,19 @@ export function installOAuthApi(root: DatabaseRoot): void {
 // rather than inferred: Next.js compiles this file for the edge runtime as well as for Node, a
 // top-level import is resolved before the `NEXT_RUNTIME` guard can run, and `pg`, `node:fs` and
 // `node:path` do not exist on the edge. `@agent-workspace/core/secrets` opens a `pg.Pool`,
-// `@agent-workspace/core/storage` reaches `node:fs`, and `sessions/file-store.ts` reaches both
-// `node:fs` and `node:path`, so all three are loaded here and not at the top of the file. The
-// seams themselves — `configureSecretsRuntime`, `configureFilesRuntime`,
-// `configureSkillsRuntime`, `installSessionApi` — are static imports, because each of those
-// modules imports nothing but types.
+// `@agent-workspace/core/storage` reaches `node:fs`, so both are loaded here and not at the top
+// of the file. The `Secrets` type is a static import, because its module imports nothing but
+// types.
 
 /**
- * Install `/api/secrets/**` (spec §23, W2-CP-02).
+ * Build `/api/secrets/**` (spec §23, W2-CP-02).
  *
  * `createSecretsService` is that subsystem's own composition root: it loads the selected
  * master-key provider **before** it opens anything, so a deployment with no key or a malformed one
  * throws here and the routes keep answering `503 secrets_runtime_not_configured`. That
  * ordering is the subsystem's own guarantee (`packages/core/src/secrets/service.ts`), and this
- * function's only contribution to it is to not defeat it: the error is logged and the seam is left
- * uninstalled, never caught and replaced with an in-memory service. `createInMemorySecretsService`
+ * function's only contribution to it is to not defeat it: the error is logged and the domain is
+ * `unavailable`, never caught and replaced with an in-memory service. `createInMemorySecretsService`
  * exists and is deliberately not called from here — it encrypts under a key invented inside the
  * process, so a deployment running on it would accept secrets it could not read again after a
  * restart, which is the fallback-indistinguishable-from-success shape of ADR-0015.
@@ -191,68 +243,94 @@ export function installOAuthApi(root: DatabaseRoot): void {
 export async function installSecretsApi(
   resolveWorkspace: (request: Request) => Promise<WorkspaceResolution>,
   scopes: DatabaseRoot['scopes'],
-): Promise<SecretsService | null> {
+  storageConnections: DatabaseRoot['storageConnections'],
+): Promise<{ readonly secrets: Secrets; readonly secretsService: SecretsService | null }> {
+  let secrets: typeof import('@agent-workspace/core/secrets') | undefined;
   try {
-    const secrets = await import('@agent-workspace/core/secrets');
+    secrets = await import('@agent-workspace/core/secrets');
     const service = await secrets.createSecretsService(process.env);
-    configureSecretsRuntime({
-      resolveWorkspace,
-      secrets: createRepositorySecretsStoreProvider({ service, scopes }),
-    });
-    console.log(
+    log.info(
       '[compose] secrets API installed: envelope encryption under the configured master-key ' +
         'provider, write-only through the routes',
     );
-    return service;
+    return {
+      secrets: {
+        kind: 'serving',
+        runtime: {
+          resolveWorkspace,
+          secrets: createRepositorySecretsStoreProvider({
+            service,
+            scopes,
+            storageConnections,
+          }),
+        },
+      },
+      secretsService: service,
+    };
   } catch (error) {
-    console.error(
-      `[compose] secrets API NOT installed: ${error instanceof Error ? error.message : String(error)} ` +
-        `Every /api/secrets/** route answers 503 secrets_runtime_not_configured.`,
+    if (secrets !== undefined && error instanceof secrets.MalformedMasterKeyError) {
+      // Issue #1562 (owner decision D9): set but malformed is a misconfiguration, not "secrets not
+      // configured". The error's message names the variable and the format, never the value.
+      log.error(
+        '[compose] secrets API NOT installed: MASTER_ENCRYPTION_KEY is set but malformed. ' +
+          `${secrets.MASTER_KEY_EXPECTED_FORMAT}. Every /api/secrets/** route answers 503 ` +
+          'secrets_runtime_not_configured, and GET /api/readyz answers 503, until it is fixed.',
+        { error },
+      );
+      return {
+        secrets: { kind: 'unavailable', reason: 'malformed-master-key' },
+        secretsService: null,
+      };
+    }
+    log.error(
+      '[compose] secrets API NOT installed. Every /api/secrets/** route answers 503 secrets_runtime_not_configured.',
+      { error },
     );
-    return null;
+    return { secrets: { kind: 'unavailable' }, secretsService: null };
   }
 }
 
-/** Install the profile and connection APIs, and return the §36 runtime-switch audit sink. */
+/** Build the profile and connection APIs and the §36 runtime-switch audit sink. */
 export async function installRuntimesApi(
   resolveWorkspace: (request: Request) => Promise<WorkspaceResolution>,
   identifyActor: (request: Request) => Promise<Principal | null>,
   root: DatabaseRoot,
   secretsService: SecretsService | null,
-): Promise<NonNullable<AgentsRuntime['runtimeSwitchAudit']> | null> {
+): Promise<{
+  readonly runtimes: Runtimes;
+  readonly runtimeSwitchAudit: NonNullable<AgentsRuntime['runtimeSwitchAudit']> | null;
+}> {
   if (secretsService === null) {
-    console.error(
+    log.error(
       '[compose] runtime APIs NOT installed: runtime connections are encrypted secrets, and the ' +
         'secrets service is unavailable. Runtime switches remain disabled because §36 cannot ' +
         'name both drivers without loading the referenced profiles.',
     );
-    return null;
+    return { runtimes: { kind: 'unavailable' }, runtimeSwitchAudit: null };
   }
 
-  const [{ configureRuntimesRuntime }, profileModule, connectionModule, auditModule] =
-    await Promise.all([
-      import('../runtimes/runtime'),
-      import('../runtimes/store'),
-      import('../runtimes/connections'),
-      import('../agents/runtime-switch-audit'),
-    ]);
+  const [profileModule, connectionModule, auditModule] = await Promise.all([
+    import('../runtimes/store'),
+    import('../runtimes/connections'),
+    import('../agents/runtime-switch-audit'),
+  ]);
   const profiles = profileModule.createRepositoryRuntimeProfileStoreProvider({
     repositories: root.runtimeProfiles,
     scopes: root.scopes,
   });
-  configureRuntimesRuntime({
+  const runtime = {
     resolveWorkspace,
     profiles,
     connections: connectionModule.createSecretsRuntimeConnectionStoreProvider({
       secrets: secretsService,
       scopes: root.scopes,
     }),
-  });
-  console.log(
+  };
+  log.info(
     '[compose] runtime profile and connection APIs installed: PostgreSQL profiles + encrypted connections',
   );
 
-  return auditModule.createRuntimeSwitchAudit({
+  const runtimeSwitchAudit = auditModule.createRuntimeSwitchAudit({
     profiles,
     identifyActor: async (request) => {
       const actor = await identifyActor(request);
@@ -267,6 +345,7 @@ export async function installRuntimesApi(
     },
     recordAuditEvent: (event) => root.recordAuditEvent(event),
   });
+  return { runtimes: { kind: 'serving', runtime }, runtimeSwitchAudit };
 }
 
 export function runnerManagerDriverLabel(driverId: RuntimeDriverId): string {
@@ -280,7 +359,11 @@ export function runnerManagerDriverLabel(driverId: RuntimeDriverId): string {
 
 type UnavailableRuntimeEntry = readonly [RuntimeDriverId, string, false, false];
 
-/** Static registry rows, excluding the driver represented by the live runner-manager row. */
+/**
+ * Static registry rows, excluding the driver represented by the live runner-manager row. `local`,
+ * `docker`, `cloud-run-service` and `cloudflare-sandbox` have no static row here; the pin in
+ * `runtimes/driver-catalogue.test.ts` records that.
+ */
 export function unavailableRuntimeRegistryEntries(
   managedDriverId: RuntimeDriverId,
 ): readonly UnavailableRuntimeEntry[] {
@@ -526,12 +609,10 @@ export async function installDriverRegistry(
         renderEvent: String,
       }),
     );
-    console.log(
+    log.info(
       `[compose] runtime registry installed: local is development-only; ${managedDriverLabel} uses runner-manager create/readiness/echo/destroy verification (${image})`,
     );
   } catch (error) {
-    console.error(
-      `[compose] runtime registry NOT installed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    log.error('[compose] runtime registry NOT installed', { error });
   }
 }

@@ -101,7 +101,7 @@ example :
       guard c "write" (some "docs-private/a.md") = true ∧
       guard c "write" (some "/workspace/docs-private/a.md") = true ∧
       guard c "read" (some ".") = true ∧ guard c "read" (some "/workspace/") = true ∧
-      guard c "read" (some "/etc/passwd") = false := by decide
+      guard c "read" (some "/etc/passwd") = false := by decide +kernel
 
 /-- A write to the workspace root itself is refused with its own reason, not as a grant refusal. -/
 example :
@@ -110,7 +110,7 @@ example :
         connection := connectionFor "http://gw" "tok", model := "claude-sonnet-4-5",
         maxTurns := none, budgetCap := false, grants := [], skills := [] }
     workspaceWriteVerdict c "/workspace/" = .refused .workspaceRoot ∧
-      workspaceWriteVerdict c "~/x" = .refused .rewrittenSpelling := by decide
+      workspaceWriteVerdict c "~/x" = .refused .rewrittenSpelling := by decide +kernel
 
 /-- Every model request an accepted configuration can issue targets the gateway's base URL plus
 `/v1/messages`, carries the run token as `Authorization: Bearer`, and there is exactly one such
@@ -136,7 +136,7 @@ theorem every_model_request_goes_to_the_gateway_with_the_run_token {r : Request}
 /-- Witness: a base URL with a trailing slash still yields one `/v1/messages` request under it. -/
 example :
     modelRequests (connectionFor "http://gateway:8787/" "run-token") =
-      [("http://gateway:8787/v1/messages", "Bearer run-token")] := by decide
+      [("http://gateway:8787/v1/messages", "Bearer run-token")] := by decide +kernel
 
 /-- The pinned resource loader admits only what the platform materialised for this run — built
 from the compiled configuration alone: a placed skill the run grants, or the agent's instructions —
@@ -177,6 +177,6 @@ example :
         [⟨.piHome, "evil-extension"⟩, ⟨.agentsHome, "evil-skill"⟩, ⟨.project, "project-skill"⟩,
          ⟨.platformSkill, "writer"⟩, ⟨.platformSkill, "not-granted"⟩,
          ⟨.platformInstructions, "planted"⟩] =
-      [⟨.platformSkill, "writer"⟩, instructions] := by decide
+      [⟨.platformSkill, "writer"⟩, instructions] := by decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.Pi

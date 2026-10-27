@@ -102,8 +102,8 @@ job.
 idempotency](/guides/retries-and-idempotency), [CLI vs SDK](/cli/cli-vs-sdk).
 
 <Note>
-  **Today:** a retried start after a lost response may start a second run, and there are no
-  webhooks — poll or stream in-process. **Target:** an `Idempotency-Key` on start. Tracked as
+  **Today:** there are no webhooks — poll or stream in-process — and a retried start is safe only
+  with an `idempotencyKey`. Tracked as [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes) and
   [S-6](/concepts/roadmap#s-6-idempotency-keys).
 </Note>
 

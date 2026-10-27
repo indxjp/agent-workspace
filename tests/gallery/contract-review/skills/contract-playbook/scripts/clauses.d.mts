@@ -1,7 +1,7 @@
 // Types for the contract-playbook skill's script, which is plain JavaScript so it runs with Node
 // alone inside a run's sandbox. The tests and the backend import it through these declarations.
 
-/** One paragraph as the office-reader skill prints it for a .docx. */
+/** One paragraph as the office-reader skill prints it for a .docx; this script reads that JSON, never the Word file. */
 export interface DocxParagraph {
   readonly style: string | null;
   readonly text: string;
@@ -74,3 +74,8 @@ export function check(
   paragraphs: readonly DocxParagraph[],
   playbook?: ReadonlyMap<string, PlaybookRule> | null,
 ): CheckResult;
+/** The draft's paragraphs plus a 【修正案】 block: the playbook's standard clause for each must-flag or 高 finding. */
+export function redline(
+  paragraphs: readonly DocxParagraph[],
+  result: CheckResult,
+): readonly DocxParagraph[];

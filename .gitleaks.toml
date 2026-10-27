@@ -1,0 +1,27 @@
+# gitleaks configuration for the fast-checks secret scan (audit F-03).
+# All default rules stay on. The one allowlist below stops only the entropy-based generic-api-key
+# rule from firing on test fixtures, snapshots and generated test vectors, where it matched 98 of
+# the 99 pre-existing history findings (random-looking test ids, hashes). Vendor-specific rules
+# (cloud keys, GitHub/Slack/Stripe tokens, private keys, ...) still apply to those paths.
+title = "indx gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "generic-api-key false positives in tests, snapshots and generated vectors"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)tests?/''',
+  '''\.test\.[cm]?[jt]sx?$''',
+  '''__snapshots__/''',
+  '''^formal/''',
+  '''^docs/''',
+]
+
+[[allowlists]]
+description = "the dummy MASTER_ENCRYPTION_KEY CI uses for its throwaway stack"
+condition = "AND"
+targetRules = ["generic-api-key"]
+paths = ['''^\.github/workflows/(ci|quality)\.yml$''']
+regexes = ['''0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef''']

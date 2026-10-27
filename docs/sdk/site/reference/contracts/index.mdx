@@ -3,7 +3,7 @@ title: "contracts"
 description: "The @indx-workspace/contracts root entry: identifiers and the error envelope."
 ---
 
-<Note>This page is generated from `packages/contracts/src/identifiers.ts`, `packages/contracts/src/index.ts`, `packages/contracts/src/problem.ts`, `packages/contracts/src/version.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+<Note>This page is generated from `packages/contracts/src/identifiers.ts`, `packages/contracts/src/index.ts`, `packages/contracts/src/mcp-server-config.ts`, `packages/contracts/src/problem.ts`, `packages/contracts/src/version.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
 ## ApiProblem
 
@@ -97,7 +97,7 @@ Value: `'x-agent-workspace-contracts-minimum'`
 
 The version of `@indx-workspace/contracts` this build is; equal to its `package.json` version.
 
-Value: `'0.6.9'`
+Value: `'0.6.11'`
 
 ## CONTRACTS_VERSION_HEADER
 
@@ -155,6 +155,7 @@ resource is refused, never cascaded, and never left to orphan the referrer (ADR-
 - `'agent'`
 - `'connector'`
 - `'model-connection'`
+- `'storage-connection'`
 
 ## InUseReferrer
 
@@ -162,7 +163,7 @@ One referrer, as the `details` of a `409 <resource>_in_use` problem carries it.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `kind` | `"agent" \| "connector" \| "model-connection"` | Yes |  |
+| `kind` | `"agent" \| "connector" \| "model-connection" \| "storage-connection"` | Yes |  |
 | `id` | `string` | Yes |  |
 
 ## InUseReferrerKind
@@ -170,6 +171,7 @@ One referrer, as the `details` of a `409 <resource>_in_use` problem carries it.
 - `"agent"`
 - `"connector"`
 - `"model-connection"`
+- `"storage-connection"`
 
 ## IsoDateTimeSchema
 
@@ -191,6 +193,77 @@ Judge one client version against a served range.
 ```ts
 judgeContractsVersion(client: ContractsVersion, range: ServedContractsRange): ContractsVersionVerdict
 ```
+
+## McpHttpServerConfigSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | `"http"` | Yes |  |
+| `url` | `string` | Yes |  |
+| `headers` | `undefined \| Record<string, string>` | No |  |
+| `tools` | `undefined \| McpToolPolicy[]` | No |  |
+| `timeout` | `undefined \| number` | No |  |
+| `alwaysLoad` | `undefined \| false \| true` | No |  |
+
+## McpServerConfigSchema
+
+What a write accepts: a record, after the `streamable-http` alias is normalised to `http`.
+
+- `{ type: "http"; url: string; headers?: Record<string, string> | undefined; tools?: { name: string; permission_policy?: "always_allow" | "always_ask" | "always_deny" | undefined; org_max_permission?: "allow" | "ask" | "blocked" | undefined; }[] | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+- `{ url: string; type: "sse"; headers?: Record<string, string> | undefined; tools?: { name: string; permission_policy?: "always_allow" | "always_ask" | "always_deny" | undefined; org_max_permission?: "allow" | "ask" | "blocked" | undefined; }[] | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+- `{ command: string; type?: "stdio" | undefined; args?: string[] | undefined; env?: Record<string, string> | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+
+## McpServerRecord
+
+- `{ type: "http"; url: string; headers?: Record<string, string> | undefined; tools?: { name: string; permission_policy?: "always_allow" | "always_ask" | "always_deny" | undefined; org_max_permission?: "allow" | "ask" | "blocked" | undefined; }[] | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+- `{ url: string; type: "sse"; headers?: Record<string, string> | undefined; tools?: { name: string; permission_policy?: "always_allow" | "always_ask" | "always_deny" | undefined; org_max_permission?: "allow" | "ask" | "blocked" | undefined; }[] | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+- `{ command: string; type?: "stdio" | undefined; args?: string[] | undefined; env?: Record<string, string> | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+
+## McpServerRecordSchema
+
+A stored record, with no alias normalisation: what an engine adapter validates.
+
+- `{ type: "http"; url: string; headers?: Record<string, string> | undefined; tools?: { name: string; permission_policy?: "always_allow" | "always_ask" | "always_deny" | undefined; org_max_permission?: "allow" | "ask" | "blocked" | undefined; }[] | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+- `{ url: string; type: "sse"; headers?: Record<string, string> | undefined; tools?: { name: string; permission_policy?: "always_allow" | "always_ask" | "always_deny" | undefined; org_max_permission?: "allow" | "ask" | "blocked" | undefined; }[] | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+- `{ command: string; type?: "stdio" | undefined; args?: string[] | undefined; env?: Record<string, string> | undefined; timeout?: number | undefined; alwaysLoad?: boolean | undefined; }`
+
+## McpSseServerConfigSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `type` | `"sse"` | Yes |  |
+| `headers` | `undefined \| Record<string, string>` | No |  |
+| `tools` | `undefined \| McpToolPolicy[]` | No |  |
+| `timeout` | `undefined \| number` | No |  |
+| `alwaysLoad` | `undefined \| false \| true` | No |  |
+
+## McpStdioServerConfigSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `command` | `string` | Yes |  |
+| `type` | `undefined \| "stdio"` | No |  |
+| `args` | `undefined \| string[]` | No |  |
+| `env` | `undefined \| Record<string, string>` | No |  |
+| `timeout` | `undefined \| number` | No |  |
+| `alwaysLoad` | `undefined \| false \| true` | No |  |
+
+## McpToolPolicy
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `permission_policy` | `undefined \| "always_allow" \| "always_ask" \| "always_deny"` | No |  |
+| `org_max_permission` | `undefined \| "allow" \| "ask" \| "blocked"` | No |  |
+
+## McpToolPolicySchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `permission_policy` | `undefined \| "always_allow" \| "always_ask" \| "always_deny"` | No |  |
+| `org_max_permission` | `undefined \| "allow" \| "ask" \| "blocked"` | No |  |
 
 ## parseContractsVersion
 

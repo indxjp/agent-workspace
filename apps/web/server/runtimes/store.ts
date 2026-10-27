@@ -4,16 +4,16 @@
  *
  * Copies `apps/web/server/agents/store.ts`'s shape exactly — read that file's header first for why
  * a store is obtained *for a workspace id* (never a `WorkspaceScope`, which is a sibling package's
- * type) and why every core reference here is a type. The reasoning is unchanged; only the resource
- * differs.
+ * type). The reasoning is unchanged; only the resource differs.
  */
-import type {
-  CreateRuntimeProfileInput as CoreCreateRuntimeProfileInput,
-  RuntimeProfileRecord as CoreRuntimeProfileRecord,
-  RuntimeProfileRepository as CoreRuntimeProfileRepository,
-  RuntimeProfileRepositoryProvider as CoreRuntimeProfileRepositoryProvider,
-  UpdateRuntimeProfilePatch as CoreUpdateRuntimeProfilePatch,
-  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import {
+  UnknownWorkspaceError,
+  type CreateRuntimeProfileInput as CoreCreateRuntimeProfileInput,
+  type RuntimeProfileRecord as CoreRuntimeProfileRecord,
+  type RuntimeProfileRepository as CoreRuntimeProfileRepository,
+  type RuntimeProfileRepositoryProvider as CoreRuntimeProfileRepositoryProvider,
+  type UpdateRuntimeProfilePatch as CoreUpdateRuntimeProfilePatch,
+  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
 /** One `runtime_profiles` row, as this layer hands it around. Mirrors the repository's record. */
@@ -71,25 +71,6 @@ export interface RuntimeProfileStoreProvider {
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // The PostgreSQL implementation, as an adapter onto the repository layer.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-
-/**
- * Thrown when a store is asked for a workspace no `workspaces` row names. Declared here, not
- * imported, for the mechanical reason `agents/store.ts`'s identical class gives: every reference
- * to core in this file is a type, and a value import would drag `pg` into the edge bundle
- * `apps/web/instrumentation.ts` also compiles for.
- */
-export class UnknownWorkspaceError extends Error {
-  public readonly workspaceId: string;
-
-  public constructor(workspaceId: string) {
-    super(
-      `no workspace has id ${workspaceId}; a runtime-profile store cannot be scoped to a ` +
-        'workspace that does not exist',
-    );
-    this.name = 'UnknownWorkspaceError';
-    this.workspaceId = workspaceId;
-  }
-}
 
 /** What {@link createRepositoryRuntimeProfileStoreProvider} needs, and the whole of it. */
 export interface RepositoryRuntimeProfileStoreDependencies {

@@ -49,11 +49,16 @@
    "expected":
    {"otherChecks":
     ["runs_ended_at_iff_terminal",
+     "runs_awaiting_approval_has_pending",
+     "runs_awaiting_approval_has_deadline",
      "runs_ended_after_started",
      "runs_counters_non_negative",
      "runs_cost_currency_usd",
      "runs_price_version_matches_accounting_state",
-     "runs_unpriced_cost_zero"]}},
+     "runs_unpriced_cost_zero",
+     "runs_output_only_when_completed",
+     "runs_consumed_approvals_never_queued",
+     "runs_idempotency_key_has_hash"]}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
@@ -85,12 +90,39 @@
    "id": "checks/audit_events",
    "expected":
    {"otherChecks":
-    ["audit_events_actor_label_not_blank", "audit_events_subject_label_not_blank", "audit_events_subject_id_shape"]}},
+    ["audit_events_details_only_agent_created",
+     "audit_events_actor_label_not_blank",
+     "audit_events_subject_label_not_blank",
+     "audit_events_subject_id_shape"]}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"table": "surface_session_keys"},
    "id": "checks/surface_session_keys",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "triggers"},
+   "id": "checks/triggers",
+   "expected": {"otherChecks": ["triggers_secret_hash_sha256_hex", "triggers_kind_shape"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "trigger_deliveries"},
+   "id": "checks/trigger_deliveries",
+   "expected": {"otherChecks": ["trigger_deliveries_key_length"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "storage_migration_runs"},
+   "id": "checks/storage_migration_runs",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "builder_tool_calls"},
+   "id": "checks/builder_tool_calls",
    "expected": {"otherChecks": []}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
@@ -111,7 +143,20 @@
    "input": {"name": "runs_ended_at_iff_terminal"},
    "id": "check/runs_ended_at_iff_terminal",
    "expected":
-   {"sql": "(\"runs\".\"status\" in ('completed', 'failed', 'cancelled')) = (\"runs\".\"ended_at\" is not null)"}},
+   {"sql":
+    "(\"runs\".\"status\" in ('completed', 'failed', 'cancelled', 'awaiting_approval')) = (\"runs\".\"ended_at\" is not null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_awaiting_approval_has_pending"},
+   "id": "check/runs_awaiting_approval_has_pending",
+   "expected": {"sql": "\"runs\".\"status\" <> 'awaiting_approval' or \"runs\".\"pending_approval\" is not null"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_awaiting_approval_has_deadline"},
+   "id": "check/runs_awaiting_approval_has_deadline",
+   "expected": {"sql": "\"runs\".\"status\" <> 'awaiting_approval' or \"runs\".\"approval_deadline_at\" is not null"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
@@ -151,6 +196,24 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_output_only_when_completed"},
+   "id": "check/runs_output_only_when_completed",
+   "expected": {"sql": "\"runs\".\"output\" is null or \"runs\".\"status\" = 'completed'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_consumed_approvals_never_queued"},
+   "id": "check/runs_consumed_approvals_never_queued",
+   "expected": {"sql": "\"runs\".\"approvals_consumed_at\" is null or \"runs\".\"status\" <> 'queued'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_idempotency_key_has_hash"},
+   "id": "check/runs_idempotency_key_has_hash",
+   "expected": {"sql": "(\"runs\".\"idempotency_key\" is null) = (\"runs\".\"idempotency_request_hash\" is null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "run_feedback_comment_length"},
    "id": "check/run_feedback_comment_length",
    "expected": {"sql": "\"run_feedback\".\"comment\" is null or char_length(\"run_feedback\".\"comment\") <= 1000"}},
@@ -184,6 +247,12 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "audit_events_details_only_agent_created"},
+   "id": "check/audit_events_details_only_agent_created",
+   "expected": {"sql": "\"audit_events\".\"details\" is null or \"audit_events\".\"action\" = 'agent-created'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "audit_events_actor_label_not_blank"},
    "id": "check/audit_events_actor_label_not_blank",
    "expected": {"sql": "length(btrim(\"audit_events\".\"actor_label\")) > 0"}},
@@ -200,6 +269,26 @@
    "id": "check/audit_events_subject_id_shape",
    "expected":
    {"sql":
-    "\"audit_events\".\"subject_id\" is null or \"audit_events\".\"subject_id\" ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"}}],
+    "\"audit_events\".\"subject_id\" is null or \"audit_events\".\"subject_id\" ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "triggers_secret_hash_sha256_hex"},
+   "id": "check/triggers_secret_hash_sha256_hex",
+   "expected": {"sql": "\"triggers\".\"secret_hash\" is null or \"triggers\".\"secret_hash\" ~ '^[0-9a-f]{64}$'"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "triggers_kind_shape"},
+   "id": "check/triggers_kind_shape",
+   "expected":
+   {"sql":
+    "(\"triggers\".\"kind\" = 'webhook' and \"triggers\".\"secret_hash\" is not null and \"triggers\".\"cron\" is null and \"triggers\".\"timezone\" is null)\n        or (\"triggers\".\"kind\" = 'schedule' and \"triggers\".\"secret_hash\" is null and \"triggers\".\"cron\" is not null and \"triggers\".\"timezone\" is not null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "trigger_deliveries_key_length"},
+   "id": "check/trigger_deliveries_key_length",
+   "expected": {"sql": "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"}}],
  "family": "concept-work",
  "description": "The refined checks of the work tables and their exact SQL"}

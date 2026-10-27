@@ -29,6 +29,7 @@ const DEFINE_SOURCES = [
   'packages/sdk/src/define/surface.ts',
   'packages/sdk/src/define/references.ts',
   'packages/sdk/src/define/version-body.ts',
+  'packages/sdk/src/define/from-version-body.ts',
   'packages/sdk/src/define/errors.ts',
   'packages/sdk/src/define/brand.ts',
 ];

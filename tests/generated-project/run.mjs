@@ -26,7 +26,9 @@
  * `GP_REVISION` (`git rev-parse HEAD`), and three numbers, each a positive integer or the run
  * stops naming it: `GP_REGISTRY_PORT` (5000) and `GP_FAKE_CONTROL_PORT` (18081, the fake
  * provider's control port on the host's loopback), both at most 65535, and `GP_PREPARE_TIMEOUT_MS`
- * (30 minutes: the cap on packing, installing and building the images).
+ * (30 minutes: the cap on packing, installing and building the images). `GP_WEB_PORT` and
+ * `GP_OBJECT_STORE_PORT`, when set, replace the generated `.env`'s `PORT` (3000) and
+ * `SEAWEEDFS_PORT` (8333) before `pnpm start`.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -43,7 +45,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 /** registry:3.0.0, pinned by its multi-arch index digest. */
 export const REGISTRY_IMAGE =
   'docker.io/library/registry@sha256:6c5666b861f3505b116bb9aa9b25175e71210414bd010d92035ff64018f9457e';
-const REGISTRY_CONTAINER = 'generated-project-e2e-registry';
+// Named per runner: the self-hosted CI host runs several jobs on one Docker daemon at once.
+const REGISTRY_CONTAINER = `generated-project-e2e-registry-${(process.env.RUNNER_NAME ?? 'local').replace(/[^\w.-]/gu, '-')}`;
 
 /**
  * The cap on everything before the suite starts (pack, install, four image builds), so that a hung

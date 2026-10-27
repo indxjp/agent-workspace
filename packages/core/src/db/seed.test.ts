@@ -177,7 +177,7 @@ describe('readSeedOptions (no database required)', () => {
 });
 
 describe('agents table shape', () => {
-  it('has no column that could mark an agent as built in (§19.5 rule 3)', () => {
+  it('has one column that marks an agent as built in, and it is nullable (§19.5 rule 3, ADR-0108 B-D1)', () => {
     const columns = getTableConfig(agents).columns.map((column) => column.name);
     expect(columns).toEqual([
       'id',
@@ -199,12 +199,21 @@ describe('agents table shape', () => {
       // whoever created the row, so this test's point survives unchanged.
       'created_by',
       'owner_principal_id',
+      // Added by #1848: the one built-in marker. NULL for every ordinary row, including General,
+      // which this file's seed still creates as an ordinary, editable and deletable agent.
+      'builtin_key',
       // Added by PR #403's review (issue #393): when first-run setup last configured the agent, a
       // composer preference. Not a built-in flag: the agent stays an ordinary, editable and
       // deletable row, and General is not marked by it.
       'setup_configured_at',
       // Added by issue #613: the version the row was last written from. Not a flag either.
       'materialised_version_id',
+      // Added by #1851: lineage of an agent made by an agent, and when it was archived. Both
+      // null for every ordinary row, and neither marks an agent as built in.
+      'created_by_agent_id',
+      'created_by_agent_version',
+      'created_by_run_id',
+      'archived_at',
       'created_at',
       'updated_at',
     ]);

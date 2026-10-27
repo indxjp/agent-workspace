@@ -2,16 +2,13 @@ apiVersion: agentworkspace.dev/v2
 kind: Project
 name: excel-consolidation
 engine: claude-agent-sdk
-# The file search is your own MCP server (mcp/file-finder.mjs), standing in for SharePoint, Box or
-# the file server's index. A project file names only remote connectors, so run it over HTTP:
-#   FILE_ROOT=/srv/branch-reports MCP_TRANSPORT=http PORT=8788 node mcp/file-finder.mjs
-connectors:
-  file-finder:
-    url: http://127.0.0.1:8788/mcp
-    transport: http
+# No connectors: the workbooks are found with the platform's search_files over the granted branch
+# folders, and the backend narrows each run to the folders the signed-in person may see with
+# `runs.start({ fileScope })`. Upload each branch's workbooks into its folder once:
+#   (cd data && for f in */*; do aw files upload "$f" "$f"; done)
 policy:
   permissions:
-    writeFiles: false
+    writeFiles: true
     runCommands: true
     unrestrictedNetwork: false
   limits:

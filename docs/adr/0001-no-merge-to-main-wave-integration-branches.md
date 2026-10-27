@@ -1,6 +1,6 @@
 # ADR-0001 — The trunk does not advance; waves stack on integration branches
 
-Status: accepted
+Status: accepted — Superseded by [ADR-0149](0149-main-requires-a-pull-request-and-the-ci-success-gate.md)
 Date: 2026-09-03
 Decided by: Owner (this session), after the orchestrator raised the objection below
 Scope: whole programme

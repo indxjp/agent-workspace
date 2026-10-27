@@ -1,3 +1,4 @@
+import ErSnapshot
 import AgentWorkspace.Er.Current.Identity
 import AgentWorkspace.Theorems.Invariants.ErCore
 
@@ -102,7 +103,7 @@ def state : State
     [⟨[("id", "r1"), ("workspace_id", "w1"), ("session_id", "s1"), ("status", "queued"),
        ("input_tokens", "0"), ("output_tokens", "0"), ("cache_read_input_tokens", "0"),
        ("cache_creation_input_tokens", "0"), ("cost_usd", "0"), ("cost_currency", "USD"),
-       ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}")] ++ ts⟩]
+       ("tool_calls", "0"), ("accounting_state", "pending"), ("tool_connector_ids", "{}"), ("file_grants", "{}"), ("approved_tool_calls", "[]"), ("consumed_tool_calls", "[]")] ++ ts⟩]
   | .browserTokens =>
     [⟨[("id", "t1"), ("workspace_id", "w1"), ("minted_by_principal_id", "p2"),
        ("scope_kind", "run"), ("run_id", "r1"), ("token_hash", "h-t1"), ("expires_at", "1300"),
@@ -237,7 +238,7 @@ elab "aw_identity_relationship_theorems" : command => do
           theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : Er.Core.consistent catalogue st = true) {r r' : Row}
               (h : References catalogue st $tT (fkOf $tT $nL) r r') :
               tenantOf catalogue $tT r = tenantOf catalogue (fkOf $tT $nL).refTable r' :=
-            reference_preserves_tenant catalogue st hc (by decide) (by decide) h))
+            reference_preserves_tenant catalogue st hc (by decide +kernel) (by decide +kernel) h))
       let thm := mkIdent (Name.mkSimple s!"{n}_parent_is_unique")
       let doc := mkDocComment s!"In every consistent state, a `{sql}` row whose \
         {colsText fk.columns} are set references exactly one `{ref}` row through `{n}`."
@@ -251,7 +252,7 @@ elab "aw_identity_relationship_theorems" : command => do
               ∀ r'' ∈ st (fkOf $tT $nL).refTable,
                 r''.project (fkOf $tT $nL).refColumns = r.project (fkOf $tT $nL).columns →
                   r'' = r' :=
-          exactly_one_parent hc (by decide) (by decide) hr hp))
+          exactly_one_parent hc (by decide +kernel) (by decide +kernel) hr hp))
       if parentMultiplicity t fk == .exactlyOne then
         let thm := mkIdent (Name.mkSimple s!"{n}_is_required")
         let doc := mkDocComment s!"In every consistent state, every `{sql}` row has \
@@ -261,7 +262,7 @@ elab "aw_identity_relationship_theorems" : command => do
           @[aw_spec (tier := $(mkIdent `T2)) (doc := $(Syntax.mkStrLit erDoc)) (ts := $(cite n))]
           theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : Er.Core.consistent catalogue st = true) {r : Row}
               (hr : r ∈ st $tT) : r.present (fkOf $tT $nL).columns = true :=
-            not_null_present (t := $tT) hc (by decide) hr))
+            not_null_present (t := $tT) hc (by decide +kernel) hr))
       if childMultiplicity t fk == .atMostOne then
         let thm := mkIdent (Name.mkSimple s!"{n}_child_is_unique")
         let doc := mkDocComment s!"In every consistent state, a `{ref}` row is referenced through \
@@ -274,9 +275,9 @@ elab "aw_identity_relationship_theorems" : command => do
               (hp : r1.present (fkOf $tT $nL).columns = true)
               (he : r1.project (fkOf $tT $nL).columns = r2.project (fkOf $tT $nL).columns) :
               r1 = r2 :=
-            unique_of_covers hc (by decide) h1 h2 hp he))
+            unique_of_covers hc (by decide +kernel) h1 h2 hp he))
     for u in s.uniques do
-      if !u.partialNullColumns.isEmpty then continue
+      if !u.partialNullColumns.isEmpty || !u.partialNotNullColumns.isEmpty then continue
       let thm := mkIdent (Name.mkSimple s!"{u.name}_identifies_a_row")
       let doc := mkDocComment s!"In every consistent state, two `{sql}` rows that agree on \
         {colsText u.columns} (all set) are the same row (`{u.name}`)."
@@ -289,7 +290,7 @@ elab "aw_identity_relationship_theorems" : command => do
         theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : Er.Core.consistent catalogue st = true) {r1 r2 : Row}
             (h1 : r1 ∈ st $tT) (h2 : r2 ∈ st $tT) (hp : r1.present $cols = true)
             (he : r1.project $cols = r2.project $cols) : r1 = r2 :=
-          unique_of_covers hc (by decide) h1 h2 hp he))
+          unique_of_covers hc (by decide +kernel) h1 h2 hp he))
 
 end Generator
 
@@ -298,7 +299,8 @@ aw_identity_relationship_theorems
 /-- The witness state gives every unique key of the cluster a row with the key set: each
 `<key>_identifies_a_row` has a row that satisfies its hypotheses (with itself). -/
 example : tables.all (fun t => (catalogue t).uniques.all fun u =>
-    !u.partialNullColumns.isEmpty || (Witness.state t).any (·.present u.columns)) = true := by
+    !u.partialNullColumns.isEmpty || !u.partialNotNullColumns.isEmpty ||
+      (Witness.state t).any (·.present u.columns)) = true := by
   decide +kernel
 
 /-! ## The concepts' shapes in every state -/
@@ -339,7 +341,7 @@ private theorem core_of_identity {st : Er.Core.State}
 private theorem scope_kind_present {st : Er.Core.State}
     (hc : Er.Core.consistent catalogue st = true) {r : Row} (hr : r ∈ st .browserTokens) :
     (r.get "scope_kind").isSome = true := by
-  have := not_null_present (t := .browserTokens) (cols := ["scope_kind"]) hc (by decide) hr
+  have := not_null_present (t := .browserTokens) (cols := ["scope_kind"]) hc (by decide +kernel) hr
   simpa [Row.present] using this
 
 /-- In every consistent state (with the refined checks), every browser-token row decodes to
@@ -349,9 +351,9 @@ exactly one scope: a run or a session, never both and never neither. -/
 theorem browser_token_row_has_one_scope (st : Er.Core.State)
     (hc : Er.Current.Identity.consistent st = true) {r : Row} (hr : r ∈ st .browserTokens) :
     (scopeOfRow? r).isSome = true := by
-  have hx := identity_checks_hold hc (t := .browserTokens) (by decide) hr
+  have hx := identity_checks_hold hc (t := .browserTokens) (by decide +kernel) hr
     (n := "browser_tokens_scope_xor")
-    (e := .xor "scope_kind" "run" "run_id" "session" "session_id") (by decide)
+    (e := .xor "scope_kind" "run" "run_id" "session" "session_id") (by decide +kernel)
   have hk := scope_kind_present (core_of_identity hc) hr
   obtain ⟨k, hk'⟩ := Option.isSome_iff_exists.mp hk
   simp only [CheckExpr.holds, CheckExpr.eval, eqText, hk', Option.map_some] at hx
@@ -381,25 +383,25 @@ theorem membership_links_exactly_one_user_and_one_workspace (st : Er.Core.State)
       (∃ w ∈ st .workspaces, w.get "id" = m.get "workspace_id" ∧
         ∀ w' ∈ st .workspaces, w'.get "id" = m.get "workspace_id" → w' = w) := by
   have hu1 : (fkOf .memberships "memberships_user_id_users_id_fk").columns = ["user_id"] := by
-    decide
+    decide +kernel
   have hu2 : (fkOf .memberships "memberships_user_id_users_id_fk").refColumns = ["id"] := by
-    decide
-  have hu3 : (fkOf .memberships "memberships_user_id_users_id_fk").refTable = .users := by decide
+    decide +kernel
+  have hu3 : (fkOf .memberships "memberships_user_id_users_id_fk").refTable = .users := by decide +kernel
   have hw1 : (fkOf .memberships "memberships_workspace_id_workspaces_id_fk").columns =
-      ["workspace_id"] := by decide
+      ["workspace_id"] := by decide +kernel
   have hw2 : (fkOf .memberships "memberships_workspace_id_workspaces_id_fk").refColumns =
-      ["id"] := by decide
+      ["id"] := by decide +kernel
   have hw3 : (fkOf .memberships "memberships_workspace_id_workspaces_id_fk").refTable =
-      .workspaces := by decide
+      .workspaces := by decide +kernel
   constructor
   · have := exactly_one_parent (t := .memberships)
-      (fk := fkOf .memberships "memberships_user_id_users_id_fk") hc (by decide) (by decide) hm
-      (not_null_present (t := .memberships) hc (by decide) hm)
+      (fk := fkOf .memberships "memberships_user_id_users_id_fk") hc (by decide +kernel) (by decide +kernel) hm
+      (not_null_present (t := .memberships) hc (by decide +kernel) hm)
     simp only [hu1, hu2, hu3, single_project, List.cons.injEq, and_true] at this
     exact this
   · have := exactly_one_parent (t := .memberships)
-      (fk := fkOf .memberships "memberships_workspace_id_workspaces_id_fk") hc (by decide)
-      (by decide) hm (not_null_present (t := .memberships) hc (by decide) hm)
+      (fk := fkOf .memberships "memberships_workspace_id_workspaces_id_fk") hc (by decide +kernel)
+      (by decide +kernel) hm (not_null_present (t := .memberships) hc (by decide +kernel) hm)
     simp only [hw1, hw2, hw3, single_project, List.cons.injEq, and_true] at this
     exact this
 
@@ -425,17 +427,17 @@ theorem membership_principal_has_exactly_one_membership (st : Er.Core.State)
   have hmem : (p.get "membership_id").isSome = true := by
     rcases hsrc with ⟨_, h, _⟩ | ⟨h, _, _⟩
     · exact h
-    · exact absurd (hk.symm.trans h) (by decide)
+    · exact absurd (hk.symm.trans h) (by decide +kernel)
   have hws : (p.get "workspace_id").isSome = true := by
     have := not_null_present (t := .workspacePrincipals) (cols := ["workspace_id"]) hc
-      (by decide) hp
+      (by decide +kernel) hp
     simpa [Row.present] using this
   have hpres : p.present (fkOf .workspacePrincipals
       "workspace_principals_membership_workspace_fk").columns = true := by
     simp [fkOf, Row.present, hmem, hws, catalogue, TableSpec.foreignKey?]
   obtain ⟨m, hm, he, huniq⟩ := exactly_one_parent (t := .workspacePrincipals)
     (fk := fkOf .workspacePrincipals "workspace_principals_membership_workspace_fk") hc
-    (by decide) (by decide) hp hpres
+    (by decide +kernel) (by decide +kernel) hp hpres
   have he' : m.get "workspace_id" = p.get "workspace_id" ∧ m.get "id" = p.get "membership_id" := by
     simpa [fkOf, Row.project, catalogue, TableSpec.foreignKey?] using he
   refine ⟨m, hm, he'.1, he'.2, fun m' hm' h1 h2 => huniq m' hm' ?_⟩
@@ -447,7 +449,7 @@ example : ∃ m ∈ Witness.state .memberships, m.get "workspace_id" = some "w1"
       m'.get "id" = some "m1" → m' = m :=
   membership_principal_has_exactly_one_membership Witness.state Witness.core_consistent
     (p := ⟨[("id", "p1"), ("workspace_id", "w1"), ("kind", "membership"), ("membership_id", "m1"),
-      ("activated_at", "1000"), ("created_at", "1000")]⟩) (by decide) rfl
+      ("activated_at", "1000"), ("created_at", "1000")]⟩) (by decide +kernel) rfl
 
 /-- In every consistent state an API-key principal is backed by exactly one API key, in the
 principal's workspace: "An API key … *is* the principal". -/
@@ -464,18 +466,18 @@ theorem api_key_principal_has_exactly_one_api_key (st : Er.Core.State)
   have hsrc := principal_has_exactly_one_source st hc hp
   have hkey : (p.get "api_key_id").isSome = true := by
     rcases hsrc with ⟨h, _, _⟩ | ⟨_, h, _⟩
-    · exact absurd (hk.symm.trans h) (by decide)
+    · exact absurd (hk.symm.trans h) (by decide +kernel)
     · exact h
   have hws : (p.get "workspace_id").isSome = true := by
     have := not_null_present (t := .workspacePrincipals) (cols := ["workspace_id"]) hc
-      (by decide) hp
+      (by decide +kernel) hp
     simpa [Row.present] using this
   have hpres : p.present (fkOf .workspacePrincipals
       "workspace_principals_api_key_workspace_fk").columns = true := by
     simp [fkOf, Row.present, hkey, hws, catalogue, TableSpec.foreignKey?]
   obtain ⟨k, hkr, he, huniq⟩ := exactly_one_parent (t := .workspacePrincipals)
     (fk := fkOf .workspacePrincipals "workspace_principals_api_key_workspace_fk") hc
-    (by decide) (by decide) hp hpres
+    (by decide +kernel) (by decide +kernel) hp hpres
   have he' : k.get "workspace_id" = p.get "workspace_id" ∧ k.get "id" = p.get "api_key_id" := by
     simpa [fkOf, Row.project, catalogue, TableSpec.foreignKey?] using he
   refine ⟨k, hkr, he'.1, he'.2, fun k' hk' h1 h2 => huniq k' hk' ?_⟩
@@ -488,7 +490,7 @@ example : ∃ k ∈ Witness.state .apiKeys, k.get "workspace_id" = some "w1" ∧
   api_key_principal_has_exactly_one_api_key Witness.state Witness.core_consistent
     (p := ⟨[("id", "p2"), ("workspace_id", "w1"), ("kind", "api_key"), ("api_key_id", "k1"),
       ("activated_at", "1000"), ("acts_for_principal_id", "p1"), ("created_at", "1000")]⟩)
-    (by decide) rfl
+    (by decide +kernel) rfl
 
 /-! ## Time: liveness is lost for good -/
 
@@ -505,7 +507,7 @@ example : (ApiKey.live ⟨⟨"k"⟩, ⟨"w"⟩, "CI", .builder, "p", "h", none, 
     false ∧
     (ApiKey.live ⟨⟨"k"⟩, ⟨"w"⟩, "CI", .builder, "p", "h", none, some 50, none, 10, 10⟩ 70) =
       false :=
-  ⟨rfl, api_key_liveness_is_lost_for_good _ (t := 60) (t' := 70) (by decide) rfl⟩
+  ⟨rfl, api_key_liveness_is_lost_for_good _ (t := 60) (t' := 70) (by decide +kernel) rfl⟩
 
 /-- A key is live exactly when its state is `active`. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/directory.ts#authenticateApiKeyHash")]
@@ -523,7 +525,7 @@ theorem browser_token_liveness_is_lost_for_good (b : BrowserToken) {t t' : Insta
 
 example : (BrowserToken.live ⟨⟨"t"⟩, ⟨"w"⟩, ⟨"p"⟩, .run ⟨"r"⟩, "h", 300, none, 0⟩ 300) = false ∧
     (BrowserToken.live ⟨⟨"t"⟩, ⟨"w"⟩, ⟨"p"⟩, .run ⟨"r"⟩, "h", 300, none, 0⟩ 301) = false :=
-  ⟨rfl, browser_token_liveness_is_lost_for_good _ (t := 300) (t' := 301) (by decide) rfl⟩
+  ⟨rfl, browser_token_liveness_is_lost_for_good _ (t := 300) (t' := 301) (by decide +kernel) rfl⟩
 
 /-- A browser token is live exactly when its state is `active`. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/repositories/browser-tokens.ts#findActiveBrowserTokenByHash")]
@@ -543,7 +545,7 @@ theorem invitation_resolution_is_stable (i : Invitation) {t t' : Instant} (hle :
 example : (Invitation.stateAt ⟨⟨"i"⟩, ⟨"w"⟩, "a@b.co", .viewer, none, "h", 50, none, none, 10, 10⟩
     90) = (Invitation.stateAt ⟨⟨"i"⟩, ⟨"w"⟩, "a@b.co", .viewer, none, "h", 50, none, none, 10, 10⟩
     60) :=
-  invitation_resolution_is_stable _ (t := 60) (t' := 90) (by decide) (by decide)
+  invitation_resolution_is_stable _ (t := 60) (t' := 90) (by decide +kernel) (by decide +kernel)
 
 /-! ## Admission over time -/
 
@@ -569,8 +571,8 @@ theorem api_key_admission_is_lost_for_good (k : ApiKey) (p : Principal)
 
 example : apiKeyAdmitted liveKey (keyPrincipal none) 500 = false ∧
     apiKeyAdmitted liveKey (keyPrincipal none) 600 = false :=
-  ⟨by decide,
-    api_key_admission_is_lost_for_good _ _ none (t := 500) (t' := 600) (by decide) (by decide)⟩
+  ⟨by decide +kernel,
+    api_key_admission_is_lost_for_good _ _ none (t := 500) (t' := 600) (by decide +kernel) (by decide +kernel)⟩
 
 /-- The run-scoped token the browser-token examples use: minted by `p`, live until 300. -/
 private def runToken : BrowserToken := ⟨⟨"t"⟩, ⟨"w"⟩, ⟨"p"⟩, .run ⟨"r"⟩, "h", 300, none, 10⟩
@@ -619,8 +621,8 @@ example : browserTokenAdmitted runToken (some (.run ⟨"r"⟩ .running)) (keyPri
       (.apiKey (some liveKey)) 300 = false ∧
     browserTokenAdmitted runToken (some (.run ⟨"r"⟩ .running)) (keyPrincipal none)
       (.apiKey (some liveKey)) 400 = false :=
-  ⟨by decide, browser_token_admission_is_lost_for_good _ _ _ _ none (t := 300) (t' := 400)
-    (by decide) (by decide)⟩
+  ⟨by decide +kernel, browser_token_admission_is_lost_for_good _ _ _ _ none (t := 300) (t' := 400)
+    (by decide +kernel) (by decide +kernel)⟩
 
 /-! ## Bearer shapes -/
 
@@ -680,10 +682,10 @@ theorem target_gives_each_membership_exactly_one_principal (st : Er.Core.State)
   obtain ⟨p, hp, hw, hid⟩ := hcov.1 m hm
   refine ⟨p, hp, hw, hid, fun p' hp' hw' hid' => ?_⟩
   have hmp : m.present ["workspace_id", "id"] = true :=
-    not_null_present (t := .memberships) hc (by decide) hm
+    not_null_present (t := .memberships) hc (by decide +kernel) hm
   simp only [Row.present, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at hmp
   exact unique_of_covers (t := .workspacePrincipals) (cols := ["workspace_id", "membership_id"])
-    hc (by decide) hp' hp (by simp [Row.present, hw', hid', hmp.1, hmp.2])
+    hc (by decide +kernel) hp' hp (by simp [Row.present, hw', hid', hmp.1, hmp.2])
     (by simp [Row.project, hw, hid, hw', hid'])
 
 example : ∀ m ∈ Witness.state .memberships, ∃ p ∈ Witness.state .workspacePrincipals,
@@ -711,10 +713,10 @@ theorem target_gives_each_api_key_exactly_one_principal (st : Er.Core.State)
   obtain ⟨p, hp, hw, hid⟩ := hcov.2 k hk
   refine ⟨p, hp, hw, hid, fun p' hp' hw' hid' => ?_⟩
   have hkp : k.present ["workspace_id", "id"] = true :=
-    not_null_present (t := .apiKeys) hc (by decide) hk
+    not_null_present (t := .apiKeys) hc (by decide +kernel) hk
   simp only [Row.present, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at hkp
   exact unique_of_covers (t := .workspacePrincipals) (cols := ["workspace_id", "api_key_id"])
-    hc (by decide) hp' hp (by simp [Row.present, hw', hid', hkp.1, hkp.2])
+    hc (by decide +kernel) hp' hp (by simp [Row.present, hw', hid', hkp.1, hkp.2])
     (by simp [Row.project, hw, hid, hw', hid'])
 
 example : ∀ k ∈ Witness.state .apiKeys, ∃ p ∈ Witness.state .workspacePrincipals,
@@ -734,7 +736,7 @@ example :
       (∀ k ∈ crossedCoverage false true .apiKeys,
         ∃ p ∈ crossedCoverage false true .workspacePrincipals, p.get "api_key_id" = k.get "id") ∧
       everySourceHasPrincipal (crossedCoverage false true) = false := by
-  decide
+  decide +kernel
 
 /-! ## Owner and actor (issue #509, S1-24) -/
 
@@ -752,7 +754,7 @@ theorem owner_differs_from_the_actor_only_for_an_api_key (a : Actor) (h : a.well
     exact absurd h.2.2 hne
 
 example : (fromApiKey ⟨"p-key", "k", "w", .admin, "CI", some "p-admin"⟩).kind = .apiKey :=
-  owner_differs_from_the_actor_only_for_an_api_key _ rfl (by decide)
+  owner_differs_from_the_actor_only_for_an_api_key _ rfl (by decide +kernel)
 
 /-- The owner of every principal the constructors build is its own principal or the principal it
 acts for, and a browser token keeps its minter's. -/
@@ -882,30 +884,30 @@ example : targetsOutside repairLocals "p-admin" = true ∧
       [⟨"agent-1", "p-admin"⟩, ⟨"session-1", "p-admin0"⟩, ⟨"agent-2", "p-hosted"⟩,
         ⟨"skill-1", "p-ada"⟩] ∧
     backfillActsFor repairLocals "p-admin" = [⟨"p-key1", some "p-admin"⟩, ⟨"p-key2", some "p-admin0"⟩] :=
-  by decide
+  by decide +kernel
 
 example : reassignLocalOwnership repairLocals "p-admin"
       (reassignLocalOwnership repairLocals "p-admin" repairRows) =
     reassignLocalOwnership repairLocals "p-admin" repairRows :=
-  reassign_local_ownership_is_idempotent _ _ _ (by decide)
+  reassign_local_ownership_is_idempotent _ _ _ (by decide +kernel)
 
 example : repairLocalOwnership (repairLocalOwnership repairLocals "p-admin" repairRows).1 "p-admin"
       (repairLocalOwnership repairLocals "p-admin" repairRows).2 =
     repairLocalOwnership repairLocals "p-admin" repairRows :=
-  repair_local_ownership_is_idempotent _ _ _ (by decide)
+  repair_local_ownership_is_idempotent _ _ _ (by decide +kernel)
 
 example : ⟨"agent-2", "p-hosted"⟩ ∈ reassignLocalOwnership repairLocals "p-admin" repairRows :=
-  repair_keeps_rows_no_local_key_owns _ _ _ _ (by decide) (by decide)
+  repair_keeps_rows_no_local_key_owns _ _ _ _ (by decide +kernel) (by decide +kernel)
 
 example : ∀ r ∈ reassignLocalOwnership repairLocals "p-admin" repairRows,
     ∀ l ∈ repairLocals, l.id ≠ r.owner :=
-  repair_leaves_no_row_owned_by_a_local_key _ _ _ (by decide)
+  repair_leaves_no_row_owned_by_a_local_key _ _ _ (by decide +kernel)
 
 /-- Without the hypothesis the repair is not idempotent: a local key that acts for another local
 key's principal moves its rows twice. -/
 example : let ls : List LocalKey := [⟨"k1", some "k2"⟩, ⟨"k2", none⟩]
     targetsOutside ls "admin" = false ∧
       reassignLocalOwnership ls "admin" (reassignLocalOwnership ls "admin" [⟨"a", "k1"⟩]) ≠
-        reassignLocalOwnership ls "admin" [⟨"a", "k1"⟩] := by decide
+        reassignLocalOwnership ls "admin" [⟨"a", "k1"⟩] := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.ConceptIdentity

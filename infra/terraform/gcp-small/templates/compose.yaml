@@ -45,9 +45,7 @@ services:
       # The image the Runtimes page's Test Runtime approval is keyed to; unset, the web process
       # falls back to a development tag this VM never runs.
       RUNTIME_IMAGE: ${RUNTIME_IMAGE:?digest-pinned RUNTIME_IMAGE is required}
-      AW_FILE_STORAGE_ROOT: /var/lib/agent-workspace/files
-      AW_SKILL_STORAGE_ROOT: /var/lib/agent-workspace/skills
-      AW_SESSION_TRANSCRIPT_ROOT: /var/lib/agent-workspace/sessions
+      AW_STORAGE_URL: file:///var/lib/agent-workspace
       AW_RUNTIME_VERIFICATION_FILE: /var/lib/agent-workspace/runtime-verifications.json
       AW_SESSION_TRANSCRIPT_RETENTION_DAYS: '30'
       AW_SESSION_RETENTION_DRY_RUN: 'false'
@@ -71,6 +69,9 @@ services:
     read_only: true
     cap_drop: [ALL]
     env_file: [/run/agent-workspace/secrets/gateway.env]
+    environment:
+      # The gateway forwards the Builder's aw-control MCP calls to web on the control network.
+      GATEWAY_CONTROL_PLANE_ORIGIN: http://web:3000
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=32m
     depends_on:

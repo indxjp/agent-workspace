@@ -18,9 +18,9 @@ How far usage accounting for a run has progressed. `complete` is the only settle
 ## AccountingState
 
 - `"failed"`
+- `"pending"`
 - `"partial"`
 - `"unavailable"`
-- `"pending"`
 - `"complete"`
 
 ## InterruptRunResponse
@@ -39,10 +39,25 @@ one it asked for.
 | --- | --- | --- | --- |
 | `run` | `RunResource` | Yes |  |
 
+## isCanonicalFileScopePath
+
+A canonical workspace-relative path: no leading or trailing `/`, no empty, `.` or `..` segment,
+no backslash and no NUL. A path that is not canonical can never name a granted file.
+
+```ts
+isCanonicalFileScopePath(path: string): boolean
+```
+
 ## isRunStartProblemCode
 
 ```ts
 isRunStartProblemCode(value: string): value is RunStartProblemCode
+```
+
+## isStoppedRunStatus
+
+```ts
+isStoppedRunStatus(status: RunStatus): boolean
 ```
 
 ## isTerminalRunStatus
@@ -56,6 +71,18 @@ isTerminalRunStatus(status: RunStatus): boolean
 The largest prompt one run may carry, in string code units (`docs/adr/W1-CP-04-start-run-request-shape.md`).
 
 Value: `100_000`
+
+## MAX_RUN_ATTACHMENTS
+
+The most workspace files one run may carry as attachments (ADR-0146 Decision 5).
+
+Value: `10`
+
+## MAX_RUN_FILE_SCOPE_PATHS
+
+The most paths one run's `fileScope` may name (issue #1539).
+
+Value: `100`
 
 ## MODEL_PROVIDERS
 
@@ -79,6 +106,75 @@ and they are independent: a `claude-agent-sdk` run can be served by `openai`.
 - `"openai"`
 - `"azure-openai"`
 - `"openai-compatible"`
+
+## OUTPUT_SCHEMA_DIALECT
+
+The one JSON Schema dialect an `outputSchema` may declare.
+
+Value: `'https://json-schema.org/draft/2020-12/schema'`
+
+## OUTPUT_SCHEMA_LIMITS
+
+The limits an `outputSchema` can break; each failure message begins with its name.
+
+- `'root_type'`
+- `'size'`
+- `'dialect'`
+- `'ref'`
+- `'depth'`
+
+## OUTPUT_SCHEMA_MAX_BYTES
+
+The largest `outputSchema` a request may carry: its JSON serialisation in UTF-8 bytes (ADR-0143).
+
+Value: `32_768`
+
+## OUTPUT_SCHEMA_MAX_DEPTH
+
+The deepest nesting of schema objects an `outputSchema` may have; the root is level 1.
+
+Value: `16`
+
+## OUTPUT_SCHEMA_UNSATISFIED
+
+The run-failure code of a run whose engine could not produce a value that satisfies the
+request's `outputSchema` (ADR-0143). The stored `error` is `output_schema_unsatisfied: ` followed
+by `OUTPUT_SCHEMA_UNSATISFIED_MESSAGE`, never the model's text or the schema. Not retryable
+as is: the same prompt and schema will likely fail again.
+
+Value: `'output_schema_unsatisfied'`
+
+## OUTPUT_SCHEMA_UNSATISFIED_MESSAGE
+
+Value: `'The run could not produce an answer that satisfies the requested output schema.'`
+
+## OutputSchemaLimit
+
+- `"ref"`
+- `"size"`
+- `"root_type"`
+- `"dialect"`
+- `"depth"`
+
+## outputSchemaViolation
+
+Judge an `outputSchema` against the limits of ADR-0143, structurally and without a JSON Schema
+library: root `type: "object"`, at most `OUTPUT_SCHEMA_MAX_BYTES` bytes, draft 2020-12, only
+local, non-recursive `#/$defs/<name>` references, at most `OUTPUT_SCHEMA_MAX_DEPTH` nested
+levels with each reference followed. `null`
+means the schema is within every limit. This is the one owner of the rule: the request schema and
+the server's body parser both call it.
+
+```ts
+outputSchemaViolation(schema: unknown): OutputSchemaViolation | null
+```
+
+## OutputSchemaViolation
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `limit` | `"ref" \| "size" \| "root_type" \| "dialect" \| "depth"` | Yes |  |
+| `message` | `string` | Yes | `<limit>: <what failed>`, safe to show a caller; it never repeats the schema. |
 
 ## parseRunFailure
 
@@ -105,6 +201,53 @@ and `outcome` is the repository's own vocabulary — a single-token request answ
 | --- | --- | --- | --- |
 | `revoked` | `number` | Yes |  |
 | `outcome` | `"revoked" \| "already-revoked" \| "not-found"` | Yes |  |
+
+## RUN_APPROVAL_COMMENT_MAX_LENGTH
+
+The longest comment that may accompany an approval decision, in characters.
+
+Value: `1000`
+
+## RUN_APPROVAL_DECISIONS
+
+The decisions `POST /api/runs/:id/approval` accepts.
+
+- `'approve'`
+- `'reject'`
+
+## RUN_APPROVAL_PROBLEM_CODES
+
+The refusals of `POST /api/runs/:id/approval` beyond the common ones, with their statuses.
+
+| Key | Value |
+| --- | --- |
+| `run_not_awaiting_approval` | `409` |
+| `approval_already_decided` | `409` |
+| `approval_expired` | `409` |
+
+## RUN_FILE_CORRUPT
+
+The run-failure code of a run whose granted file's stored bytes do not match its catalog row's
+size or SHA-256 (the storage design, §04). The server checks each file while it streams the run's
+files into the sandbox and stops at the first mismatch: storage-side corruption, so nothing
+reached the agent. Not retryable as is; the file has to be uploaded again.
+
+Value: `'run_file_corrupt'`
+
+## RUN_IDEMPOTENCY_PROBLEM_CODES
+
+The refusals of `POST /api/agents/:id/runs` that come from its `Idempotency-Key` header
+(ADR-0151). A start whose key is already held by the same request is not refused: it answers
+`202` with the run that key started, whatever that run's status.
+
+- `invalid_idempotency_key` — the header is blank or longer than 255 characters.
+- `run_idempotency_conflict` — this caller already used the key with a different request. Send
+  a new key.
+
+| Key | Value |
+| --- | --- |
+| `invalid_idempotency_key` | `400` |
+| `run_idempotency_conflict` | `409` |
 
 ## RUN_LIST_DEFAULT_LIMIT
 
@@ -159,6 +302,13 @@ server logs a warning and lets the run proceed. There is therefore no "discovery
 - `policy_cannot_widen` — the run asks for more than the deployment's policy ceiling allows: an
   engine or a model outside its allowlist, judged at the start for an explicit `modelOverride`
   and in preflight for the resolved model (ADR-0102 SD6, C14, issue #524).
+- `daily_cost_cap_reached` — the workspace has spent its policy ceiling's `maxCostPerDayUsd` of
+  model cost today (UTC), so no run starts until the next UTC midnight; `429`, with the cap, the
+  spend and the reset time in `details` (ADR-0102 SD6, issue #1851). Model responses with no
+  price are stored at 0, so once any run with usage today is unmeasured the cap refuses the same
+  way with `unpricedUsage: true` in `details`: a cap that cannot be measured is not met.
+- `daily_cost_unavailable` — the daily cost cap is set but the workspace's spend could not be
+  read, so the start is refused rather than let through; `503`, with no details (issue #1851).
 - `network_policy_unenforceable` — the agent lacks `unrestrictedNetwork`, so its `open` profile
   was lowered to `restricted` for its remote connectors' hosts, and the profile's driver cannot
   enforce `restricted` (ADR-0117 decisions 7 and 9, issue #785). Grant `unrestrictedNetwork`,
@@ -178,10 +328,44 @@ server logs a warning and lets the run proceed. There is therefore no "discovery
 - `runtime_not_verified` — the profile's driver has no current Test Runtime pass: it never
   passed, or its pass lapsed (it lasts 24 hours, and a new runtime image needs a new one) and
   re-verifying it automatically failed. Run Test Runtime, then retry. Judged at launch too.
+- `run_attachments_unreadable` — the request attaches files but the agent cannot read files:
+  `readFiles` is off, stored or capped by the policy ceiling (ADR-0146 Decision 4, issue #1307).
+  Grant the agent `readFiles`, or send the request without `attachments`.
+- `run_attachments_too_large` — an attached file is over 10 MiB, more than 20 attachments are
+  named (a folder counts as one), or the attachments total over 50 MiB; the session's earlier
+  uploads count too (the storage design, §04). Attach smaller files, or fewer. Judged before the
+  run is created.
+- `run_attachments_unsupported_runtime` — the request attaches files but the agent's runtime
+  profile uses the `local` driver, which cannot be handed session files (ADR-0146 Decision 2).
+  Use a runtime that hydrates session files, or send the request without `attachments`.
+- `run_attachments_untranscribable` — the request attaches an audio file and the run's model
+  connection is not one whose provider transcribes; today only `openai` does (issue #1313).
+  Switch the run to an OpenAI connection, or attach a text transcript instead.
 
-The ten configuration codes are `422`: the request is well formed and the agent exists — it is
+- `run_file_scope_not_granted` — the request's `fileScope` names a path the agent is not granted
+  (ADR-0147, issue #1539): a parent of a granted file, an unrelated path, or any path when the
+  agent has no files. The scope narrows and never widens. It is judged when the run
+  launches, against the agent's files after the policy ceiling, so the run fails with this code
+  before any token is issued.
+- `run_files_too_large` — the run's granted files, skills and attachments total more than the
+  128 MiB a run may be handed (the storage design, §04 "Giving files to a run"); the message
+  names the total and the limit. Grant fewer or smaller files. The start answers it, summed
+  from the files' catalog sizes, before the run is queued; it is judged again when the run
+  launches, before its runtime sandbox is created, so a run whose files grew in between fails
+  with this code.
+- `run_storage_grant_unavailable` — the agent's grant of a storage connection's folder cannot be
+  delivered: the connection is gone, the folder is no longer one it allows, or its credential is
+  missing (the storage design, §05). Fix the connection or redeploy the agent. Judged when the
+  run launches.
+
+- `builder_model_unavailable` — the run is the built-in Builder's and no model connection serves
+  the model it runs on. Add or fix a connection that offers it. Answered `503` before the run is
+  created.
+
+The seventeen configuration codes are `422`: the request is well formed and the agent exists — it is
 the workspace's configuration that cannot run it yet. The ceiling refusal is `403`: it refuses
-what is asked rather than naming a missing piece (C14).
+what is asked rather than naming a missing piece (C14). The daily cost cap is `429`: the request
+is fine and would be accepted after the reset; an unreadable spend is `503`.
 
 | Key | Value |
 | --- | --- |
@@ -195,18 +379,89 @@ what is asked rather than naming a missing piece (C14).
 | `runtime_connection_missing` | `422` |
 | `runtime_connection_credential_unavailable` | `422` |
 | `runtime_not_verified` | `422` |
+| `run_attachments_unreadable` | `422` |
+| `run_attachments_too_large` | `422` |
+| `run_attachments_unsupported_runtime` | `422` |
+| `run_attachments_untranscribable` | `422` |
+| `run_files_too_large` | `422` |
+| `run_storage_grant_unavailable` | `422` |
+| `run_subject_forbidden` | `403` |
+| `run_file_scope_not_granted` | `403` |
 | `policy_cannot_widen` | `403` |
+| `daily_cost_cap_reached` | `429` |
+| `daily_cost_unavailable` | `503` |
+| `builder_model_unavailable` | `503` |
 
 ## RUN_STATUSES
 
-The run lifecycle as the API reports it. `queued` and `running` are live; the other three are
-terminal, and a terminal run's event stream replays and ends rather than follows.
+The run lifecycle as the API reports it. `queued` and `running` are live. `awaiting_approval`
+is a pause: the run stopped before a tool call its agent requires approval for (ADR-0145) and
+is not live, yet not final either — a decision starts a continuation run and completes it, an
+interrupt cancels it. The other three are terminal, and a terminal run's event stream replays
+and ends rather than follows.
 
 - `'queued'`
 - `'running'`
+- `'awaiting_approval'`
 - `'completed'`
 - `'failed'`
 - `'cancelled'`
+
+## RunApprovalCall
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolName` | `string` | Yes |  |
+| `canonicalCall` | `string` | Yes |  |
+
+## RunApprovalCallSchema
+
+The tool call a paused run is waiting for a decision on (ADR-0145): the tool's name and the
+canonical form of the call, which is exactly what an approval lets the continuation run.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `toolName` | `string` | Yes |  |
+| `canonicalCall` | `string` | Yes |  |
+
+## RunApprovalDecision
+
+- `"approve"`
+- `"reject"`
+
+## RunApprovalRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `decision` | `"approve" \| "reject"` | Yes |  |
+| `comment` | `undefined \| string` | No |  |
+
+## RunApprovalRequestSchema
+
+The body of `POST /api/runs/:id/approval` (ADR-0145): approve or reject the tool call a run
+paused on, with an optional non-blank comment that reaches the continuation run's prompt.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `decision` | `"approve" \| "reject"` | Yes |  |
+| `comment` | `undefined \| string` | No |  |
+
+## RunApprovalResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+| `events` | `string` | Yes | Relative to the API origin: `/api/runs/:id/events`. Also sent as the `Location` header. |
+
+## RunApprovalResponseSchema
+
+The `202` body of `POST /api/runs/:id/approval`: the continuation run the decision started, in
+the same session, and where to stream it from.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunResource` | Yes |  |
+| `events` | `string` | Yes | Relative to the API origin: `/api/runs/:id/events`. Also sent as the `Location` header. |
 
 ## RunCost
 
@@ -238,7 +493,7 @@ for an error that carries no recognised code (a runtime failure, an older run).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `code` | `null \| "policy_cannot_widen" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
+| `code` | `null \| "policy_cannot_widen" \| "builder_model_unavailable" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_attachments_unreadable" \| "run_attachments_too_large" \| "run_attachments_unsupported_runtime" \| "run_attachments_untranscribable" \| "run_files_too_large" \| "run_storage_grant_unavailable" \| "run_subject_forbidden" \| "run_file_scope_not_granted" \| "daily_cost_cap_reached" \| "daily_cost_unavailable" \| "output_schema_unsatisfied" \| "run_file_corrupt" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
 | `message` | `string` | Yes |  |
 
 ## RunListQuery
@@ -250,7 +505,7 @@ caller whose grant covers the whole workspace (Owner or Admin) and is otherwise 
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `status` | `undefined \| "completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | No |  |
+| `status` | `undefined \| "completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | No |  |
 | `agent` | `undefined \| string` | No |  |
 | `project` | `undefined \| string` | No |  |
 | `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
@@ -285,6 +540,23 @@ Render a `RunListQuery` as the query string the route parses, omitting absent fi
 runListSearchParams(query: RunListQuery): URLSearchParams
 ```
 
+## RunOutput
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `text` | `string` | Yes |  |
+| `structured` | `unknown` | Yes |  |
+
+## RunOutputSchema
+
+What a completed run answered (ADR-0143): the final assistant text, and the value that satisfies
+the request's `outputSchema` (`null` when the request carried none).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `text` | `string` | Yes |  |
+| `structured` | `unknown` | Yes |  |
+
 ## RunResource
 
 | Name | Type | Required | Description |
@@ -295,7 +567,8 @@ runListSearchParams(query: RunListQuery): URLSearchParams
 | `projectId` | `null \| string` | Yes |  |
 | `initiatingUserId` | `null \| string` | Yes | Legacy human attribution; `null` for a run started with an API key. |
 | `sessionId` | `string` | Yes |  |
-| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `agentVersion` | `null \| number` | Yes | The number of the agent version this run's session pins (#612, ADR-0101): the version the run executed, whose definition names the skill revisions it applied. `null` for a legacy session created before versions existed. Server-set and read-only. |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 | `startedAt` | `null \| string` | Yes |  |
 | `endedAt` | `null \| string` | Yes |  |
@@ -308,7 +581,9 @@ runListSearchParams(query: RunListQuery): URLSearchParams
 | `usage` | `RunUsage` | Yes |  |
 | `cost` | `RunCost` | Yes |  |
 | `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
-| `accountingState` | `"failed" \| "partial" \| "unavailable" \| "pending" \| "complete"` | Yes |  |
+| `output` | `null \| RunOutput` | Yes | The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. |
+| `pendingApproval` | `null \| RunApprovalCall` | Yes | The call the run is waiting for a decision on while `status` is `awaiting_approval`, and `null` in every other status (once decided, the continuation run carries the approved call). |
+| `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
 | `accountingError` | `null \| string` | Yes |  |
 
 ## RunResourceSchema
@@ -325,7 +600,8 @@ both `startedAt` and `endedAt` exist.
 | `projectId` | `null \| string` | Yes |  |
 | `initiatingUserId` | `null \| string` | Yes | Legacy human attribution; `null` for a run started with an API key. |
 | `sessionId` | `string` | Yes |  |
-| `status` | `"completed" \| "failed" \| "running" \| "queued" \| "cancelled"` | Yes |  |
+| `agentVersion` | `null \| number` | Yes | The number of the agent version this run's session pins (#612, ADR-0101): the version the run executed, whose definition names the skill revisions it applied. `null` for a legacy session created before versions existed. Server-set and read-only. |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 | `startedAt` | `null \| string` | Yes |  |
 | `endedAt` | `null \| string` | Yes |  |
@@ -338,7 +614,9 @@ both `startedAt` and `endedAt` exist.
 | `usage` | `RunUsage` | Yes |  |
 | `cost` | `RunCost` | Yes |  |
 | `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
-| `accountingState` | `"failed" \| "partial" \| "unavailable" \| "pending" \| "complete"` | Yes |  |
+| `output` | `null \| RunOutput` | Yes | The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. |
+| `pendingApproval` | `null \| RunApprovalCall` | Yes | The call the run is waiting for a decision on while `status` is `awaiting_approval`, and `null` in every other status (once decided, the continuation run carries the approved call). |
+| `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
 | `accountingError` | `null \| string` | Yes |  |
 
 ## RunResponseSchema
@@ -352,6 +630,7 @@ The body of `GET /api/runs/:id`.
 ## RunStartProblemCode
 
 - `"policy_cannot_widen"`
+- `"builder_model_unavailable"`
 - `"agent_runtime_profile_missing"`
 - `"model_connection_unresolved"`
 - `"model_connection_failed"`
@@ -362,13 +641,24 @@ The body of `GET /api/runs/:id`.
 - `"runtime_connection_missing"`
 - `"runtime_connection_credential_unavailable"`
 - `"runtime_not_verified"`
+- `"run_attachments_unreadable"`
+- `"run_attachments_too_large"`
+- `"run_attachments_unsupported_runtime"`
+- `"run_attachments_untranscribable"`
+- `"run_files_too_large"`
+- `"run_storage_grant_unavailable"`
+- `"run_subject_forbidden"`
+- `"run_file_scope_not_granted"`
+- `"daily_cost_cap_reached"`
+- `"daily_cost_unavailable"`
 
 ## RunStatus
 
 - `"completed"`
 - `"failed"`
-- `"running"`
 - `"queued"`
+- `"running"`
+- `"awaiting_approval"`
 - `"cancelled"`
 
 ## RUNTIME_CAPACITY_EXHAUSTED
@@ -415,6 +705,10 @@ Value: `'runtime_capacity_exhausted'`
 | `modelConnectionId` | `undefined \| null \| string` | No |  |
 | `model` | `undefined \| null \| string` | No |  |
 | `version` | `undefined \| number` | No |  |
+| `attachments` | `undefined \| { fileId: string; }[]` | No |  |
+| `subject` | `undefined \| string` | No | The person an API-key caller acts for: opaque, 1 to 256 characters (ADR-0142 D2). It becomes the `sub` of the identity assertion. Any other caller is refused `403 run_subject_forbidden`. |
+| `fileScope` | `undefined \| string[]` | No |  |
+| `outputSchema` | `undefined \| Record<string, unknown>` | No |  |
 
 ## StartRunRequestSchema
 
@@ -429,6 +723,29 @@ level with a model from another. `sessionId` continues an existing session; omit
 pointer names (issue #697). A session keeps the version it started on, so `version` with a
 `sessionId` is refused. An unknown number is `404 agent_version_not_found`.
 
+`attachments` names workspace files (`FileResource.id`) the run may read, one to
+`MAX_RUN_ATTACHMENTS`, each at most once (ADR-0146, issue #1307). Each is granted to this
+run as `read` and named in the user turn. An id the caller cannot read, or that does not exist,
+is the same concealed `404 file_not_found`; an agent without `readFiles` is
+`422 run_attachments_unreadable`; a file over `SURFACE_ATTACHMENT_MAX_BYTES` (10 MiB), or a
+session whose attachments, the ones it stored earlier included, pass
+`SURFACE_ATTACHMENTS_MAX_FILES` (20) or `SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES` (50 MiB) together,
+are `422 run_attachments_too_large`; a run on the `local` runtime driver is `422 run_attachments_unsupported_runtime`. A session-scoped
+browser token may attach only files uploaded to its own session by
+`POST /api/sessions/:id/attachments` (issue #1308); any other id is the same concealed `404`.
+
+`fileScope` narrows the files the run can search and read to a subset of what the agent is
+granted (ADR-0147, issue #1539): one to `MAX_RUN_FILE_SCOPE_PATHS` canonical
+workspace-relative paths, each a granted file or a folder inside a grant, each at most once. The
+calling app, which knows the subject, scopes built-in `search_files` per caller with it. It never
+widens: a path outside the agent's effective grants fails the run with
+`403 run_file_scope_not_granted`, judged when the run launches. Absent, the run keeps all of the
+agent's grants.
+
+`outputSchema` asks for the answer as a value of that JSON Schema (ADR-0143): it comes back as
+`RunResource.output.structured`. It must satisfy `outputSchemaViolation`, and an engine
+that cannot honour it is refused with `422 engine_capability_unsupported`.
+
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `prompt` | `string` | Yes |  |
@@ -436,6 +753,10 @@ pointer names (issue #697). A session keeps the version it started on, so `versi
 | `modelConnectionId` | `undefined \| null \| string` | No |  |
 | `model` | `undefined \| null \| string` | No |  |
 | `version` | `undefined \| number` | No |  |
+| `attachments` | `undefined \| { fileId: string; }[]` | No |  |
+| `subject` | `undefined \| string` | No | The person an API-key caller acts for: opaque, 1 to 256 characters (ADR-0142 D2). It becomes the `sub` of the identity assertion. Any other caller is refused `403 run_subject_forbidden`. |
+| `fileScope` | `undefined \| string[]` | No |  |
+| `outputSchema` | `undefined \| Record<string, unknown>` | No |  |
 
 ## StartRunResponse
 
@@ -452,6 +773,15 @@ The `202` body of `POST /api/agents/:id/runs`: the queued run and where to strea
 | --- | --- | --- | --- |
 | `run` | `RunResource` | Yes |  |
 | `events` | `string` | Yes | Relative to the API origin: `/api/runs/:id/events`. Also sent as the `Location` header. |
+
+## STOPPED_RUN_STATUSES
+
+The statuses in which nothing is executing: the terminal ones and the `awaiting_approval` pause.
+An event stream and `runs.result()` end at one of these; a run interrupt still refuses only a
+terminal run, because a paused run can be cancelled.
+
+- `...TERMINAL_RUN_STATUSES`
+- `'awaiting_approval'`
 
 ## TERMINAL_RUN_STATUSES
 

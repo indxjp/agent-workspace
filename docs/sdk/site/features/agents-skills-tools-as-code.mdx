@@ -43,6 +43,10 @@ who never open a terminal see the same agent in the browser.
 - [Chapter 5 · Ship it to your servers](/path/ship): `aw push` and `aw promote` in [Deploy](/guides/deploy) and [Moving agents](/building/moving-agents).
 - [Chapter 6 · Run it for your team](/path/operate): who may edit an agent, in [Team](/resources/team) and [Shares](/resources/shares).
 
+<Frame caption="The Skills screen: the same skills you keep as files in the project, shown in the console.">
+  <img src="/images/console/06-skills.png" alt="The Skills page of the Agent Workspace console" />
+</Frame>
+
 ## Lay out an agent project
 
 One folder holds everything an agent is. The CLI reads the folder and the server stores what it
@@ -245,8 +249,9 @@ parser: a list form is stored, but the field reads back as `null`.
 
 At run time the runner writes every assigned, enabled skill under `<CLAUDE_CONFIG_DIR>/skills/<name>/`
 in that run's sandbox, the runner's equivalent of `.claude/skills/<name>/`, read-only. A disabled
-skill is silently left out. A skill has no versions today: an edit reaches every agent that uses it
-on its next run ([N-1](/concepts/roadmap#n-1-skill-revisions)). Deleting a folder never deletes the
+skill is silently left out. An edit reaches every agent that uses a skill without pinning a
+revision on its next run; `aw skills publish` freezes a numbered revision an agent can pin
+([Revisions](/building/skills#revisions)). Deleting a folder never deletes the
 workspace skill; `aw check` lists it as "only in the workspace".
 
 ## Connect internal systems over MCP
@@ -297,7 +302,7 @@ Two ways to give an agent a tool without running an MCP server of your own:
 | -------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | What it is     | An OpenAPI 3.0 or 3.1 document becomes tools, one per allowed operation                            | Your own TypeScript function, with a Zod input schema                        |
 | Who runs it    | The gateway, which holds the credential (on the `local` driver this is advisory: see below)        | A tool host `aw dev` starts on your machine                                  |
-| What it may do | Reads only: `GET` and `HEAD`. `POST` and other writes are refused (`connector_write_unsupported`). | Anything your code does                                                      |
+| What it may do | Reads only: `GET` and `HEAD`. `openapiTool()` refuses a write rule for now; the gateway already runs a write only after approval. | Anything your code does                                                      |
 | Deployable     | **Yes.** Once the tool is registered in the workspace, a version that uses it can be promoted.     | **Only where the operator enables the tool sandbox.** Elsewhere `aw promote` refuses with `422 code_tool_needs_host`. |
 
 <Accordion title="An openapiTool() in code">
@@ -491,14 +496,14 @@ flowchart TD
   tool in its own session's sandbox. The sandbox is off by default
   (`AGENT_WORKSPACE_TOOL_HOST_IMAGE`) and shares one network across sessions until #841.
 - **`openapiTool()` only reads.** `GET` and `HEAD`; writes go through your backend.
-- **No webhooks, no idempotency key.** Your backend polls or streams, and a retried start after a
-  lost response may start a second run ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes),
+- **No webhooks.** Your backend polls or streams, and a retried start is safe only with an
+  `idempotencyKey` ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes),
   [S-6](/concepts/roadmap#s-6-idempotency-keys)).
 - **No retrieval.** There is no vector index or RAG pipeline, and none is on the roadmap; search is
   your own MCP server.
 - **Creating an agent saves no version** (V-2), and the browser has no skill import or export.
-- **Skills have no revisions** ([N-1](/concepts/roadmap#n-1-skill-revisions)), and tools defined in
-  code are not versioned: editing one changes every version that uses it.
+- **Tools defined in code are not versioned:** editing one changes every version that uses it. A
+  skill can be pinned to a published revision ([Revisions](/building/skills#revisions)).
 - **Public runnable agent shares are off** (`400 invalid_share`). For public visitors, publish a
   surface with `allowedOrigins`.
 - **Other model providers and managed-cloud sandboxes are not live-proven.**

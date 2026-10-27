@@ -1,4 +1,9 @@
+import {
+  MODEL_PROVIDER_CONFIG_RULES,
+  type ModelConnectionConfig,
+} from '@indx-workspace/contracts/models';
 import type { ModelProvider as ConnectionProvider } from '@indx-workspace/contracts/runs';
+import { ModelConnectionIncompleteError } from '../types.js';
 import type {
   AnthropicCountTokensRequest,
   AnthropicMessageRequest,
@@ -24,7 +29,7 @@ import { scriptedModelsFromEnv, type ScriptedModels } from './scripted.js';
 // only this one import; see `package.json`'s `./providers/registry` export, added for exactly
 // that purpose.
 export type { ModelCapabilities, ModelInfo, ModelProvider, RequestContext };
-export { ModelDiscoveryHttpError } from '../types.js';
+export { ModelConnectionIncompleteError, ModelDiscoveryHttpError } from '../types.js';
 export {
   ANTHROPIC_CAPABILITIES,
   AZURE_OPENAI_CAPABILITIES,
@@ -50,17 +55,41 @@ export type ProviderRegistryOptions = {
   readonly scripted?: ScriptedModels | null;
 };
 
-function optionalSetting(context: RequestContext, name: string): string | undefined {
+function optionalSetting(
+  context: RequestContext,
+  name: keyof ModelConnectionConfig,
+): string | undefined {
   const value = context.settings[name];
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
-function requiredSetting(context: RequestContext, name: string, providerId: string): string {
+function requiredSetting(
+  context: RequestContext,
+  name: keyof ModelConnectionConfig,
+  providerId: RegisteredProviderId,
+): string {
   const value = optionalSetting(context, name);
-  if (value === undefined) {
-    throw new Error(`${providerId} model connections require config.${name}.`);
-  }
+  if (value === undefined) throw new ModelConnectionIncompleteError(providerId, name);
   return value;
+}
+
+/**
+ * Check `MODEL_PROVIDER_CONFIG_RULES[id].required` before an adapter is built, so a stored
+ * connection that predates a rule (or a row that forgets to read a field) is a typed refusal
+ * rather than an opaque 500.
+ */
+function withRequiredConfig<Adapter extends ModelProvider>(
+  id: RegisteredProviderId,
+  create: (context: RequestContext) => Adapter,
+): (context: RequestContext) => Adapter {
+  return (context) => {
+    for (const field of MODEL_PROVIDER_CONFIG_RULES[id].required) {
+      if (optionalSetting(context, field) === undefined) {
+        throw new ModelConnectionIncompleteError(id, field);
+      }
+    }
+    return create(context);
+  };
 }
 
 /**
@@ -71,9 +100,10 @@ function requiredSetting(context: RequestContext, name: string, providerId: stri
 function row(
   id: RegisteredProviderId,
   capabilities: ModelCapabilities,
-  create: (context: RequestContext) => ModelProvider,
+  createUnchecked: (context: RequestContext) => ModelProvider,
   scripted?: ScriptedModels,
 ): ModelProvider {
+  const create = withRequiredConfig(id, createUnchecked);
   return {
     id,
     capabilities,
@@ -132,10 +162,11 @@ function scriptedProtocolUnsupported(protocol: WireProtocol, context: RequestCon
 function forwardingRow(
   id: RegisteredProviderId,
   capabilities: ModelCapabilities,
-  create: (context: RequestContext) => ModelProvider & WireProtocolForwarder,
+  createUnchecked: (context: RequestContext) => ModelProvider & WireProtocolForwarder,
   scripted?: ScriptedModels,
 ): ModelProvider & WireProtocolForwarder {
-  const base = row(id, capabilities, create);
+  const create = withRequiredConfig(id, createUnchecked);
+  const base = row(id, capabilities, createUnchecked);
   return {
     ...base,
     countTokens(request: AnthropicCountTokensRequest, context: RequestContext) {
@@ -201,11 +232,10 @@ export function createProviderRegistry(
       'azure-openai',
       AZURE_OPENAI_CAPABILITIES,
       (context) => {
-        const apiVersion = optionalSetting(context, 'apiVersion');
         return createAzureOpenAIProvider({
           endpoint: requiredSetting(context, 'baseUrl', 'azure-openai'),
           deployment: requiredSetting(context, 'deployment', 'azure-openai'),
-          ...(apiVersion === undefined ? {} : { apiVersion }),
+          apiVersion: requiredSetting(context, 'apiVersion', 'azure-openai'),
           ...(request === undefined ? {} : { fetch: request }),
         });
       },

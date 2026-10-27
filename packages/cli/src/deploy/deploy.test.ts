@@ -1,7 +1,10 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
+import { IGNORED_STORAGE_VARIABLES } from '@indx-workspace/contracts/storage-settings';
+import { parseStorageUrl } from '@indx-workspace/contracts/storage-url';
 import { parseProjectFile } from '@indx-workspace/sdk/project';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -126,6 +129,27 @@ async function capturedFailure(
   expect(message).not.toBe('');
   return { message, output };
 }
+
+/** Replace every object store location line of a project's `.env` with `lines` (`NAME=value`). */
+async function setStorage(target: string, lines: readonly string[]): Promise<void> {
+  const file = path.join(target, '.env');
+  const kept = (await readFile(file, 'utf8'))
+    .split('\n')
+    .filter(
+      (line) =>
+        !/^(OBJECT_STORAGE_(BACKEND|ENDPOINT|BUCKET|FORCE_PATH_STYLE)|AW_(FILE|SKILL)_STORAGE_ROOT|AW_SESSION_TRANSCRIPT_ROOT|AW_STORAGE_URL)=/u.test(
+          line,
+        ),
+    );
+  await writeFile(file, `${kept.join('\n').replace(/\n*$/u, '\n')}${lines.join('\n')}\n`);
+}
+
+/** Old location lines a `.env` may still carry, with a value that must never be echoed. */
+const oldStorageLines = (secret: string): readonly string[] => [
+  'OBJECT_STORAGE_BACKEND=s3',
+  `OBJECT_STORAGE_BUCKET=${secret}`,
+  `OBJECT_STORAGE_ENDPOINT=https://${secret}.example.com`,
+];
 
 /** `docker compose up`, `helm upgrade` or `terraform apply`: a call that changes a deployment. */
 function isApply({ tool, args }: ToolInvocation): boolean {
@@ -1176,11 +1200,15 @@ describe('agent-workspace deploy to Vercel', () => {
     expect(names('acme-ai-gateway')).toEqual(
       [
         'DATABASE_URL',
+        'GATEWAY_CONTROL_PLANE_ORIGIN',
         'GATEWAY_PRICING_JSON',
         'GATEWAY_TOKEN_SECRET',
         'MASTER_ENCRYPTION_KEY',
         'MASTER_KEY_PROVIDER',
       ].sort(),
+    );
+    expect(byProject.get('acme-ai-gateway')?.get('GATEWAY_CONTROL_PLANE_ORIGIN')).toBe(
+      'https://acme-ai.vercel.app',
     );
     expect(names('acme-ai-manager')).toEqual(
       [
@@ -1785,51 +1813,121 @@ describe('agent-workspace deploy to Vercel', () => {
     expect(calls.some(({ tool, args }) => tool === 'vercel' && args[0] === 'deploy')).toBe(false);
   });
 
-  it.each([
-    'OBJECT_STORAGE_BUCKET',
-    'OBJECT_STORAGE_ACCESS_KEY_ID',
-    'OBJECT_STORAGE_SECRET_ACCESS_KEY',
-  ])('refuses an apply whose .env has no %s, by name, before any tool runs', async (name) => {
+  it.each(['OBJECT_STORAGE_ACCESS_KEY_ID', 'OBJECT_STORAGE_SECRET_ACCESS_KEY'])(
+    'refuses an apply whose .env has no %s, by name, before any tool runs',
+    async (name) => {
+      const target = await vercelProject();
+      await setEnv(target, name, '');
+      const { runner, calls } = stubRunner(vercelResponder(false));
+
+      const { message, output } = await capturedFailure(() =>
+        runDeployCommand([target, '--yes'], { runner, environment: vercelEnvironment }),
+      );
+
+      expect(message).toContain(`${name} is empty in .env`);
+      expect(message).toContain('Nothing was run');
+      expect(`${message}${output}`).not.toContain('object-secret');
+      expect(calls).toEqual([]);
+    },
+  );
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to vercel refuses a .env with only old storage names, and warns without their values', async () => {
     const target = await vercelProject();
-    await setEnv(target, name, '');
+    const secret = `bucket-${randomUUID()}`;
+    await setStorage(target, oldStorageLines(secret));
     const { runner, calls } = stubRunner(vercelResponder(false));
 
     const { message, output } = await capturedFailure(() =>
       runDeployCommand([target, '--yes'], { runner, environment: vercelEnvironment }),
     );
 
-    expect(message).toContain(`${name} is empty in .env`);
-    expect(message).toContain('Nothing was run');
-    expect(`${message}${output}`).not.toContain('object-secret');
+    expect(message).toContain('AW_STORAGE_URL is empty in .env');
+    expect(output).toContain(
+      'storage_setting_ignored: ignoring OBJECT_STORAGE_BUCKET, OBJECT_STORAGE_BACKEND, OBJECT_STORAGE_ENDPOINT; AW_STORAGE_URL',
+    );
+    expect(`${message}${output}`).not.toContain(secret);
     expect(calls).toEqual([]);
   });
 
-  it('gives the control plane the S3-compatible endpoint, bucket and key pair', async () => {
+  const controlPlaneAdds = (calls: readonly ToolInvocation[]) =>
+    changesOf(calls)
+      .filter(({ env }) => env['VERCEL_PROJECT_ID'] === 'acme-ai')
+      .map(({ args }) => args[2]);
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to vercel pushes AW_STORAGE_URL', async () => {
     const target = await vercelProject();
-    await setEnv(target, 'OBJECT_STORAGE_ENDPOINT', 'https://acct.r2.cloudflarestorage.com');
+    await setStorage(target, ['AW_STORAGE_URL=s3://acme-ai-files']);
     const { runner, calls } = stubRunner(vercelResponder(false));
 
     await captured(() =>
       runDeployCommand([target, '--yes'], { runner, environment: vercelEnvironment }),
     );
 
-    const added = changesOf(calls)
-      .filter(({ env }) => env['VERCEL_PROJECT_ID'] === 'acme-ai')
-      .map(({ args }) => args[2]);
-    expect(added).toEqual(
-      expect.arrayContaining([
-        'OBJECT_STORAGE_BACKEND',
-        'OBJECT_STORAGE_ENDPOINT',
-        'OBJECT_STORAGE_BUCKET',
-        'AWS_ACCESS_KEY_ID',
-        'AWS_SECRET_ACCESS_KEY',
-      ]),
+    const added = controlPlaneAdds(calls);
+    expect(added).toContain('AW_STORAGE_URL');
+    expect(added).not.toContain('OBJECT_STORAGE_BUCKET');
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to vercel warns once about an old storage variable next to AW_STORAGE_URL, pushes none, and goes on', async () => {
+    const target = await vercelProject();
+    const secret = `bucket-${randomUUID()}`;
+    await setStorage(target, [
+      'AW_STORAGE_URL=s3://acme-ai-files',
+      ...IGNORED_STORAGE_VARIABLES.map((name) => `${name}=${secret}`),
+    ]);
+    const { runner, calls } = stubRunner(vercelResponder(false));
+
+    const { output } = await captured(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: vercelEnvironment }),
     );
+
+    expect(output.match(/storage_setting_ignored/gu)).toHaveLength(1);
+    expect(output).toContain(
+      `storage_setting_ignored: ignoring ${IGNORED_STORAGE_VARIABLES.join(', ')};`,
+    );
+    expect(output).not.toContain(secret);
+    const added = changesOf(calls).map(({ args }) => args[2]);
+    expect(controlPlaneAdds(calls)).toContain('AW_STORAGE_URL');
+    for (const name of IGNORED_STORAGE_VARIABLES) expect(added).not.toContain(name);
+    expect(JSON.stringify(calls)).not.toContain(secret);
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy refuses an invalid AW_STORAGE_URL without echoing it', async () => {
+    const target = await vercelProject();
+    const secret = 'pw-not-for-logs';
+    await setStorage(target, [`AW_STORAGE_URL=s3://user:${secret}@acme-ai-files`]);
+    const { runner, calls } = stubRunner(vercelResponder(false));
+
+    const { message, output } = await capturedFailure(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: vercelEnvironment }),
+    );
+
+    expect(message).toContain('AW_STORAGE_URL in .env is not valid');
+    expect(`${message}${output}`).not.toContain(secret);
+    expect(calls).toEqual([]);
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to vercel refuses a file: AW_STORAGE_URL, which a function cannot keep', async () => {
+    const target = await vercelProject();
+    await setStorage(target, ['AW_STORAGE_URL=file:///var/lib/agent-workspace']);
+    const { runner, calls } = stubRunner(vercelResponder(false));
+
+    const { message } = await capturedFailure(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: vercelEnvironment }),
+    );
+
+    expect(message).toContain('a Vercel function keeps nothing on disk');
+    expect(calls).toEqual([]);
   });
 
   it('does not ask a non-S3 object store for an S3 key pair', async () => {
     const target = await vercelProject();
-    await setEnv(target, 'OBJECT_STORAGE_BACKEND', 'gcs');
+    await setStorage(target, ['AW_STORAGE_URL=gcs://acme-ai-files']);
     await setEnv(target, 'OBJECT_STORAGE_ACCESS_KEY_ID', '');
     await setEnv(target, 'OBJECT_STORAGE_SECRET_ACCESS_KEY', '');
     const { runner } = stubRunner(vercelResponder(false));
@@ -2315,7 +2413,7 @@ describe('agent-workspace deploy to Cloudflare', () => {
     expect(result).toEqual({ changes: true, applied: false });
     expect(output).toContain('CONTROL_PLANE_URL, CRON_SECRET');
     expect(output).toContain('MASTER_ENCRYPTION_KEY');
-    expect(output).toContain('OBJECT_STORAGE_ENDPOINT');
+    expect(output).toContain('AW_STORAGE_URL');
     expect(output).not.toContain(await masterKey(target));
     expect(output).toContain('acme-ai-gateway (https://acme-ai-gateway.acme.workers.dev)');
     expect(output).toContain('acme-ai-manager (https://acme-ai-manager.acme.workers.dev)');
@@ -2979,6 +3077,9 @@ describe('agent-workspace deploy to Cloudflare', () => {
     expect(gateway['DATABASE_URL']).toBe(databaseUrl);
     expect(gateway['MASTER_ENCRYPTION_KEY']).toBe(env['MASTER_ENCRYPTION_KEY']);
     expect(gateway['GATEWAY_TOKEN_SECRET']).toBe(env['GATEWAY_TOKEN_SECRET']);
+    expect(gateway['GATEWAY_CONTROL_PLANE_ORIGIN']).toBe(
+      'https://acme-ai-control-plane.acme.workers.dev',
+    );
 
     const manager = bulkFor(calls, 'acme-ai-manager');
     expect(manager).toMatchObject({
@@ -3264,32 +3365,123 @@ describe('agent-workspace deploy to Cloudflare', () => {
     expect(manager).not.toHaveProperty('CLOUDFLARE_SANDBOX_BRIDGE_URL');
   });
 
-  it('fills a blank OBJECT_STORAGE_ENDPOINT with the R2 URL and keeps an explicit one', async () => {
-    const target = await cloudflareProject();
-    const first = stubRunner(cloudflareResponder(true).respond);
-    await captured(() =>
-      runDeployCommand([target, '--yes'], {
-        runner: first.runner,
-        environment: cloudflareEnvironment,
-      }),
-    );
-    expect(controlPlanePuts(first.calls)).toContainEqual([
-      'OBJECT_STORAGE_ENDPOINT',
-      'https://acct123.r2.cloudflarestorage.com',
-    ]);
+  /** The location the control plane received in `AW_STORAGE_URL`. */
+  const pushedLocation = (calls: readonly ToolInvocation[]) => {
+    const parsed = parseStorageUrl(bulkFor(calls, 'acme-ai-control-plane')['AW_STORAGE_URL'] ?? '');
+    return parsed.ok ? parsed.location : null;
+  };
 
-    await editEnv(target, 'OBJECT_STORAGE_ENDPOINT', 'https://eu.example.com');
-    const second = stubRunner(cloudflareResponder(true).respond);
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to cloudflare reads the bucket from AW_STORAGE_URL', async () => {
+    const target = await cloudflareProject();
+    const { runner, calls } = stubRunner(cloudflareResponder(true).respond);
+
     await captured(() =>
-      runDeployCommand([target, '--yes'], {
-        runner: second.runner,
-        environment: cloudflareEnvironment,
-      }),
+      runDeployCommand([target, '--yes'], { runner, environment: cloudflareEnvironment }),
     );
-    expect(controlPlanePuts(second.calls)).toContainEqual([
-      'OBJECT_STORAGE_ENDPOINT',
-      'https://eu.example.com',
+
+    const r2 = calls.filter(({ args }) => args[0] === 'r2').map(({ args }) => args.slice(1));
+    expect(r2).toEqual([['bucket', 'info', 'acme-ai-files']]);
+    expect(pushedLocation(calls)).toMatchObject({
+      kind: 's3',
+      bucket: 'acme-ai-files',
+      endpoint: 'https://acct123.r2.cloudflarestorage.com',
+      region: 'auto',
+    });
+    expect(controlPlanePuts(calls).map(([name]) => name)).not.toContain('OBJECT_STORAGE_ENDPOINT');
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to cloudflare keeps the endpoint and region a URL names', async () => {
+    const target = await cloudflareProject();
+    await setStorage(target, [
+      'AW_STORAGE_URL=s3://eu-files/data?endpoint=https%3A%2F%2Feu.example.com&region=eu',
     ]);
+    const { runner, calls } = stubRunner(cloudflareResponder(true).respond);
+
+    await captured(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: cloudflareEnvironment }),
+    );
+
+    expect(pushedLocation(calls)).toMatchObject({
+      bucket: 'eu-files',
+      prefix: 'data',
+      endpoint: 'https://eu.example.com',
+      region: 'eu',
+    });
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to cloudflare refuses a URL that is not s3://', async () => {
+    const target = await cloudflareProject();
+    await setStorage(target, ['AW_STORAGE_URL=gcs://acme-ai-files']);
+    const { runner, calls } = stubRunner(cloudflareResponder(true).respond);
+    const { message } = await capturedFailure(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: cloudflareEnvironment }),
+    );
+    expect(message).toContain('must be an s3:// URL');
+    expect(calls.some(({ args }) => args[0] === 'r2' || args[1] === 'bulk')).toBe(false);
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to cloudflare warns about old storage names next to AW_STORAGE_URL and never translates them', async () => {
+    const target = await cloudflareProject();
+    const secret = `bucket-${randomUUID()}`;
+    await setStorage(target, ['AW_STORAGE_URL=s3://acme-ai-files', ...oldStorageLines(secret)]);
+    const { runner, calls } = stubRunner(cloudflareResponder(true).respond);
+
+    const { output } = await captured(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: cloudflareEnvironment }),
+    );
+
+    expect(output).toContain('storage_setting_ignored: ignoring OBJECT_STORAGE_BUCKET,');
+    expect(output).not.toContain(secret);
+    expect(calls.filter(({ args }) => args[0] === 'r2').map(({ args }) => args.slice(1))).toEqual([
+      ['bucket', 'info', 'acme-ai-files'],
+    ]);
+    expect(pushedLocation(calls)).toMatchObject({
+      bucket: 'acme-ai-files',
+      endpoint: 'https://acct123.r2.cloudflarestorage.com',
+    });
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to cloudflare refuses a .env with only old storage names, as vercel does, without their values', async () => {
+    const target = await cloudflareProject();
+    const secret = `bucket-${randomUUID()}`;
+    await setStorage(target, oldStorageLines(secret));
+    const { runner, calls } = stubRunner(cloudflareResponder(true).respond);
+
+    const { message, output } = await capturedFailure(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: cloudflareEnvironment }),
+    );
+
+    expect(message).toContain('AW_STORAGE_URL is empty in .env');
+    expect(message).toContain('Nothing was run');
+    expect(output).toContain('storage_setting_ignored: ignoring OBJECT_STORAGE_BUCKET,');
+    expect(`${message}${output}`).not.toContain(secret);
+    expect(calls).toEqual([]);
+  });
+
+  // @story US-STO-10
+  it('[US-STO-10][api][cli] deploy to cloudflare warns once and pushes none of the old storage names', async () => {
+    const target = await cloudflareProject();
+    const secret = `bucket-${randomUUID()}`;
+    await setStorage(target, [
+      'AW_STORAGE_URL=s3://acme-ai-files',
+      ...IGNORED_STORAGE_VARIABLES.map((name) => `${name}=${secret}`),
+    ]);
+    const { runner, calls } = stubRunner(cloudflareResponder(true).respond);
+
+    const { output } = await captured(() =>
+      runDeployCommand([target, '--yes'], { runner, environment: cloudflareEnvironment }),
+    );
+
+    expect(output.match(/storage_setting_ignored/gu)).toHaveLength(1);
+    const pushed = bulkFor(calls, 'acme-ai-control-plane');
+    expect(pushed['AW_STORAGE_URL']).toBeDefined();
+    for (const name of IGNORED_STORAGE_VARIABLES) expect(pushed[name], name).toBeUndefined();
+    expect(JSON.stringify(calls)).not.toContain(secret);
   });
 
   it('gives the control plane what the secrets service and file storage read', async () => {
@@ -3309,8 +3501,6 @@ describe('agent-workspace deploy to Cloudflare', () => {
     expect(controlPlane['MASTER_ENCRYPTION_KEY']).toMatch(/^[0-9a-f]{64}$/iu);
     // The S3 adapter reads `AWS_*`, `OBJECT_STORAGE_*` alone leave R2 without credentials.
     expect(controlPlane).toMatchObject({
-      OBJECT_STORAGE_BACKEND: 's3',
-      OBJECT_STORAGE_ENDPOINT: 'https://acct123.r2.cloudflarestorage.com',
       AWS_ACCESS_KEY_ID: 'r2-access-key',
       AWS_SECRET_ACCESS_KEY: 'r2-secret-key',
       AWS_REGION: 'auto',

@@ -1,13 +1,14 @@
-import {
-  EngineImageConfigurationError,
-  type KubernetesResourceClient,
-  type RuntimeHandle,
-} from '@agent-workspace/runtime';
+import { type RuntimeHandle } from '@agent-workspace/runtime/driver';
+import { type KubernetesResourceClient } from '@agent-workspace/runtime/driver/kubernetes';
+import { EngineImageConfigurationError } from '@agent-workspace/runtime/engine-images';
 import { describe, expect, it, vi } from 'vitest';
+
+import { RUNTIME_DRIVERS } from '@indx-workspace/contracts/runtimes';
 
 import {
   acaSessionsDriverOptions,
   acaSessionsNetworkStatus,
+  createShutdownSignalHandler,
   dockerDriverOptions,
   dockerRuntimeOrigin,
   engineImagesFor,
@@ -16,6 +17,7 @@ import {
   kubernetesRuntimeOrigin,
   managerDriverOptions,
   RuntimeDriverConfigurationError,
+  SERVED_RUNTIME_DRIVERS,
   startRunnerManager,
   toolSandboxTimeoutSeconds,
 } from './manager-start.js';
@@ -766,5 +768,56 @@ describe('runner manager kubernetes composition (#854)', () => {
     expect(() =>
       kubernetesDriverOptions({ ...kubernetes, NODE_ENV: 'production' }, client),
     ).toThrow(EngineImageConfigurationError);
+  });
+});
+
+describe('SERVED_RUNTIME_DRIVERS', () => {
+  it('names only drivers in the contracts catalogue', () => {
+    const catalogue = new Set<string>(RUNTIME_DRIVERS);
+    expect(SERVED_RUNTIME_DRIVERS.filter((driver) => !catalogue.has(driver))).toEqual([]);
+  });
+});
+
+describe('createShutdownSignalHandler', () => {
+  function harness(shutdown: () => Promise<'clean' | 'sandboxes-left'>) {
+    const written: string[] = [];
+    const exits: number[] = [];
+    const handler = createShutdownSignalHandler(
+      shutdown,
+      (code) => {
+        exits.push(code);
+      },
+      { write: (chunk: string | Uint8Array) => written.push(String(chunk)) > 0 },
+    );
+    return { handler, written, exits };
+  }
+
+  it('exits 2 and names the failure when the shutdown rejects', async () => {
+    const { handler, written, exits } = harness(() => Promise.reject(new Error('gate exploded')));
+    handler('SIGTERM');
+    await vi.waitFor(() => {
+      expect(exits).toEqual([2]);
+    });
+    expect(written.join('')).toContain('runner manager: shutdown failed: gate exploded');
+  });
+
+  it.each([
+    ['clean', 0],
+    ['sandboxes-left', 2],
+  ] as const)('exits with the %s outcome', async (outcome, code) => {
+    const { handler, exits } = harness(() => Promise.resolve(outcome));
+    handler('SIGINT');
+    await vi.waitFor(() => {
+      expect(exits).toEqual([code]);
+    });
+  });
+
+  it('leaves at once on a second signal without running the shutdown again', () => {
+    const shutdown = vi.fn(() => new Promise<'clean'>(() => undefined));
+    const { handler, exits } = harness(shutdown);
+    handler('SIGTERM');
+    handler('SIGTERM');
+    expect(exits).toEqual([2]);
+    expect(shutdown).toHaveBeenCalledTimes(1);
   });
 });

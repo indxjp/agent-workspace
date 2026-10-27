@@ -10,12 +10,12 @@ export default defineConfig({
       reporter: ['text-summary', 'json-summary'],
       reportsDirectory: 'coverage/apps',
       thresholds: {
-        // First enforced application floor. Raise from measured release-candidate evidence; never
-        // drop or remove it to make a release green.
-        lines: 20,
-        functions: 20,
-        statements: 20,
-        branches: 15,
+        // Ratcheted by scripts/check-coverage-ratchet.mjs: within 5 points of measured. Raise it; never
+        // drop or remove it.
+        lines: 88,
+        functions: 90,
+        statements: 86,
+        branches: 80,
       },
     },
   },

@@ -33,6 +33,18 @@ export function composeBuildTargets(root = ROOT) {
   return [...new Set(pairs)].map((pair) => /** @type {[string, string]} */ (pair.split(' ')));
 }
 
+/**
+ * Each service of compose.yaml with a `build:`, except `migrate`. It shares `web`'s build and tag,
+ * and on the containerd image store one `up --build` exporting that tag twice fails ("image ...
+ * already exists"), so the E2E builds these and starts the stack without `--build`.
+ */
+export function composeBuildServices(root = ROOT) {
+  const text = readFileSync(path.join(root, 'compose.yaml'), 'utf8');
+  return [...text.matchAll(/^ {2}([a-z][a-z-]*):\n {4}build:$/gmu)]
+    .map((match) => String(match[1]))
+    .filter((name) => name !== 'migrate');
+}
+
 /** @param {readonly string[]} args */
 export function docker(args) {
   const result = spawnSync('docker', args, { cwd: ROOT, stdio: 'inherit', timeout: 1_800_000 });

@@ -93,10 +93,17 @@ describe('the storage barrel is a runtime surface', () => {
       ({ specifier }) => !specifier.startsWith('node:'),
     );
     expect(external).toEqual([
+      { file: 'object-store.ts', specifier: '@indx-workspace/contracts/files' },
       { file: 'gcs-store.ts', specifier: '@google-cloud/storage' },
       { file: 'azure-blob-store.ts', specifier: '@azure/identity' },
       { file: 'azure-blob-store.ts', specifier: '@azure/storage-blob' },
       { file: 's3-store.ts', specifier: '@aws-sdk/client-s3' },
+      { file: 's3-store.ts', specifier: '@aws-sdk/lib-storage' },
+      { file: 's3-store.ts', specifier: '@indx-workspace/contracts/storage-url' },
+      { file: 'connection-store.ts', specifier: '@indx-workspace/contracts/storage-connections' },
+      { file: 'connection-store.ts', specifier: '@indx-workspace/contracts/storage-url' },
+      { file: '../posture.ts', specifier: 'zod' },
+      { file: 'open.ts', specifier: '@indx-workspace/contracts/storage-url' },
     ]);
   });
 

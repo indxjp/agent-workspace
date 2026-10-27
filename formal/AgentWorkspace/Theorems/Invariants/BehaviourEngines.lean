@@ -59,7 +59,7 @@ request is well formed, and the session has a history this run does not belong t
 @[aw_spec (tier := T2) (ts := "packages/contracts/src/engines.ts#ENGINE_PROBLEM_CODES")]
 theorem session_engine_mismatch_is_a_four_oh_nine :
     LaunchVerdict.engineMismatch.code = some "session_engine_mismatch" ∧
-    LaunchVerdict.engineMismatch.status = 409 := by decide
+    LaunchVerdict.engineMismatch.status = 409 := by decide +kernel
 
 /-! ## What a permitted run does -/
 
@@ -153,28 +153,28 @@ Concrete runs, so that every theorem above has a state that satisfies its hypoth
 
 /-- Witness: the published-engine hypotheses above are satisfiable — `claude-agent-sdk` is
 published. -/
-example : claude ∈ engineIds := by decide
+example : claude ∈ engineIds := by decide +kernel
 
 /-- Witness: two runs on the pinned engine land, in order. -/
 example :
     startRun claude (startRun claude (recordIdentity claude "s1" freshSession)).2
       = (LaunchVerdict.created claude,
-         ⟨some claude, some "s1", [⟨claude⟩, ⟨claude⟩]⟩) := by decide
+         ⟨some claude, some "s1", [⟨claude⟩, ⟨claude⟩]⟩) := by decide +kernel
 
 /-- Witness: a request for another engine is refused and leaves both prior runs untouched. -/
 example :
     startRun testOnly ⟨some claude, some "s1", [⟨claude⟩, ⟨claude⟩]⟩
-      = (LaunchVerdict.engineMismatch, ⟨some claude, some "s1", [⟨claude⟩, ⟨claude⟩]⟩) := by decide
+      = (LaunchVerdict.engineMismatch, ⟨some claude, some "s1", [⟨claude⟩, ⟨claude⟩]⟩) := by decide +kernel
 
 /-- Witness: the refusal is symmetric. A session pinned to a test-only engine does not quietly become
 a `claude-agent-sdk` session either. -/
 example :
-    (startRun claude ⟨some testOnly, some "s1", []⟩).1 = LaunchVerdict.engineMismatch := by decide
+    (startRun claude ⟨some testOnly, some "s1", []⟩).1 = LaunchVerdict.engineMismatch := by decide +kernel
 
 /-- Witness: the very first run of a session pins nothing by itself — the engine is still NULL until
 the runner reports an identity — and it is still recorded on the run. -/
 example :
     startRun claude freshSession
-      = (LaunchVerdict.created claude, ⟨Option.none, Option.none, [⟨claude⟩]⟩) := by decide
+      = (LaunchVerdict.created claude, ⟨Option.none, Option.none, [⟨claude⟩]⟩) := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.BehaviourEngines

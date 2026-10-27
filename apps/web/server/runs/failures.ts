@@ -1,8 +1,9 @@
+import { log as webLog } from '../telemetry/logger';
 import { RUN_PREPARATION_FAILED } from '@indx-workspace/contracts/runs';
 
 import { RuntimeManagerError } from '../compose/runtime-manager-client';
 import { DomainError, InfrastructureError, toInfrastructureError } from '../errors';
-import { redacted } from '../redact';
+import { redacted } from '@agent-workspace/core/telemetry';
 
 export interface RunFailureContext {
   readonly operation: string;
@@ -24,7 +25,8 @@ export function publicRunFailure(cause: unknown, context: RunFailureContext): st
   if (failure instanceof DomainError) return failure.publicMessage;
 
   const log =
-    context.log ?? ((message: string, error: InfrastructureError) => console.error(message, error));
+    context.log ??
+    ((message: string, error: InfrastructureError) => webLog.error(message, { error }));
   log(`[runs] ${context.operation} failed`, failure);
   return context.publicMessage;
 }
@@ -38,6 +40,7 @@ export type PreparationStep =
   | 'allocation'
   | 'model'
   | 'resources'
+  | 'transcription'
   | 'token'
   | 'compose'
   | 'prepare';
@@ -96,7 +99,7 @@ const MAX_MANAGER_DETAIL = 400;
 export function publicPreparationFailure(
   cause: unknown,
   secrets: readonly string[] | null,
-  log: (message: string) => void = (message) => console.error(message),
+  log: (message: string) => void = (message) => webLog.error(message),
 ): string {
   if (cause instanceof DomainError) return cause.publicMessage;
   const step = cause instanceof PreparationStepError ? cause.step : 'prepare';

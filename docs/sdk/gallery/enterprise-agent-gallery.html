@@ -203,6 +203,8 @@ footer ul { padding-left: 18px; margin: 8px 0 0; display: grid; gap: 4px; }
   </div>
 </header>
 
+<div class="shell"><p class="note" style="margin:16px 0 0"><span data-i18n="snapshot">This page is a snapshot taken before the gallery programme; its scores are out of date. Live scores:</span> <a href="https://docs.agentworkspace.indx.jp/tutorials">docs.agentworkspace.indx.jp/tutorials</a></p></div>
+
 <main id="app"></main>
 
 <script>
@@ -210,6 +212,7 @@ footer ul { padding-left: 18px; margin: 8px 0 0; display: grid; gap: 4px; }
 const S = { ok: '✓', work: '~', gap: '−', na: '·' };
 
 const T = {
+  snapshot: { ja: 'このページはギャラリー整備前のスナップショットで、スコアは最新ではありません。最新のスコア:', en: 'This page is a snapshot taken before the gallery programme; its scores are out of date. Live scores:' },
   navMatrix: { ja: 'ベンチマーク', en: 'Benchmark' },
   navPieces: { ja: 'SDKの部品', en: 'SDK pieces' },
   navCases: { ja: 'ユースケース', en: 'Use cases' },
@@ -774,7 +777,7 @@ const XGAPS = [
   { ref: 'RF-102', ja: '利用者ごとのデータ範囲', en: 'Per-user data scope', pja: '資格情報と権限はエージェント単位で、実行は利用者の身元を道具に渡しません。顧客問い合わせでは、バックエンドが発行するHMACトークンをMCPサーバーが検証する方式を自作しました。', pen: 'Credentials and grants are per agent, and a run passes no end-user identity to its tools. Customer inquiry built its own HMAC token, minted by the backend and checked by the MCP server.', u: [4], w: [1,2,3,5,6,7,8,9,10] },
   { ref: 'policy.approval', ja: '実行中の人の承認', en: 'Human approval mid-run', pja: '実行を止めて承認を待てないため、6件が「同じセッションで2回実行」に分けました。議事録では、承認トークンがない書き込みをタスク管理側で拒否させています。', pen: 'A run cannot stop and wait, so six use cases split the work into two runs in one session. Meeting minutes has the tracker refuse any write without an approval token.', u: [2,3,5], w: [6,7,8,9,10] },
   { ref: 'define-tool-approval', ja: 'コードで定義したエージェントのツール承認', en: 'Tool approval for agents as code', pja: 'defineAgent で writeFiles / runCommands を与えても Write・Bash は自動承認されず、無人の実行では拒否されます。スキルのスクリプトを使う6件は aw.agents.replacePolicy で方針を上書きする必要があり、次の aw push で戻る恐れがあります。', pen: 'Granting writeFiles or runCommands in defineAgent does not auto-approve Write or Bash, so an unattended run refuses them. The six use cases that run skill scripts must store a policy with aw.agents.replacePolicy, which a later aw push may undo.', u: [], w: [2,3,6,7,8,10] },
-  { ref: 'N-3 · S-6', ja: 'イベント起動・定期実行', en: 'Event triggers and schedules', pja: '起票・メール受信・会議終了・月次の起動はすべて自前のバックエンドです。runs.start に冪等キーがないため、稟議ではリトライで二重レビューにならないよう自分で重複排除しました。', pen: 'Ringi filed, email received, meeting ended and the monthly run are all your own backend. runs.start has no idempotency key, so ringi review dedupes retried webhooks itself.', u: [4,5,6,8], w: [] },
+  { ref: 'N-3 · S-6', ja: 'イベント起動・定期実行', en: 'Event triggers and schedules', pja: '起票・メール受信・会議終了・月次の起動はすべて自前のバックエンドです。runs.start は idempotencyKey（Idempotency-Key ヘッダーとして送信）を受け付けます。稟議ではリトライによるコメントの二重投稿を防ぐため、自分で重複排除しました。', pen: 'Ringi filed, email received, meeting ended and the monthly run are all your own backend. runs.start accepts an idempotencyKey (sent as the Idempotency-Key header); ringi review still dedupes retried webhooks itself so it never posts a comment twice.', u: [4,5,6,8], w: [] },
   { ref: 'launcher.ts', ja: '成果物ファイルの返却', en: 'Getting output files back', pja: '実行中に書いたファイルはファイルストアに戻りません（ライブ実行で確認）。persistPaths は実行の作業ディレクトリではなく /workspace を収集しています。図面・統合表・赤字docx は回答経由で返し、バックエンドで再生成しています。', pen: 'A file written during a run never reaches the file store (confirmed with a live run): persistPaths collects /workspace, not the run’s working directory. Drawings, merged tables and redlined docx come back through the answer and the backend rebuilds them.', u: [2,6,7], w: [] },
   { ref: 'ADR-0113', ja: '業務システムへの書き込み', en: 'Writes to business systems', pja: 'openapiTool は GET/HEAD のみです。タスク登録・保全記録は自前MCP、ERP登録・稟議コメントはバックエンドで行いました。', pen: 'openapiTool allows GET and HEAD only. Task creation and maintenance logs use your own MCP server; ERP booking and ringi comments go through the backend.', u: [3], w: [4,8,9] },
   { ref: 'attachments', ja: '添付（写真・図面・音声）', en: 'Attachments (photos, drawings, audio)', pja: 'ウィジェットも runs.start も添付を受け付けません。写真の不具合部品、見積の図面、稟議の見積書、会議の音声はすべて別経路です。', pen: 'Neither the widget nor runs.start takes attachments: the photo of a faulty part, the drawing for a quote, the quotes on a ringi and meeting audio all travel another way.', u: [4,8,9], w: [2,3,7] },

@@ -6,7 +6,8 @@
    "id": "empty",
    "expected":
    {"env":
-    {"CLAUDE_CONFIG_DIR": "/run/claude/tenant-a/.claude",
+    {"ENABLE_TOOL_SEARCH": "false",
+     "CLAUDE_CONFIG_DIR": "/run/claude/tenant-a/.claude",
      "CLAUDE_CODE_PROJECT_DIR_NAME": "tenant-a",
      "AGENT_WORKSPACE_SESSION_ID": "2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e",
      "AGENT_WORKSPACE_RUN_ID": "6f1d0d0a-8b0a-4a1f-9b3e-1c2d3e4f5a6b"}}},
@@ -17,7 +18,8 @@
    "id": "custom",
    "expected":
    {"env":
-    {"CUSTOM": "value",
+    {"ENABLE_TOOL_SEARCH": "false",
+     "CUSTOM": "value",
      "CLAUDE_CONFIG_DIR": "/run/claude/tenant-a/.claude",
      "CLAUDE_CODE_PROJECT_DIR_NAME": "tenant-a",
      "AGENT_WORKSPACE_SESSION_ID": "2b0f5f2a-91a4-4a0e-9a1a-9f7a1b2c3d4e",

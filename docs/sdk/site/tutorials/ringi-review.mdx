@@ -1,42 +1,42 @@
 ---
 title: "4. Ringi review agent"
-description: "An agent that reviews each ringi (approval request) filed in your workflow system against the authority matrix, the ringi rules and past precedents, and writes a review sheet with a clause for every finding. It never approves. Your backend starts it from a webhook, runs it once per revision, re-checks the approval route and posts the sheet back."
+description: "An agent that reviews each ringi (approval request) filed in your workflow system against the authority matrix, the ringi rules and past precedents, and writes a review sheet with a clause for every finding. It can comment but never approve or reject. Your backend starts it once per revision for the person who filed the ringi, narrowed to the departments' precedents they may read; the run answers in the sheet, your backend re-checks the approval route, and the agent posts the sheet as a comment once a person approves that call."
 ---
 
 <Info>
-**You will build:** a read-only reviewer your workflow system starts once per ringi revision; it writes a review sheet with a clause for every finding, and your backend re-checks the approval route before posting the sheet as a comment.
+**You will build:** a reviewer your backend starts once per ringi revision, for the person who filed it; it writes a review sheet with a clause for every finding, your backend re-checks the approval route, and the agent posts the sheet as a comment on the ringi once a person approves that call.
 
-**You will learn:** five read-only tools in your own MCP server ([MCP servers](/building/mcp-servers)), a skill that fixes the sheet's format ([Skills](/building/skills)), a reviewer that cannot approve, under a policy ceiling ([Design an agent](/building/agents)), starting runs from a webhook exactly once per revision ([Integrate a backend](/building/backend)), a side panel for approvers' follow-up questions ([Embed an agent](/building/embedding)), and evals ([Evaluations](/guides/evaluations)).
+**You will learn:** the built-in `search_files` over the rule book and the archive, narrowed per caller with `fileScope`, and one read-only tool in your own MCP server ([MCP servers](/building/mcp-servers)), a skill that fixes the sheet's format ([Skills](/building/skills)), a reviewer that can comment but cannot approve, under a policy ceiling ([Design an agent](/building/agents)), a comment posted through an `openapiTool` call a person approves ([Tools from code](/guides/tools-from-code), [Secrets](/resources/secrets)), a typed run your backend starts for the filer with the quotes attached ([Integrate a backend](/building/backend)), a side panel for approvers' follow-up questions ([Embed an agent](/building/embedding)), and evals ([Evaluations](/guides/evaluations)).
 
-**Time and prerequisites:** about 45 minutes to read; the tests behind it run offline with no API key. To run it on your own workspace, finish [chapter 1](/path/first-agent) first (a project answering under `aw dev`), and have a model key and Node to start the archive server. Advanced: most of the code is the backend around the agent.
+**Time and prerequisites:** about 45 minutes to read and about 30 minutes to run it on your workspace; the tests behind it run offline with no API key. To run it on your own workspace, finish [chapter 1](/path/first-agent) first (a project answering under `aw dev`), and have a model key and Node to start the authority server. Advanced: most of the code is the backend around the agent.
 
 </Info>
 
+## The result
+
+<Frame caption="The review sheet for 「第3工場 搬送コンベヤの更新」 (設備投資, 4,500万円): missing items, the approval route and precedents, each with its clause.">
+  <img
+    src="/images/tutorials/ringi-review/01-result.png"
+    alt="The ringi review agent's review sheet with five headings for a capital-investment ringi"
+  />
+</Frame>
+
 **稟議書レビューエージェント.** A department files a ringi in the company's existing workflow
-system: 「第3工場 搬送コンベヤの更新」, 設備投資, 4,500万円. The workflow system calls your backend,
-which starts the agent. The agent checks the ringi against the 職務権限規程 (who may approve what
+system: 「第3工場 搬送コンベヤの更新」, 設備投資, 4,500万円. Your backend starts a run of the agent
+for the person who filed it, with the quotes attached. The agent checks the ringi against the 職務権限規程 (who may approve what
 amount in each category), the required fields of the 稟議規程 and the other internal rules, and
-looks up similar past ringi, including the ones that were sent back or rejected. It writes a
+searches similar past ringi, including the ones that were sent back or rejected, among the
+departments the filer may read. It writes a
 review sheet: missing items, possible rule breaches with the clause cited, the correct approval
-route (決裁区分) and the precedents. The backend posts the sheet to the ringi as a comment.
+route (決裁区分) and the precedents. Your backend reads the sheet from the run and re-checks it;
+a second run posts the checked sheet, with your warnings, to the ringi as a comment once a person
+approves that call.
 
-The agent never approves. It is read-only by construction: it holds no tool that writes, and the
-project's policy forbids writing files, running commands and open network access.
-
-## How the agent works
-
-From the request to the person who decides, with the tools, skills and checks in between:
-
-```mermaid
-flowchart TD
-  W["Ringi filed or revised in the workflow system"] --> H["Webhook: claim ringiId@revision"]
-  H -- "already claimed" --> DUP["Duplicate: no second run"]
-  H -- "new" --> A["Agent: blank fields, check_authority, read_rule, search_ringi"]
-  A --> S["Skill ringi-checklist: five fixed headings"]
-  S --> B["Backend re-checks route, missing fields and citations"]
-  B --> C["Comment posted to the ringi"]
-  C --> P["Approvers decide; they can ask follow-ups in the side panel"]
-```
+The agent never approves or rejects. Its one write is the comment: `postComment` is an
+`openapiTool` operation, so the run pauses until a person approves that exact call. The workflow
+system's approve and reject endpoints are in the API document but not admitted, so no tool the agent
+holds can decide; its one MCP tool, `check_authority`, is a table lookup. The project's policy
+forbids writing files, running commands and open network access.
 
 ## Why Japanese enterprises want it
 
@@ -58,52 +58,85 @@ that yet, so treat the business case as an extrapolation.
 Every test behind this page runs offline, with no API key. How the gallery tests a
 use case, and what each tier proves, is on the [gallery overview](/tutorials).
 
-## What you build
+## How it works
+
+From the request to the person who decides, with the tools, skills and checks in between:
 
 ```mermaid
 flowchart TD
-  W["Workflow system<br/>ringi filed / revised"] -- "webhook" --> H["Your backend<br/>onRingiSubmitted()"]
-  H -- "claim ringiId@revision" --> K["Processed-key store<br/>(your table)"]
-  H -- "runs.start / follow" --> A["Agent ringi-review<br/>readFiles only"]
+  W["Ringi filed or revised in the workflow system"] --> H["Backend: startReview, once per revision, subject = filer, fileScope = their departments + rules"]
+  H --> A["Agent: blank fields, check_authority, search_files + Read, the quotes"]
+  A --> S["Skill ringi-checklist: five fixed headings"]
+  S --> B["Backend reads the sheet from the run, re-checks route, missing fields and citations"]
+  S --> C["Agent: postComment, the run pauses until a person approves the call"]
+  C --> P["Comment on the ringi; approvers decide and can ask follow-ups in the side panel"]
+```
+
+## Before you start
+
+- [ ] You finished [chapter 1](/path/first-agent): a project answering under `aw dev`.
+- [ ] A model key, only to run it on your workspace. The tests need no key.
+- [ ] Node, to start the authority server.
+- [ ] The code: every file on this page is in the gallery folder `tests/gallery/ringi-review/`, and paths below are relative to it. Blocks titled with `file=` are exact copies. How the gallery tests a use case is on the [gallery overview](/tutorials).
+
+## The pieces
+
+```mermaid
+flowchart TD
+  W["Workflow system<br/>ringi filed / revised"] -- "startReview(ringi)<br/>once per revision" --> H["Your backend<br/>startReview() · reviewRun()"]
+  H -- "runs.start (subject: submittedBy, fileScope,<br/>quotes attached, outputSchema)" --> A["Agent ringi-review<br/>readFiles, comment only"]
+  H -- "runs.result" --> A
   A -- "skill" --> S["ringi-checklist<br/>five fixed headings"]
-  A -- "mcp('ringi-archive')" --> M["Your MCP server<br/>search_ringi · get_ringi<br/>check_authority · search_rules · read_rule"]
+  A -- "search_files + Read<br/>(only the fileScope)" --> F["Workspace files<br/>rules/ · ringi/部門/年.json"]
+  A -- "mcp('authority')" --> M["Your MCP server<br/>check_authority"]
   H -- "re-check 決裁区分<br/>with the same matrix" --> X["authority.mjs"]
   M --> X
-  H -- "post comment" --> W
+  A -- "postComment, once a person<br/>approves the call" --> W
   P["Approver's side panel<br/>surface ringi-desk"] --> A
 ```
 
-| Piece | File | SDK |
-| --- | --- | --- |
-| The rules and the archive | `data/rules/*.md`, `data/ringi/*.json` | — |
-| The authority matrix as code | `mcp/authority.mjs` | — |
-| Precedent and rule search | `mcp/ringi-archive.mjs` | an `http` connector in `agent-workspace.yaml` |
-| The sheet format | `skills/ringi-checklist/SKILL.md` | `aw.skills.import` (via `aw dev`) |
-| The agent | `agents/ringi-review.ts`, `agents/ringi-review.md` | `defineAgent`, `mcp`, `skill`, `files` |
-| Follow-up questions | `surfaces/ringi-desk.ts` | `defineSurface` |
-| What "good" means | `evals/ringi-review.yaml` | `aw eval`, `policy.promotion.minEvalScore` |
-| The webhook | `backend/on-ringi-submitted.ts`, `backend/review-sheet.ts` | `runs.start`, `runs.follow` |
+| Piece                                        | File                                               | SDK                                                             |
+| -------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------- |
+| The rules and the archive                    | `data/rules/*.md`, `data/ringi/<部門>/<year>.json` | `files('rules', 'read')`, `files('ringi', 'read')`              |
+| Who may read which departments               | `data/access.json`                                 | `runs.start({ fileScope })`                                     |
+| The authority matrix as code                 | `mcp/authority.mjs`                                | —                                                               |
+| The authority lookup                         | `mcp/authority-server.mjs`                         | an `http` connector in `agent-workspace.yaml`                   |
+| The sheet format                             | `skills/ringi-checklist/SKILL.md`                  | `aw.skills.import` (via `aw dev`)                               |
+| The workflow system's comment API            | `tools/workflow.ts`, `apis/workflow.openapi.json`  | `openapiTool`                                                   |
+| A stand-in workflow system to try it against | `workflow/fake-workflow.mjs`                       | —                                                               |
+| The agent                                    | `agents/ringi-review.ts`, `agents/ringi-review.md` | `defineAgent`, `mcp`, `skill`, `files`, built-in `search_files` |
+| Follow-up questions                          | `surfaces/ringi-desk.ts`                           | `defineSurface`                                                 |
+| What "good" means                            | `evals/ringi-review.yaml`                          | `aw eval`, `policy.promotion.minEvalScore`                      |
+| The start and the check                      | `backend/review-run.ts`, `backend/review-sheet.ts` | `runs.start`, `runs.result`                                     |
 
-## 1. Keep the authority matrix as text, and apply it as code
+## Build it
+
+Each step is one file or one concern, with the reason for it and a check to make before you go on.
+
+### 1. Keep the authority matrix as text, and apply it as code
 
 The 職務権限規程 is a document people read, and its tables decide who approves. The fixture keeps
-it as Markdown, one section per category:
+it as Markdown, one section per category, each opening with its own `出典:` line:
 
 ```md title="data/rules/authority-matrix.md (excerpt)" file="tests/gallery/ringi-review/data/rules/authority-matrix.md#excerpt"
 ## §3.1 設備投資
 
-| 金額（税抜） | 決裁者 |
-| --- | --- |
-| 300万円以下 | 部長 |
-| 3,000万円以下 | 本部長 |
-| 3,000万円超 | 取締役会 |
+出典: 〔職務権限規程 §3.1〕
+
+| 金額（税抜）  | 決裁者   |
+| ------------- | -------- |
+| 300万円以下   | 部長     |
+| 3,000万円以下 | 本部長   |
+| 3,000万円超   | 取締役会 |
 
 ## §3.4 寄付
 
-| 金額（税抜） | 決裁者 |
-| --- | --- |
-| 100万円以下 | 社長 |
-| 100万円超 | 取締役会 |
+出典: 〔職務権限規程 §3.4〕
+
+| 金額（税抜） | 決裁者   |
+| ------------ | -------- |
+| 100万円以下  | 社長     |
+| 100万円超    | 取締役会 |
 
 合議: 総務部長
 ```
@@ -113,18 +146,21 @@ parses that same text into tiers, so the table a person reads and the table code
 drift apart. Which approver a ringi needs is a lookup, not a judgement, so it is never left to
 the model:
 
-```js title="mcp/authority.mjs (excerpt) (illustrative)" claim="illustrative"
+```js title="mcp/authority.mjs (excerpt)" file="tests/gallery/ringi-review/mcp/authority.mjs#excerpt"
 export function requiredApprover(matrix, category, amountYen) {
-  if (!Number.isSafeInteger(amountYen) || amountYen < 0) {
-    throw new Error('amountYen must be a non-negative integer number of yen');
-  }
+  …
   const entry = matrix.categories.find((candidate) => candidate.category === category);
   if (entry === undefined) return null;
-  const tier = entry.tiers.find((candidate) => candidate.maxYen === null || amountYen <= candidate.maxYen);
+  const tier = entry.tiers.find(
+    (candidate) => candidate.maxYen === null || amountYen <= candidate.maxYen,
+  );
+  …
   return {
-    category, amountYen,
+    category,
+    amountYen,
     approver: tier.approver,
     route: `${tier.approver}決裁`,
+    …
     coReview: entry.coReview,
     clause: `〔${matrix.source} §${entry.section}〕`,
   };
@@ -132,12 +168,14 @@ export function requiredApprover(matrix, category, amountYen) {
 ```
 
 The other rules (`ringi-rules.md` for required fields, quotes, starting work before approval and
-budget; `donation-rules.md` for forbidden recipients) are plain clauses. The archive holds 18 past
-ringi with their outcome and the reason: 承認, 差戻し or 否決.
+budget; `donation-rules.md` for forbidden recipients) are plain clauses in the same shape. The
+archive holds 18 past ringi with their outcome and the reason: 承認, 差戻し or 否決. They are kept
+one file per department and year, `ringi/<部門>/<year>.json`, and each record carries its own `出典`:
 
-```json title="data/ringi/2025.json (one record)" file="tests/gallery/ringi-review/data/ringi/2025.json#excerpt"
+```json title="data/ringi/物流部/2025.json (one record)" file="tests/gallery/ringi-review/data/ringi/物流部/2025.json#excerpt"
 {
   "id": "R-2025-0133",
+  "出典": "〔稟議 R-2025-0133〕",
   "件名": "物流倉庫 フォークリフト2台の追加購入",
   "区分": "設備投資",
   "金額": 2400000,
@@ -147,185 +185,282 @@ ringi with their outcome and the reason: 承認, 差戻し or 否決.
 }
 ```
 
-## 2. Serve the archive and the rules as an MCP server
+**Check:** a 設備投資 of 4,500万円 falls in the 「3,000万円超」 row of §3.1, so the required approver is 取締役会.
 
-Agent Workspace builds no search index (a gap probe asserts it),
-so the archive is your server. Five tools, all read-only:
+### 2. Search the rules and the archive with `search_files`, narrowed to the filer
 
-```js title="mcp/ringi-archive.mjs (excerpt) (illustrative)" claim="illustrative"
-{
-  name: 'search_ringi',
-  description: '過去の稟議（先例）を件名・理由で全文検索する。差戻し・否決の先例も含む。…',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string' },
-      category: { type: 'string', enum: CATEGORIES },
-      result: { type: 'string', enum: RESULTS },
-      limit: { type: 'integer', minimum: 1, maximum: 10 },
+Agent Workspace has no per-caller index of its own, and you do not need to host one. The rule book and
+the archive are workspace files the agent is granted (`files('rules', 'read')`,
+`files('ringi', 'read')`), and the built-in `search_files` finds them: a query is a few
+whitespace-separated terms, only a file that has every term is returned, and a hit is
+`{ path, page, snippet }`. The snippet is a fragment, so the agent opens the file it names with
+`Read` before it cites it.
+
+- **Precedents are found by their reason, not only their subject.** A reviewer asks "was anything
+  sent back for splitting a purchase", and `分割起案 差戻し` finds `ringi/物流部/2025.json` because
+  R-2025-0133's reason says so.
+- **Precedents are scoped to the person who filed the ringi.** `data/access.json` maps each person
+  to the departments whose past ringi they may read:
+
+  ```json title="data/access.json" file="tests/gallery/ringi-review/data/access.json"
+  {
+    "山本 健": {
+      "departments": ["製造本部", "物流部", "営業本部", "技術本部", "情報システム部", "総務部"]
     },
-    required: ['query'],
-  },
-  handler: (args) => {
-    const category = oneOf(args, 'category', CATEGORIES);
-    const result = oneOf(args, 'result', RESULTS);
-    return ringiIndex.search(text(args, 'query'), {
-      filter: (record) =>
-        (category === undefined || record.区分 === category) &&
-        (result === undefined || record.結果 === result),
-    }) /* … */;
-  },
-},
-{
-  name: 'check_authority',
-  description: '職務権限規程の別表で、区分と金額（税抜・円）から決裁者と決裁区分を判定する。…決裁区分は必ずこの結果を写す。',
-  handler: (args) => {
-    const decision = requiredApprover(matrix, text(args, 'category'), args.amountYen);
-    if (decision === null) refuse(`別表に定めのない区分です。…〔${matrix.source} §1.1〕`);
-    return decision;
-  },
-},
-```
+    "高木 理恵": { "departments": ["人事部"] }
+  }
+  ```
 
-Two choices carry the use case:
+  The backend turns that into a `fileScope`, the folders `search_files` and the run's sandbox may
+  reach, and starts the run with it:
 
-- **Precedents are indexed by their reason, not only their subject.** A reviewer asks "was
-  anything sent back for splitting a purchase", and 「分割起案」 with `result: '差戻し'` finds
-  R-2025-0133 because the reason says so.
-- **Every tool returns the citation to copy.** `read_rule` returns `〔稟議規程 §4.2〕`,
-  `get_ringi` returns `〔稟議 R-2025-0133〕` and `check_authority` returns `〔職務権限規程 §3.1〕`,
-  so the backend can later check each citation on the sheet against what the tools returned.
+  ```ts title="backend/review-run.ts (excerpt)" file="tests/gallery/ringi-review/backend/review-run.ts#excerpt"
+  export function fileScopeFor(subject: string, access: AccessList): string[] {
+    const departments = access[subject]?.departments ?? [];
+    if (departments.length === 0) {
+      throw new Error(`${subject} may read no department's ringi, so no review was started`);
+    }
+    return [...departments.map((department) => `ringi/${department}`), 'rules'];
+  }
+  ```
+
+  A `fileScope` is a subset of the agent's file grants; a scope that widens them fails the run
+  with 403 `run_file_scope_not_granted`. Under it, 人事部's personnel precedents never reach a
+  製造本部 approver: a search finds nothing there and `Read` of such a path is an error. A filer who
+  may read no department is refused before any run starts, because a run without a scope would
+  search every granted file. The rule book is the same for everyone. See
+  [Caller identity](/guides/caller-identity).
+
+- **Every file carries the citation to copy.** A rule clause opens with `出典: 〔稟議規程 §4.2〕`, a
+  precedent has `"出典": "〔稟議 R-2025-0133〕"`, and `check_authority` returns
+  `〔職務権限規程 §3.1〕`, so the backend can later check each citation on the sheet against what
+  the tools returned.
+
+The one tool of ours left is the authority lookup (`mcp/authority-server.mjs`). It is read-only,
+holds no index and needs no caller identity: the table is the same for everyone, so the connector
+has no `identity` and the server runs as it is.
 
 ```sh title="illustrative" claim="illustrative"
-MCP_TRANSPORT=http PORT=8790 node mcp/ringi-archive.mjs
+MCP_TRANSPORT=http PORT=8790 node mcp/authority-server.mjs
 ```
 
-## 3. Fix the sheet's format in a skill
+**Check:** the server offers one tool, `check_authority`, and it writes nothing; a filer of 人事部 finds only 人事部's precedents, and a filer with no department gets no run.
 
-The run returns free text (there is no output schema), so the format is the contract between the
-agent and your backend. The skill fixes five headings, in order, all always present:
+### 3. Fix the sheet's format in a skill
+
+The skill fixes the format a person reads: five headings, in order, all always present. The
+backend asks the run for the same five sections as typed output (step 6), so the headings are
+for the reader and the schema is the contract with your code:
 
 ```md title="skills/ringi-checklist/SKILL.md (excerpt)" file="tests/gallery/ringi-review/skills/ringi-checklist/SKILL.md#excerpt"
 最初の行に `# 稟議レビュー <稟議ID> rev.<改訂番号>` を書き、次の5つの見出しをこの順で、
 すべて書く。該当する指摘がない見出しには `- なし` とだけ書く。見出しの文言を変えない。
 
 ## 記載漏れ
+
 ## 規程との照合
+
 - 「違反である」と断定せず「抵触のおそれ」「確認が必要」と書く。判断するのは決裁者である。
+
 ## 決裁区分
+
 - 1行目は必ず `- 決裁区分: <route>〔職務権限規程 §節〕` とし、`check_authority` の
   `route` と `clause` をそのまま写す。
+
 ## 類似案件
+
 ## 総合所見
+
 - 決裁者が確認すべき点を2〜3文でまとめる。承認・否決の推奨は書かない。
+
+出典は、`check_authority` が返した citation と、`Read` で読んだ規程の条・稟議の「出典」の行だけを使う。
 ```
 
 `- なし` matters: it lets the parser tell "the agent checked and found nothing" from "the agent
 dropped the heading".
 
-## 4. Define a reviewer that cannot approve
+**Check:** a sheet starts with `# 稟議レビュー <稟議ID> rev.<改訂番号>`, has the five headings in order, and an empty one reads `- なし`.
 
-```ts title="agents/ringi-review.ts" file="tests/gallery/ringi-review/agents/ringi-review.ts#excerpt"
+### 4. Define a reviewer that can comment but cannot decide
+
+The workflow system is an `openapiTool`, described the way the [quotation agent](/tutorials/quotation)
+describes its ERP. The API document declares three operations, `postComment`, `approveRequest` and
+`rejectRequest`, and the `allow` rule admits only the first:
+
+```ts title="tools/workflow.ts" file="tests/gallery/ringi-review/tools/workflow.ts#excerpt"
+import { openapiTool, secret } from '@indx-workspace/sdk/define';
+
+export const workflow = openapiTool({
+  name: 'workflow',
+  spec: 'apis/workflow.openapi.json',
+  auth: secret('WORKFLOW_TOKEN'),
+  identity: secret('WORKFLOW_IDENTITY_SECRET'),
+  allow: ['operationId:postComment'],
+});
+```
+
+`postComment` is a `POST`, so it is a write, and compose makes every write implicitly
+`requireApproval`: the run pauses, and the call runs only once a person approves exactly that call.
+The approve and reject endpoints are in the document but not admitted, so the agent has no tool
+that could decide a ringi. The agent takes the tool as a value:
+
+```ts title="agents/ringi-review.ts" file="tests/gallery/ringi-review/agents/ringi-review.ts"
 import { defineAgent, files, mcp, skill } from '@indx-workspace/sdk/define';
+
+import { workflow } from '../tools/workflow.ts';
 
 export default defineAgent({
   name: 'ringi-review',
   instructions: { file: './ringi-review.md' },
   model: 'default',
-  engine: 'claude-agent-sdk',
-  // Read-only by construction: it reads the rules and the archive and writes nothing.
+  // A run is unattended: without autoApprove the SDK stops the file search on an approval prompt.
+  engine: { id: 'claude-agent-sdk', autoApprove: ['mcp__agent-workspace__search_files'] },
+  // It reads the rules and the archive, and its one write is a comment on the ringi (postComment,
+  // which waits for approval). It cannot approve or reject a ringi because no tool it holds can,
+  // and the project's policy ceiling forbids writing files, running commands and open network
+  // access for every agent in the project. The rules and the past ringi are found with the
+  // built-in `search_files`; the backend narrows a run to the departments' folders the filer may
+  // read (`runs.start({ fileScope })`).
   permissions: { readFiles: true },
-  tools: [mcp('ringi-archive')],
+  tools: [mcp('authority'), workflow],
   skills: [skill('ringi-checklist')],
-  files: [files('rules', 'read')],
+  files: [files('rules', 'read'), files('ringi', 'read')],
   limits: { maxTurns: 16, maxBudgetUsd: 0.5 },
 });
 ```
 
 The instructions (`agents/ringi-review.md`) open with the rule that matters most:
-「あなたは稟議を承認も否決もしません」. They then give the order of work: list the blank fields,
-call `check_authority` and copy its `route`, read the clauses that apply before citing them,
-search precedents (rephrasing when a subject matches nothing), and write the sheet in the skill's
-format. The project file adds a ceiling no agent in the project can widen:
+「あなたは稟議を承認も否決もしません」. They then give the order of work: list the blank fields
+(reading the required fields from the 稟議規程 with `search_files` and `Read`), call
+`check_authority` and copy its `route`, search the clauses that apply and open them before citing
+them, search precedents at most three times in one turn (once for similar subjects, once each for
+`差戻し` and `否決`; a search that finds nothing is not rephrased), read the attached quotes, write
+the sheet in the skill's format, and not post it in that run: the post is a separate request that
+passes the given `requestId` and `body` to `postComment` unchanged. The project file names the
+authority connector and the workflow system, takes the workflow token from the environment, and
+adds a ceiling no agent in the project can widen:
 
-```yaml title="agent-workspace.yaml (excerpt) (illustrative)" claim="illustrative"
+```yaml title="agent-workspace.yaml (excerpt)" file="tests/gallery/ringi-review/agent-workspace.yaml#excerpt"
 connectors:
-  ringi-archive:
+  authority:
     url: http://127.0.0.1:8790/mcp
     transport: http
+#   WORKFLOW_TOKEN=... aw dev
 policy:
-  permissions: { writeFiles: false, runCommands: false, unrestrictedNetwork: false }
-  limits: { maxBudgetUsd: 1 }
-  promotion: { minEvalScore: 0.9 }
+  # The ceiling no agent in this project can widen: the reviewer writes no files and runs nothing.
+  permissions:
+    writeFiles: false
+    runCommands: false
+    unrestrictedNetwork: false
+  # The only openapiTool any agent in this project may use.
+  tools: [workflow]
+  limits:
+    maxBudgetUsd: 1
+  promotion:
+    minEvalScore: 0.9
 ```
 
 Approval stays in your workflow system, with the people the 職務権限規程 names. The agent has no
-tool that could change a ringi's status, and an `openapiTool` could not give it one, because an
-`openapiTool` may only call GET and HEAD operations (probe `openapi-write`).
+tool that could change a ringi's status: the one operation admitted is `postComment`. The
+document's `servers` is the company's workflow system; to try the project, run the bundled stand-in
+(`workflow/fake-workflow.mjs`, port 8791) and set `servers[0].url` to `http://127.0.0.1:8791/api/v1`.
 
-## 5. Start it from the workflow system, once per revision
+**Check:** without an approval the workflow system is never called, `approveRequest` and
+`rejectRequest` are not tools at all, and an approved `postComment` posts exactly one comment.
 
-Agent Workspace has no inbound trigger or webhook route (probe `inbound-trigger`), so the
-workflow system calls your endpoint. And `runs.start` takes no idempotency key (probe
-`run-start-idempotency`): workflow systems retry webhooks on timeouts, and every retry would
-start a second, billed run and post a second comment. The hook therefore claims
-`ringiId@revision` before it starts anything:
+### 5. Why the backend starts each review, once per revision
 
-```ts title="backend/on-ringi-submitted.ts (excerpt) (illustrative)" claim="illustrative"
-export async function onRingiSubmitted(body: unknown, deps: HookDependencies): Promise<HookResult> {
-  const ringi = parseSubmission(body); // throws InvalidSubmission naming the bad fields
-  const key = `${ringi.ringiId}@${String(ringi.revision)}`;
-  const claimed = await deps.store.claim(key);
-  if (claimed.state === 'in-progress') return { status: 'duplicate', key };
-  if (claimed.state === 'reviewed') {
-    if (claimed.posted) return { status: 'duplicate', key };
-    await deps.postComment(ringi.ringiId, ringi.revision, claimed.comment);
-    await deps.store.markPosted(key);
-    return { status: 'reposted', key, comment: claimed.comment };
-  }
+Each review needs three inputs that differ per filing: the filer as `subject` (ADR-0142 D2), a
+`fileScope` narrowing the precedents to the filer's departments (ADR-0147), and the quotes as
+`attachments` (ADR-0146). A webhook trigger (ADR-0144) cannot carry them: the prompt is its only
+per-firing input (ADR-0144 D1), and ADR-0156 rejects "a `subject` per firing" because anyone
+holding the fire URL could then assert any caller. So your backend starts the run itself with
+`runs.start`, which is a platform feature, and this use case needs no trigger.
 
-  const reading = await runAndRead(deps.aw, deps.agentId, { prompt: promptFor(ringi) }).catch(
-    async (error: unknown) => {
-      await deps.store.release(key); // a failed run may be retried
-      throw error;
-    },
-  );
-  // … parse, re-check, compose …
-  await deps.store.saveReview(key, comment); // kept before posting
-  await deps.postComment(ringi.ringiId, ringi.revision, comment);
-  await deps.store.markPosted(key);
-  return { status: 'reviewed', key, review, comment };
+The review prompt is written once, as the shared template `RINGI_TRIGGER` with the review sheet as
+its `outputSchema` (ADR-0154). It is still a valid webhook trigger for a deployment with one fixed
+caller; here `startReview` only reuses its prompt. The ringi is untrusted text that is put into the
+prompt and never parsed:
+
+```ts title="backend/review-run.ts (excerpt)" file="tests/gallery/ringi-review/backend/review-run.ts#excerpt"
+export const RINGI_TRIGGER = {
+  kind: 'webhook',
+  name: 'ringi-review',
+  prompt: [
+    '次の稟議をレビューし、ringi-checklist の書式でレビューシートを書いてください。',
+    'ワークフローが送った稟議（JSON。区分と金額はそのまま職務権限の判定に使う）:',
+    '{{body}}',
+  ].join('\n'),
+  outputSchema: ReviewSheetSchema,
+} as const;
+```
+
+`startReview` starts the run with the same prompt, for the person who filed the ringi, narrowed to
+their departments' precedents, with the quotes attached and the sheet as its `outputSchema`
+(ADR-0143):
+
+```ts title="backend/review-run.ts (excerpt)" file="tests/gallery/ringi-review/backend/review-run.ts#excerpt"
+export async function startReview(
+  ringi: RingiSubmission,
+  deps: ReviewDependencies,
+): Promise<string> {
+  const fileScope = fileScopeFor(ringi.submittedBy, deps.access);
+  const { run } = await deps.aw.runs.start(deps.agentId, {
+    prompt: RINGI_TRIGGER.prompt.replace('{{body}}', () => JSON.stringify(ringi)),
+    subject: ringi.submittedBy,
+    fileScope,
+    outputSchema: ReviewSheetSchema,
+    ...(ringi.quotes === undefined
+      ? {}
+      : { attachments: ringi.quotes.map(({ fileId }) => ({ fileId })) }),
+  });
+  return run.id;
 }
 ```
 
-`ProcessedKeyStore` is an interface; in production it is a table with a unique key, where an
-insert that fails on conflict is the claim. Give the `in-progress` state an expiry in production
-so that a process that dies mid-run does not block the ringi forever. The test sends the same
-webhook twice at once and once more later, and asserts one run and one comment; a revision 2 of
-the same ringi is reviewed again.
+`submittedBy` is a required field of the ringi: the workflow system's signed-in user who filed it,
+which the run carries as `subject`. It is separate from `applicant` (the form's 起案者 text, where
+blank is a finding), and the `fileScope` is computed from `submittedBy` alone, never from anything
+in the prompt. A filer with no department makes `startReview` throw before any run starts. The
+quotes (見積書) ride on the run by file id, so the agent reads them and compares vendor, amount
+and count with the ringi; a ringi with no quotes sends no `attachments` key at all.
 
-The comment is posted by this code, not by the agent: the workflow system's API is called with
-your credentials, from the place where you already control who may write.
+Call `startReview` once per revision and keep the run id with the ringi. It sends
+`ringiId@revision` as the `Idempotency-Key` (`idempotencyKey` in the SDK, ADR-0151), which gives
+the dedupe a trigger would: a retried filing, even at the same moment, answers the run already
+started instead of starting a second review.
 
-## 6. Check what the agent wrote
+Your code does not call the workflow system. The agent calls `postComment` itself, and the run
+pauses for the person who approves that call. The platform's tool gateway then calls the workflow
+system with `WORKFLOW_TOKEN`, which never enters the run, and with the signed caller assertion
+(`identity`), so the system refuses a comment on another department's ringi exactly as it refuses
+one that does not exist.
+
+**Check:** the review run carries the filer as `subject`, their departments as `fileScope` and the quotes as attachments, and filing the same revision again starts no second run.
+
+### 6. Check what the agent wrote
 
 `backend/review-sheet.ts`
-reads the sheet into typed findings by section, each with its parsed citations, and lists any
-heading the sheet is missing. Then the hook checks three things a model must not be trusted with
+holds `ReviewSheetSchema`, the five sections as typed findings with their citations, and
+`renderReviewSheet`, which writes them back as the Markdown the comment shows. A section the agent
+drops is a missing key, so the run fails instead of reading as "no findings". Then
+`reviewRun(runId, ringi, deps)` in `backend/review-run.ts` reads the settled run `startReview`
+started (`runs.result`; it starts nothing) and checks three things a model must not be trusted with
 alone:
 
-```ts title="backend/on-ringi-submitted.ts (excerpt) (illustrative)" claim="illustrative"
-const sheet = parseReviewSheet(reading.answer);
+```ts title="backend/review-run.ts (excerpt) (illustrative)" claim="illustrative"
+const reading = await readRun(deps.aw, runId, ReviewSheetSchema);
+const sheet = reading.output; // ReviewSheetSchema, typed
 const expected = requiredApprover(deps.matrix, ringi.category, ringi.amountYen);
 const authority = {
   expected,
-  written: sheet.approver,
-  matches: expected !== null && sheet.approver === expected.approver,
+  written: sheet.決裁区分.approver,
+  matches: expected !== null && sheet.決裁区分.approver === expected.approver,
   toolCalled: reading.toolCalls.some((call) => toolIs(call.name, 'check_authority')),
 };
 const missingFields = REQUIRED.filter(([field]) => blank(ringi[field])).map(([, label]) => label);
 const missedByAgent = missingFields.filter((label) => !omissions.includes(label));
-const unverified = findings.flatMap((f) => f.citations).filter((c) => !returned.has(c.raw));
+const unverified = cited.filter((citation) => !returned.has(citation));
 ```
 
 - **The route.** The backend runs the same `requiredApprover` on the submitted category and
@@ -334,87 +469,132 @@ const unverified = findings.flatMap((f) => f.citations).filter((c) => !returned.
   A wrong route sends the ringi to the wrong approver, so this is the check to keep.
 - **Missing fields.** Which required fields are blank is known without a model; any the sheet
   does not mention are added to the comment.
-- **Citations.** Every 〔…〕 on the sheet must be one that `read_rule`, `check_authority` or
-  `get_ringi` returned in this run.
+- **Citations.** Every citation on the sheet must be one that `check_authority` returned, or that
+  `search_files` or `Read` showed from a rule clause or a precedent in this run.
+
+`reviewRun` answers the checked review and `comment`, which is the sheet with these warnings. It
+posts nothing. `postReview(ringi, { review, comment }, deps)` starts a second run in the same
+session, for the filer, that is told to pass exactly that comment to `postComment`. The call is a
+write, so the run pauses at `awaiting_approval`, and `postReview` answers the pause: the run id,
+the call, and `exact`, whether the paused call is your comment unchanged.
+
+The person's decision is `decidePost(aw, paused, { approve, comment? })`. It refuses to approve a
+call that is not your comment unchanged (`exact` is false). Otherwise it calls `runs.approve` or
+`runs.reject`, follows the continuation run that starts in the same session with `readRun`, and
+answers `posted` only when a `postComment` call succeeded in it. The continuation acts for the
+filer, because the platform gives it the paused run's `subject` ([Caller identity](/guides/caller-identity));
+the approver cannot name another. A rejection posts nothing.
 
 The note on the route check: the deterministic answer uses the submitted amount. When the agent
 argues for a higher route because of 分割起案 (§2.3, related ringi within three months), the two
 will differ and the comment flags it; that is a case for the reviewer to read, not an error.
 
-## 7. Let approvers ask follow-up questions
+**Check:** a route that differs from `requiredApprover`, a blank required field the sheet missed, or a citation no tool returned is flagged in the comment `reviewRun` answers.
 
-```ts title="surfaces/ringi-desk.ts (illustrative)" claim="illustrative"
+### 7. Let approvers ask follow-up questions
+
+```ts title="surfaces/ringi-desk.ts" file="tests/gallery/ringi-review/surfaces/ringi-desk.ts"
+import { defineSurface } from '@indx-workspace/sdk/define';
+
 export default defineSurface({
   name: 'ringi-desk',
   agent: 'ringi-review',
   title: '稟議レビュー（決裁者向け）',
   layout: 'side',
   parts: {
-    greeting: 'レビューシートについて質問できます。規程の条文や過去の稟議を出典つきで示します。可否の判断はしません。',
-    suggestedPrompts: ['設備投資 4,500万円の決裁区分は？', '相見積が1社のときに必要な記載は？', 'フォークリフト購入で差し戻された先例はある？'],
+    greeting:
+      'レビューシートについて質問できます。規程の条文や過去の稟議を出典つきで示します。可否の判断はしません。',
+    suggestedPrompts: [
+      '設備投資 4,500万円の決裁区分は？',
+      '相見積が1社のときに必要な記載は？',
+      'フォークリフト購入で差し戻された先例はある？',
+    ],
     disclaimer: 'AIによる参考情報です。決裁は職務権限規程に定める決裁者が行います。',
     toolTrace: 'collapsed',
     history: true,
     feedback: true,
   },
+  // Hits render as cards. The key is the tool's bare name: a run's engine prefix is ignored.
+  toolResults: { search_files: 'card' },
 });
 ```
 
 <Note>
-  The surface sets no `toolResults`. A surface matches a tool by its exact name in the run, and a
-  Claude run names this server's tools `mcp__<connector-name>__search_ringi`, or
-  `mcp__connector-<uuid>__search_ringi` (65 characters, past the 64-character limit on a
-  `toolResults` key, and different in every workspace) when the name is not a usable slug. Precedent
-  results therefore render as text in the collapsed tool trace.
+  A `toolResults` key is the tool's bare name. A surface matches it against the tool's exact name in
+  the run, or against the part after the last `__`, so `search_files` also matches the engine's
+  `mcp__agent-workspace__search_files`, and hits render as cards.
 </Note>
 
-## 8. Say what "good" means
+**Check:** the surface is a side panel (`layout: 'side'`) on the same agent, and its disclaimer says the decision stays with the approver.
 
-```yaml title="evals/ringi-review.yaml (excerpt) (illustrative)" claim="illustrative"
+### 8. Say what "good" means
+
+```yaml title="evals/ringi-review.yaml (excerpt)" file="tests/gallery/ringi-review/evals/ringi-review.yaml#excerpt"
 cases:
   - name: 設備投資の決裁区分を別表から判定する
     input: >
       稟議ID R-2026-0101 rev.1 / 件名: 第3工場 搬送コンベヤの更新 / 区分: 設備投資 /
-      金額（税抜）: 45,000,000円 / … / 期待効果: （未記載） / … / 見積社数: 1
+      金額（税抜）: 45,000,000円 / … / 期待効果: （未記載） / … / 見積社数: 1 / …
     expect:
       contains: ['## 決裁区分', '取締役会決裁', '〔職務権限規程 §3.1〕']
   - name: 承認や否決を推奨しない
-    input: > …
+    input: >
+      …
     expect:
       contains: ['部長決裁', '〔職務権限規程 §3.2〕']
       notContains: ['承認を推奨', '否決を推奨', '承認してよい']
       judge: >
-        レビューシートが5つの見出しをこの順ですべて含み、承認・否決の判断や推奨を書いていないこと。
+        レビューシートが「記載漏れ」「規程との照合」「決裁区分」「類似案件」「総合所見」の
+        5つの見出しをこの順ですべて含み、承認・否決の判断や推奨を書いていないこと。
 ```
 
 Four cases: the route, the missing-field and quote findings with their clauses, a political
 donation that must surface the rejected precedent R-2025-0170 and 〔寄付金取扱基準 §2.2〕, and a
-routine renewal that must not recommend approval. Pin with `contains`, never `tool:`, because the
-MCP tool name carries the connector's id.
+routine renewal that must not recommend approval. Eval inputs start no run with a `subject` or a
+`fileScope`, so these cases search every granted folder; the scoping by department is tested
+offline.
 
-## 9. Run it
+**Check:** the file holds four cases, and the donation case surfaces the rejected precedent R-2025-0170.
+
+## Run it
 
 <Steps>
   <Step title="Offline, in the test suite">
-    Loads the project through the contract `aw check` applies, drives the real archive server
-    (including every boundary of the 設備投資 table), and runs `onRingiSubmitted` against a
-    scripted workspace whose tool results are the server's own: the happy path, a duplicate and
-    concurrent webhook, a wrong route, a failed post, and an invalid body. Ten tests, no API key.
+    Loads the project through the contract `aw check` applies, calls the real authority server
+    (including every boundary of the 設備投資 table), searches the rule book and the archive with
+    `search_files` (rejected precedents included), checks that a filer's `fileScope` hides the other
+    departments' precedents and that a filer with none gets no run, fires the ringi trigger and runs
+    `reviewRun` against a scripted workspace: the happy path, a repeated `Idempotency-Key`, a wrong
+    secret, a wrong route and a failed start. `postReview`'s run pauses on exactly the checked
+    comment and nothing is posted; `decidePost` approves it, and the continuation posts that
+    comment for the filer; a rejection posts nothing. The tool gateway runs against the bundled stand-in workflow system: approve and
+    reject are not tools, and another department's ringi is refused by the asserted subject. No API
+    key.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    MCP_TRANSPORT=http PORT=8790 node mcp/ringi-archive.mjs &
+    MCP_TRANSPORT=http PORT=8790 node mcp/authority-server.mjs &
     aw dev                  # keeps the connector and the skill in step
-    aw files mkdir rules
+    (cd data && for f in rules/*.md ringi/*/*.json; do aw files upload "$f" "$f"; done)
     aw push --yes
     aw eval ringi-review    # the four cases, on a real model
     ```
-    Nothing is uploaded into `rules` here, so it is created with `aw files mkdir`, which does nothing when the folder already exists. A folder with a file uploaded into it needs no `aw files mkdir`.
-    Then mount `onRingiSubmitted` behind an HTTP route in your backend, give it a
-    `ProcessedKeyStore` backed by your database and a `postComment` that calls your workflow
-    system, and register that route as the workflow system's "ringi filed" webhook.
+    A grant on a folder resolves once a file is uploaded into it, so neither `rules` nor `ringi` needs an `aw files mkdir`; the uploads keep the `ringi/<部門>/` folders, because the `fileScope` names them. If `aw dev` refused the agent with `agent_definition_references_missing [file:ringi]` before the upload, `aw push --yes` syncs it, and so does saving the agent file again.
+    Set `WORKFLOW_TOKEN` in the environment of `aw dev`, and point `servers[0].url` in
+    `apis/workflow.openapi.json` at your workflow system (or at the stand-in,
+    `PORT=8791 node workflow/fake-workflow.mjs`). Then call `startReview` when the workflow system
+    files a ringi revision, keep the run id with the ringi, call `reviewRun` with it to check
+    the sheet, and `postReview` to ask for the post. When a person approves the paused call, call
+    `decidePost`; the comment is posted by the continuation run.
   </Step>
 </Steps>
+
+<Frame caption="The same agent on its page in the console, after `aw push`.">
+  <img
+    src="/images/tutorials/ringi-review/02-agent.png"
+    alt="The ringi-review agent's page in the console"
+  />
+</Frame>
 
 ## Where the SDK stands
 
@@ -424,33 +604,31 @@ it; `probe` means a test asserts the capability is still missing and fails the d
 
 {/* benchmark:start */}
 
-Score: **50 / 100** (✅ = 1, 🟡 = 0.5, ❌ = 0, over the capabilities this use case needs).
+Score: **100 / 100** (✅ = 1, 🟡 = 0.5, ❌ = 0, over the capabilities this use case needs).
 
 | Capability | Today | Evidence | What it means for you |
 | --- | --- | --- | --- |
-| Agent as code | ✅ | contract | defineAgent, a skill, a rules grant and a surface pass the contract; the policy ceiling makes the reviewer read-only by construction, so it cannot approve anything. |
-| Grounded search | 🟡 | contract | Precedents, rule clauses and the authority matrix are your own MCP server; check_authority is a deterministic table lookup the model copies rather than computes. |
-| Document parsing | ❌ | probe | The quotes (見積書) attached to a ringi cannot be handed to a run; this example reviews the fields the workflow sends and leaves the quotes to a person. |
-| Structured output | ❌ | probe | The review sheet comes back as Markdown; the backend parses the five fixed headings into typed findings and reports a dropped heading. |
-| Write to systems | 🟡 | probe | An openapiTool may only read, so your backend, not the agent, posts the comment to the workflow system and keeps it for a retry if the post fails. |
-| Triggers | ❌ | probe | No inbound trigger and no idempotency key on runs.start (probe `run-start-idempotency`): you host the webhook and dedupe by ringi id and revision yourself. |
-| Per-user scope | ❌ | source | Grants are per agent, not per approver: every approver sees every department’s precedents unless you split agents or archives by department. |
-| Embedded UI | ✅ | contract | A side-panel surface lets approvers ask follow-up questions; `toolResults` cannot target this server’s tools, whose run names exceed 64 characters. |
+| Agent as code | ✅ | contract | defineAgent, a skill, a rules grant and a surface pass the contract; the reviewer’s only write is a comment, and no tool it holds can approve or reject. |
+| Grounded search | ✅ | contract | Rule clauses and past ringi are files found with the built-in `search_files`, narrowed per caller with `runs.start({ fileScope })`; the model then opens the file it names. The one tool of ours left is `check_authority`, a deterministic table lookup the model copies rather than computes. |
+| Document parsing | ✅ | contract | The quotes (見積書) are attached to the review run by file id and the agent reads each one, so no person transcribes a quote and no count field is kept. |
+| Structured output | ✅ | contract | The sheet comes back typed (`runs.result` with a Zod schema), so a dropped heading fails the run instead of reading as no findings; your backend only checks the route and every citation against what the tools returned. |
+| Write to systems | ✅ | contract | `openapiTool` allows `operationId:postComment` only, so the agent can comment but not approve or reject. `postReview` starts a second run that posts exactly the checked comment with your warnings; it pauses for approval and answers the run id. `runs.approve` starts a continuation that posts that comment for the same filer (the platform keeps the paused run’s `subject`), and `runs.reject` posts nothing. |
+| Per-user scope | ✅ | contract | Precedents are stored as `ringi/<部門>/<year>.json`, so what a person may see is a set of paths. `startReview` computes `fileScope` from `data/access.json` (the permitted `ringi/<部門>` folders plus `rules`) and starts the run with it; `search_files` and the sandbox then hold nothing else (人事部 precedents stay with 人事部), and a filer who may read no department is refused before any run starts. |
+| Embedded UI | ✅ | contract | A side-panel surface lets approvers ask follow-up questions; search hits render as cards with `toolResults: { search_files: 'card' }`. |
 | Evals | ✅ | contract | Four cases pin the route, the clauses, a rejected precedent and that the sheet never recommends approval, with a 0.9 promotion bar. |
 | Audit and cost | ✅ | source | Every review run records tokens and cost, and the audit log records who changed the agent or its rules skill. |
 
 {/* benchmark:end */}
 
 **Verdict: buildable today, with a backend that does real work.** The agent itself is the easy
-part: a definition, a skill and a read-only policy. What is yours is the plumbing around it: a
-webhook endpoint, an idempotency store, a sheet parser, the route re-check and the comment post,
-about 390 lines with their comments, plus the 270-line archive server. What would remove code from this page:
+part: a definition, a skill, one approved write and a policy. What is yours is the check around it:
+the route re-check, the missing fields and the citations, about 200 lines with their comments,
+plus a 50-line authority server. The comment post is not code of yours: it is an approved
+`openapiTool` call. The platform types the sheet (`outputSchema`), carries the filer (`subject`),
+the precedents they may read (`fileScope`) and the quotes (`attachments`). That your backend starts
+each run, rather than a trigger, is by design (ADR-0156). `data/access.json` stays yours; the
+platform does not know which departments a person may read.
 
-- **An inbound trigger with an idempotency key** would replace the endpoint and the
-  processed-key store (probes `inbound-trigger`, `run-start-idempotency`).
-- **A run that returns structured output** would replace the heading parser with typed findings
-  (probe `run-output-schema`).
-- **Attachments on a run** would let the agent read the quotes attached to the ringi, which this
-  example leaves to a person (probe `run-attachments`).
-- **Per-person data scope** would let one agent serve every department while each approver sees
-  only their own department's precedents; today grants are per agent ([RF-102](/concepts/roadmap)).
+<Card title="Next: 5. Customer inquiry agent" icon="arrow-right" href="/tutorials/customer-inquiry">
+  The chat agent that answers one signed-in customer from their own history, in keigo.
+</Card>

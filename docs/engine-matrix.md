@@ -19,14 +19,14 @@ Every cell is derived: the capability rows from each adapter's own declaration �
 | Budget enforced by | native | adapter | adapter | adapter |
 | Gateway dialects | anthropic-messages | openai-responses, openai-chat-completions, anthropic-messages | anthropic-messages | anthropic-messages, openai-responses, openai-chat-completions |
 | Protected config directory | `.claude` | `.openai-agents` | `.pi` | `.mastra` |
-| Adapter version | 0.3.296 | 0.0.0+0.20.0 | 0.0.0+1.1.0 | 0.0.0+1.76.0 |
+| Adapter version | 0.3.310 | 0.0.0+0.21.0 | 0.0.0+1.4.0 | 0.0.0+1.79.0 |
 | Conformance (compile scenarios) | 9/9 PASS | 9/9 PASS | 9/9 PASS | 9/9 PASS |
 
 The conformance row reports the **compile-only** scenarios, which are the ones a generator
 can run: an adapter's `start` spawns its engine and needs a credential. The whole kit —
 the run, the reported session id, the durability verdict and the interrupt as well — runs
 against recorded engine messages in each adapter's own test file, and the full list is
-16 scenarios.
+17 scenarios.
 
 The capability keys a *save* can be refused for are
 `mcp`, `skills`, `subagents`: an agent assigned a

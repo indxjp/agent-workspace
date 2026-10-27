@@ -39,6 +39,10 @@
    "input": {"status": "cancelled", "error": null},
    "id": "cancelled",
    "expected":
-   {"status": "cancelled", "message": "run 99999999-9999-4999-8999-999999999999 was cancelled", "kind": "failed"}}],
+   {"status": "cancelled", "message": "run 99999999-9999-4999-8999-999999999999 was cancelled", "kind": "failed"}},
+  {"witnesses": ["AgentWorkspace.Theorems.Normative.EventsSse.classify_run_outcome_is_total"],
+   "input": {"status": "awaiting_approval", "error": null},
+   "id": "awaiting-approval",
+   "expected": {"kind": "paused"}}],
  "family": "events-sse",
  "description": "Run status to stream outcome"}

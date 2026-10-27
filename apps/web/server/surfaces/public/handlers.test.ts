@@ -1,3 +1,4 @@
+import { log as webLogger } from '../../telemetry/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiProblemSchema } from '@indx-workspace/contracts';
@@ -17,12 +18,9 @@ import {
   visitorRunResponseHeaders,
 } from './handlers';
 import { resetSurfaceLimits, SURFACE_RATE_LIMITS } from './limits';
-import {
-  clearSurfaceSessionsRuntime,
-  configureSurfaceSessionsRuntime,
-  type ResolvedSurface,
-  type SurfaceSessionOpening,
-} from './runtime';
+import { type ResolvedSurface, type SurfaceSessionOpening } from './runtime';
+import { installTestDomains } from '../../application-context-fixtures';
+import { clearApplicationContext } from '../../application-context';
 
 const LOCAL_ENV = { AW_LOCAL_SURFACE_SESSIONS: '1', HOST: '127.0.0.1' } as const;
 const SAME_ORIGIN = {
@@ -68,19 +66,24 @@ function install(
   },
 ): FakeRuntimeCalls {
   const calls: FakeRuntimeCalls = { resolved: [], opened: [], requests: [] };
-  configureSurfaceSessionsRuntime({
-    resolve: (name, mode) => {
-      calls.resolved.push(mode === 'public' ? name : `${name} (${mode})`);
-      return Promise.resolve(resolved);
+  installTestDomains({
+    surfaces: {
+      kind: 'serving',
+      runtime: {
+        resolve: (name, mode) => {
+          calls.resolved.push(mode === 'public' ? name : `${name} (${mode})`);
+          return Promise.resolve(resolved);
+        },
+        open: (surface, options) => {
+          calls.opened.push(surface);
+          calls.requests.push(options);
+          return Promise.resolve(opening);
+        },
+        checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
+        visitorSurface: () => Promise.reject(new Error('the bootstrap never looks a session up')),
+        servedSurfaces: () => Promise.resolve(resolved === null ? [] : [resolved.surface]),
+      },
     },
-    open: (surface, options) => {
-      calls.opened.push(surface);
-      calls.requests.push(options);
-      return Promise.resolve(opening);
-    },
-    checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
-    visitorSurface: () => Promise.reject(new Error('the bootstrap never looks a session up')),
-    servedSurfaces: () => Promise.resolve(resolved === null ? [] : [resolved.surface]),
   });
   return calls;
 }
@@ -113,7 +116,7 @@ function codeOf(body: unknown): string {
 }
 
 afterEach(() => {
-  clearSurfaceSessionsRuntime();
+  clearApplicationContext();
   resetSurfaceLimits();
 });
 
@@ -317,6 +320,15 @@ describe('POST /p/s/<name>/sessions (ADR-0105 slice 1; S1-17, #455)', () => {
     expect(response.headers.get('content-security-policy')).toBe(FRAME_ANCESTORS);
   });
 
+  it('answers the same 503 while the surfaces are disabled (no run runtime)', async () => {
+    installTestDomains({ surfaces: { kind: 'disabled' } });
+    const { status, body, response } = await answer('main');
+    expect(status).toBe(503);
+    expect(codeOf(body)).toBe('surface_sessions_not_configured');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-security-policy')).toBe(FRAME_ANCESTORS);
+  });
+
   it('answers 404 surface_not_found for an unknown surface, and opens nothing', async () => {
     const calls = install(null);
     const { status, body } = await answer('other');
@@ -440,12 +452,17 @@ describe('an origin only the local draft lists, while production serves visitors
 
   /** A runtime whose public lookup answers `production` and whose try lookup answers `draft`. */
   function installVersions(production: ResolvedSurface | null, draft: ResolvedSurface): void {
-    configureSurfaceSessionsRuntime({
-      resolve: (_name, mode) => Promise.resolve(mode === 'public' ? production : draft),
-      open: () => Promise.reject(new Error('a refused origin never opens a session')),
-      checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
-      visitorSurface: () => Promise.reject(new Error('the bootstrap never looks a session up')),
-      servedSurfaces: () => Promise.resolve(production === null ? [] : [production.surface]),
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          resolve: (_name, mode) => Promise.resolve(mode === 'public' ? production : draft),
+          open: () => Promise.reject(new Error('a refused origin never opens a session')),
+          checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
+          visitorSurface: () => Promise.reject(new Error('the bootstrap never looks a session up')),
+          servedSurfaces: () => Promise.resolve(production === null ? [] : [production.surface]),
+        },
+      },
     });
   }
 
@@ -466,15 +483,20 @@ describe('an origin only the local draft lists, while production serves visitors
 
   it('does not look the draft up for a request without an Origin', async () => {
     const modes: string[] = [];
-    configureSurfaceSessionsRuntime({
-      resolve: (_name, mode) => {
-        modes.push(mode);
-        return Promise.resolve(mode === 'public' ? PRODUCTION : DRAFT);
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          resolve: (_name, mode) => {
+            modes.push(mode);
+            return Promise.resolve(mode === 'public' ? PRODUCTION : DRAFT);
+          },
+          open: () => Promise.reject(new Error('a refused origin never opens a session')),
+          checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
+          visitorSurface: () => Promise.reject(new Error('the bootstrap never looks a session up')),
+          servedSurfaces: () => Promise.resolve([PRODUCTION.surface]),
+        },
       },
-      open: () => Promise.reject(new Error('a refused origin never opens a session')),
-      checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
-      visitorSurface: () => Promise.reject(new Error('the bootstrap never looks a session up')),
-      servedSurfaces: () => Promise.resolve([PRODUCTION.surface]),
     });
     const { host } = FROM_SITE;
     expect((await answer('main', request({ host }))).status).toBe(404);
@@ -529,22 +551,33 @@ describe('the local draft’s default origins under `aw dev` (#699, composed wit
 
   it('lets the run routes answer CORS only for a surface served from the local draft', async () => {
     const run = new Headers({ ...FROM_APP, 'access-control-request-method': 'POST' });
-    configureSurfaceSessionsRuntime({
-      resolve: () => Promise.resolve(RESOLVED),
-      open: () => Promise.reject(new Error('the run routes never open a session')),
-      checkModel: () => Promise.reject(new Error('the run routes never check a model')),
-      visitorSurface: () => Promise.reject(new Error('the preflight never looks a session up')),
-      servedSurfaces: () => Promise.resolve([{ ...RESOLVED.surface, servedFrom: 'local' }]),
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          resolve: () => Promise.resolve(RESOLVED),
+          open: () => Promise.reject(new Error('the run routes never open a session')),
+          checkModel: () => Promise.reject(new Error('the run routes never check a model')),
+          visitorSurface: () => Promise.reject(new Error('the preflight never looks a session up')),
+          servedSurfaces: () => Promise.resolve([{ ...RESOLVED.surface, servedFrom: 'local' }]),
+        },
+      },
     });
     expect(await preflightVisitorRun('POST', run, LOCAL_ENV)).toMatchObject({
       'access-control-allow-origin': APP,
     });
-    configureSurfaceSessionsRuntime({
-      resolve: () => Promise.resolve(RESOLVED),
-      open: () => Promise.reject(new Error('the run routes never open a session')),
-      checkModel: () => Promise.reject(new Error('the run routes never check a model')),
-      visitorSurface: () => Promise.reject(new Error('the preflight never looks a session up')),
-      servedSurfaces: () => Promise.resolve([{ ...RESOLVED.surface, servedFrom: 'production' }]),
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          resolve: () => Promise.resolve(RESOLVED),
+          open: () => Promise.reject(new Error('the run routes never open a session')),
+          checkModel: () => Promise.reject(new Error('the run routes never check a model')),
+          visitorSurface: () => Promise.reject(new Error('the preflight never looks a session up')),
+          servedSurfaces: () =>
+            Promise.resolve([{ ...RESOLVED.surface, servedFrom: 'production' }]),
+        },
+      },
     });
     expect(await preflightVisitorRun('POST', run, LOCAL_ENV)).toEqual({
       'cache-control': 'no-store',
@@ -613,19 +646,24 @@ describe('CORS of the run routes a visitor token may call (#680)', () => {
   it('grants nothing when no served surface lists origins, or none is installed', async () => {
     install(RESOLVED);
     expect(await visitorRunResponseHeaders(from(SHOP), {})).toEqual({ vary: 'origin' });
-    clearSurfaceSessionsRuntime();
+    clearApplicationContext();
     expect(await visitorRunResponseHeaders(from(SHOP), {})).toEqual({ vary: 'origin' });
   });
 
   it('fails closed when the served surfaces cannot be read', async () => {
-    configureSurfaceSessionsRuntime({
-      resolve: () => Promise.resolve(null),
-      open: () => Promise.reject(new Error('never opened')),
-      visitorSurface: () => Promise.resolve(null),
-      servedSurfaces: () => Promise.reject(new Error('the database is down')),
-      checkModel: () => Promise.reject(new Error('never checked')),
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          resolve: () => Promise.resolve(null),
+          open: () => Promise.reject(new Error('never opened')),
+          visitorSurface: () => Promise.resolve(null),
+          servedSurfaces: () => Promise.reject(new Error('the database is down')),
+          checkModel: () => Promise.reject(new Error('never checked')),
+        },
+      },
     });
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logged = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     try {
       expect(await visitorRunResponseHeaders(from(SHOP), {})).toEqual({ vary: 'origin' });
       expect(logged).toHaveBeenCalledOnce();

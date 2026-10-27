@@ -1332,7 +1332,7 @@ describe('defineAgentFromPortable', () => {
   });
 
   it('tools: an openapi tool openapiTool() refuses is dropped with its message', () => {
-    const rules = ['POST /orders'];
+    const rules = ['post /orders'];
     const refusal = thrown(() =>
       openapiTool({ name: 'orders', spec: 'openapi/orders.json', allow: rules }),
     );

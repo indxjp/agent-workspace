@@ -26,6 +26,7 @@ import {
 } from '@indx-workspace/contracts/models';
 import {
   RunResourceSchema,
+  isStoppedRunStatus,
   isTerminalRunStatus,
   type RunResource,
 } from '@indx-workspace/contracts/runs';
@@ -171,13 +172,15 @@ function agent(overrides: Partial<AgentResource> = {}): AgentResource {
 }
 
 /**
- * A run in `status` (default `queued`). A terminal status also gets `startedAt`, `endedAt` and
- * `durationMs` unless the overrides name them, so `run({ status: 'completed' })` reads like a run
- * the server really settled.
+ * A run in `status` (default `queued`). A stopped status (terminal or `awaiting_approval`) also
+ * gets `startedAt`, `endedAt` and `durationMs` unless the overrides name them, as the server stamps
+ * `endedAt` when a run pauses, so `run({ status: 'completed' })` reads like a run the server really
+ * settled.
  */
 function run(overrides: Partial<RunResource> = {}): RunResource {
   const status = overrides.status ?? 'queued';
   const ended = isTerminalRunStatus(status);
+  const stopped = isStoppedRunStatus(status);
   return RunResourceSchema.parse({
     id: RUN_ID,
     workspaceId: WORKSPACE_ID,
@@ -185,11 +188,12 @@ function run(overrides: Partial<RunResource> = {}): RunResource {
     projectId: null,
     initiatingUserId: null,
     sessionId: SESSION_ID,
+    agentVersion: null,
     status,
     createdAt: FIXTURE_TIME,
-    startedAt: ended || status === 'running' ? FIXTURE_TIME : null,
-    endedAt: ended ? FIXTURE_END_TIME : null,
-    durationMs: ended ? 1000 : null,
+    startedAt: stopped || status === 'running' ? FIXTURE_TIME : null,
+    endedAt: stopped ? FIXTURE_END_TIME : null,
+    durationMs: stopped ? 1000 : null,
     model: null,
     provider: null,
     modelConnectionId: null,
@@ -205,6 +209,9 @@ function run(overrides: Partial<RunResource> = {}): RunResource {
     },
     cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
     error: status === 'failed' ? 'The run failed.' : null,
+    output: null,
+    pendingApproval:
+      status === 'awaiting_approval' ? { toolName: 'send_email', canonicalCall: '{}' } : null,
     accountingState: ended ? 'complete' : 'pending',
     accountingError: null,
     ...overrides,

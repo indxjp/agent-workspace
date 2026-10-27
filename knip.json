@@ -35,8 +35,7 @@
         "server/sessions/acceptance/resume.acceptance.ts",
         "server/connectors/fixtures/{http,sse,stdio}-server.mjs",
         "components/**/*.test.{ts,tsx}",
-        "contracts/**/*.test.ts",
-        "lib/**/*.test.ts"
+        "contracts/**/*.test.ts"
       ],
       "project": [
         "app/**/*.{ts,tsx}",
@@ -47,7 +46,12 @@
         "server/**/*.{ts,mts,mjs}"
       ],
       "ignoreIssues": {
-        "{contracts,server}/**/*": ["exports", "types"]
+        "contracts/**/*": ["exports", "types"],
+        "server/{a2a,agent-versions,agents,audit,auth,cli-auth,compose,composition,connectors,endpoint-clients,endpoints,engines,evaluations,files,gateway,http,invitations,models,oauth,openapi,pagination,platforms,policy-ceiling,projects,rbac,resources,runtimes,secrets,setup,shares,skills,surfaces,team,telemetry,tokens,tool-bundles,tool-endpoint,versioning,workspaces}/**/*": [
+          "exports",
+          "types"
+        ],
+        "server/*.ts": ["exports", "types"]
       }
     },
     "packages/contracts": {
@@ -71,7 +75,7 @@
     },
     "packages/core": {
       "entry": [
-        "src/{auth,audit,db,secrets,storage,telemetry}/index.ts",
+        "src/{auth,db,secrets,storage,telemetry}/index.ts",
         "src/db/{migrate,seed,drizzle.config}.ts",
         "src/storage/azure-live.vitest.config.mjs",
         "src/{secrets,storage}/*.live.acceptance.ts",
@@ -84,6 +88,10 @@
       "project": ["src/**/*.ts"]
     },
     "packages/engine": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/run-protocol": {
       "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
@@ -107,12 +115,20 @@
       "entry": ["src/{index,main}.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
+    "packages/skills-office": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/tool-host": {
       "entry": ["src/{index,main}.ts", "src/**/*.test.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/runtime": {
-      "entry": ["src/**/*.test.ts"],
+      "entry": [
+        "src/{index,local,docker,kubernetes,cloud-run,vercel-sandbox,cloudflare-sandbox,aca-sessions,engine-images,transfer}.ts",
+        "src/external/index.ts",
+        "src/**/*.test.ts"
+      ],
       "project": ["src/**/*.ts"]
     },
     "packages/gateway": {
@@ -143,7 +159,7 @@
         "@aws-sdk/client-kms",
         "@azure/identity",
         "@azure/keyvault-secrets",
-        "@earendil-works/chord",
+        "@azure/storage-blob",
         "@earendil-works/pi-agent-core",
         "@earendil-works/pi-ai",
         "@earendil-works/pi-codemode",
@@ -159,6 +175,9 @@
         "@modelcontextprotocol/sdk",
         "@openai/agents",
         "@openai/agents-extensions",
+        "@opentelemetry/exporter-trace-otlp-http",
+        "@opentelemetry/sdk-node",
+        "@opentelemetry/sdk-trace",
         "drizzle-orm",
         "google-auth-library",
         "next",

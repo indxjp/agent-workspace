@@ -1,0 +1,129 @@
+---
+title: "Tell a tool who is asking"
+description: "Start a run with a subject, opt a connector in with identity, and check the signed x-aw-identity header in your own server with verifyIdentity()."
+---
+
+A tool that reads customer data has to know whose data to read. If the only way to tell it is the
+prompt, anyone who can type into the prompt can claim to be someone else. Instead, your backend names
+the signed-in person when it starts the run, and the platform signs that name for the tool.
+
+**What you can do**
+
+- [Start a run for a person](#start-a-run-for-a-person)
+- [Opt a connector in](#opt-a-connector-in)
+- [Check the header in your server](#check-the-header-in-your-server)
+- [Rotate the key](#rotate-the-key)
+- [Know what a refusal means](#know-what-a-refusal-means)
+
+```mermaid
+sequenceDiagram
+  participant B as Your backend
+  participant P as Platform
+  participant T as Your tool server
+  B->>P: runs.start(agentId, prompt, subject)
+  P->>T: tool call + x-aw-identity (signed with the connector's secret)
+  T->>T: verifyIdentity(header, key, now, audience, workspace)
+  T-->>P: only what that subject may see
+```
+
+## Start a run for a person
+
+Pass `subject` to `runs.start()`. It is the id your own system uses for the person, 1 to 256
+characters. Only an API key may set it; any other caller gets `403 run_subject_forbidden`.
+
+```ts title="backend/chat.ts (illustrative)" claim="illustrative"
+await aw.runs.start(agentId, {
+  prompt: question,
+  subject: signedInUser.id, // from your session, never from the prompt
+});
+```
+
+Take the subject from your own session. Text the person typed is not evidence of who they are.
+
+A run nobody starts by hand, such as a schedule or a webhook, has no session to take it from. Set a
+`subject` on the [trigger](/resources/triggers#a-caller-for-every-firing) instead: every run it
+starts asserts that caller, and the firing body cannot change it.
+
+A run that pauses for approval keeps its subject. The run that carries on after the decision acts
+for the same person, and the person who approves only decides: the approval request cannot name a
+different subject.
+
+## Opt a connector in
+
+A connector receives the header only when it names a secret to sign with. Set `identity` on the
+connector in `agent-workspace.yaml`, or on an `openapiTool()` with `secret()`.
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+connectors:
+  task-tracker:
+    url: http://127.0.0.1:8788/mcp
+    transport: http
+    identity:
+      secret: TASK_TRACKER_IDENTITY_SECRET
+```
+
+```ts title="tools/erp.ts (illustrative)" claim="illustrative"
+openapiTool({
+  name: 'erp',
+  spec: 'apis/erp.openapi.json',
+  auth: secret('ERP_TOKEN'),
+  identity: secret('ERP_IDENTITY_SECRET'),
+  allow: ['GET /orders/*'],
+});
+```
+
+Create the secret with `aw secrets set TASK_TRACKER_IDENTITY_SECRET` and give your server the same
+value. The platform signs the caller with it: an `openapiTool` call gets a fresh assertion each time,
+and an MCP connector gets one assertion when the run starts, valid for five minutes, so a longer run
+is refused with `identity_assertion_expired`. A connector without `identity` gets no header.
+
+## Check the header in your server
+
+The header is `x-aw-identity`: `base64url(payload).base64url(HMAC-SHA256)`. The payload holds `sub`
+(your `subject`), `principalKind` (`membership`, `api-key` or `visitor`), `workspace`, `runId`, `aud`
+(the connector id) and `exp`. It is valid for five minutes.
+
+`verifyIdentity()` checks the shape, the signature, the expiry, the audience and the workspace. It
+never throws; it returns the payload or a code.
+
+```ts title="your tool server (illustrative)" claim="illustrative"
+import { verifyIdentity } from '@indx-workspace/sdk';
+
+const result = await verifyIdentity(
+  request.headers['x-aw-identity'] ?? '',
+  process.env.TASK_TRACKER_IDENTITY_SECRET ?? '',
+  new Date(),
+  { audience: CONNECTOR_ID, workspace: WORKSPACE_ID },
+);
+if (!result.ok) return reply(401, { code: result.code });
+const person = result.payload.sub; // look up what this person may see
+```
+
+Then scope by `person`: keep a table from `sub` to what that person may read, filter every list,
+search and count by it, and refuse an out-of-scope id with the same words as a missing id, so the
+refusal does not confirm that the record exists. Refuse a call with no header too; do not fall back to
+"everyone".
+
+Do not log the header. It is a bearer proof for up to five minutes.
+
+## Rotate the key
+
+Pass a list of keys, the new one and the old one, while the secret changes:
+
+```ts title="your tool server (illustrative)" claim="illustrative"
+await verifyIdentity(header, [newKey, oldKey], new Date(), expected);
+```
+
+Set the new value with `aw secrets set`, deploy your server with both, then drop the old key once
+the five minutes have passed.
+
+## Know what a refusal means
+
+| Code                          | Status | Meaning                                                      |
+| ----------------------------- | ------ | ------------------------------------------------------------ |
+| `identity_assertion_invalid`  | 401    | Missing, malformed, wrong key, or a payload with extra keys. |
+| `identity_assertion_expired`  | 401    | Past `exp` plus 30 seconds of clock skew.                    |
+| `identity_audience_mismatch`  | 401    | Signed for a different connector.                            |
+| `identity_workspace_mismatch` | 401    | Signed for a different workspace.                            |
+
+Return the code only, never the header.

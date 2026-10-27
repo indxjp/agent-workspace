@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import os from 'node:os';
@@ -12,6 +13,7 @@ import { renderEnv, type EnvSecrets } from './render/env.js';
 import {
   ProbeRefusedError,
   ProjectEnvironmentError,
+  StorageSettingsRefusedError,
   describeProbeResults,
   liveProfileProbes,
   runProfileProbes,
@@ -87,7 +89,8 @@ const COMPOSE_DATABASE_URL = 'postgres://agent_workspace:pw@postgres:5432/agent_
  * Compose service is skipped before any probe is reached.
  */
 const MANAGED_DATABASE_URL = 'postgres://ops:pw@10.0.0.2:5432/agent_workspace';
-const MANAGED_STORE_ENVIRONMENT = { DATABASE_URL: MANAGED_DATABASE_URL };
+const GCS_STORAGE = { AW_STORAGE_URL: 'gcs://acme-ai-files' };
+const MANAGED_STORE_ENVIRONMENT = { DATABASE_URL: MANAGED_DATABASE_URL, ...GCS_STORAGE };
 
 describe('level 2: the connectivity probes', () => {
   it('probes a store whose credential is present', async () => {
@@ -118,7 +121,8 @@ describe('level 2: the connectivity probes', () => {
     const composeEnvironment = {
       OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
       OBJECT_STORAGE_SECRET_ACCESS_KEY: 'object-store-secret',
-      OBJECT_STORAGE_ENDPOINT: 'https://s3.example',
+      AW_STORAGE_URL: 's3://agent-workspace?endpoint=https://s3.example&pathStyle=true',
+      AW_STORAGE_CREATE_BUCKET: 'true',
     };
     const objectsResult = async (objects: ProfileProbes['objects'], timeoutMs = 10_000) =>
       (
@@ -144,6 +148,15 @@ describe('level 2: the connectivity probes', () => {
         'missing  objects: bucket agent-workspace does not exist yet — the platform creates it ' +
           'on first boot\n',
       );
+    });
+
+    it('refuses a missing bucket the platform does not create', async () => {
+      const refusal = await runProfileProbes(localProfile, {
+        probes: recordingProbes({ objects: () => Promise.resolve('absent') }).probes,
+        environment: { ...composeEnvironment, AW_STORAGE_CREATE_BUCKET: 'false' },
+      }).catch((thrown: unknown) => thrown);
+      expect(refusal).toBeInstanceOf(ProbeRefusedError);
+      expect((refusal as ProbeRefusedError).message).toContain('operator-owned bucket');
     });
 
     it('maps an absent native GCS bucket to missing instead of refusing the first run', async () => {
@@ -197,7 +210,7 @@ describe('level 2: the connectivity probes', () => {
     const { calls, probes } = recordingProbes();
     // A managed relational store's URL is held by the cloud's secret service. Native GCS uses
     // ADC, so it can still be probed without an HMAC credential in the profile or environment.
-    const results = await runProfileProbes(gcpProfile, { probes, environment: {} });
+    const results = await runProfileProbes(gcpProfile, { probes, environment: GCS_STORAGE });
 
     expect(calls).toEqual(['objects:acme-ai-files']);
     expect(outcomes(results)).toEqual({
@@ -210,7 +223,10 @@ describe('level 2: the connectivity probes', () => {
 
   it('names managed identity, not a missing credential, when this host cannot probe Azure Blob', async () => {
     const { calls, probes } = recordingProbes();
-    const results = await runProfileProbes(azureProfile, { probes, environment: {} });
+    const results = await runProfileProbes(azureProfile, {
+      probes,
+      environment: { AW_STORAGE_URL: 'azblob://acme/acme-ai-files' },
+    });
 
     expect(calls).toEqual([]);
     expect(describeProbeResults(results)).toContain(
@@ -605,7 +621,7 @@ describe('a store on the Compose project internal network', () => {
     DATABASE_URL: COMPOSE_DATABASE_URL,
     OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
     OBJECT_STORAGE_SECRET_ACCESS_KEY: 'object-store-secret',
-    OBJECT_STORAGE_ENDPOINT: 'http://seaweedfs:8333',
+    AW_STORAGE_URL: 's3://agent-workspace?endpoint=http://seaweedfs:8333&pathStyle=true',
   };
 
   /**
@@ -645,7 +661,10 @@ describe('a store on the Compose project internal network', () => {
     const { calls, probes } = recordingProbes();
     const results = await runProfileProbes(localProfile, {
       probes,
-      environment: { ...composeEnvironment, OBJECT_STORAGE_ENDPOINT: 'http://minio:9000' },
+      environment: {
+        ...composeEnvironment,
+        AW_STORAGE_URL: 's3://agent-workspace?endpoint=http://minio:9000&pathStyle=true',
+      },
     });
 
     expect(calls).toEqual([]);
@@ -659,7 +678,10 @@ describe('a store on the Compose project internal network', () => {
   it('still probes a store that is not one of those services', async () => {
     const managed = 'postgres://user:pw@10.0.0.2:5432/agent_workspace';
     const { calls, probes } = recordingProbes();
-    await runProfileProbes(gcpProfile, { probes, environment: { DATABASE_URL: managed } });
+    await runProfileProbes(gcpProfile, {
+      probes,
+      environment: { DATABASE_URL: managed, ...GCS_STORAGE },
+    });
     expect(calls).toEqual([`relational:${managed}`, 'objects:acme-ai-files']);
   });
 });
@@ -729,4 +751,123 @@ describe('the live probes honour the run deadline', () => {
       // bare assertion would stay green if `abortSignal: signal` were dropped from the request.
     ).rejects.toThrow(/Request aborted/u);
   }, 10_000);
+});
+
+// @story US-STO-10
+describe('validate reads AW_STORAGE_URL with the server resolver', () => {
+  const credentials = {
+    OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
+    OBJECT_STORAGE_SECRET_ACCESS_KEY: 'object-store-secret',
+  };
+
+  const validateIn = async (environment: Record<string, string>) => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'agent-workspace-validate-'));
+    created.push(directory);
+    await writeFile(
+      path.join(directory, 'agent-workspace.yaml'),
+      renderProfileDocument(gcpProfile),
+      'utf8',
+    );
+    const written: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    const inputs: unknown[] = [];
+    const { probes } = recordingProbes({
+      objects: (input) => {
+        inputs.push(input);
+        return Promise.resolve('present');
+      },
+    });
+    const outcome = await runValidateCommand([directory], { probes, environment }).catch(
+      (thrown: unknown) => thrown,
+    );
+    return { inputs, outcome, output: written.join('') };
+  };
+
+  it('[US-STO-10][api][cli] validate probes the bucket AW_STORAGE_URL names', async () => {
+    const { inputs, outcome } = await validateIn({
+      ...credentials,
+      AW_STORAGE_URL: 's3://url-bucket?endpoint=https://objects.example&region=eu-west-1',
+    });
+
+    expect(outcome).toBeUndefined();
+    expect(inputs).toEqual([
+      {
+        backend: 's3',
+        bucket: 'url-bucket',
+        region: 'eu-west-1',
+        endpoint: 'https://objects.example',
+        forcePathStyle: false,
+        accessKeyId: 'agent_workspace',
+        secretAccessKey: 'object-store-secret',
+      },
+    ]);
+  });
+
+  it('[US-STO-10][api][cli] validate never probes a bucket the old variables name, and says why', async () => {
+    const { inputs, outcome, output } = await validateIn({
+      ...credentials,
+      OBJECT_STORAGE_BUCKET: 'old-bucket',
+      OBJECT_STORAGE_ENDPOINT: 'https://objects.example',
+      OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
+    });
+
+    expect(outcome).toBeUndefined();
+    expect(inputs).toEqual([]);
+    expect(output).toContain(
+      'skipped  objects: AW_STORAGE_URL is not configured, so there is no bucket to probe',
+    );
+  });
+
+  it('[US-STO-10][api][cli] validate ignores a legacy variable beside AW_STORAGE_URL', async () => {
+    const { inputs, outcome } = await validateIn({
+      AW_STORAGE_URL: 'file:///var/lib/agent-workspace',
+      AW_FILE_STORAGE_ROOT: '/elsewhere/files',
+    });
+
+    expect(outcome).toBeUndefined();
+    expect(inputs).toEqual([]);
+  });
+
+  it('[US-STO-10][api][cli] validate refuses an endpoint on the app origin, as the server does', async () => {
+    const { outcome } = await validateIn({
+      ...credentials,
+      AW_PUBLIC_URL: 'https://app.example',
+      AW_STORAGE_URL: 's3://url-bucket?endpoint=https://app.example',
+    });
+
+    expect(outcome).toBeInstanceOf(StorageSettingsRefusedError);
+    expect((outcome as Error).message).toContain('storage_endpoint_same_origin');
+  });
+
+  it('[US-STO-10][api][cli] validate refuses a malformed AW_STORAGE_CREATE_BUCKET as start-up does', async () => {
+    const { inputs, outcome, output } = await validateIn({
+      ...credentials,
+      AW_STORAGE_URL: 's3://url-bucket',
+      AW_STORAGE_CREATE_BUCKET: 'yes-secret-value',
+    });
+
+    expect(outcome).toBeInstanceOf(StorageSettingsRefusedError);
+    expect((outcome as Error).message).toBe(
+      'the storage setting is refused — AW_STORAGE_CREATE_BUCKET must be true or false.',
+    );
+    expect(inputs).toEqual([]);
+    expect(output).not.toContain('yes-secret-value');
+  });
+
+  it('[US-STO-10][api][cli] validate never prints a credential-shaped AW_STORAGE_URL', async () => {
+    const generated = randomBytes(12).toString('hex');
+    const { outcome, output } = await validateIn({
+      AW_STORAGE_URL: `s3://url-bucket?X-Amz-Credential=${generated}`,
+    });
+
+    expect(outcome).toBeInstanceOf(StorageSettingsRefusedError);
+    expect((outcome as Error).message).toMatch(
+      /^the storage setting is refused — AW_STORAGE_URL is invalid/u,
+    );
+    expect((outcome as Error).message).not.toContain(generated);
+    expect(output).not.toContain(generated);
+  });
 });

@@ -11,7 +11,9 @@ The token's scope names one session, and the session row names its workspace and
 Two halves refuse a visitor's request, both with `403 token_out_of_scope`:
 
 1. `decide()`'s scope grammar (`TokenScope.checkTokenScope`) admits only the route *shapes* of a
-   session scope: reading a run by id (and its events), running an agent, and a run's `feedback`.
+   session scope: reading a run by id (and its events), running an agent, a run's `feedback`, the
+   presigned file URLs, and handing a file to its own session (`attachments`, whose path `:id` the
+   grammar half compares with the scope's session).
 2. `requireSessionScopeMatch` (`apps/web/server/runs/api.ts`) compares the session the run row or
    the turn's body names with the scope's, because on none of those shapes does the path carry it.
 
@@ -42,7 +44,8 @@ structure Request where
   resource : Resource
   op : Operation
   sub : Option String
-  /-- The path's `:id`: a run on the `runs` routes, an agent on `agents/:id/runs`. -/
+  /-- The path's `:id`: a run on the `runs` routes, an agent on `agents/:id/runs`, the session on
+  `sessions/:id/attachments`. -/
   pathId : Option String
   /-- The session the run row (read, events, feedback) or the turn's body names. -/
   sessionId : Option String

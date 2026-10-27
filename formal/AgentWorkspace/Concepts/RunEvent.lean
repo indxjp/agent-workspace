@@ -97,7 +97,7 @@ def isWindow : List Nat → Bool
 /-- The stored log of a run is a window: "Sequence numbers are contiguous per run", and the
 oldest may have been pruned. -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")
-  (ts := "packages/core/src/db/repositories/runs.ts#createDatabaseRunEventRepositoryProvider")]
+  (ts := "packages/core/src/db/repositories/runs/events.ts#createDatabaseRunEventRepositoryProvider")]
 def logContiguous (events : List RunEvent) (run : RunId) : Bool := isWindow (sequencesOf events run)
 
 end AgentWorkspace.Concepts.RunEvent

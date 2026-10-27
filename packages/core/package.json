@@ -23,13 +23,13 @@
       "types": "./src/auth/index.ts",
       "default": "./dist/auth/index.js"
     },
-    "./audit": {
-      "types": "./src/audit/index.ts",
-      "default": "./dist/audit/index.js"
-    },
     "./telemetry": {
       "types": "./src/telemetry/index.ts",
       "default": "./dist/telemetry/index.js"
+    },
+    "./tracing": {
+      "types": "./src/telemetry/tracing.ts",
+      "default": "./dist/telemetry/tracing.js"
     },
     "./secrets": {
       "types": "./src/secrets/index.ts",
@@ -38,6 +38,30 @@
     "./storage": {
       "types": "./src/storage/index.ts",
       "default": "./dist/storage/index.js"
+    },
+    "./storage/keys": {
+      "types": "./src/storage/key-safety.ts",
+      "default": "./dist/storage/key-safety.js"
+    },
+    "./storage/content-type": {
+      "types": "./src/storage/content-type.ts",
+      "default": "./dist/storage/content-type.js"
+    },
+    "./storage/object-name": {
+      "types": "./src/storage/object-name.ts",
+      "default": "./dist/storage/object-name.js"
+    },
+    "./storage/streams": {
+      "types": "./src/storage/streams.ts",
+      "default": "./dist/storage/streams.js"
+    },
+    "./storage/key-lock": {
+      "types": "./src/storage/key-lock.ts",
+      "default": "./dist/storage/key-lock.js"
+    },
+    "./storage/backends": {
+      "types": "./src/storage/backends.ts",
+      "default": "./dist/storage/backends.js"
     },
     "./posture": {
       "types": "./src/posture.ts",
@@ -52,25 +76,30 @@
     "db:seed": "pnpm --filter \"@agent-workspace/core...\" run build && node dist/db/seed.js"
   },
   "dependencies": {
-    "@agent-workspace/engine": "workspace:*",
-    "@aws-sdk/client-kms": "3.1149.0",
-    "@aws-sdk/client-s3": "3.1149.0",
-    "@azure/identity": "4.13.3",
+    "@aws-sdk/client-kms": "3.1156.0",
+    "@aws-sdk/client-s3": "3.1156.0",
+    "@aws-sdk/lib-storage": "3.1156.0",
+    "@azure/identity": "4.14.0",
     "@azure/keyvault-secrets": "4.11.2",
     "@azure/storage-blob": "12.34.0",
-    "@google-cloud/secret-manager": "7.1.1",
+    "@google-cloud/secret-manager": "7.2.0",
     "@google-cloud/storage": "8.4.0",
     "@indx-workspace/contracts": "workspace:*",
+    "@opentelemetry/api": "1.10.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.300.0",
+    "@opentelemetry/sdk-node": "0.300.0",
+    "@opentelemetry/sdk-trace": "3.0.0",
     "drizzle-orm": "0.45.4",
+    "google-auth-library": "11.3.1",
     "pg": "8.23.1",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "drizzle-kit": "0.31.11",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "nx": {
     "targets": {

@@ -27,6 +27,8 @@
  * The two mutating functions return a discriminated result rather than throwing or returning the
  * input unchanged, so a caller cannot mistake "refused" for "nothing to do".
  */
+import { UuidSchema } from '@indx-workspace/contracts';
+import { StartRunRequestSchema } from '@indx-workspace/contracts/runs';
 import type { Badge } from '@indx-workspace/react/run-model';
 
 export type { Badge } from '@indx-workspace/react/run-model';
@@ -125,25 +127,6 @@ export interface ComposerProject {
   readonly name: string;
 }
 
-/** Read `GET /api/projects`'s `{ projects: [...] }` into the composer's own, narrower shape. */
-export function readComposerProjects(body: unknown): readonly ComposerProject[] {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    throw new Error('The projects response was not an object.');
-  }
-  const projects = (body as { projects?: unknown }).projects;
-  if (!Array.isArray(projects)) throw new Error('The projects response has no list.');
-  return projects.map((entry, index) => {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-      throw new Error(`Project ${String(index)} was not an object.`);
-    }
-    const value = entry as Record<string, unknown>;
-    if (typeof value['id'] !== 'string' || typeof value['name'] !== 'string') {
-      throw new Error(`Project ${String(index)} has no id or name.`);
-    }
-    return { id: value['id'], name: value['name'] };
-  });
-}
-
 /** The two narrowing pickers. The agent picker is not one of these: it selects, it does not narrow. */
 export type PickerKind = 'files' | 'connectors';
 
@@ -225,6 +208,43 @@ export function findAgent(
     if (agent.id === agentId) return agent;
   }
   return null;
+}
+
+// The pin's version is the run-start input's `version`: the number a session may be started on.
+const PinnedVersionSchema = StartRunRequestSchema.unwrap().shape.version.unwrap();
+
+/** An agent version a new chat is pinned to: the pair `/?agent=<uuid>&version=<n>` names. */
+export interface PinnedAgent {
+  readonly agentId: string;
+  readonly version: number;
+}
+
+type SearchValue = string | readonly string[] | undefined;
+
+/**
+ * The pin a URL asks for, or `null`. A pin needs both parameters to be well formed; a repeated,
+ * missing or malformed one leaves the chat unpinned rather than guessing.
+ */
+export function pinnedAgentFrom(params: {
+  readonly agent?: SearchValue;
+  readonly version?: SearchValue;
+}): PinnedAgent | null {
+  const { agent, version } = params;
+  if (
+    typeof agent !== 'string' ||
+    typeof version !== 'string' ||
+    !/^[1-9]\d{0,9}$/u.test(version)
+  ) {
+    return null;
+  }
+  const agentId = UuidSchema.safeParse(agent);
+  const number = PinnedVersionSchema.safeParse(Number(version));
+  return agentId.success && number.success ? { agentId: agentId.data, version: number.data } : null;
+}
+
+/** The home chat route, pinned to `version` of `agentId`; {@link pinnedAgentFrom} reads it back. */
+export function pinnedChatHref({ agentId, version }: PinnedAgent): string {
+  return `/?${new URLSearchParams({ agent: agentId, version: String(version) }).toString()}`;
 }
 
 /**

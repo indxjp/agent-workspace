@@ -21,12 +21,12 @@ read. The current resolver rejects it before route-level scope checks run. -/
 @[aw_spec (tier := T4) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
   (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")]
 theorem terminal_run_read_diverges :
-    browserCurrent terminalRunToken = false ∧ browserReadTarget terminalRunToken = true := by decide
+    browserCurrent terminalRunToken = false ∧ browserReadTarget terminalRunToken = true := by decide +kernel
 
 /-- Both current and target rules refuse an archived session token. -/
 @[aw_spec (tier := T4) (ts := "apps/web/server/composition/session-rbac.ts#resolveBrowserTokenActor")]
 theorem archived_session_agrees :
     browserCurrent { scope := .session, tokenFound := true, workspaceFound := true, targetFound := true, runTerminal := false, sessionArchived := true, minterFound := true } = false ∧
-    browserReadTarget { scope := .session, tokenFound := true, workspaceFound := true, targetFound := true, runTerminal := false, sessionArchived := true, minterFound := true } = false := by decide
+    browserReadTarget { scope := .session, tokenFound := true, workspaceFound := true, targetFound := true, runTerminal := false, sessionArchived := true, minterFound := true } = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.AuthzRunToken

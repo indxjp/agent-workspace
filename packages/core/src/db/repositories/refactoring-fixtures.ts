@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 
+import { workspaceFolder } from '../../storage/object-name.js';
 import type { Database } from '../client.js';
 import { agents } from '../schema/agents.js';
 import { files } from '../schema/files.js';
@@ -88,7 +89,7 @@ export async function installRf001LegacyFixture(db: Database): Promise<Rf001Lega
     .replaceAll('-', '')
     .toUpperCase()}`;
   const legacyRuntimeCredentialName = 'RUNTIME_CONNECTION__DOCKER__RF001';
-  const catalogStorageKey = `workspaces/${workspaceId}/files/${fileId}/original`;
+  const catalogStorageKey = `${workspaceFolder(workspaceId)}files/${fileId}/original`;
 
   await db.insert(workspaces).values({
     id: workspaceId,

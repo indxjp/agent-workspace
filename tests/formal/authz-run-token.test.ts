@@ -150,6 +150,9 @@ describe('authz-run-token: real gateway authentication', () => {
                 providerId: 'openai',
                 connectionProvider: 'openai',
                 credential: 'fixture-secret',
+                // A literal loopback address: the egress check would otherwise send
+                // `api.openai.com` to the real resolver even though `fetch` is a double.
+                settings: { baseUrl: 'http://127.0.0.1/v1' },
               });
             default:
               throw new Error(`${id}: unknown resolver state`);

@@ -68,14 +68,26 @@ import {
   CLAUDE_CONFIG_DIR_ENV,
   RunRequest,
   type SdkSettingSource,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 import { sandboxEnvironmentVerdict } from '@agent-workspace/engine';
 import { claudeDeniedToolsFor, type AgentToolPolicy } from '@indx-workspace/contracts/agents';
 
-import type { CompiledMcpServerConfig, CompiledSdkAgent, CompiledSdkOptions } from './options.js';
+import { CLAUDE_HANDOFF_TOOL } from './handoff.js';
+import type {
+  CompiledClaudeRun,
+  CompiledMcpServerConfig,
+  CompiledSdkAgent,
+  CompiledSdkOptions,
+} from './options.js';
 import { ClaudeRunPolicy } from './policy.js';
 import { claudeSessionScope } from './scope.js';
-import { CLAUDE_PRESET_TOOLS, compileClaudeToolPolicy } from './tools.js';
+import {
+  CLAUDE_APPROVABLE_TOOLS,
+  CLAUDE_PRESET_TOOLS,
+  compileClaudeToolPolicy,
+  splitApprovals,
+  unapprovableRules,
+} from './tools.js';
 
 /**
  * `settingSources` for every platform-launched run.
@@ -152,7 +164,7 @@ export const ANTHROPIC_API_KEY_ENV = 'ANTHROPIC_API_KEY';
  * whose configuration could not be validated must not start, and must not start *with defaults*
  * either. There is no partial-success return.
  */
-export function compileRunRequest(request: RunRequest): CompiledSdkOptions {
+export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
   const parsed = RunRequest.parse(request);
   const { portable, session } = parsed;
 
@@ -179,6 +191,22 @@ export function compileRunRequest(request: RunRequest): CompiledSdkOptions {
     mcpServers: portable.mcpServers,
   });
 
+  // ADR-0145: a gated call must reach `canUseTool`, which only `default` mode consults for every
+  // call. `bypassPermissions` and `dontAsk` never call it, and `acceptEdits` approves edits first,
+  // so the call would run unapproved or be denied without ever asking.
+  if (policy.requireApproval.length > 0 && tools.permissionMode !== 'default') {
+    throw new Error(
+      `requireApproval needs permissionMode 'default', but this policy uses '${tools.permissionMode}', which would run or deny a gated call without asking. Set the stored policy's permissionMode to 'default' or remove requireApproval.`,
+    );
+  }
+  const unasked = unapprovableRules(policy.requireApproval);
+  if (unasked.length > 0) {
+    throw new Error(
+      `requireApproval cannot gate ${unasked.map((rule) => JSON.stringify(rule)).join(', ')}: the SDK runs that tool without calling canUseTool, or Claude Code's permission rules cannot match that connector glob, so the call could run unapproved. Gate only ${CLAUDE_APPROVABLE_TOOLS.join(', ')}, an exact connector tool (mcp__<server>__<tool>) or a whole server (mcp__<server>__*).`,
+    );
+  }
+  const split = splitApprovals(tools.autoApprove, policy.requireApproval);
+
   // `options.env` REPLACES the subprocess environment — it is not merged with `process.env`
   // (R-01 §3, a breaking change in SDK 0.2.113). `parsed.env` is therefore the complete
   // environment the runner decided on, and this function adds four derived values on top: the
@@ -187,6 +215,11 @@ export function compileRunRequest(request: RunRequest): CompiledSdkOptions {
   // same `RunRequest`'s own `runId` / `sessionId` fields rather than copied from `parsed.env`
   // (which cannot set them: they are derived, always last, so they always win).
   const env: Record<string, string> = {
+    // Since SDK 0.3.304 Claude Code defers MCP tools behind ToolSearch, so a connector tool is
+    // absent from the request's `tools` until the model searches for it. That needs the Messages
+    // API's tool-reference support, which the model gateway does not promise for every upstream;
+    // every connector tool is sent up front instead, as before. The runner may still override it.
+    ENABLE_TOOL_SEARCH: 'false',
     ...parsed.env,
     [CLAUDE_CONFIG_DIR_ENV]: scope.configDir,
     [CLAUDE_CODE_PROJECT_DIR_NAME_ENV]: scope.projectKey,
@@ -220,7 +253,7 @@ export function compileRunRequest(request: RunRequest): CompiledSdkOptions {
     );
   }
 
-  const options: CompiledSdkOptions = {
+  const options: CompiledClaudeRun = {
     cwd: parsed.cwd,
     env,
     settingSources: PLATFORM_SETTING_SOURCES,
@@ -231,7 +264,12 @@ export function compileRunRequest(request: RunRequest): CompiledSdkOptions {
     // `allowedTools` auto-approves and does not restrict. All three lists are emitted, and
     // `base` — the SDK's `tools` — is the one that decides what the model can see at all.
     // docs/adr/W1-CORE-01-tool-permissions-correct-spec-6.md.
-    allowedTools: tools.autoApprove,
+    //
+    // `allowedTools` bypasses `canUseTool`, so a rule that could approve a gated tool is moved
+    // out of it by `splitApprovals` and decided by the callback instead.
+    allowedTools: policy.handoff
+      ? [...split.allowedTools, CLAUDE_HANDOFF_TOOL]
+      : split.allowedTools,
     disallowedTools: tools.deny,
     tools: tools.base === 'claude_code_preset' ? [...CLAUDE_PRESET_TOOLS] : tools.base,
     skills: portable.skills.mode === 'all' ? 'all' : portable.skills.names,
@@ -266,6 +304,16 @@ export function compileRunRequest(request: RunRequest): CompiledSdkOptions {
     // The three arms of `RunSessionMode` are exactly the three legal combinations, so this
     // switch is total and cannot emit an illegal pair.
     ...compileSessionMode(session),
+    ...(policy.handoff ? { handoff: true as const } : {}),
+    ...(policy.requireApproval.length === 0
+      ? {}
+      : {
+          approval: {
+            requireApproval: policy.requireApproval,
+            deferred: split.deferred,
+            approvedToolCalls: policy.approvedToolCalls,
+          },
+        }),
   };
 
   return options;

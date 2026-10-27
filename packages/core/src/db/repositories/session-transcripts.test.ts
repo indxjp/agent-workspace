@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 
+import { asc } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agents } from '../schema/agents.js';
@@ -86,11 +87,19 @@ describe.skipIf(!hasDatabase)('SessionTranscriptRepository', () => {
     );
     const transcript = await afterRestart.load(key);
     expect(transcript).toHaveLength(12);
-    expect(transcript?.[0]).toMatchObject({ uuid: 'u-0', index: 'corrected' });
 
-    const deliveries = await isolated.db.select().from(sessionMessages);
+    // The concurrent appends race for the per-key lock, so delivery order, not call order, is
+    // the order the transcript must preserve.
+    const deliveries = await isolated.db
+      .select()
+      .from(sessionMessages)
+      .orderBy(asc(sessionMessages.sequence));
     expect(deliveries).toHaveLength(13);
-    expect(deliveries.at(-1)?.position).toBe(deliveries[0]?.position);
+    const delivered = deliveries.slice(0, 12).map((row) => row.entryUuid);
+    expect(transcript?.map((entry) => entry['uuid'])).toEqual(delivered);
+    const firstU0 = delivered.indexOf('u-0');
+    expect(transcript?.[firstU0]).toMatchObject({ uuid: 'u-0', index: 'corrected' });
+    expect(deliveries.at(-1)?.position).toBe(deliveries[firstU0]?.position);
   });
 
   it('keeps the same session id isolated by workspace scope', async () => {

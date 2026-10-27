@@ -1,8 +1,9 @@
 /**
  * The seam between the hosted surface page and its local session bootstrap (ADR-0105 slice 1;
  * S1-17, issue #455) and the database layer that resolves a surface and opens a session — the
- * same globalThis registry shape as `../../tokens/runtime.ts`, installed by the composition root
- * (ADR-0038) and replaced by a fake in the handler tests.
+ * composition root (ADR-0038) installs it as `ApplicationContext.surfaces`, and the handler tests
+ * install a fake. It is `disabled` until the run runtime is wired, because opening a session mints
+ * a token and preflights a run.
  */
 import type { AgentEnvironment } from '@indx-workspace/contracts/agent-versions';
 import type { RunStartProblemCode } from '@indx-workspace/contracts/runs';
@@ -104,19 +105,7 @@ export interface VisitorSurface {
   readonly surface: SurfaceDefinition | null;
 }
 
-interface Registry {
-  __agentWorkspaceSurfaceSessionsRuntime__?: SurfaceSessionsRuntime;
-}
-const registry = globalThis as typeof globalThis & Registry;
-
-export function configureSurfaceSessionsRuntime(runtime: SurfaceSessionsRuntime): void {
-  registry.__agentWorkspaceSurfaceSessionsRuntime__ = runtime;
-}
-
-export function clearSurfaceSessionsRuntime(): void {
-  delete registry.__agentWorkspaceSurfaceSessionsRuntime__;
-}
-
-export function currentSurfaceSessionsRuntime(): SurfaceSessionsRuntime | null {
-  return registry.__agentWorkspaceSurfaceSessionsRuntime__ ?? null;
-}
+/** The surface session bootstrap as the application context holds it. */
+export type PublicSurfaces =
+  | { readonly kind: 'serving'; readonly runtime: SurfaceSessionsRuntime }
+  | { readonly kind: 'disabled' };

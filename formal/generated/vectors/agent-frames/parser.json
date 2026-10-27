@@ -107,6 +107,25 @@
      "engine": "claude-agent-sdk"}},
    "id": "ok/agent.malformed",
    "expected": {"frame": "agent.malformed", "engine": "claude-agent-sdk", "accepted": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AgentFrames.frame_codec_round_trips"],
+   "input":
+   {"name": "agent.approval.requested",
+    "data":
+    {"toolName": "Bash",
+     "toolCallId": "tool_2",
+     "raw": null,
+     "frame": "agent.approval.requested",
+     "engine": "claude-agent-sdk",
+     "canonicalCall": "Bash(rm -rf build)"}},
+   "id": "ok/agent.approval.requested",
+   "expected": {"frame": "agent.approval.requested", "engine": "claude-agent-sdk", "accepted": true}},
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AgentFrames.frame_codec_round_trips"],
+   "input":
+   {"name": "agent.handoff",
+    "data":
+    {"reason": "The visitor asked for a person.", "raw": null, "frame": "agent.handoff", "engine": "claude-agent-sdk"}},
+   "id": "ok/agent.handoff",
+   "expected": {"frame": "agent.handoff", "engine": "claude-agent-sdk", "accepted": true}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AgentFrames.platform_frames_carry_no_agent_event",
     "AgentWorkspace.Theorems.WellFormed.AgentFrames.decode_refuses_what_the_contract_refuses"],

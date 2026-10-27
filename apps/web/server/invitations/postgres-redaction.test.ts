@@ -1,3 +1,4 @@
+import { captureLog } from '../telemetry/capture-log';
 import crypto from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -13,8 +14,9 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import { POST as CREATE } from '../../app/api/invitations/route';
 import { installRbacHarness } from '../rbac/testing';
-import { clearInvitationsRuntime, configureInvitationsRuntime } from './runtime';
 import { createManualLinkInvitationSender } from './send-invitation';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -68,27 +70,20 @@ describe.skipIf(!hasDatabase)('invitation audit redaction', () => {
   }, 180_000);
 
   afterAll(async () => {
-    clearInvitationsRuntime();
+    clearApplicationContext();
     vi.restoreAllMocks();
     await root.close();
     await isolated.close();
   });
 
   it('writes an audit row and no log line containing the presented token', async () => {
-    const logs: unknown[][] = [];
-    vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
-      logs.push(args);
-    });
-    vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
-      logs.push(args);
-    });
-    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-      logs.push(args);
-    });
+    const logs = captureLog();
 
-    configureInvitationsRuntime({
-      recordAuditEvent: (event) => root.recordAuditEvent(event),
-      sendInvitation: createManualLinkInvitationSender(),
+    installTestDomains({
+      invitations: {
+        recordAuditEvent: (event) => root.recordAuditEvent(event),
+        sendInvitation: createManualLinkInvitationSender(),
+      },
     });
     const harness = installRbacHarness(
       [
@@ -122,7 +117,7 @@ describe.skipIf(!hasDatabase)('invitation audit redaction', () => {
         actorUserId: ownerId,
       });
       expect(JSON.stringify(rows)).not.toContain(token);
-      expect(JSON.stringify(logs)).not.toContain(token);
+      expect(logs.text()).not.toContain(token);
     } finally {
       harness.teardown();
     }

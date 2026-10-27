@@ -1,4 +1,5 @@
-import { createCloudflareSandboxProvider, createExternalDriver } from '@agent-workspace/runtime';
+import { createCloudflareSandboxProvider } from '@agent-workspace/runtime/driver/cloudflare-sandbox';
+import { createExternalDriver } from '@agent-workspace/runtime/driver/external';
 import { describe, expect, it } from 'vitest';
 
 import {

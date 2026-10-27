@@ -18,13 +18,15 @@ also the direction `pnpm architecture:check` enforces (`dependency-cruiser.confi
 `libraries-do-not-import-applications`, `contracts-depend-on-nothing-in-the-workspace`,
 `sdk-depends-only-on-contracts`, `aw-depends-only-on-sdk-and-contracts`,
 `cli-depends-only-on-sdk-and-contracts`, `create-depends-only-on-cli`,
-`engine-port-depends-only-on-contracts`, `platforms-depend-only-on-contracts`,
+`engine-port-depends-only-on-contracts`, `run-protocol-depends-only-on-contracts-and-engine`,
+`platforms-depend-only-on-contracts`,
 `platforms-are-pure`, and the `src/dependencies.test.ts` allowlist (contracts, `zod`, `yaml`, no other
 npm package, which dependency-cruiser cannot hold because it excludes `node_modules`),
 `engine-adapters-depend-only-on-the-port-and-contracts` (any adapter but the Claude one sees only
 the port, the contracts and its own package, never another adapter or `packages/core`),
-`claude-adapter-depends-only-on-the-port-contracts-and-core` (the Claude adapter may also import
-`packages/core`, for its `RunRequest` and `agent.*` mapping),
+`claude-adapter-depends-only-on-the-port-contracts-and-run-protocol` (the Claude adapter may also
+import `packages/run-protocol`, for its `RunRequest` and `agent.*` mapping),
+`core-depends-only-on-contracts`,
 `web-does-not-import-an-engine-adapter`,
 `runner-reaches-engine-adapters-only-through-engines-ts`). Nothing imports an application;
 nothing server-side is reachable from the three consumer packages.
@@ -59,6 +61,7 @@ graph LR
     web["apps/web<br/>control plane: Next.js routes app/api/**,<br/>domain operations server/**, RBAC, browser UI"]
     runner["apps/runner<br/>private runtime-manager HTTP boundary;<br/>reaches an engine adapter only through src/engines.ts"]
     core["packages/core<br/>Drizzle schema and repositories, pluggable master keys,<br/>local/S3/GCS object storage, audit, telemetry"]
+    runProtocol["packages/run-protocol<br/>the private run contract: RunRequest, agent configuration schemas,<br/>the Claude SDK event surface and its agent.* mapping"]
     runtime["packages/runtime<br/>runtime driver interfaces and implementations<br/>(local, docker, kubernetes, cloud-run, aca);<br/>the engine → image map (ENG-07)"]
     gateway["packages/gateway<br/>authenticated model-provider routing;<br/>substitutes a run identity for a stored credential"]
     embedded["packages/embedded (private)<br/>pnpm start:embedded: the development-only<br/>embedded workspace in one Node process"]
@@ -85,9 +88,13 @@ graph LR
   web --> core
   web --> gateway
   web --> runtime
+  web --> runProtocol
   runner --> core
+  runner --> runProtocol
   runner --> runtime
   gateway --> core
+  runProtocol --> engine
+  runProtocol --> contracts
   cli --> sdk
   cli --> contracts
   create --> cli
@@ -100,7 +107,7 @@ graph LR
   platforms --> contracts
   engineAdapter --> engine
   engineAdapter --> contracts
-  engineAdapter --> core
+  engineAdapter --> runProtocol
   engineAdapter --> claudeSdk
   openaiAdapter --> engine
   openaiAdapter --> contracts
@@ -272,6 +279,8 @@ erDiagram
   files ||--o{ agent_files : "file_id"
   agents ||--o{ agent_skills : "agent_id"
   skills ||--o{ agent_skills : "skill_id"
+  skills ||--o{ skill_revisions : "skill_id"
+  skill_revisions |o--o{ agent_skills : "skill_id, number"
   agents ||--o{ agent_mcp_servers : "agent_id"
   mcp_servers ||--o{ agent_mcp_servers : "mcp_server_id"
   agents ||--o{ agent_grants : "agent_id"
@@ -281,6 +290,7 @@ erDiagram
   projects |o--o{ sessions : "project_id"
   sessions ||--o{ runs : "session_id"
   model_connections |o--o{ runs : "model_connection_id"
+  runs |o--o{ runs : "continues_run_id"
   runs ||--o{ run_events : "run_id"
   workspace_principals ||--o{ browser_tokens : "minted_by_principal_id"
   runs |o--o{ browser_tokens : "run_id"
@@ -419,11 +429,19 @@ erDiagram
     uuid file_id FK
     text access
   }
+  skill_revisions {
+    uuid id PK
+    uuid workspace_id FK
+    uuid skill_id FK
+    integer number
+    integer file_count
+  }
   agent_skills {
     uuid id PK
     uuid workspace_id FK
     uuid agent_id FK
     uuid skill_id FK
+    integer revision "nullable: NULL follows the current files"
   }
   agent_mcp_servers {
     uuid id PK
@@ -552,12 +570,13 @@ SDK client is `packages/sdk/src/resources/<family>.ts`; the commands are
 | Workspaces         | `workspaces`                      | `GET/POST /workspaces`, `GET/PATCH /workspaces/:id`, `POST /auth/workspace` (JSON body → `200 { workspace }`; the form-encoded body still → `303`), `POST /auth/cli-workspace` (a CLI user token), `GET/PATCH /sharing-policies` | `workspaces.list/get/create/update/select`, `workspaces.sharingPolicy.get/set`                                                                                                           | `aw workspaces list                                                                                                                                       | get                                                                                                          | create | update | select`, `aw workspaces sharing-policy get | set` [^s22] | set`[^s22]; no command for`select` (session-only) | `workspaces` |
 | Team               | `team`, `invitations`, `api-keys` | `/memberships[/:id]`, `/users`, `/invitations[/:id]`, `/invitations/:id/resend\|accept`, `/api-keys[/:id]`                                                                                                                       | `team.members.*`, `team.users.*`, `team.invitations.*`, `team.apiKeys.*`                                                                                                                 | `aw team members\|users\|api-keys …` [^s22]                                                                                                               | `memberships`, `users`, `invitations`, `api_keys`, `workspace_principals`                                    |
 | Endpoint clients   | `endpoint-clients`                | `GET/POST /endpoint-clients`, `GET/PATCH/DELETE /endpoint-clients/:id`, `POST /endpoint-clients/:id/keys`, `POST /endpoint-clients/:id/secret`                                                                                   | `endpointClients.list/get/create/update/revoke/mintKey/rotateSecret`                                                                                                                     | `aw endpoint-clients list\|get\|create\|update\|revoke`, `aw endpoint-clients keys create`, `aw endpoint-clients secret rotate`                           | `endpoint_clients`, `endpoint_client_agents`, `endpoint_client_api_keys`                                     |
+| Triggers           | `triggers`                        | `GET/POST /triggers`, `GET/PATCH/DELETE /triggers/:id`, `POST /triggers/:id/secret`, `POST /triggers/:id/fire/:secret` (public, sender-facing) [^fire]                                                                           | `triggers.list/get/create/update/remove/rotateSecret`                                                                                                                                    | `aw triggers list\|get\|create\|update\|remove`, `aw triggers secret rotate`                                                                              | `triggers`, `trigger_deliveries`                                                                             |
 | Tokens             | `tokens`                          | `POST /tokens`                                                                                                                                                                                                                   | `tokens.mint`                                                                                                                                                                            | `aw tokens mint`                                                                                                                                          | `browser_tokens`                                                                                             |
 | Models             | `models`                          | `GET /models`, `/model-connections[/:id]`, `/model-connections/:id/credential\|test`                                                                                                                                             | `models.discover`, `models.connections.list/get/create/update/remove/rotateCredential/test`                                                                                              | `aw models discover`, `aw models connections …`                                                                                                           | `model_connections`                                                                                          |
 | Runtimes           | `runtimes`                        | `/runtime-profiles[/:id]`, `/runtime-connections`                                                                                                                                                                                | `runtimes.profiles.list/get/create/update/remove`, `runtimes.connections.list/create`                                                                                                    | `aw runtimes profiles …`, `aw runtimes connections …` [^runtimes]                                                                                         | `runtime_profiles`, `secrets` (a connection is a secret)                                                     |
 | Secrets            | `secrets`                         | `GET/POST /secrets`, `PUT/DELETE /secrets/:id`                                                                                                                                                                                   | `secrets.list/create/replace/remove`                                                                                                                                                     | `aw secrets list\|create\|replace\|remove`                                                                                                                | `secrets`                                                                                                    |
-| Files              | `files`                           | `GET/POST /files`, `GET/PATCH/DELETE /files/:id` (id = base64url of the path)                                                                                                                                                    | `files.list/upload/createFolder/download/move/remove`                                                                                                                                    | `aw files list\|upload\|mkdir\|download\|move\|remove`                                                                                                    | `files`                                                                                                      |
-| Skills             | `skills`                          | `GET/POST /skills`, `GET/PATCH/DELETE /skills/:name` (`?export=true`)                                                                                                                                                            | `skills.list/import/get/export/update/remove`                                                                                                                                            | `aw skills list\|get\|import\|export\|update\|enable\|disable\|remove`                                                                                    | `skills`                                                                                                     |
+| Files              | `files`                           | `GET/POST /files`, `GET/PATCH/DELETE /files/:id` (id = base64url of the path), `POST /files/:id/upload-urls\|download-urls`                                                                                                      | `files.list/upload/createFolder/download/move/remove/createUploadUrl/createDownloadUrl`                                                                                                  | `aw files list\|upload [--direct]\|mkdir\|download\|move\|remove`                                                                                         | `files`                                                                                                      |
+| Skills             | `skills`                          | `GET/POST /skills`, `GET/PATCH/DELETE /skills/:name` (`?export=true`), `POST /skills/:name/revisions`                                                                                                                            | `skills.list/import/get/export/update/publish/remove`                                                                                                                                    | `aw skills list\|get\|import\|export\|update\|publish\|enable\|disable\|remove`                                                                           | `skills`, `skill_revisions`, `agent_skills`                                                                  |
 | Connectors (MCP)   | `connectors`                      | `GET/POST /connectors`, `GET/PATCH/DELETE /connectors/:id`, `POST /connectors/:id/test-connection`                                                                                                                               | `connectors.list/get/create/update/remove/rotateCredential/test/testDraft`                                                                                                               | `aw connectors list\|get\|create\|update\|remove\|rotate-credential\|test\|test-draft`                                                                    | `mcp_servers`                                                                                                |
 | Engines            | `engines`                         | `GET /engines`                                                                                                                                                                                                                   | `engines.list`                                                                                                                                                                           | `aw engines list`; `aw agents create\|update --engine <id>`                                                                                               | none — the catalogue is deployment configuration, read from `apps/web/server/engines/registry.ts` [^engines] |
 | Agents             | `agents`                          | `GET/POST /agents`, `GET/PATCH/DELETE /agents/:id`, `GET/PUT /agents/:id/resources`, `GET/PUT /agents/:id/policy`, `GET/PUT /agents/:id/grants`                                                                                  | `agents.list/get/create/update/remove/getResourceAssignments/replaceResourceAssignments/getPolicy/replacePolicy/getGrants/replaceGrants/export/import` (export/import compose, no route) | `aw agents list\|get\|create\|update\|remove\|export\|import`, `aw agents assignments get\|set`, `aw agents policy get\|set`, `aw agents grants get\|set` | `agents`, `agent_files`, `agent_skills`, `agent_mcp_servers`, `agent_grants`                                 |
@@ -586,6 +605,12 @@ Routes not in the table are outside the SDK's scope by 04 §1 (`/api/setup`, `/a
 [^publish]:
     `aw shares publish` is absent because the snapshot is still built by the browser; the SDK
     method exists and the server-owned snapshot is RF-103 (refactoring programme).
+
+[^fire]:
+    `POST /triggers/:id/fire/:secret` has no SDK method and no `aw` command. Its caller is a provider
+    (Microsoft Graph, Zoom, a mail rule) that holds no API key; the URL secret that `triggers.create`
+    and `triggers.rotateSecret` return once is its only authentication. `trigger_deliveries` holds
+    the dedupe and rate records of firings and is never on the wire.
 
 [^engines]:
     The only family in this table with no row of its own. An engine is not tenant data: it is what

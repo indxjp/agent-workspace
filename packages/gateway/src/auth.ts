@@ -1,14 +1,16 @@
+import type { ModelConnectionConfig } from '@indx-workspace/contracts/models';
 import type { ModelProvider } from '@indx-workspace/contracts/runs';
+import type { RegisteredProviderId } from './providers/registry.js';
 import type { GatewayRouter, RequestContext, WireProtocol } from './types.js';
 import type { RunTokenClaims, RunTokenCodec } from './tokens/run-token.js';
 import { extractResponseUsage } from './usage/index.js';
 
 type ActiveRunResolution = {
   readonly state: 'active';
-  readonly providerId: string;
+  readonly providerId: RegisteredProviderId;
   readonly connectionProvider: ModelProvider;
   readonly credential: string;
-  readonly settings?: Readonly<Record<string, unknown>>;
+  readonly settings?: ModelConnectionConfig;
 };
 
 export type RunResolution =
@@ -149,14 +151,7 @@ export async function authenticateGatewayRequest(
       providerId: resolved.providerId,
       credential: resolved.credential,
       requestId: `run_${claims.runId}_${crypto.randomUUID()}`,
-      settings: {
-        runId: claims.runId,
-        sessionId: claims.sessionId,
-        workspaceId: claims.workspaceId,
-        agentId: claims.agentId,
-        modelConnectionId: claims.modelConnectionId,
-        ...resolved.settings,
-      },
+      settings: resolved.settings ?? {},
       signal: request.signal,
     },
   };
@@ -297,7 +292,7 @@ export function createAuthenticatedGateway(
   tokens: RunTokenCodec,
   resolver: GatewayRunResolver,
   usage?: UsageRecorder,
-  onUsageError: (error: unknown) => void = () => undefined,
+  onUsageError: (error: unknown, request: Request) => void = () => undefined,
   settlementTimeoutMs = DEFAULT_SETTLEMENT_TIMEOUT_MS,
 ): Pick<GatewayRouter, 'fetch'> {
   return {
@@ -328,7 +323,9 @@ export function createAuthenticatedGateway(
         // Non-streaming: already fully buffered by the provider client, so awaiting here before
         // returning costs nothing extra — and closes exactly the gap issue #134 names: "the
         // process between the response being returned and the ledger insert".
-        await recordResponseUsage(response.clone(), identity, usage).catch(onUsageError);
+        await recordResponseUsage(response.clone(), identity, usage).catch((error: unknown) => {
+          onUsageError(error, request);
+        });
         return response;
       }
 
@@ -340,7 +337,9 @@ export function createAuthenticatedGateway(
         new Response(capture, { headers: response.headers }),
         identity,
         usage,
-      ).catch(onUsageError);
+      ).catch((error: unknown) => {
+        onUsageError(error, request);
+      });
       return new Response(gateBodyOnSettlement(forward, settlement, settlementTimeoutMs), {
         status: response.status,
         statusText: response.statusText,

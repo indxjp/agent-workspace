@@ -1,3 +1,4 @@
+import { AgentCreatedAuditDetailsSchema } from '@indx-workspace/contracts/observability';
 import { and, count, desc, eq, type SQL } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { auditEvents, type AuditAction, type NewAuditEvent } from '../schema/index.js';
@@ -22,6 +23,24 @@ interface AuditEventListInput {
   readonly limit?: number;
   /** The previous page's `nextCursor`; omitted or `null` for the newest rows. */
   readonly cursor?: KeysetPosition | null;
+  /** Only rows of this action; omitted for every action. */
+  readonly action?: AuditAction;
+}
+
+/**
+ * The one check every audit write passes before its insert: `details` belongs to `agent-created`
+ * alone and must satisfy the strict contracts schema. Returns the event with the parsed details.
+ */
+export function checkedAuditEvent<T extends { action: AuditAction; details?: unknown }>(
+  event: T,
+): T {
+  if (event.details === undefined || event.details === null) return event;
+  if (event.action !== 'agent-created') {
+    throw new Error(`An '${event.action}' audit row cannot carry details.`);
+  }
+  const parsed = AgentCreatedAuditDetailsSchema.safeParse(event.details);
+  if (!parsed.success) throw new Error('The audit row details are not AgentCreatedAuditDetails.');
+  return { ...event, details: parsed.data };
 }
 
 type AuditEventWrite = Omit<NewAuditEvent, 'workspaceId' | 'actorPrincipalId' | 'actorUserId'> & {
@@ -48,7 +67,7 @@ export function createDatabaseAuditEventRepositoryProvider(
       const { workspaceId } = requireWorkspaceScope(scope, 'AuditEventRepositoryProvider');
       return {
         async write(event) {
-          await db.insert(auditEvents).values({ ...event, workspaceId });
+          await db.insert(auditEvents).values({ ...checkedAuditEvent(event), workspaceId });
         },
         async count(action) {
           const where = action
@@ -62,6 +81,7 @@ export function createDatabaseAuditEventRepositoryProvider(
           const limit = input.limit ?? DEFAULT_AUDIT_PAGE;
           assertPageLimit(limit, MAX_AUDIT_PAGE, 'audit event list');
           const predicates: SQL[] = [eq(auditEvents.workspaceId, workspaceId)];
+          if (input.action !== undefined) predicates.push(eq(auditEvents.action, input.action));
           if (input.cursor !== undefined && input.cursor !== null) {
             predicates.push(afterPosition(auditEvents.createdAt, auditEvents.id, input.cursor));
           }

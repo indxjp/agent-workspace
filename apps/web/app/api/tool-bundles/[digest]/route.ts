@@ -1,4 +1,4 @@
-import { toResponse } from '../../../../server/agents/http';
+import { apiResultResponse } from '../../../../server/http/json-transport';
 import { getToolBundle } from '../../../../server/tool-bundles/handlers';
 import {
   openToolBundleStore,
@@ -18,6 +18,6 @@ export async function GET(
   const access = await requireResourceAccess(request, 'not-applicable');
   if (!access.ok) return access.response;
   const store = openToolBundleStore(access.principal.workspaceId);
-  if (store === null) return toResponse(toolBundlesNotConfigured());
-  return toResponse(await getToolBundle(store, await readRouteParam(context, 'digest')));
+  if (store === null) return apiResultResponse(toolBundlesNotConfigured());
+  return apiResultResponse(await getToolBundle(store, await readRouteParam(context, 'digest')));
 }

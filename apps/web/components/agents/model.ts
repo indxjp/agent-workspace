@@ -61,7 +61,6 @@ import type {
   AgentResourceAssignments,
   CreateAgentInput,
 } from '../../contracts/agents';
-import { EngineListResponseSchema, type EngineDescriptor } from '../../contracts/engines';
 import type { ProjectResource } from '../../contracts/projects';
 import type { ModelSelectionValue } from '../models/catalog';
 
@@ -86,7 +85,7 @@ export const DEFAULT_AGENT_PERMISSIONS: AgentPermissions = {
  * own discovery adapter) is what `agent-form.tsx` and `agent-detail.tsx` read and submit now.
  */
 
-/** A non-blank name, the same rule `parseAgentName` applies server-side (`contract.ts`). */
+/** A non-blank name, the same rule the server's `CreateAgentInputSchema` applies. */
 export function isValidAgentName(raw: string): boolean {
   return raw.trim().length > 0;
 }
@@ -377,19 +376,6 @@ export function readRuntimeProfileOptions(body: unknown): readonly RuntimeProfil
     }
     return { id: value['id'], name: value['name'], driver: value['driver'] };
   });
-}
-
-/**
- * The engines `GET /api/engines` says this deployment offers (issue #319, ENG-02c).
- *
- * Validated against the published `EngineListResponseSchema` rather than hand-read, because the
- * route's body is an owned contract with a strict shape: a descriptor the schema refuses is drift
- * to report, not something to render half of.
- */
-export function readEngineCatalog(body: unknown): readonly EngineDescriptor[] {
-  const parsed = EngineListResponseSchema.safeParse(body);
-  if (!parsed.success) throw new Error('The engines response was not the published catalogue.');
-  return parsed.data.engines;
 }
 
 /** Case-insensitive substring match. `''` (no query typed) matches everything. */

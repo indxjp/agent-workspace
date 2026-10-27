@@ -10,7 +10,7 @@
  * written out — so an upgrade that started to drift would fail rather than agree with a stale
  * expectation.
  */
-import { classifySdkEvent, toAgentFrames } from '@agent-workspace/core';
+import { classifySdkEvent, toAgentFrames } from '@agent-workspace/run-protocol';
 import { describe, expect, it } from 'vitest';
 
 import { upgradeEventStream, upgradeStoredEvent, wireEventId } from '../server/runs/agent-frames';

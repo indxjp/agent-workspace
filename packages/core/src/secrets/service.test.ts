@@ -90,6 +90,47 @@ describe('createInMemorySecretsService — no database, no configured master key
     await service.close();
   });
 
+  it('resolveById returns the value for an id in this workspace', async () => {
+    const service = createInMemorySecretsService();
+    const resolver = createInMemoryWorkspaceScopeResolver([{ id: 'ws-3', slug: 'ws-3' }]);
+    const scope = await resolver.forWorkspaceId('ws-3');
+    if (scope === null) throw new Error('fixture workspace does not resolve');
+
+    await service.create(scope, { name: 'DECOY', value: Buffer.from('decoy') });
+    const created = await service.create(scope, { name: 'BY_ID', value: Buffer.from('by-id') });
+    if (created.kind !== 'created') throw new Error(`expected created, got ${created.kind}`);
+
+    const resolved = await service.resolveById(scope, created.secret.id);
+    expect(resolved?.name).toBe('BY_ID');
+    expect(resolved?.value.toString('utf8')).toBe('by-id');
+  });
+
+  it('resolveById returns null for an id from another workspace', async () => {
+    const service = createInMemorySecretsService();
+    const resolver = createInMemoryWorkspaceScopeResolver([
+      { id: 'ws-a', slug: 'ws-a' },
+      { id: 'ws-b', slug: 'ws-b' },
+    ]);
+    const scopeA = await resolver.forWorkspaceId('ws-a');
+    const scopeB = await resolver.forWorkspaceId('ws-b');
+    if (scopeA === null || scopeB === null) throw new Error('fixture workspaces do not resolve');
+
+    const created = await service.create(scopeA, { name: 'A_ONLY', value: Buffer.from('a-only') });
+    if (created.kind !== 'created') throw new Error(`expected created, got ${created.kind}`);
+
+    await expect(service.resolveById(scopeB, created.secret.id)).resolves.toBeNull();
+  });
+
+  it('resolveById returns null for a malformed id', async () => {
+    const service = createInMemorySecretsService();
+    const resolver = createInMemoryWorkspaceScopeResolver([{ id: 'ws-4', slug: 'ws-4' }]);
+    const scope = await resolver.forWorkspaceId('ws-4');
+    if (scope === null) throw new Error('fixture workspace does not resolve');
+
+    await service.create(scope, { name: 'SOME_SECRET', value: Buffer.from('v') });
+    await expect(service.resolveById(scope, 'not-a-uuid')).resolves.toBeNull();
+  });
+
   it('never leaks the plaintext into the metadata JSON.stringify produces', async () => {
     const service = createInMemorySecretsService();
     const resolver = createInMemoryWorkspaceScopeResolver([{ id: 'ws-2', slug: 'ws-2' }]);
@@ -182,5 +223,50 @@ describe.skipIf(!hasDatabase)('createSecretsService — end to end against Postg
       value: Buffer.from('two'),
     });
     expect(outcome).toEqual({ kind: 'name-conflict', name: 'DUPLICATE_NAME' });
+  });
+
+  it('resolveById returns the value for an id in this workspace', async () => {
+    const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+      workspaceId,
+    );
+    if (scope === null) throw new Error('fixture workspace does not resolve');
+
+    const created = await service.create(scope, {
+      name: 'RESOLVE_BY_ID',
+      value: Buffer.from('value-by-id'),
+    });
+    if (created.kind !== 'created') throw new Error(`expected created, got ${created.kind}`);
+
+    const resolved = await service.resolveById(scope, created.secret.id);
+    expect(resolved?.name).toBe('RESOLVE_BY_ID');
+    expect(resolved?.value.toString('utf8')).toBe('value-by-id');
+  });
+
+  it('resolveById returns null for an id from another workspace', async () => {
+    const resolver = createDatabaseWorkspaceScopeResolver(isolated.db);
+    const otherWorkspaceId = crypto.randomUUID();
+    await isolated.db
+      .insert(workspaces)
+      .values({ id: otherWorkspaceId, slug: `ws-${otherWorkspaceId}`, name: 'Other' });
+    const scope = await resolver.forWorkspaceId(workspaceId);
+    const otherScope = await resolver.forWorkspaceId(otherWorkspaceId);
+    if (scope === null || otherScope === null) throw new Error('fixture workspaces do not resolve');
+
+    const created = await service.create(otherScope, {
+      name: 'OTHER_WORKSPACE_ONLY',
+      value: Buffer.from('other'),
+    });
+    if (created.kind !== 'created') throw new Error(`expected created, got ${created.kind}`);
+
+    await expect(service.resolveById(scope, created.secret.id)).resolves.toBeNull();
+  });
+
+  it('resolveById returns null for a malformed id', async () => {
+    const scope = await createDatabaseWorkspaceScopeResolver(isolated.db).forWorkspaceId(
+      workspaceId,
+    );
+    if (scope === null) throw new Error('fixture workspace does not resolve');
+
+    await expect(service.resolveById(scope, 'not-a-uuid')).resolves.toBeNull();
   });
 });

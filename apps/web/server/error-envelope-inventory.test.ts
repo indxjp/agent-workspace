@@ -35,10 +35,12 @@
  *     `500`, which is not the envelope either.
  *
  * How deep the handler pass reaches is stated rather than implied (ADR-0031). This process installs
- * the RBAC runtime and nothing else, so a handler whose subsystem needs PostgreSQL, storage or a
- * runner answers its own `503 <subsystem>_runtime_not_configured` before it reads the caller, the
- * id or the body; the RBAC-gated routes (team, keys, audit, files, skills, policy, grants) go on to
- * their `401`, `403`, `404` and `400`. The deeper refusals of the other subsystems are held by a
+ * the RBAC runtime and the rest of the application context as a deployment with an empty database
+ * has it ({@link installEmptyDeployment}): a subsystem with an absent state (storage, secrets,
+ * models, runtimes, the run runtime's surfaces) is in it, so its handlers answer their own
+ * `503 <subsystem>_runtime_not_configured` before they read the caller, the id or the body; the
+ * domains production always builds from the database read empty in-memory rows, so their routes go
+ * on to their `401`, `403`, `404` and `400`. The deeper refusals of the other subsystems are held by a
  * third, static pass: no tracked handler or server module outside the excluded routes' own files
  * may spell the bare-code body `{ error: '<code>' }` at all, so a refusal this process cannot reach
  * still cannot be written in the old shape — neither as a string literal nor as a code read from a
@@ -89,6 +91,14 @@ import {
   TEST_WORKSPACE_ID,
   type RbacHarness,
 } from './rbac/testing';
+import { createInMemoryAgentVersionStoreProvider } from './agent-versions/memory-store';
+import { createInMemoryAgentStoreProvider } from './agents/memory-store';
+import { applicationContext } from './application-context';
+import { installTestDomains } from './application-context-fixtures';
+import { createManualLinkInvitationSender } from './invitations/send-invitation';
+import { InMemoryTranscriptStore } from './sessions/memory-store';
+import { createMemoryWorkspaceRepository } from './workspaces/testing';
+import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 
 /** What a route module exports, as far as this sweep calls it. */
 type RouteHandler = (
@@ -135,6 +145,10 @@ const EXCLUDED: Readonly<Record<string, string>> = {
  * what the run observed, so a route cannot land here by being probed badly.
  */
 const NEVER_REFUSES: Readonly<Record<string, string>> = {
+  'GET /api/readyz':
+    'The readiness probe (issue #1562): it reads no caller and no body, and refuses only for a malformed MASTER_ENCRYPTION_KEY, which this process does not configure. That 503 is the standard envelope, pinned in server/readiness.test.ts.',
+  'POST /api/auth/cli-device':
+    'The first step of the CLI device sign-in (issue #242): it starts a sign-in for any caller, pre-authentication, and reads no body. Its one refusal in a wired deployment is 429 over the rate limit, whose envelope cli-auth/handlers.test.ts asserts.',
   'GET /api/setup/runtime-detect':
     'A read-only, pre-authentication probe of the local container runtime that answers 200 with what it found to every caller; it has no refusal path.',
 };
@@ -359,6 +373,173 @@ describe('the edge (apps/web/proxy.ts) refuses in the standard envelope', () => 
   });
 });
 
+/** A write the probes never reach: every write probe is refused (401, 403 or 400) before it. */
+function unreachableWrite(): Promise<never> {
+  return Promise.reject(new Error('this sweep sends no write that reaches a store'));
+}
+
+/**
+ * The rest of the application context, as a deployment with an empty database has it. RBAC is
+ * the harness's; every subsystem that has an absent state (`unavailable` or `disabled`) is in it,
+ * so its routes answer their own `503`; the domains production always builds from the database
+ * read an empty one, so a probe meets the `401`, `403`, `404` or `400` a real deployment answers.
+ */
+function installEmptyDeployment(): void {
+  const rbac = applicationContext()?.rbac;
+  if (rbac === undefined) throw new Error('install the RBAC harness first');
+  const identify = (request: Request) => rbac.identify(request);
+  const actorOf = async (request: Request) => {
+    const principal = await identify(request);
+    if (principal === null) {
+      return { kind: 'unauthenticated' as const, reason: 'no verified identity' };
+    }
+    return {
+      kind: 'workspace' as const,
+      workspaceId: principal.workspaceId,
+      principalId: principal.principalId,
+      ownerPrincipalId: principal.ownerPrincipalId,
+      userId: principal.userId,
+      userLabel: principal.label,
+      role: principal.role,
+    };
+  };
+  const agents = createInMemoryAgentStoreProvider();
+  installTestDomains({
+    a2a: { kind: 'disabled' },
+    connectors: { kind: 'unavailable' },
+    files: { kind: 'unavailable' },
+    models: { kind: 'unavailable' },
+    runtimes: { kind: 'unavailable' },
+    secrets: { kind: 'unavailable' },
+    setup: { kind: 'unavailable' },
+    skills: { kind: 'unavailable' },
+    surfaces: { kind: 'disabled' },
+    tokens: { kind: 'disabled' },
+    toolEndpoint: { kind: 'disabled' },
+    triggers: { kind: 'disabled' },
+    agents: {
+      agents,
+      resolveWorkspace: async (request) => {
+        const actor = await actorOf(request);
+        return actor.kind === 'workspace'
+          ? { kind: 'workspace', workspaceId: actor.workspaceId }
+          : actor;
+      },
+    },
+    agentVersions: { versions: createInMemoryAgentVersionStoreProvider({ agents }) },
+    audit: {
+      scopes: createInMemoryWorkspaceScopeResolver([{ id: TEST_WORKSPACE_ID, slug: 'envelope' }]),
+      repositories: {
+        forScope: () => ({
+          write: () => Promise.resolve(),
+          count: () => Promise.resolve(0),
+          list: () => Promise.resolve({ items: [], nextCursor: null }),
+        }),
+      },
+    },
+    cliAuth: {
+      secret: 'a-session-secret-that-is-long-enough-for-tests',
+      sessions: {
+        recordApproval: unreachableWrite,
+        exchange: unreachableWrite,
+        findActiveByHash: () => Promise.resolve(null),
+        revokeByHash: () => Promise.resolve(false),
+        moveToWorkspace: () => Promise.resolve(false),
+      },
+    },
+    endpointClients: {
+      list: () => Promise.resolve([]),
+      get: () => Promise.resolve(null),
+      create: unreachableWrite,
+      update: () => Promise.resolve({ kind: 'not-found' }),
+      revoke: () => Promise.resolve(null),
+      rotateSecret: () => Promise.resolve({ kind: 'not-found' }),
+      mintKey: unreachableWrite,
+      agentOwnership: () => Promise.resolve('unknown'),
+      audit: () => Promise.resolve(),
+    },
+    invitations: {
+      recordAuditEvent: () => Promise.resolve(),
+      sendInvitation: createManualLinkInvitationSender(),
+    },
+    oauth: {
+      findClient: () => Promise.resolve(null),
+      canRunAll: () => Promise.resolve(false),
+      agentNames: () => Promise.resolve(null),
+      tokens: unreachableWrite,
+      audit: () => Promise.resolve(),
+    },
+    projects: {
+      resolveActor: actorOf,
+      forWorkspace: () =>
+        Promise.resolve({
+          projects: {
+            get: () => Promise.resolve(null),
+            list: () => Promise.resolve([]),
+            createWithAssociations: unreachableWrite,
+            updateWithAssociations: unreachableWrite,
+            archive: () => Promise.resolve(null),
+            restore: () => Promise.resolve(null),
+            moveSession: unreachableWrite,
+          },
+          files: { list: () => Promise.resolve([]) },
+          mcpServers: { list: () => Promise.resolve([]) },
+          audit: { write: () => Promise.resolve() },
+          agents: { get: () => Promise.resolve(null) },
+          sessions: { get: () => Promise.resolve(null), ensure: unreachableWrite },
+          agentVersions: { list: () => Promise.resolve(null) },
+        }),
+    },
+    sessions: {
+      authenticate: async (request) => {
+        const principal = await identify(request);
+        if (principal === null || principal.scope !== null || principal.via === 'user-token') {
+          return null;
+        }
+        return {
+          kind: 'user',
+          principalId: principal.principalId,
+          ownerPrincipalId: principal.ownerPrincipalId,
+          userId: principal.userId,
+          workspaceId: principal.workspaceId,
+          role: principal.role,
+        };
+      },
+      canAccessSession: () => Promise.resolve(false),
+      store: new InMemoryTranscriptStore(),
+    },
+    shares: {
+      resolveActor: actorOf,
+      forWorkspace: () =>
+        Promise.resolve({
+          shares: {
+            create: unreachableWrite,
+            findByToken: () => Promise.resolve(null),
+            get: () => Promise.resolve(null),
+            list: () => Promise.resolve([]),
+            revoke: () => Promise.resolve(false),
+            stop: () => Promise.resolve(false),
+            reserveVisitorMessage: unreachableWrite,
+            getPublicSharingEnabled: () => Promise.resolve(false),
+            setPublicSharingEnabled: unreachableWrite,
+          },
+          views: { record: () => Promise.resolve(), count: () => Promise.resolve(0) },
+          audit: { write: () => Promise.resolve() },
+        }),
+      resolvePublic: () => Promise.resolve(null),
+      sharingMaterials: () => Promise.resolve({ values: [], referenceIds: [] }),
+      sessionRuns: (_workspaceId, runIds) => Promise.resolve(runIds.map(() => null)),
+      subjectOwnership: () => Promise.resolve('unknown'),
+      runPublic: unreachableWrite,
+    },
+    workspaces: {
+      repository: createMemoryWorkspaceRepository({
+        workspaces: [{ id: TEST_WORKSPACE_ID, slug: 'envelope', name: 'Envelope', members: [] }],
+      }),
+    },
+  });
+}
+
 describe('every route handler refuses in the standard envelope', () => {
   const observations: Observation[] = [];
   const threw: string[] = [];
@@ -369,6 +550,7 @@ describe('every route handler refuses in the standard envelope', () => {
       { email: OWNER.email, name: 'Owner', workspaceId: TEST_WORKSPACE_ID, role: 'owner' },
       { email: VIEWER.email, name: 'Viewer', workspaceId: TEST_WORKSPACE_ID, role: 'viewer' },
     ]);
+    installEmptyDeployment();
     for (const route of apiRoutes) {
       const load = ROUTE_MODULES[moduleKey(route.path)];
       if (load === undefined) continue;

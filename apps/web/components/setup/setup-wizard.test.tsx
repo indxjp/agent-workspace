@@ -6,9 +6,9 @@ import {
   ADMIN_EMAIL_HINT,
   ADMIN_PASSWORD_HINT,
   AdministratorFields,
-  INVALID_ADMIN_CREDENTIALS_MESSAGE,
+  DETECTION_FAILED_MESSAGE,
   ProviderKeyField,
-  setupFailureMessage,
+  RuntimeChoices,
 } from './setup-wizard';
 
 function administratorStep(): string {
@@ -112,24 +112,25 @@ describe('setup wizard, provider key step', () => {
   });
 });
 
-describe('setup wizard, refusal message', () => {
-  it('names the values to use when the administrator credentials do not match', () => {
-    const message = setupFailureMessage(401, {
-      code: 'invalid_credentials',
-      message: 'Administrator credentials did not match.',
-    });
+describe('setup wizard, runtime step', () => {
+  const runtimeStep = (detectionFailed: boolean) =>
+    renderToStaticMarkup(
+      createElement(RuntimeChoices, {
+        detection: null,
+        detectionFailed,
+        runtime: 'local',
+        setRuntime: () => undefined,
+      }),
+    );
 
-    expect(message).toBe(INVALID_ADMIN_CREDENTIALS_MESSAGE);
-    expect(message).toContain('BOOTSTRAP_ADMIN and BOOTSTRAP_ADMIN_PASSWORD');
+  it('says it is detecting while the host has not answered', () => {
+    expect(runtimeStep(false)).toContain('Detecting this host…');
   });
 
-  it("shows any other refusal's own message, or the status when there is none", () => {
-    expect(
-      setupFailureMessage(400, {
-        code: 'invalid_setup',
-        message: 'Every setup field is required.',
-      }),
-    ).toBe('Every setup field is required.');
-    expect(setupFailureMessage(502, null)).toBe('Setup returned 502.');
+  it('says detection failed instead of detecting forever', () => {
+    const html = runtimeStep(true);
+
+    expect(html).toContain(DETECTION_FAILED_MESSAGE);
+    expect(html).not.toContain('Detecting this host');
   });
 });

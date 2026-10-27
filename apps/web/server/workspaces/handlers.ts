@@ -6,7 +6,8 @@
  * reason: a handler is exercised without a framework, a server or a network, and the route files
  * under `apps/web/app/api/workspaces/**` are the thin wiring above these.
  */
-import { problem, type ApiResult } from '../rbac/http';
+import type { ApiResult } from '../http/result';
+import { problemWithDetail as problem } from '../http/result';
 // `asObject`/`readString` are `apps/web/server/rbac/handlers.ts`'s, not a copy of them:
 // verification round 1, finding 6, found jscpd reporting a byte-identical clone of both between
 // this file and that one — both are this task's `Owns`, so the fix is one shared export, not a

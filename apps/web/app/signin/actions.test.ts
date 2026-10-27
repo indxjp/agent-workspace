@@ -2,6 +2,7 @@
  * The password half of `/signin?next=` (issue #971): `signInAction` reads `next` from the form,
  * passes it through `safeNextPath`, redirects to it on success and keeps it on a failed attempt.
  */
+import { log as webLogger } from '../../server/telemetry/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const request = vi.hoisted(() => ({
@@ -34,8 +35,8 @@ beforeEach(() => {
   vi.stubEnv('SESSION_SECRET', 'a'.repeat(32));
   vi.stubEnv('BOOTSTRAP_ADMIN', 'admin@example.com');
   vi.stubEnv('BOOTSTRAP_ADMIN_PASSWORD', 'correct-horse-battery');
-  vi.spyOn(console, 'log').mockImplementation(() => undefined);
-  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  vi.spyOn(webLogger, 'info').mockImplementation(() => undefined);
+  vi.spyOn(webLogger, 'warn').mockImplementation(() => undefined);
 });
 
 afterEach(() => {

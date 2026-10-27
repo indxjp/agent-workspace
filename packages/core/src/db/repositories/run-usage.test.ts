@@ -476,6 +476,127 @@ describe.skipIf(!hasDatabase)('RunRepository usage settlement', () => {
     });
   });
 
+  it("sums the workspace's ledger cost over a half-open window, and says whether any run in it is unpriced", async () => {
+    const otherWorkspaceId = crypto.randomUUID();
+    const otherMembershipId = crypto.randomUUID();
+    const otherPrincipalId = crypto.randomUUID();
+    const otherAgentId = crypto.randomUUID();
+    const otherSessionId = crypto.randomUUID();
+    const otherRunId = crypto.randomUUID();
+    await isolated.db
+      .insert(workspaces)
+      .values({ id: otherWorkspaceId, slug: otherWorkspaceId, name: 'Other' });
+    await isolated.db.transaction(async (tx) => {
+      await tx
+        .insert(memberships)
+        .values({ id: otherMembershipId, workspaceId: otherWorkspaceId, userId, role: 'owner' });
+      await tx.insert(workspacePrincipals).values({
+        id: otherPrincipalId,
+        workspaceId: otherWorkspaceId,
+        kind: 'membership',
+        membershipId: otherMembershipId,
+      });
+    });
+    await isolated.db.insert(agents).values({
+      id: otherAgentId,
+      workspaceId: otherWorkspaceId,
+      name: 'Other agent',
+      instructions: '',
+      ownerPrincipalId: otherPrincipalId,
+      createdBy: userId,
+      permissions: {
+        readFiles: true,
+        writeFiles: false,
+        runCommands: false,
+        unrestrictedNetwork: false,
+      },
+    });
+    await isolated.db.insert(sessions).values({
+      id: otherSessionId,
+      workspaceId: otherWorkspaceId,
+      userId,
+      ownerPrincipalId: otherPrincipalId,
+      agentId: otherAgentId,
+    });
+    await isolated.db
+      .insert(runs)
+      .values({ id: otherRunId, workspaceId: otherWorkspaceId, sessionId: otherSessionId });
+
+    const row = (
+      workspace: string,
+      run: string,
+      responseId: string,
+      costUsd: string,
+      createdAt: string,
+    ) => ({
+      workspaceId: workspace,
+      runId: run,
+      providerResponseId: responseId,
+      provider: 'anthropic',
+      model: 'claude-fixture',
+      inputTokens: 1,
+      outputTokens: 1,
+      costUsd,
+      createdAt: new Date(createdAt),
+    });
+    // Two runs of this test's own, so their accounting state does not depend on the other tests:
+    // one settled (`complete`, so priced) and one whose response had no price (`unavailable`).
+    const pricedRunId = crypto.randomUUID();
+    const unavailableRunId = crypto.randomUUID();
+    await isolated.db.insert(runs).values({
+      id: pricedRunId,
+      workspaceId,
+      sessionId,
+      accountingState: 'complete',
+      priceTableVersion: 'test-prices',
+    });
+    await isolated.db
+      .insert(runs)
+      .values({ id: unavailableRunId, workspaceId, sessionId, accountingState: 'unavailable' });
+    // A window in 2001 that no other test in this file writes to.
+    await isolated.db
+      .insert(runUsageRecords)
+      .values([
+        row(workspaceId, pricedRunId, 'day-before', '9', '2001-01-01T23:59:59.999Z'),
+        row(workspaceId, pricedRunId, 'day-start', '1.5', '2001-01-02T00:00:00.000Z'),
+        row(workspaceId, pricedRunId, 'day-late', '2.25', '2001-01-02T23:59:59.999Z'),
+        row(workspaceId, unavailableRunId, 'day-after', '0', '2001-01-03T00:00:00.000Z'),
+        row(otherWorkspaceId, otherRunId, 'other-day', '40', '2001-01-02T12:00:00.000Z'),
+      ]);
+
+    const scopes = createDatabaseWorkspaceScopeResolver(isolated.db);
+    const scope = await scopes.forWorkspaceId(workspaceId);
+    const otherScope = await scopes.forWorkspaceId(otherWorkspaceId);
+    if (scope === null || otherScope === null) throw new Error('workspace did not resolve');
+    const provider = createDatabaseRunRepositoryProvider(isolated.db);
+    const window = (day: string) =>
+      [
+        new Date(`2001-01-${day}T00:00:00Z`),
+        new Date(`2001-01-0${Number(day) + 1}T00:00:00Z`),
+      ] as const;
+
+    // The settled run's day: the rows before and after it are outside the half-open window.
+    await expect(provider.forScope(scope).usageCostUsd(...window('02'))).resolves.toEqual({
+      costUsd: '3.750000',
+      unpricedUsage: false,
+    });
+    // The next day holds only the unpriced run's row: cost 0, and flagged as not measurable.
+    await expect(provider.forScope(scope).usageCostUsd(...window('03'))).resolves.toEqual({
+      costUsd: '0.000000',
+      unpricedUsage: true,
+    });
+    // The other workspace's run is still `pending` (not complete), and never leaks into ours.
+    await expect(provider.forScope(otherScope).usageCostUsd(...window('02'))).resolves.toEqual({
+      costUsd: '40.000000',
+      unpricedUsage: true,
+    });
+    await expect(
+      provider
+        .forScope(scope)
+        .usageCostUsd(new Date('2001-02-01T00:00:00Z'), new Date('2001-02-02T00:00:00Z')),
+    ).resolves.toEqual({ costUsd: '0', unpricedUsage: false });
+  });
+
   it('lists non-complete runs older than a threshold for operator reconciliation', async () => {
     const future = new Date(Date.now() + 60_000);
     const candidates = await listRunsNeedingAccountingReconciliation(isolated.db, future, 1_000);

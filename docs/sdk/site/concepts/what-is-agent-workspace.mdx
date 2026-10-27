@@ -14,34 +14,17 @@ description: "The product in one page: a self-hosted control plane around the Cl
 
 </Info>
 
-Writing an agent with the Claude Agent SDK takes an afternoon. Everything after that is what
-stalls a rollout: who may change the agent, where it executes, whose credentials it holds, how a
-teammate switches it to another model or another cloud, and how the result reaches the people
-— or the product — that need it. **Agent Workspace is the layer around the SDK that answers
-those questions**, runs in your own infrastructure, and exposes everything it manages through
-one API so that the same agents can be driven from its own UI, from your backend, from your
-frontend, or from a terminal.
+Writing an agent with the Claude Agent SDK takes an afternoon. What stalls the rollout is
+everything after that: who may change the agent, where it executes, whose credentials it holds,
+how to move it to another model or cloud, and how it reaches the people or the product that need
+it. **Agent Workspace is the layer around the SDK that answers those questions.** It runs on your
+own servers and exposes everything it manages through one API, so the same agents work from its
+web console, your backend, your frontend and a terminal.
 
-```mermaid
-flowchart TD
-  subgraph Infra["Your infrastructure: a laptop, a VM, Cloud Run or Kubernetes"]
-    Files["Your project files: agents, skills, tools, evals"]
-    CLI["aw CLI and the SDK"]
-    CP["Control plane: agents, versions, runs, people, secrets"]
-    subgraph Sandbox["A sandbox per run"]
-      Engine["Engine: Claude Agent SDK, OpenAI Agents SDK, pi or Mastra"]
-    end
-    GW["Model gateway"]
-    FE["Your frontends: website widget, React app, your backend"]
-  end
-  Prov["Model provider: Anthropic, OpenAI, Azure OpenAI or compatible"]
-  Files --> CLI
-  CLI -- "aw push, aw promote" --> CP
-  CP -- "launches each run" --> Engine
-  Engine -- "per-run token" --> GW
-  GW -- "your stored key" --> Prov
-  FE -- "messages and run events" --> CP
-```
+<Frame caption="Your repository, the control plane and the sandboxes on your servers, and the model behind the gateway.">
+  <img className="block dark:hidden" src="/images/diagrams/architecture-light.svg" alt="Architecture: your repository is pushed with aw dev or aw push to the control plane on your servers, which stores state in PostgreSQL and object storage and launches each run in a sandbox (local, Docker or Kubernetes) running an engine; the engine reaches the model only through the model gateway, and your site or app talks to the control plane" />
+  <img className="hidden dark:block" src="/images/diagrams/architecture-dark.svg" alt="Architecture: your repository is pushed with aw dev or aw push to the control plane on your servers, which stores state in PostgreSQL and object storage and launches each run in a sandbox (local, Docker or Kubernetes) running an engine; the engine reaches the model only through the model gateway, and your site or app talks to the control plane" />
+</Frame>
 
 Read it left to right. You keep the agent as files in your repository; `aw` (or the SDK) saves
 them to the control plane; each run starts the agent's engine in a sandbox; the engine reaches
@@ -146,7 +129,7 @@ const skillMd =
   '---\nname: release-notes\ndescription: Write release notes from a diff.\n---\nSummarise the diff into three user-facing bullets.\n';
 const skill = await aw.skills.import({
   name: 'release-notes',
-  files: [{ path: 'SKILL.md', contentBase64: btoa(skillMd) }],
+  files: [{ path: 'SKILL.md', body: skillMd }],
 });
 
 // 3. A tool server — an MCP server with its credential stored write-only.

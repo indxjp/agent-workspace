@@ -157,6 +157,26 @@ The SDK's `PermissionMode`, verbatim from `sdk.d.ts` (R-01 §3, §10). The only 
 - `'dontAsk'`
 - `'auto'`
 
+## AgentCreatedByAgent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `null \| string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `runId` | `string` | Yes |  |
+
+## AgentCreatedByAgentSchema
+
+Which agent made an agent (issue #1851): the creating agent, the version of it that was running and
+the run that saved the new agent. `agentId` is `null` once the creating agent was deleted; the
+version and run still say how the row was made.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `null \| string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `runId` | `string` | Yes |  |
+
 ## AgentDefinition
 
 | Name | Type | Required | Description |
@@ -164,7 +184,7 @@ The SDK's `PermissionMode`, verbatim from `sdk.d.ts` (R-01 §3, §10). The only 
 | `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
 | `kind` | `"AgentDefinition"` | Yes |  |
 | `agent` | `AgentDefinitionAgent` | Yes |  |
-| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
 | `policySource` | `"stored" \| "compiled"` | Yes |  |
 | `resources` | `AgentDefinitionResources` | Yes |  |
 
@@ -223,16 +243,20 @@ workspace, owner or timestamp — those belong to the workspace the agent lives 
 | `files` | `readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]` | Yes |  |
 | `skills` | `readonly string[]` | Yes |  |
 | `connectors` | `readonly string[]` | Yes |  |
+| `skillRevisions` | `undefined \| Readonly<Record<string, number>>` | No | The revision each listed skill is pinned to, by skill name; a skill with no key follows `latest`. Every key must be in `skills`. Absent when nothing is pinned. |
 
 ## AgentDefinitionResourcesSchema
 
-The agent's resource assignments, by workspace path and by name — never by id.
+The agent's resource assignments, by workspace path and by name — never by id. A file path that
+starts with `storage://` grants a folder of a storage connection, as
+`storage://<connection>/<folder>` (the storage design, §05); any other path is a workspace file.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `files` | `readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]` | Yes |  |
 | `skills` | `readonly string[]` | Yes |  |
 | `connectors` | `readonly string[]` | Yes |  |
+| `skillRevisions` | `undefined \| Readonly<Record<string, number>>` | No | The revision each listed skill is pinned to, by skill name; a skill with no key follows `latest`. Every key must be in `skills`. Absent when nothing is pinned. |
 
 ## AgentDefinitionSchema
 
@@ -260,7 +284,7 @@ stays compiled in the destination. See ADR-0076 and spec 04 §6.2.
 | `apiVersion` | `"agentworkspace.dev/v1"` | Yes |  |
 | `kind` | `"AgentDefinition"` | Yes |  |
 | `agent` | `AgentDefinitionAgent` | Yes |  |
-| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
 | `policySource` | `"stored" \| "compiled"` | Yes |  |
 | `resources` | `AgentDefinitionResources` | Yes |  |
 
@@ -323,7 +347,7 @@ The body of `GET /api/agents`.
 an engine added to the list without an arm (or an arm for an id the list lacks) fails typecheck
 (ADR-0136).
 
-- `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions: boolean; }>; }>`
+- `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] | undefined; handoff?: true | undefined; }>`
 - `Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
 - `Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
 - `Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
@@ -337,7 +361,7 @@ an engine added to the list without an arm (or an arm for an id the list lacks) 
 
 ## AgentPolicyLimitsSchema
 
-`maxTurns` / `maxBudgetUsd`, transcribed from `packages/core/src/schemas.ts`'s `AgentConfig`.
+`maxTurns` / `maxBudgetUsd`, transcribed from `packages/run-protocol/src/schemas.ts`'s `AgentConfig`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -361,7 +385,7 @@ an engine added to the list without an arm (or an arm for an id the list lacks) 
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
 | `source` | `undefined \| "stored" \| "compiled"` | No |  |
 | `connectorNames` | `undefined \| Record<string, string>` | No |  |
 
@@ -379,7 +403,7 @@ omitted when no rule names a connector that still exists with a key other than
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
+| `policy` | `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>` | Yes |  |
 | `source` | `undefined \| "stored" \| "compiled"` | No |  |
 | `connectorNames` | `undefined \| Record<string, string>` | No |  |
 
@@ -413,7 +437,7 @@ further layers are applied on top when a run is composed and are *not* reflected
 the full set a run ends up with; reading `autoApprove: []` does not mean no tool is
 auto-approved at run time.
 
-- `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions: boolean; }>; }>`
+- `Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] | undefined; handoff?: true | undefined; }>`
 - `Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
 - `Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
 - `Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>`
@@ -422,6 +446,15 @@ auto-approved at run time.
 
 - `"stored"`
 - `"compiled"`
+
+## agentRequestIssueMessages
+
+The `details` lines for a refused `CreateAgentInputSchema` or `UpdateAgentPatchSchema`
+body: one per issue, one per unknown key, and an object's unknown keys before its fields.
+
+```ts
+agentRequestIssueMessages(issues: readonly z.core.$ZodIssue[]): string[]
+```
 
 ## AgentResource
 
@@ -439,6 +472,9 @@ auto-approved at run time.
 | `ownerPrincipalId` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
+| `builtin` | `undefined \| "builder"` | No | Present only on a built-in agent: people cannot edit it, only the platform does. |
+| `createdByAgent` | `undefined \| AgentCreatedByAgent` | No | Present only on an agent made by an agent. `createdBy` above stays the person (issue #1851). |
+| `archivedAt` | `undefined \| string` | No | When the agent was archived; absent while active. Lists still include archived agents. |
 
 ## AgentResourceAssignments
 
@@ -447,6 +483,20 @@ auto-approved at run time.
 | `files` | `readonly Readonly<{ fileId: string; access: "read" \| "read-write"; }>[]` | Yes |  |
 | `skillIds` | `readonly string[]` | Yes |  |
 | `connectorIds` | `readonly string[]` | Yes |  |
+| `storageGrants` | `readonly Readonly<{ connectionId: string; prefix: string; access: "read" \| "read-write"; }>[]` | Yes | The folders of storage connections the agent may reach (the storage design, §05), written only by a materialised version with the connection id the deploy resolved, never by a client: a `PUT` keeps the stored grants and ignores this field. Absent parses to `[]`, so an assignment stored before grants existed is unchanged. |
+| `skillRevisions` | `undefined \| Readonly<Record<string, number>>` | No | The revision each listed skill is pinned to, by skill id; a skill with no key follows `latest`. Every key must be in `skillIds`. Absent when nothing is pinned. |
+
+## AgentResourceAssignmentsInput
+
+What a client may send: `storageGrants` is optional.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly Readonly<{ fileId: string; access: "read" \| "read-write"; }>[]` | Yes |  |
+| `skillIds` | `readonly string[]` | Yes |  |
+| `connectorIds` | `readonly string[]` | Yes |  |
+| `skillRevisions` | `undefined \| Readonly<Record<string, number>>` | No | The revision each listed skill is pinned to, by skill id; a skill with no key follows `latest`. Every key must be in `skillIds`. Absent when nothing is pinned. |
+| `storageGrants` | `undefined \| readonly Readonly<{ connectionId: string; prefix: string; access: "read" \| "read-write"; }>[]` | No | The folders of storage connections the agent may reach (the storage design, §05), written only by a materialised version with the connection id the deploy resolved, never by a client: a `PUT` keeps the stored grants and ignores this field. Absent parses to `[]`, so an assignment stored before grants existed is unchanged. |
 
 ## AgentResourceAssignmentsResponseSchema
 
@@ -463,6 +513,8 @@ The `GET`/`PUT /api/agents/:id/resources` payload: what the agent is allowed to 
 | `files` | `readonly Readonly<{ fileId: string; access: "read" \| "read-write"; }>[]` | Yes |  |
 | `skillIds` | `readonly string[]` | Yes |  |
 | `connectorIds` | `readonly string[]` | Yes |  |
+| `storageGrants` | `readonly Readonly<{ connectionId: string; prefix: string; access: "read" \| "read-write"; }>[]` | Yes | The folders of storage connections the agent may reach (the storage design, §05), written only by a materialised version with the connection id the deploy resolved, never by a client: a `PUT` keeps the stored grants and ignores this field. Absent parses to `[]`, so an assignment stored before grants existed is unchanged. |
+| `skillRevisions` | `undefined \| Readonly<Record<string, number>>` | No | The revision each listed skill is pinned to, by skill id; a skill with no key follows `latest`. Every key must be in `skillIds`. Absent when nothing is pinned. |
 
 ## AgentResourceSchema
 
@@ -484,6 +536,9 @@ ISO-8601 strings.
 | `ownerPrincipalId` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
+| `builtin` | `undefined \| "builder"` | No | Present only on a built-in agent: people cannot edit it, only the platform does. |
+| `createdByAgent` | `undefined \| AgentCreatedByAgent` | No | Present only on an agent made by an agent. `createdBy` above stays the person (issue #1851). |
+| `archivedAt` | `undefined \| string` | No | When the agent was archived; absent while active. Lists still include archived agents. |
 
 ## AgentSkillPolicy
 
@@ -559,6 +614,86 @@ and nothing else may set that flag. This is the only copy of the cross-field rul
 | `deny` | `readonly string[]` | Yes |  |
 | `permissionMode` | `"default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"` | Yes |  |
 | `allowDangerouslySkipPermissions` | `false \| true` | Yes |  |
+
+## approvalOverlapsGate
+
+Whether the auto-approval `approved` and the gate `required` could both match one tool: each is
+tested against the other's tool name, and an `Edit` rule against every tool it approves
+(`CLAUDE_EDIT_RULE_TOOLS`).
+
+```ts
+approvalOverlapsGate(approved: string, required: string): boolean
+```
+
+## BUILTIN_AGENT_KEYS
+
+The built-in agents the platform provisions into a workspace. Closed: add a key, then every switch.
+
+- `'builder'`
+
+## BUILTIN_AGENT_OPERATIONS
+
+Every operation the item routes of one agent serve, named for the built-in refusal (#1848).
+
+- `'read'`
+- `'update'`
+- `'delete'`
+- `'update-policy'`
+- `'replace-resources'`
+- `'replace-grants'`
+- `'create-version'`
+- `'set-pointer'`
+- `'promote'`
+- `'rollback'`
+- `'advance-evaluation'`
+- `'evaluate'`
+- `'start-evaluation-run'`
+- `'export'`
+- `'export-archive'`
+
+## BUILTIN_AGENT_PROBLEM_CODES
+
+Problem codes of the built-in agents, with their HTTP status.
+
+| Key | Value |
+| --- | --- |
+| `builtin_agent_read_only` | `403` |
+
+## BuiltinAgentKey
+
+`"builder"`
+
+## BuiltinAgentKeySchema
+
+`"builder"`
+
+## BuiltinAgentOperation
+
+- `"promote"`
+- `"rollback"`
+- `"read"`
+- `"update"`
+- `"delete"`
+- `"update-policy"`
+- `"replace-resources"`
+- `"replace-grants"`
+- `"create-version"`
+- `"set-pointer"`
+- `"advance-evaluation"`
+- `"evaluate"`
+- `"start-evaluation-run"`
+- `"export"`
+- `"export-archive"`
+
+## canonicalCall
+
+The canonical text of one tool call, `{"input":…,"name":…}` in RFC 8785 canonical JSON, so one
+approval binds a tool name and its exact arguments (ADR-0145 D2.1). It is not hashed; the digest is
+taken where the request is stored.
+
+```ts
+canonicalCall(name: string, input: unknown): string
+```
 
 ## CLAUDE_GRANT_SHELL_DENIALS
 
@@ -665,6 +800,15 @@ An absolute path in the POSIX form Claude Code matches rules against, without a 
 claudeRulePath(absolute: string): string
 ```
 
+## conflictingApprovalRules
+
+The indexes of `requireApproval` rules that also match an `autoApprove` rule (ADR-0145 D3: "a tool
+that matches both lists is refused when the agent is saved"), by `approvalOverlapsGate`.
+
+```ts
+conflictingApprovalRules(autoApprove: readonly string[], requireApproval: readonly string[]): number[]
+```
+
 ## CreateAgentInput
 
 Normalized body accepted by `POST /api/agents`.
@@ -675,8 +819,23 @@ Normalized body accepted by `POST /api/agents`.
 | `instructions` | `string` | Yes |  |
 | `modelConnectionId` | `null \| string` | Yes |  |
 | `model` | `null \| string` | Yes |  |
-| `runtimeProfileId` | `undefined \| null \| string` | No |  |
 | `permissions` | `AgentPermissions` | Yes |  |
+| `runtimeProfileId` | `undefined \| null \| string` | No |  |
+
+## CreateAgentInputSchema
+
+The body of `POST /api/agents`. Every field is a required key — `null` is the value that means
+"default" for `modelConnectionId` and `model` — except `runtimeProfileId`, whose absence the
+stores read as `null`. Unknown keys are refused so a typo is a 400, not a silently ignored field.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `instructions` | `string` | Yes |  |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `permissions` | `AgentPermissions` | Yes |  |
+| `runtimeProfileId` | `undefined \| null \| string` | No |  |
 
 ## CreateAgentOptions
 
@@ -686,7 +845,7 @@ request, and the `201` it gets back — the same rows `create` followed by
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `assignments` | `undefined \| AgentResourceAssignments` | No |  |
+| `assignments` | `undefined \| AgentResourceAssignmentsInput` | No |  |
 
 ## CreateAgentWithAssignmentsResponse
 
@@ -806,6 +965,16 @@ Which of §17 Step 4's switches grants each Mastra workspace tool.
 - `"mastra_workspace_execute_command"`
 - `"mastra_workspace_get_process_output"`
 - `"mastra_workspace_kill_process"`
+
+## needsApproval
+
+Whether a call to `toolName` needs a human's approval under `rules` (ADR-0145 D3). The one
+decision: the engine's `canUseTool` and the gateway's write backstop both call it, so they cannot
+disagree. Pure; it reads the tool name only.
+
+```ts
+needsApproval(rules: readonly string[], toolName: string): boolean
+```
 
 ## OPENAI_AGENTS_REASONING_EFFORTS
 
@@ -933,6 +1102,14 @@ policyNarrowedPermissions(permissions: AgentPermissions, policy: AgentPolicy | n
 | `skills` | `Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>` | Yes |  |
 | `limits` | `AgentPolicyLimits` | Yes |  |
 
+## RequireApprovalRuleSchema
+
+A rule that is allowed to *require approval*: `engine.requireApproval` (ADR-0145 D3). A granting
+rule, minus the scoped form: `needsApproval` decides by tool name, so `Bash(git push *)`
+could only be honoured by gating every `Bash` call, and a rule is refused rather than widened.
+
+`string`
+
 ## translatePolicyForEngineSwitch
 
 Carry an engine switch's narrowing across (ADR-0074 D12, the Owner's decision on PR #339).
@@ -972,6 +1149,21 @@ translatePolicyForEngineSwitch(previous: AgentPolicy, next: AgentPolicy): Engine
 ## UpdateAgentPatch
 
 Normalized body accepted by `PATCH /api/agents/:id`; omitted fields remain unchanged.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `undefined \| string` | No |  |
+| `instructions` | `undefined \| string` | No |  |
+| `modelConnectionId` | `undefined \| null \| string` | No |  |
+| `model` | `undefined \| null \| string` | No |  |
+| `runtimeProfileId` | `undefined \| null \| string` | No |  |
+| `permissions` | `undefined \| AgentPermissions` | No |  |
+
+## UpdateAgentPatchSchema
+
+The body of `PATCH /api/agents/:id`: the create fields, each optional. A present key must carry
+a valid value (`undefined` is not "absent"), and a body that changes nothing is refused rather
+than answered `200`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |

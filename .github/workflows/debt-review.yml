@@ -1,0 +1,42 @@
+# Quarterly debt review (engineering audit W4-3): opens, or refreshes, one issue per quarter that
+# lists the size of every baseline that may only shrink. Procedure: docs/operations/debt-review.md.
+name: Debt review
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 5 1 1,4,7,10 *'
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      # Idempotent: the issue is found by its title, so a re-run updates the body instead of
+      # opening a second issue.
+      - name: Open or refresh the quarter's review issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/ci/debt-review.mjs > "$RUNNER_TEMP/body.md"
+          quarter="$(head -n 1 "$RUNNER_TEMP/body.md" | sed -E 's/<!-- debt-review:(.*) -->/\1/')"
+          title="Quarterly debt review ${quarter}"
+          number="$(gh issue list --state all --search "\"${title}\" in:title" --json number,title --jq "map(select(.title == \"${title}\")) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/body.md"
+          fi

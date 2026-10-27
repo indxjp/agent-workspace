@@ -23,7 +23,7 @@ produced had it been there. Quantified over `framesIfStarted`, which is exactly 
 output" claim: the number of frames a started run would have made cannot change the answer. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/site/building/extending-the-platform.mdx#registering-it")
   (ts := "apps/runner/src/engines.ts#loadEngine")
-  (ts := "apps/runner/src/server.ts#streamEngineRefusal")]
+  (ts := "apps/runner/src/run-handler.ts#streamEngineRefusal")]
 theorem unregistered_engine_emits_no_frame (table : List InstalledAdapter)
     (capabilities : Capabilities) (request : Request) (projectKey configDir : String)
     (framesIfStarted : Nat)
@@ -60,7 +60,7 @@ acceptance criterion. -/
 theorem an_image_with_no_adapter_reports_none :
     installedEngines [{ id := "claude-agent-sdk", version := "0.3.278",
                         protectedConfigDirectory := ".claude", loads := false }] = [] := by
-  decide
+  decide +kernel
 
 /-- In the model, a `run-error` terminal carries no frame — because the model's only `run-error`
 is a refusal *before start*. A policy the adapter cannot read and a credential it refuses are
@@ -91,7 +91,7 @@ the engine did not load, or it loaded and `compile` refused. Stated over the ref
 over the terminal name, so it does not depend on `run-error` meaning only a refusal — which it
 does not in the server, where a run that fails mid-stream also ends with `run-error`. -/
 @[aw_spec (tier := T2) (ts := "apps/runner/src/runtime.ts#startEngineAgent")
-  (ts := "apps/runner/src/server.ts#streamEngineRefusal")]
+  (ts := "apps/runner/src/run-handler.ts#streamEngineRefusal")]
 theorem every_refusal_before_start_emits_no_frame (table : List InstalledAdapter)
     (capabilities : Capabilities) (request : Request) (projectKey configDir : String)
     (framesIfStarted : Nat) (reason : Refusal)

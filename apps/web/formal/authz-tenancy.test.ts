@@ -24,16 +24,12 @@ import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../serv
 import type { TokenScope } from '../server/rbac/token-scope';
 import { requireResourceAccess } from '../server/resources/authorise';
 import { interruptRun, readRun, revokeRunTokens, streamRunEvents } from '../server/runs/api';
-import {
-  installRunApi,
-  resetRunApi,
-  type Principal as RunPrincipal,
-  type RunApiEnvironment,
-} from '../server/runs/environment';
-import { InMemoryRunStore } from '../server/runs/store';
+import type { RunPrincipal, RunApiEnvironment } from '../server/runs/environment';
+import { InMemoryRunStore } from '../server/runs/memory-store';
 import { memberOwnershipResolver, ownerOwnershipResolver } from '../server/workspaces/access';
 import { createMemoryWorkspaceRepository } from '../server/workspaces/testing';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
+import { installTestRunApi, resetTestRunApi } from '../server/application-context-fixtures';
 
 const FAMILY = 'authz-tenancy';
 const SESSION_SECRET = 'a-test-session-secret-that-is-long-enough-32';
@@ -59,7 +55,7 @@ const AGENT = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 
 afterEach(() => {
-  resetRunApi();
+  resetTestRunApi();
 });
 
 async function installRuns(input: Record<string, unknown>, id: string): Promise<void> {
@@ -96,7 +92,7 @@ async function installRuns(input: Record<string, unknown>, id: string): Promise<
     },
     launch: () => undefined,
   };
-  installRunApi(environment);
+  installTestRunApi(environment);
 }
 
 async function callRunRoute(route: string, runId: string): Promise<Response> {

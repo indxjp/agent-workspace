@@ -7,6 +7,7 @@ import {
   type AgentRecord,
   type EndpointClientRecord,
 } from '@agent-workspace/core/db';
+import type { EndpointClientKind } from '@indx-workspace/contracts/endpoint-clients';
 import { describe, expect, it } from 'vitest';
 
 import { Principal } from '../rbac/principal';
@@ -15,6 +16,8 @@ import { createRepositoryOAuthRuntime } from './store';
 
 const WORKSPACE = crypto.randomUUID();
 const PRINCIPAL = crypto.randomUUID();
+/** Differs from the creator so the consent label cannot come from the acts-for principal. */
+const ACTS_FOR = crypto.randomUUID();
 
 const agent = (name: string): AgentRecord => ({
   id: crypto.randomUUID(),
@@ -40,7 +43,7 @@ const agent = (name: string): AgentRecord => ({
 const first = agent('first <b>');
 const second = agent('second');
 
-function setup(kind: 'mcp-project' | 'a2a-agent') {
+function setup(kind: EndpointClientKind) {
   const known = new Map([first, second].map((a) => [a.id, a]));
   const clientId = crypto.randomUUID();
   const bound: EndpointClientRecord = {
@@ -48,11 +51,11 @@ function setup(kind: 'mcp-project' | 'a2a-agent') {
     workspaceId: WORKSPACE,
     name: 'client name',
     kind,
-    agentIds: [first.id],
+    agentIds: kind === 'builder' ? [] : [first.id],
     toolNames: null,
     redirectUris: [],
     hasClientSecret: false,
-    actsForPrincipalId: PRINCIPAL,
+    actsForPrincipalId: ACTS_FOR,
     createdByPrincipalId: PRINCIPAL,
     apiKeyIds: [],
     revokedAt: null,
@@ -75,7 +78,7 @@ function setup(kind: 'mcp-project' | 'a2a-agent') {
               workspaceId: WORKSPACE,
               name: bound.name,
               kind,
-              actsForPrincipalId: PRINCIPAL,
+              actsForPrincipalId: ACTS_FOR,
               clientSecretHash: null,
               redirectUris: [],
             }
@@ -83,7 +86,22 @@ function setup(kind: 'mcp-project' | 'a2a-agent') {
       ),
     oauthTokens: { forScope: unused },
     auditEventRepository: { forScope: unused },
-    directory: { principalById: unused },
+    directory: {
+      principalById: (_workspaceId, principalId) =>
+        Promise.resolve(
+          principalId === PRINCIPAL
+            ? {
+                principalId,
+                kind: 'membership',
+                role: 'admin',
+                label: 'Ada Lovelace',
+                userId: crypto.randomUUID(),
+                apiKeyId: null,
+                actsForPrincipalId: null,
+              }
+            : null,
+        ),
+    },
   });
   return { clientId, runtime };
 }
@@ -114,6 +132,18 @@ describe('createRepositoryOAuthRuntime', () => {
     const { runtime, clientId } = setup('mcp-project');
     expect(await runtime.findClient(clientId)).toMatchObject({
       resourcePath: '/mcp/projects/client%20name',
+    });
+  });
+});
+
+describe('a builder client', () => {
+  it('has the fixed /mcp/builder resource and no agent binding', async () => {
+    const { runtime, clientId } = setup('builder');
+    expect(await runtime.findClient(clientId)).toMatchObject({
+      kind: 'builder',
+      agentIds: [],
+      resourcePath: '/mcp/builder',
+      creatorLabel: 'Ada Lovelace',
     });
   });
 });
@@ -208,9 +238,21 @@ describe('canRunAll without the agents runtime', () => {
     );
   });
 
+  it('lets a builder run an agent granted to them (ADR-0152)', async () => {
+    const { runtime } = runtimeOf([first, second], [first.id]);
+    expect(await runtime.canRunAll(memberIn(WORKSPACE, 'builder'), [first.id])).toBe(true);
+  });
+
   it('refuses a builder who neither owns nor was granted an agent', async () => {
     const { runtime } = runtimeOf([first, second]);
     expect(await runtime.canRunAll(memberIn(WORKSPACE, 'builder'), [first.id])).toBe(false);
+  });
+
+  it('lets any member consent to a client that binds no agent (membership consent)', async () => {
+    const { runtime } = runtimeOf([]);
+    for (const role of ['owner', 'admin', 'builder', 'viewer'] as const) {
+      expect(await runtime.canRunAll(memberIn(WORKSPACE, role), []), role).toBe(true);
+    }
   });
 
   it('refuses an agent that does not exist', async () => {

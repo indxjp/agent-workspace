@@ -61,6 +61,7 @@
     ]},
     { label: "Administration", items: [
       { id: "models",   label: "Models",       href: "models.html",   icon: "models" },
+      { id: "storage",  label: "Storage",      href: "storage.html",  icon: "folder" },
       { id: "users",    label: "Users",        href: "users.html",    icon: "users" },
       { id: "apikeys",  label: "API Keys",     href: "api-keys.html", icon: "keys" },
       { id: "runtimes", label: "Runtimes",     href: "runtimes.html", icon: "runtimes" },

@@ -162,9 +162,15 @@ describe('openapiTool', () => {
     ]);
   });
 
-  it('refuses a write rule at its index', () => {
-    expect(pathsOf(() => openapiTool({ ...ORDERS, allow: ['POST /x'] }))).toStrictEqual([
-      'allow.0',
+  it('accepts write rules and freezes them as written', () => {
+    const tool = openapiTool({ ...ORDERS, allow: ['POST /x', 'DELETE /x/*'] });
+
+    expect(tool.allow).toStrictEqual(['POST /x', 'DELETE /x/*']);
+  });
+
+  it('still refuses a lower-case method or a bad rule at its index', () => {
+    expect(pathsOf(() => openapiTool({ ...ORDERS, allow: ['GET /x', 'post /x'] }))).toStrictEqual([
+      'allow.1',
     ]);
   });
 
@@ -212,6 +218,19 @@ describe('openapiTool', () => {
     expect(openapiTool({ ...ORDERS, auth: { secret: 'ORDERS_TOKEN' } }).auth).toStrictEqual({
       secret: 'ORDERS_TOKEN',
     });
+  });
+
+  it('carries an identity secret reference into the definition, and refuses a literal (ADR-0142)', () => {
+    const tool = openapiTool({ ...ORDERS, identity: secret('ORDERS_IDENTITY_KEY') });
+    expect(tool.identity).toStrictEqual({ secret: 'ORDERS_IDENTITY_KEY' });
+    const [definition] = toolDefinitionsOf(
+      defineAgent({ name: 'assistant', instructions: 'x', tools: [tool] }),
+    );
+    expect(definition).toMatchObject({ identity: { secret: 'ORDERS_IDENTITY_KEY' } });
+    expect(Object.isFrozen(definition?.kind === 'openapi' ? definition.identity : null)).toBe(true);
+    const issues = issuesOf(callUntyped(openapiTool, { ...ORDERS, identity: 'hmac-key-value' }));
+    expect(issues.map((issue) => issue.path)).toStrictEqual(['identity']);
+    expect(JSON.stringify(issues)).not.toContain('hmac-key-value');
   });
 
   it('refuses a header that cannot carry a credential, and a bad base URL', () => {

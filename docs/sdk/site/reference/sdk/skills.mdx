@@ -7,7 +7,7 @@ description: "Every method of SkillsClient, its parameters, return type, and rou
 
 `/api/skills/**` — spec §5.7. A skill is the Claude Agent SDK's native directory (`SKILL.md`
 plus supporting files), addressed by its slug name; file bytes travel as base64 inside JSON
-bodies in both directions. Every response is `{ skill }`-wrapped and unwrapped here.
+bodies, except an import, which sends them as `multipart/form-data` with no base64. Every response is `{ skill }`-wrapped and unwrapped here.
 
 ## list
 
@@ -27,18 +27,24 @@ async list(options?: RequestOptions): Promise<readonly SkillDetail[]>
 
 ## import
 
-Create a skill from a `SKILL.md`, or import a whole directory. `400 invalid_name` for a name
+Create a skill from a `SKILL.md`, or import a whole directory, as `multipart/form-data`: one
+part per file, its filename the relative path (`SKILL.md` is sent first), so no file is
+base64-encoded and the import may use the whole 16 MiB request ceiling. The JSON body with
+`contentBase64` is deprecated: the server still takes it, and answers with a `Deprecation`
+header. A file given as `contentBase64` here is deprecated too: it is decoded and sent as
+multipart all the same, logs one warning per process, and is removed in the next major
+release. `400 invalid_name` for a name
 outside the slug grammar, `400 missing_skill_md` when no entry is `SKILL.md`,
 `400 inadmissible_path` for a path outside the server's grammar, `409 skill_already_exists`
 when the name is taken, `409 colliding_paths` for two paths that differ only by letter case.
 
 ```ts
-async import(input: ImportSkillInput, options?: RequestOptions): Promise<SkillDetail>
+async import(input: SkillImportInput, options?: RequestOptions): Promise<SkillDetail>
 ```
 
 | Name | Type | Required |
 | --- | --- | --- |
-| `input` | `ImportSkillInput` | Yes |
+| `input` | `SkillImportInput` | Yes |
 | `options` | `RequestOptions` | No |
 
 **Returns:** `Promise<SkillDetail>`
@@ -100,6 +106,27 @@ async update(name: string, patch: UpdateSkillPatch, options?: RequestOptions): P
 
 **Route:** `PATCH /api/skills/:name`
 
+## publish
+
+Replace the skill's current files with `files` and freeze them as the next numbered revision
+(1, 2, 3 …), which an agent can then pin and which never changes. `files` is a whole directory,
+as `import` takes, including `SKILL.md`. `404 skill_not_found` for a skill the workspace does
+not hold; the `400`s `import` answers for a bad directory.
+
+```ts
+async publish(name: string, input: PublishSkillRevisionRequest, options?: RequestOptions): Promise<SkillRevision>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `name` | `string` | Yes |
+| `input` | `PublishSkillRevisionRequest` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<SkillRevision>`
+
+**Route:** `POST /api/skills/:name/revisions`
+
 ## remove
 
 Delete a skill: its catalog row, its files and its record. `409 skill_in_use` while any agent
@@ -119,3 +146,28 @@ async remove(name: string, options?: RequestOptions): Promise<void>
 **Returns:** `Promise<void>`
 
 **Route:** `DELETE /api/skills/:name`
+
+## SkillImportBody
+
+What one imported file's bytes may be given as.
+
+- `string`
+- `Blob`
+- `Uint8Array<ArrayBuffer>`
+
+## SkillImportFile
+
+One file of an import: its bytes as `body` (sent as they are, a `string` as UTF-8), or, deprecated
+and removed in the next major release, as `contentBase64`, which is decoded and sent as bytes too.
+
+- `{ readonly path: string; readonly body: SkillImportBody; }`
+- `{ readonly path: string; readonly contentBase64: string; }`
+
+## SkillImportInput
+
+The input of `SkillsClient.import`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `files` | `readonly ({ readonly path: string; readonly body: SkillImportBody; } \| { readonly path: string; readonly contentBase64: string; })[]` | Yes |  |

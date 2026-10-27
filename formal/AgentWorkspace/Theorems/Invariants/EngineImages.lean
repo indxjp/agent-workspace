@@ -135,19 +135,19 @@ theorem route_refuses_before_a_run_row (images : EngineImageMap) (runs : List St
 example :
     create .docker [("claude-agent-sdk", "runtime-claude"), ("pi", "runtime-pi")] {} "s1" "pi" =
       (.created "runtime-pi", { created := [("s1", "runtime-pi")] }) := by
-  decide
+  decide +kernel
 
 /-- Witness: a map lacking `pi` refuses a pi run and creates nothing. -/
 example :
     create .kubernetes [("claude-agent-sdk", "runtime-claude")] {} "s1" "pi" =
       (.refused "engine_not_installed", {}) := by
-  decide
+  decide +kernel
 
 /-- Witness: a map lacking `pi` answers a pi run `422` and writes no run row. -/
 example :
     startRun [("claude-agent-sdk", "runtime-claude")] ["r0"] "r1" "pi" =
       .refused 422 "engine_not_installed" ["r0"] := by
-  decide
+  decide +kernel
 
 /-- Witness: a Claude pool starts a Claude session and refuses a pi one. -/
 example :
@@ -155,7 +155,7 @@ example :
         (.created "runtime-claude", { created := [("s1", "runtime-claude")] }) ∧
       createInPool "claude-agent-sdk" "runtime-claude" {} "s2" "pi" =
         (.refused "engine_not_installed", {}) := by
-  decide
+  decide +kernel
 
 /-- Witness for the label hypothesis: a label function under which a two-engine map is honest. -/
 example :
@@ -163,6 +163,6 @@ example :
       [("claude-agent-sdk", "runtime-claude"), ("pi", "runtime-pi")] := by
   intro engine image h
   simp only [List.mem_cons, Prod.mk.injEq, List.not_mem_nil, or_false] at h
-  rcases h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide
+  rcases h with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.EngineImages

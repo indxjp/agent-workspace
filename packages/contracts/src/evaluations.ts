@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { AGENT_VERSION_NUMBER_MAX } from './agent-versions.js';
 import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
+import { outputSchemaViolation } from './runs.js';
 
 /**
  * The most cases one evaluation runs (issue #618). The server runs them one after another inside a
@@ -20,6 +21,12 @@ export const EVALUATION_RUN_CASE_LIMIT = 200;
 /** The longest `toolInput`, as JSON text, in characters. */
 export const EVALUATION_TOOL_INPUT_MAX_LENGTH = 2048;
 
+/** The longest `expect.output`, as JSON text, in characters. */
+export const EVALUATION_OUTPUT_MAX_LENGTH = 2048;
+
+/** The longest case `outputSchema`, as JSON text, in characters (inside ADR-0143's own limit). */
+export const EVALUATION_OUTPUT_SCHEMA_MAX_LENGTH = 4096;
+
 /** The longest case input, in characters: the prompt the case's run is started with. */
 export const EVALUATION_INPUT_MAX_LENGTH = 8192;
 
@@ -36,6 +43,11 @@ const nonBlank = (max: number) =>
     .max(max)
     .refine((value) => value.trim().length > 0, { message: 'must not be blank' });
 
+const jsonObject = (max: number) =>
+  z.record(z.string(), z.unknown()).refine((value) => JSON.stringify(value).length <= max, {
+    message: `must be at most ${String(max)} characters as JSON`,
+  });
+
 const NeedlesSchema = z
   .array(nonBlank(EVALUATION_NEEDLE_MAX_LENGTH))
   .min(1)
@@ -43,50 +55,89 @@ const NeedlesSchema = z
   .readonly();
 
 /**
- * What a case's answer must satisfy (issue #618). Four checks and nothing else: `contains` and
+ * What a case's answer must satisfy (issue #618). Six checks and nothing else: `contains` and
  * `notContains` are case-sensitive substrings of the final answer, `tool` is the exact name of a
- * tool the run called, and `judge` is a rubric a model grades the answer against. At least one.
+ * tool the run called, `output` is a part of the run's structured output, `judge` is a rubric a
+ * model grades the answer against, and `awaitsApproval` says the run must stop at an approval
+ * pause. At least one.
+ *
+ * `awaitsApproval` (issue #1569, ADR-0145) is `true` or absent. With it, a run that ends at
+ * `awaiting_approval` passes the status check instead of failing `run_awaiting_approval`, and the
+ * other checks run against what the run did up to the pause: `tool` and `toolInput` also match the
+ * paused call, and `contains`, `notContains` and `judge` read the answer so far. A run that
+ * completes without pausing fails `run_not_awaiting_approval`. The evaluation never approves: it
+ * cancels the paused run after scoring. It is refused with `output`, since a paused run has no
+ * structured output yet.
  *
  * `toolInput` (issue #799) narrows `tool`: some call to that tool must pass every key listed here
  * with an equal value (a subset match; keys the call also passes are ignored). It needs `tool`.
+ *
+ * `output` (issue #1289) is matched the same way against `RunResource.output.structured`: every key
+ * listed must be present with an equal value, extra keys are ignored, arrays must be equal and in
+ * order. The case needs an `outputSchema`, so its run has a structured output to match.
  */
 export const EvalExpectSchema = z
   .object({
     contains: NeedlesSchema.optional(),
     notContains: NeedlesSchema.optional(),
     tool: nonBlank(256).optional(),
-    toolInput: z
-      .record(z.string(), z.unknown())
-      .refine((input) => JSON.stringify(input).length <= EVALUATION_TOOL_INPUT_MAX_LENGTH, {
-        message: `must be at most ${String(EVALUATION_TOOL_INPUT_MAX_LENGTH)} characters as JSON`,
-      })
-      .optional(),
+    toolInput: jsonObject(EVALUATION_TOOL_INPUT_MAX_LENGTH).optional(),
+    output: jsonObject(EVALUATION_OUTPUT_MAX_LENGTH).optional(),
     judge: nonBlank(EVALUATION_RUBRIC_MAX_LENGTH).optional(),
+    awaitsApproval: z.literal(true).optional(),
   })
   .strict()
   .refine((expect) => Object.keys(expect).length > 0, {
-    message: 'expect must name at least one of contains, notContains, tool or judge',
+    message:
+      'expect must name at least one of contains, notContains, tool, output, judge or awaitsApproval',
   })
   .refine((expect) => expect.toolInput === undefined || expect.tool !== undefined, {
     path: ['toolInput'],
     message: 'toolInput needs tool: the tool whose call it matches',
+  })
+  .refine((expect) => expect.awaitsApproval === undefined || expect.output === undefined, {
+    path: ['awaitsApproval'],
+    message:
+      'awaitsApproval cannot be combined with output: a paused run has no structured output yet',
   })
   .readonly();
 export type EvalExpect = z.infer<typeof EvalExpectSchema>;
 
 /**
  * One case: a name, the input its run is started with, and what the answer must satisfy.
- * `fromRun` names the rated run the case was made from (`aw eval add-case`, issue #620); it is
- * kept for traceability and never scored.
+ * `outputSchema` (issue #1289) is the JSON Schema the case's run answers with (ADR-0143); it must
+ * satisfy `outputSchemaViolation`, and an engine that cannot honour it refuses the case with
+ * `engine_capability_unsupported`. `expect.output` needs it. `fromRun` names the rated run the
+ * case was made from (`aw eval add-case`, issue #620); it is kept for traceability and never
+ * scored. `tags` are labels such as `injection`, never scored; a gate over a report reads them
+ * (the Builder's, issue #1848).
  */
 export const EvalCaseSchema = z
   .object({
     name: nonBlank(200),
     input: nonBlank(EVALUATION_INPUT_MAX_LENGTH),
     expect: EvalExpectSchema,
+    outputSchema: jsonObject(EVALUATION_OUTPUT_SCHEMA_MAX_LENGTH)
+      .superRefine((schema, context) => {
+        const found = outputSchemaViolation(schema);
+        if (found !== null) context.addIssue({ code: 'custom', message: found.message });
+      })
+      .optional(),
     fromRun: UuidSchema.optional(),
+    tags: z
+      .array(z.string().regex(/^[a-z][a-z0-9-]{0,31}$/))
+      .max(8)
+      .readonly()
+      .optional(),
   })
   .strict()
+  .refine(
+    (evalCase) => evalCase.expect.output === undefined || evalCase.outputSchema !== undefined,
+    {
+      path: ['expect', 'output'],
+      message: "output needs outputSchema: the schema the case's run answers with",
+    },
+  )
   .readonly();
 export type EvalCase = z.infer<typeof EvalCaseSchema>;
 
@@ -153,11 +204,12 @@ export type AdvanceEvaluationRunRequest = z.infer<typeof AdvanceEvaluationRunReq
 /**
  * The machine-readable case failures the server mints itself (issue #618): the case ran out of
  * the request's deadline, its run's stream could not be read, or its judge could not be reached or
- * read.
+ * read, or a case that expects an approval pause (issue #1569) ended without one.
  */
 export const EVALUATION_CASE_FAILURE_CODES = [
   'deadline_exceeded',
   'run_stream_failed',
+  'run_not_awaiting_approval',
   'judge_unavailable',
   'judge_unparseable',
 ] as const;
@@ -168,10 +220,11 @@ export type EvaluationCaseFailureCode = (typeof EVALUATION_CASE_FAILURE_CODES)[n
  * start was refused, or the deadline had passed). `failures` is empty exactly when `passed`.
  *
  * A failure is one of {@link EVALUATION_CASE_FAILURE_CODES}; `run_<status>` for a run that ended
- * other than `completed` (`run_failed`, `run_cancelled`, …); the code a failed run's error carries,
- * when it carries one (`model_credential_rejected`, …), in place of `run_failed`; a refused start's
- * problem code, verbatim (`model_unavailable`, …); or a sentence: `contains: …`, `notContains: …`,
- * `tool: …` or `judge: <the judge's reason>`.
+ * other than `completed` (`run_failed`, `run_cancelled`, `run_awaiting_approval`, …); the code a
+ * failed run's error carries, when it carries one (`model_credential_rejected`, …), in place of
+ * `run_failed`; a refused start's problem code, verbatim (`model_unavailable`, …); or a sentence:
+ * `contains: …`, `notContains: …`, `tool: …`, `toolInput: …`, `output: …` or
+ * `judge: <the judge's reason>`.
  */
 export const EvaluationCaseResultSchema = z
   .object({

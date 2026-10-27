@@ -104,7 +104,7 @@ async function main(): Promise<void> {
 
   const created = await aw.skills.import({
     name: 'release-notes',
-    files: [{ path: 'SKILL.md', contentBase64: Buffer.from(skillMd, 'utf8').toString('base64') }],
+    files: [{ path: 'SKILL.md', body: skillMd }],
   });
   console.log(created.name, created.enabled, created.allowedTools);
 
@@ -135,8 +135,13 @@ no two paths that are equal once letter case is folded.
   matches `[A-Za-z0-9][A-Za-z0-9._-]*`, none ending in `.` or a space, none `.` or `..` — and the
   whole path is at most `SKILL_FILE_PATH_MAX_BYTES`, 4096 UTF-8 bytes. Anything outside that
   grammar is `400 inadmissible_path`.
-- **Content encoding:** `contentBase64` must be standard, padded base64 (an empty file is `""`); a
-  value outside that alphabet is `400 malformed_content` rather than being decoded leniently.
+- **Content encoding:** `import` sends every file's bytes as `multipart/form-data`, with no base64.
+  `update`, `publish` and `export` carry `contentBase64`, which must be standard, padded base64
+  (an empty file is `""`); a value outside that alphabet is `400 malformed_content` rather than
+  being decoded leniently.
+- **Deprecated:** the JSON body of `POST /api/skills`, and `contentBase64` on `import`, still work
+  — the server answers a JSON import with a `Deprecation` header, and the SDK logs one warning per
+  process — and are removed in the next major release. Pass each file as `body` instead.
 
 </Accordion>
 </AccordionGroup>
@@ -167,7 +172,8 @@ assigned is removed the same way, by diffing against the manifest left by the pr
 (`removeRevoked`, same file). None of this is something you write to yourself.
 
 `loadSkills` in `apps/web/server/compose/resource-loader.ts` skips an assigned skill whose own
-`enabled` is `false`, so it is never materialized. A skill that is not in the agent's `skillIds` is
+`enabled` is `false`, so it is never materialized, and reads a pinned skill from its revision's
+frozen files instead of its current ones. A skill that is not in the agent's `skillIds` is
 never looked up. Neither case surfaces as an error to the caller starting the run.
 
 </Accordion>
@@ -247,16 +253,42 @@ case-only rename as two requests. `removeFiles` may never name `SKILL.md`, and a
 ### Naming and versions
 
 A skill's `name` is a lower-case slug — `^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$`, 1–64 characters,
-unique in the workspace — and the only handle every route uses. There is no version field: to keep an
-older revision while you test a new one, use two names, such as `release-notes` and
-`release-notes-v2`.
+unique in the workspace — and the only handle every route uses.
 
-<Note>
-  **Today:** a skill is one mutable directory addressed by `name`; `update` patches it in place and
-  every assigning agent sees the change on its next run. **Target:** immutable revisions —
-  `skills.publish(name, {files})` creates one, and an assignment pins `latest` or a specific number.
-  Tracked as [N-1](/concepts/roadmap#n-1-skill-revisions).
-</Note>
+### Revisions
+
+A skill's current files are mutable: `update` patches them in place, and an agent that does not pin a
+revision loads them on its next run (`latest`). To freeze a state, publish it:
+
+```ts title="illustrative" claim="illustrative"
+const revision = await aw.skills.publish('release-notes', { files }); // { number: 1, fileCount, publishedAt }
+```
+
+`aw skills publish <name> <dir>` does the same from a directory. `files` is a whole directory, as
+`import` takes — `SKILL.md` included — and publishing replaces the skill's current files with it
+before freezing it as the next number (1, 2, 3 …). A revision's bytes are written once and never
+change; `aw.skills.get(name).revisions` lists them, newest first. Deleting the skill deletes its
+revisions, and an agent that still assigns the skill keeps it from being deleted.
+
+An agent pins a revision in `skillRevisions` (skill id → number) next to `skillIds`, and a pin can
+only name an assigned skill. A pinned agent loads exactly that revision; a skill without a pin loads
+its current files. A pin that names a revision the skill does not have is refused with
+`422 agent_definition_references_missing`. `agents.export` writes pins by skill name
+(`resources.skillRevisions`) and `agents.import` resolves them in the destination workspace.
+
+In `defineAgent`, pin with the `revision` option of `skill`:
+
+```ts title="illustrative" claim="illustrative"
+skills: [skill('release-notes', { revision: 3 })],
+```
+
+The pin lands in the saved version's `resources.skillRevisions`, and a skill without the option
+follows `latest` and adds no key. Publish the revision before you push the agent: `aw skills publish`
+first, then `aw push`, because a pin on a revision that is not there yet is refused. Publishing
+replaces an existing skill's files, so a skill the workspace does not have yet is `aw skills import`ed
+first (`404 skill_not_found` otherwise). Every run
+reports the agent version it executed as `agentVersion`; read that version with
+`aw.agents.versions.list(agentId)` to see which revisions it pinned.
 
 ## See also
 

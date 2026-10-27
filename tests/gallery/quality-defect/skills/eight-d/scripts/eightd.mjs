@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /* global process */ // The root ESLint config declares no environment globals.
 // Parse and check an 8D report draft written in the eight-d skill's Markdown format, with Node
-// alone. The agent runs it on its own draft before answering; the backend imports the same
-// functions (typed by eightd.d.mts) and runs them again on the answer, so the format has one
-// definition.
+// alone. The agent runs it on its own draft before answering. The backend imports `checkEightD`
+// (typed by eightd.d.mts) and runs it on the structure the run returns, so the checks have one
+// definition; `parseEightD` is the same checks after reading the Markdown.
 //
 //   node eightd.mjs <draft.md>        → JSON on stdout; exit 1 when not valid
 //   node eightd.mjs --text <draft>    the draft itself as the argument (run_skill_script has no stdin)
@@ -67,8 +67,76 @@ function fourMOf(lines) {
 }
 
 /**
+ * Check a draft's structure: its title, the D1–D8 sections, the D4 なぜなぜ chain, the D4 claims
+ * (each なぜ, bullet and the 根本原因 line), the root cause, the 原因区分 and the quoted 4M counts.
+ * Pure: the same structure gives the same result. The structure comes from `parseEightD` or, in the
+ * backend, from a run's structured output.
+ */
+export function checkEightD(draft) {
+  const { sections, whys, claims, rootCause } = draft;
+  const issues = [];
+  const seen = sections.map((section) => section.id);
+  for (const id of DISCIPLINES) {
+    const count = seen.filter((value) => value === id).length;
+    if (count === 0) issues.push({ code: 'missing_section', section: id, message: `${id} がない` });
+    if (count > 1) issues.push({ code: 'duplicate_section', section: id, message: `${id} が重複` });
+  }
+  const order = seen.filter((id, index) => seen.indexOf(id) === index);
+  if (order.join() !== DISCIPLINES.filter((id) => order.includes(id)).join()) {
+    issues.push({ code: 'section_order', section: null, message: 'D1〜D8 の順序が違う' });
+  }
+
+  const d4 = sections.find((section) => section.id === 'D4');
+  if (d4 !== undefined && whys.length < MIN_WHYS) {
+    issues.push({
+      code: 'shallow_whys',
+      section: 'D4',
+      message: `なぜなぜが ${String(whys.length)} 段（${String(MIN_WHYS)} 段以上必要）`,
+    });
+  }
+  if (whys.some((why, index) => why.depth !== index + 1)) {
+    issues.push({
+      code: 'whys_out_of_order',
+      section: 'D4',
+      message: 'なぜの番号が 1 から連番でない',
+    });
+  }
+  if (d4 !== undefined && rootCause === null) {
+    issues.push({ code: 'missing_root_cause', section: 'D4', message: '根本原因の行がない' });
+  }
+  // A structure from a run need not repeat each なぜ and the 根本原因 in `claims`, so they are checked
+  // too, unless an uncited claim containing the same text is already reported (as parseEightD's are).
+  const uncited = claims.filter((claim) => claim.cites.length === 0);
+  const reported = (text) => uncited.some((claim) => claim.text.includes(text));
+  const unclaimed = [...whys, ...(rootCause === null ? [] : [rootCause])].filter(
+    (claim) => claim.cites.length === 0 && !reported(claim.text),
+  );
+  for (const claim of [...uncited, ...unclaimed]) {
+    issues.push({
+      code: 'uncited_claim',
+      section: 'D4',
+      message: `出典〔過去トラ Q-xxxx〕がない: ${claim.text}`,
+    });
+  }
+
+  return {
+    ...draft,
+    // Every place a case can be cited, the section prose included, so no field hides a Q-number.
+    cites: unique([
+      ...sections.flatMap((section) => [...section.cites, ...citedCases(section.body)]),
+      ...whys.flatMap((why) => why.cites),
+      ...claims.flatMap((claim) => claim.cites),
+      ...(rootCause?.cites ?? []),
+    ]),
+    issues,
+    valid: issues.length === 0,
+  };
+}
+
+/**
  * Parse `markdown` into its title, the D1–D8 sections, the D4 なぜなぜ chain and root-cause claims,
- * the 原因区分 and the quoted 4M counts, and check it. Pure: the same text gives the same result.
+ * the 原因区分 and the quoted 4M counts, and check it with `checkEightD`.
+ * Pure: the same text gives the same result.
  */
 export function parseEightD(markdown) {
   const lines = markdown.replace(/\r\n?/gu, '\n').split('\n');
@@ -95,20 +163,7 @@ export function parseEightD(markdown) {
     if (current !== null && line !== '') current.lines.push(line);
   }
 
-  const issues = [];
-  const seen = sections.map((section) => section.id);
-  for (const id of DISCIPLINES) {
-    const count = seen.filter((value) => value === id).length;
-    if (count === 0) issues.push({ code: 'missing_section', section: id, message: `${id} がない` });
-    if (count > 1) issues.push({ code: 'duplicate_section', section: id, message: `${id} が重複` });
-  }
-  const order = seen.filter((id, index) => seen.indexOf(id) === index);
-  if (order.join() !== DISCIPLINES.filter((id) => order.includes(id)).join()) {
-    issues.push({ code: 'section_order', section: null, message: 'D1〜D8 の順序が違う' });
-  }
-
-  const d4 = sections.find((section) => section.id === 'D4');
-  const d4Lines = d4?.lines ?? [];
+  const d4Lines = sections.find((section) => section.id === 'D4')?.lines ?? [];
   const whys = [];
   const claims = [];
   let rootCause = null;
@@ -129,43 +184,16 @@ export function parseEightD(markdown) {
         cites: citedCases(line),
       };
       whys.push(entry);
-      claims.push({ kind: 'why', text: line, cites: entry.cites });
+      claims.push({ text: line, cites: entry.cites });
     } else if (root !== null) {
       rootCause = { text: (root[1] ?? '').trim(), cites: citedCases(line) };
-      claims.push({ kind: 'root', text: line, cites: rootCause.cites });
+      claims.push({ text: line, cites: rootCause.cites });
     } else if (BULLET.test(line)) {
-      claims.push({ kind: 'bullet', text: line, cites: citedCases(line) });
+      claims.push({ text: line, cites: citedCases(line) });
     }
   }
 
-  if (d4 !== undefined && whys.length < MIN_WHYS) {
-    issues.push({
-      code: 'shallow_whys',
-      section: 'D4',
-      message: `なぜなぜが ${String(whys.length)} 段（${String(MIN_WHYS)} 段以上必要）`,
-    });
-  }
-  if (whys.some((why, index) => why.depth !== index + 1)) {
-    issues.push({
-      code: 'whys_out_of_order',
-      section: 'D4',
-      message: 'なぜの番号が 1 から連番でない',
-    });
-  }
-  if (d4 !== undefined && rootCause === null) {
-    issues.push({ code: 'missing_root_cause', section: 'D4', message: '根本原因の行がない' });
-  }
-  for (const claim of claims) {
-    if (claim.cites.length === 0) {
-      issues.push({
-        code: 'uncited_claim',
-        section: 'D4',
-        message: `出典〔過去トラ Q-xxxx〕がない: ${claim.text}`,
-      });
-    }
-  }
-
-  return {
+  return checkEightD({
     title,
     sections: sections.map(({ lines: body, ...section }) => ({
       ...section,
@@ -173,13 +201,11 @@ export function parseEightD(markdown) {
       cites: unique(body.flatMap(citedCases)),
     })),
     whys,
+    claims,
     rootCause,
     causeCode,
     fourM: fourMOf(d4Lines),
-    cites: unique(sections.flatMap((section) => section.lines.flatMap(citedCases))),
-    issues,
-    valid: issues.length === 0,
-  };
+  });
 }
 
 // ---------- command line ----------

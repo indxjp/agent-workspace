@@ -1,3 +1,4 @@
+import { log as webLogger } from '../telemetry/logger';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -10,6 +11,7 @@ import {
   renderEventData,
   RESERVED_EVENT_NAMES,
   RUN_STATUS_EVENT,
+  RUN_WARNING_EVENT,
   sseComment,
   sseControlFrame,
   sseFrame,
@@ -147,6 +149,14 @@ describe('classifyEventName', () => {
     // into a run's durable log before this was reserved.
     expect(PLATFORM_EVENT_NAMES).toContain(RUN_STATUS_EVENT);
     expect(classifyEventName(RUN_STATUS_EVENT).kind).toBe('reserved');
+  });
+
+  it('reserves run.warning for the platform path (ADR-0146): a relayed event cannot forge it', () => {
+    expect(classifyEventName(RUN_WARNING_EVENT).kind).toBe('reserved');
+    expect(classifyPlatformEventName(RUN_WARNING_EVENT)).toEqual({
+      kind: 'ok',
+      name: RUN_WARNING_EVENT,
+    });
   });
 
   it('admits a platform name only because it is one, and rejects everything else', () => {
@@ -308,7 +318,7 @@ describe('sseStreamResponse', () => {
   });
 
   it('turns a mid-stream failure into a 200 with a run-failed frame, never a non-200', async () => {
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
     const controller = new AbortController();
     const response = sseStreamResponse({
       source: sourceThenThrow(new Error('the runtime vanished SECRET_SENTINEL'), {
@@ -328,7 +338,7 @@ describe('sseStreamResponse', () => {
       'event: run-failed\ndata: {"status":"unknown","message":"The event stream ended unexpectedly."}',
     );
     expect(text).not.toContain('SECRET_SENTINEL');
-    expect((log.mock.calls[0]?.[1] as Error | undefined)?.cause).toEqual(
+    expect((log.mock.calls[0]?.[1] as { error: Error } | undefined)?.error.cause).toEqual(
       new Error('the runtime vanished SECRET_SENTINEL'),
     );
     // No `done` either — telling the client to stop reconnecting would be that same assertion.

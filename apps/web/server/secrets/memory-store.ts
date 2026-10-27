@@ -34,7 +34,8 @@ import type {
 
 /**
  * `referrersOf` stands in for the references the PostgreSQL repository finds in `mcp_servers` and
- * `model_connections`: a test declares which secrets are in use, and `delete` refuses them.
+ * `model_connections`: a test declares which secrets are in use, and `delete` refuses them. `replace`
+ * refuses only a storage connection's credential, as the PostgreSQL store does.
  */
 export function createInMemorySecretsStoreProvider(
   referrersOf: (workspaceId: string, secretId: string) => SecretReferrers | null = () => null,
@@ -80,8 +81,13 @@ export function createInMemorySecretsStoreProvider(
         create(input: CreateSecretInput): Promise<CreateSecretOutcome> {
           return scope().then((resolved) => service.create(resolved, input));
         },
-        replace(id: string, value: Buffer): Promise<ReplaceSecretOutcome> {
-          return scope().then((resolved) => service.replace(resolved, id, value));
+        async replace(id: string, value: Buffer): Promise<ReplaceSecretOutcome> {
+          const resolved = await scope();
+          const referrers = referrersOf(workspaceId, id);
+          if (referrers !== null && referrers.storageConnectionIds.length > 0) {
+            return { kind: 'in-use', referrers };
+          }
+          return service.replace(resolved, id, value);
         },
         async remove(id: string): Promise<DeleteSecretOutcome> {
           const resolved = await scope();

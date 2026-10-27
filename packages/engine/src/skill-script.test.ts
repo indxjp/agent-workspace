@@ -136,7 +136,7 @@ describe('skillScriptSetup: when the tool is offered', () => {
       cwd: '/work',
       skillsDirectory: '.engine-config/skills',
       skills: [{ name: 'review', scripts: ['check.mjs'] }],
-      writable: ['drafts'],
+      writable: ['drafts', 'outputs'],
     });
   });
 
@@ -212,6 +212,42 @@ describe('skillScriptSetup: when the tool is offered', () => {
   it('names no writable path unless writeFiles is on, and never a read-only grant', () => {
     expect(skillScriptSetup(request({ writeFiles: false }), CONFIG)?.writable).toEqual([]);
     expect(skillScriptSetup(request(), CONFIG)?.writable).not.toContain('contracts');
+  });
+
+  it('lets a writeFiles agent write outputs/, where the run collects its files', () => {
+    expect(skillScriptSetup(request(), CONFIG)?.writable).toContain('outputs');
+    expect(skillScriptSetup(request({ writeFiles: false }), CONFIG)?.writable).not.toContain(
+      'outputs',
+    );
+  });
+
+  it.each(['outputs', 'outputs/reference', './outputs/x/'])(
+    'does not name outputs/ when the read-only grant %s is outputs or lies under it',
+    (path) => {
+      const writable = skillScriptSetup(
+        request({ files: [{ kind: 'directory', path, access: 'read' }] }),
+        CONFIG,
+      )?.writable;
+      expect(writable).toEqual([]);
+    },
+  );
+
+  it('compares outputs/ with a read-only grant by segment, not by prefix', () => {
+    expect(
+      skillScriptSetup(
+        request({ files: [{ kind: 'directory', path: 'outputs-archive', access: 'read' }] }),
+        CONFIG,
+      )?.writable,
+    ).toEqual(['outputs']);
+  });
+
+  it('does not name outputs/ when a grant does not normalise', () => {
+    expect(
+      skillScriptSetup(
+        request({ files: [{ kind: 'directory', path: '/etc', access: 'read-write' }] }),
+        CONFIG,
+      )?.writable,
+    ).toEqual([]);
   });
 });
 

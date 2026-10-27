@@ -301,6 +301,7 @@ Value: `64`
 | `url` | `string` | Yes |  |
 | `transport` | `undefined \| "http" \| "sse"` | No |  |
 | `auth` | `undefined \| Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }>` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1); the server reads the named secret at run compose. |
 
 ## ProjectConnectorAuthScheme
 
@@ -320,6 +321,7 @@ only remote connectors.
 | `url` | `string` | Yes |  |
 | `transport` | `undefined \| "http" \| "sse"` | No |  |
 | `auth` | `undefined \| Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }>` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1); the server reads the named secret at run compose. |
 
 ## ProjectConnectorTransport
 
@@ -343,7 +345,7 @@ only remote connectors.
 | `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>` | Yes |  |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
 | `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
-| `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; }>>>` | No |  |
+| `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | No |  |
 | `policy` | `undefined \| PlatformOptions` | No |  |
 | `platforms` | `undefined \| ProjectPlatforms` | No |  |
 
@@ -375,7 +377,7 @@ reads it.
 | `environments` | `Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>` | Yes |  |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No |  |
 | `models` | `undefined \| Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>>` | No |  |
-| `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; }>>>` | No |  |
+| `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | No |  |
 | `policy` | `undefined \| PlatformOptions` | No |  |
 | `platforms` | `undefined \| ProjectPlatforms` | No |  |
 

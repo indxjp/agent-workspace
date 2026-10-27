@@ -65,7 +65,7 @@ example :
       .ok { cwd := "/workspace", tools := [.read, .bash], networkEgress := false,
             connection := connectionFor "http://gw" "tok", model := "claude-sonnet-4-5",
             maxTurns := some 2, budgetCap := false, grants := [], skills := [] } := by
-    decide
+    decide +kernel
 
 /-! ## `beforeToolCall` blocks bash whenever `runCommands` is off -/
 
@@ -103,7 +103,7 @@ example :
       | .refused _ => true) = false ∧
       (match compile { base with permissions := { base.permissions with runCommands := true } } with
         | .ok c => guard c "bash" none
-        | .refused _ => false) = true := by decide
+        | .refused _ => false) = true := by decide +kernel
 
 /-! ## MCP is always refused -/
 
@@ -179,6 +179,6 @@ example :
       compile { base with gateway := some ("http://gw", "tok", "openai-responses") } =
         .refused (.capabilityUnsupported "wireProtocols") ∧
       compile { base with gateway := none } = .refused (.credentialRefused "gateway") := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.Pi

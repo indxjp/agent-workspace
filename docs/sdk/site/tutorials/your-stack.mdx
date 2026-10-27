@@ -15,21 +15,35 @@ an MCP server and a skill ([Tools from code](/guides/tools-from-code),
 [MCP servers](/building/mcp-servers), [Skills](/building/skills)), the ways into your frontend
 ([Embed an agent](/building/embedding)), and how to deploy ([Deploy](/guides/deploy)).
 
-**Time and prerequisites:** about 20 minutes. Node 24 or newer and a key for the model provider
-you pick, as in [chapter 1](/path/first-agent); Docker is not needed.
+**Time and prerequisites:** about 20 minutes, reading and hands-on together (part 7 also needs a
+server to deploy to). Finish [chapter 1](/path/first-agent) first: Node 24 or newer and a key for
+the model provider you pick. Docker is not needed.
 
 </Info>
 
-Agent Workspace does not ask you to adopt its agent model. You keep the parts you already chose:
-the agent framework, the model provider, your own APIs and database, your frontend, and the
-servers it all runs on. This tutorial builds one agent and changes each of those layers in turn,
-so you can see that each change touches one flag or one line.
+**Tutorial 0.** Agent Workspace does not ask you to adopt its agent model. You keep the parts you
+already chose: the agent framework, the model provider, your own APIs and database, your frontend,
+and the servers it all runs on. This tutorial builds one agent and changes each of those layers in
+turn, so you can see that each change touches one flag or one line.
 
-The interactive version of this page is the builder at the top of
-[lp.agentworkspace.indx.jp](https://lp.agentworkspace.indx.jp/#stack-cmd): click a chip and it
-prints the same commands and files as this page.
+## The result
 
-You need Node 24 or newer and a key for the model provider you pick. Docker is not needed.
+<Frame caption="Where you start: a generated agent answering on its try page (here the quickstart project, with a refund question). Each part below changes one layer under it.">
+  <img src="/images/quickstart/03-try-chat.png" alt="The try page of a generated project, with the agent answering a refund question" />
+</Frame>
+
+## How it works
+
+```mermaid
+flowchart TD
+  C["npm create with your flags"] --> P["agent-workspace.yaml<br/>models, connectors, environments"]
+  C --> A["agents/&lt;name&gt;.ts<br/>engine, tools, skills"]
+  A --> E["Engine: Claude Agent SDK, Mastra,<br/>OpenAI Agents SDK or pi"]
+  P --> M["Model: your provider or your own endpoint"]
+  A --> T["Tools and skills: your API, database,<br/>MCP servers, SKILL.md"]
+  C --> F["surfaces/main.ts: hosted page,<br/>widget, React or your backend"]
+  P --> I["Infrastructure: laptop, VM,<br/>Cloud Run, Kubernetes"]
+```
 
 ## The six layers
 
@@ -42,81 +56,102 @@ You need Node 24 or newer and a key for the model provider you pick. Docker is n
 | Frontend | The hosted chat page, a `<script>` widget, React `<Chat/>`, or your backend calling the API | `surfaces/main.ts`, then your own app |
 | Infrastructure | A laptop, a VM in your data centre, Google Cloud Run, your Kubernetes | `environments:` in `agent-workspace.yaml`, or the Helm chart |
 
-## 1. Create the project with your choices
+## Before you start
 
-Each setup question of the generator is also a flag. This one asks for an agent on Mastra that
-answers from your documents with an OpenAI model and can call your REST API:
+- [Chapter 1](/path/first-agent) done, or at least Node 24 or newer installed.
+- A key for the model provider you pick (the example uses OpenAI, as `OPENAI_API_KEY`).
+- Docker is not needed.
 
-```sh claim="run"
-npm create @indx-workspace@latest my-agent -- --yes \
-    --engine mastra \
-    --provider openai \
-    --theme knowledge \
-    --tools openapi \
-    --openapi https://erp.acme.internal/openapi.json
-```
+**Get the code.** There is nothing to download: the generator writes every file. The interactive
+version of this page is the builder at the top of
+[lp.agentworkspace.indx.jp](https://lp.agentworkspace.indx.jp/#stack-cmd): click a chip and it
+prints the same commands and files as this page.
 
-`--yes` takes the default for every question no flag answers and asks nothing, so a coding agent
-or CI can run it. Without `--yes`, on a terminal, the same questions are arrow-key menus. Run
-`npm create @indx-workspace@latest -- --help` for every flag and the values it accepts.
+## Build it
 
-The generator writes the project file, which holds no secret and is meant to be committed:
+<Steps>
+  <Step title="Part 1 · Create the project with your choices">
 
-```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
-apiVersion: agentworkspace.dev/v2
-kind: Project
-name: my-agent
-models:
-  default:
-    provider: openai
-    credential:
-      secret: OPENAI_API_KEY
-environments:
-  local:
-    cloud: local
-    identity:
-      bootstrapAdmin: admin@localhost.test
-```
+    Each setup question of the generator is also a flag. This one asks for an agent on Mastra that
+    answers from your documents with an OpenAI model and can call your REST API:
 
-It also writes the agent, as TypeScript:
+    ```sh claim="run"
+    npm create @indx-workspace@latest my-agent -- --yes \
+        --engine mastra \
+        --provider openai \
+        --theme knowledge \
+        --tools openapi \
+        --openapi https://erp.acme.internal/openapi.json
+    ```
 
-```ts title="agents/knowledge.ts (illustrative)" claim="illustrative"
-import { defineAgent, skill } from '@indx-workspace/sdk/define';
+    `--yes` takes the default for every question no flag answers and asks nothing, so a coding agent
+    or CI can run it. Without `--yes`, on a terminal, the same questions are arrow-key menus. Run
+    `npm create @indx-workspace@latest -- --help` for every flag and the values it accepts.
 
-import openapiTool from '../tools/openapi';
+    The generator writes the project file, which holds no secret and is meant to be committed:
 
-export default defineAgent({
-  name: 'knowledge',
-  instructions: 'You answer questions from the knowledge you have been given. ...',
-  engine: 'mastra',
-  model: 'default',
-  tools: [openapiTool],
-  skills: [skill('cite-sources')],
-});
-```
+    ```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+    apiVersion: agentworkspace.dev/v2
+    kind: Project
+    name: my-agent
+    models:
+      default:
+        provider: openai
+        credential:
+          secret: OPENAI_API_KEY
+    environments:
+      local:
+        cloud: local
+        identity:
+          bootstrapAdmin: admin@localhost.test
+    ```
 
-Beside them are `skills/cite-sources/SKILL.md`, `tools/openapi.ts`, `surfaces/main.ts` and an
-eval file. Every one of them is a plain file in your repository.
+    It also writes the agent, as TypeScript:
 
-## 2. Run it on your machine
+    ```ts title="agents/knowledge.ts (illustrative)" claim="illustrative"
+    import { defineAgent, skill } from '@indx-workspace/sdk/define';
 
-```sh title="illustrative" claim="illustrative"
-export OPENAI_API_KEY=...
-cd my-agent && npm run dev
-```
+    import openapiTool from '../tools/openapi';
 
-`npm run dev` runs `aw dev`: one Node process with an embedded PostgreSQL that serves the chat,
-the admin screens and the API on `http://127.0.0.1:3000`. The key stays in your shell; `aw dev`
-hands it to the model gateway, and the agent's own process only ever sees a token for one run.
-Talk to it with `npx aw chat -p "hi"`, or open the try URL the ready screen prints.
+    export default defineAgent({
+      name: 'knowledge',
+      instructions: 'You answer questions from the knowledge you have been given. ...',
+      engine: 'mastra',
+      model: 'default',
+      tools: [openapiTool],
+      skills: [skill('cite-sources')],
+    });
+    ```
 
-## 3. Change the engine
+    Beside them are `skills/cite-sources/SKILL.md`, `tools/openapi.ts`, `surfaces/main.ts` and an
+    eval file. Every one of them is a plain file in your repository.
 
-The engine is one line of the agent. Change `engine: 'mastra'` to `'claude-agent-sdk'`,
-`'openai-agents'` or `'pi'` and save; `aw dev` watches `agents/` and applies it. The skills,
-the limits and the permissions travel with the agent. What each engine can honour is fixed by
-its adapter, and an agent that asks for more is refused when it is saved rather than run
-without it:
+    **Check:** `my-agent/` holds `agent-workspace.yaml`, `agents/knowledge.ts`,
+    `skills/cite-sources/SKILL.md`, `tools/openapi.ts`, `surfaces/main.ts` and an eval file.
+
+  </Step>
+  <Step title="Part 2 · Run it on your machine">
+
+    ```sh title="illustrative" claim="illustrative"
+    export OPENAI_API_KEY=...
+    cd my-agent && npm run dev
+    ```
+
+    `npm run dev` runs `aw dev`: one Node process with an embedded PostgreSQL that serves the chat,
+    the admin screens and the API on `http://127.0.0.1:3000`. The key stays in your shell; `aw dev`
+    hands it to the model gateway, and the agent's own process only ever sees a token for one run.
+    Talk to it with `npx aw chat -p "hi"`, or open the try URL the ready screen prints.
+
+    **Check:** `npx aw chat -p "hi"` prints the agent's answer, and the try URL opens the chat.
+
+  </Step>
+  <Step title="Part 3 · Change the engine">
+
+    The engine is one line of the agent. Change `engine: 'mastra'` to `'claude-agent-sdk'`,
+    `'openai-agents'` or `'pi'` and save; `aw dev` watches `agents/` and applies it. The skills,
+    the limits and the permissions travel with the agent. What each engine can honour is fixed by
+    its adapter, and an agent that asks for more is refused when it is saved rather than run
+    without it:
 
 | | Claude Agent SDK | Mastra | OpenAI Agents SDK | pi |
 | --- | --- | --- | --- | --- |
@@ -126,89 +161,102 @@ without it:
 | Fork a session | — | — | — | ✓ |
 | Model dialects | Anthropic Messages | Anthropic Messages, OpenAI Responses, Chat Completions | OpenAI Responses, Chat Completions, Anthropic Messages | Anthropic Messages |
 
-So the agent above, which has a skill, cannot move to the OpenAI Agents SDK as it is. pi
-reaches any model connection through the gateway's Anthropic Messages ingress, which the gateway
-translates for an OpenAI-family connection. `npx aw engines list` prints the engines your deployment
-has installed. The table is generated from the adapters themselves; see the
-[engine matrix](/resources/engines) and [Runtime neutrality](/concepts/runtime-neutrality) for
-what each engine's tools are and how a policy is carried from one engine to another.
+    So the agent above, which has a skill, cannot move to the OpenAI Agents SDK as it is. pi
+    reaches any model connection through the gateway's Anthropic Messages ingress, which the gateway
+    translates for an OpenAI-family connection. `npx aw engines list` prints the engines your deployment
+    has installed. The table is generated from the adapters themselves; see the
+    [engine matrix](/resources/engines) and [Runtime neutrality](/concepts/runtime-neutrality) for
+    what each engine's tools are and how a policy is carried from one engine to another.
 
-## 4. Change the model
+    **Check:** after you save, `aw dev` applies the new engine and the agent still answers
+    `npx aw chat -p "hi"`; an engine that cannot honour the agent refuses it on save.
 
-Change `provider:` in `agent-workspace.yaml` and the variable the key is read from. A model you
-run yourself is an `openai-compatible` connection with its endpoint:
+  </Step>
+  <Step title="Part 4 · Change the model">
 
-```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
-models:
-  default:
-    provider: openai-compatible
-    credential:
-      secret: OPENAI_API_KEY
-    baseUrl: http://gpu-01.internal:8000/v1
-```
+    Change `provider:` in `agent-workspace.yaml` and the variable the key is read from. A model you
+    run yourself is an `openai-compatible` connection with its endpoint:
 
-Saving the file while `aw dev` runs applies its `models` at once. Azure OpenAI needs the
-deployment and API version beside the endpoint; see
-[Models and runtimes](/building/models-and-runtimes).
+    ```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+    models:
+      default:
+        provider: openai-compatible
+        credential:
+          secret: OPENAI_API_KEY
+        baseUrl: http://gpu-01.internal:8000/v1
+    ```
 
-## 5. Add your tools and skills
+    Saving the file while `aw dev` runs applies its `models` at once. Azure OpenAI needs the
+    deployment and API version beside the endpoint; see
+    [Models and runtimes](/building/models-and-runtimes).
 
-- **Your API.** `--tools openapi` wrote `tools/openapi.ts`, an `openapiTool()` over your OpenAPI
-  document, with `GET` only allowed until you widen it. See
-  [Tools from code](/guides/tools-from-code).
-- **Your database.** `--tools postgres` writes a read-only `postgresTool()` with one placeholder
-  table to replace.
-- **Your MCP servers.** Name them under `connectors:` in the project file and assign them with
-  `mcp('<name>')`. See [MCP servers](/building/mcp-servers).
-- **Your know-how.** A skill is a folder with a `SKILL.md`. Copy the starter's, write your
-  procedure in it and list it with `skill('<name>')`. See [Skills](/building/skills).
+    **Check:** the next `npx aw chat -p "hi"` is answered through the new connection.
 
-## 6. Put it in your frontend
+  </Step>
+  <Step title="Part 5 · Add your tools and skills">
 
-The project's surface, `surfaces/main.ts`, is already a hosted chat page. To use it elsewhere:
+    - **Your API.** `--tools openapi` wrote `tools/openapi.ts`, an `openapiTool()` over your OpenAPI
+      document, with `GET` only allowed until you widen it. See
+      [Tools from code](/guides/tools-from-code).
+    - **Your database.** `--tools postgres` writes a read-only `postgresTool()` with one placeholder
+      table to replace.
+    - **Your MCP servers.** Name them under `connectors:` in the project file and assign them with
+      `mcp('<name>')`. See [MCP servers](/building/mcp-servers).
+    - **Your know-how.** A skill is a folder with a `SKILL.md`. Copy the starter's, write your
+      procedure in it and list it with `skill('<name>')`. See [Skills](/building/skills).
 
-<CodeGroup>
-```html title="Widget (illustrative)" claim="illustrative"
-<script src="https://agents.acme.example/p/s/main/widget.js" async></script>
-```
+    **Check:** `npx aw check` passes after each addition.
 
-```tsx React claim="compile"
-// npm install @indx-workspace/react @indx-workspace/sdk
-import { Chat } from '@indx-workspace/react';
+  </Step>
+  <Step title="Part 6 · Put it in your frontend">
 
-export const Help = () => <Chat surface="main" baseUrl="https://agents.acme.example" />;
-```
+    The project's surface, `surfaces/main.ts`, is already a hosted chat page. To use it elsewhere:
 
-```ts title="Backend (illustrative)" claim="illustrative"
-// npm install @indx-workspace/sdk
-const run = await aw.runs.start({ agentId, prompt });
-```
-</CodeGroup>
+    <CodeGroup>
+    ```html title="Widget (illustrative)" claim="illustrative"
+    <script src="https://agents.acme.example/p/s/main/widget.js" async></script>
+    ```
 
-Add your site's origin to the surface's `allowedOrigins`. [Build a frontend](/building/frontend)
-and the [embedding guide](/building/embedding) cover each option.
+    ```tsx React claim="compile"
+    // npm install @indx-workspace/react @indx-workspace/sdk
+    import { Chat } from '@indx-workspace/react';
 
-## 7. Deploy it on your infrastructure
+    export const Help = () => <Chat surface="main" baseUrl="https://agents.acme.example" />;
+    ```
 
-Name production in the same project file, then plan and apply:
+    ```ts title="Backend (illustrative)" claim="illustrative"
+    // npm install @indx-workspace/sdk
+    const run = await aw.runs.start({ agentId, prompt });
+    ```
+    </CodeGroup>
 
-```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
-environments:
-  production:
-    target: single-vm # or gcp-cloudrun
-    url: https://agents.acme.example
-```
+    Add your site's origin to the surface's `allowedOrigins`. [Build a frontend](/building/frontend)
+    and the [embedding guide](/building/embedding) cover each option.
 
-```sh title="illustrative" claim="illustrative"
-npx aw deploy production --plan
-npx aw deploy production --yes
-export AGENT_WORKSPACE_URL=https://agents.acme.example AGENT_WORKSPACE_API_KEY=<key>
-npx aw push --yes && npx aw promote --yes
-```
+    **Check:** the chat opens on your page, served from your site's origin.
 
-`<key>` is a workspace API key minted in **Administration → API Keys** (see
-[Connect to a control plane](/cli/overview#connect-to-a-control-plane)): `aw push` refuses the
-user token `aw login` stores.
+  </Step>
+  <Step title="Part 7 · Deploy it on your infrastructure">
+
+    Name production in the same project file, then plan and apply:
+
+    ```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+    environments:
+      production:
+        target: single-vm # or gcp-cloudrun
+        url: https://agents.acme.example
+    ```
+
+    ```sh title="illustrative" claim="illustrative"
+    npx aw deploy production --plan
+    npx aw deploy production --yes
+    export AGENT_WORKSPACE_URL=https://agents.acme.example AGENT_WORKSPACE_API_KEY=<key>
+    npx aw push --yes && npx aw promote --yes
+    ```
+
+    `<key>` is a workspace API key minted in **Administration → API Keys** (see
+    [Connect to a control plane](/cli/overview#connect-to-a-control-plane)): `aw push` refuses the
+    user token `aw login` stores.
 
 | Where | How, today |
 | --- | --- |
@@ -217,8 +265,14 @@ user token `aw login` stores.
 | Your Kubernetes (EKS, GKE, AKS, OpenShift) | The Helm chart in `infra/helm/agent-workspace`, applied with `helm upgrade --install` |
 | Amazon Bedrock AgentCore, Azure Container Apps sessions, GKE Agent Sandbox | Roadmap: the runtime drivers are named in the contract; see [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud) |
 
-[Deploy](/guides/deploy) lists every prerequisite `aw deploy` checks, and
-[Self-hosting](/building/self-hosting) says which runtime drivers are real today.
+    [Deploy](/guides/deploy) lists every prerequisite `aw deploy` checks, and
+    [Self-hosting](/building/self-hosting) says which runtime drivers are real today.
+
+    **Check:** `npx aw deploy production --plan` shows the plan and changes nothing; after
+    `aw promote`, the agent answers at your production URL.
+
+  </Step>
+</Steps>
 
 ## What is not there yet
 
@@ -228,8 +282,8 @@ user token `aw login` stores.
   recipe yet.
 - A tool written with `defineTool()` runs under `aw dev` but cannot be promoted yet.
 
-## Next
+Everything `defineAgent` and `defineSurface` take is in [Agents as code](/guides/agents-as-code).
 
-- [The use-case gallery](/tutorials): ten enterprise agents built this way, with what each
-  needed beyond the SDK.
-- [Agents as code](/guides/agents-as-code): everything `defineAgent` and `defineSurface` take.
+<Card title="Next: 1. Manual search agent" icon="arrow-right" href="/tutorials/manual-search">
+  The first gallery tutorial: a read-only agent that answers from manuals with checked citations.
+</Card>

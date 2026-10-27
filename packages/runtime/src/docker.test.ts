@@ -892,6 +892,53 @@ describe('docker driver deadline reaper (#783)', () => {
     await expect(driver.destroy(second)).rejects.toThrow(/no longer live/u);
   });
 
+  it('waits out a removal another call still has in progress', async () => {
+    vi.useFakeTimers();
+    const calls: string[][] = [];
+    const answers = [
+      commandResult(
+        1,
+        '',
+        'Error response from daemon: removal of container c-1 is already in progress',
+      ),
+      commandResult(
+        1,
+        '',
+        'Error response from daemon: removal of container c-1 is already in progress',
+      ),
+      commandResult(1, '', 'Error response from daemon: No such container: c-1'),
+    ];
+    const driver = recordingDriver(calls, { rm: () => answers.shift() ?? commandResult(0) });
+    const handle = await driver.create({
+      sessionId: 's',
+      engine: 'claude-agent-sdk',
+      workspacePath: '/ws/s',
+      runSpec: runSpec(),
+    });
+
+    const destroyed = driver.destroy(handle);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(destroyed).resolves.toBeUndefined();
+    expect(removals(calls)).toHaveLength(3);
+    expect(await driver.isLive(handle)).toBe(false);
+  });
+
+  it('still reports a removal that keeps failing', async () => {
+    const calls: string[][] = [];
+    const driver = recordingDriver(calls, {
+      rm: () => commandResult(1, '', 'Error response from daemon: device or resource busy'),
+    });
+    const handle = await driver.create({
+      sessionId: 's',
+      engine: 'claude-agent-sdk',
+      workspacePath: '/ws/s',
+      runSpec: runSpec(),
+    });
+
+    await expect(driver.destroy(handle)).rejects.toThrow(/remove container failed: .*busy/u);
+    expect(removals(calls)).toHaveLength(1);
+  });
+
   it('stops the interval once reapAll has run', async () => {
     vi.useFakeTimers();
     const calls: string[][] = [];

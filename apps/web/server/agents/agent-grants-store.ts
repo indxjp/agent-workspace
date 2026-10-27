@@ -1,11 +1,11 @@
 /**
  * The port `POST /api/agents/:id/runs` uses to check a Viewer's explicit `agent_grants` row
- * (spec §21, issue #117). Mirrors `store.ts`'s shape exactly — see that file's header for why
- * every reference to `@agent-workspace/core/db` here is `import type` only.
+ * (spec §21, issue #117). Mirrors `store.ts`'s shape exactly.
  */
-import type {
-  AgentGrantRepositoryProvider as CoreAgentGrantRepositoryProvider,
-  WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
+import {
+  UnknownWorkspaceError,
+  type AgentGrantRepositoryProvider as CoreAgentGrantRepositoryProvider,
+  type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
 /** Grant lookups for exactly one workspace. No method takes a workspace id (§25). */
@@ -26,23 +26,6 @@ export interface WorkspaceAgentGrantStore {
 /** Hands out a {@link WorkspaceAgentGrantStore} bound to one workspace. */
 export interface AgentGrantStoreProvider {
   forWorkspace(workspaceId: string): WorkspaceAgentGrantStore;
-}
-
-/**
- * Thrown when a store is asked for a workspace no `workspaces` row names. Transcribed rather than
- * imported — see `store.ts`'s own copy of this class for the edge-safety reason.
- */
-export class UnknownWorkspaceError extends Error {
-  public readonly workspaceId: string;
-
-  public constructor(workspaceId: string) {
-    super(
-      `no workspace has id ${workspaceId}; an agent grant store cannot be scoped to a ` +
-        'workspace that does not exist',
-    );
-    this.name = 'UnknownWorkspaceError';
-    this.workspaceId = workspaceId;
-  }
 }
 
 /** What {@link createRepositoryAgentGrantStoreProvider} needs, and the whole of it. */

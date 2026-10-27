@@ -1,9 +1,10 @@
+import { captureLog } from '../telemetry/capture-log';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { createInMemorySecretsService } from '@agent-workspace/core/secrets';
-import type { RuntimeDriverId, RuntimeRunSpec } from '@agent-workspace/runtime';
+import type { RuntimeDriverId, RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -181,10 +182,7 @@ async function rejection(promise: Promise<unknown>): Promise<Error> {
 }
 
 function watchConsole(): () => string {
-  const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((method) =>
-    vi.spyOn(console, method).mockImplementation(() => undefined),
-  );
-  return () => JSON.stringify(spies.map((spy) => spy.mock.calls));
+  return captureLog().text;
 }
 
 describe.each(PROVIDER_DRIVERS)('provider credential forwarding (%s)', (driver) => {

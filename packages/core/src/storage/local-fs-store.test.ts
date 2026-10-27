@@ -4,25 +4,39 @@
  * cannot make because they are about the real filesystem underneath it.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
+import {
+  defineObjectStoreContract,
+  defineObjectStoreV2Contract,
+  type ObjectStoreV2ContractFixture,
+} from './contract.js';
 import { OBJECT_METADATA_SUFFIX, toObjectKey, UnsafeObjectKeyError } from './key-safety.js';
 import { createLocalFilesystemObjectStoreProvider } from './local-fs-store.js';
 
-async function setup(): Promise<ObjectStoreContractFixture> {
+async function setup(): Promise<ObjectStoreV2ContractFixture> {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-'));
   return {
     provider: createLocalFilesystemObjectStoreProvider(rootDir),
     teardown: () => rm(rootDir, { recursive: true, force: true }),
+    async plantRaw(key, bytes) {
+      const target = path.join(rootDir, 'objects', ...key.split('/'));
+      if (key.endsWith('/')) {
+        await mkdir(target, { recursive: true });
+        return;
+      }
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, bytes);
+    },
   };
 }
 
 defineObjectStoreContract('local filesystem', setup);
+defineObjectStoreV2Contract('local filesystem', setup);
 
 /**
  * The 8.3 short names NTFS has minted for the files in `dir`, read from the filesystem itself with
@@ -81,6 +95,19 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       expect(ownEntries).toEqual([]);
     } finally {
       await rm(isolationParent, { recursive: true, force: true });
+    }
+  });
+
+  it('cannot hold a file and a folder at the same key (why this store declares fileAndFolderShareKey: false)', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-dup-'));
+    try {
+      const store = scopedStore(rootDir);
+      await store.put('dup/x', { body: new TextEncoder().encode('file') });
+      await expect(
+        store.put('dup/x/y', { body: new TextEncoder().encode('deep') }),
+      ).rejects.toThrow();
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
     }
   });
 
@@ -339,6 +366,55 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
         { recursive: true } as never,
       );
       expect(metadataEntries).toContain(path.join('a', `b.txt${OBJECT_METADATA_SUFFIX}`));
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('two writes of the same size with the same mtime still get different etags', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'aw-fs-etag-'));
+    const onDisk = path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID, 'k.txt');
+    const sameTime = new Date('2026-01-01T00:00:00.000Z');
+    try {
+      const store = scopedStore(rootDir);
+      await store.write('k.txt', new TextEncoder().encode('aaaa'), {});
+      await utimes(onDisk, sameTime, sameTime);
+      const first = await store.head('k.txt');
+      await store.write('k.txt', new TextEncoder().encode('bbbb'), {});
+      await utimes(onDisk, sameTime, sameTime);
+      const second = await store.head('k.txt');
+      expect(second?.etag).not.toBe(first?.etag);
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed body leaves neither the object nor a staging file, and the previous version stays readable', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'aw-fs-failed-write-'));
+    const failingBody = (): ReadableStream<Uint8Array> => {
+      let pulls = 0;
+      return new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          if (pulls > 2) controller.error(new Error('body failed'));
+          else controller.enqueue(new Uint8Array(1024));
+        },
+      });
+    };
+    try {
+      const store = scopedStore(rootDir);
+      await store.write('k.txt', new TextEncoder().encode('original'), {});
+
+      await expect(store.write('k.txt', failingBody(), {})).rejects.toThrow('body failed');
+      await expect(store.write('fresh.txt', failingBody(), {})).rejects.toThrow('body failed');
+
+      expect(await readdir(path.join(rootDir, 'staging'))).toEqual([]);
+      expect(await readdir(path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID))).toEqual([
+        'k.txt',
+      ]);
+      const kept = await store.get('k.txt');
+      expect(new TextDecoder().decode(kept?.body)).toBe('original');
+      expect(await store.head('fresh.txt')).toBeNull();
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }

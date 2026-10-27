@@ -103,6 +103,73 @@ agent only as an MCP connector or as uploaded files, never through these stores.
   each store is in [The data plane](/concepts/data-plane#the-contract).
 </Note>
 
+## Protect stored files
+
+Files, skills and transcripts live wherever `AW_STORAGE_URL` points. This section says how that
+data is encrypted, where its credentials come from and how far the app's access reaches (the
+storage design, §05).
+
+### Encrypt the disk under `file://` and self-hosted S3
+
+| Backend                                                                          | Encrypted at rest                                                                               |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `s3://` on AWS, `gcs://`, `azblob://`                                            | Yes, by default, by the cloud. Nothing to switch on.                                            |
+| `s3://…?endpoint=` on your own host (the bundled SeaweedFS in single-VM Compose) | **Only if you encrypt the disk.** SeaweedFS writes plain files to the `seaweedfs-data` volume.  |
+| `file://` (`aw dev`, the GCP single-VM target)                                   | **Only if you encrypt the disk.** Agent Workspace writes plain files and does not encrypt them. |
+
+An install on `file://` or on a self-hosted S3-compatible store **must** keep the data on an
+encrypted disk: LUKS on Linux, BitLocker on Windows, FileVault on macOS, or an encrypted cloud
+volume (check that encryption is on for the volume that holds the data). This covers the
+`seaweedfs-data` volume of a [single-VM install](/guides/deploy#single-vm), the
+`file:///var/lib/agent-workspace` path on the GCP single-VM target and the
+`.agent-workspace/storage` directory of `aw dev`.
+
+### Keep traffic on TLS
+
+Every cloud endpoint is reached over TLS. When you set a custom `endpoint=` on an `s3://` URL, use
+`https://`. The bundled SeaweedFS in the Compose project is never published beyond localhost; the
+web service reaches it over the project's internal network.
+
+### Keep credentials out of the URL
+
+`AW_STORAGE_URL` never carries a key or a password. Credentials come from the environment or from
+workload identity:
+
+- **S3-compatible endpoints:** `OBJECT_STORAGE_ACCESS_KEY_ID` and `OBJECT_STORAGE_SECRET_ACCESS_KEY`
+  in the environment (the Compose file and the Helm chart pass them on as `AWS_ACCESS_KEY_ID` and
+  `AWS_SECRET_ACCESS_KEY`). On AWS, prefer an IAM role (IRSA on EKS, an instance profile on EC2).
+- **GCS:** Application Default Credentials, which on Cloud Run is the service's own identity.
+- **Azure Blob:** a managed identity.
+
+### Limit the app to its own bucket
+
+Give the app a dedicated bucket. On GCP the Terraform module grants the web identity bucket roles
+only, never a project-wide storage role. On Azure the
+`Storage Blob Data Contributor` role is scoped to the container. There is no AWS Terraform; on a
+shared S3 bucket, limit the role to the prefix in your URL:
+
+```json title="aws-storage-policy.json (illustrative)" claim="illustrative"
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::<bucket>/<prefix>/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::<bucket>",
+      "Condition": { "StringLike": { "s3:prefix": "<prefix>/*" } }
+    }
+  ]
+}
+```
+
+Replace `<bucket>` and `<prefix>` with the bucket and prefix in your `s3://<bucket>/<prefix>` URL.
+If you still set the old variables, [map them to the URL](/concepts/data-plane#migrating-from-the-old-variables).
+
 ## Start on a laptop and grow to a cluster
 
 Every mode runs the same platform. Only where the sandboxes execute changes.
@@ -188,6 +255,10 @@ that key from `MASTER_ENCRYPTION_KEY`. In the cloud, the key can come from the c
 | GCP Secret Manager + CMEK | Loaded from Secret Manager under a Cloud KMS CMEK       | Implemented, awaiting live proof |
 
 Tracked as [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud).
+
+<Frame caption="The Runtimes screen: where agents run and which isolation each runtime gives them.">
+  <img src="/images/console/10-runtimes.png" alt="The Runtimes page of the Agent Workspace console" />
+</Frame>
 
 ## Choose where agents run
 
@@ -418,15 +489,15 @@ more of the runtime.
 
 ### Four roles
 
-Every member has exactly one of four roles. **The roles are not a total order**: an Admin has no
-projects grant and cannot confer the Builder role.
+Every member has exactly one of four roles. **The roles are monotonic** (ADR-0152): each role can
+do at least everything the roles below it can, so an Admin can confer every role but Owner.
 
-| Role      | Can                                                                                                                                                 | Cannot                                                        |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `owner`   | Everything. The only role that reads the audit trail, manages secrets and runs setup. Owns the public-sharing policy                                | —                                                             |
-| `admin`   | Full control of agents, skills and files. Manages connectors, API keys, members, invitations, users, models, model connections, runtimes and shares | Projects, secrets, audit, setup                               |
-| `builder` | Reads any agent, skill, file or connector; writes and runs its own. Reads runtime profiles. Owns its own projects and sessions                      | Edit other people's rows; API keys, members, models, runtimes |
-| `viewer`  | Reads agents. Runs only agents it is explicitly granted. Reads its own sessions and runs                                                            | Skills, files, connectors; any ungranted agent                |
+| Role      | Can                                                                                                                                                           | Cannot                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `owner`   | Everything. The only role that reads the audit trail, manages secrets and runs setup. Owns the public-sharing policy                                          | —                                                             |
+| `admin`   | Full control of agents, skills, files and connectors. Manages projects, API keys, members, invitations, users, models, model connections, runtimes and shares | Secrets, audit, setup                                         |
+| `builder` | Reads any agent, skill, file or connector; writes its own and runs its own or granted agents. Reads runtime profiles. Owns its own projects and sessions      | Edit other people's rows; API keys, members, models, runtimes |
+| `viewer`  | Reads agents. Runs only agents it is explicitly granted. Reads its own sessions and runs                                                                      | Skills, files, connectors; any ungranted agent                |
 
 Full resource-by-role table: [Ownership and sharing](/concepts/ownership-and-sharing#the-role-table).
 

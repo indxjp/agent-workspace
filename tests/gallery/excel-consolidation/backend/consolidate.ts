@@ -1,28 +1,48 @@
 /**
- * Corporate planning's backend: a two-turn conversation with the excel-consolidation agent.
+ * Corporate planning's backend: one run with the excel-consolidation agent, and a person's approval
+ * in the middle of it (ADR-0145).
  *
- * Turn 1 (`proposePlan`): the agent finds the branch workbooks, inspects them and answers with a
- * mapping plan. The backend validates the plan before a person sees it: every workbook the agent
+ * Every run starts for the signed-in person with `fileScope`: the branch folders that
+ * person may see in `data/access.json`. The agent's built-in `search_files` and its sandbox then
+ * cover those folders only. A person with no folder gets no run at all (an empty scope is invalid).
+ *
+ * The agent finds the branch workbooks, inspects them and writes its mapping plan to
+ * `outputs/plan.json` with `Write`, which the agent definition holds for approval
+ * (`requireApproval`). The run stops there, `awaiting_approval`, and `proposePlan` reads the plan
+ * from the pending call. The backend validates it before a person sees it: every workbook the agent
  * found is either mapped or excluded with a reason, nothing is mapped that was not found, every
  * required field has a column, and every unit and date format is stated, not left to a guess.
  *
- * Turn 2 (`runConfirmedPlan`, same `sessionId`): the person has confirmed, the agent runs the
- * script and explains. The backend does not take the explanation on trust. It recomputes every
- * total and change from the script's rows, checks each row's `@src` points into a planned file,
- * and refuses an explanation that quotes a number the script did not produce.
+ * The approval is bound to that exact call. `approvePlan` lets the agent write the plan the person
+ * saw and nothing else, and the continuation (same session) runs the script and explains. The
+ * backend does not take the explanation on trust. It recomputes every total and change from the
+ * script's rows, checks each row's `@src` points into a planned file, and refuses an explanation
+ * that quotes a number the script did not produce. `rejectPlan` sends the person's comment back;
+ * the agent writes a revised plan, which pauses again.
  *
- * A run has no output schema and a file the agent writes does not come back to the file store, so
- * both the plan and the report travel as one fenced ```json block in the answer.
+ * The run asks for structured output (`ReportAnswerSchema`), so the report is not parsed out of the
+ * agent's prose; the checks above are what the backend still owns. The consolidated workbook is the
+ * agent's own file: it writes `outputs/consolidated-<to>.xlsx`, the backend collects it with
+ * `runs.outputs` and `files.download`, and accepts it only when its sheets hold what the (already
+ * checked) report does.
  */
 import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
+import { z } from 'zod';
 
-import { runAndRead } from '../../shared/run-answer.ts';
-import type {
-  DateFormat,
-  Field,
-  Layout,
-  Report,
-  Unit,
+import {
+  pendingCall,
+  readRun,
+  runAndRead,
+  RunAwaitingApproval,
+  type AwaitingApproval,
+} from '../../shared/run-answer.ts';
+import { readXlsx } from '@agent-workspace/skills-office/office-reader/scripts/ooxml.mjs';
+import {
+  workbookSpec,
+  type DateFormat,
+  type Layout,
+  type Report,
+  type Unit,
 } from '../skills/excel-consolidate/scripts/consolidate.mjs';
 
 export interface MappingPlan {
@@ -44,21 +64,27 @@ export interface PlanLine {
 }
 
 export interface PlanProposal {
+  /** The paused run: the person's decision goes to it. */
+  readonly runId: string;
   readonly sessionId: string;
-  /** The agent's explanation of the plan, without the JSON block. */
-  readonly explanation: string;
-  /** The `.xlsx` paths `find_files` returned during the run. */
+  /** The signed-in person the run is for. */
+  readonly subject: string;
+  /** The folders the run was scoped to; the continuation keeps the same grants. */
+  readonly fileScope: readonly string[];
+  /** The `.xlsx` paths `search_files` returned during the run. */
   readonly found: readonly string[];
   readonly plan: MappingPlan | null;
   readonly lines: readonly PlanLine[];
-  /** Why the plan cannot be shown for confirmation; empty when it can. */
+  /** Why the plan cannot be shown for approval; empty when it can. */
   readonly problems: readonly string[];
 }
 
 export interface Consolidation {
   readonly status: 'accepted' | 'refused';
   readonly explanation: string;
-  readonly report: Report | null;
+  readonly report: Report;
+  /** The workbook the agent wrote to `outputs/`, as the run returns it; `null` when it wrote none. */
+  readonly workbook: { readonly name: string; readonly bytes: Uint8Array } | null;
   /** Totals or changes the agent's report states that its own rows do not add up to. */
   readonly mismatches: readonly string[];
   /** Numbers the explanation quotes that appear nowhere in the script's output. */
@@ -66,115 +92,143 @@ export interface Consolidation {
   readonly sessionId: string;
 }
 
-const UNITS: readonly string[] = ['円', '千円', '百万円'];
-const DATE_FORMATS: readonly string[] = ['wareki', 'ymd', 'serial'];
-const FIELDS: readonly Field[] = ['date', 'category', 'amount'];
-const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/u;
-const COLUMN = /^[A-Z]{1,3}$/u;
+/** Who may see which top-level folders of the file store: `data/access.json`. */
+export type AccessList = Readonly<Record<string, { readonly folders: readonly string[] }>>;
+
+/** The person has no folder they may search; no run was started. */
+export class NoAccessibleFiles extends Error {
+  public constructor(subject: string) {
+    super(`${subject} may not see any branch folder, so no run was started`);
+    this.name = 'NoAccessibleFiles';
+  }
+}
+
+/** The `fileScope` for `subject`: the folders they may see, refused when there are none. */
+export function fileScopeFor(subject: string, access: AccessList): string[] {
+  const folders = access[subject]?.folders ?? [];
+  if (folders.length === 0) throw new NoAccessibleFiles(subject);
+  return [...folders];
+}
 
 const toolIs = (name: string, tool: string): boolean => name === tool || name.endsWith(`__${tool}`);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const isText = (value: unknown): value is string => typeof value === 'string' && value !== '';
 
-/** The last ```json block of an answer, parsed, and the answer without it. */
-export function splitJsonBlock(answer: string): { text: string; json: unknown } {
-  const blocks = [...answer.matchAll(/```json\s*\n([\s\S]*?)```/gu)];
-  const last = blocks.at(-1);
-  if (last === undefined) return { text: answer.trim(), json: undefined };
-  const text = (answer.slice(0, last.index) + answer.slice(last.index + last[0].length)).trim();
-  try {
-    return { text, json: JSON.parse(last[1] ?? '') as unknown };
-  } catch {
-    return { text, json: undefined };
-  }
-}
+const nonEmpty = (what: string) => z.string().min(1).describe(what);
+const column = (what: string) =>
+  z
+    .string()
+    .regex(/^[A-Z]{1,3}$/u)
+    .describe(`${what}の列（A、B、AA のような英大文字）`);
+const month = (what: string) =>
+  z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/u)
+    .describe(`${what}（YYYY-MM）`);
 
-function layoutProblems(value: unknown, at: string): string[] {
-  if (!isRecord(value)) return [`${at} is not an object`];
-  const problems: string[] = [];
-  if (!isText(value['branch'])) problems.push(`${at}: 拠点名（branch）がない`);
-  if (!isText(value['sheet'])) problems.push(`${at}: シート名（sheet）がない`);
-  const files = value['files'];
-  if (!Array.isArray(files) || files.length === 0 || !files.every(isText))
-    problems.push(`${at}: files が空`);
-  const headerRows = value['headerRows'];
-  if (
-    !Array.isArray(headerRows) ||
-    headerRows.length === 0 ||
-    !headerRows.every((row) => Number.isInteger(row) && (row as number) >= 1)
-  )
-    problems.push(`${at}: 見出し行（headerRows）がない`);
-  const columns = isRecord(value['columns']) ? value['columns'] : {};
-  for (const field of FIELDS) {
-    const column = columns[field];
-    if (typeof column !== 'string' || !COLUMN.test(column))
-      problems.push(`${at}: ${field} の列が割り当てられていない`);
-  }
-  if (typeof value['unit'] !== 'string' || !UNITS.includes(value['unit']))
-    problems.push(`${at}: 単位（unit）が明示されていない`);
-  if (typeof value['dateFormat'] !== 'string' || !DATE_FORMATS.includes(value['dateFormat']))
-    problems.push(`${at}: 日付の形式（dateFormat）が明示されていない`);
-  const skip = value['skip'];
-  if (skip !== undefined && (!Array.isArray(skip) || !skip.every(isText)))
-    problems.push(`${at}: skip は文字列の配列にする`);
-  return problems;
-}
+/** A workbook layout as the agent reads it. A unit or date format it cannot state is `null`, never a guess. */
+const LayoutSchema = z.object({
+  branch: nonEmpty('拠点名'),
+  files: z.array(nonEmpty('ファイルのパス（search_files が返したもの）')).min(1),
+  sheet: nonEmpty('シート名'),
+  headerRows: z.array(z.number().int().min(1)).min(1).describe('見出し行（1始まり）'),
+  columns: z.object({
+    date: column('日付'),
+    category: column('区分'),
+    amount: column('金額'),
+  }),
+  unit: z.enum(['円', '千円', '百万円']).nullable().describe('金額の単位。明示できなければ null'),
+  dateFormat: z
+    .enum(['wareki', 'ymd', 'serial'])
+    .nullable()
+    .describe('日付の形式。明示できなければ null'),
+  skip: z.array(nonEmpty('除外する行の先頭文字列')).optional().describe('小計・合計・注記など'),
+});
+
+export const MappingPlanSchema = z.object({
+  from: month('前月'),
+  to: month('今月'),
+  layouts: z.array(LayoutSchema).min(1),
+  excluded: z
+    .array(z.object({ file: nonEmpty('除外するファイル'), reason: nonEmpty('除外する理由') }))
+    .describe('集計に使わないブック。なければ空配列'),
+});
+
+const ChangeSchema = z.object({
+  previous: z.number(),
+  current: z.number(),
+  diff: z.number(),
+  pct: z.number().nullable(),
+});
+
+/** The script's `compare` output, as the agent pastes it. */
+export const ReportSchema = z.object({
+  branches: z.array(z.string()),
+  rows: z.array(
+    z.object({
+      branch: z.string(),
+      date: z.string(),
+      month: z.string(),
+      category: z.string().nullable(),
+      amount: z.number(),
+      raw: z.object({ amount: z.number(), unit: z.enum(['円', '千円', '百万円']) }),
+      '@src': z.object({ date: z.string(), category: z.string(), amount: z.string() }),
+    }),
+  ),
+  totals: z.record(z.string(), z.record(z.string(), z.number())),
+  skipped: z.array(z.object({ src: z.string(), reason: z.string(), text: z.string() })),
+  comparison: z.object({
+    from: z.string(),
+    to: z.string(),
+    branches: z.array(ChangeSchema.extend({ branch: z.string() })),
+    total: ChangeSchema,
+  }),
+}) satisfies z.ZodType<Report>;
+
+/** The run's answer once the plan is approved: the script's report, unchanged, and the explanation written from it. */
+export const ReportAnswerSchema = z.object({
+  explanation: z.string().describe('スクリプトの出力だけから書いた説明'),
+  report: ReportSchema.describe('report.json の内容そのまま。数値を書き換えない'),
+});
 
 /**
  * Check a plan the agent proposed against the workbooks it found. Returns the plan only when
- * there is no problem: a plan with a problem is never shown as ready to confirm.
+ * there is no problem: a plan with a problem is never shown as ready to confirm. The schema has
+ * settled the shape; what is left is what it cannot say.
  */
 export function validatePlan(
-  value: unknown,
+  value: z.output<typeof MappingPlanSchema>,
   found: readonly string[],
 ): { plan: MappingPlan | null; problems: string[] } {
-  if (!isRecord(value)) return { plan: null, problems: ['計画の JSON がない'] };
   const problems: string[] = [];
-  const { from, to, layouts, excluded } = value;
-  if (typeof from !== 'string' || !MONTH.test(from)) problems.push('from（前月）が YYYY-MM でない');
-  if (typeof to !== 'string' || !MONTH.test(to)) problems.push('to（今月）が YYYY-MM でない');
-  if (typeof from === 'string' && typeof to === 'string' && from >= to)
-    problems.push('from は to より前の月にする');
-  if (!Array.isArray(layouts) || layouts.length === 0) problems.push('layouts が空');
-  const layoutList: unknown[] = Array.isArray(layouts) ? layouts : [];
-  layoutList.forEach((layout, index) => {
-    problems.push(...layoutProblems(layout, `layouts[${String(index)}]`));
+  const { from, to, excluded } = value;
+  if (from >= to) problems.push('from は to より前の月にする');
+  const layouts: Layout[] = [];
+  value.layouts.forEach(({ unit, dateFormat, skip, ...layout }, index) => {
+    const at = `layouts[${String(index)}]`;
+    if (unit === null) problems.push(`${at}: 単位（unit）が明示されていない`);
+    if (dateFormat === null) problems.push(`${at}: 日付の形式（dateFormat）が明示されていない`);
+    if (unit !== null && dateFormat !== null)
+      layouts.push({ ...layout, ...(skip === undefined ? {} : { skip }), unit, dateFormat });
   });
-  const excludedList: unknown[] =
-    excluded === undefined ? [] : Array.isArray(excluded) ? excluded : [null];
-  for (const entry of excludedList) {
-    if (!isRecord(entry) || !isText(entry['file']) || !isText(entry['reason']))
-      problems.push('excluded の各項目には file と reason が要る');
-  }
 
   // Every found workbook is accounted for exactly once, and nothing unfound is mapped.
-  const mapped = layoutList.flatMap((layout) =>
-    isRecord(layout) && Array.isArray(layout['files']) ? layout['files'].filter(isText) : [],
-  );
-  const skipped = excludedList.flatMap((entry) =>
-    isRecord(entry) && isText(entry['file']) ? [entry['file']] : [],
-  );
-  const named = [...mapped, ...skipped];
+  const named = [
+    ...value.layouts.flatMap((layout) => layout.files),
+    ...excluded.map((e) => e.file),
+  ];
   for (const file of found) {
     const count = named.filter((name) => name === file).length;
     if (count === 0) problems.push(`${file} が計画にも除外にもない`);
     if (count > 1) problems.push(`${file} が計画に2回以上ある`);
   }
   for (const file of new Set(named)) {
-    if (!found.includes(file)) problems.push(`${file} は find_files が返していない`);
+    if (!found.includes(file)) problems.push(`${file} は search_files が返していない`);
   }
 
   if (problems.length > 0) return { plan: null, problems };
-  return {
-    plan: {
-      from: from as string,
-      to: to as string,
-      layouts: layoutList as Layout[],
-      excluded: excludedList as MappingPlan['excluded'],
-    },
-    problems,
-  };
+  return { plan: { from, to, layouts, excluded }, problems };
 }
 
 function linesOf(plan: MappingPlan): PlanLine[] {
@@ -191,17 +245,110 @@ function linesOf(plan: MappingPlan): PlanLine[] {
   );
 }
 
-/** Turn 1: ask for a plan, and validate it before anyone is asked to confirm it. */
+/**
+ * The monthly run as a schedule trigger (ADR-0144): 09:00 JST on the 1st. A schedule prompt is
+ * fixed text (it may not hold `{{body}}`), so the month is the agent's to work out from the files.
+ * It asks for the report (`outputSchema`, ADR-0154) and stops at the plan's `Write` for approval. A
+ * schedule run has no signed-in person, so the trigger names one as its `subject` (ADR-0156): the
+ * planner who owns the monthly close, as your access list knows them. A trigger cannot carry a
+ * `fileScope`, so the run searches every folder the agent is granted; {@link proposePlanFromRun}
+ * refuses a plan that names a file outside that planner's folders.
+ */
+export const MONTHLY_TRIGGER = {
+  kind: 'schedule',
+  name: 'monthly-branch-sales',
+  prompt: '先月と今月の拠点別売上を集計して、前月からの増減を説明して',
+  cron: '0 9 1 * *',
+  timezone: 'Asia/Tokyo',
+  outputSchema: ReportAnswerSchema,
+  subject: '田村 恵',
+} as const;
+
+/** The plan's file, which the agent saves with `Write` and the definition holds for approval. */
+const PLAN_FILE = 'outputs/plan.json';
+
+/**
+ * Ask for the plan and validate it before anyone is asked to approve it. The run stops at the
+ * agent's `Write` of the plan; the person decides with {@link approvePlan} or {@link rejectPlan}.
+ */
 export async function proposePlan(
   aw: AgentWorkspaceClient,
   agentId: string,
   request: string,
+  /** The signed-in person asking, from the planning desk's own session; their folders scope the run. */
+  subject: string,
+  access: AccessList,
 ): Promise<PlanProposal> {
-  const reading = await runAndRead(aw, agentId, { prompt: request });
+  const fileScope = fileScopeFor(subject, access);
+  return proposalFrom(
+    await untilApproval(
+      runAndRead(aw, agentId, { prompt: request, subject, fileScope }, ReportAnswerSchema),
+    ),
+    subject,
+    fileScope,
+    [],
+  );
+}
+
+/**
+ * Turn 1 of a run the monthly trigger started: read it and validate its plan as {@link proposePlan}
+ * does. `subject` is the trigger's own. The run carried no `fileScope`, so a file it found outside
+ * the folders `subject` may see makes the plan unconfirmable; turn 2 runs with their scope.
+ */
+export async function proposePlanFromRun(
+  aw: AgentWorkspaceClient,
+  runId: string,
+  subject: string,
+  access: AccessList,
+): Promise<PlanProposal> {
+  const fileScope = fileScopeFor(subject, access);
+  const proposal = proposalFrom(
+    await untilApproval(readRun(aw, runId, ReportAnswerSchema)),
+    subject,
+    fileScope,
+    [],
+  );
+  const outside = proposal.found.filter(
+    (file) => !fileScope.some((folder) => file === folder || file.startsWith(`${folder}/`)),
+  );
+  if (outside.length === 0) return proposal;
+  return {
+    ...proposal,
+    plan: null,
+    lines: [],
+    problems: [
+      ...proposal.problems,
+      ...outside.map((file) => `${file} は ${subject} の閲覧範囲外`),
+    ],
+  };
+}
+
+/** The pause a plan run must reach; a run that finished without asking was never held at the gate. */
+async function untilApproval(
+  reading: Promise<{ readonly run: { readonly id: string } }>,
+): Promise<AwaitingApproval> {
+  try {
+    const { run } = await reading;
+    throw new Error(`run ${run.id} finished without stopping for the plan's approval`);
+  } catch (error) {
+    if (error instanceof RunAwaitingApproval) return error.pending;
+    throw error;
+  }
+}
+
+function proposalFrom(
+  paused: AwaitingApproval,
+  subject: string,
+  fileScope: readonly string[],
+  known: readonly string[],
+): PlanProposal {
   const found = [
-    ...new Set(
-      reading.toolCalls
-        .filter((call) => toolIs(call.name, 'find_files') && !call.isError && call.output !== null)
+    ...new Set([
+      ...known,
+      ...paused.toolCalls
+        .filter(
+          (call) => toolIs(call.name, 'search_files') && !call.isError && call.output !== null,
+        )
         .flatMap((call) => {
           const parsed: unknown = JSON.parse(call.output ?? '[]');
           return Array.isArray(parsed)
@@ -209,13 +356,14 @@ export async function proposePlan(
             : [];
         })
         .filter((file) => file.toLowerCase().endsWith('.xlsx')),
-    ),
+    ]),
   ].sort();
-  const { text, json } = splitJsonBlock(reading.answer);
-  const { plan, problems } = validatePlan(json, found);
+  const { plan, problems } = readPlan(paused, found);
   return {
-    sessionId: reading.run.sessionId,
-    explanation: text,
+    runId: paused.runId,
+    sessionId: paused.sessionId,
+    subject,
+    fileScope,
     found,
     plan,
     lines: plan === null ? [] : linesOf(plan),
@@ -223,43 +371,51 @@ export async function proposePlan(
   };
 }
 
-// ---------- turn 2: the checks on the report ----------
+/** The plan in the call the run is paused on; a call that is not the plan's file is a problem. */
+function readPlan(
+  paused: AwaitingApproval,
+  found: readonly string[],
+): { plan: MappingPlan | null; problems: string[] } {
+  const { name, input } = pendingCall(paused.call);
+  const content = input['content'];
+  if (name !== 'Write' || input['file_path'] !== PLAN_FILE || typeof content !== 'string') {
+    return { plan: null, problems: [`${name} が ${PLAN_FILE} 以外を書こうとして止まった`] };
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(content);
+  } catch {
+    return { plan: null, problems: [`${PLAN_FILE} が JSON ではない`] };
+  }
+  const parsed = MappingPlanSchema.safeParse(json);
+  if (!parsed.success) {
+    return {
+      plan: null,
+      problems: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`),
+    };
+  }
+  return validatePlan(parsed.data, found);
+}
+
+/** The person said no: the agent writes a revised plan from the comment, and the run pauses again. */
+export async function rejectPlan(
+  aw: AgentWorkspaceClient,
+  proposal: PlanProposal,
+  comment: string,
+): Promise<PlanProposal> {
+  const { run } = await aw.runs.reject(proposal.runId, { comment });
+  return proposalFrom(
+    await untilApproval(readRun(aw, run.id, ReportAnswerSchema)),
+    proposal.subject,
+    proposal.fileScope,
+    proposal.found,
+  );
+}
+
+// ---------- after the approval: the checks on the report ----------
 
 const percent = (diff: number, previous: number): number | null =>
   previous === 0 ? null : Math.round((diff / previous) * 1000) / 10;
-
-const isNumberOrNull = (value: unknown): boolean => value === null || typeof value === 'number';
-const isChange = (value: unknown): boolean =>
-  isRecord(value) &&
-  typeof value['previous'] === 'number' &&
-  typeof value['current'] === 'number' &&
-  typeof value['diff'] === 'number' &&
-  isNumberOrNull(value['pct']);
-const isRow = (value: unknown): boolean =>
-  isRecord(value) &&
-  isText(value['branch']) &&
-  isText(value['month']) &&
-  typeof value['amount'] === 'number' &&
-  isRecord(value['@src']) &&
-  isText(value['@src']['amount']);
-
-/** The report's shape, checked before any of it is trusted: it arrived as text in an answer. */
-const isReport = (value: unknown): value is Report => {
-  if (!isRecord(value) || !Array.isArray(value['rows']) || !Array.isArray(value['skipped']))
-    return false;
-  const comparison = value['comparison'];
-  return (
-    value['rows'].every(isRow) &&
-    isRecord(comparison) &&
-    isText(comparison['from']) &&
-    isText(comparison['to']) &&
-    Array.isArray(comparison['branches']) &&
-    comparison['branches'].every(
-      (entry) => isChange(entry) && isRecord(entry) && isText(entry['branch']),
-    ) &&
-    isChange(comparison['total'])
-  );
-};
 
 /**
  * Recompute every total and change from the report's own rows, and check each row came from a
@@ -351,45 +507,66 @@ export function ungroundedNumbers(text: string, report: Report): string[] {
     .map((match) => match[0]);
 }
 
+/** Whether the workbook's sheets hold the cells the report's own rows and comparison give. */
+function sameCells(bytes: Uint8Array, report: Report): boolean {
+  const trim = (rows: readonly (readonly unknown[])[]): unknown[][] =>
+    rows.map((row) => {
+      const cells = [...row];
+      while (cells.at(-1) === null || cells.at(-1) === undefined) cells.pop();
+      return cells;
+    });
+  // The workbook is the agent's file: one that does not open does not match the report.
+  let written: ReturnType<typeof readXlsx>['sheets'];
+  try {
+    written = readXlsx(Buffer.from(bytes)).sheets;
+  } catch {
+    return false;
+  }
+  const expected = workbookSpec(report).sheets;
+  return (
+    written.length === expected.length &&
+    expected.every((sheet, index) => {
+      const actual = written[index];
+      return (
+        actual?.name === sheet.name &&
+        JSON.stringify(trim(actual.rows)) === JSON.stringify(trim(sheet.rows))
+      );
+    })
+  );
+}
+
 /**
- * Turn 2: the person confirmed `proposal`'s plan. Continue the same session, let the agent run the
- * script and explain, and accept the explanation only if the report adds up and every number it
- * quotes is the script's.
+ * The person approved `proposal`'s plan. The continuation may write exactly the plan they saw; the
+ * agent then runs the script and explains. Accept the explanation only if the report adds up and
+ * every number it quotes is the script's.
  */
-export async function runConfirmedPlan(
+export async function approvePlan(
   aw: AgentWorkspaceClient,
-  agentId: string,
   proposal: PlanProposal,
 ): Promise<Consolidation> {
   const { plan } = proposal;
   if (plan === null)
-    throw new Error(`the plan was not confirmable: ${proposal.problems.join('; ')}`);
-  const prompt = [
-    '計画を確認しました。この計画のとおりに集計し、前月からの増減を説明してください。',
-    '',
-    '```json',
-    JSON.stringify(plan, null, 2),
-    '```',
-  ].join('\n');
-  const reading = await runAndRead(aw, agentId, { prompt, sessionId: proposal.sessionId });
-  const { text, json } = splitJsonBlock(reading.answer);
+    throw new Error(`the plan was not approvable: ${proposal.problems.join('; ')}`);
+  const { run } = await aw.runs.approve(proposal.runId);
+  const reading = await readRun(aw, run.id, ReportAnswerSchema);
+  const { explanation, report } = reading.output;
   const sessionId = reading.run.sessionId;
-  if (!isReport(json)) {
-    return {
-      status: 'refused',
-      explanation: text,
-      report: null,
-      mismatches: ['回答にスクリプトの出力（report.json）がない'],
-      ungrounded: [],
-      sessionId,
-    };
+  const mismatches = recompute(report, plan);
+  const ungrounded = ungroundedNumbers(explanation, report);
+  const name = `consolidated-${plan.to}.xlsx`;
+  const written = (await aw.runs.outputs(reading.run.id)).find((file) => file.name === name);
+  const downloaded = written === undefined ? null : await aw.files.download(written.path);
+  const workbook = downloaded?.kind === 'file' ? { name, bytes: downloaded.bytes } : null;
+  // A report that adds up is the reference; a workbook is compared with it only then.
+  if (mismatches.length === 0) {
+    if (workbook === null) mismatches.push(`outputs/${name} がない`);
+    else if (!sameCells(workbook.bytes, report)) mismatches.push(`${name} の内容が報告と違う`);
   }
-  const mismatches = recompute(json, plan);
-  const ungrounded = ungroundedNumbers(text, json);
   return {
     status: mismatches.length === 0 && ungrounded.length === 0 ? 'accepted' : 'refused',
-    explanation: text,
-    report: json,
+    explanation,
+    report,
+    workbook,
     mismatches,
     ungrounded,
     sessionId,

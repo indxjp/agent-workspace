@@ -1,5 +1,7 @@
 /**
  * `apps/runner/src/server.ts` — the runtime container's HTTP contract (spec §14.3).
+ * The HTTP plumbing is in `./http-io.ts` and the run lifecycle (`/run`, `/interrupt`, the SSE
+ * stream) in `./run-handler.ts`; this file keeps routing, `/files` and the listener.
  *
  * ```text
  * GET  /healthz            liveness / readiness
@@ -8,6 +10,10 @@
  * POST /files              hydrate the workspace from a tar stream
  * GET  /files              collect persistent files as a tar stream
  * ```
+ *
+ * `/files` answers a refused archive or path with 400, a missing path with 404, an archive over
+ * the size cap with 413 and any other fault with a 500 whose message is fixed (the detail goes to
+ * stderr), so no response carries a host path.
  *
  * Provider-required aliases live in the same server (§14.3): `POST /invocations` and `GET /ping`
  * are Amazon Bedrock AgentCore's required paths on port 8080, and W3-RT-05 wires each to the same
@@ -83,7 +89,7 @@
  * file adds none; the trust assumption is a declared gap on the task's PR rather than an
  * oversight, and whoever exposes this socket beyond a driver-private network owes it one.
  *
- * Keep-alive comments every {@link KEEPALIVE_MS} are not decoration: R-13 finding 4 probed a
+ * Keep-alive comments every `KEEPALIVE_MS` are not decoration: R-13 finding 4 probed a
  * silent stream being killed at ~60 s by stock nginx's `proxy_read_timeout`, and an AWS ALB's
  * `idle_timeout` defaults to the same 60 s. A runtime container sits behind at least one of those
  * on every driver except this one.
@@ -91,536 +97,33 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
 
-import { RunRequest } from '@agent-workspace/core';
+import {
+  createJsonLogger,
+  parseTraceparent,
+  traceHeaders,
+  type Logger,
+} from '@agent-workspace/core/telemetry';
+import { inServerSpan, spanTraceparent } from '@agent-workspace/core/tracing';
+import {
+  ArchiveTooLargeError,
+  ArchiveValidationError,
+  extractUstarStream,
+  RUN_FILES_MAX_BYTES,
+  RUN_FILES_MAX_MEMBERS,
+} from '@agent-workspace/runtime/transfer';
 
 import { contractSummary } from './http-contract.js';
 import { installedEngines, loadEngine, toEngineRunRequest } from './engines.js';
-import { collectWorkspace, hydrateWorkspace } from './files.js';
-import {
-  startEngineAgent,
-  type EngineStartOutcome,
-  type RunnerAgentConnection,
-  type RunnerAgentStarter,
-} from './runtime.js';
-
-/** The parsed private-contract body. Named so the starter signature reads at a glance. */
-type RunRequestValue = ReturnType<typeof RunRequest.parse>;
+import { collectWorkspace } from './files.js';
+import { readJsonObject, sendError, sendJson, sendMethodNotAllowed } from './http-io.js';
+import { type ResolvedRunRequest } from './resources.js';
+import { handleInterrupt, handleRun, type RunnerState } from './run-handler.js';
+import { startEngineAgent, type EngineStartOutcome, type RunnerAgentStarter } from './runtime.js';
 
 /** §14.3: *"Kubernetes / Docker / ECS — our own paths on port `8080`"*. */
 const DEFAULT_PORT = 8080;
-
-/**
- * R-13's inference, restated where it is used: shorter than the smallest idle timeout on any hop.
- * nginx `proxy_read_timeout` and ALB `idle_timeout` both default to 60 s; 15 s is a 4× margin.
- * The probes bracketed it (1 s survived 620 s, 70 s of silence died at ~60 s) without running it.
- */
-const KEEPALIVE_MS = 15_000;
-
-/** A run request is a JSON object of bounded size. 1 MiB is far more than `RunRequest` can need. */
-const MAX_BODY_BYTES = 1024 * 1024;
-const MAX_FILE_ARCHIVE_BYTES = 128 * 1024 * 1024;
-
-/**
- * R-13's three headers, and only three. `Content-Encoding: none`, `Connection: keep-alive` and
- * `X-Content-Type-Options: nosniff` were each removed from that note's contract for a stated
- * reason; do not add them back here without reading the omitted-headers table.
- */
-const SSE_HEADERS: Readonly<Record<string, string>> = {
-  'Content-Type': 'text/event-stream; charset=utf-8',
-  'Cache-Control': 'no-cache, no-transform',
-  'X-Accel-Buffering': 'no',
-};
-
-const JSON_HEADERS: Readonly<Record<string, string>> = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Cache-Control': 'no-store',
-};
-
-// ── Small HTTP helpers ──────────────────────────────────────────────────────────────────
-
-function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  if (res.headersSent) return;
-  const payload = Buffer.from(JSON.stringify(body), 'utf8');
-  res.writeHead(status, { ...JSON_HEADERS, 'Content-Length': String(payload.byteLength) });
-  res.end(payload);
-}
-
-/** A refusal that names itself: a stable machine code, and a sentence a human can act on. */
-function sendError(res: ServerResponse, status: number, error: string, message: string): void {
-  sendJson(res, status, { error, message });
-}
-
-function sendMethodNotAllowed(res: ServerResponse, path: string, allow: string): void {
-  if (res.headersSent) return;
-  const payload = Buffer.from(
-    JSON.stringify({
-      error: 'method_not_allowed',
-      message: `${path} accepts ${allow} only (spec §14.3).`,
-    }),
-    'utf8',
-  );
-  res.writeHead(405, {
-    ...JSON_HEADERS,
-    Allow: allow,
-    'Content-Length': String(payload.byteLength),
-  });
-  res.end(payload);
-}
-
-type BodyResult =
-  | { readonly ok: true; readonly value: Record<string, unknown> }
-  | {
-      readonly ok: false;
-      readonly status: number;
-      readonly error: string;
-      readonly message: string;
-    };
-
-/**
- * Read a bounded request body and parse it as a JSON object.
- *
- * Every failure arm is explicit and none of them falls through to "assume `{}`": an empty body, a
- * body that is not JSON, and a body that is JSON but not an object are three different mistakes
- * and are reported as three different messages. A `RunRequest` built from a silently defaulted
- * body is exactly the run this platform must not start.
- */
-async function readJsonObject(req: IncomingMessage): Promise<BodyResult> {
-  const raw = await new Promise<Buffer | 'too-large'>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let overflowed = false;
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.byteLength;
-      if (size > MAX_BODY_BYTES) {
-        overflowed = true;
-        chunks.length = 0;
-        return;
-      }
-      chunks.push(chunk);
-    });
-    req.on('end', () => {
-      resolve(overflowed ? 'too-large' : Buffer.concat(chunks));
-    });
-    req.on('error', (error: Error) => {
-      reject(error);
-    });
-  });
-
-  if (raw === 'too-large') {
-    return {
-      ok: false,
-      status: 413,
-      error: 'body_too_large',
-      message: `the request body exceeds ${String(MAX_BODY_BYTES)} bytes.`,
-    };
-  }
-  if (raw.byteLength === 0) {
-    return {
-      ok: false,
-      status: 400,
-      error: 'empty_body',
-      message: 'the request body is empty; a JSON RunRequest object is required.',
-    };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw.toString('utf8'));
-  } catch (error) {
-    return {
-      ok: false,
-      status: 400,
-      error: 'invalid_json',
-      message: `the request body is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return {
-      ok: false,
-      status: 400,
-      error: 'invalid_body',
-      message: 'the request body must be a JSON object.',
-    };
-  }
-  return { ok: true, value: parsed as Record<string, unknown> };
-}
-
-// ── SSE framing ─────────────────────────────────────────────────────────────────────────
-
-/**
- * One frame. `id` is monotonic within the stream and is the resume cursor a relay seeks to;
- * `JSON.stringify` is what guarantees `data` contains no raw newline, which HTML §9.2 would
- * otherwise read as a second `data:` line.
- */
-function sseFrame(name: string, id: number, data: unknown): string {
-  return `event: ${name}\nid: ${String(id)}\ndata: ${JSON.stringify(data)}\n\n`;
-}
-
-/**
- * Write one chunk, respecting backpressure.
- *
- * Resolves on `drain` when the socket buffer is full, and on `close` when it will never drain
- * because the client went away — without the second listener a disconnected slow consumer parks
- * this run forever on a promise nothing will settle.
- */
-function writeChunk(res: ServerResponse, chunk: string): Promise<void> {
-  if (res.writableEnded || res.destroyed) return Promise.resolve();
-  if (res.write(chunk)) return Promise.resolve();
-  return new Promise<void>((resolve) => {
-    const done = (): void => {
-      res.off('drain', done);
-      res.off('close', done);
-      resolve();
-    };
-    res.once('drain', done);
-    res.once('close', done);
-  });
-}
-
-// ── The three endpoints ─────────────────────────────────────────────────────────────────
-
-/** One run this runner process is serving. */
-type InFlight = {
-  readonly runId: string;
-  readonly sessionId: string;
-  readonly connection: RunnerAgentConnection;
-  interrupted: boolean;
-};
-
-/**
- * A run this runner has admitted: the admission checks passed and the slot is held, whether or
- * not its engine has started yet. Kept apart from {@link InFlight} because a run is admitted
- * before it has a connection to interrupt — `startAgent` is asynchronous (the registry's dynamic
- * `import()`), and the slot must be held across that `await`.
- */
-type Admitted = {
-  readonly runId: string;
-  readonly sessionId: string;
-  /** `/interrupt` arrived while the engine was still starting; applied once it has started. */
-  interruptRequested: boolean;
-};
-
-type RunnerState = {
-  /** Every admitted run — starting or streaming. The admission checks read this map only. */
-  readonly admitted: Map<string, Admitted>;
-  /** The admitted runs whose engine has started, which are the ones an interrupt can reach. */
-  readonly runs: Map<string, InFlight>;
-  readonly maxConcurrentRuns: number;
-};
-
-/** What the caller learns about the Claude session id, without the promise being able to hang. */
-async function settleSessionId(
-  connection: RunnerAgentConnection,
-): Promise<{ sessionId: string | null; sessionIdError: string | null }> {
-  try {
-    return { sessionId: await connection.sessionId, sessionIdError: null };
-  } catch (error) {
-    return {
-      sessionId: null,
-      sessionIdError: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-/** Raise the cancellation without awaiting it; a rejection is logged, never left unhandled. */
-function interruptInBackground(run: InFlight): void {
-  run.interrupted = true;
-  run.connection.interrupt().catch((error: unknown) => {
-    process.stderr.write(
-      `runner: interrupting run ${run.runId} failed: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-  });
-}
-
-async function streamRun(res: ServerResponse, run: InFlight): Promise<void> {
-  res.writeHead(200, SSE_HEADERS);
-  let id = 0;
-  // R-13: pin the client's reconnection delay rather than inheriting a user-agent default.
-  await writeChunk(res, 'retry: 3000\n\n');
-
-  const keepalive = setInterval(() => {
-    // A ':' line is a comment to the client (HTML §9.2) and real body bytes to every proxy on
-    // the path, which is the only thing that resets an idle timer.
-    void writeChunk(res, ': keepalive\n\n');
-  }, KEEPALIVE_MS);
-  // Node keeps a process alive for a pending interval; this one must never be the reason.
-  keepalive.unref();
-
-  // The client going away must stop the run. Without this the agent keeps running — and keeps
-  // spending — with nobody reading a single event of it.
-  const onClose = (): void => {
-    if (!run.interrupted) interruptInBackground(run);
-  };
-  res.once('close', onClose);
-
-  let events = 0;
-  let failure: string | null = null;
-  try {
-    // ENG-04: the frames arrive from the engine adapter already neutral. This loop no longer
-    // maps anything — the mapping moved behind `@agent-workspace/engine`'s port, so this server
-    // cannot put an engine-native event name on the wire because it never receives one.
-    //
-    // Three properties of the adapter's stream are relied on and not re-checked here, each one
-    // asserted by the conformance kit instead (`@agent-workspace/engine/testing`): every name is
-    // an `agent.*` name, so none can collide with a control-frame name and none is `error`
-    // (R-13 finding 7, HTML §9.2); `engine` names the adapter that produced it; and `raw`
-    // carries the engine-native message, capped, so a client that wants the original still has
-    // it. One engine message may become several frames — an assistant turn with two tool calls
-    // is three — and each gets its own monotonic `id`, because `id` is the resume cursor and a
-    // cursor that named a message rather than a frame could not resume in the middle of one.
-    for await (const frame of run.connection.frames) {
-      events += 1;
-      id += 1;
-      await writeChunk(res, sseFrame(frame.frame, id, frame));
-    }
-  } catch (error) {
-    failure = error instanceof Error ? error.message : String(error);
-  } finally {
-    clearInterval(keepalive);
-    res.off('close', onClose);
-  }
-
-  const { sessionId, sessionIdError } = await settleSessionId(run.connection);
-  const summary = {
-    runId: run.runId,
-    // How many frames this run produced. Before ENG-04 this counted *engine messages*, because
-    // the mapping from one message to its frames happened here; now it happens in the adapter,
-    // and what this server can honestly count is what it wrote. The field keeps its name, and
-    // the change in what it counts is stated on ENG-04's PR rather than left for a consumer to
-    // notice: a run that made two tool calls now reports more events than it used to.
-    events,
-    interrupted: run.interrupted,
-    sessionId,
-    sessionIdError,
-    /** ENG-04: which adapter version produced this run, for support and for the catalogue. */
-    engineVersion: run.connection.engineVersion,
-    // §14.9 calls a session that lives only inside the sandbox a release blocker, so the verdict
-    // travels with the run rather than being inferred later from its absence.
-    sessionDurability: run.connection.sessionDurability(),
-    ...(failure === null ? {} : { message: failure }),
-  };
-
-  // Three terminal names, none of them `error` and none of them a name
-  // `apps/web/server/runs/sse.ts` reserves for its own outward control frames (see the header).
-  // `run-interrupted` is kept apart from `run-error` because a cancelled run is not a broken one,
-  // and a relay that cannot tell them apart shows the user a failure they caused on purpose.
-  //
-  // `run.interrupted` is checked FIRST and unconditionally (ADR-0015): it is decided from the
-  // positive fact this run already holds, not inferred from the shape `failure` happens to take.
-  // A conformant `AgentConnection` (`packages/runtime/src/driver.ts`) is free to end its `events`
-  // iterable cleanly on cancellation — no throw required — so nesting the interrupted check under
-  // `failure === null ? … : …` reached it only when the connection *also* threw, and a clean-ending
-  // one reported `run-done` for a run the caller had cancelled. See
-  // `docs/adr/W1-RN-03-terminal-frame-name-is-decided-from-interrupted-first.md`.
-  const name = run.interrupted ? 'run-interrupted' : failure === null ? 'run-done' : 'run-error';
-  id += 1;
-  await writeChunk(res, sseFrame(name, id, summary));
-  res.end();
-}
-
-/**
- * Answer a run the engine refused, **before any output frame** (ENG-04's T2 invariant).
- *
- * A 200 SSE stream carrying exactly one `run-error`, and not a 4xx JSON body, for the reason
- * `docs/adr/W1-COMP-01-…` gives about this contract's terminal names: the control plane's relay
- * (`apps/web/server/runs/relay.ts`) reads a run's outcome off the stream's terminal frame, and a
- * refusal delivered as a status code is an outcome it has to learn about a second way. One
- * shape for "this run is over and here is why" is the whole reason the three terminal names
- * exist.
- *
- * `code` is on the frame beside `message` so a consumer branches on `engine_not_installed`
- * rather than pattern-matching a sentence. `events: 0` is stated rather than omitted: it is the
- * positive assertion that nothing was streamed before this, which is the invariant itself.
- */
-async function streamEngineRefusal(
-  res: ServerResponse,
-  runId: string,
-  code: string,
-  message: string,
-): Promise<void> {
-  res.writeHead(200, SSE_HEADERS);
-  await writeChunk(res, 'retry: 3000\n\n');
-  await writeChunk(
-    res,
-    sseFrame('run-error', 1, {
-      runId,
-      code,
-      message,
-      events: 0,
-      interrupted: false,
-      sessionId: null,
-      sessionIdError: null,
-      sessionDurability: {
-        durable: false,
-        reason: 'the run was refused before it started, so no session exists to be durable.',
-      },
-    }),
-  );
-  res.end();
-}
-
-async function handleRun(
-  req: IncomingMessage,
-  res: ServerResponse,
-  state: RunnerState,
-  startAgent: RunnerAgentStarter,
-): Promise<void> {
-  const body = await readJsonObject(req);
-  if (!body.ok) {
-    sendError(res, body.status, body.error, body.message);
-    return;
-  }
-
-  // Parse before you compare (ADR-0015). `startLocalAgent` parses again inside the SDK boundary;
-  // doing it here as well is what turns a `ZodError` into a 400 with issues instead of a 500.
-  const parsed = RunRequest.safeParse(body.value);
-  if (!parsed.success) {
-    sendJson(res, 400, {
-      error: 'invalid_run_request',
-      message: 'the request body is not a valid RunRequest.',
-      issues: parsed.error.issues,
-    });
-    return;
-  }
-
-  // Admission is synchronous (ENG-04 review): from the first check below to the reservation
-  // after the last one there is no `await`, so two requests cannot both pass a check that only
-  // one of them may pass. The reservation is taken *before* `startAgent` is awaited and released
-  // on every path out of this function.
-  if (state.admitted.has(parsed.data.runId)) {
-    sendError(
-      res,
-      409,
-      'run_in_flight',
-      `this runner is already serving run ${parsed.data.runId}.`,
-    );
-    return;
-  }
-  // A container's workspace is provisioned per session — `cwd` is fixed to the session's own
-  // directory (`apps/web/server/compose/run-request.ts`) precisely so a session's files persist
-  // turn over turn. Two runs of the *same* session sharing that one directory concurrently is
-  // never safe, no matter how much spare capacity `maxConcurrentRuns` reports: their hydrate,
-  // run, and collect phases (`apps/web/server/runs/launcher.ts`) would race on identical paths.
-  // `maxConcurrentRuns` bounds concurrency *across* sessions; same-session overlap is refused
-  // outright rather than left to a filesystem race. See W1-RN-02's "one runtime per run" decision.
-  for (const existing of state.admitted.values()) {
-    if (existing.sessionId === parsed.data.sessionId) {
-      sendError(
-        res,
-        409,
-        'session_in_flight',
-        `session ${parsed.data.sessionId} already has run ${existing.runId} in flight on this runtime; concurrent runs of the same session are not supported.`,
-      );
-      return;
-    }
-  }
-  if (state.admitted.size >= state.maxConcurrentRuns) {
-    sendError(
-      res,
-      429,
-      'runner_capacity_exhausted',
-      `this runner is serving its configured maximum of ${String(state.maxConcurrentRuns)} concurrent runs; retry when capacity is available.`,
-    );
-    return;
-  }
-
-  const admission: Admitted = {
-    runId: parsed.data.runId,
-    sessionId: parsed.data.sessionId,
-    interruptRequested: false,
-  };
-  state.admitted.set(admission.runId, admission);
-  try {
-    let outcome: EngineStartOutcome;
-    try {
-      outcome = await startAgent(parsed.data);
-    } catch (error) {
-      // A throw out of `startAgent` is a programming fault, not a request this engine will not
-      // run: every refusal the port can express arrives as `outcome.ok === false` below.
-      // Answering 422 keeps the pre-ENG-04 behaviour for the one caller that still throws — the
-      // Claude boundary's own translation refusals, which reach here through `start`.
-      sendError(res, 422, 'run_rejected', error instanceof Error ? error.message : String(error));
-      return;
-    }
-    if (!outcome.ok) {
-      await streamEngineRefusal(res, parsed.data.runId, outcome.code, outcome.reason);
-      return;
-    }
-
-    const run: InFlight = {
-      runId: parsed.data.runId,
-      sessionId: parsed.data.sessionId,
-      connection: outcome.connection,
-      interrupted: false,
-    };
-    state.runs.set(run.runId, run);
-    // Cancelled while the engine was starting — by `/interrupt`, or by the client leaving, whose
-    // `close` fired before `streamRun` could listen for it. Either way the run must not go on
-    // spending with nobody reading it.
-    if (admission.interruptRequested || res.destroyed) interruptInBackground(run);
-    try {
-      await streamRun(res, run);
-    } finally {
-      // A duplicate id is refused above, so identity still guards against a future refactor
-      // that replaces an entry while an older stream is winding down.
-      if (state.runs.get(run.runId) === run) state.runs.delete(run.runId);
-    }
-  } finally {
-    if (state.admitted.get(admission.runId) === admission) state.admitted.delete(admission.runId);
-  }
-}
-
-async function handleInterrupt(
-  req: IncomingMessage,
-  res: ServerResponse,
-  state: RunnerState,
-): Promise<void> {
-  const body = await readJsonObject(req);
-  if (!body.ok) {
-    sendError(res, body.status, body.error, body.message);
-    return;
-  }
-  const expectedRunId = body.value['runId'];
-  if (typeof expectedRunId !== 'string' || expectedRunId.length === 0) {
-    sendError(res, 400, 'invalid_interrupt_request', 'runId must be a non-empty string.');
-    return;
-  }
-  const admission = state.admitted.get(expectedRunId);
-  if (admission === undefined && state.admitted.size === 0) {
-    // Not 200. Reporting success for an interrupt that interrupted nothing is the same shape of
-    // lie as a gate that passes because it could not run.
-    sendError(
-      res,
-      409,
-      'no_run_in_flight',
-      'there is no current run to interrupt on this runtime.',
-    );
-    return;
-  }
-  if (admission === undefined) {
-    const active = [...state.admitted.keys()].sort();
-    sendError(
-      res,
-      409,
-      'run_mismatch',
-      `the requested run ${expectedRunId} is not active; refusing to interrupt ${String(active.length)} unrelated active run(s).`,
-    );
-    return;
-  }
-  const run = state.runs.get(expectedRunId);
-  if (run === undefined) {
-    // Admitted, engine still starting: there is no connection to signal yet, so the request is
-    // recorded and `handleRun` applies it the moment the connection exists.
-    admission.interruptRequested = true;
-  } else {
-    run.interrupted = true;
-    await run.connection.interrupt();
-  }
-  // The run's own SSE stream is where the cancellation becomes observable: it ends with a
-  // `run-interrupted` frame. This response says only that the signal was raised.
-  sendJson(res, 202, { interrupted: true, runId: expectedRunId });
-}
 
 // ── The server ──────────────────────────────────────────────────────────────────────────
 
@@ -631,7 +134,7 @@ async function handleInterrupt(
  * meets an engine adapter. Everything before it is engine-neutral, and the one decision made
  * here is a table lookup in `./engines.ts`.
  */
-async function startRegisteredAgent(request: RunRequestValue): Promise<EngineStartOutcome> {
+async function startRegisteredAgent(request: ResolvedRunRequest): Promise<EngineStartOutcome> {
   const lookup = await loadEngine(request.engine);
   if (!lookup.ok) return { ok: false, code: lookup.code, reason: lookup.reason };
   return startEngineAgent(lookup.engine, toEngineRunRequest(request));
@@ -643,6 +146,32 @@ async function listEngines(): Promise<readonly { id: string; version: string }[]
     id: engine.id,
     version: engine.version,
   }));
+}
+
+/**
+ * `POST /run` inside its SERVER span (ADR-0155). The span continues the control plane's trace, the
+ * engine is handed the span's own `traceparent` so the gateway's span is its child, and a run that
+ * arrived without a trace logs the span's trace id. With tracing off this is `handleRun` as before.
+ */
+function handleRunInSpan(
+  route: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  state: RunnerState,
+  startAgent: RunnerAgentStarter,
+  logger: Logger,
+  forwardedTrace: Readonly<Record<string, string>>,
+): Promise<void> {
+  const attributes = { 'http.request.method': 'POST', 'http.route': route };
+  return inServerSpan(`POST ${route}`, forwardedTrace['traceparent'], attributes, async (span) => {
+    const own = spanTraceparent(span);
+    const trace =
+      own === null ? forwardedTrace : traceHeaders(own, forwardedTrace['tracestate'] ?? null);
+    const traceId = parseTraceparent(trace['traceparent'])?.traceId;
+    const log = traceId === undefined ? logger : logger.child({ traceId });
+    await handleRun(req, res, state, startAgent, log, trace);
+    span.setAttribute('http.response.status_code', res.statusCode);
+  });
 }
 
 export type RunnerServerOptions = {
@@ -668,7 +197,37 @@ export type RunnerServerOptions = {
    * what is not the manager. Unset leaves the private-network drivers exactly as they were.
    */
   readonly bearer?: string;
+  /** Size cap for `POST /files` bodies and `GET /files` collections. Defaults to 128 MiB. */
+  readonly maxFileArchiveBytes?: number;
+  /** Member cap for `POST /files` archives. Defaults to `RUN_FILES_MAX_MEMBERS`. */
+  readonly maxFileArchiveMembers?: number;
+  /** Where request logs go. Defaults to JSON lines on stdout/stderr (F-04). */
+  readonly logger?: Logger;
 };
+
+const FILES_NOT_FOUND = 'the requested workspace path does not exist.';
+const FILES_FAILED = 'the workspace files could not be processed.';
+
+function isMissingPath(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+/** Typed `/files` failures: only the codec's own validation messages (relative paths) are sent. */
+function sendFilesFailure(
+  res: ServerResponse,
+  log: Logger,
+  error: unknown,
+  invalidCode: string,
+): void {
+  if (error instanceof ArchiveTooLargeError) {
+    sendError(res, 413, 'archive_too_large', error.message);
+  } else if (error instanceof ArchiveValidationError) {
+    sendError(res, 400, invalidCode, error.message);
+  } else {
+    log.error('/files failed', { error });
+    sendError(res, 500, 'internal_error', FILES_FAILED);
+  }
+}
 
 const DEFAULT_MAX_CONCURRENT_RUNS = 8;
 
@@ -703,10 +262,13 @@ export function createRunnerServer(options: RunnerServerOptions = {}): Server {
   const startAgent = options.startAgent ?? startRegisteredAgent;
   const workspacePath = options.workspacePath ?? '/workspace';
   const maxConcurrentRuns = options.maxConcurrentRuns ?? DEFAULT_MAX_CONCURRENT_RUNS;
+  const maxFileArchiveBytes = options.maxFileArchiveBytes ?? RUN_FILES_MAX_BYTES;
+  const maxFileArchiveMembers = options.maxFileArchiveMembers ?? RUN_FILES_MAX_MEMBERS;
   if (!Number.isSafeInteger(maxConcurrentRuns) || maxConcurrentRuns < 1) {
     throw new Error('maxConcurrentRuns must be a positive safe integer.');
   }
   const state: RunnerState = { admitted: new Map(), runs: new Map(), maxConcurrentRuns };
+  const logger = options.logger ?? createJsonLogger({ service: 'runner' });
 
   return createServer((req, res) => {
     // Frames are small and latency matters more than packet count on a streaming response.
@@ -739,6 +301,17 @@ export function createRunnerServer(options: RunnerServerOptions = {}): Server {
       sendError(res, 401, 'unauthorized', 'a valid bearer token is required.');
       return;
     }
+
+    // W3C trace context from the control plane joins this request's log lines to its trace. An
+    // absent, repeated or malformed header is no context — never an error, and never echoed.
+    const traceHeader = req.headers['traceparent'];
+    const stateHeader = req.headers['tracestate'];
+    const forwardedTrace = traceHeaders(
+      typeof traceHeader === 'string' ? traceHeader : null,
+      typeof stateHeader === 'string' ? stateHeader : null,
+    );
+    const trace = parseTraceparent(forwardedTrace['traceparent']);
+    const log = trace === null ? logger : logger.child({ traceId: trace.traceId });
 
     const handle = async (): Promise<void> => {
       // `GET /ping` is Amazon Bedrock AgentCore's required liveness path (§14.3) and behaves
@@ -793,7 +366,7 @@ export function createRunnerServer(options: RunnerServerOptions = {}): Server {
           sendMethodNotAllowed(res, path, 'POST');
           return;
         }
-        await handleRun(req, res, state, startAgent);
+        await handleRunInSpan(path, req, res, state, startAgent, logger, forwardedTrace);
         return;
       }
 
@@ -808,37 +381,15 @@ export function createRunnerServer(options: RunnerServerOptions = {}): Server {
 
       if (path === '/files') {
         if (method === 'POST') {
-          const chunks: Buffer[] = [];
-          let size = 0;
-          for await (const incoming of req) {
-            const chunk: unknown = incoming;
-            if (typeof chunk === 'string' || chunk instanceof Uint8Array) {
-              const bytes = Buffer.from(chunk);
-              size += bytes.byteLength;
-              if (size > MAX_FILE_ARCHIVE_BYTES) {
-                sendError(
-                  res,
-                  413,
-                  'archive_too_large',
-                  `the workspace archive exceeds ${String(MAX_FILE_ARCHIVE_BYTES)} bytes.`,
-                );
-                return;
-              }
-              chunks.push(bytes);
-            } else {
-              throw new Error('request body produced a non-byte chunk');
-            }
-          }
           try {
-            const files = await hydrateWorkspace(workspacePath, Buffer.concat(chunks));
+            const files = await extractUstarStream(
+              Readable.toWeb(req) as ReadableStream<Uint8Array>,
+              workspacePath,
+              { maxBytes: maxFileArchiveBytes, maxMembers: maxFileArchiveMembers },
+            );
             sendJson(res, 200, { hydrated: files });
           } catch (error) {
-            sendError(
-              res,
-              400,
-              'invalid_archive',
-              error instanceof Error ? error.message : String(error),
-            );
+            sendFilesFailure(res, log, error, 'invalid_archive');
           }
           return;
         }
@@ -847,6 +398,7 @@ export function createRunnerServer(options: RunnerServerOptions = {}): Server {
             const archive = await collectWorkspace(
               workspacePath,
               requestUrl.searchParams.getAll('path'),
+              maxFileArchiveBytes,
             );
             res.writeHead(200, {
               'Content-Type': 'application/x-tar',
@@ -855,12 +407,8 @@ export function createRunnerServer(options: RunnerServerOptions = {}): Server {
             });
             res.end(Buffer.from(archive));
           } catch (error) {
-            sendError(
-              res,
-              400,
-              'invalid_file_request',
-              error instanceof Error ? error.message : String(error),
-            );
+            if (isMissingPath(error)) sendError(res, 404, 'file_not_found', FILES_NOT_FOUND);
+            else sendFilesFailure(res, log, error, 'invalid_file_request');
           }
           return;
         }

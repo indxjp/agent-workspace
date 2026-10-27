@@ -29,8 +29,10 @@
  * knows more than this build does, not malformed input. {@link describeCost} and the status badge
  * both follow that precedent: the *shape* of a run (an object with the fields below, of the right
  * JS types) is checked positively and rejected by name when it is wrong, but the *vocabulary*
- * inside `status` is total over what this build recognises and falls back to showing the raw word
- * for what it does not. Accounting is different: its state controls whether a number may be shown
+ * inside `status` is total over what this build recognises. The SDK's `RunResourceSchema` now
+ * validates `status` against the closed `RUN_STATUSES` enum before a run reaches this module, so
+ * an unknown server status is refused as a malformed response; `badgeForRunStatus`'s raw-word
+ * fallback only covers URL and filter text typed by the user. Accounting is different: its state controls whether a number may be shown
  * as actual cost, so an unknown or internally inconsistent state is a malformed response and is
  * refused before rendering.
  *
@@ -45,21 +47,14 @@
  */
 import type {
   RunCost as ContractRunCost,
+  RunListQuery,
   RunResource,
+  RunStatus,
   RunUsage as ContractRunUsage,
 } from '@indx-workspace/contracts/runs';
 import { badgeForRunStatus, RUN_STATUS_NAMES } from '@indx-workspace/react/run-model';
-import { AgentListResponseSchema } from '../../contracts/agents';
-import { ProjectListResponseSchema } from '../../contracts/projects';
-import { parseWorkspaceList } from '../shell/workspaces-directory';
-import {
-  describeRequestFailure,
-  describeTransportRejection,
-  isApiErrorEnvelope,
-  type RequestProblem,
-} from '../agents/model';
+import type { RequestProblem } from '../agents/model';
 
-export { describeRequestFailure, describeTransportRejection };
 export type { RequestProblem };
 
 // ── The accounting-state vocabulary (issue #134) ────────────────────────────────────────────────
@@ -107,6 +102,8 @@ export interface RunListItem {
   readonly projectId: string | null;
   readonly initiatingUserId: string | null;
   readonly sessionId: string;
+  /** The agent version the run's session pins (#612); `null` for a legacy unversioned session. */
+  readonly agentVersion: number | null;
   /** Total over {@link RUN_STATUS_NAMES}, but not narrowed to it — see this file's header. */
   readonly status: string;
   readonly createdAt: string;
@@ -123,6 +120,10 @@ export interface RunListItem {
   readonly usage: RunUsage;
   readonly cost: RunCost;
   readonly error: string | null;
+  /** The run's final answer (ADR-0143); `null` until it completes, and for a run that did not. */
+  readonly output: { readonly text: string; readonly structured: unknown } | null;
+  /** The tool call a run in `awaiting_approval` waits on (ADR-0145); `null` in every other status. */
+  readonly pendingApproval: { readonly toolName: string; readonly canonicalCall: string } | null;
   /** Checked against {@link ACCOUNTING_STATE_NAMES} at the response boundary. */
   readonly accountingState: string;
   readonly accountingError: string | null;
@@ -148,6 +149,7 @@ export const RUN_KEYS = [
   'projectId',
   'initiatingUserId',
   'sessionId',
+  'agentVersion',
   'status',
   'createdAt',
   'startedAt',
@@ -161,6 +163,8 @@ export const RUN_KEYS = [
   'usage',
   'cost',
   'error',
+  'output',
+  'pendingApproval',
   'accountingState',
   'accountingError',
 ] as const satisfies readonly (keyof RunResource)[];
@@ -177,8 +181,6 @@ export const COST_KEYS = [
   'currency',
   'priceTableVersion',
 ] as const satisfies readonly (keyof ContractRunCost)[];
-const RUN_LIST_KEYS = ['runs', 'nextCursor'] as const;
-const RUN_DETAIL_KEYS = ['run'] as const;
 
 function requireString(record: Record<string, unknown>, key: string, where: string): string {
   const value = record[key];
@@ -277,6 +279,21 @@ function requireObject(value: unknown, where: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function parseOutput(value: unknown, where: string): RunListItem['output'] {
+  if (value === null) return null;
+  const record = requireExactObject(value, ['text', 'structured'], where);
+  return { text: requireString(record, 'text', where), structured: record['structured'] };
+}
+
+function parsePendingApproval(value: unknown, where: string): RunListItem['pendingApproval'] {
+  if (value === null) return null;
+  const record = requireExactObject(value, ['toolName', 'canonicalCall'], where);
+  return {
+    toolName: requireString(record, 'toolName', where),
+    canonicalCall: requireString(record, 'canonicalCall', where),
+  };
+}
+
 function requireExactObject<const Key extends string>(
   value: unknown,
   keys: readonly Key[],
@@ -307,6 +324,13 @@ export function parseRunResource(value: unknown, where = 'run'): RunListItem {
     throw new MalformedRunError(
       `${where}: "durationMs" must be a non-negative safe integer or null`,
     );
+  }
+  const agentVersion = record['agentVersion'];
+  if (
+    agentVersion !== null &&
+    (typeof agentVersion !== 'number' || !Number.isSafeInteger(agentVersion) || agentVersion < 1)
+  ) {
+    throw new MalformedRunError(`${where}: "agentVersion" must be a positive safe integer or null`);
   }
   const usage = {
     inputTokens: requireNonNegativeInteger(usageRecord, 'inputTokens', `${where}.usage`),
@@ -369,6 +393,7 @@ export function parseRunResource(value: unknown, where = 'run'): RunListItem {
     projectId: requireNullableUuid(record, 'projectId', where),
     initiatingUserId: requireNullableUuid(record, 'initiatingUserId', where),
     sessionId: requireUuid(record, 'sessionId', where),
+    agentVersion,
     status: requireString(record, 'status', where),
     createdAt: requireTimestamp(record, 'createdAt', where),
     startedAt: requireNullableTimestamp(record, 'startedAt', where),
@@ -386,6 +411,8 @@ export function parseRunResource(value: unknown, where = 'run'): RunListItem {
       priceTableVersion,
     },
     error: requireNullableString(record, 'error', where),
+    output: parseOutput(record['output'], `${where}.output`),
+    pendingApproval: parsePendingApproval(record['pendingApproval'], `${where}.pendingApproval`),
     accountingState,
     accountingError,
   };
@@ -395,29 +422,6 @@ export function parseRunResource(value: unknown, where = 'run'): RunListItem {
 export interface RunListPage {
   readonly runs: readonly RunListItem[];
   readonly nextCursor: string | null;
-}
-
-/** Parse `GET /api/runs`'s body. Refused by name when the envelope itself is not what it claims. */
-export function parseRunListPage(value: unknown): RunListPage {
-  const record = requireExactObject(value, RUN_LIST_KEYS, 'the run list response');
-  const rawRuns = record['runs'];
-  if (!Array.isArray(rawRuns)) {
-    throw new MalformedRunError('the run list response has no "runs" array');
-  }
-  const nextCursor = record['nextCursor'];
-  if (nextCursor !== null && typeof nextCursor !== 'string') {
-    throw new MalformedRunError('the run list response\'s "nextCursor" must be a string or null');
-  }
-  return {
-    runs: rawRuns.map((entry, index) => parseRunResource(entry, `runs[${String(index)}]`)),
-    nextCursor,
-  };
-}
-
-/** Parse `GET /api/runs/:id`'s body: `{ run: <RunListItem> }`. */
-export function parseRunDetailResponse(value: unknown): RunListItem {
-  const record = requireExactObject(value, RUN_DETAIL_KEYS, 'the run detail response');
-  return parseRunResource(record['run'], 'run');
 }
 
 // ── Filters and pagination, held in the URL ─────────────────────────────────────────────────────
@@ -473,9 +477,9 @@ export function runIdFromSearchParams(params: URLSearchParams): string | null {
   return run !== null && UUID_PATTERN.test(run) ? run : null;
 }
 
-/** A detail endpoint path only for a canonical UUID; invalid text never reaches path construction. */
-export function runDetailPath(runId: string): string | null {
-  return UUID_PATTERN.test(runId) ? `/api/runs/${runId}` : null;
+/** Whether `runId` is a canonical UUID; anything else never reaches a request. */
+export function isCanonicalRunId(runId: string): boolean {
+  return UUID_PATTERN.test(runId);
 }
 
 /** The pagination cursor `?cursor=` carries, or `null`. Opaque — never inspected, only forwarded. */
@@ -485,18 +489,19 @@ export function cursorFromSearchParams(params: URLSearchParams): string | null {
 }
 
 /**
- * The exact query string this screen sends to `GET /api/runs` for a set of filters and a cursor.
- * Only the four server-recognised filter names and `cursor` are written. The URL's `q` is a
- * current-page search and is deliberately not forwarded as an unknown server parameter.
+ * The query this screen sends to `GET /api/runs` for a set of filters and a cursor. Only the four
+ * server-recognised filters and `cursor` are written: the URL's `q` is a current-page search and
+ * is deliberately not forwarded as an unknown server parameter. `status` is forwarded as typed —
+ * the server is the authority on what it accepts and rejects an unknown one by name.
  */
-export function runsListQuery(filters: RunListFilters, cursor: string | null): string {
-  const params = new URLSearchParams();
-  if (filters.status !== undefined) params.set(FILTER_PARAM.status, filters.status);
-  if (filters.agentId !== undefined) params.set(FILTER_PARAM.agentId, filters.agentId);
-  if (filters.projectId !== undefined) params.set(FILTER_PARAM.projectId, filters.projectId);
-  if (filters.userId !== undefined) params.set(FILTER_PARAM.userId, filters.userId);
-  if (cursor !== null) params.set('cursor', cursor);
-  return params.toString();
+export function runListQuery(filters: RunListFilters, cursor: string | null): RunListQuery {
+  return {
+    ...(filters.status === undefined ? {} : { status: filters.status as RunStatus }),
+    ...(filters.agentId === undefined ? {} : { agent: filters.agentId }),
+    ...(filters.projectId === undefined ? {} : { project: filters.projectId }),
+    ...(filters.userId === undefined ? {} : { user: filters.userId }),
+    ...(cursor === null ? {} : { cursor }),
+  };
 }
 
 /**
@@ -539,29 +544,6 @@ export function withScreenState(
 export const USER_FILTER_PROBE_ID = '00000000-0000-0000-0000-000000000000';
 
 export type UserFilterAvailability = 'available' | 'unavailable';
-
-/**
- * Decide whether to show the `user` filter control, from a real response to the probe above.
- * **Never a client-side role table** (the task card's own words): this reads the server's actual
- * answer, so a workspace whose policy later widens or narrows who may filter by user changes this
- * screen with no code here to update. Anything other than a clean `200` or the one named `403` is
- * treated as `'unavailable'` — fail-closed, per ADR-0015: a control this screen cannot confirm the
- * server will honour is not offered.
- */
-export function classifyUserFilterProbe(status: number, body: unknown): UserFilterAvailability {
-  if (status === 200) {
-    try {
-      parseRunListPage(body);
-      return 'available';
-    } catch {
-      return 'unavailable';
-    }
-  }
-  if (status === 403 && isApiErrorEnvelope(body) && body.error.code === 'user_filter_forbidden') {
-    return 'unavailable';
-  }
-  return 'unavailable';
-}
 
 // ── Rendering a run's fields as words, never as an invented number ─────────────────────────────
 
@@ -749,53 +731,14 @@ export type CatalogState =
 export type CatalogKind = 'agents' | 'projects' | 'users' | 'workspaces';
 
 /**
- * Where this screen reads the project catalogue from — **with `?archived=all`** (issue #184).
- *
- * `GET /api/projects` answers only active projects when the parameter is absent
- * (`server/projects/http.ts`), so without it every run filed under a project would lose its name
- * the moment that project was archived and render as `'deleted'` instead. Named here, rather than
- * inlined at the call site, so the filter is a value a test can assert: reverting it to the bare
- * path fails `history.test.ts`'s "the project catalogue asks for archived projects too".
+ * Build one catalogue from a list this screen already has read access to. A row whose id is not a
+ * canonical UUID refuses the whole list, so `'deleted'` is never claimed against a catalogue that
+ * could not be matched to the runs' own ids.
  */
-export const PROJECT_CATALOG_URL = '/api/projects?archived=all';
-
-const USER_CATALOG_KEYS = ['users'] as const;
-const USER_ROW_KEYS = ['id', 'email', 'name', 'createdAt'] as const;
-
-/**
- * Read the four catalogue responses used by this screen. Each branch first closes the complete
- * owned envelope and row contract, then projects only `id` and `name`. Agent/project schemas are
- * shared with their producers; the workspace parser is shared with the shell. Only `/api/users`
- * lacks a browser contract, so its four-field response is enumerated locally.
- */
-export function parseCatalog(body: unknown, kind: CatalogKind): Catalog {
-  let list: readonly { readonly id: string; readonly name: string }[];
-  if (kind === 'agents') {
-    const parsed = AgentListResponseSchema.safeParse(body);
-    if (!parsed.success) throw new MalformedRunError('the agents response is malformed');
-    list = parsed.data.agents.map(({ id, name }) => ({ id, name }));
-  } else if (kind === 'projects') {
-    const parsed = ProjectListResponseSchema.safeParse(body);
-    if (!parsed.success) throw new MalformedRunError('the projects response is malformed');
-    list = parsed.data.projects.map(({ id, name }) => ({ id, name }));
-  } else if (kind === 'workspaces') {
-    const parsed = parseWorkspaceList(body);
-    if (parsed === null) throw new MalformedRunError('the workspaces response is malformed');
-    list = parsed.map(({ id, name }) => ({ id, name }));
-  } else {
-    const record = requireExactObject(body, USER_CATALOG_KEYS, 'the users response');
-    if (!Array.isArray(record.users)) {
-      throw new MalformedRunError('the users response has no "users" array');
-    }
-    list = record.users.map((entry, index) => {
-      const row = requireExactObject(entry, USER_ROW_KEYS, `users[${String(index)}]`);
-      const id = requireUuid(row, 'id', `users[${String(index)}]`);
-      const name = requireString(row, 'name', `users[${String(index)}]`);
-      requireString(row, 'email', `users[${String(index)}]`);
-      requireTimestamp(row, 'createdAt', `users[${String(index)}]`);
-      return { id, name };
-    });
-  }
+export function catalogFromList(
+  kind: CatalogKind,
+  list: readonly { readonly id: string; readonly name: string }[],
+): Catalog {
   const byId = new Map<string, string>();
   list.forEach((entry, index) => {
     if (!UUID_PATTERN.test(entry.id)) {

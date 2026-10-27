@@ -22,6 +22,9 @@ describe('@indx-workspace/sdk/testing fixtures (issue #246, P-2)', () => {
     expect([queued.status, queued.startedAt, queued.endedAt]).toEqual(['queued', null, null]);
     expect(fixtures.run({ status: 'running' }).startedAt).not.toBeNull();
     expect(fixtures.run({ status: 'failed' }).error).toBe('The run failed.');
+    expect(queued.output).toBeNull();
+    const output = { text: 'done', structured: { ok: true } };
+    expect(fixtures.run({ status: 'completed', output }).output).toEqual(output);
   });
 
   it('applies overrides last, so a caller can name any field', () => {

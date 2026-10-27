@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 
 import {
   auditEvents,
+  createDatabaseStorageConnectionRepositoryProvider,
   createDatabaseWorkspaceScopeResolver,
   createIsolatedTestDatabase,
   workspaces,
@@ -23,10 +24,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { GET as listRoute, POST as createRoute } from '../../app/api/secrets/route';
 import { PUT as replaceRoute } from '../../app/api/secrets/[id]/route';
-import { clearRbacRuntime } from '../rbac/runtime';
 import { installWorkspaceHeaderRbac } from '../rbac/testing';
 import { createRepositorySecretsStoreProvider } from './store';
-import { clearSecretsRuntime, configureSecretsRuntime, type WorkspaceResolution } from './runtime';
+import type { WorkspaceResolution } from './runtime';
+import { installTestDomains } from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE_HEADER = 'x-test-workspace';
 
@@ -73,13 +75,23 @@ describe.skipIf(!hasDatabase)(
       });
 
       const scopes = createDatabaseWorkspaceScopeResolver(isolated.db);
-      const secrets = createRepositorySecretsStoreProvider({ service, scopes });
-      configureSecretsRuntime({
-        secrets,
-        resolveWorkspace(req: Request): Promise<WorkspaceResolution> {
-          const id = req.headers.get(WORKSPACE_HEADER);
-          if (id === null) return Promise.resolve({ kind: 'unauthenticated', reason: 'no header' });
-          return Promise.resolve({ kind: 'workspace', workspaceId: id });
+      const secrets = createRepositorySecretsStoreProvider({
+        service,
+        scopes,
+        storageConnections: createDatabaseStorageConnectionRepositoryProvider(isolated.db),
+      });
+      installTestDomains({
+        secrets: {
+          kind: 'serving',
+          runtime: {
+            secrets,
+            resolveWorkspace(req: Request): Promise<WorkspaceResolution> {
+              const id = req.headers.get(WORKSPACE_HEADER);
+              if (id === null)
+                return Promise.resolve({ kind: 'unauthenticated', reason: 'no header' });
+              return Promise.resolve({ kind: 'workspace', workspaceId: id });
+            },
+          },
         },
       });
       // Every secrets route is gated by the shared decision table (issue #388); secrets are
@@ -88,8 +100,7 @@ describe.skipIf(!hasDatabase)(
     }, 180_000);
 
     afterAll(async () => {
-      clearSecretsRuntime();
-      clearRbacRuntime();
+      clearApplicationContext();
       await service.close();
       await isolated.close();
     });

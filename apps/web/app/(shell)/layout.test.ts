@@ -9,9 +9,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mintSessionToken, newSessionClaims, verifySessionToken } from '../../server/auth';
 import { conferredBy } from '../../server/rbac/conferral';
 import { createMemoryDirectory } from '../../server/rbac/memory-directory';
-import { clearRbacRuntime, configureRbacRuntime } from '../../server/rbac/runtime';
 
 import { resolveIdentity } from './layout';
+import { clearApplicationContext } from '../../server/application-context';
+import { installTestDomains } from '../../server/application-context-fixtures';
 
 const SECRET = 'a'.repeat(32);
 
@@ -24,7 +25,7 @@ async function verifiedSessionFor(email: string, workspaceSlug: string) {
 
 describe('resolveIdentity', () => {
   afterEach(() => {
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('resolves the real display name, workspace name and role — never the session-claim literal', async () => {
@@ -32,7 +33,7 @@ describe('resolveIdentity', () => {
       workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme Corp' }],
       users: [{ email: 'aya@example.test', name: 'Aya Ito', workspaceId: 'ws-a', role: 'builder' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
 
     const session = await verifiedSessionFor('aya@example.test', 'acme');
     expect(session.role).toBe('owner'); // the vestigial claim every session mints (issue #118)
@@ -51,7 +52,7 @@ describe('resolveIdentity', () => {
       workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme Corp' }],
       users: [{ email: 'aya@example.test', name: 'Aya Ito', workspaceId: 'ws-a', role: 'viewer' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
     const session = await verifiedSessionFor('aya@example.test', 'acme');
 
     expect((await resolveIdentity(session))?.role).toBe('viewer');
@@ -73,7 +74,7 @@ describe('resolveIdentity', () => {
       ],
       users: [{ email: 'aya@example.test', name: 'Aya Ito', workspaceId: 'ws-a', role: 'admin' }],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
     const session = await verifiedSessionFor('aya@example.test', 'acme');
 
     const [membership] = await directory.forWorkspace('ws-a').listMemberships();

@@ -61,6 +61,7 @@ def scopeKeyword : ScopeDenial → String
   | .notInGrammar => "may only reach"
   | .collectionRead => "may read one run by id"
   | .runIdMismatch => "names a different row"
+  | .sessionIdMismatch => "names a different row"
   | .revoke => "does not reach revoking run tokens"
 
 def factsJson : Option RouteFacts → Json
@@ -125,6 +126,8 @@ def witnessesFor (role method path : String) (scope : Option Scope) : List Strin
       nm "deny_code_is_token_out_of_scope_exactly_on_a_scope_objection"]
   | .deny none (some .runIdMismatch) => [nm "run_scope_needs_the_exact_run_id", iv "scope_only_narrows",
       nm "deny_code_is_token_out_of_scope_exactly_on_a_scope_objection"]
+  | .deny none (some .sessionIdMismatch) => [nm "session_scope_needs_its_own_session_id", iv "scope_only_narrows",
+      nm "deny_code_is_token_out_of_scope_exactly_on_a_scope_objection"]
   | .deny none (some .revoke) => [nm "revoke_capability_matches_roles"]
   | .revokeDeny _ => [nm "revoke_capability_matches_roles"]
   | .allow (some f) | .deny (some f) _ =>
@@ -148,7 +151,7 @@ def decideVector (idPrefix role method path : String) (scope : Option Scope) : V
 def enumerationVectors : List Vector :=
   [ { id := "enum/resources", input := Json.mkObj [("enum", "RESOURCES")],
       expected := Json.mkObj [("members", strs (WireEnum.wires Resource))],
-      witnesses := [wf "resource_wires_are_the_twenty_nine_resources"] },
+      witnesses := [wf "resource_wires_are_the_thirty_resources"] },
     { id := "enum/roles", input := Json.mkObj [("enum", "ROLES")],
       expected := Json.mkObj [("members", strs (roles.map WireEnum.toWire))],
       witnesses := [wf "decision_vocabularies_match_typescript"] },
@@ -163,7 +166,7 @@ def enumerationVectors : List Vector :=
       witnesses := [nm "scope_grammar_is_the_documented_route_table"] },
     { id := "enum/sub-resources", input := Json.mkObj [("enum", "SUB_RESOURCES")],
       expected := Json.mkObj (Resource.all.map fun r => (Resource.toWire r, strs (subResources r))),
-      witnesses := [wf "sub_resource_composition_yields_thirty_three_pairs"] } ]
+      witnesses := [wf "sub_resource_composition_yields_forty_four_pairs"] } ]
 
 def policyVectors : List Vector :=
   roles.flatMap fun role => Resource.all.map fun res =>
@@ -317,7 +320,7 @@ def applyGrantVectors : List Vector :=
       expected := Json.mkObj [("allowed", Json.mkObj ((WireEnum.all : List Ownership).map fun o =>
           (o.toWire, Json.bool (applyGrant g o)))),
         ("outcomes", byOwnership role m p none)],
-      witnesses := [nm "apply_grant_table", nm "permitted_grant_admits_exactly_permitted",
+      witnesses := [nm "apply_grant_table", nm "permitted_grant_admits_own_and_permitted",
         iv "unknown_owner_is_decided_as_other"] }
 
 def divergenceVectors : List Vector :=
@@ -337,7 +340,7 @@ def divergenceVectors : List Vector :=
     decideVector "archive-capability" "builder" "POST" "/api/projects/:id/archive" none ].map
     fun v => { v with witnesses := v.witnesses ++
       [mt "decide_and_the_revoke_gate_agree_for_every_role",
-        mt "granted_builder_cannot_run_the_agent_a_granted_viewer_can",
+        mt "granted_builder_runs_the_agent_a_granted_viewer_can",
          mt "admin_run_verbs_adrs_disagree_at_one_cell", mt "run_scope_id_accepts_equivalent_uuid_spelling",
         mt "run_scope_passes_every_get_on_its_runs_shapes", nm "archive_capability_follows_decide"] }
 

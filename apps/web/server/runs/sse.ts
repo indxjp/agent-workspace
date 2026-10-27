@@ -35,6 +35,8 @@
  * cannot be rendered safely is not rendered "best effort" — it is refused.
  */
 
+import { RUN_WARNING_EVENT } from '@indx-workspace/contracts/run-events';
+
 import { publicRunFailure } from './failures';
 
 /**
@@ -74,7 +76,7 @@ export const SSE_HEADERS: Readonly<Record<string, string>> = {
 export const DEFAULT_KEEPALIVE_MS = 15_000;
 
 /** Pin the client's reconnection delay rather than inheriting a user-agent default. */
-export const DEFAULT_RETRY_MS = 3_000;
+const DEFAULT_RETRY_MS = 3_000;
 
 /**
  * The largest event id the platform can carry.
@@ -110,7 +112,7 @@ export const MAX_EVENT_ID = 9_223_372_036_854_775_807n;
  *                      transport-error listener, where the client's watchdog swallows it.
  */
 export const CONTROL_FRAME_NAMES = ['done', 'run-failed', 'stream-reset', 'error'] as const;
-export type ControlFrameName = (typeof CONTROL_FRAME_NAMES)[number];
+type ControlFrameName = (typeof CONTROL_FRAME_NAMES)[number];
 
 /**
  * The platform's own lifecycle event: a durable, replayable event this server appends to a run's
@@ -126,8 +128,15 @@ export type ControlFrameName = (typeof CONTROL_FRAME_NAMES)[number];
  */
 export const RUN_STATUS_EVENT = 'run.status';
 
+/**
+ * The durable event the platform appends when a run start has something to tell the caller
+ * (ADR-0146 Decision 3), defined by the contract. Reserved and platform-only exactly like
+ * {@link RUN_STATUS_EVENT}.
+ */
+export { RUN_WARNING_EVENT };
+
 /** Durable event names only this server may write. Total, and checked positively. */
-export const PLATFORM_EVENT_NAMES = [RUN_STATUS_EVENT] as const;
+export const PLATFORM_EVENT_NAMES = [RUN_STATUS_EVENT, RUN_WARNING_EVENT] as const;
 export type PlatformEventName = (typeof PLATFORM_EVENT_NAMES)[number];
 
 /**
@@ -137,7 +146,6 @@ export type PlatformEventName = (typeof PLATFORM_EVENT_NAMES)[number];
  * the ADR calls this list a compatibility surface.
  */
 export const RESERVED_EVENT_NAMES = [...CONTROL_FRAME_NAMES, ...PLATFORM_EVENT_NAMES] as const;
-export type ReservedEventName = (typeof RESERVED_EVENT_NAMES)[number];
 
 const RESERVED: ReadonlySet<string> = new Set(RESERVED_EVENT_NAMES);
 const PLATFORM: ReadonlySet<string> = new Set(PLATFORM_EVENT_NAMES);
@@ -321,7 +329,7 @@ export interface SseEvent {
  * At most three sub-index digits: one engine message cannot become a thousand frames, and a bounded
  * grammar is what keeps `cursor.ts` parsing a client-supplied id without an unbounded integer.
  */
-export const WIRE_EVENT_ID_PATTERN = /^\d{1,19}(?:\.\d{1,3})?$/;
+const WIRE_EVENT_ID_PATTERN = /^\d{1,19}(?:\.\d{1,3})?$/;
 
 /**
  * One durable event as it goes on the wire.
@@ -412,6 +420,8 @@ export function sseComment(text: string): string {
 export type StreamOutcome =
   /** The run's record read `completed`. `done` is written and nothing else. */
   | { readonly kind: 'succeeded' }
+  /** The run stopped at `awaiting_approval` (ADR-0145): nothing failed, and a decision continues it elsewhere. */
+  | { readonly kind: 'paused' }
   /** The run reached a terminal status other than `completed`. `status` is that status. */
   | { readonly kind: 'failed'; readonly status: string; readonly message: string }
   /** The source ended without the run's outcome being knowable. Reported, never assumed good. */
@@ -519,8 +529,9 @@ export function sseStreamResponse(options: SseStreamOptions): Response {
         // that writes nothing, which is the shape of the defect this whole option exists to fix.
         switch (outcome.kind) {
           case 'succeeded':
-            // The only arm that writes no `run-failed`, and the only one a caller reaches by
-            // positively reporting a completed run (ADR-0015).
+          case 'paused':
+            // The only arms that write no `run-failed`, each reached by positively reporting a
+            // completed or a paused run (ADR-0015).
             break;
           case 'failed':
             write(

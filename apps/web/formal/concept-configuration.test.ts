@@ -272,7 +272,7 @@ const VALID_PROFILE: Record<string, unknown> = {
   networkPolicy: 'none',
   allowedDomains: ['example.com'],
   filesystem: 'read-write',
-  persistPaths: ['/work'],
+  persistPaths: ['/workspace/work'],
   timeoutSeconds: 60,
   idleTimeoutSeconds: 30,
   driverConfig: {},

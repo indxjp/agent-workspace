@@ -80,6 +80,6 @@ theorem the_session_refines_the_store {α : Type} (s : List (Entry α)) (items :
 example :
     let first := addItems ([] : List (Entry String)) ["user: read a.md", "assistant: done"]
     getItems (addItems first ["user: again"]) none =
-      some ["user: read a.md", "assistant: done", "user: again"] := by decide
+      some ["user: read a.md", "assistant: done", "user: again"] := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.OpenAiAgents

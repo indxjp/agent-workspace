@@ -16,7 +16,8 @@ import {
   findAgent,
   initialSession,
   offeredBy,
-  readComposerProjects,
+  pinnedAgentFrom,
+  pinnedChatHref,
   selectAgent,
   selectedChips,
   selectedIn,
@@ -249,22 +250,33 @@ describe('the mockup fixture stays a fixture', () => {
   });
 });
 
-describe('readComposerProjects', () => {
-  it('reads a well-formed projects response', () => {
-    expect(
-      readComposerProjects({ projects: [{ id: 'p1', name: 'Contract Review', extra: 'ignored' }] }),
-    ).toEqual([{ id: 'p1', name: 'Contract Review' }]);
+describe('a chat pinned to an agent version', () => {
+  const AGENT = '0b7f4f0e-6a38-4d6c-9d0e-0c7a1f5a8c11';
+
+  it('[US-BLD-05][unit][web] reads a well-formed pin and round-trips the link it builds', () => {
+    expect(pinnedAgentFrom({ agent: AGENT, version: '2' })).toEqual({ agentId: AGENT, version: 2 });
+    const url = new URL(pinnedChatHref({ agentId: AGENT, version: 2 }), 'http://x');
+    expect(url.pathname).toBe('/');
+    expect(pinnedAgentFrom(Object.fromEntries(url.searchParams))).toEqual({
+      agentId: AGENT,
+      version: 2,
+    });
   });
 
-  it('reads an empty list as no projects, not an error', () => {
-    expect(readComposerProjects({ projects: [] })).toEqual([]);
-  });
-
-  it('throws a named error for a response with no list, rather than returning no projects silently', () => {
-    expect(() => readComposerProjects({})).toThrow(/has no list/u);
-  });
-
-  it('throws a named error for a project with no id or name', () => {
-    expect(() => readComposerProjects({ projects: [{ id: 'p1' }] })).toThrow(/has no id or name/u);
+  it.each([
+    ['no parameters', {}],
+    ['no version', { agent: AGENT }],
+    ['no agent', { version: '2' }],
+    ['an agent that is not a uuid', { agent: 'general', version: '2' }],
+    ['a zero version', { agent: AGENT, version: '0' }],
+    ['a negative version', { agent: AGENT, version: '-1' }],
+    ['a fractional version', { agent: AGENT, version: '1.5' }],
+    ['a non-numeric version', { agent: AGENT, version: 'latest' }],
+    ['a version past the contract maximum', { agent: AGENT, version: '2147483648' }],
+    ['a version with leading zeros', { agent: AGENT, version: '02' }],
+    ['a repeated agent', { agent: [AGENT, AGENT], version: '2' }],
+    ['a repeated version', { agent: AGENT, version: ['1', '2'] }],
+  ])('[US-BLD-05][unit][web] ignores the pin for %s', (_name, params) => {
+    expect(pinnedAgentFrom(params)).toBeNull();
   });
 });

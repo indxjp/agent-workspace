@@ -10,7 +10,7 @@ description: "The @indx-workspace/contracts/invitations exports, sorted alphabet
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `workspaceId` | `string` | Yes |  |
-| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "owner" \| "admin" \| "builder" \| "viewer"; createdAt: string; }` | Yes |  |
+| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "builder" \| "owner" \| "admin" \| "viewer"; createdAt: string; }` | Yes |  |
 
 ## AcceptedInvitationResponseSchema
 
@@ -22,7 +22,7 @@ same-origin browser client receives.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `workspaceId` | `string` | Yes |  |
-| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "owner" \| "admin" \| "builder" \| "viewer"; createdAt: string; }` | Yes |  |
+| `membership` | `{ id: string; principalId: string; userId: string; email: string; name: string; role: "builder" \| "owner" \| "admin" \| "viewer"; createdAt: string; }` | Yes |  |
 
 ## AcceptInvitationInput
 
@@ -43,7 +43,7 @@ key as `400 invalid_field`. `role` must be one the caller may confer
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `email` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 
 ## INVITATION_TOKEN_MAX_LENGTH
 
@@ -71,7 +71,7 @@ The body of `GET /api/invitations`.
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `email` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `invitedBy` | `null \| string` | Yes |  |
 | `expiresAt` | `string` | Yes |  |
 | `acceptedAt` | `null \| string` | Yes |  |
@@ -96,7 +96,7 @@ wire row carries timestamps, and a consumer derives the state from them with a f
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `email` | `string` | Yes |  |
-| `role` | `"owner" \| "admin" \| "builder" \| "viewer"` | Yes |  |
+| `role` | `"builder" \| "owner" \| "admin" \| "viewer"` | Yes |  |
 | `invitedBy` | `null \| string` | Yes |  |
 | `expiresAt` | `string` | Yes |  |
 | `acceptedAt` | `null \| string` | Yes |  |

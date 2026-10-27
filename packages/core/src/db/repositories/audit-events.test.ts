@@ -1,15 +1,49 @@
 import crypto from 'node:crypto';
 
+import type { AgentCreatedAuditDetails } from '@indx-workspace/contracts/observability';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { auditEvents } from '../schema/audit-events.js';
 import { workspaces } from '../schema/workspaces.js';
-import { createDatabaseAuditEventRepositoryProvider } from './audit-events.js';
+import { checkedAuditEvent, createDatabaseAuditEventRepositoryProvider } from './audit-events.js';
 import type { KeysetPosition } from './keyset.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
+
+const DETAILS = {
+  agentId: crypto.randomUUID(),
+  version: 2,
+  via: 'builder',
+  builderRunId: 'run-1',
+} as const;
+
+describe('checkedAuditEvent', () => {
+  const event = { action: 'agent-created', subjectLabel: 'x' } as const;
+
+  it('passes an event without details through untouched', () => {
+    expect(checkedAuditEvent(event)).toBe(event);
+  });
+
+  it('keeps the parsed details of an agent-created event', () => {
+    expect(checkedAuditEvent({ ...event, details: DETAILS }).details).toEqual(DETAILS);
+  });
+
+  it.each([
+    ['an extra key', { ...DETAILS, token: 's3cret' }],
+    ['a via that is not an origin', { ...DETAILS, via: 'carrier-pigeon' }],
+    ['a version of zero', { ...DETAILS, version: 0 }],
+  ])('refuses details with %s, before any insert', (_why, details) => {
+    expect(() => checkedAuditEvent({ ...event, details })).toThrow(/AgentCreatedAuditDetails/);
+  });
+
+  it('refuses details on any other action', () => {
+    expect(() =>
+      checkedAuditEvent({ action: 'agent-changed', subjectLabel: 'x', details: DETAILS }),
+    ).toThrow(/cannot carry details/);
+  });
+});
 
 describe.skipIf(!hasDatabase)('AuditEventRepository keyset pages against PostgreSQL (S-5)', () => {
   let isolated: IsolatedTestDatabase;
@@ -85,6 +119,22 @@ describe.skipIf(!hasDatabase)('AuditEventRepository keyset pages against Postgre
     expect(new Set(walked).size).toBe(5);
   });
 
+  it('filters by action, with the same order and cursor semantics', async () => {
+    const repository = await repositoryFor(workspaceA.id);
+    await repository.write({
+      actorPrincipalId: null,
+      actorLabel: 'system',
+      action: 'file-deleted',
+      subjectId: null,
+      subjectLabel: 'filtered',
+    });
+    const page = await repository.list({ action: 'file-deleted', limit: 1 });
+    expect(page.items.map((event) => event.action)).toEqual(['file-deleted']);
+    expect(page.nextCursor).toBeNull();
+    const none = await repository.list({ action: 'file-moved' });
+    expect(none.items).toEqual([]);
+  });
+
   it('never returns another workspace’s rows, whatever boundary it is handed', async () => {
     const repositoryB = await repositoryFor(workspaceB.id);
     const page = await repositoryB.list({
@@ -98,5 +148,62 @@ describe.skipIf(!hasDatabase)('AuditEventRepository keyset pages against Postgre
     const repository = await repositoryFor(workspaceA.id);
     await expect(repository.list({ limit: 0 })).rejects.toThrow(/limit/);
     await expect(repository.list({ limit: 501 })).rejects.toThrow(/limit/);
+  });
+
+  it('stores and lists an agent-created event (issue #1847)', async () => {
+    const repository = await repositoryFor(workspaceA.id);
+    await repository.write({
+      actorPrincipalId: null,
+      actorLabel: 'system',
+      action: 'agent-created',
+      subjectId: null,
+      subjectLabel: 'built',
+    });
+    const page = await repository.list({ action: 'agent-created' });
+    expect(page.items.map((event) => [event.action, event.subjectLabel])).toEqual([
+      ['agent-created', 'built'],
+    ]);
+  });
+
+  it('stores and returns the details of an agent-created event', async () => {
+    const repository = await repositoryFor(workspaceA.id);
+    await repository.write({
+      actorPrincipalId: null,
+      actorLabel: 'system',
+      action: 'agent-created',
+      subjectId: DETAILS.agentId,
+      subjectLabel: 'with details',
+      details: DETAILS,
+    });
+    const page = await repository.list({ action: 'agent-created' });
+    expect(page.items.find((e) => e.subjectLabel === 'with details')?.details).toEqual(DETAILS);
+    expect(page.items.find((e) => e.subjectLabel === 'built')?.details).toBeNull();
+  });
+
+  it('refuses invalid details through the repository, writing nothing', async () => {
+    const repository = await repositoryFor(workspaceA.id);
+    const before = await repository.count('agent-created');
+    const badDetails: unknown = { ...DETAILS, via: 'carrier-pigeon' };
+    await expect(
+      repository.write({
+        actorPrincipalId: null,
+        actorLabel: 'system',
+        action: 'agent-created',
+        subjectLabel: 'bad details',
+        details: badDetails as AgentCreatedAuditDetails,
+      }),
+    ).rejects.toThrow(/AgentCreatedAuditDetails/);
+    expect(await repository.count('agent-created')).toBe(before);
+  });
+
+  it('refuses details on any other action in the database itself', async () => {
+    await expect(
+      isolated.db.insert(auditEvents).values({
+        ...row(workspaceA.id, new Date()),
+        details: DETAILS,
+      }),
+    ).rejects.toMatchObject({
+      cause: { code: '23514', constraint: 'audit_events_details_only_agent_created' },
+    });
   });
 });

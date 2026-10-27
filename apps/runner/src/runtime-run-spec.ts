@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { RuntimeProfile } from '@agent-workspace/core';
-import type { RuntimeRunSpec } from '@agent-workspace/runtime';
+import { RuntimeProfile } from '@agent-workspace/run-protocol';
+import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 
 /** Validates the resolved runtime constraints accepted by the manager's HTTP boundary. */
 const RuntimeRunSpecSchema = RuntimeProfile.omit({ id: true, name: true })

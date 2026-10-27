@@ -1,3 +1,4 @@
+import { MODEL_PROVIDER_CONFIG_RULES } from '@indx-workspace/contracts/models';
 import { MODEL_PROVIDERS } from '@indx-workspace/contracts/runs';
 import { describe, expect, it } from 'vitest';
 
@@ -6,6 +7,7 @@ import {
   agentsReferencing,
   confirmationMatches,
   connectionStatus,
+  createConnectionPayload,
   editableConfigFields,
   formatApiError,
   isEditFormValid,
@@ -75,7 +77,15 @@ describe('connectionStatus', () => {
   });
 });
 
-describe('requiredConfigFields / editableConfigFields — the field set §126 validates, transcribed', () => {
+describe('requiredConfigFields / editableConfigFields — the field set §126 validates', () => {
+  it('editable and required fields follow MODEL_PROVIDER_CONFIG_RULES for every provider', () => {
+    for (const provider of MODEL_PROVIDERS) {
+      const rule = MODEL_PROVIDER_CONFIG_RULES[provider];
+      expect(new Set(editableConfigFields(provider))).toEqual(new Set(rule.allowed));
+      expect(new Set(requiredConfigFields(provider))).toEqual(new Set(rule.required));
+    }
+  });
+
   it('requires nothing extra for anthropic, anthropic-compatible or openai', () => {
     for (const provider of ['anthropic', 'anthropic-compatible', 'openai'] as const) {
       expect(requiredConfigFields(provider)).toEqual([]);
@@ -115,6 +125,34 @@ describe('isEditFormValid', () => {
         'azure-openai',
       ),
     ).toBe(true);
+  });
+});
+
+describe('createConnectionPayload', () => {
+  const typed = {
+    name: ' Prod ',
+    apiKey: 'k',
+    baseUrl: ' https://x ',
+    deployment: ' d ',
+    apiVersion: ' v ',
+  } as const;
+
+  it('drops the fields typed before a provider switch that the provider does not accept', () => {
+    expect(createConnectionPayload({ ...typed, provider: 'anthropic' })).toEqual({
+      name: 'Prod',
+      provider: 'anthropic',
+      apiKey: 'k',
+      config: { baseUrl: 'https://x' },
+    });
+  });
+
+  it('keeps all three trimmed fields for azure-openai', () => {
+    expect(createConnectionPayload({ ...typed, provider: 'azure-openai' })).toEqual({
+      name: 'Prod',
+      provider: 'azure-openai',
+      apiKey: 'k',
+      config: { baseUrl: 'https://x', deployment: 'd', apiVersion: 'v' },
+    });
   });
 });
 

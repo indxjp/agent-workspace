@@ -129,9 +129,14 @@ function sourceCandidates(packageDirectory, target) {
     ? `src/${relativeTarget.slice('dist/'.length)}`
     : relativeTarget;
   const stem = sourceRelative.replace(/\.d\.ts$|\.[cm]?jsx?$/u, '');
-  return ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs'].map((extension) =>
-    path.join(packageDirectory, `${stem}${extension}`),
-  );
+  // Non-script assets (for example styles.css) are copied verbatim, so their source is the same
+  // file name under src/.
+  return [
+    path.join(packageDirectory, sourceRelative),
+    ...['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs'].map((extension) =>
+      path.join(packageDirectory, `${stem}${extension}`),
+    ),
+  ];
 }
 
 /** @param {string} target */

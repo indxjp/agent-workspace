@@ -304,11 +304,11 @@ example :
         [("claude-agent-sdk", "agent-workspace/runtime:dev"), ("pi", "agent-workspace/runtime-pi:dev")] =
       .ok [("claude-agent-sdk", "agent-workspace/runtime:dev"),
         ("pi", "agent-workspace/runtime-pi:dev")] := by
-  decide
+  decide +kernel
 
 /-- The hypotheses of `malformed_map_fails_parsing` are satisfiable: an unpublished key. -/
 example : ("pie", "agent-workspace/runtime:dev") ∈ [("pie", "agent-workspace/runtime:dev")] ∧
     (["claude-agent-sdk"].contains "pie" = false) := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.EngineImages

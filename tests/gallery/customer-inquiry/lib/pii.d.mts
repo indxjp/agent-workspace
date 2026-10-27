@@ -1,4 +1,4 @@
-// Types for `pii.mjs`, which the CRM server (plain Node) and the chat backend share.
+// Types for `pii.mjs`, which the fake CRM (plain Node) and the chat backend share.
 export interface PiiOptions {
   /** Values masked verbatim wherever they appear: the customer's own phone, address, e-mail. */
   readonly known?: readonly string[];

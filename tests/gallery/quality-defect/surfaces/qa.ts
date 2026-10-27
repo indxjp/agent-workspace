@@ -17,4 +17,6 @@ export default defineSurface({
     toolTrace: 'full',
     feedback: true,
   },
+  // Similar past cases render as a table. The key is the tool's bare name: a run's engine prefix is ignored.
+  toolResults: { searchDefects: 'table' },
 });

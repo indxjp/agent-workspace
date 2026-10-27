@@ -25,9 +25,9 @@ import {
   acceptInvitation,
   type AcceptInvitationResult,
 } from '../../../../../server/invitations/handlers';
-import { currentInvitationsRuntime } from '../../../../../server/invitations/runtime';
-import { problem, readIdParam, readJsonBody } from '../../../../../server/rbac/http';
-import { currentRbacRuntime } from '../../../../../server/rbac/runtime';
+import { applicationContext } from '../../../../../server/application-context';
+import { readJsonBody } from '../../../../../server/http/result';
+import { problem, readIdParam } from '../../../../../server/rbac/http';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -91,9 +91,8 @@ export async function POST(
     );
   }
 
-  const rbac = currentRbacRuntime();
-  const invitations = currentInvitationsRuntime();
-  if (rbac === null || invitations === null) {
+  const application = applicationContext();
+  if (application === null) {
     return responseFor(
       problem(
         503,
@@ -106,11 +105,11 @@ export async function POST(
   const body = await readJsonBody(request);
   if (!body.ok) return responseFor(body.result);
   const result = await acceptInvitation(
-    rbac.directory,
+    application.rbac.directory,
     identity.claims,
     id,
     body.value,
-    invitations,
+    application.invitations,
   );
   const response = responseFor(result);
   if (result.acceptedSession !== undefined) {

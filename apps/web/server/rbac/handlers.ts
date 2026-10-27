@@ -37,7 +37,8 @@ import type {
   WorkspaceDirectory,
 } from './directory';
 import { conferRole, type ConferredRole } from './conferral';
-import { problem, type ApiResult } from './http';
+import type { ApiResult } from '../http/result';
+import { problem } from './http';
 import type { Principal, PrincipalKind } from './principal';
 import { ROLES, type Role } from './roles';
 
@@ -140,13 +141,14 @@ export function readEmail(
  * ```text
  * allow   the caller holds at least everything §21 grants the requested role
  * deny    403 forbidden_role_conferral    §21 grants that role something the caller has not got
- * refuse  500 authorisation_undecidable   the two cannot be compared; nothing was decided
+ * refuse  500 authorisation_undecidable   the caller's role is not one of §21's four; nothing was decided
  * ```
  *
  * A malformed value — absent, not a string, not one of §21's four — is still a `400`, because that
  * is a fact about the request rather than about the caller's entitlement; `conferRole` reports it
- * as `refuse`, and this function turns that one case back into the `400` it always was. Every
- * other refusal keeps its `500`: a `403` there would assert that a rule was applied, and none was.
+ * as `refuse`, and this function turns that one case back into the `400` it always was. The only
+ * other refusal is a caller role that is not one of the four, and it keeps its `500`: a `403` there
+ * would assert that a rule was applied, and none was.
  */
 export function readConferredRole(
   body: Record<string, unknown>,

@@ -1,7 +1,9 @@
+import type { SetupProvider } from '@indx-workspace/contracts/setup';
+
 import type { SessionCookie } from '../auth/session';
 
 export interface SetupInput {
-  provider: 'anthropic' | 'openai' | 'azure-openai' | 'openai-compatible';
+  provider: SetupProvider;
   providerApiKey: string;
   /** Where the provider answers instead of its public API; first-run setup only. */
   providerBaseUrl?: string;
@@ -40,16 +42,10 @@ export interface SetupRuntime {
   complete(input: SetupInput): Promise<SetupResult>;
 }
 
-interface Registry {
-  __agentWorkspaceSetupRuntime__?: SetupRuntime;
-}
-
-const registry = globalThis as typeof globalThis & Registry;
-
-export function configureSetupRuntime(runtime: SetupRuntime): void {
-  registry.__agentWorkspaceSetupRuntime__ = runtime;
-}
-
-export function currentSetupRuntime(): SetupRuntime | null {
-  return registry.__agentWorkspaceSetupRuntime__ ?? null;
-}
+/**
+ * First-run setup as the application context holds it. It stores the model key encrypted, so it is
+ * `unavailable` whenever encrypted model storage did not start; `POST /api/setup` then answers its
+ * `503 setup_unavailable`, as it does with no context installed.
+ */
+export type Setup =
+  { readonly kind: 'serving'; readonly runtime: SetupRuntime } | { readonly kind: 'unavailable' };

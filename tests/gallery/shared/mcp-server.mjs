@@ -12,17 +12,27 @@
 // (`agent-workspace.yaml`) may declare only remote `http`/`sse` connectors, so the HTTP form is
 // the one `aw dev` can keep in step; a `stdio` connector is created through the SDK
 // (`aw.connectors.create({ transport: 'stdio', command, args })`) and runs inside the runtime.
+//
+// Who is asking (ADR-0142 D1). A connector that opts in with `identity: { secret }` receives a
+// signed `x-aw-identity` header on every HTTP request of a run. Set `IDENTITY_SECRET` (a comma
+// separated list while the secret rotates), `IDENTITY_AUDIENCE` (this connector's id) and
+// `IDENTITY_WORKSPACE`, and the server verifies the header with the SDK's `verifyIdentity`: a bad
+// header is answered `401 { code }` and nothing else, never the header itself. A tool handler
+// receives `(args, { identity })`, `identity` being the verified payload or `null` (stdio, or no
+// header); `subjectOf` is how a handler asks for the caller and refuses without one.
 import { createServer } from 'node:http';
 import { createInterface } from 'node:readline';
+
+import { IDENTITY_ASSERTION_HEADER, verifyIdentity } from '@indx-workspace/sdk';
 
 const PROTOCOL_VERSION = '2025-11-25';
 
 /**
  * Serve `tools` over stdio until stdin closes, or over Streamable HTTP when `MCP_TRANSPORT=http`.
  *
- * Each tool is `{ name, description, inputSchema, handler }`. `handler(args)` returns a plain
+ * Each tool is `{ name, description, inputSchema, handler }`. `handler(args, context)` returns a plain
  * value: a string is sent as text, anything else as pretty JSON text, which is what the agent
- * reads. A handler that throws becomes a tool result with `isError: true`, never a crash, so one
+ * reads. `context` is `{ identity }` (see the header comment). A handler that throws becomes a tool result with `isError: true`, never a crash, so one
  * bad call cannot end the agent's run.
  */
 export function serveTools({ name, version = '0.1.0', tools }) {
@@ -62,7 +72,13 @@ function serveHttp(handle) {
     }
     const chunks = [];
     request.on('data', (chunk) => chunks.push(chunk));
-    request.on('end', () => {
+    request.on('end', async () => {
+      const caller = await identityOf(request.headers[IDENTITY_ASSERTION_HEADER]);
+      if (caller.refused !== undefined) {
+        response.writeHead(401, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ code: caller.refused }));
+        return;
+      }
       const message = parse(Buffer.concat(chunks).toString('utf8'));
       if (message === undefined) {
         response.writeHead(400, { 'content-type': 'application/json' });
@@ -75,7 +91,7 @@ function serveHttp(handle) {
         );
         return;
       }
-      void handle(message).then((reply) => {
+      void handle(message, { identity: caller.identity }).then((reply) => {
         if (reply === undefined) {
           response.writeHead(202).end();
           return;
@@ -85,14 +101,28 @@ function serveHttp(handle) {
       });
     });
   });
-  server.listen(port, '127.0.0.1');
+  // With `PORT=0` the system picks the port, so the one line on stdout is how a caller learns it.
+  server.listen(port, '127.0.0.1', () => {
+    process.stdout.write(`listening on 127.0.0.1:${server.address().port}\n`);
+  });
   return server;
+}
+
+/** The verified caller of one request: `{ identity }`, or `{ refused: code }` for a bad header. */
+async function identityOf(header) {
+  const keys = (process.env.IDENTITY_SECRET ?? '').split(',').filter((key) => key !== '');
+  if (typeof header !== 'string' || keys.length === 0) return { identity: null };
+  const check = await verifyIdentity(header, keys, new Date(), {
+    audience: process.env.IDENTITY_AUDIENCE ?? '',
+    workspace: process.env.IDENTITY_WORKSPACE ?? '',
+  });
+  return check.ok ? { identity: check.payload } : { refused: check.code };
 }
 
 /** The JSON-RPC dispatcher both transports share. */
 export function createHandler({ name, version = '0.1.0', tools }) {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
-  return async function handle(message) {
+  return async function handle(message, context = { identity: null }) {
     const { id, method, params } = message;
     if (method === 'initialize') {
       return {
@@ -129,7 +159,7 @@ export function createHandler({ name, version = '0.1.0', tools }) {
         };
       }
       try {
-        const value = await tool.handler(params.arguments ?? {});
+        const value = await tool.handler(params.arguments ?? {}, context);
         const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
         return {
           jsonrpc: '2.0',
@@ -149,6 +179,31 @@ export function createHandler({ name, version = '0.1.0', tools }) {
 /** Throw an error the agent reads as the tool's answer (see `serveTools`). */
 export function refuse(message) {
   throw new Error(message);
+}
+
+/**
+ * The asserted caller's `sub`. Refuses, in words that name no one, when the call carries no
+ * verified identity or the caller's kind is not one of `kinds` (any kind when omitted).
+ */
+export function subjectOf(context, { kinds } = {}) {
+  const identity = context?.identity;
+  if (identity === null || identity === undefined) {
+    refuse('caller unknown: this tool answers only a call that carries a verified identity');
+  }
+  if (kinds !== undefined && !kinds.includes(identity.principalKind)) {
+    refuse('this kind of caller may not use this tool');
+  }
+  return identity.sub;
+}
+
+/**
+ * What `access` (a map of `sub` to that person's scope, read from the use case's own data) grants
+ * the asserted caller. Refuses a caller the map does not list, in the same words whoever they are.
+ */
+export function scopeOf(context, access, options) {
+  const sub = subjectOf(context, options);
+  if (!Object.hasOwn(access, sub)) refuse('no access: this caller is not registered for this tool');
+  return access[sub];
 }
 
 /** A required, non-blank string argument, or a refusal naming it. */

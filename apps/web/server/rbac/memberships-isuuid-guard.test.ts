@@ -32,7 +32,7 @@ import {
 
 import type { WorkspaceDirectory } from './directory';
 import { changeMembershipRole, deleteMembership } from './handlers';
-import type { ApiResult } from './http';
+import type { ApiResult } from '../http/result';
 import { createPostgresDirectory } from './postgres-directory';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());

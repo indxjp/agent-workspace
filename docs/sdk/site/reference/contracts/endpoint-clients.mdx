@@ -10,7 +10,7 @@ description: "The @indx-workspace/contracts/endpoint-clients exports, sorted alp
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `undefined \| null \| readonly string[]` | No |  |
 
@@ -18,12 +18,13 @@ description: "The @indx-workspace/contracts/endpoint-clients exports, sorted alp
 
 The body of `POST /api/endpoint-clients`. An `a2a-agent` client lists exactly one agent and no
 `toolNames`; an `mcp-project` client lists 1 to `ENDPOINT_CLIENT_AGENTS_MAX` agents and may
-narrow the tools with `toolNames` (`null` or absent means every code tool of those agents).
+narrow the tools with `toolNames` (`null` or absent means every code tool of those agents); a
+`builder` client lists no agent and no `toolNames`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `undefined \| null \| readonly string[]` | No |  |
 
@@ -35,12 +36,14 @@ Value: `64`
 
 ## ENDPOINT_CLIENT_KINDS
 
-What an endpoint client names (ADR-0134): an MCP project tool endpoint or one agent's A2A
-endpoint. A credential is bound to exactly one client, so revoking the client revokes everything
-that could reach the resource.
+What an endpoint client names (ADR-0134): an MCP project tool endpoint, one agent's A2A endpoint,
+or the Builder's MCP door (`/mcp/builder`, issue #1846). A credential is bound to exactly one
+client, so revoking the client revokes everything that could reach the resource. A `builder`
+client binds no agent: the member who consents to it is the principal of its tokens.
 
 - `'mcp-project'`
 - `'a2a-agent'`
+- `'builder'`
 
 ## ENDPOINT_CLIENT_PROBLEM_CODES
 
@@ -74,6 +77,7 @@ Value: `64`
 
 ## EndpointClientKind
 
+- `"builder"`
 - `"mcp-project"`
 - `"a2a-agent"`
 
@@ -103,7 +107,7 @@ Value: `64`
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `null \| readonly string[]` | Yes |  |
 | `redirectUris` | `readonly string[]` | Yes |  |
@@ -124,7 +128,7 @@ shown once, by the mint answer.
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `kind` | `"mcp-project" \| "a2a-agent"` | Yes |  |
+| `kind` | `"builder" \| "mcp-project" \| "a2a-agent"` | Yes |  |
 | `agentIds` | `readonly string[]` | Yes |  |
 | `toolNames` | `null \| readonly string[]` | Yes |  |
 | `redirectUris` | `readonly string[]` | Yes |  |

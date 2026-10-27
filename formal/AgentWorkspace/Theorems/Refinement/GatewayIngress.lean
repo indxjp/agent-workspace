@@ -53,7 +53,7 @@ theorem only_the_two_new_routes_changed :
       ∀ r : Request,
         ingressDecisionRouteCurrent .responses r = .answered 404 "not_found_error" ∧
           ingressDecisionRouteCurrent .chatCompletions r = .answered 404 "not_found_error" :=
-  ⟨by decide, fun _ => ⟨rfl, rfl⟩⟩
+  ⟨by decide +kernel, fun _ => ⟨rfl, rfl⟩⟩
 
 /-- Anthropic Messages behaves identically on every connection family in both tables, so the
 refinement is not merely about the route's existence. -/
@@ -62,7 +62,7 @@ refinement is not merely about the route's existence. -/
 theorem messages_behaves_identically_on_every_family :
     ConnectionFamily.all.all (fun family =>
       ingressDecisionRouteCurrent .messages (clean .anthropicMessages family) ==
-        ingressDecisionRoute .messages (clean .anthropicMessages family)) = true := by decide
+        ingressDecisionRoute .messages (clean .anthropicMessages family)) = true := by decide +kernel
 
 /-- The `wire_protocol` column's default is the only dialect the gateway spoke before this unit, so
 a row written by the previous release is correctly labelled without a backfill. -/
@@ -72,7 +72,7 @@ theorem the_column_default_is_the_previous_only_dialect :
     WireProtocol.columnDefault = .anthropicMessages ∧
       WireEnum.toWire WireProtocol.columnDefault = "anthropic-messages" ∧
       (Route.all.filter Route.existedBeforeIngress).filterMap routeProtocol? =
-        [WireProtocol.columnDefault] := by decide
+        [WireProtocol.columnDefault] := by decide +kernel
 
 /-- The upstream request allowlist is a **refinement** of the `openai-` prefix rule it replaces, not a
 different rule: every name the closed list still admits the prefix admitted too, and the names the
@@ -87,7 +87,7 @@ theorem the_upstream_allowlist_refines_the_prefix_rule :
       ["openai-organization", "openai-project"].all (fun name =>
         hasOpenAIPrefix name && !travelsUpstream name) = true ∧
       ["authorization", "cookie", "x-api-key"].all (fun name =>
-        !hasOpenAIPrefix name && !travelsUpstream name) = true := by decide
+        !hasOpenAIPrefix name && !travelsUpstream name) = true := by decide +kernel
 
 /-- Metering an Anthropic Messages response is the same function it was: the extraction was moved
 into its own module, not changed. A `message_start` / `message_delta` pair with a tool block still
@@ -99,7 +99,7 @@ theorem anthropic_metering_is_unchanged :
     extractAnthropic [.usageSnapshot 12 0 4 2, .toolBlockStart, .usageSnapshot 12 7 4 2, .stop] =
       ⟨⟨12, 7, 4, 2, 1⟩, true, true⟩ ∧
     settle .anthropicMessages (extractAnthropic [.usageSnapshot 12 0 4 2, .toolBlockStart,
-      .usageSnapshot 12 7 4 2, .stop]) = .recorded ⟨12, 7, 4, 2, 1⟩ true := by decide
+      .usageSnapshot 12 7 4 2, .stop]) = .recorded ⟨12, 7, 4, 2, 1⟩ true := by decide +kernel
 
 /-- An Anthropic response carrying no usage at all still settles as a failure, exactly as it did
 before the gateway spoke three dialects — **including** the shape every real one has, which ends in
@@ -112,6 +112,6 @@ theorem an_anthropic_response_without_usage_still_fails :
     settle .anthropicMessages (extractAnthropic []) = .failed ∧
       settle .anthropicMessages (extractAnthropic [.toolBlockStart]) = .failed ∧
       settle .anthropicMessages (extractAnthropic [.stop]) = .failed ∧
-      settle .anthropicMessages (extractAnthropic [.toolBlockStart, .stop]) = .failed := by decide
+      settle .anthropicMessages (extractAnthropic [.toolBlockStart, .stop]) = .failed := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.GatewayIngress

@@ -9,6 +9,7 @@ describe('isAgentEndpointRoute', () => {
     expect(declared.map((route) => `${route.method} ${route.path}`).sort()).toEqual([
       'GET /api/a2a/agents/:agentName/.well-known/agent-card.json',
       'POST /api/a2a/agents/:agentName',
+      'POST /mcp/builder',
       'POST /mcp/projects/:name',
     ]);
     for (const route of declared) {
@@ -34,5 +35,14 @@ describe('isAgentEndpointRoute', () => {
     expect(isAgentEndpointRoute('POST', '/mcp/projects/')).toBe(false);
     expect(isAgentEndpointRoute('POST', '/mcp/projectsx')).toBe(false);
     expect(isAgentEndpointRoute('POST', '/mcp/other/support')).toBe(false);
+  });
+
+  it('admits the Builder door on POST and on that exact path only', () => {
+    expect(isAgentEndpointRoute('POST', '/mcp/builder')).toBe(true);
+    expect(isAgentEndpointRoute('GET', '/mcp/builder')).toBe(false);
+    expect(isAgentEndpointRoute('POST', '/mcp/builder/')).toBe(false);
+    expect(isAgentEndpointRoute('POST', '/mcp/builder/extra')).toBe(false);
+    expect(isAgentEndpointRoute('POST', '/mcp/builders')).toBe(false);
+    expect(isAgentEndpointRoute('POST', '/mcp/Builder')).toBe(false);
   });
 });

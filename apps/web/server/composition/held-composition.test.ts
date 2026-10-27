@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { defineSlot } from '../runtime-slot';
 import { closeHeldComposition, holdComposition } from './held-composition';
 
 describe('held composition (S1-25, #510)', () => {
@@ -24,9 +25,11 @@ describe('held composition (S1-25, #510)', () => {
     expect(closes).toBe(1);
   });
 
-  it('keeps the handle under a registered symbol, which every bundled copy shares', () => {
+  it('keeps the handle in a runtime slot, which every bundled copy shares', () => {
     const composition = { close: () => Promise.resolve() };
     holdComposition(composition);
-    expect(Reflect.get(globalThis, Symbol.for('indx.aw.web.held-composition'))).toBe(composition);
+    expect(defineSlot<typeof composition>('__agentWorkspaceHeldComposition__').current()).toBe(
+      composition,
+    );
   });
 });

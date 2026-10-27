@@ -43,10 +43,7 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 
 import {
-  describeTransportRejection,
-  describeWorkspacesFailure,
   findCurrentMembership,
-  parseWorkspaceList,
   type WorkspaceMembership,
   type WorkspacesProblem,
 } from './workspaces-directory';
@@ -55,6 +52,8 @@ import {
   shouldReloadRestoredTenantPage,
   WORKSPACE_DIRECTORY_CHANGED_EVENT,
 } from './workspace-navigation';
+import { browserClient } from '../../lib/browser-client';
+import { loadWorkspaces } from './workspaces-requests-model';
 import { DismissibleNotice } from './dismissible-notice';
 import { recoverWorkspaceSession } from './session-recovery';
 import { clampMenuIndex, nextMenuIndex, parseMenuKey } from './workspace-switcher-menu';
@@ -122,62 +121,27 @@ export function WorkspaceSwitcher({
       setState((currentState) =>
         currentState.kind === 'idle' ? { kind: 'loading' } : currentState,
       );
-      fetch('/api/workspaces', { headers: { accept: 'application/json' } })
-        .then(async (response) => {
-          if (cancelled) return;
-          if (!response.ok) {
-            const problem = await describeWorkspacesFailure(response, () => response.json());
-            if (cancelled) return;
-            if (
-              recoverWorkspaceSession(problem, {
-                clearTenantState: () => {
-                  setOpen(false);
-                  setState({ kind: 'idle' });
-                },
-                concealTenantDocument: () => concealTenantDocument(document),
-                navigate: (path) => window.location.assign(path),
-              })
-            ) {
-              return;
-            }
-            setState({
-              kind: 'problem',
-              problem,
-            });
-            return;
-          }
-          let body: unknown;
-          try {
-            body = await response.json();
-          } catch {
-            if (cancelled) return;
-            setState({
-              kind: 'problem',
-              problem: {
-                kind: 'transport',
-                reason: 'The server answered with a body that was not JSON.',
+      void loadWorkspaces(browserClient()).then((result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          const { problem } = result;
+          if (
+            recoverWorkspaceSession(problem, {
+              clearTenantState: () => {
+                setOpen(false);
+                setState({ kind: 'idle' });
               },
-            });
+              concealTenantDocument: () => concealTenantDocument(document),
+              navigate: (path) => window.location.assign(path),
+            })
+          ) {
             return;
           }
-          // A newer load (another open, or a directory change) owns the state from here on.
-          if (cancelled) return;
-          const parsed = parseWorkspaceList(body);
-          if (parsed === null) {
-            setState({
-              kind: 'problem',
-              problem: {
-                kind: 'transport',
-                reason: 'The server answered without the usual workspaces list.',
-              },
-            });
-            return;
-          }
-          setState({ kind: 'loaded', items: parsed });
-        })
-        .catch((error: unknown) => {
-          if (!cancelled) setState({ kind: 'problem', problem: describeTransportRejection(error) });
-        });
+          setState({ kind: 'problem', problem });
+          return;
+        }
+        setState({ kind: 'loaded', items: result.value });
+      });
     }
 
     // Always known on mount, so the archived banner below is accurate even before the menu is

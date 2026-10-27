@@ -57,7 +57,7 @@ as one, at both edges of the plane. -/
 theorem utf16_units_at_the_plane_edges :
     utf16Units (Char.ofNat 0xFFFF) = 1 ∧ utf16Units (Char.ofNat 0x10000) = 2 ∧
       utf16Units (Char.ofNat 0x1F600) = 2 ∧ utf16Units 'a' = 1 := by
-  decide
+  decide +kernel
 
 /-- Both bounds of a string schema are checked in UTF-16 units, including the upper bound. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#MAX_PROMPT_CHARS")]
@@ -68,7 +68,7 @@ theorem length_within_checks_maximum (lo hi : Nat) (s : String) :
 
 example : lengthWithin 1 (some 2) (String.ofList [Char.ofNat 0x1F600]) = true ∧
     lengthWithin 1 (some 1) (String.ofList [Char.ofNat 0x1F600]) = false := by
-  decide
+  decide +kernel
 
 /-- The JavaScript whitespace predicate holds for each of its 25 listed code points and for none
 of the look-alikes `trim` keeps: next line `U+0085`, the Mongolian vowel separator `U+180E`, the
@@ -80,7 +80,7 @@ theorem js_whitespace_is_the_listed_set :
       jsWhitespaceCodePoints.length = 25 ∧ jsWhitespaceCodePoints.Nodup ∧
       ([0x85, 0x180E, 0x200B, 0x2060, 0x41, 0x30, 0x5F, 0x1F].all
         fun n => !isJsWhitespace (Char.ofNat n)) = true := by
-  decide
+  decide +kernel
 
 private theorem dropWhile_eq_nil_iff (p : Char → Bool) :
     ∀ cs : List Char, cs.dropWhile p = [] ↔ cs.all p = true
@@ -103,7 +103,7 @@ theorem js_trim_empty_iff_blank (s : String) : jsTrimList s.toList = [] ↔ isBl
   unfold jsTrimList isBlank
   rw [List.reverse_eq_nil_iff, dropWhile_eq_nil_iff, List.all_reverse, all_dropWhile]
 
-example : isBlank "\u3000 \t" = true ∧ isBlank " a " = false := by decide
+example : isBlank "\u3000 \t" = true ∧ isBlank " a " = false := by decide +kernel
 
 /-- `trim` removes leading and trailing whitespace of every kind the set lists and keeps the
 characters JavaScript does not treat as whitespace. -/
@@ -112,7 +112,7 @@ characters JavaScript does not treat as whitespace. -/
 theorem js_trim_examples :
     jsTrim " \t\n a b \r\u00A0\u2028\uFEFF" = "a b" ∧ jsTrim "\u0085x\u180E" = "\u0085x\u180E" ∧
       jsTrim "\u3000" = "" := by
-  decide
+  decide +kernel
 
 /-! ## UUIDs -/
 
@@ -137,17 +137,17 @@ example : uuidCodec.decode (.str sampleUuid) = some sampleUuid :=
 private theorem canonical_length (s : String) (h : Uuid.isCanonical s = true) :
     s.toList.length = 36 := by
   simp only [Uuid.isCanonical, Bool.and_eq_true, beq_iff_eq] at h
-  rw [h.1]; decide
+  rw [h.1]; decide +kernel
 
 private theorem hex_small (c : Char) (h : Uuid.isHexDigit c = true) : c.toNat ≤ 0xFFFF := by
   simp only [Uuid.isHexDigit, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h
   have hf : c ≤ 'f' := by
     rcases h with (⟨_, h2⟩ | ⟨_, h2⟩) | ⟨_, h2⟩
-    · exact Char.le_trans h2 (by decide)
+    · exact Char.le_trans h2 (by decide +kernel)
     · exact h2
-    · exact Char.le_trans h2 (by decide)
+    · exact Char.le_trans h2 (by decide +kernel)
   have h1 : c.val.toNat ≤ ('f' : Char).val.toNat := UInt32.le_iff_toNat_le.mp (Char.le_def.mp hf)
-  have h2 : ('f' : Char).val.toNat = 102 := by decide
+  have h2 : ('f' : Char).val.toNat = 102 := by decide +kernel
   show c.val.toNat ≤ 0xFFFF
   omega
 
@@ -171,9 +171,9 @@ theorem uuid_is_36_characters (s : String) (h : Uuid.isCanonical s = true) :
   intro c hc
   rcases canonical_chars s h c hc with hx | rfl
   · exact hex_small c hx
-  · decide
+  · decide +kernel
 
-example : utf16Length sampleUuid = 36 := (uuid_is_36_characters _ (by decide)).2
+example : utf16Length sampleUuid = 36 := (uuid_is_36_characters _ (by decide +kernel)).2
 
 /-- A non-hexadecimal character at any one of the 36 positions of an accepted id is refused. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/identifiers.ts#UUID_PATTERN")]
@@ -205,7 +205,7 @@ theorem uuid_refuses_wrong_lengths_and_decorations :
       Uuid.isCanonical "urn:uuid:123e4567-e89b-12d3-a456-426614174000" = false ∧
       Uuid.isCanonical "123e4567e89b12d3a456426614174000" = false ∧
       Uuid.isCanonical "" = false := by
-  decide
+  decide +kernel
 
 /-- `UuidSchema`, `isUuid` and `IsoDateTimeSchema` refuse every JSON value that is not a string. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/identifiers.ts#UuidSchema")
@@ -240,7 +240,7 @@ theorem iso_date_time_leap_days :
       isIsoDateTime "0000-02-29T00:00:00Z" = true ∧ isIsoDateTime "2023-02-29T00:00:00Z" = false ∧
       isIsoDateTime "1900-02-29T00:00:00Z" = false ∧
       isIsoDateTime "2100-02-29T00:00:00Z" = false := by
-  decide
+  decide +kernel
 
 /-- For every year, February has 29 days exactly under the Gregorian divisibility rule. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/identifiers.ts#IsoDateTimeSchema")]
@@ -258,7 +258,7 @@ theorem iso_date_time_field_bounds :
       isIsoDateTime "2026-01-00T00:00:00Z" = false ∧ isIsoDateTime "2026-01-01T24:00:00Z" = false ∧
       isIsoDateTime "2026-01-01T00:60:00Z" = false ∧ isIsoDateTime "2026-01-01T00:00:60Z" = false ∧
       isIsoDateTime "2026-12-31T23:59:59Z" = true := by
-  decide
+  decide +kernel
 
 /-- Only the `Z` form is accepted: an offset, a lower-case `z` or `t`, a missing designator, a
 missing seconds field, a space for `T` and a trailing newline are refused. -/
@@ -269,7 +269,7 @@ theorem iso_date_time_refuses_other_forms :
       isIsoDateTime "2026-09-23T10:00:00" = false ∧ isIsoDateTime "2026-09-23T10:00Z" = false ∧
       isIsoDateTime "2026-09-23 10:00:00Z" = false ∧
       isIsoDateTime "2026-09-23T10:00:00Z\n" = false ∧ isIsoDateTime "2026-09-23" = false := by
-  decide
+  decide +kernel
 
 /-- A fraction of seconds needs at least one digit and may have many. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/identifiers.ts#IsoDateTimeSchema")]
@@ -278,7 +278,7 @@ theorem iso_date_time_fraction :
       isIsoDateTime "2026-09-23T10:00:00.1Z" = true ∧
       isIsoDateTime "2026-09-23T10:00:00.123456789012Z" = true ∧
       isIsoDateTime "2026-09-23T10:00:00.12aZ" = false := by
-  decide
+  decide +kernel
 
 /-! ## Problem envelopes -/
 
@@ -304,7 +304,7 @@ theorem problem_envelopes_parse_exactly_the_values_with_a_code
 
 example : ¬ ∃ j, apiProblemBareCodeCodec.decode j = some ⟨"", none⟩ := fun h =>
   absurd ((problem_envelopes_parse_exactly_the_values_with_a_code default default ⟨"", none⟩).2.2.mp h)
-    (by decide)
+    (by decide +kernel)
 
 /-- `details` is any list of strings, the empty list included (`z.array(z.string())` has no
 length bound), and is read back unchanged. -/
@@ -317,7 +317,7 @@ theorem api_problem_accepts_any_details_list (d : List String) :
   -- checked against the decoder itself.
   have hitems : Codec.decodeAll Codec.string.decode (d.map JValue.str) = some d :=
     Codec.decodeAll_map_encode Codec.string d (by simp [Codec.string, Codec.stringWhere])
-  have hcode : codeCodec.decode (.str "x") = some "x" := by decide
+  have hcode : codeCodec.decode (.str "x") = some "x" := by decide +kernel
   have hmsg : Codec.string.decode (.str "") = some "" := rfl
   simp [apiProblemCodec, Obj.strict, Obj.onlyKeys, Obj.req, Obj.opt, lookup, obj?, bodyCodec,
     decodeBody, decodeBodyFields, bodyKeys, detailsCodec, Codec.array, hitems, hcode, hmsg]
@@ -340,7 +340,7 @@ theorem problem_code_min_one :
       (apiProblemCodec.decode
         (.obj [("error", .obj [("code", .str "x"), ("message", .str "")])])).isSome ∧
       (apiProblemBareCodeCodec.decode (.obj [("error", .str (String.singleton (Char.ofNat 0x1F600)))])).isSome := by
-  decide
+  decide +kernel
 
 /-- Missing and mistyped fields are refused: a missing `message` or `code`, `details: null`
 (optional is not nullable), a non-string detail, a bare `error` string where the standard envelope
@@ -360,7 +360,7 @@ theorem problem_envelopes_refuse_missing_and_mistyped_fields :
       apiProblemBareCodeCodec.decode (.obj [("error", .str "x"), ("message", .null)]) = none ∧
       apiProblemCodec.decode (.str "boom") = none ∧
       apiProblemCodec.decode (.arr []) = none ∧ apiProblemCodec.decode (.obj []) = none := by
-  decide
+  decide +kernel
 
 /-- The standard envelope refuses an unknown key inside `error`, whatever the key's value, for
 every valid body. -/
@@ -377,7 +377,7 @@ theorem api_problem_refuses_unknown_inner_key (b : ApiProblemBody) (k : String) 
 
 example : apiProblemCodec.decode (.obj [("error", .obj [("code", .str "x"), ("message", .str "y"),
     ("status", .num 400 0)])]) = none :=
-  api_problem_refuses_unknown_inner_key ⟨"x", "y", none, none⟩ "status" (.num 400 0) (by decide)
+  api_problem_refuses_unknown_inner_key ⟨"x", "y", none, none⟩ "status" (.num 400 0) (by decide +kernel)
 
 /-- The RBAC envelope refuses an unknown key inside `error` beside `code` and `detail`, whatever
 the key's value, for every code and detail (its inner object is `.strict()` too). -/
@@ -394,7 +394,7 @@ theorem api_problem_detail_refuses_unknown_inner_key (code detail k : String) (v
 
 example : apiProblemDetailCodec.decode (.obj [("error", .obj [("code", .str "last_owner"),
     ("detail", .str "x"), ("details", .arr [])])]) = none :=
-  api_problem_detail_refuses_unknown_inner_key "last_owner" "x" "details" (.arr []) (by decide)
+  api_problem_detail_refuses_unknown_inner_key "last_owner" "x" "details" (.arr []) (by decide +kernel)
 
 /-- `code` has a lower bound only: a code of any length from one UTF-16 unit up is accepted by
 each of the three envelopes and read back unchanged. -/
@@ -413,7 +413,7 @@ theorem problem_code_has_no_upper_bound (s : String) (hs : 1 ≤ utf16Length s) 
 
 example : apiProblemBareCodeCodec.decode (.obj [("error", .str "a_code_far_longer_than_any_bound_of_32_units")]) =
     some ⟨"a_code_far_longer_than_any_bound_of_32_units", none⟩ :=
-  (problem_code_has_no_upper_bound _ (by decide)).2.2
+  (problem_code_has_no_upper_bound _ (by decide +kernel)).2.2
 
 /-- A repeated key is read as its last occurrence, as `JSON.parse` (the SDK's `response.json()`)
 keeps it: at the top level of the bare envelope and inside the standard envelope's `error`. -/
@@ -425,7 +425,7 @@ theorem problem_envelope_repeated_key_last_wins :
       apiProblemCodec.decode (.obj [("error", .obj [("code", .str "first"), ("message", .str "m"),
         ("code", .str "last")])]) = some ⟨⟨"last", "m", none, none⟩⟩ ∧
       apiProblemBareCodeCodec.decode (.obj [("error", .str "x"), ("error", .str "")]) = none := by
-  decide
+  decide +kernel
 
 /-- Each envelope refuses a key beside `error` at the top level, for every body: the standard and
 RBAC envelopes refuse every other key, `message` included; the bare envelope refuses every key but
@@ -448,11 +448,11 @@ theorem problem_envelopes_refuse_unknown_top_level_key (e : JValue) (k : String)
 
 example : apiProblemCodec.decode (.obj [("error", encodeBody ⟨"x", "y", none, none⟩),
     ("message", .str "m")]) = none :=
-  (problem_envelopes_refuse_unknown_top_level_key _ "message" (.str "m") (by decide)).1
+  (problem_envelopes_refuse_unknown_top_level_key _ "message" (.str "m") (by decide +kernel)).1
 
 example : apiProblemBareCodeCodec.decode (.obj [("error", .str "x"), ("code", .str "y")]) = none :=
-  (problem_envelopes_refuse_unknown_top_level_key (.str "x") "code" (.str "y") (by decide)).2.2
-    (by decide)
+  (problem_envelopes_refuse_unknown_top_level_key (.str "x") "code" (.str "y") (by decide +kernel)).2.2
+    (by decide +kernel)
 
 /-! ## The combinators no foundation contract uses
 
@@ -527,7 +527,7 @@ theorem codec_int_admits_safe_integers_only :
       Sample.count.decode (.str "1") = none ∧
       (Codec.int none none).decode (.num (-9007199254740991) 0) = some (-9007199254740991) ∧
       (Codec.int none none).decode (.num (-9007199254740992) 0) = none := by
-  decide
+  decide +kernel
 
 /-- `.nullable()` reads `null` as the absent value and a string as itself, refuses a number, and
 does not make the key optional: a missing `resumedAfter` is refused. -/
@@ -539,7 +539,7 @@ theorem codec_nullable_is_not_optional :
         some (.obj [("reason", .str "r"), ("resumedAfter", .str "7")]) ∧
       Sample.streamReset (.obj [("reason", .str "r"), ("resumedAfter", .num 7 0)]) = none ∧
       Sample.streamReset (.obj [("reason", .str "r")]) = none := by
-  decide
+  decide +kernel
 
 /-- `z.array(s)` accepts the empty array, refuses the whole array when any one item is refused
 (here an empty path), and refuses a non-array. -/
@@ -550,7 +550,7 @@ theorem codec_array_refuses_on_any_bad_item :
       Sample.pathList.decode (.arr [.str "a", .str ""]) = none ∧
       Sample.pathList.decode (.arr [.str "", .str "a"]) = none ∧
       Sample.pathList.decode (.str "a") = none := by
-  decide
+  decide +kernel
 
 /-- `z.looseObject` checks its shape and passes every other key through (a strict object with the
 same shape refuses the same body); a missing or empty `kind` and a non-object are refused. -/
@@ -563,7 +563,7 @@ theorem obj_loose_object_passes_unknown_keys_through :
       Sample.relayedEvent (.obj [("kind", .str "")]) = none ∧
       Sample.relayedEvent (.obj [("n", .num 2 0)]) = none ∧
       Sample.relayedEvent (.arr []) = none := by
-  decide
+  decide +kernel
 
 /-- `z.discriminatedUnion('status', …)` hands the body to the branch its tag names, and that
 branch's own strictness applies (`total` is refused on `ok`); an unknown, missing or non-string tag
@@ -580,6 +580,6 @@ theorem obj_discriminated_union_dispatches_on_the_tag :
       Sample.subtreeMove (.obj [("status", .str "OK"), ("moved", .num 3 0)]) = none ∧
       Sample.subtreeMove (.obj [("moved", .num 3 0)]) = none ∧
       Sample.subtreeMove (.obj [("status", .num 1 0), ("moved", .num 3 0)]) = none := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.ContractsFoundation

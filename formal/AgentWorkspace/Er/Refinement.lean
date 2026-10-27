@@ -166,7 +166,7 @@ def unsoundSetNull (S : Schema) : List (TableName × String) :=
 /-- The closed-set checks of a schema whose values `oneOf` cannot inline into DDL. -/
 def unrenderable (S : Schema) : List (TableName × String) :=
   allTables.flatMap fun t => (S t).checks.filterMap fun
-    | .oneOf n _ vs => if (renderValueList? vs).isNone then some (t, n) else none
+    | .oneOf n _ vs => if (renderOneOf? n vs).isNone then some (t, n) else none
     | .other _ => none
 
 /-- The names of the constraints of today's schema a state breaks, with each non-closed-set check
@@ -338,14 +338,16 @@ def ledgerRowWith (p : String) : State :=
 parents first. -/
 def load : List Current.Stmt :=
   [.workspaces, .users, .userIdentities, .memberships, .apiKeys, .workspacePrincipals,
-    .invitations, .cliSessions, .modelConnections, .secrets, .runtimeProfiles,
-    .runtimeVerifications, .agents, .skills, .files,
-    .mcpServers, .agentFiles, .agentSkills, .agentMcpServers, .agentGrants, .agentVersions,
+    .invitations, .cliSessions, .modelConnections, .secrets, .storageConnections, .runtimeProfiles,
+    .runtimeVerifications, .agents, .skills, .skillRevisions, .files, .fileTexts,
+    .mcpServers, .agentFiles, .agentSkills, .agentStorageGrants, .agentMcpServers, .agentGrants,
+    .agentVersions, .agentVersionStorageGrants,
     .agentVersionPointers, .agentPointerMoves, .agentVersionEvaluations, .endpointClients,
     .endpointClientAgents, .endpointClientApiKeys, .oauthTokens, .projects, .projectFiles,
     .projectMcpServers, .sessions, .surfaceSessionKeys, .sessionTranscripts, .sessionMessages, .sessionStateStreams, .sessionStateEntries, .sessionStateBlobs, .runs,
-    .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .auditEvents, .shares, .shareViews,
-    .shareRunCharges].flatMap fun t => (base t).map (.insert t)
+    .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .builderToolCalls, .auditEvents, .shares, .shareViews,
+    .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns].flatMap fun t =>
+      (base t).map (.insert t)
 
 end TargetCells
 

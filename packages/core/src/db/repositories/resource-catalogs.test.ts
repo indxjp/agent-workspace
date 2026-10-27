@@ -1,72 +1,200 @@
 import crypto from 'node:crypto';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { agentFiles } from '../schema/agent-files.js';
 import { agentSkills } from '../schema/agent-skills.js';
 import { agents } from '../schema/agents.js';
 import { files } from '../schema/files.js';
+import { skillRevisions } from '../schema/skill-revisions.js';
+import { skills } from '../schema/skills.js';
 import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
 import { workspaces } from '../schema/workspaces.js';
-import { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
+import type { StorageArea } from '../../storage/storage-areas.js';
+import { createInMemoryCatalog } from './memory-catalog.js';
+import {
+  describeCatalogConformance,
+  describeSkillCatalogConformance,
+} from './resource-catalogs.contract.js';
+import {
+  CatalogPathPendingError,
+  createDatabaseResourceCatalogRepositoryProvider,
+  STALE_SKILL_REVISION_MS,
+} from './resource-catalogs.js';
 import { createDatabaseWorkspaceScopeResolver, type WorkspaceScope } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
+describeCatalogConformance('the in-memory catalog', () => {
+  const provider = createInMemoryCatalog();
+  const workspaceIds = { a: crypto.randomUUID(), b: crypto.randomUUID() };
+  const ownerA = crypto.randomUUID();
+  const ownerB = crypto.randomUUID();
+  return Promise.resolve({
+    catalog: (workspace) => provider.forWorkspace(workspaceIds[workspace]),
+    ownerA,
+    ownerB,
+    actorA: crypto.randomUUID(),
+    seed: (workspace, row) =>
+      Promise.resolve().then(() =>
+        provider
+          .forWorkspace(workspaceIds[workspace])
+          .seed({ ...row, ownerPrincipalId: workspace === 'a' ? ownerA : ownerB }),
+      ),
+  });
+});
+
+describeSkillCatalogConformance('the in-memory catalog', () => {
+  const provider = createInMemoryCatalog();
+  const workspaceIds = { a: crypto.randomUUID(), b: crypto.randomUUID() };
+  return Promise.resolve({
+    catalog: (workspace) => provider.forWorkspace(workspaceIds[workspace]),
+    ownerA: crypto.randomUUID(),
+    ownerB: crypto.randomUUID(),
+    actorA: crypto.randomUUID(),
+    assign: (workspace, skill) => {
+      const agentId = crypto.randomUUID();
+      provider.forWorkspace(workspaceIds[workspace]).assignSkill(skill.name, agentId);
+      return Promise.resolve(agentId);
+    },
+    ageRevisions: (name) =>
+      Promise.resolve().then(() => provider.forWorkspace(workspaceIds.a).ageSkillRevisions(name)),
+  });
+});
+
+it('failNext rejects the next call of one operation, once', async () => {
+  const provider = createInMemoryCatalog();
+  const catalog = provider.forWorkspace(crypto.randomUUID());
+  const input = { ownerPrincipalId: crypto.randomUUID(), sizeBytes: 1, contentType: null };
+  provider.failNext('reserve', new Error('store down'));
+  await expect(catalog.get('a.txt')).resolves.toBeNull();
+  await expect(catalog.reserve('a.txt', input)).rejects.toThrow('store down');
+  await expect(catalog.reserve('a.txt', input)).resolves.toMatchObject({ kind: 'reserved' });
+});
+
+/** One workspace with an owner membership and its principal; `created_by` is tenant-paired (issue #117). */
+async function seedWorkspace(db: IsolatedTestDatabase['db'], slug: string) {
+  const workspaceId = crypto.randomUUID();
+  const userId = crypto.randomUUID();
+  const membershipId = crypto.randomUUID();
+  const principalId = crypto.randomUUID();
+  await db.insert(workspaces).values({ id: workspaceId, slug, name: slug });
+  await db
+    .insert(users)
+    .values({ id: userId, email: `${userId}@example.test`, name: `Owner ${slug}` });
+  await db.transaction(async (tx) => {
+    await tx.insert(memberships).values({ id: membershipId, workspaceId, userId, role: 'owner' });
+    await tx
+      .insert(workspacePrincipals)
+      .values({ id: principalId, workspaceId, kind: 'membership', membershipId });
+  });
+  const scope = await createDatabaseWorkspaceScopeResolver(db).forWorkspaceId(workspaceId);
+  if (scope === null) throw new Error('catalog scope did not resolve');
+  return { scope, userId, principalId };
+}
+
 describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', () => {
   let isolated: IsolatedTestDatabase;
   let scopeA: WorkspaceScope;
   let scopeB: WorkspaceScope;
-  /** `created_by` is tenant-paired to `memberships` (issue #117); one owner per workspace. */
-  const userA = crypto.randomUUID();
-  const userB = crypto.randomUUID();
-  const membershipA = crypto.randomUUID();
-  const membershipB = crypto.randomUUID();
-  const principalA = crypto.randomUUID();
-  const principalB = crypto.randomUUID();
+  let userA: string;
+  let userB: string;
+  let principalA: string;
+  let principalB: string;
 
   beforeAll(async () => {
     isolated = await createIsolatedTestDatabase('aw_resource_catalogs');
-    const ids = [crypto.randomUUID(), crypto.randomUUID()];
-    await isolated.db.insert(workspaces).values([
-      { id: ids[0]!, slug: 'catalog-a', name: 'A' },
-      { id: ids[1]!, slug: 'catalog-b', name: 'B' },
-    ]);
-    await isolated.db.insert(users).values([
-      { id: userA, email: `${userA}@example.test`, name: 'Owner A' },
-      { id: userB, email: `${userB}@example.test`, name: 'Owner B' },
-    ]);
-    await isolated.db.transaction(async (tx) => {
-      await tx.insert(memberships).values([
-        { id: membershipA, workspaceId: ids[0]!, userId: userA, role: 'owner' },
-        { id: membershipB, workspaceId: ids[1]!, userId: userB, role: 'owner' },
-      ]);
-      await tx.insert(workspacePrincipals).values([
-        {
-          id: principalA,
-          workspaceId: ids[0]!,
-          kind: 'membership',
-          membershipId: membershipA,
-        },
-        {
-          id: principalB,
-          workspaceId: ids[1]!,
-          kind: 'membership',
-          membershipId: membershipB,
-        },
-      ]);
-    });
-    const resolver = createDatabaseWorkspaceScopeResolver(isolated.db);
-    const a = await resolver.forWorkspaceId(ids[0]!);
-    const b = await resolver.forWorkspaceId(ids[1]!);
-    if (a === null || b === null) throw new Error('catalog scopes did not resolve');
-    scopeA = a;
-    scopeB = b;
+    const a = await seedWorkspace(isolated.db, 'catalog-a');
+    const b = await seedWorkspace(isolated.db, 'catalog-b');
+    ({ scope: scopeA, userId: userA, principalId: principalA } = a);
+    ({ scope: scopeB, userId: userB, principalId: principalB } = b);
   }, 180_000);
+
+  describeCatalogConformance('the PostgreSQL catalog', async () => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const a = await seedWorkspace(isolated.db, `conformance-a-${suffix}`);
+    const b = await seedWorkspace(isolated.db, `conformance-b-${suffix}`);
+    const provider = createDatabaseResourceCatalogRepositoryProvider(isolated.db);
+    return {
+      catalog: (workspace) => provider.forScope(workspace === 'a' ? a.scope : b.scope),
+      ownerA: a.principalId,
+      ownerB: b.principalId,
+      actorA: a.userId,
+      seed: async (workspace, row) => {
+        const seeded = workspace === 'a' ? a : b;
+        await isolated.db.insert(files).values({
+          workspaceId: seeded.scope.workspaceId,
+          path: row.path,
+          kind: 'file',
+          storageKey: row.path,
+          ownerPrincipalId: seeded.principalId,
+          status: row.status,
+          objectId: row.objectId ?? null,
+        });
+      },
+    };
+  });
+
+  describeSkillCatalogConformance('the PostgreSQL catalog', async () => {
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const a = await seedWorkspace(isolated.db, `skills-a-${suffix}`);
+    const b = await seedWorkspace(isolated.db, `skills-b-${suffix}`);
+    const provider = createDatabaseResourceCatalogRepositoryProvider(isolated.db);
+    return {
+      catalog: (workspace) => provider.forScope(workspace === 'a' ? a.scope : b.scope),
+      ownerA: a.principalId,
+      ownerB: b.principalId,
+      actorA: a.userId,
+      assign: async (workspace, skill) => {
+        const seeded = workspace === 'a' ? a : b;
+        const agentId = crypto.randomUUID();
+        await isolated.db.insert(agents).values({
+          id: agentId,
+          workspaceId: seeded.scope.workspaceId,
+          name: 'Skill assignee',
+          instructions: '',
+          modelConnectionId: null,
+          model: null,
+          permissions: {
+            readFiles: false,
+            writeFiles: false,
+            runCommands: false,
+            unrestrictedNetwork: false,
+          },
+          ownerPrincipalId: seeded.principalId,
+          createdBy: seeded.userId,
+        });
+        await isolated.db
+          .insert(agentSkills)
+          .values({ workspaceId: seeded.scope.workspaceId, agentId, skillId: skill.id });
+        return agentId;
+      },
+      ageRevisions: async (name) => {
+        await isolated.db
+          .update(skillRevisions)
+          .set({
+            createdAt: sql`${skillRevisions.createdAt} - make_interval(secs => ${STALE_SKILL_REVISION_MS / 1000 + 1})`,
+          })
+          .where(
+            and(
+              eq(skillRevisions.workspaceId, a.scope.workspaceId),
+              eq(skillRevisions.pending, true),
+              inArray(
+                skillRevisions.skillId,
+                isolated.db
+                  .select({ id: skills.id })
+                  .from(skills)
+                  .where(and(eq(skills.workspaceId, a.scope.workspaceId), eq(skills.name, name))),
+              ),
+            ),
+          );
+      },
+    };
+  });
 
   afterAll(async () => isolated.close());
 
@@ -114,6 +242,148 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       createdBy: userA,
     });
     expect(skillUpdated.id).toBe(skill.id);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] a pending file row is invisible to listFiles', async () => {
+    const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+    await isolated.db.insert(files).values({
+      workspaceId: scopeA.workspaceId,
+      path: 'inbox/pending.bin',
+      kind: 'file',
+      storageKey: 'inbox/pending.bin',
+      sizeBytes: 4,
+      ownerPrincipalId: principalA,
+      status: 'pending',
+    });
+    const ready = await repo.putFile({
+      path: 'inbox/ready.bin',
+      kind: 'file',
+      storageKey: 'inbox/ready.bin',
+      sizeBytes: 4,
+      contentType: null,
+      ownerPrincipalId: principalA,
+    });
+    const listed = await repo.listFiles();
+    expect(listed.map((file) => file.path)).not.toContain('inbox/pending.bin');
+    expect(listed.find((file) => file.path === ready.path)).toMatchObject({ status: 'ready' });
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] a folder row is always ready', async () => {
+    const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+    await expect(
+      isolated.db.insert(files).values({
+        workspaceId: scopeA.workspaceId,
+        path: 'pending-folder',
+        kind: 'folder',
+        ownerPrincipalId: principalA,
+        status: 'pending',
+      }),
+    ).rejects.toMatchObject({ cause: { code: '23514', constraint: 'files_folder_is_ready' } });
+    await repo.putFile({
+      path: 'implied/parent/leaf.txt',
+      kind: 'file',
+      storageKey: 'implied/parent/leaf.txt',
+      sizeBytes: 1,
+      contentType: null,
+      ownerPrincipalId: principalA,
+    });
+    const folders = (await repo.listFiles()).filter(
+      (file) => file.path === 'implied' || file.path === 'implied/parent',
+    );
+    expect(folders).toHaveLength(2);
+    expect(folders.every((folder) => folder.kind === 'folder' && folder.status === 'ready')).toBe(
+      true,
+    );
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] putFile over a pending row is refused and leaves it pending', async () => {
+    const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+    const [pending] = await isolated.db
+      .insert(files)
+      .values({
+        workspaceId: scopeA.workspaceId,
+        path: 'inbox/reserved.bin',
+        kind: 'file',
+        storageKey: 'inbox/reserved.bin',
+        sizeBytes: 4,
+        ownerPrincipalId: principalA,
+        status: 'pending',
+      })
+      .returning({ id: files.id });
+    await expect(
+      repo.putFile({
+        path: 'inbox/reserved.bin',
+        kind: 'file',
+        storageKey: 'inbox/reserved.bin',
+        sizeBytes: 4,
+        contentType: null,
+        ownerPrincipalId: principalA,
+      }),
+    ).rejects.toBeInstanceOf(CatalogPathPendingError);
+    await expect(repo.get('inbox/reserved.bin', { includePending: true })).resolves.toMatchObject({
+      id: pending?.id,
+      status: 'pending',
+    });
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] a parent folder is not added beside a pending file at its path', async () => {
+    const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+    await repo.reserve('shadowed-by-pending', {
+      ownerPrincipalId: principalA,
+      sizeBytes: 1,
+      contentType: null,
+    });
+    await repo.putFile({
+      path: 'shadowed-by-pending/child.txt',
+      kind: 'file',
+      storageKey: 'shadowed-by-pending/child.txt',
+      sizeBytes: 1,
+      contentType: null,
+      ownerPrincipalId: principalA,
+    });
+    const rows = await isolated.db
+      .select()
+      .from(files)
+      .where(eq(files.path, 'shadowed-by-pending'));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ kind: 'file', status: 'pending' });
+  });
+
+  describe('the files checks', () => {
+    const row = (path: string, extra: { sha256?: string; area?: StorageArea } = {}) => ({
+      workspaceId: scopeA.workspaceId,
+      path,
+      kind: 'file' as const,
+      storageKey: path,
+      ownerPrincipalId: principalA,
+      ...extra,
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] refuses a sha256 that is not 64 lowercase hex characters', async () => {
+      const refused = ['a'.repeat(63), 'a'.repeat(65), 'A'.repeat(64), 'g'.repeat(64), ''];
+      for (const [index, sha256] of refused.entries()) {
+        await expect(
+          isolated.db.insert(files).values(row(`sha/bad-${String(index)}.bin`, { sha256 })),
+        ).rejects.toMatchObject({ cause: { code: '23514', constraint: 'files_sha256_shape' } });
+      }
+      await isolated.db.insert(files).values(row('sha/good.bin', { sha256: '0'.repeat(64) }));
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] refuses an unknown area', async () => {
+      await expect(
+        isolated.db.execute(
+          sql`insert into files (workspace_id, path, kind, storage_key, owner_principal_id, area)
+            values (${scopeA.workspaceId}, 'area/bad.bin', 'file', 'area/bad.bin', ${principalA}, 'elsewhere')`,
+        ),
+      ).rejects.toMatchObject({ cause: { code: '23514', constraint: 'files_area_valid' } });
+      await isolated.db.insert(files).values(row('area/good.bin', { area: 'staging' }));
+    });
   });
 
   it('keeps equal paths and names isolated by workspace', async () => {
@@ -257,7 +527,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       const seeded = await a.putFile(fileInput('prefix-source/x.md', principalA, userA));
       await a.deleteFile('prefix-source');
 
-      const renamed = await a.renameFilesByPrefix!('prefix-source', 'prefix-target/inner');
+      const renamed = await a.renameFilesByPrefix('prefix-source', 'prefix-target/inner');
       expect(renamed.map((row) => row.path)).toEqual(['prefix-target/inner/x.md']);
 
       const rows = await a.listFiles();
@@ -307,7 +577,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         createdBy: userA,
       });
 
-      const renamed = await repo.renameFilesByPrefix!('a', 'z');
+      const renamed = await repo.renameFilesByPrefix('a', 'z');
       // `a/b` is the folder row `putFile('a/b/c.txt')` wrote for the file's parent.
       expect(renamed.map((row) => row.path).sort()).toEqual(['z', 'z/b', 'z/b/c.txt']);
 
@@ -364,7 +634,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         access: 'read',
       });
 
-      await repo.renameFilesByPrefix!('assigned', 'moved');
+      await repo.renameFilesByPrefix('assigned', 'moved');
 
       const grant = await isolated.db
         .select({ fileId: agentFiles.fileId })
@@ -388,13 +658,13 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         createdBy: userB,
       });
 
-      await expect(a.renameFilesByPrefix!('shared-prefix', 'renamed-prefix')).resolves.toEqual([]);
+      await expect(a.renameFilesByPrefix('shared-prefix', 'renamed-prefix')).resolves.toEqual([]);
       const stillThere = await b.listFiles();
       expect(stillThere.find((row) => row.id === otherWorkspaceFile.id)).toMatchObject({
         path: 'shared-prefix/x.txt',
       });
 
-      await expect(a.deleteFilesByPrefix!('does-not-exist')).resolves.toBeUndefined();
+      await expect(a.deleteFilesByPrefix('does-not-exist')).resolves.toBeUndefined();
     });
 
     it('deleteFilesByPrefix removes a folder and its descendants, never a same-prefixed sibling', async () => {
@@ -427,7 +697,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         createdBy: userA,
       });
 
-      await repo.deleteFilesByPrefix!('to-delete');
+      await repo.deleteFilesByPrefix('to-delete');
 
       const rows = await repo.listFiles();
       expect(rows.find((row) => row.id === folder.id)).toBeUndefined();
@@ -473,7 +743,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         createdBy: userA,
       });
 
-      const renamed = await repo.renameFilesByPrefix!(prefix, 'moved-emoji');
+      const renamed = await repo.renameFilesByPrefix(prefix, 'moved-emoji');
       expect(renamed.map((row) => row.path).sort()).toEqual([
         'moved-emoji',
         'moved-emoji/inner.txt',
@@ -492,7 +762,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         path: `${prefix}-sibling.txt`,
       });
 
-      await repo.deleteFilesByPrefix!('moved-emoji');
+      await repo.deleteFilesByPrefix('moved-emoji');
 
       const rowsAfterDelete = await repo.listFiles();
       expect(rowsAfterDelete.find((row) => row.id === folder.id)).toBeUndefined();
@@ -551,6 +821,124 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       });
       expect((await a.listSkills()).map((row) => row.id)).not.toContain(skill.id);
       await expect(a.deleteSkill('assigned-skill')).resolves.toEqual({ kind: 'not-found' });
+    });
+  });
+  describe('skill revisions (SDK-19, N-1)', () => {
+    const skillInput = (name: string) => ({
+      name,
+      skillMd: `# ${name}`,
+      enabled: true,
+      ownerPrincipalId: principalA,
+      createdBy: userA,
+    });
+    const noWrite = () => Promise.resolve(undefined);
+
+    it('numbers revisions 1, 2, 3 per skill, lists newest first and hides them from other workspaces', async () => {
+      const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+      const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
+      await a.putSkill(skillInput('numbered'));
+      await a.putSkill(skillInput('numbered-other'));
+      const written: number[] = [];
+      const write = (n: number) => {
+        written.push(n);
+        return Promise.resolve(undefined);
+      };
+      const first = await a.publishSkillRevision('numbered', { fileCount: 1, write });
+      const second = await a.publishSkillRevision('numbered', { fileCount: 3, write });
+      const other = await a.publishSkillRevision('numbered-other', {
+        fileCount: 1,
+        write: noWrite,
+      });
+      expect([first?.number, second?.number, other?.number]).toEqual([1, 2, 1]);
+      expect(written).toEqual([1, 2]);
+      expect((await a.listSkillRevisions('numbered')).map((r) => [r.number, r.fileCount])).toEqual([
+        [2, 3],
+        [1, 1],
+      ]);
+      await expect(b.listSkillRevisions('numbered')).resolves.toEqual([]);
+      await expect(
+        b.publishSkillRevision('numbered', { fileCount: 1, write: noWrite }),
+      ).resolves.toBeNull();
+      await expect(
+        a.publishSkillRevision('missing', { fileCount: 1, write: noWrite }),
+      ).resolves.toBeNull();
+    });
+
+    it('gives concurrent publishes distinct numbers', async () => {
+      const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+      await a.putSkill(skillInput('concurrent'));
+      const published = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          a.publishSkillRevision('concurrent', { fileCount: 1, write: noWrite }),
+        ),
+      );
+      expect(published.map((r) => r?.number).sort()).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('records nothing and reuses the number when the object-store write fails', async () => {
+      const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+      await a.putSkill(skillInput('flaky'));
+      await expect(
+        a.publishSkillRevision('flaky', {
+          fileCount: 1,
+          write: () => Promise.reject(new Error('store down')),
+        }),
+      ).rejects.toThrow('store down');
+      await expect(a.listSkillRevisions('flaky')).resolves.toEqual([]);
+      await expect(
+        a.publishSkillRevision('flaky', { fileCount: 1, write: noWrite }),
+      ).resolves.toMatchObject({ number: 1 });
+    });
+
+    it('refuses a second row for a published number and leaves the row alone when the skill changes', async () => {
+      const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+      const skill = await a.putSkill(skillInput('frozen-row'));
+      const first = await a.publishSkillRevision('frozen-row', { fileCount: 2, write: noWrite });
+      await expect(
+        isolated.db
+          .insert(skillRevisions)
+          .values({ workspaceId: scopeA.workspaceId, skillId: skill.id, number: 1, fileCount: 9 }),
+      ).rejects.toThrow();
+
+      await a.putSkill({ ...skillInput('frozen-row'), skillMd: '# changed', enabled: false });
+      const second = await a.publishSkillRevision('frozen-row', { fileCount: 5, write: noWrite });
+      expect(second?.number).toBe(2);
+      expect(await a.listSkillRevisions('frozen-row')).toEqual([second, first]);
+    });
+
+    it('lets an assignment pin only a revision that exists, and cascades revisions with the skill', async () => {
+      const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+      const skill = await a.putSkill(skillInput('pinned'));
+      await a.publishSkillRevision('pinned', { fileCount: 1, write: noWrite });
+      const agentId = crypto.randomUUID();
+      await isolated.db.insert(agents).values({
+        id: agentId,
+        workspaceId: scopeA.workspaceId,
+        name: 'Pinning agent',
+        instructions: '',
+        modelConnectionId: null,
+        model: null,
+        permissions: {
+          readFiles: false,
+          writeFiles: false,
+          runCommands: false,
+          unrestrictedNetwork: false,
+        },
+        ownerPrincipalId: principalA,
+        createdBy: userA,
+      });
+      const assignment = { workspaceId: scopeA.workspaceId, agentId, skillId: skill.id };
+      await expect(
+        isolated.db.insert(agentSkills).values({ ...assignment, revision: 2 }),
+      ).rejects.toThrow();
+      await isolated.db.insert(agentSkills).values({ ...assignment, revision: 1 });
+      await expect(a.deleteSkill('pinned')).resolves.toMatchObject({ kind: 'in-use' });
+
+      await isolated.db.delete(agentSkills).where(eq(agentSkills.skillId, skill.id));
+      await expect(a.deleteSkill('pinned')).resolves.toMatchObject({ kind: 'deleted' });
+      await expect(
+        isolated.db.select().from(skillRevisions).where(eq(skillRevisions.skillId, skill.id)),
+      ).resolves.toEqual([]);
     });
   });
 });

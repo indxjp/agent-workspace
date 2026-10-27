@@ -1,7 +1,10 @@
-import { trace, SpanStatusCode } from '@opentelemetry/api';
+import { context, propagation, trace, SpanStatusCode } from '@opentelemetry/api';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { NodeSDK } from '@opentelemetry/sdk-node';
-import type { RunTelemetryAttributes } from '@agent-workspace/core/telemetry';
+import { BatchSpanProcessor, type SpanProcessor } from '@opentelemetry/sdk-trace';
+import { parseTraceparent, type RunTelemetryAttributes } from '@agent-workspace/core/telemetry';
+import { defineSlot } from '../runtime-slot';
+import { redactingExporter, redactSpanStart } from './redact-span';
 
 /**
  * The Runs screen is an operational convenience, not the durable run store. Keep its process-local
@@ -13,16 +16,12 @@ import type { RunTelemetryAttributes } from '@agent-workspace/core/telemetry';
  */
 export const RECENT_RUN_TELEMETRY_LIMIT = 1_000;
 
-interface RecentRunTelemetrySlot {
-  /** Namespaced so it cannot collide with anything else on the global object. */
-  __agentWorkspaceRecentRunTelemetry__?: Map<string, RunTelemetryAttributes>;
-}
-
-const slot = globalThis as typeof globalThis & RecentRunTelemetrySlot;
+const slot = defineSlot<Map<string, RunTelemetryAttributes>>(
+  '__agentWorkspaceRecentRunTelemetry__',
+);
 
 function recentRuns(): Map<string, RunTelemetryAttributes> {
-  slot.__agentWorkspaceRecentRunTelemetry__ ??= new Map();
-  return slot.__agentWorkspaceRecentRunTelemetry__;
+  return slot.getOrCreate(() => new Map());
 }
 
 // Module-level on purpose: only one graph configures it; the OTel API holds the provider globally.
@@ -34,11 +33,31 @@ export function configureTelemetryRuntime(
   const endpoint = env['OTEL_EXPORTER_OTLP_ENDPOINT']?.trim();
   if (!endpoint) return Promise.resolve(false);
   if (sdk !== null) return Promise.resolve(true);
+  const exporter = new OTLPTraceExporter({ url: `${endpoint.replace(/\/$/u, '')}/v1/traces` });
+  // ADR-0144 D2: Next.js spans carry the request URL; the redactor runs before the exporter.
+  const redactor: SpanProcessor = {
+    onStart: (span) => redactSpanStart(span, span.name, span.attributes),
+    onEnd: () => undefined,
+    forceFlush: () => Promise.resolve(),
+    shutdown: () => Promise.resolve(),
+  };
   sdk = new NodeSDK({
-    traceExporter: new OTLPTraceExporter({ url: `${endpoint.replace(/\/$/u, '')}/v1/traces` }),
+    spanProcessors: [redactor, new BatchSpanProcessor({ exporter: redactingExporter(exporter) })],
   });
   sdk.start();
   return Promise.resolve(true);
+}
+
+/**
+ * The W3C `traceparent` of the active span, for a request to the runtime (F-04): the runner joins
+ * its log lines to this trace. Empty when telemetry is off or no span is active, because without a
+ * configured SDK the OpenTelemetry API propagates nothing.
+ */
+export function activeTraceHeaders(): Readonly<Record<string, string>> {
+  const carrier: Record<string, string> = {};
+  propagation.inject(context.active(), carrier);
+  const traceparent = carrier['traceparent'];
+  return parseTraceparent(traceparent) === null || traceparent === undefined ? {} : { traceparent };
 }
 
 export function recordRunTelemetry(attributes: RunTelemetryAttributes): void {

@@ -47,6 +47,24 @@ function refusal(request: EngineRunRequest): string {
 }
 
 describe('compileOpenAiAgentsRun', () => {
+  describe('outputSchema (ADR-0143)', () => {
+    const schema = { type: 'object', properties: { verdict: { type: 'string' } } };
+
+    it('copies the schema verbatim, and compiles none to null', () => {
+      expect(compiled({ ...BASE, outputSchema: schema }).outputSchema).toEqual(schema);
+      expect(compiled(BASE).outputSchema).toBeNull();
+    });
+
+    it('refuses by name a schema it cannot read for validation', () => {
+      const result = compileOpenAiAgentsRun({
+        ...BASE,
+        outputSchema: { type: 'object', properties: { a: { $ref: '#/definitions/missing' } } },
+      });
+      expect(result).toMatchObject({ ok: false, code: 'engine_capability_unsupported' });
+      expect(result.ok ? '' : result.reason).toContain('outputSchema');
+    });
+  });
+
   describe('subagents', () => {
     const researcher = {
       name: 'researcher',

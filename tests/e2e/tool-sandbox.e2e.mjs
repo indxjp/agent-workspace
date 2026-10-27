@@ -51,11 +51,12 @@ import { toolSandboxRunToken } from '@agent-workspace/gateway/tokens';
 import { nodeImageOf } from '../generated-project/run.mjs';
 import {
   FAKE_PROVIDER_HOST,
+  parseDotEnv,
   run,
   writeFakeProviderFixture,
 } from '../generated-project/project.mjs';
 import { StackClient, assistantText, terminalStatus } from '../generated-project/stack-api.mjs';
-import { IMAGES, docker } from './tool-sandbox-images.mjs';
+import { IMAGES, composeBuildServices, docker } from './tool-sandbox-images.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const PROJECT = 'aw-tool-sandbox-e2e';
@@ -166,6 +167,42 @@ const run: ToolRun<typeof getOrder> = async ({ orderNumber }) => {
 export default run;
 `;
 
+/**
+ * The `AW_STORAGE_URL` `.env.example` gives the bundled SeaweedFS, which `compose.yaml` requires.
+ * Read from that file so the e2e stack and a copied `.env` name the same store.
+ *
+ * @param {string} [root] the checkout holding `.env.example`
+ */
+export function bundledStorageUrl(root = ROOT) {
+  const url = parseDotEnv(readFileSync(path.join(root, '.env.example'), 'utf8'))['AW_STORAGE_URL'];
+  if (url === undefined || url === '') throw new Error('.env.example sets no AW_STORAGE_URL');
+  return url;
+}
+
+/**
+ * The `--env-file` the e2e brings `compose.yaml` up with.
+ *
+ * @param {{ adminEmail: string, adminPassword: string, webPort: number, dockerGid: number, storageUrl: string }} options
+ */
+export function stackEnv({ adminEmail, adminPassword, webPort, dockerGid, storageUrl }) {
+  return [
+    'DATABASE_URL=postgres://agent_workspace:agent_workspace@postgres:5432/agent_workspace',
+    `MASTER_ENCRYPTION_KEY=${randomBytes(32).toString('hex')}`,
+    `AW_STORAGE_URL=${storageUrl}`,
+    'OBJECT_STORAGE_ACCESS_KEY_ID=agent_workspace',
+    'OBJECT_STORAGE_SECRET_ACCESS_KEY=agent_workspace',
+    `BOOTSTRAP_ADMIN=${adminEmail}`,
+    `BOOTSTRAP_ADMIN_PASSWORD=${adminPassword}`,
+    `SESSION_SECRET=${randomBytes(24).toString('hex')}`,
+    `RUNNER_MANAGER_TOKEN=${randomBytes(24).toString('hex')}`,
+    'GATEWAY_PRICING_JSON={"version":"unconfigured","models":{"disabled:unconfigured":{"inputUsdPerMillion":"0","outputUsdPerMillion":"0"}}}',
+    'TOOL_HOST_IMAGE=agent-workspace/tool-host:dev',
+    `WEB_PORT=${String(webPort)}`,
+    `DOCKER_GID=${String(dockerGid)}`,
+    '',
+  ].join('\n');
+}
+
 /** @param {string} name */
 function required(name, fallback) {
   const value = process.env[name] ?? fallback;
@@ -222,6 +259,9 @@ ${trust}
   web:
     environment:
 ${trust}
+  # Nothing here reaches SeaweedFS from the host, and another project on the daemon may hold 8333.
+  seaweedfs:
+    ports: !reset []
 networks:
   # The runner only attaches runtime networks that carry the ownership label.
   runtime-control:
@@ -257,21 +297,13 @@ async function main() {
   );
   writeFileSync(
     path.join(work, 'stack.env'),
-    [
-      'DATABASE_URL=postgres://agent_workspace:agent_workspace@postgres:5432/agent_workspace',
-      `MASTER_ENCRYPTION_KEY=${randomBytes(32).toString('hex')}`,
-      'OBJECT_STORAGE_ACCESS_KEY_ID=agent_workspace',
-      'OBJECT_STORAGE_SECRET_ACCESS_KEY=agent_workspace',
-      `BOOTSTRAP_ADMIN=${adminEmail}`,
-      `BOOTSTRAP_ADMIN_PASSWORD=${adminPassword}`,
-      `SESSION_SECRET=${randomBytes(24).toString('hex')}`,
-      `RUNNER_MANAGER_TOKEN=${randomBytes(24).toString('hex')}`,
-      'GATEWAY_PRICING_JSON={"version":"unconfigured","models":{"disabled:unconfigured":{"inputUsdPerMillion":"0","outputUsdPerMillion":"0"}}}',
-      'TOOL_HOST_IMAGE=agent-workspace/tool-host:dev',
-      `WEB_PORT=${String(webPort)}`,
-      `DOCKER_GID=${String(statSync('/var/run/docker.sock').gid)}`,
-      '',
-    ].join('\n'),
+    stackEnv({
+      adminEmail,
+      adminPassword,
+      webPort,
+      dockerGid: statSync('/var/run/docker.sock').gid,
+      storageUrl: bundledStorageUrl(),
+    }),
   );
   const compose = (/** @type {readonly string[]} */ args) =>
     docker([
@@ -316,7 +348,8 @@ async function main() {
         docker(['build', '--file', dockerfile, '--target', target, ...args, '--tag', tag, '.']);
       }
     }
-    compose(['up', '--detach', '--build']);
+    compose(['build', ...composeBuildServices()]);
+    compose(['up', '--detach']);
 
     const client = new StackClient(baseUrl);
     for (let attempt = 0; ; attempt += 1) {

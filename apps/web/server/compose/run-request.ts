@@ -36,26 +36,17 @@
  * condition its own doc comment records.
  * `docs/adr/0072-the-claude-tool-mapping-and-skills-live-in-the-claude-adapter.md` is the decision.
  */
+import { log } from '../telemetry/logger';
 import { isIP } from 'node:net';
 
 import {
-  DEFAULT_RUN_ENGINE,
   RunRequest,
   type AgentPermissions,
   type PortableAgentConfig,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 
-import {
-  claudeReadOnlyGrantDenials,
-  engineSettingsOf,
-  type AgentToolPolicy,
-} from '@indx-workspace/contracts/agents';
-import {
-  ENGINE_CATALOGUE,
-  isEngineId,
-  isWithholdingEngine,
-  mcpToolName,
-} from '@indx-workspace/contracts/engines';
+import { claudeReadOnlyGrantDenials, engineSettingsOf } from '@indx-workspace/contracts/agents';
+import { isWithholdingEngine } from '@indx-workspace/contracts/engines';
 import {
   meetPolicyCeiling,
   policyWidenings,
@@ -63,348 +54,75 @@ import {
   type PolicyWidening,
   type ProjectPolicy,
 } from '@indx-workspace/contracts/policy-ceiling';
-import {
-  AW_DEV_TOOLS_CONNECTOR,
-  GATEWAY_TOOL_SANDBOX_ROUTE,
-  TOOL_NAME_MAX_LENGTH,
-  TOOL_SANDBOX_CONNECTOR_URL,
-  gatewayToolPath,
-} from '@indx-workspace/contracts/tool-connectors';
+import { GATEWAY_TOOL_SANDBOX_ROUTE } from '@indx-workspace/contracts/tool-connectors';
 
-import {
-  AGENT_PERMISSION_KEYS,
-  type AgentPermissionKey,
-  policyNarrowedPermissions,
-} from '../../contracts/agents';
+import { policyNarrowedPermissions } from '../../contracts/agents';
 import { DomainError } from '../errors';
+import { narrowFileGrants } from '../files/search-terms';
 import { atStep } from '../runs/failures';
 import { storedEffective } from '../policy-ceiling/ceiling';
-import { registeredEngine } from '../engines/registry';
-import { resolveWireProtocol } from '../engines/protocol';
 import type { AgentRecord } from '../agents/contract';
 import type { RunAgent, RunSubagent } from '../agent-versions/session-version';
-import type { ModelProvider, RunStartProblemCode } from '@indx-workspace/contracts/runs';
+import type { ModelProvider } from '@indx-workspace/contracts/runs';
 
 import type { ModelDiscovery } from '../models/discovery';
-import type { ModelConnectionResource } from '../models/contract';
-import type { DeploymentDefaultModels } from '../models/deployment-default';
 import { selectPreferredModel } from '../models/preferred-model';
-import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
+import type { WorkspaceModelsStore } from '../models/store';
 import type { RunTokenIssuer } from '../gateway/issuer';
+import { runCallerOf } from '../runs/caller';
 import type { LaunchContext, ModelSelection } from '../runs/environment';
-import type {
-  AgentRunResourceLoader,
-  AgentRunResourceSelection,
-  PendingToolConnector,
+import {
+  assertRunFilesFit,
+  loadAttachedFiles,
+  withAttachedFiles,
+  type AgentRunResourceLoader,
+  type AgentRunResourceSelection,
 } from './resource-loader';
+import { ceilingRefusalMessage, loadResourcesWithinCeiling } from './run-request-ceiling';
+import { engineFor, wireProtocolFor } from './run-request-engine';
+import {
+  NO_DEFAULT_CONNECTION_REASON,
+  SELECTION_LAYERS,
+  readyConnectionFor,
+  validateModel,
+  type ModelResolution,
+  type ModelResolutionLayers,
+} from './run-request-model-resolution';
+import type { RuntimeSettings } from './run-request-runtime-settings';
+import {
+  assertCallerForIdentity,
+  assertMayReachAwControl,
+  assertToolNamesFit,
+  codeToolsServedBySandbox,
+  toolMcpServersFor,
+  withIdentityHeaders,
+  withRunConnectorKeys,
+  withToolHostRunHeaders,
+} from './run-request-tool-connectors';
+
+export { ceilingRefusalMessage } from './run-request-ceiling';
+export {
+  DEFAULT_MODEL_CONNECTION_NAME,
+  NO_DEFAULT_CONNECTION_REASON,
+  connectionSubject,
+  modelUnavailableReason,
+  type DeploymentLayer,
+  type ModelResolution,
+  type ModelResolutionLayers,
+} from './run-request-model-resolution';
+export {
+  DEFAULT_WORKSPACE_ROOT,
+  readRuntimeSettings,
+  type RuntimeSettings,
+} from './run-request-runtime-settings';
+export { assertToolNamesFit, withToolHostRunHeaders } from './run-request-tool-connectors';
 
 /** Records the run's tool connector ids before the request is posted (C16). Throws on failure. */
 export type RunToolSnapshot = (runId: string, connectorIds: readonly string[]) => Promise<void>;
 
-/** The deployment values a run needs, once they have been read and found usable. */
-export interface RuntimeSettings {
-  /** `POST {runnerUrl}/run` — the §14.3 contract. No trailing slash. */
-  readonly runnerUrl: string;
-  /**
-   * The directory, **inside the runtime container**, under which each workspace's sandbox lives.
-   *
-   * §25 requires a distinct `cwd` per workspace and forbids two tenants sharing one; this is the
-   * parent of those, and the workspace id is the segment appended to it. It has a default because
-   * it is a path in an image this repository builds, not a secret and not a value an operator has
-   * to know — `Dockerfile`'s runner target works in `/app`, and `/workspace` is a sibling of it
-   * that no build step writes to. Override it when the runtime is somebody else's image.
-   */
-  readonly workspaceRoot: string;
-  /**
-   * Whether the runner allocated this run's session a tool sandbox (ADR-0118 TS2). Absent for a
-   * runtime that has none, which a run with code tools refuses by name.
-   */
-  readonly toolSandbox?: boolean;
-}
-
-export type RuntimeSettingsResult =
-  | { readonly ok: true; readonly settings: RuntimeSettings }
-  | { readonly ok: false; readonly reason: string };
-
-/** The default for {@link RuntimeSettings.workspaceRoot}. See that field for why it has one. */
-export const DEFAULT_WORKSPACE_ROOT = '/workspace';
-
-/**
- * Read the runtime's deployment values, or say what is missing.
- *
- * `RUNNER_URL` has **no default**. A guess would be a URL nobody chose, and the failure it
- * produces — every run failing thirty seconds later with a connection error written into the run
- * record — is far worse than the 503 the run routes answer while this returns `ok: false`. That
- * is the ADR-0015 shape applied to configuration: the capability is unavailable because nothing
- * asserted it was available.
- *
- * The URL is parsed before it is used, so a value that is not a URL is rejected here with the
- * variable's name attached rather than at the first `fetch` of the first run.
- */
-export function readRuntimeSettings(
-  env: Readonly<Record<string, string | undefined>>,
-): RuntimeSettingsResult {
-  const raw = env['RUNNER_URL'];
-  if (typeof raw !== 'string' || raw.trim().length === 0) {
-    return {
-      ok: false,
-      reason:
-        'RUNNER_URL is not set, so there is no spec §14.3 runtime to relay runs to. The three ' +
-        'run routes answer 503 run_api_not_configured until it is. Set it to the runtime ' +
-        "container's base URL — inside compose that is http://runner:8080.",
-    };
-  }
-  const trimmed = raw.trim();
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    return { ok: false, reason: `RUNNER_URL is not a parseable URL: ${JSON.stringify(trimmed)}` };
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return {
-      ok: false,
-      reason: `RUNNER_URL uses the "${parsed.protocol}" scheme; §14.3 is an HTTP contract.`,
-    };
-  }
-
-  const rawRoot = env['RUNNER_WORKSPACE_ROOT'];
-  const workspaceRoot =
-    typeof rawRoot === 'string' && rawRoot.trim().length > 0
-      ? rawRoot.trim().replace(/\/+$/, '')
-      : DEFAULT_WORKSPACE_ROOT;
-  if (workspaceRoot.length === 0) {
-    return { ok: false, reason: 'RUNNER_WORKSPACE_ROOT is only slashes.' };
-  }
-
-  return {
-    ok: true,
-    settings: { runnerUrl: trimmed.replace(/\/+$/, ''), workspaceRoot },
-  };
-}
-
-// ── Model resolution (issue #129) ────────────────────────────────────────────────────────────────
-//
-// One connection + one provider-side model, written and read together as a pair at every layer
-// that can supply one, and resolved by exactly one function, in exactly one documented order:
-// run override > agent override > project default > workspace default > deployment default.
-// `resolveModelForRun` is that function. It is called once per launch, by whoever composes the
-// application (before `buildRunRequestFor`, so the resolved triple can be snapshotted onto the run
-// row before the runtime is ever called), not by `buildRunRequestFor` itself — see that function's
-// own `resolvedModel` parameter for how the two connect.
-//
-// The deployment default (issue #506, ADR-0103's amendment) is the one named exception to never
-// mixing a connection from one level with a model from another: for an agent that names no model,
-// it pairs the agent's connection — or, when the agent names none, the workspace's connection named
-// `default` (contract C7, bound late) — with the deployment's configured id for that connection's
-// provider. It is the last layer, reported as its own layer, and applies only when no other layer
-// names a pair. The late binding of `default` happens in this layer only, so it changes nothing
-// for a run an earlier layer resolves.
-
 // `ModelSelection` itself lives on `../runs/environment` — `LaunchContext.modelOverride` needs it
 // too, and that module has no reason to import this one back.
 export type { ModelSelection } from '../runs/environment';
-
-export type ModelResolutionLayer = 'run' | 'agent' | 'project' | 'workspace' | 'deployment';
-
-/**
- * The deployment default layer (issue #506) of an agent that names no model: its connection and the
- * deployment's per-provider default model ids (`AW_DEPLOYMENT_DEFAULT_MODELS`).
- */
-export type DeploymentLayer = {
-  /**
-   * The agent's own connection when it names one; otherwise the workspace's connection named
-   * `default` (C7 bound at run time, because a version applied before that connection existed is
-   * stored with none); `null` when the workspace has no such connection, which is a refusal.
-   */
-  readonly connectionId: string | null;
-  readonly defaults: DeploymentDefaultModels;
-};
-
-/** Which selection each layer supplies, or `null` when that layer has none configured. */
-export type ModelResolutionLayers = {
-  readonly run: ModelSelection | null;
-  readonly agent: ModelSelection | null;
-  readonly project: ModelSelection | null;
-  readonly workspace: ModelSelection | null;
-  /**
-   * Non-null whenever the agent names no model. It is **not** gated on a default or a connection
-   * being configured, so an unconfigured deployment default is a refusal naming `deployment`,
-   * never a silent skip.
-   */
-  readonly deployment: DeploymentLayer | null;
-};
-
-export type ModelResolution =
-  | {
-      readonly ok: true;
-      readonly layer: ModelResolutionLayer;
-      readonly connectionId: string;
-      readonly model: string;
-      readonly provider: ModelProvider;
-      /**
-       * `false` when the model list could not be read, so the model was not checked against it
-       * (issue #393). A launch maps the provider's "model not found" answer to `model_unavailable`
-       * only for such a run, because a validated model that is then not found is a different fault.
-       */
-      readonly validated: boolean;
-      /** The selected connection's name, for a refusal sentence written after the launch. */
-      readonly connectionName: string;
-    }
-  | ModelResolutionRefusal;
-
-type ModelResolutionRefusal = {
-  readonly ok: false;
-  /** Which layer's selection was refused — the preflight error's "actionable" half. */
-  readonly layer: ModelResolutionLayer;
-  /** The contract-declared code `runs.start` answers with (issue #393). */
-  readonly code: Extract<
-    RunStartProblemCode,
-    | 'model_connection_unresolved'
-    | 'model_connection_failed'
-    | 'model_unavailable'
-    | 'model_credential_rejected'
-  >;
-  readonly reason: string;
-};
-
-const SELECTION_LAYERS = ['run', 'agent', 'project', 'workspace'] as const;
-
-/** Contract C7's connection name: what a definition with no connection, or `default`, resolves to. */
-export const DEFAULT_MODEL_CONNECTION_NAME = 'default';
-
-/**
- * The refusal at the deployment layer for an agent that names neither a model nor a connection, in
- * a workspace with no connection named `default` for the deployment default to use.
- */
-export const NO_DEFAULT_CONNECTION_REASON =
-  'the agent names no model or model connection, no project or workspace default model is ' +
-  `configured, and the workspace has no connection named "${DEFAULT_MODEL_CONNECTION_NAME}" for ` +
-  'the deployment default model to use.';
-
-/**
- * How a refusal names a layer's connection. The deployment layer supplies only a model id; its
- * connection is the agent's, so that is what the user is pointed at to fix.
- */
-export function connectionSubject(layer: ModelResolutionLayer): string {
-  return layer === 'deployment' ? "the agent's model connection" : `the ${layer} model connection`;
-}
-
-/** The `model_unavailable` sentence for `model` on the named connection of `layer`. */
-export function modelUnavailableReason(
-  layer: ModelResolutionLayer,
-  model: string,
-  connectionName: string,
-): string {
-  return layer === 'deployment'
-    ? `the deployment default model "${model}" is not available at the agent's model connection "${connectionName}".`
-    : `model "${model}" is not available at the ${layer} connection "${connectionName}".`;
-}
-
-type ReadyConnection = {
-  readonly ok: true;
-  readonly connectionId: string;
-  readonly connection: ModelConnectionResource;
-  readonly resolved: ResolvedModelConnection;
-};
-
-/** The checks every layer's connection must pass: it exists, is ready and its credential reads. */
-async function readyConnectionFor(
-  layer: ModelResolutionLayer,
-  connectionId: string,
-  store: WorkspaceModelsStore,
-): Promise<ReadyConnection | ModelResolutionRefusal> {
-  const connection: ModelConnectionResource | null = await store.get(connectionId);
-  if (connection === null) {
-    return {
-      ok: false,
-      layer,
-      code: 'model_connection_unresolved',
-      reason: `${connectionSubject(layer)} ${connectionId} no longer exists in this workspace.`,
-    };
-  }
-  if (!connection.ready) {
-    return {
-      ok: false,
-      layer,
-      code: 'model_connection_unresolved',
-      reason: `${connectionSubject(layer)} "${connection.name}" is not ready (missing credential or configuration).`,
-    };
-  }
-  const resolved = await store.resolve(connectionId);
-  if (resolved === null) {
-    return {
-      ok: false,
-      layer,
-      code: 'model_connection_unresolved',
-      reason: `${connectionSubject(layer)} "${connection.name}"'s credential could not be read.`,
-    };
-  }
-  return { ok: true, connectionId, connection, resolved };
-}
-
-/**
- * Validate `model` against the connection's discovered list. `pick` chooses the id from a readable
- * list (the exact id for an explicit selection, alias-or-dated for the deployment default) and
- * returns `null` when the model is not there.
- */
-async function validateModel(
-  layer: ModelResolutionLayer,
-  ready: ReadyConnection,
-  model: string,
-  pick: (discoveredIds: readonly string[]) => string | null,
-  discover: ModelDiscovery,
-  warn: (message: string) => void,
-): Promise<ModelResolution> {
-  const { connection, resolved } = ready;
-  const discovered = await discover(resolved);
-  let chosen = model;
-  let validated = true;
-  if (!discovered.ok) {
-    if (discovered.failure.kind === 'credential-rejected') {
-      return {
-        ok: false,
-        layer,
-        code: 'model_credential_rejected',
-        reason: `${connectionSubject(layer)} "${connection.name}": ${discovered.reason}`,
-      };
-    }
-    if (discovered.failure.kind === 'connection-failed') {
-      return {
-        ok: false,
-        layer,
-        code: 'model_connection_failed',
-        reason: `${connectionSubject(layer)} "${connection.name}": ${discovered.reason}`,
-      };
-    }
-    warn(
-      `[runs] model "${model}" on the ${layer} connection ${connection.id} was not ` +
-        `validated because the model list could not be read (${discovered.failure.kind}); ` +
-        'the run proceeds with the explicit selection.',
-    );
-    validated = false;
-  } else {
-    const picked = pick(discovered.models.map((entry) => entry.providerModelId));
-    if (picked === null) {
-      return {
-        ok: false,
-        layer,
-        code: 'model_unavailable',
-        reason: modelUnavailableReason(layer, model, connection.name),
-      };
-    }
-    chosen = picked;
-  }
-  return {
-    ok: true,
-    layer,
-    connectionId: ready.connectionId,
-    model: chosen,
-    provider: connection.provider,
-    validated,
-    connectionName: connection.name,
-  };
-}
 
 /**
  * Resolve one run's `(connection, model)` pair against the documented precedence, validating the
@@ -450,7 +168,7 @@ export async function resolveModelForRun(
   layers: ModelResolutionLayers,
   store: WorkspaceModelsStore,
   discover: ModelDiscovery,
-  warn: (message: string) => void = (message) => console.warn(message),
+  warn: (message: string) => void = (message) => log.warn(message),
 ): Promise<ModelResolution> {
   for (const layer of SELECTION_LAYERS) {
     const selection = layers[layer];
@@ -622,48 +340,47 @@ export function portableAgentConfigFor(
 function enginePolicyArmFor(
   agent: AgentRecord,
   cwd: string,
-  resources: Pick<AgentRunResourceSelection, 'files' | 'connectorKeys'>,
+  resources: Pick<AgentRunResourceSelection, 'connectorKeys' | 'toolConnectors'> & {
+    readonly files: GrantedFiles;
+  },
+  approvedToolCalls: readonly { readonly canonicalCall: string }[],
 ): unknown {
   const policy = agent.policy;
   // A withholding arm is its engine-native settings, verbatim: the adapter compiles its tools from
   // the portable permissions and enforces grants itself, and has no pre-ENG-04 image to be
   // defended for (ADR-0072 D5).
   if (policy !== null && isWithholdingEngine(policy.engine)) return engineSettingsOf(policy);
+  // Every write operation of an openapi tool is implicitly `requireApproval` (ADR-0113 SD4); the
+  // rules carry the run's own server keys, so they are added here rather than stored on the policy.
+  const requireApproval = [
+    ...new Set([
+      ...(policy !== null && 'tools' in policy ? (policy.requireApproval ?? []) : []),
+      ...(resources.toolConnectors ?? []).flatMap((connector) => connector.approvalRules ?? []),
+    ]),
+  ];
   return {
     tools:
       policy !== null && 'tools' in policy
         ? withRunConnectorKeys(policy.tools, resources.connectorKeys ?? {})
         : null,
     fileGrantDeny: applyFileGrantPolicy(cwd, resources.files),
+    // Left out when empty, so a run without a gate sends the arm an older runner image accepts.
+    ...(requireApproval.length === 0 ? {} : { requireApproval }),
+    ...(policy !== null && 'tools' in policy && policy.handoff === true ? { handoff: true } : {}),
+    ...(approvedToolCalls.length === 0
+      ? {}
+      : { approvedToolCalls: approvedToolCalls.map((call) => call.canonicalCall) }),
   };
 }
 
-const LEGACY_CONNECTOR_RULE_PREFIX = /^mcp__connector-([0-9a-f-]{36})__/u;
-
-/**
- * A stored Claude tool policy with every rule written against an MCP connector's old server key,
- * `mcp__connector-<id>__…`, pointed at the key the connector has in this run (ADR-0113 SD13,
- * #1109), so a `deny` or an `autoApprove` keeps its meaning when the key is its slug name. A rule
- * for a connector not in the run, or already in the run's key form, is left as it is.
- */
-function withRunConnectorKeys<T extends AgentToolPolicy>(
-  tools: T,
-  keys: Readonly<Record<string, string>>,
-): T {
-  const rewrite = (rules: readonly string[]): readonly string[] =>
-    rules.map((rule) =>
-      rule.replace(LEGACY_CONNECTOR_RULE_PREFIX, (prefix, id: string) => {
-        const key = keys[id];
-        return key === undefined ? prefix : `mcp__${key}__`;
-      }),
-    );
-  return {
-    ...tools,
-    base: tools.base === 'claude_code_preset' ? tools.base : rewrite(tools.base),
-    autoApprove: rewrite(tools.autoApprove),
-    deny: rewrite(tools.deny),
-  };
+/** One granted path: what the read-only denials and the runner's materialisation need to know. */
+interface GrantedPath {
+  readonly path: string;
+  readonly kind: 'file' | 'directory';
+  readonly access: 'read' | 'read-write';
 }
+
+type GrantedFiles = AgentRunResourceSelection['files'] | readonly GrantedPath[];
 
 /**
  * File grants narrow the agent-wide permission switches: read-only paths are removed from the
@@ -688,10 +405,7 @@ function withRunConnectorKeys<T extends AgentToolPolicy>(
  * `docs/adr/0072-the-claude-tool-mapping-and-skills-live-in-the-claude-adapter.md` records the condition so
  * that removing it is a decision somebody takes rather than a line nobody dares touch.
  */
-export function applyFileGrantPolicy(
-  cwd: string,
-  files: AgentRunResourceSelection['files'],
-): readonly string[] {
+export function applyFileGrantPolicy(cwd: string, files: GrantedFiles): readonly string[] {
   return claudeReadOnlyGrantDenials(
     cwd,
     files.filter((file) => file.access === 'read'),
@@ -702,7 +416,7 @@ export function applyFileGrantPolicy(
  * The sandbox root and tenant namespace for one workspace.
  *
  * `projectKey` is the workspace id, and the SDK's own validator for `CLAUDE_CODE_PROJECT_DIR_NAME`
- * — `/^[A-Za-z0-9_-]{1,64}$/`, transcribed in `packages/core/src/schemas.ts` from the shipped
+ * — `/^[A-Za-z0-9_-]{1,64}$/`, transcribed in `packages/run-protocol/src/schemas.ts` from the shipped
  * bundle — accepts a UUID's 36 characters unchanged. That is checked rather than assumed: the
  * value goes through `RunProjectKey`, whose `superRefine` rejects anything the SDK would silently
  * ignore, and R-01 §7 records that silently ignoring it collapses two tenants onto one session key
@@ -725,39 +439,18 @@ export function sandboxFor(
   return { cwd: `${settings.workspaceRoot}/${workspaceId}/${sessionId}`, projectKey: workspaceId };
 }
 
-/**
- * C17's run-time half: refuse a run whose tool connectors would show the model a name over
- * {@link TOOL_NAME_MAX_LENGTH} characters, or the same name twice. `mcp__<key>__<operation>` is
- * every engine's worst case and fits by construction (16 + 41); it is checked as a guard.
- */
-export function assertToolNamesFit(
-  pending: readonly PendingToolConnector[],
-  engineId: string,
-): void {
-  // An engine the catalogue does not list shows the bare tool name, the strictest for collisions.
-  const form = isEngineId(engineId) ? ENGINE_CATALOGUE[engineId].mcpToolName : 'tool';
-  const seen = new Set<string>();
-  for (const connector of pending) {
-    for (const operation of connector.operationNames) {
-      const name = mcpToolName(form, connector.key, operation);
-      const worst = `mcp__${connector.key}__${operation}`;
-      if (
-        seen.has(name) ||
-        name.length > TOOL_NAME_MAX_LENGTH ||
-        worst.length > TOOL_NAME_MAX_LENGTH
-      ) {
-        throw new DomainError({
-          category: 'validation',
-          code: 'connector_tool_name_collision',
-          publicMessage:
-            `connector_tool_name_collision: the tool ${JSON.stringify(name)} of connector ` +
-            `${connector.connectorId} collides with another connector's tool or is longer than ` +
-            `${String(TOOL_NAME_MAX_LENGTH)} characters on engine ${engineId}`,
-        });
-      }
-      seen.add(name);
-    }
-  }
+const lowest = (resolved: number | null, cap: number | undefined): number | null =>
+  cap === undefined ? resolved : resolved === null ? cap : Math.min(resolved, cap);
+
+/** The met limits under one run's override: the lower of each, so an override never raises a limit. */
+export function lowerLimits(
+  limits: PortableAgentConfig['limits'],
+  override: LaunchContext['limits'],
+): PortableAgentConfig['limits'] {
+  return {
+    maxTurns: lowest(limits.maxTurns, override?.maxTurns),
+    maxBudgetUsd: lowest(limits.maxBudgetUsd, override?.maxBudgetUsd),
+  };
 }
 
 /**
@@ -790,80 +483,6 @@ export function meetRunCeiling(
   return { met, refused };
 }
 
-/** The switches the ceiling turned off: on after the withholding narrowing, off after the meet. */
-function ceilingCapsFor(
-  permissions: AgentPermissions,
-  policy: AgentRecord['policy'],
-  met: AgentPermissions,
-): AgentPermissionKey[] {
-  const narrowed = policyNarrowedPermissions(permissions, policy);
-  return AGENT_PERMISSION_KEYS.filter((key) => narrowed[key] && !met[key]);
-}
-
-/** The sentence a `policy_cannot_widen` run refusal carries, naming each detail in C14 order. */
-export function ceilingRefusalMessage(refused: readonly PolicyWidening[]): string {
-  return (
-    "the run asks for more than this deployment's policy ceiling allows: " +
-    `${refused.join(', ')}. Choose an engine and a model the ceiling lists.`
-  );
-}
-
-/**
- * The loaded resources without the connectors the ceiling's `tools` does not allow, decided by
- * `meetPolicyCeiling` over their names (C14: no copy of the rule). An MCP entry the loader named no
- * connector for is judged as the empty name, which no ceiling lists, so a `tools` ceiling drops it.
- */
-function resourcesWithinCeiling(
-  resources: AgentRunResourceSelection,
-  met: EffectivePolicyConfiguration,
-  ceiling: ProjectPolicy | null,
-): AgentRunResourceSelection {
-  if (ceiling === null) return resources;
-  const names = resources.connectorNames ?? {};
-  const nameOf = (key: string): string => names[key] ?? '';
-  const pending = resources.toolConnectors ?? [];
-  const kept = new Set(
-    meetPolicyCeiling(
-      {
-        ...met,
-        tools: [...Object.keys(resources.mcpServers).map(nameOf), ...pending.map((c) => c.name)],
-      },
-      ceiling,
-    ).tools,
-  );
-  return {
-    ...resources,
-    mcpServers: Object.fromEntries(
-      Object.entries(resources.mcpServers).filter(([key]) => kept.has(nameOf(key))),
-    ),
-    toolConnectors: pending.filter((connector) => kept.has(connector.name)),
-  };
-}
-
-async function loadResourcesWithinCeiling(
-  workspaceId: string,
-  runAgent: RunAgent,
-  permissions: AgentPermissions,
-  met: EffectivePolicyConfiguration,
-  resourceLoader: AgentRunResourceLoader | undefined,
-  ceiling: ProjectPolicy | null,
-  projectId: string | null,
-): Promise<AgentRunResourceSelection> {
-  return resourcesWithinCeiling(
-    resourceLoader === undefined
-      ? { files: [], skills: [], mcpServers: {} }
-      : await resourceLoader.load(
-          workspaceId,
-          runAgent.assignments,
-          projectId,
-          met.permissions,
-          ceilingCapsFor(permissions, runAgent.agent.policy, met.permissions),
-        ),
-    met,
-    ceiling,
-  );
-}
-
 /**
  * What a run's sandbox may be granted on the network (ADR-0117 decision 9, issue #785): the met
  * `unrestrictedNetwork` switch and the DNS names of the met remote (`http`/`sse`) connectors, which
@@ -881,11 +500,9 @@ export async function runNetworkGrant(
 ): Promise<{ readonly unrestrictedNetwork: boolean; readonly connectorHosts: readonly string[] }> {
   const permissions = context.permissionOverride ?? runAgent.agent.permissions;
   const { met } = meetRunCeiling(runAgent.agent, permissions, null, ceiling);
-  const resources = await loadResourcesWithinCeiling(
-    context.principal.workspaceId,
+  const resources = await runResourcesWithinCeiling(
+    context,
     runAgent,
-    permissions,
-    met,
     resourceLoader,
     ceiling,
     projectId,
@@ -900,102 +517,78 @@ export async function runNetworkGrant(
 }
 
 /**
- * The run's MCP servers, with the tool host's connector (ADR-0115) told which run and agent call
- * it: the host reads `x-aw-run-id` and `x-aw-agent` into each code tool's context. The agent name
- * is percent-encoded, because a header value must be a ByteString and a name may be any Unicode.
- *
- * With `sandbox` (ADR-0118 TS3) the connector's entry is replaced by the gateway's tool sandbox
- * route and the run token: the agent sandbox never holds the tool host's own credential, and the
- * connector's stored URL, a reserved placeholder there, is never dialled.
+ * The run's resources as {@link buildRunRequestFor} loads them — the session's assignments, the
+ * project's (issue #125), capped by the met permissions and the ceiling — for a caller that runs
+ * before compose: the network grant, and the input archive, whose files must be the ones the
+ * `/run` body references.
  */
-export function withToolHostRunHeaders(
-  resources: AgentRunResourceSelection,
-  runId: string,
-  agent: string,
-  sandbox?: { readonly url: string; readonly token: string },
-): AgentRunResourceSelection['mcpServers'] {
-  const names = resources.connectorNames ?? {};
-  const agentHeader = encodeURIComponent(agent);
-  return Object.fromEntries(
-    Object.entries(resources.mcpServers).map(([key, server]) => {
-      if (names[key] !== AW_DEV_TOOLS_CONNECTOR || !('url' in server)) return [key, server];
-      if (sandbox !== undefined) {
-        return [
-          key,
-          {
-            type: 'http' as const,
-            url: sandbox.url,
-            headers: { authorization: `Bearer ${sandbox.token}`, 'x-aw-agent': agentHeader },
-          },
-        ];
-      }
-      return [
-        key,
-        {
-          ...server,
-          headers: { ...server.headers, 'x-aw-run-id': runId, 'x-aw-agent': agentHeader },
-        },
-      ];
-    }),
-  );
-}
-
-/**
- * A run whose version pins code tools needs the tool host's connector among its servers, and a
- * sandbox to run them in when that connector is the deployment's reserved placeholder. Without
- * either the tools would silently not exist, so the run fails and names them instead (ADR-0118
- * TS8). A connector at a real tool host, such as `aw dev`'s loopback one, keeps the header path of
- * earlier pins (TS7).
- *
- * @returns whether the connector's entry is swapped for the gateway's tool sandbox route.
- */
-function codeToolsServedBySandbox(
+export async function runResourcesWithinCeiling(
+  context: Pick<LaunchContext, 'permissionOverride'> & {
+    readonly principal: Pick<LaunchContext['principal'], 'workspaceId'>;
+  },
   runAgent: RunAgent,
-  settings: RuntimeSettings,
-  resources: AgentRunResourceSelection,
-): boolean {
-  const tools = runAgent.toolBundles.map((bundle) => bundle.tool).join(', ');
-  const key = Object.entries(resources.connectorNames ?? {}).find(
-    ([, name]) => name === AW_DEV_TOOLS_CONNECTOR,
-  )?.[0];
-  const server = key === undefined ? undefined : resources.mcpServers[key];
-  if (server === undefined) {
-    throw new DomainError({
-      category: 'validation',
-      code: 'code_tool_connector_missing',
-      publicMessage: `code_tool_connector_missing: the code tools ${tools} are served through the connector ${AW_DEV_TOOLS_CONNECTOR}, which this run does not have (it may be disabled, or outside the deployment policy).`,
-    });
-  }
-  if (settings.toolSandbox === true) return true;
-  if ('url' in server && server.url === TOOL_SANDBOX_CONNECTOR_URL) {
-    throw new DomainError({
-      category: 'validation',
-      code: 'code_tool_needs_host',
-      publicMessage: `code_tool_needs_host: the code tools ${tools} need a tool sandbox, and this run's runtime has none (the operator enables it with AGENT_WORKSPACE_TOOL_HOST_IMAGE on the web and the runner).`,
-    });
-  }
-  return false;
+  resourceLoader: AgentRunResourceLoader | undefined,
+  ceiling: ProjectPolicy | null,
+  projectId: string | null,
+): Promise<AgentRunResourceSelection> {
+  const permissions = context.permissionOverride ?? runAgent.agent.permissions;
+  const { met } = meetRunCeiling(runAgent.agent, permissions, null, ceiling);
+  return loadResourcesWithinCeiling(
+    context.principal.workspaceId,
+    runAgent,
+    permissions,
+    met,
+    resourceLoader,
+    ceiling,
+    projectId,
+  );
 }
 
 /**
- * Each tool connector as an `http` MCP server at the gateway (ADR-0113 SD2, C16). The run token is
- * its only credential; the connector's own credential never leaves the gateway.
+ * The loaded resources with `files` narrowed to the run's `fileScope` (ADR-0147, issue #1539), or
+ * unchanged when the run has none. A scope path outside the agent's effective grants (after the
+ * readFiles switch and the ceiling) refuses the run, built here as `policy_cannot_widen` is.
  */
-function toolMcpServersFor(
-  pending: readonly PendingToolConnector[],
-  gatewayBaseUrl: string,
-  token: string,
-): Record<string, { type: 'http'; url: string; headers: Record<string, string> }> {
-  return Object.fromEntries(
-    pending.map((connector) => [
-      connector.key,
-      {
-        type: 'http' as const,
-        url: `${gatewayBaseUrl}${gatewayToolPath(connector.connectorId)}`,
-        headers: { authorization: `Bearer ${token}` },
-      },
-    ]),
+export function narrowedToFileScope<R extends { readonly files: readonly GrantedPath[] }>(
+  resources: R,
+  fileScope: readonly string[] | undefined,
+): R {
+  if (fileScope === undefined) return resources;
+  const { kept, widens } = narrowFileGrants(resources.files, fileScope);
+  if (widens.length > 0) {
+    throw new DomainError({
+      category: 'validation',
+      code: 'run_file_scope_not_granted',
+      // Names no path: which ones failed would tell the caller what lies inside the grants.
+      publicMessage:
+        "run_file_scope_not_granted: fileScope names a path this run cannot narrow to. The scope can only narrow the agent's file grants.",
+    });
+  }
+  return { ...resources, files: kept };
+}
+
+/**
+ * The `/run` body's `resources.files`: the run's grants, already narrowed by
+ * {@link narrowedToFileScope}, with its attachments after them. Exported so the delivery tests'
+ * runner double receives the body this composes.
+ */
+export async function attachedRunFiles(
+  context: LaunchContext,
+  resources: Pick<AgentRunResourceSelection, 'files' | 'skills'>,
+  resourceLoader: AgentRunResourceLoader | undefined,
+): Promise<AgentRunResourceSelection['files']> {
+  // Each attachment is also a `read` reference in `resources.files`, so the runner checks it like
+  // any grant; its bytes arrive in the input archive.
+  // @story US-STO-11
+  const attached = await atStep('resources', () =>
+    loadAttachedFiles(resourceLoader, context.principal.workspaceId, context.attachments ?? []),
   );
+  const runFiles = withAttachedFiles(resources.files, attached.files);
+  // The total after the scope narrowed the grants and the attachments joined them; the input
+  // archive judged the same total before the sandbox, so this is the backstop.
+  // @story US-STO-06
+  assertRunFilesFit(runFiles, resources.skills);
+  return runFiles;
 }
 
 /**
@@ -1100,7 +693,7 @@ export async function buildRunRequestFor(
       publicMessage: `policy_cannot_widen: ${ceilingRefusalMessage(refused)}`,
     });
   }
-  const resources = await atStep('resources', () =>
+  const loaded = await atStep('resources', () =>
     loadResourcesWithinCeiling(
       workspaceId,
       runAgent,
@@ -1111,6 +704,12 @@ export async function buildRunRequestFor(
       projectId,
     ),
   );
+  const resources = narrowedToFileScope(loaded, context.fileScope);
+  const caller = runCallerOf(context.principal, context.subject);
+  // Before a token is issued: a run that reaches the reserved `aw-control` name, then one that
+  // reaches a connector wanting an identity it has none for.
+  assertMayReachAwControl(resources);
+  assertCallerForIdentity(resources, caller);
   // Before a token is issued: a run that cannot serve its code tools never gets one.
   const sandboxed =
     runAgent.toolBundles.length > 0 && codeToolsServedBySandbox(runAgent, settings, resources);
@@ -1121,6 +720,7 @@ export async function buildRunRequestFor(
       workspaceId,
       agentId: agent.id,
       modelConnectionId,
+      ...(caller === null ? {} : { caller }),
     }),
   );
   const { cwd, projectKey } = sandboxFor(workspaceId, context.session.id, settings);
@@ -1141,17 +741,36 @@ export async function buildRunRequestFor(
   const composedResources: AgentRunResourceSelection = {
     ...resources,
     mcpServers: {
-      ...withToolHostRunHeaders(
-        resources,
+      ...(await withIdentityHeaders(
+        withToolHostRunHeaders(
+          resources,
+          context.run.id,
+          agent.name,
+          sandboxed
+            ? { url: `${gateway.baseUrl}${GATEWAY_TOOL_SANDBOX_ROUTE.path}`, token }
+            : undefined,
+        ),
+        resources.connectorIdentities,
+        caller,
+        workspaceId,
         context.run.id,
-        agent.name,
-        sandboxed
-          ? { url: `${gateway.baseUrl}${GATEWAY_TOOL_SANDBOX_ROUTE.path}`, token }
-          : undefined,
-      ),
+      )),
       ...toolMcpServersFor(pendingTools, gateway.baseUrl, token),
     },
   };
+
+  // ADR-0146 Decisions 2 and 3: an attachment is a read-only grant whose bytes never ride in this
+  // request (the runner's `POST /files` hydrate writes them), so the shell removal a read grant
+  // causes is applied here instead, for every engine.
+  const attachments = context.attachments ?? [];
+  const attachmentGrants: readonly GrantedPath[] = attachments.map(({ path, kind }) => ({
+    path,
+    kind,
+    access: 'read',
+  }));
+  const portablePermissions =
+    attachments.length === 0 ? met.permissions : { ...met.permissions, runCommands: false };
+  const runFiles = await attachedRunFiles(context, resources, resourceLoader);
 
   const request = RunRequest.parse({
     runId: context.run.id,
@@ -1164,18 +783,23 @@ export async function buildRunRequestFor(
     portable: {
       ...portableAgentConfigFor(
         agent,
-        met.permissions,
+        portablePermissions,
         projectInstructions,
         composedResources,
         model,
         runAgent.subagents,
       ),
-      limits: met.limits,
+      limits: lowerLimits(met.limits, context.limits),
     },
     // The engine-native arm, forwarded rather than computed (ENG-04b). Everything that used to be
     // derived here — the Claude tool names a permission switch removes, the `mcp__<server>__*`
     // approvals an assigned connector earns — is compiled by the engine's own adapter now.
-    policy: enginePolicyArmFor(agent, cwd, resources),
+    policy: enginePolicyArmFor(
+      agent,
+      cwd,
+      { ...resources, files: [...resources.files, ...attachmentGrants] },
+      context.run.approvedToolCalls ?? [],
+    ),
     session: context.session.resume
       ? { kind: 'resume', resume: context.session.id }
       : { kind: 'fresh', sessionId: context.session.id },
@@ -1183,7 +807,7 @@ export async function buildRunRequestFor(
     // one engine's CLI (ENG-04). The variables below are *still* set, because the Claude Agent
     // SDK's bundled CLI reads its credential out of its environment and this unit is
     // behaviour-preserving for that engine; a later unit removes them once the adapter derives
-    // them from this field alone. `packages/core/src/schemas.ts`'s `RunGatewayConnection`
+    // them from this field alone. `packages/run-protocol/src/schemas.ts`'s `RunGatewayConnection`
     // records why the field exists at all.
     gateway: { baseUrl: gateway.baseUrl, token, protocol: wireProtocol },
     env: {
@@ -1195,7 +819,11 @@ export async function buildRunRequestFor(
       AW_SESSION_MIRROR_TOKEN: token,
       NODE_USE_ENV_PROXY: '1',
     },
-    resources: { files: resources.files, skills: resources.skills },
+    resources: {
+      files: runFiles,
+      skills: resources.skills,
+    },
+    ...(context.outputSchema === undefined ? {} : { outputSchema: context.outputSchema }),
   });
   if (pendingTools.length > 0) {
     if (snapshotTools === undefined) {
@@ -1207,59 +835,4 @@ export async function buildRunRequestFor(
     );
   }
   return request;
-}
-
-/**
- * The engine this agent runs on: the one its stored policy names, or the default.
- *
- * Read off the policy rather than off a column, because that is where ENG-02 put it — the policy
- * is discriminated by engine id, so an agent with no stored policy is on the engine
- * `compiledPolicyFor` answers with, which is the same default `apps/web/server/engines/session-engine.ts`
- * publishes and `packages/core`'s `DEFAULT_RUN_ENGINE` carries onto the wire.
- */
-function engineFor(agent: AgentRecord): string {
-  return agent.policy?.engine ?? DEFAULT_RUN_ENGINE;
-}
-
-/**
- * Resolve the wire protocol for this run, or throw the typed `engine_model_protocol_unsupported`
- * refusal.
- *
- * Throws rather than returning a verdict because every other refusal in this function does:
- * `buildRunRequestFor`'s own contract is *"throws — with a sentence naming the reason — rather
- * than returning a partial request"*.
- *
- * The throw is a {@link DomainError}, not a bare `Error`, and that is what makes the refusal
- * reach a human. The launcher turns anything thrown while preparing a run into the run's public
- * failure through `publicRunFailure` (`../runs/failures.ts`), which keeps a `DomainError`'s
- * `publicMessage` and replaces every other error with a generic sentence. So the run is
- * recorded `failed` with an error that starts with the problem code and continues with the
- * resolver's sentence — the engine, the dialects the gateway serves for this provider, and what
- * to change — which is what the run API and the UI show.
- *
- * This is decided while the run is being composed, **after** its row exists, and not as an HTTP
- * `422` on the run-create route: the model connection is resolved here (`resolveModelForRun`,
- * which may call provider discovery), and the protocol check depends on which connection the
- * run resolved to. ENG-04's PR records that as a deviation from the issue's "`422` before a run
- * row exists"; `ENGINE_PROBLEM_CODES` keeps the status a future route-level check would answer.
- *
- * An unregistered engine is **not** decided here. `apps/web/server/agents/policy.ts` refuses one
- * at save time with `400 unsupported_engine`, and a descriptor this deployment has since stopped
- * registering is a deployment change rather than a request problem; composing on the
- * gateway-native dialect keeps that run working exactly as it did before this check existed,
- * which is the behaviour-preserving direction for a check whose job is to catch a *mismatch*.
- */
-export function wireProtocolFor(engineId: string, provider: ModelProvider | undefined): string {
-  if (provider === undefined) return 'anthropic-messages';
-  const descriptor = registeredEngine(engineId);
-  if (descriptor === null) return 'anthropic-messages';
-  const resolution = resolveWireProtocol(engineId, descriptor.capabilities.wireProtocols, provider);
-  if (!resolution.ok) {
-    throw new DomainError({
-      category: 'validation',
-      code: 'engine_model_protocol_unsupported',
-      publicMessage: `engine_model_protocol_unsupported: ${resolution.reason}`,
-    });
-  }
-  return resolution.protocol;
 }

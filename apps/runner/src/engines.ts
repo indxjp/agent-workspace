@@ -40,12 +40,13 @@
  * names no adapter at all. In the workspace the specifiers below resolve through the root
  * manifest's development dependencies; in an image, `runtime.Dockerfile` links the one adapter it
  * built into this application's `node_modules`. The emit build type-checks these two imports
- * against `apps/runner/types/engine-modules.d.ts` — the export this table reads, typed `unknown` and
+ * against `apps/runner/types/engine-modules.d.ts` — the factory this table calls, typed `unknown` and
  * checked at run time by {@link readEngineExport} — so an image that did not copy an adapter still
  * compiles, and `engine_not_installed` is its honest answer (ADR-0074 "images").
  */
-import type { RunRequest } from '@agent-workspace/core';
 import type { AgentEngine, EngineRunRequest } from '@agent-workspace/engine';
+
+import type { ResolvedRunRequest } from './resources.js';
 
 /** One row of the registry: an engine id, and the literal specifier that loads its adapter. */
 type EngineModuleLoader = () => Promise<unknown>;
@@ -75,18 +76,19 @@ const ENGINE_MODULES: Readonly<Record<string, EngineModuleLoader>> = {
 export const ADAPTER_ENGINE_IDS: readonly string[] = Object.keys(ENGINE_MODULES).sort();
 
 /**
- * The export each adapter module publishes its {@link AgentEngine} under.
+ * The factory each adapter module exports — its package's only value export (W3-8,
+ * `tests/engine-adapter-surface.test.ts`). Called once with no arguments; the load is cached.
  *
  * A named export rather than a default, and checked rather than assumed: a module that resolved
- * but exported nothing shaped like an engine is a packaging mistake, and answering
+ * but exported nothing that builds an engine is a packaging mistake, and answering
  * `engine_not_installed` for it would be the wrong sentence — the package *is* installed, it is
  * the wrong version of it. {@link readEngineExport} says so by name.
  */
 const ENGINE_EXPORTS: Readonly<Record<string, string>> = {
-  'claude-agent-sdk': 'CLAUDE_AGENT_SDK_ENGINE_ADAPTER',
-  'openai-agents': 'OPENAI_AGENTS_ENGINE_ADAPTER',
-  pi: 'PI_ENGINE_ADAPTER',
-  mastra: 'MASTRA_ENGINE_ADAPTER',
+  'claude-agent-sdk': 'createClaudeAgentSdkEngine',
+  'openai-agents': 'createOpenAiAgentsEngine',
+  pi: 'createPiEngine',
+  mastra: 'createMastraEngine',
 };
 
 export type EngineLookup =
@@ -122,15 +124,17 @@ function readEngineExport(id: string, module: unknown): EngineLookup {
       reason: `engine ${JSON.stringify(id)} has a module in this runner's registry but no declared export name; this is a packaging mistake in apps/runner/src/engines.ts.`,
     };
   }
-  const exported =
+  const factory =
     typeof module === 'object' && module !== null
       ? (module as Record<string, unknown>)[name]
       : undefined;
+  const exported: unknown =
+    typeof factory === 'function' ? (factory as () => unknown)() : undefined;
   if (!isAgentEngine(exported)) {
     return {
       ok: false,
       code: 'engine_not_installed',
-      reason: `the adapter package for engine ${JSON.stringify(id)} loaded but its ${JSON.stringify(name)} export is not an AgentEngine. The package is installed at a version this runner cannot use.`,
+      reason: `the adapter package for engine ${JSON.stringify(id)} loaded but its ${JSON.stringify(name)} export does not build an AgentEngine. The package is installed at a version this runner cannot use.`,
     };
   }
   if (exported.id !== id) {
@@ -217,7 +221,7 @@ export async function loadEngine(id: string): Promise<EngineLookup> {
 }
 
 /**
- * Translate a private-contract `RunRequest` into the port's neutral {@link EngineRunRequest}.
+ * Translate a resolved private-contract request into the port's neutral {@link EngineRunRequest}.
  *
  * Since ENG-04b (#325) this is a field-for-field forward and nothing else: the contract's v2 body
  * already carries the portable core and the engine-native arm separately, so there is no longer a
@@ -231,7 +235,7 @@ export async function loadEngine(id: string): Promise<EngineLookup> {
  * Skills *do* carry their bytes, because where a skill goes is the engine's decision
  * ({@link AgentEngine.placeSkills}) and the adapter is what makes it.
  */
-export function toEngineRunRequest(request: RunRequest): EngineRunRequest {
+export function toEngineRunRequest(request: ResolvedRunRequest): EngineRunRequest {
   return {
     runId: request.runId,
     sessionId: request.sessionId,
@@ -254,15 +258,10 @@ export function toEngineRunRequest(request: RunRequest): EngineRunRequest {
         path: file.path,
         access: file.access,
       })),
-      skills: (request.resources?.skills ?? []).map((skill) => ({
-        name: skill.name,
-        files: skill.files.map((file) => ({
-          path: file.path,
-          contentBase64: file.contentBase64,
-        })),
-      })),
+      skills: request.resources?.skills ?? [],
     },
     env: request.env,
+    ...(request.outputSchema === undefined ? {} : { outputSchema: request.outputSchema }),
   };
 }
 

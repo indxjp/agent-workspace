@@ -39,11 +39,14 @@
  *   whose argument is not a plain string literal could name anything at run time, and this reader
  *   does not attempt the fuller "vouched for" analysis
  *   `packages/core/src/db/repositories/database-reachability.test.ts` uses for that case. That is a
- *   narrower gate than that one, stated as a limit rather than implied to be its equal. An
- *   unrecognised alias of `require` this reader does not know to look for — one bound through a
- *   destructuring pattern, or through a property read off an object rather than a plain
- *   `const x = require` / `const x = createRequire(...)` — is not detected and not refused; this is
- *   this gate's own residual limit on top of the one above, named rather than implied away.
+ *   narrower gate than that one, stated as a limit rather than implied to be its equal. Also read
+ *   as edges: `import x = require('…')`, `X.require('…')` for any `X` (`module.require`,
+ *   `globalThis.require`), `require.resolve('…')`, and a `createRequire` imported under another
+ *   name or called as `X.createRequire(...)`. An unrecognised alias of `require` this reader does
+ *   not know to look for — one bound through a destructuring pattern, or through a property read
+ *   off an object rather than a call (`const x = module.require`) — is not detected and not
+ *   refused; this is this gate's own residual limit on top of the one above, named rather than
+ *   implied away.
  * * **A property access on a value already in hand is invisible to this gate.** It answers "does
  *   this file's own import statements, followed transitively, reach the package", not "does this
  *   file call a method on an object some other file handed it at run time." `store.ts`'s
@@ -124,7 +127,10 @@ const REAL_REPO_ROOT = realpathSync(REPO_ROOT);
  * the un-realpathed path is the same mistake ADR-0030 names for specifier text, one layer down —
  * see this file's header.
  */
+const realRepoRelativeCache = new Map<string, string>();
 function toRealRepoRelative(absolute: string): string {
+  const cached = realRepoRelativeCache.get(absolute);
+  if (cached !== undefined) return cached;
   let real: string;
   try {
     real = realpathSync(absolute);
@@ -136,11 +142,13 @@ function toRealRepoRelative(absolute: string): string {
       { cause: error },
     );
   }
-  return posix(path.relative(REAL_REPO_ROOT, real));
+  const repoRelative = posix(path.relative(REAL_REPO_ROOT, real));
+  realRepoRelativeCache.set(absolute, repoRelative);
+  return repoRelative;
 }
 
-function trackedFilesUnder(prefix: string): string[] {
-  const stdout = execFileSync('git', ['ls-files', '-z', '--', prefix], {
+function trackedFilesUnder(...prefixes: string[]): string[] {
+  const stdout = execFileSync('git', ['ls-files', '-z', '--', ...prefixes], {
     cwd: REPO_ROOT,
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
@@ -237,44 +245,53 @@ interface FoundSpecifier {
 }
 
 /**
- * Identifiers one file binds to something `require`-shaped: the literal name `require`, an
- * identifier assigned straight from it (`const req = require`), or an identifier assigned the
- * result of calling `createRequire(...)` (verification round 3's B2 — `const req =
- * createRequire(import.meta.url)`). A call through any of these is treated exactly like a direct
- * `require(...)` call, including refusing a non-literal argument.
+ * Is this variable declaration binding an identifier to something `require`-shaped: assigned
+ * straight from `require` (`const req = require`), or assigned the result of calling
+ * `createRequire(...)` (verification round 3's B2 — `const req = createRequire(import.meta.url)`),
+ * whether that function is named `createRequire`, is a local alias the file imported it under
+ * (`import { createRequire as cr } from 'node:module'`; `createRequireNames`), or is read off an
+ * object (`module.createRequire(...)`, `m.createRequire(...)` for `import * as m`)? A call through
+ * such a binding is treated exactly like a direct `require(...)` call, including refusing a
+ * non-literal argument.
  */
-function requireLikeBindings(source: ts.SourceFile): ReadonlySet<string> {
-  const names = new Set<string>();
-  const walk = (node: ts.Node): void => {
-    if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.initializer !== undefined
-    ) {
-      const init = node.initializer;
-      const isRequireAlias = ts.isIdentifier(init) && init.text === 'require';
-      const isCreateRequireResult =
-        ts.isCallExpression(init) &&
-        ts.isIdentifier(init.expression) &&
-        init.expression.text === 'createRequire';
-      if (isRequireAlias || isCreateRequireResult) names.add(node.name.text);
-    }
-    ts.forEachChild(node, walk);
-  };
-  walk(source);
-  return names;
+function requireLikeBinding(
+  declaration: ts.VariableDeclaration,
+  createRequireNames: ReadonlySet<string>,
+): string | null {
+  if (!ts.isIdentifier(declaration.name)) return null;
+  const init = declaration.initializer;
+  if (init === undefined) return null;
+  const isRequireAlias = ts.isIdentifier(init) && init.text === 'require';
+  const isCreateRequireResult =
+    ts.isCallExpression(init) &&
+    ((ts.isIdentifier(init.expression) && createRequireNames.has(init.expression.text)) ||
+      (ts.isPropertyAccessExpression(init.expression) &&
+        init.expression.name.text === 'createRequire'));
+  return isRequireAlias || isCreateRequireResult ? declaration.name.text : null;
 }
 
 /**
  * Every static and literal-argument dynamic specifier in one file. Throws — rather than skipping —
  * on a dynamic `import()` or a `require`-shaped call (direct, or through a binding
- * {@link requireLikeBindings} recognises) whose argument is not a plain string literal (ADR-0031):
+ * {@link requireLikeBinding} recognises, or a property call such as `module.require(...)`,
+ * `globalThis.require(...)` or `require.resolve(...)`) whose argument is not a plain string literal
+ * (ADR-0031):
  * such a call could resolve to anything at run time, and this reader does not attempt the fuller
  * "vouched for" analysis the database-reachability gate uses for that case.
+ *
+ * One parse and one pruned pass over the tree per file, with no parent pointers and no JSDoc parsing:
+ * none of the nodes read here is a JSDoc node (`forEachChild` never visits those) or needs its
+ * parent. Calls through a plain identifier are collected during the pass and classified after it,
+ * once every `require`-shaped binding in the file is known — a binding declared below its first
+ * use is still recognised. This reader runs over the whole value closure (~170 files, ~1.4 MB) on
+ * a CI runner that also runs two vitest projects side by side, so its CPU cost is the test's
+ * duration there, multiplied by the runner's load.
  */
-function specifiersIn(file: string): FoundSpecifier[] {
+function specifiersIn(
+  file: string,
+  text = readFileSync(path.join(REPO_ROOT, file), 'utf8'),
+): FoundSpecifier[] {
   const absolute = path.join(REPO_ROOT, file);
-  const text = readFileSync(absolute, 'utf8');
   const extension = path.posix.extname(file).toLowerCase();
   const kind =
     extension === '.tsx'
@@ -282,9 +299,34 @@ function specifiersIn(file: string): FoundSpecifier[] {
       : extension === '.ts'
         ? ts.ScriptKind.TS
         : ts.ScriptKind.JS;
-  const source = ts.createSourceFile(absolute, text, ts.ScriptTarget.Latest, true, kind);
-  const requireLike = requireLikeBindings(source);
+  const source = ts.createSourceFile(
+    absolute,
+    text,
+    { languageVersion: ts.ScriptTarget.Latest, jsDocParsingMode: ts.JSDocParsingMode.ParseNone },
+    false,
+    kind,
+  );
+  const createRequireNames = new Set(['createRequire']);
+  const declarations: ts.VariableDeclaration[] = [];
+  const identifierCalls: { readonly callee: string; readonly call: ts.CallExpression }[] = [];
+  const resolveCalls: { readonly callee: string; readonly call: ts.CallExpression }[] = [];
   const found: FoundSpecifier[] = [];
+  // Which subtrees the pass below may skip. Every specifier it records comes from one of: an
+  // import declaration, an `import()` call or an `import('…')` type — each has the keyword
+  // `import` inside its own source range — an `export … from` statement, which only ever sits
+  // directly in a source file or a module block (both always descended), or a call through
+  // `require` or a binding of it, which cannot exist in a file whose text names neither `require`
+  // nor `createRequire` (or spells an identifier with a `\u` escape). So unless the file may call
+  // `require`, a subtree whose range has no `import` in it is not walked — mostly schema and
+  // repository bodies that cannot hold an edge. The compiler still decides every edge that is
+  // recorded; the text only decides where not to look.
+  const mayCallRequire = /\brequire\b|createRequire|\\u/u.test(text);
+  const mayHoldAnEdge = (node: ts.Node): boolean => {
+    if (mayCallRequire || ts.isSourceFile(node) || ts.isModuleDeclaration(node)) return true;
+    if (ts.isModuleBlock(node)) return true;
+    const at = text.indexOf('import', node.pos);
+    return at !== -1 && at < node.end;
+  };
 
   const literalArg = (node: ts.CallExpression, construct: string): void => {
     const argument = node.arguments[0];
@@ -302,6 +344,24 @@ function specifiersIn(file: string): FoundSpecifier[] {
     if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
       const typeOnly = node.importClause?.isTypeOnly === true;
       found.push({ specifier: node.moduleSpecifier.text, typeOnly });
+      const bindings = node.importClause?.namedBindings;
+      if (
+        /^(?:node:)?module$/u.test(node.moduleSpecifier.text) &&
+        bindings !== undefined &&
+        ts.isNamedImports(bindings)
+      ) {
+        for (const element of bindings.elements) {
+          if ((element.propertyName ?? element.name).text === 'createRequire') {
+            createRequireNames.add(element.name.text);
+          }
+        }
+      }
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference) &&
+      ts.isStringLiteralLike(node.moduleReference.expression)
+    ) {
+      found.push({ specifier: node.moduleReference.expression.text, typeOnly: node.isTypeOnly });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier !== undefined) {
       if (ts.isStringLiteralLike(node.moduleSpecifier)) {
         found.push({ specifier: node.moduleSpecifier.text, typeOnly: node.isTypeOnly });
@@ -313,16 +373,34 @@ function specifiersIn(file: string): FoundSpecifier[] {
     } else if (ts.isCallExpression(node)) {
       if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
         literalArg(node, 'a dynamic import');
-      } else if (
-        ts.isIdentifier(node.expression) &&
-        (node.expression.text === 'require' || requireLike.has(node.expression.text))
-      ) {
-        literalArg(node, node.expression.text === 'require' ? 'require' : 'an aliased require');
+      } else if (ts.isIdentifier(node.expression)) {
+        identifierCalls.push({ callee: node.expression.text, call: node });
+      } else if (ts.isPropertyAccessExpression(node.expression)) {
+        const { expression: target, name } = node.expression;
+        if (name.text === 'require') {
+          literalArg(node, 'a property call to require');
+        } else if (name.text === 'resolve' && ts.isIdentifier(target)) {
+          resolveCalls.push({ callee: target.text, call: node });
+        }
       }
+    } else if (ts.isVariableDeclaration(node)) {
+      declarations.push(node);
     }
-    ts.forEachChild(node, walk);
+    if (mayHoldAnEdge(node)) ts.forEachChild(node, walk);
   };
   walk(source);
+  const requireLike = new Set<string>();
+  for (const declaration of declarations) {
+    const binding = requireLikeBinding(declaration, createRequireNames);
+    if (binding !== null) requireLike.add(binding);
+  }
+  for (const { callee, call } of identifierCalls) {
+    if (callee === 'require') literalArg(call, 'require');
+    else if (requireLike.has(callee)) literalArg(call, 'an aliased require');
+  }
+  for (const { callee, call } of resolveCalls) {
+    if (callee === 'require' || requireLike.has(callee)) literalArg(call, 'require.resolve');
+  }
   return found;
 }
 
@@ -363,79 +441,69 @@ function edgesOf(file: string): readonly Edge[] {
 
 /** `null` means "does not reach"; otherwise the chain of files from `file` into the package. */
 type Reach = readonly string[] | null;
-const reachCache = new Map<string, Reach>();
 
 /**
- * `reaches`'s answer for one file, plus whether that answer was influenced by a cycle-detection
- * shortcut — see {@link reaches}'s header for why the second part exists and what happens without
- * it (verification round 4's secondary finding on this function).
+ * Files proven to reach the package (with the chain that does it) or proven not to. Shared across
+ * roots, because many roots' walks pass through the same intermediate files.
  */
-interface ReachResult {
-  readonly chain: Reach;
-  readonly involvedCycle: boolean;
-}
+const reachCache = new Map<string, Reach>();
 
 /**
  * Does `file` reach the secrets package through any chain of **value** edges? Follows a value edge
  * into any file — allow-listed or not, inside these two directories or not — except one under
  * `node_modules`.
  *
- * Memoised, but **not** by caching every `null` unconditionally — an earlier version of this
- * function did, and the confirmer found it unsound rather than merely conservative: with a cycle
- * `h1 → h2 → h3 → h1` plus a direct `h1 → secrets`, exploring `h1`'s first edge walks
- * `h2 → h3 → h1` and hits the in-progress guard on `h1`, so `h3` and then `h2` were cached `null`
- * — before `h1`'s *second* edge (straight to `secrets`) was ever examined. A later, independent
- * root that reaches `secrets` only through `h2` then read that stale cached `null` and was wrongly
- * cleared. The comment on the previous version claimed this caching was "sound … a file's
- * transitive reach does not depend on which root asked," which is true of the *graph* but was not
- * true of *this function's* answer, because the answer for `h2`/`h3` was computed before `h1`'s own
- * answer was known.
+ * A plain depth-first search per root with one `visited` set, so each file is expanded at most once
+ * per root. What goes into {@link reachCache} is restricted to answers that are true independently
+ * of which root asked:
  *
- * The fix: a `null` result is cached only when computing it never hit the in-progress guard on any
- * node — i.e., it is a genuine dead end, not an artefact of giving up on a cycle mid-exploration. A
- * result that *did* hit the guard is left uncached, so the next query for that file recomputes it —
- * by which point any node the cycle passed through may have a settled, cached answer of its own
- * (as `h1` does, above), making the recomputation both correct and cheap. A **positive** result
- * (a chain was found) is always safe to cache regardless: finding a real path is true independent
- * of anything else still being explored.
+ * * A **positive** result (a chain was found) is cached for every file on that chain — a real path
+ *   into the package is true regardless of anything else still being explored.
+ * * A **negative** result is cached only when the *whole* search from a root came back negative.
+ *   At that point every file the search visited had its entire reachable set explored inside that
+ *   same search (anything reachable from a visited file is reachable from the root), so none of
+ *   them can reach the package either. A negative seen mid-search is never cached on its own: with
+ *   a cycle `h1 → h2 → h3 → h1` plus a direct `h1 → secrets`, exploring `h1`'s first edge sees `h2`
+ *   and `h3` come back negative only because `h1` was already on the stack — caching that was the
+ *   unsound shortcut an earlier version of this function took (verification round 4's secondary
+ *   finding), and a later root reaching the package only through `h2` was wrongly cleared by it.
+ *
+ * The version before this one avoided that by leaving such cycle-touched negatives uncached and
+ * recomputing them on every revisit, which was correct but re-expanded the same files hundreds of
+ * thousands of times (542,074 calls for 171 files) and timed out under CI load.
  */
-function reachesInner(file: string, visiting: Set<string>): ReachResult {
-  const cached = reachCache.get(file);
-  if (cached !== undefined) return { chain: cached, involvedCycle: false };
-  if (visiting.has(file)) return { chain: null, involvedCycle: true };
-  visiting.add(file);
-  let chain: Reach = null;
-  let involvedCycle = false;
-  for (const edge of edgesOf(file)) {
-    if (edge.typeOnly) continue;
-    if (insideSecretsPackage(edge.resolved)) {
-      chain = [file, edge.resolved];
-      break;
+function reaches(root: string): Reach {
+  const visited = new Set<string>();
+  const search = (file: string): Reach => {
+    const cached = reachCache.get(file);
+    if (cached !== undefined) return cached;
+    if (visited.has(file)) return null;
+    visited.add(file);
+    for (const edge of edgesOf(file)) {
+      if (edge.typeOnly) continue;
+      if (insideSecretsPackage(edge.resolved)) {
+        const chain = [file, edge.resolved];
+        reachCache.set(file, chain);
+        return chain;
+      }
+      if (isExternal(edge.resolved)) continue;
+      const deeper = search(edge.resolved);
+      if (deeper !== null) {
+        const chain = [file, ...deeper];
+        reachCache.set(file, chain);
+        return chain;
+      }
     }
-    if (isExternal(edge.resolved)) continue;
-    const deeper = reachesInner(edge.resolved, visiting);
-    if (deeper.involvedCycle) involvedCycle = true;
-    if (deeper.chain !== null) {
-      chain = [file, ...deeper.chain];
-      break;
-    }
-  }
-  visiting.delete(file);
-  if (chain !== null || !involvedCycle) reachCache.set(file, chain);
-  return { chain, involvedCycle };
-}
-
-/** The public entry point: a fresh `visiting` set per root, per this file's header. */
-function reaches(file: string): Reach {
-  return reachesInner(file, new Set()).chain;
+    return null;
+  };
+  const chain = search(root);
+  if (chain === null) for (const file of visited) reachCache.set(file, null);
+  return chain;
 }
 
 describe('nothing reachable from a secrets route can construct a live secrets service', () => {
   it('no non-allow-listed file in these two directories transitively reaches the secrets package', () => {
-    const files = [
-      ...trackedFilesUnder('apps/web/app/api/secrets'),
-      ...trackedFilesUnder('apps/web/server/secrets'),
-    ];
+    const files = trackedFilesUnder('apps/web/app/api/secrets', 'apps/web/server/secrets');
     expect(files.length).toBeGreaterThan(0);
 
     const violations: { readonly root: string; readonly chain: readonly string[] }[] = [];
@@ -460,5 +528,40 @@ describe('nothing reachable from a secrets route can construct a live secrets se
         .map((v) => `${v.root} reaches the package via: ${v.chain.join(' -> ')}`)
         .join('\n'),
     ).toEqual([]);
+  });
+
+  const PLANTED = 'apps/web/server/secrets/planted.ts';
+  const SECRETS = '@agent-workspace/core/secrets';
+
+  it.each([
+    ['import-equals require', `import x = require('${SECRETS}');`],
+    ['module.require', `module.require('${SECRETS}');`],
+    ['globalThis.require', `globalThis.require('${SECRETS}');`],
+    ['require.resolve', `require.resolve('${SECRETS}');`],
+    [
+      'an aliased createRequire',
+      `import { createRequire as cr } from 'node:module';\nconst r = cr(import.meta.url);\nr('${SECRETS}');`,
+    ],
+    [
+      'module.createRequire',
+      `import module from 'node:module';\nconst r = module.createRequire(import.meta.url);\nr('${SECRETS}');`,
+    ],
+    [
+      'a require alias declared after its use',
+      `function f() { return r.resolve('${SECRETS}'); }\nconst r = require;`,
+    ],
+  ])('sees %s as a value edge', (_form, text) => {
+    expect(specifiersIn(PLANTED, text)).toContainEqual({ specifier: SECRETS, typeOnly: false });
+  });
+
+  it.each([
+    ['module.require', 'module.require(name);'],
+    ['require.resolve', 'require.resolve(name);'],
+    [
+      'module.createRequire',
+      'import module from "node:module";\nconst r = module.createRequire(import.meta.url);\nr(name);',
+    ],
+  ])('refuses a non-literal argument to %s (ADR-0031)', (_form, text) => {
+    expect(() => specifiersIn(PLANTED, text)).toThrow(/ADR-0031/u);
   });
 });

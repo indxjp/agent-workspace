@@ -224,7 +224,8 @@ end ToolConnector
 /-- The columns of `mcp_servers`, in declaration order. -/
 def dbColumns : List String :=
   ["id", "workspace_id", "name", "kind", "transport", "command", "args", "url", "tool_config",
-    "openapi_document", "auth_type", "credential_secret_id", "enabled", "created_by",
+    "openapi_document", "auth_type", "credential_secret_id", "identity_secret_name", "enabled",
+    "created_by",
     "owner_principal_id", "created_at", "updated_at"]
 
 /-! ## The wire -/
@@ -263,13 +264,13 @@ tool connectors (ADR-0113 C15): `kind` follows `name` and a missing `kind` means
 def wireFields : List String :=
   ["id", "workspaceId", "name", "kind", "transport", "command", "args", "url", "authType",
     "hasCredential", "enabled", "createdBy", "ownerPrincipalId", "createdAt", "updatedAt",
-    "openapi", "postgres"]
+    "openapi", "postgres", "identity"]
 
 /-- The keys of `ConnectorResourceSchema` that may be absent from a resource: `kind` (absent
 means `mcp`, so an MCP row renders as before the tool kinds) and the per-kind `openapi` and
 `postgres` configurations. Every other key of `wireFields` is always present. -/
 @[aw_spec (ts := "packages/contracts/src/connectors.ts#ConnectorResourceSchema")]
-def wireOptionalFields : List String := ["kind", "openapi", "postgres"]
+def wireOptionalFields : List String := ["kind", "openapi", "postgres", "identity"]
 
 /-! ## The create-body admission rule (`parseCreateConnectorBody`) -/
 

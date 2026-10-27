@@ -82,6 +82,7 @@ once, sealed as a secret, and never returned.
 | --- | --- | --- | --- |
 | `authType` | `undefined \| "bearer" \| "none" \| "api-key" \| "oauth"` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1). `422 connector_identity_unsupported` on a `stdio` connector, which cannot set a request header. |
 
 ## ConnectorKind
 
@@ -118,7 +119,7 @@ The body of `GET /api/connectors`: every connector of the caller's workspace.
 | `id` | `string` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `transport` | `null \| "http" \| "stdio" \| "sse"` | Yes |  |
+| `transport` | `null \| "http" \| "sse" \| "stdio"` | Yes |  |
 | `command` | `null \| string` | Yes |  |
 | `args` | `null \| readonly string[]` | Yes |  |
 | `url` | `null \| string` | Yes |  |
@@ -130,8 +131,9 @@ The body of `GET /api/connectors`: every connector of the caller's workspace.
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
 | `kind` | `undefined \| "mcp" \| "openapi" \| "postgres"` | No |  |
-| `openapi` | `undefined \| Readonly<{ spec: Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>; baseUrl: string; auth: "bearer" \| "none" \| Readonly<{ header: string; }>; allow: readonly string[]; operations: readonly Readonly<{ name: string; method: "GET" \| "HEAD"; path: string; }>[]; }>` | No | An `openapi` connector's document summary, base URL, rules and operations. |
+| `openapi` | `undefined \| Readonly<{ spec: Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>; baseUrl: string; auth: "bearer" \| "none" \| Readonly<{ header: string; }>; allow: readonly string[]; operations: readonly Readonly<{ name: string; method: "GET" \| "HEAD" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"; path: string; }>[]; }>` | No | An `openapi` connector's document summary, base URL, rules and operations. |
 | `postgres` | `undefined \| Readonly<{ tables: readonly string[]; readOnly: true; maxRows: number; }>` | No | A `postgres` connector's tables, `readOnly` and `maxRows`. |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret, never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector. |
 
 ## ConnectorResourceSchema
 
@@ -162,7 +164,7 @@ says whether one is on file and `.strict()` refuses a body that carries the valu
 | `id` | `string` | Yes |  |
 | `workspaceId` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `transport` | `null \| "http" \| "stdio" \| "sse"` | Yes |  |
+| `transport` | `null \| "http" \| "sse" \| "stdio"` | Yes |  |
 | `command` | `null \| string` | Yes |  |
 | `args` | `null \| readonly string[]` | Yes |  |
 | `url` | `null \| string` | Yes |  |
@@ -174,14 +176,15 @@ says whether one is on file and `.strict()` refuses a body that carries the valu
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
 | `kind` | `undefined \| "mcp" \| "openapi" \| "postgres"` | No |  |
-| `openapi` | `undefined \| Readonly<{ spec: Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>; baseUrl: string; auth: "bearer" \| "none" \| Readonly<{ header: string; }>; allow: readonly string[]; operations: readonly Readonly<{ name: string; method: "GET" \| "HEAD"; path: string; }>[]; }>` | No | An `openapi` connector's document summary, base URL, rules and operations. |
+| `openapi` | `undefined \| Readonly<{ spec: Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>; baseUrl: string; auth: "bearer" \| "none" \| Readonly<{ header: string; }>; allow: readonly string[]; operations: readonly Readonly<{ name: string; method: "GET" \| "HEAD" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"; path: string; }>[]; }>` | No | An `openapi` connector's document summary, base URL, rules and operations. |
 | `postgres` | `undefined \| Readonly<{ tables: readonly string[]; readOnly: true; maxRows: number; }>` | No | A `postgres` connector's tables, `readOnly` and `maxRows`. |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret, never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector. |
 
 ## CONNECTORS_PROBLEM_CODES
 
 Problem codes the connector routes own, with the status each one travels under. The tool
-connector codes (`connector_spec_invalid`, `connector_write_unsupported`,
-`connector_tool_name_collision`, `connector_kind_unsupported`) come from
+connector codes (`connector_spec_invalid`, `connector_tool_name_collision`,
+`connector_kind_unsupported`) come from
 `TOOL_CONNECTOR_PROBLEM_CODES` (ADR-0113 SD4, C15, C17).
 
 | Key | Value |
@@ -193,6 +196,7 @@ connector codes (`connector_spec_invalid`, `connector_write_unsupported`,
 | `credential_not_configured` | `409` |
 | `credential_required_on_retarget` | `409` |
 | `connectors_runtime_not_configured` | `503` |
+| `connector_identity_unsupported` | `422` |
 
 ## ConnectorsProblemCode
 
@@ -203,16 +207,16 @@ connector codes (`connector_spec_invalid`, `connector_write_unsupported`,
 - `"credential_not_configured"`
 - `"credential_required_on_retarget"`
 - `"connectors_runtime_not_configured"`
+- `"connector_identity_unsupported"`
 - `"connector_spec_invalid"`
-- `"connector_write_unsupported"`
 - `"connector_tool_name_collision"`
 - `"connector_kind_unsupported"`
 
 ## ConnectorTransport
 
 - `"http"`
-- `"stdio"`
 - `"sse"`
+- `"stdio"`
 
 ## ConnectorUpdateRequestSchema
 
@@ -246,6 +250,7 @@ The response is the updated `ConnectorResourceSchema`: `hasCredential`, never th
 | `args` | `undefined \| null \| readonly string[]` | No |  |
 | `authType` | `undefined \| "bearer" \| "none" \| "api-key" \| "oauth"` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| null \| Readonly<{ secret: string; }>` | No | `null` removes the opt-in (ADR-0142 D1). |
 
 ## ConnectorUrlSchema
 
@@ -277,6 +282,7 @@ An `http` or `sse` connector: an absolute `http(s)` URL. Never a `command` or `a
 | `url` | `string` | Yes |  |
 | `authType` | `undefined \| "bearer" \| "none" \| "api-key" \| "oauth"` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1). `422 connector_identity_unsupported` on a `stdio` connector, which cannot set a request header. |
 
 ## CreateStdioConnectorInput
 
@@ -290,6 +296,15 @@ A `stdio` connector: a non-blank command and, optionally, its arguments. Never a
 | `args` | `undefined \| readonly string[]` | No |  |
 | `authType` | `undefined \| "bearer" \| "none" \| "api-key" \| "oauth"` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1). `422 connector_identity_unsupported` on a `stdio` connector, which cannot set a request header. |
+
+## CREDENTIALED_CONNECTOR_AUTH_TYPES
+
+The auth types that carry a credential: `CONNECTOR_AUTH_TYPES` without `none`.
+
+- `'api-key'`
+- `'bearer'`
+- `'oauth'`
 
 ## isMcpConnectorResource
 
@@ -315,6 +330,13 @@ document dense in other control characters (escaped as `\u00XX`, six bytes each)
 `413` first.
 
 Value: `2 * OPENAPI_DOCUMENT_MAX_BYTES + 64 * 1024`
+
+## REMOTE_CONNECTOR_TRANSPORTS
+
+The transports that connect to a URL: `CONNECTOR_TRANSPORTS` without `stdio`.
+
+- `'http'`
+- `'sse'`
 
 ## RotateConnectorCredentialInput
 
@@ -352,6 +374,7 @@ not a probe result at all: the control plane never launches a caller-supplied co
 
 ## TestConnectionFailureKind
 
+- `"timeout"`
 - `"auth-required"`
 - `"credential-rejected"`
 - `"credential-insufficient-scope"`
@@ -360,7 +383,6 @@ not a probe result at all: the control plane never launches a caller-supplied co
 - `"tls-error"`
 - `"command-not-found"`
 - `"process-died"`
-- `"timeout"`
 - `"protocol-version-unsupported"`
 - `"server-error"`
 - `"rate-limited"`
@@ -373,7 +395,7 @@ not a probe result at all: the control plane never launches a caller-supplied co
 ## TestConnectionOutcome
 
 - `Readonly<{ ok: true; kind: "ok"; message: string; serverName: string | null; serverVersion: string | null; toolCount: number; }>`
-- `Readonly<{ ok: false; kind: "auth-required" | "credential-rejected" | "credential-insufficient-scope" | "unreachable" | "endpoint-not-mcp" | "tls-error" | "command-not-found" | "process-died" | "timeout" | "protocol-version-unsupported" | "server-error" | "rate-limited" | "http-error" | "server-refused" | "sse-stream-failed" | "unknown-failure" | "stdio-probe-unavailable"; message: string; }>`
+- `Readonly<{ ok: false; kind: "timeout" | "auth-required" | "credential-rejected" | "credential-insufficient-scope" | "unreachable" | "endpoint-not-mcp" | "tls-error" | "command-not-found" | "process-died" | "protocol-version-unsupported" | "server-error" | "rate-limited" | "http-error" | "server-refused" | "sse-stream-failed" | "unknown-failure" | "stdio-probe-unavailable"; message: string; }>`
 
 ## TestConnectionOutcomeSchema
 
@@ -383,7 +405,7 @@ did not. `ok` is the discriminant; `message` is a sentence for a person and neve
 credential or anything a `stdio` command wrote.
 
 - `Readonly<{ ok: true; kind: "ok"; message: string; serverName: string | null; serverVersion: string | null; toolCount: number; }>`
-- `Readonly<{ ok: false; kind: "auth-required" | "credential-rejected" | "credential-insufficient-scope" | "unreachable" | "endpoint-not-mcp" | "tls-error" | "command-not-found" | "process-died" | "timeout" | "protocol-version-unsupported" | "server-error" | "rate-limited" | "http-error" | "server-refused" | "sse-stream-failed" | "unknown-failure" | "stdio-probe-unavailable"; message: string; }>`
+- `Readonly<{ ok: false; kind: "timeout" | "auth-required" | "credential-rejected" | "credential-insufficient-scope" | "unreachable" | "endpoint-not-mcp" | "tls-error" | "command-not-found" | "process-died" | "protocol-version-unsupported" | "server-error" | "rate-limited" | "http-error" | "server-refused" | "sse-stream-failed" | "unknown-failure" | "stdio-probe-unavailable"; message: string; }>`
 
 ## UpdateConnectorInput
 
@@ -396,3 +418,4 @@ credential or anything a `stdio` command wrote.
 | `args` | `undefined \| null \| readonly string[]` | No |  |
 | `authType` | `undefined \| "bearer" \| "none" \| "api-key" \| "oauth"` | No |  |
 | `credential` | `undefined \| string` | No |  |
+| `identity` | `undefined \| null \| Readonly<{ secret: string; }>` | No | `null` removes the opt-in (ADR-0142 D1). |

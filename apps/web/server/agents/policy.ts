@@ -62,7 +62,7 @@ import {
 } from '../engines/capabilities';
 import { registeredEngine, registeredEngineIds } from '../engines/registry';
 import { DEFAULT_ENGINE_ID } from '../engines/session-engine';
-import { problem, type ApiResult } from './handlers';
+import { formatIssues, problem, type ApiResult } from '../http/result';
 import type { AgentRecord } from './contract';
 import type { AgentResourceStoreProvider } from './resource-store';
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
@@ -224,7 +224,7 @@ export function parsePolicyBody(
         AGENT_POLICY_PROBLEM_CODES.invalid_policy,
         'invalid_policy',
         'The policy body does not match the published shape.',
-        parsed.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`),
+        formatIssues(parsed.error.issues),
       ),
     };
   }

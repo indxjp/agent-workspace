@@ -11,6 +11,10 @@
  *    checksum-verified SeaweedFS release binary, cached under
  *    `${XDG_CACHE_HOME:-~/.cache}/agent-workspace/seaweedfs/<version>/`.
  *
+ * With Docker, it also starts Azurite and fake-gcs-server for the Azure and GCS suites and sets
+ * `TEST_AZURITE_URL` / `TEST_GCS_ENDPOINT`, unless both are already set; the native fallback has no
+ * emulator, so those suites define no emulator cases there.
+ *
  * `AW_TEST_SERVICES=docker|native` forces step 2 or 3. ADR-0066 records the decision. Without a
  * Docker daemon, the four suites that drive real containers skip by design — `ci.yml` still runs
  * them: packages/runtime/src/docker.test.ts, packages/runtime/src/registry.test.ts,
@@ -27,10 +31,12 @@ import {
   dockerAvailable,
   startDockerPostgres,
   startDockerSeaweedfs,
+  startDockerStorageEmulators,
 } from './test-services/docker.mjs';
 import { TestServicesError } from './test-services/errors.mjs';
 import { waitForPostgresClientsToClose } from './test-services/postgres-clients.mjs';
 import { startNativePostgres } from './test-services/postgres-native.mjs';
+import { pnpmCommand } from './test-services/pnpm-command.mjs';
 import { stopProcess } from './test-services/process.mjs';
 import { startNativeSeaweedfs } from './test-services/seaweedfs.mjs';
 import { selectServices } from './test-services/select.mjs';
@@ -101,6 +107,17 @@ async function provideObjectStore(env, mode) {
   env['TEST_S3_SECRET_ACCESS_KEY'] = 'agent_workspace';
 }
 
+/**
+ * @param {Record<string, string | undefined>} env
+ * @param {boolean} docker
+ */
+async function provideStorageEmulators(env, docker) {
+  if (!docker || (env['TEST_AZURITE_URL'] && env['TEST_GCS_ENDPOINT'])) return;
+  const emulators = await startDockerStorageEmulators(cleanup, suffix);
+  env['TEST_AZURITE_URL'] ||= emulators.azuriteUrl;
+  env['TEST_GCS_ENDPOINT'] ||= emulators.gcsEndpoint;
+}
+
 /** @param {Record<string, string | undefined>} env */
 function requireFatalUnhandledRejections(env) {
   const existing = env['NODE_OPTIONS']?.trim() ?? '';
@@ -119,10 +136,8 @@ function runVitest(pnpmEntry, env) {
   /** @type {import('node:child_process').ChildProcess | undefined} */
   let child;
   cleanup.add('stop Vitest', () => stopProcess(child));
-  child = spawn(process.execPath, [pnpmEntry, 'exec', 'vitest', 'run', ...requested], {
-    env,
-    stdio: 'inherit',
-  });
+  const run = pnpmCommand(pnpmEntry, ['exec', 'vitest', 'run', ...requested]);
+  child = spawn(run.command, run.args, { env, stdio: 'inherit' });
   const running = child;
   return new Promise((resolve, reject) => {
     running.once('error', reject);
@@ -137,18 +152,22 @@ async function main() {
   const modes = selectServices({ env, dockerAvailable });
   log(`postgres: ${modes.postgres}`);
   log(`s3: ${modes.s3}`);
-  // `@indx-workspace/sdk...` is the SDK and everything it depends on (`contracts`): the web
-  // suites reach both through their `dist/` entry points, exactly as they reach `core`.
-  const built = spawnSync(
-    process.execPath,
-    [pnpmEntry, '--filter', '@agent-workspace/core', '--filter', '@indx-workspace/sdk...', 'build'],
-    { env, stdio: 'inherit' },
-  );
+  // `@indx-workspace/aw...` is the CLI and the SDK, contracts and platforms it depends on: the web
+  // suites reach them through their `dist/` entry points, exactly as they reach `core`.
+  const build = pnpmCommand(pnpmEntry, [
+    '--filter',
+    '@agent-workspace/core',
+    '--filter',
+    '@indx-workspace/aw...',
+    'build',
+  ]);
+  const built = spawnSync(build.command, build.args, { env, stdio: 'inherit' });
   if (built.status !== 0) {
-    throw new Error('The core and SDK packages failed to build before tests.');
+    throw new Error('The core, SDK and CLI packages failed to build before tests.');
   }
   const countClients = await providePostgres(env, modes.postgres);
   await provideObjectStore(env, modes.s3);
+  await provideStorageEmulators(env, modes.postgres === 'docker' || modes.s3 === 'docker');
   requireFatalUnhandledRejections(env);
   const status = await runVitest(pnpmEntry, env);
   if (status === 0 && countClients !== null) {

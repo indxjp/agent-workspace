@@ -2,18 +2,24 @@
 /* global process */ // The root ESLint config declares no environment globals.
 // Consolidate branch sales workbooks into one table, by a mapping plan a person has confirmed.
 //
-// Input is what the office-reader skill prints (`node ooxml.mjs xlsx <file> > <file>.json`), so
-// this script parses no zip and imports nothing: a skill is uploaded as its own directory.
+// It reads the .xlsx files itself, with `./xlsx.mjs` (a copy of office-reader's reader): a
+// `run_skill_script` call starts one script, so one script cannot take another's output from a
+// pipe. A skill is uploaded as its own directory, so that sibling file is the only import. A result
+// goes to stdout and, with `--out`, also to that file (under `outputs/`, where a run may write), for
+// the next call to read.
 //
-//   node consolidate.mjs inspect <book.json>...                 → each sheet's first rows, lettered, and its unit
-//   node consolidate.mjs apply <plan.json> <book.json>...       → { rows, totals, skipped }
-//   node consolidate.mjs compare <applied.json> <from> <to>     → applied + { comparison }
+//   consolidate.mjs inspect <book.xlsx>...                       → each sheet's first rows, lettered, and its unit
+//   consolidate.mjs apply <plan.json> <book.xlsx>... [--out f]   → { rows, totals, skipped }
+//   consolidate.mjs compare <applied.json> <from> <to> [--out f] → applied + { comparison }
+//   consolidate.mjs sheet <report.json> [--out f]                → { sheets } for office-reader's `ooxml.mjs write`
 //
 // Every row keeps `@src`: the `file!sheet!cell` each value came from. Units and dates are converted
 // here, by rule, never by the model: 千円 × 1,000, 百万円 × 1,000,000, 令和/平成/昭和 → ISO.
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+import { OoxmlRefusal, readXlsx } from './xlsx.mjs';
 
 export const UNITS = { 円: 1, 千円: 1_000, 百万円: 1_000_000 };
 export const DATE_FORMATS = ['wareki', 'ymd', 'serial'];
@@ -135,7 +141,7 @@ function checkLayout(layout, index) {
 // ---------- apply ----------
 
 /**
- * Apply `plan` to `books` (file path as the plan names it → office-reader output) and return every
+ * Apply `plan` to `books` (file path as the plan names it → `readXlsx` result) and return every
  * data row with its sources, the totals by month and branch, and every row left out, with why.
  */
 export function applyPlan(plan, books) {
@@ -250,6 +256,40 @@ export function compare(applied, from, to) {
   };
 }
 
+/**
+ * The report as a workbook for `ooxml.mjs write`: 明細 (every row with its source cell) and 前月比
+ * (each branch, then the total). Values are the report's own; nothing is recomputed here.
+ */
+export function workbookSpec(report) {
+  const { from, to, branches, total } = report.comparison;
+  const change = (label, entry) => [label, entry.previous, entry.current, entry.diff, entry.pct];
+  return {
+    sheets: [
+      {
+        name: '明細',
+        rows: [
+          ['拠点', '日付', '区分', '金額(円)', '出典'],
+          ...report.rows.map((row) => [
+            row.branch,
+            row.date,
+            row.category,
+            row.amount,
+            row['@src'].amount,
+          ]),
+        ],
+      },
+      {
+        name: '前月比',
+        rows: [
+          ['拠点', from, to, '差額(円)', '増減率(%)'],
+          ...branches.map((entry) => change(entry.branch, entry)),
+          change('合計', total),
+        ],
+      },
+    ],
+  };
+}
+
 // ---------- inspect ----------
 
 const letter = (index) => {
@@ -307,41 +347,54 @@ export function inspect(book, count = 8) {
 
 const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 
-/** Workbook JSON files are matched to plan entries by name: `<file>.xlsx.json` is `<file>.xlsx`. */
-function booksFor(plan, jsonFiles) {
-  const byName = new Map(
-    jsonFiles.map((file) => [path.basename(file).replace(/\.json$/u, ''), file]),
-  );
+const readBook = (file) => readXlsx(readFileSync(file));
+
+/** Workbooks are matched to plan entries by file name, so a plan may name a path the run reads elsewhere. */
+function booksFor(plan, bookFiles) {
+  const byName = new Map(bookFiles.map((file) => [path.basename(file), file]));
   const books = {};
   for (const file of plan.layouts.flatMap((layout) => layout.files)) {
-    const json =
-      byName.get(path.basename(file)) ?? fail(`no ${path.basename(file)}.json given for ${file}`);
-    books[file] = readJson(json);
+    const found =
+      byName.get(path.basename(file)) ?? fail(`no ${path.basename(file)} given for ${file}`);
+    books[file] = readBook(found);
   }
   return books;
 }
 
-function main(argv) {
-  const [command, ...args] = argv;
-  if (command === 'inspect' && args.length >= 1)
-    return args.map((file) => ({ file: path.basename(file), sheets: inspect(readJson(file)) }));
-  if (command === 'apply' && args.length >= 2) {
-    const plan = readJson(args[0]);
-    return applyPlan(plan, booksFor(plan, args.slice(1)));
+function main(args) {
+  const [command, ...rest] = args;
+  if (command === 'inspect' && rest.length >= 1)
+    return rest.map((file) => ({ file: path.basename(file), sheets: inspect(readBook(file)) }));
+  if (command === 'apply' && rest.length >= 2) {
+    const plan = readJson(rest[0]);
+    return applyPlan(plan, booksFor(plan, rest.slice(1)));
   }
-  if (command === 'compare' && args.length === 3)
-    return compare(readJson(args[0]), args[1], args[2]);
+  if (command === 'compare' && rest.length === 3)
+    return compare(readJson(rest[0]), rest[1], rest[2]);
+  if (command === 'sheet' && rest.length === 1) return workbookSpec(readJson(rest[0]));
   process.stderr.write(
-    'usage: consolidate.mjs inspect <book.json>... | apply <plan.json> <book.json>... | compare <applied.json> <YYYY-MM> <YYYY-MM>\n',
+    'usage: consolidate.mjs inspect <book.xlsx>... | apply <plan.json> <book.xlsx>... [--out <file>] | compare <applied.json> <YYYY-MM> <YYYY-MM> [--out <file>] | sheet <report.json> [--out <file>]\n',
   );
   process.exit(2);
 }
 
+/** `--out <file>` and the arguments without it. */
+function splitOut(argv) {
+  const at = argv.indexOf('--out');
+  if (at === -1) return { out: null, args: argv };
+  const out = argv[at + 1];
+  if (out === undefined || out.startsWith('--')) fail('--out needs a file name');
+  return { out, args: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
-    process.stdout.write(`${JSON.stringify(main(process.argv.slice(2)), null, 2)}\n`);
+    const { out, args } = splitOut(process.argv.slice(2));
+    const json = `${JSON.stringify(main(args), null, 2)}\n`;
+    if (out !== null) writeFileSync(out, json);
+    process.stdout.write(json);
   } catch (error) {
-    if (!(error instanceof PlanError)) throw error;
+    if (!(error instanceof PlanError || error instanceof OoxmlRefusal)) throw error;
     process.stderr.write(`consolidate: ${error.message}\n`);
     process.exit(1);
   }

@@ -94,7 +94,7 @@ theorem iso_date_time_is_utc (s : String) (h : isIsoDateTime s = true) :
   · cases h
 
 example : ("2026-09-23T10:00:00.5Z".toList.getLast? = some 'Z') :=
-  (iso_date_time_is_utc "2026-09-23T10:00:00.5Z" (by decide)).1
+  (iso_date_time_is_utc "2026-09-23T10:00:00.5Z" (by decide +kernel)).1
 
 /-! ## Three envelope spellings, one shape -/
 
@@ -160,7 +160,7 @@ theorem envelopes_are_pairwise_disjoint (j : JValue) :
     cases he
     rw [hl] at hl'
     cases hl'
-    exact absurd (hk _ hmsg) (by decide)
+    exact absurd (hk _ hmsg) (by decide +kernel)
   · rintro ⟨h1, h2⟩
     obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp h1
     obtain ⟨b, hb⟩ := Option.isSome_iff_exists.mp h2
@@ -206,7 +206,7 @@ theorem standard_envelope_is_read_as_itself (p : ApiProblem) (h : apiProblemCode
 
 example : normaliseCurrent (apiProblemCodec.encode ⟨⟨"forbidden", "No.", none, none⟩⟩) =
     some ⟨"forbidden", "No.", none, none⟩ :=
-  standard_envelope_is_read_as_itself _ (by decide)
+  standard_envelope_is_read_as_itself _ (by decide +kernel)
 
 /-- An RBAC envelope is read with its `detail` as the `message`, and no details. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
@@ -225,7 +225,7 @@ theorem detail_becomes_message (d : ApiProblemDetail) (h : apiProblemDetailCodec
 
 example : normaliseCurrent (apiProblemDetailCodec.encode ⟨"last_owner", "The last owner."⟩) =
     some ⟨"last_owner", "The last owner.", none, none⟩ :=
-  detail_becomes_message _ (by decide)
+  detail_becomes_message _ (by decide +kernel)
 
 /-- A bare envelope is read with its `message`, or `''` when the server sent none. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/site/guides/errors.mdx#three-envelope-spellings-one-shape")
@@ -248,7 +248,7 @@ theorem bare_message_defaults_to_empty (b : ApiProblemBareCode)
 
 example : normaliseCurrent (apiProblemBareCodeCodec.encode ⟨"invalid_limit", none⟩) =
     some ⟨"invalid_limit", "", none, none⟩ :=
-  bare_message_defaults_to_empty _ (by decide)
+  bare_message_defaults_to_empty _ (by decide +kernel)
 
 /-- A body that is none of the three envelopes (an HTML page, `null`, an empty object, a top-level
 `code`) is not read as a problem: the SDK then reports `unrecognised_error_body`. -/
@@ -258,7 +258,7 @@ theorem foreign_bodies_are_unrecognised :
     normaliseCurrent (.str "<html>Bad Gateway</html>") = none ∧ normaliseCurrent .null = none ∧
       normaliseCurrent (.obj []) = none ∧
       normaliseCurrent (.obj [("code", .str "x"), ("message", .str "y")]) = none := by
-  decide
+  decide +kernel
 
 /-! ## `COMMON_PROBLEM_CODES` -/
 
@@ -268,14 +268,14 @@ theorem foreign_bodies_are_unrecognised :
 theorem common_codes_match_errors_guide :
     (WireEnum.all : List CommonProblemCode).map (fun c => (WireEnum.toWire c, c.status)) =
       documentedCommonCodes := by
-  decide
+  decide +kernel
 
 /-- Every shared code travels under a failure status SPEC §4 lists. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#4-conventions")
   (ts := "packages/contracts/src/problem.ts#COMMON_PROBLEM_CODES")]
 theorem common_code_statuses_are_documented (c : CommonProblemCode) :
     documentedFailureStatus c.status = true := by
-  cases c <;> decide
+  cases c <;> decide +kernel
 
 /-- `api_key_not_permitted` is not one of the shared codes: it belongs to the workspace and
 invitation routes. -/
@@ -283,6 +283,6 @@ invitation routes. -/
   (ts := "packages/contracts/src/problem.ts#COMMON_PROBLEM_CODES")]
 theorem api_key_not_permitted_is_not_shared :
     WireEnum.ofWire? (α := CommonProblemCode) "api_key_not_permitted" = none := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Normative.ContractsFoundation

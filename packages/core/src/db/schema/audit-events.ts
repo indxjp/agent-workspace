@@ -25,13 +25,21 @@
  *     rule is now over every `*_id` column at any type — so the `text` typing buys honesty
  *     about a dead identifier and nothing else. It does not make the rule stricter, and an
  *     earlier revision of this comment claimed it did.
- *   * **There is no metadata JSONB.** §36's own first instruction after the list is "Do not log
- *     secrets", and a free-form blob on an audit row is where a request body ends up. Anything
- *     §36 does not name is not recorded.
+ *   * **There is no metadata JSONB — with one narrow, typed exception.** §36's own first
+ *     instruction after the list is "Do not log secrets", and a free-form blob on an audit row is
+ *     where a request body ends up. Anything §36 does not name is not recorded. The exception is
+ *     `details`: it holds ONLY `AgentCreatedAuditDetails` (issue #1847), is validated by that
+ *     strict contracts schema before every write, and a CHECK refuses it on any other action. It
+ *     is never a request body or a secret.
  *
  * The row is immutable, so it has `created_at` and no `updated_at`.
  */
-import { check, foreignKey, index, pgTable, text, uuid } from 'drizzle-orm/pg-core';
+import {
+  AUDIT_ACTIONS,
+  type AgentCreatedAuditDetails,
+  type AuditAction,
+} from '@indx-workspace/contracts/observability';
+import { check, foreignKey, index, jsonb, pgTable, text, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 import { createdAt, primaryKeyId } from './columns.js';
@@ -40,60 +48,8 @@ import { users } from './users.js';
 import { workspaces } from './workspaces.js';
 import { workspacePrincipals } from './workspace-principals.js';
 
-/**
- * Spec §36's list of "important control-plane actions", verbatim and in §36's order, with each
- * phrase written as the slug `oneOf` can inline into DDL.
- *
- * Five of them name objects no table in this wave holds — runtime profiles are Wave 3's,
- * projects and shares are Wave 5's. They are in the set anyway because §36 lists them and this
- * column is not a foreign key: an action name is a name. Leaving them out would mean a later
- * wave editing this file to add a value the specification already printed.
- *
- * The four `invitation-*` values are issue #121's, added by W9-TEAM-121. §36 does not print them —
- * the invitation lifecycle postdates the specification — but its own instruction ("log control-plane
- * actions that change who can do what") is exactly what creating, resending, revoking and accepting
- * one is, and `oneOf` (this file's own `check`, just below) makes adding a value here a one-line
- * `ALTER` rather than a migration with lock implications, which is the reason this project uses a
- * `CHECK` instead of a native `pgEnum` at all.
- */
-export const auditActions = [
-  'user-created',
-  'user-deleted',
-  'agent-changed',
-  'provider-credential-changed',
-  'api-key-created',
-  'api-key-revoked',
-  'connector-changed',
-  'permission-changed',
-  'runtime-profile-changed',
-  'project-created',
-  'project-deleted',
-  // Issue #183's two project lifecycle transitions. §36 prints neither word, for the same reason
-  // it prints no `invitation-*` value: the project archive lifecycle postdates the specification.
-  // They are here rather than folded into `project-deleted` because nothing is deleted by either
-  // — the row and every session attributed to it survive both — and `project-deleted` has no
-  // counterpart that could carry a restore at all.
-  'project-archived',
-  'project-restored',
-  'session-published',
-  'public-link-revoked',
-  'runnable-link-stopped',
-  'public-sharing-policy-changed',
-  'invitation-created',
-  'invitation-resent',
-  'invitation-revoked',
-  'invitation-accepted',
-  // ADR-0134: the lifecycle of an endpoint client, and a call made through one.
-  'endpoint-client-created',
-  'endpoint-client-changed',
-  'endpoint-client-revoked',
-  'endpoint-tool-called',
-  // ADR-0134 part 3: the OAuth server's client secret and grant lifecycle.
-  'oauth-client-secret-rotated',
-  'oauth-grant-issued',
-  'oauth-grant-revoked',
-] as const;
-export type AuditAction = (typeof auditActions)[number];
+/** Spec §36's control-plane actions: the list lives in contracts and the CHECK below derives from it. */
+export { AUDIT_ACTIONS as auditActions, type AuditAction };
 
 export const auditEvents = pgTable(
   'audit_events',
@@ -111,11 +67,13 @@ export const auditEvents = pgTable(
     actorPrincipalId: uuid('actor_principal_id'),
     /** §36's "Ito". The actor's name at the time — or how a non-user actor identified itself. */
     actorLabel: text('actor_label').notNull(),
-    action: text('action', { enum: auditActions }).notNull(),
+    action: text('action', { enum: AUDIT_ACTIONS }).notNull(),
     /** The subject's identifier at the time, as text. NULL for an action with no one subject. */
     subjectId: text('subject_id'),
     /** §36's "Customer Support Agent". The subject's name at the time. */
     subjectLabel: text('subject_label').notNull(),
+    /** Only an `agent-created` row has details; see the header and the CHECK below. */
+    details: jsonb('details').$type<AgentCreatedAuditDetails>(),
     createdAt: createdAt(),
   },
   (table) => [
@@ -133,7 +91,11 @@ export const auditEvents = pgTable(
       foreignColumns: [workspacePrincipals.workspaceId, workspacePrincipals.id],
       name: 'audit_events_actor_principal_workspace_fk',
     }),
-    oneOf('audit_events_action_valid', table.action, auditActions),
+    oneOf('audit_events_action_valid', table.action, AUDIT_ACTIONS),
+    check(
+      'audit_events_details_only_agent_created',
+      sql`${table.details} is null or ${table.action} = 'agent-created'`,
+    ),
     check('audit_events_actor_label_not_blank', sql`length(btrim(${table.actorLabel})) > 0`),
     check('audit_events_subject_label_not_blank', sql`length(btrim(${table.subjectLabel})) > 0`),
     // If a subject id is recorded at all it is one of this schema's ids, so it has that shape.

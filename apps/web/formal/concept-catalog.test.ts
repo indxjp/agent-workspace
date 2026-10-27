@@ -6,19 +6,20 @@
  *   - `Connector.admit` against `connectorKindOfBody` then `parseCreateConnectorBody`, the order
  *     `createConnector` applies them in, error messages and their order included
  *     (`connector-bodies.json`);
- *   - `Agent.parseName`, `parseInstructions` and `parseModel` against `parseAgentName`,
- *     `parseAgentInstructions` and `parseAgentModel`: trimming, the UTF-16 length bounds and the
+ *   - `Agent.parseName`, `parseInstructions` and `parseModel` against the `name`, `instructions`
+ *     and `model` fields of `UpdateAgentPatchSchema`: trimming, the UTF-16 length bounds and the
  *     error messages (`agent-fields.json`);
  *   - `Grant.runOwnership` against `resolveAgentRunOwnership`, run through the real agents
  *     runtime registry with the in-memory agent store and a grant store answering `hasGrant` from
  *     the vector's grant rows (`run-ownership.json`).
  */
+import { clearApplicationContext } from '../server/application-context';
+import { installTestDomains } from '../server/application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { parseAgentInstructions, parseAgentModel, parseAgentName } from '../server/agents/contract';
+import { agentRequestIssueMessages, UpdateAgentPatchSchema } from '../contracts/agents';
 import { createInMemoryAgentStoreProvider } from '../server/agents/memory-store';
 import { resolveAgentRunOwnership } from '../server/agents/run-ownership';
-import { clearAgentsRuntime, configureAgentsRuntime } from '../server/agents/runtime';
 import {
   KIND_ERROR,
   connectorKindOfBody,
@@ -68,10 +69,20 @@ describe('concept-catalog: the connector create admission', () => {
   });
 });
 
+/** One field as the patch schema parses it, in the model's outcome shape. */
+function parseField(field: 'name' | 'instructions' | 'model') {
+  return (value: unknown): unknown => {
+    const parsed = UpdateAgentPatchSchema.safeParse({ [field]: value });
+    return parsed.success
+      ? { ok: true, value: parsed.data[field] }
+      : { ok: false, errors: agentRequestIssueMessages(parsed.error.issues) };
+  };
+}
+
 const fieldParsers = {
-  name: parseAgentName,
-  instructions: parseAgentInstructions,
-  model: parseAgentModel,
+  name: parseField('name'),
+  instructions: parseField('instructions'),
+  model: parseField('model'),
 } as const;
 
 function isParsedField(value: string): value is keyof typeof fieldParsers {
@@ -120,7 +131,7 @@ function stringList(value: unknown, what: string): readonly string[] {
 
 describe('concept-catalog: resolveAgentRunOwnership', () => {
   afterEach(() => {
-    clearAgentsRuntime();
+    clearApplicationContext();
   });
 
   it('replays every ownership answer the resolver gives', () => {
@@ -160,23 +171,26 @@ describe('concept-catalog: resolveAgentRunOwnership', () => {
     }
     const grantedAgentId = agentId;
     if (input['configured'] === true) {
-      configureAgentsRuntime({
-        agents,
-        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_ID }),
-        ...(input['grantsWired'] === true
-          ? {
-              agentGrants: {
-                forWorkspace: () => ({
-                  hasGrant: (candidateAgentId: string, userId: string) =>
-                    Promise.resolve(
-                      candidateAgentId === grantedAgentId && grantUserIds.includes(userId),
-                    ),
-                  listPrincipalIds: () => Promise.resolve([]),
-                  replacePrincipalIds: () => Promise.resolve({ kind: 'agent-not-found' as const }),
-                }),
-              },
-            }
-          : {}),
+      installTestDomains({
+        agents: {
+          agents,
+          resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE_ID }),
+          ...(input['grantsWired'] === true
+            ? {
+                agentGrants: {
+                  forWorkspace: () => ({
+                    hasGrant: (candidateAgentId: string, userId: string) =>
+                      Promise.resolve(
+                        candidateAgentId === grantedAgentId && grantUserIds.includes(userId),
+                      ),
+                    listPrincipalIds: () => Promise.resolve([]),
+                    replacePrincipalIds: () =>
+                      Promise.resolve({ kind: 'agent-not-found' as const }),
+                  }),
+                },
+              }
+            : {}),
+        },
       });
     }
 

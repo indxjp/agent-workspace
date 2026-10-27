@@ -8,12 +8,13 @@
  * `apiKeyRefusal` (`access.ts`) refuses `via === 'api-key'` before any fallback identity is
  * resolved, at all four routes.
  */
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { conferredBy } from '../rbac/conferral';
 import { installRbacHarness } from '../rbac/testing';
 import type { Role } from '../rbac/roles';
-import { clearWorkspacesRuntime, configureWorkspacesRuntime } from './runtime';
 import { createMemoryWorkspaceRepository } from './testing';
 import { GET as GET_COLLECTION, POST } from '../../app/api/workspaces/route';
 import { GET as GET_ITEM, PATCH } from '../../app/api/workspaces/[id]/route';
@@ -24,7 +25,7 @@ const RANDOM_UUID = '00000000-0000-4000-8000-000000000000';
 const ROLES: readonly Role[] = ['owner', 'admin', 'builder', 'viewer'];
 
 afterEach(() => {
-  clearWorkspacesRuntime();
+  clearApplicationContext();
 });
 
 /** A workspace-A key of `role`, plus the harness and Owner's own id (workspace A's sole member). */
@@ -40,23 +41,25 @@ async function seedKey(role: Role) {
     expiresAt: null,
   });
   if (created.kind !== 'created') throw new Error(created.kind);
-  configureWorkspacesRuntime({
-    repository: createMemoryWorkspaceRepository({
-      workspaces: [
-        {
-          id: WORKSPACE_A,
-          slug: 'alpha',
-          name: 'Alpha',
-          members: [{ userId: ownerId, role: 'owner' }],
-        },
-        {
-          id: WORKSPACE_D,
-          slug: 'delta',
-          name: 'Delta',
-          members: [{ userId: ownerId, role: 'owner' }],
-        },
-      ],
-    }),
+  installTestDomains({
+    workspaces: {
+      repository: createMemoryWorkspaceRepository({
+        workspaces: [
+          {
+            id: WORKSPACE_A,
+            slug: 'alpha',
+            name: 'Alpha',
+            members: [{ userId: ownerId, role: 'owner' }],
+          },
+          {
+            id: WORKSPACE_D,
+            slug: 'delta',
+            name: 'Delta',
+            members: [{ userId: ownerId, role: 'owner' }],
+          },
+        ],
+      }),
+    },
   });
   return { harness, ownerId, bearer: created.presented };
 }

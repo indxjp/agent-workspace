@@ -36,7 +36,7 @@ the Wave 2 plan assigns to **W2-DB-01**, not to this task.
 **Persist the record. Keep the event log in process. Say so where an operator will read it.**
 
 1. `packages/core/src/db/repositories/runs.ts` persists the `runs` row and nothing else.
-2. `apps/web/server/runs/store.ts` composes the two halves. The event half — ids, retention, reset
+2. `apps/web/server/runs/repository-store.ts` composes the two halves. The event half — ids, retention, reset
    notices, the wake-up protocol — was **extracted** from `InMemoryRunStore` into one `RunEventLog`
    used by both stores, rather than reimplemented for the database one. Two implementations of the
    event log could disagree in ways the conformance suite could not catch, because the suite would

@@ -1,6 +1,6 @@
 # ADR-0037 — The ADR index is generated, not owned: every task commits it, and a conflict in it is resolved by regenerating
 
-Status: accepted
+Status: superseded by [ADR-0150](0150-the-adr-index-is-generated-on-demand-not-committed.md)
 Date: 2026-09-05
 Decided by: orchestrator, after two independent Wave 3 / Wave 4 plan reviewers raised the same finding
 Scope: `docs/adr/README.md`; the `Owns` declaration of every task that writes an ADR; how a wave integration branch resolves a conflict in it

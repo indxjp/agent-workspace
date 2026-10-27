@@ -83,7 +83,23 @@ const FRAMES: Readonly<Record<string, Record<string, unknown>>> = {
     payload: { type: 'system' },
   },
   'agent.malformed': { frame: 'agent.malformed', ...base, reason: 'not an object' },
+  'agent.approval.requested': {
+    frame: 'agent.approval.requested',
+    ...base,
+    toolCallId: 'toolu_1',
+    toolName: 'Bash',
+    canonicalCall: 'Bash {}',
+  },
+  'agent.handoff': { frame: 'agent.handoff', ...base, reason: 'The visitor asked for a person.' },
 };
+
+describe('agent.handoff', () => {
+  it('refuses an empty reason', () => {
+    expect(AgentFrameSchema.safeParse({ ...FRAMES['agent.handoff'], reason: '' }).success).toBe(
+      false,
+    );
+  });
+});
 
 describe('the neutral agent frame vocabulary', () => {
   it('covers every declared frame name, and nothing else', () => {

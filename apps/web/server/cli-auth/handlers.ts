@@ -31,15 +31,14 @@ import {
 } from '@indx-workspace/contracts/cli-auth';
 import { WorkspaceSwitchRequestSchema } from '@indx-workspace/contracts/workspaces';
 
+import { applicationContext } from '../application-context';
 import { BoundedRecencyMap } from '../http/rate-limit';
 import { hashCliTokenSecret, mintCliToken, readBearerCliTokenAttempt } from '../rbac/cli-token';
-import { problem, readJsonBody, type ApiResult } from '../rbac/http';
-import { currentRbacRuntime } from '../rbac/runtime';
+import type { ApiResult } from '../http/result';
+import { problemWithDetail as problem, readJsonBody } from '../http/result';
 import { getWorkspace, serialiseMembershipView } from '../workspaces/handlers';
-import { currentWorkspacesRuntime } from '../workspaces/runtime';
 import { displayUserCode, mintDeviceCode, newUserCode, verifyDeviceCode } from './device-code';
 import { admitCliAuthRequest, resetCliAuthRateLimits, type CliAuthRoute } from './rate-limit';
-import { currentCliAuthRuntime } from './runtime';
 
 const notConfigured = (): ApiResult =>
   problem(503, 'cli_auth_not_configured', 'CLI sign-in is not configured on this deployment.');
@@ -90,7 +89,7 @@ export function refuseOverLimit(
 
 /** `POST /api/auth/cli-device` — start a sign-in. */
 export function startDeviceAuthorization(request: Request, nowMs: number = Date.now()): ApiResult {
-  const runtime = currentCliAuthRuntime();
+  const runtime = applicationContext()?.cliAuth ?? null;
   if (runtime === null) return notConfigured();
   const limited = refuseOverLimit('start', request, nowMs);
   if (limited !== null) return limited;
@@ -111,9 +110,9 @@ export async function exchangeDeviceCode(
   request: Request,
   nowMs: number = Date.now(),
 ): Promise<ApiResult> {
-  const runtime = currentCliAuthRuntime();
-  const workspaces = currentWorkspacesRuntime();
-  if (runtime === null || workspaces === null) return notConfigured();
+  const context = applicationContext();
+  if (context === null) return notConfigured();
+  const { cliAuth: runtime, workspaces } = context;
   const limited = refuseOverLimit('poll', request, nowMs);
   if (limited !== null) return limited;
   const raw = await readJsonBody(request);
@@ -177,7 +176,7 @@ export async function revokeCliToken(
   request: Request,
   nowMs: number = Date.now(),
 ): Promise<ApiResult> {
-  const runtime = currentCliAuthRuntime();
+  const runtime = applicationContext()?.cliAuth ?? null;
   if (runtime === null) return notConfigured();
   const attempt = readBearerCliTokenAttempt(request.headers.get('authorization'));
   if (attempt.kind !== 'presented') return invalidBearer();
@@ -196,10 +195,9 @@ export async function switchCliWorkspace(
   request: Request,
   nowMs: number = Date.now(),
 ): Promise<ApiResult> {
-  const runtime = currentCliAuthRuntime();
-  const rbac = currentRbacRuntime();
-  const workspaces = currentWorkspacesRuntime();
-  if (runtime === null || rbac === null || workspaces === null) return notConfigured();
+  const context = applicationContext();
+  if (context === null) return notConfigured();
+  const { cliAuth: runtime, rbac, workspaces } = context;
   const principal = await rbac.identify(request);
   const attempt = readBearerCliTokenAttempt(request.headers.get('authorization'));
   if (

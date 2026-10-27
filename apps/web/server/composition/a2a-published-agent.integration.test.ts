@@ -28,18 +28,13 @@ import {
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
 import { versionRequest } from '../agent-versions/fixtures';
-import { clearAgentsRuntime } from '../agents/runtime';
-import { clearProjectsRuntime } from '../projects/runtime';
 import { mintApiKey } from '../rbac/api-key';
-import { clearRbacRuntime } from '../rbac/runtime';
-import { resetRunApi } from '../runs/environment';
-import { clearSharesRuntime } from '../shares/core/runtime';
-import { clearWorkspacesRuntime } from '../workspaces/runtime';
 import { serveA2aRpc } from '../a2a/dispatch';
-import { resetA2a } from '../a2a/env';
 import { resetA2aLimits } from '../a2a/limits';
 
 import { register, type RegisteredComposition } from './register';
+import { clearApplicationContext } from '../application-context';
+import { resetTestRunApi } from '../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -51,18 +46,16 @@ if (!hasDatabase) {
 }
 
 const CONTROLLED_ENV = [
-  'AW_FILE_STORAGE_ROOT',
+  'AW_STORAGE_URL',
   'AW_PUBLIC_URL',
   'BOOTSTRAP_ADMIN',
   'BOOTSTRAP_ADMIN_PASSWORD',
   'WORKSPACE_SLUG',
   'AW_RUNTIME_VERIFICATION_FILE',
-  'AW_SKILL_STORAGE_ROOT',
   'DATABASE_URL',
   'GATEWAY_TOKEN_SECRET',
   'MASTER_ENCRYPTION_KEY',
   'NEXT_RUNTIME',
-  'OBJECT_STORAGE_BUCKET',
   'RUNNER_MANAGER_TOKEN',
   'RUNNER_MANAGER_URL',
   'RUNNER_URL',
@@ -88,14 +81,9 @@ describe.skipIf(!hasDatabase)('the A2A route through the production composition'
       else process.env[key] = value;
     }
     previousEnv.clear();
-    resetA2a();
     resetA2aLimits();
-    clearAgentsRuntime();
-    clearProjectsRuntime();
-    clearRbacRuntime();
-    resetRunApi();
-    clearSharesRuntime();
-    clearWorkspacesRuntime();
+    clearApplicationContext();
+    resetTestRunApi();
     if (isolated !== undefined) {
       await closeIsolatedTestResources(
         isolated,

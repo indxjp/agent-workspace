@@ -63,32 +63,32 @@ any row, nothing to run), **OWN_WRITES** (read any row, write and run only your 
 this page's writing — it is documentation, not a generated artifact; keeping it in sync
 mechanically is a natural follow-up, not something this page claims to do yet.
 
-| Resource            | Owner      | Admin               | Builder             | Viewer                                |
-| ------------------- | ---------- | ------------------- | ------------------- | ------------------------------------- |
-| agents              | EVERYTHING | EVERYTHING          | OWN_WRITES          | read any, write none, run _permitted_ |
-| skills              | EVERYTHING | EVERYTHING          | OWN_WRITES          | none                                  |
-| files               | EVERYTHING | EVERYTHING          | OWN_WRITES          | none                                  |
-| connectors          | EVERYTHING | MANAGE              | OWN_WRITES          | none                                  |
-| projects            | EVERYTHING | none                | OWN_ONLY            | none                                  |
-| sessions            | EVERYTHING | OWN_ONLY            | OWN_ONLY            | OWN_READS                             |
-| runs                | EVERYTHING | READ_ONLY + run any | OWN_READS + run own | OWN_READS + run own                   |
-| api-keys            | EVERYTHING | MANAGE              | none                | none                                  |
-| memberships         | EVERYTHING | MANAGE              | none                | none                                  |
-| invitations         | EVERYTHING | MANAGE              | none                | none                                  |
-| users               | EVERYTHING | MANAGE              | none                | none                                  |
-| models              | EVERYTHING | MANAGE              | none                | none                                  |
-| model-connections   | EVERYTHING | MANAGE              | none                | none                                  |
-| runtimes            | EVERYTHING | MANAGE              | none                | none                                  |
-| runtime-profiles    | EVERYTHING | MANAGE              | READ_ONLY           | none                                  |
-| runtime-connections | EVERYTHING | MANAGE              | none                | none                                  |
-| secrets             | EVERYTHING | none                | none                | none                                  |
-| shares              | EVERYTHING | MANAGE              | OWN_ONLY            | OWN_ONLY                              |
-| sharing-policies    | EVERYTHING | READ_ONLY           | READ_ONLY           | READ_ONLY                             |
-| metrics             | EVERYTHING | READ_ONLY           | READ_ONLY           | READ_ONLY                             |
-| audit-events        | EVERYTHING | none                | none                | none                                  |
-| me                  | EVERYTHING | READ_ONLY           | READ_ONLY           | READ_ONLY                             |
-| setup               | EVERYTHING | none                | none                | none                                  |
-| workspaces          | OWN_ONLY\* | OWN_ONLY\*          | OWN_ONLY\*          | OWN_ONLY\*                            |
+| Resource            | Owner      | Admin               | Builder                     | Viewer                                |
+| ------------------- | ---------- | ------------------- | --------------------------- | ------------------------------------- |
+| agents              | EVERYTHING | EVERYTHING          | OWN_WRITES, run _permitted_ | read any, write none, run _permitted_ |
+| skills              | EVERYTHING | EVERYTHING          | OWN_WRITES                  | none                                  |
+| files               | EVERYTHING | EVERYTHING          | OWN_WRITES                  | none                                  |
+| connectors          | EVERYTHING | EVERYTHING          | OWN_WRITES                  | none                                  |
+| projects            | EVERYTHING | MANAGE              | OWN_ONLY                    | none                                  |
+| sessions            | EVERYTHING | OWN_ONLY            | OWN_ONLY                    | OWN_READS                             |
+| runs                | EVERYTHING | READ_ONLY + run any | OWN_READS + run own         | OWN_READS + run own                   |
+| api-keys            | EVERYTHING | MANAGE              | none                        | none                                  |
+| memberships         | EVERYTHING | MANAGE              | none                        | none                                  |
+| invitations         | EVERYTHING | MANAGE              | none                        | none                                  |
+| users               | EVERYTHING | MANAGE              | none                        | none                                  |
+| models              | EVERYTHING | MANAGE              | none                        | none                                  |
+| model-connections   | EVERYTHING | MANAGE              | none                        | none                                  |
+| runtimes            | EVERYTHING | MANAGE              | none                        | none                                  |
+| runtime-profiles    | EVERYTHING | MANAGE              | READ_ONLY                   | none                                  |
+| runtime-connections | EVERYTHING | MANAGE              | none                        | none                                  |
+| secrets             | EVERYTHING | none                | none                        | none                                  |
+| shares              | EVERYTHING | MANAGE              | OWN_ONLY                    | OWN_ONLY                              |
+| sharing-policies    | EVERYTHING | READ_ONLY           | READ_ONLY                   | READ_ONLY                             |
+| metrics             | EVERYTHING | READ_ONLY           | READ_ONLY                   | READ_ONLY                             |
+| audit-events        | EVERYTHING | none                | none                        | none                                  |
+| me                  | EVERYTHING | READ_ONLY           | READ_ONLY                   | READ_ONLY                             |
+| setup               | EVERYTHING | none                | none                        | none                                  |
+| workspaces          | OWN_ONLY\* | OWN_ONLY\*          | OWN_ONLY\*                  | OWN_ONLY\*                            |
 
 \* `workspaces`' `own` is not row ownership — it is checked against the caller's _current_
 membership of the target workspace (`read`) or an Owner membership of it (`write`), computed
@@ -106,17 +106,18 @@ have no run route; the cell is not a callable action (F-094).
 Three surprises worth stating outright, because the intuitive reading of the four role names gets
 each one wrong:
 
-- **Admin is not above Builder everywhere.** Admin holds `agents`, `skills` and `files` over every
-  row (ADR-0116), but has no `projects` grant and cannot run a connector, while a Builder holds
-  both over its own rows. So the roles are not a total order, and an Admin cannot confer the
-  Builder role.
+- **The roles are monotonic.** Each role can do at least everything the roles below it can
+  (ADR-0152): Admin holds `agents`, `skills`, `files`, `connectors` and `projects` over every row,
+  and a Builder runs the agents it owns or was granted, so it runs any agent a Viewer can run
+  through a grant. So an Admin can confer every role but Owner.
 - **Builder writes only its own rows, but reads any row in the workspace.** `OWN_WRITES` is
   `{ read: any, write: own, run: own }` — a Builder can see every other Builder's skills,
   connectors and files, and use them (see the worked examples below), but can only edit or
   delete the ones it created.
-- **Viewer runs only a granted agent**, never every agent. Viewer's `agents` grant is
-  `{ read: any, write: none, run: permitted }` — `permitted` is a fourth grant width, distinct
-  from `none`, that denies until an `agent_grants` row names that (agent, user) pair. Reading
+- **Viewer runs only an owned or granted agent**, never every agent. Viewer's `agents` grant is
+  `{ read: any, write: none, run: permitted }` — `permitted` is a fourth grant width, "own or
+  granted", that denies unless the caller owns the agent or an `agent_grants` row names that
+  (agent, user) pair. Builder's `run` on agents is the same width. Reading
   the agent list is unrestricted; starting a run is not.
 
 ## Who can use a skill, a connector, a file
@@ -183,10 +184,10 @@ live resource":
 </Note>
 
 <Note>
-  **Today:** a skill is one mutable directory addressed by `name`; updating it in place changes what
-  every assigning agent loads on its very next run, with no way to pin an older revision except a
-  second name. **Target:** `skills.publish(name, {files})` creates an immutable revision, and an
-  assignment pins a revision or `latest`. Tracked as [N-1](/concepts/roadmap#n-1-skill-revisions).
+  A skill's current files are mutable: updating them changes what every agent that does not pin a
+  revision loads on its next run. `skills.publish(name, {files})` freezes them as an immutable
+  numbered revision, which an assignment can pin ([Author a skill](/building/skills#revisions)).
+  Publishing needs the same grant as updating the skill.
 </Note>
 
 <CardGroup cols={2}>

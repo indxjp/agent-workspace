@@ -166,6 +166,30 @@ describe('SessionsClient.get', () => {
   });
 });
 
+describe('SessionsClient.attach', () => {
+  // @story US-STO-11
+  it('[US-STO-11][api][sdk] sends the file bytes under its name and reads the saved row', async () => {
+    const saved = { fileId: 'file-1', path: '.attachments/s/u/scan.txt', size: 5 };
+    const { sessions, calls } = client(() => json(201, saved));
+    const file = new File(['hello'], 'my scan.txt', { type: 'text/plain' });
+    expect(await sessions.attach(SESSION, file)).toEqual(saved);
+    const [call] = calls;
+    expect(call?.method).toBe('POST');
+    expect(call?.url.pathname).toBe(`/api/sessions/${SESSION}/attachments`);
+    expect(call?.url.searchParams.get('name')).toBe('my scan.txt');
+    expect(call?.headers.get('content-type')).toBe('text/plain');
+    expect(call?.init.body).toBe(file);
+  });
+
+  // @story US-STO-11
+  it('[US-STO-11][api][sdk] surfaces the concealed refusal by code', async () => {
+    const { sessions } = client(() => problem(404, 'file_not_found'));
+    const failure = await sessions.attach(SESSION, new File(['x'], 'a')).catch((e: unknown) => e);
+    expect((failure as ApiProblemError).status).toBe(404);
+    expect((failure as ApiProblemError).code).toBe('file_not_found');
+  });
+});
+
 describe('SessionsClient.update', () => {
   it('patches exactly the fields given and reads the wrapped 200', async () => {
     const renamed = { ...session, title: 'Incident 42' };

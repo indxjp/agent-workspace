@@ -54,7 +54,7 @@ theorem every_spelling_of_a_covered_path_is_refused :
     (writeGrantVerdict none grants "docs/spec.md").isOk = false ∧
     (writeGrantVerdict none grants "docs/./spec.md").isOk = false ∧
     (writeGrantVerdict none grants "notes/../docs/spec.md").isOk = false ∧
-    (writeGrantVerdict none grants "docs/nested/../spec.md").isOk = false := by decide
+    (writeGrantVerdict none grants "docs/nested/../spec.md").isOk = false := by decide +kernel
 
 /-- A `..` that climbs above the workspace root is refused rather than clamped.
 
@@ -64,7 +64,7 @@ makes, and it turns an escape into a write inside the sandbox at a path nobody g
 theorem climbing_above_the_root_is_refused :
     normaliseGrantPath none "../etc/passwd" = .refused .escapesRoot ∧
     normaliseGrantPath none "docs/../../etc/passwd" = .refused .escapesRoot ∧
-    normaliseGrantPath none "a/../.." = .refused .escapesRoot := by decide
+    normaliseGrantPath none "a/../.." = .refused .escapesRoot := by decide +kernel
 
 /-- An absolute path — POSIX or Windows — is refused rather than read as a relative one.
 
@@ -75,7 +75,7 @@ author meant. -/
 theorem absolute_paths_are_refused :
     normaliseGrantPath none "/etc/passwd" = .refused .absolute ∧
     normaliseGrantPath none "C:/Windows" = .refused .absolute ∧
-    normaliseGrantPath none "\\\\server\\share" = .refused .illegalCharacter := by decide
+    normaliseGrantPath none "\\\\server\\share" = .refused .illegalCharacter := by decide +kernel
 
 /-- Containment is by segment: a sibling whose name merely starts with a grant is writable.
 
@@ -85,7 +85,7 @@ would treat `docs` as covering nothing and allow a write into it. -/
 theorem a_name_that_starts_with_a_grant_is_not_inside_it :
     let grants : List Grant := [{ directory := true, segments := ["docs"], readOnly := true }]
     writeGrantVerdict none grants "docs-private/secret.md" = .ok ["docs-private", "secret.md"] ∧
-    writeGrantVerdict none grants "scratch/out.md" = .ok ["scratch", "out.md"] := by decide
+    writeGrantVerdict none grants "scratch/out.md" = .ok ["scratch", "out.md"] := by decide +kernel
 
 /-- A file grant protects exactly itself, and a directory grant protects its descendants. -/
 @[aw_spec (tier := T3) (ts := "packages/engine/src/path-grant.ts#writeGrantVerdict")]
@@ -93,11 +93,11 @@ theorem a_file_grant_does_not_cover_its_siblings :
     let grants : List Grant :=
       [{ directory := false, segments := ["config", "app.yaml"], readOnly := true }]
     (writeGrantVerdict none grants "config/app.yaml").isOk = false ∧
-    writeGrantVerdict none grants "config/other.yaml" = .ok ["config", "other.yaml"] := by decide
+    writeGrantVerdict none grants "config/other.yaml" = .ok ["config", "other.yaml"] := by decide +kernel
 
 /-- A grant list with one unreadable entry is refused whole, never narrowed by dropping it. -/
 @[aw_spec (tier := T3) (ts := "packages/engine/src/path-grant.ts#normaliseGrants")]
 theorem an_unreadable_grant_refuses_the_whole_list :
-    normaliseGrants none [(true, "docs", true), (false, "../escape.md", true)] = none := by decide
+    normaliseGrants none [(true, "docs", true), (false, "../escape.md", true)] = none := by decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.PathGrant

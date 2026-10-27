@@ -33,7 +33,9 @@ services:
   # S3-compatible object storage: SeaweedFS (Apache-2.0), `weed server -s3` on one persistent
   # volume. docs/adr/0067-the-bundled-object-store-is-seaweedfs.md records the flags: master,
   # volume and filer stay on the container's loopback, only the signed S3 gateway listens on the
-  # network, and the two keys create its only identity, so an unsigned request is refused.
+  # network, and the two keys create its only identity, so an unsigned request is refused. The
+  # gateway is published on the host's loopback only: a browser sends a file above 64 MiB straight
+  # to it through a signed link, which `web` signs for the publicEndpoint in AW_STORAGE_URL.
   seaweedfs:
     <<: *defaults
     profiles: [object-storage]
@@ -65,8 +67,12 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    # Docker publishes no port for a container attached only to internal networks, so this joins
+    # `storage-ingress`, the non-internal network that carries it. SEAWEEDFS_PORT in .env picks the
+    # host port, so this project can run beside another that publishes 8333.
+    ports: ['127.0.0.1:${SEAWEEDFS_PORT:-8333}:8333']
     volumes: [seaweedfs-data:/data]
-    networks: [control]
+    networks: [control, storage-ingress]
 
   runner:
     <<: *defaults
@@ -126,6 +132,8 @@ services:
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:?set MASTER_ENCRYPTION_KEY in .env}
       GATEWAY_TOKEN_SECRET: ${GATEWAY_TOKEN_SECRET:?set GATEWAY_TOKEN_SECRET in .env}
       GATEWAY_PRICING_JSON: ${GATEWAY_PRICING_JSON:?set GATEWAY_PRICING_JSON in .env}
+      # The gateway forwards the Builder's aw-control MCP calls to web on the control network.
+      GATEWAY_CONTROL_PLANE_ORIGIN: http://web:3000
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=32m
     healthcheck:
@@ -158,9 +166,23 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}
       MASTER_ENCRYPTION_KEY: ${MASTER_ENCRYPTION_KEY:?set MASTER_ENCRYPTION_KEY in .env}
+      # There is no default: nothing invents a storage location.
+      AW_STORAGE_URL: ${AW_STORAGE_URL:?set AW_STORAGE_URL in .env}
+      # `true` in `.env` for the bundled SeaweedFS only, which starts empty: the server creates the
+      # bucket on first boot. A `file://` project leaves it unset.
+      AW_STORAGE_CREATE_BUCKET: ${AW_STORAGE_CREATE_BUCKET:-}
+      # Blank keeps the server's default largest signed upload, 5 GiB.
+      AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES: ${AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES:-}
+      # The old storage names are forwarded only so a leftover value in `.env` draws the one
+      # storage_setting_ignored warning; the server reads nothing from them.
+      AW_FILE_STORAGE_ROOT: ${AW_FILE_STORAGE_ROOT:-}
+      AW_SKILL_STORAGE_ROOT: ${AW_SKILL_STORAGE_ROOT:-}
+      AW_SESSION_TRANSCRIPT_ROOT: ${AW_SESSION_TRANSCRIPT_ROOT:-}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-}
       OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_PUBLIC_ENDPOINT: ${OBJECT_STORAGE_PUBLIC_ENDPOINT:-}
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
-      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-true}
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-}
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:-}
@@ -186,9 +208,6 @@ services:
       AGENT_WORKSPACE_EGRESS_PROXY_IMAGE: ${EGRESS_PROXY_IMAGE:-}
       MODEL_GATEWAY_URL: ${MODEL_GATEWAY_URL:?set MODEL_GATEWAY_URL in .env}
       GATEWAY_TOKEN_SECRET: ${GATEWAY_TOKEN_SECRET:?set GATEWAY_TOKEN_SECRET in .env}
-      AW_FILE_STORAGE_ROOT: /var/lib/agent-workspace/files
-      AW_SKILL_STORAGE_ROOT: /var/lib/agent-workspace/skills
-      AW_SESSION_TRANSCRIPT_ROOT: /var/lib/agent-workspace/sessions
       AW_RUNTIME_VERIFICATION_FILE: /var/lib/agent-workspace/runtime-verifications.json
       AW_SESSION_TRANSCRIPT_RETENTION_DAYS: '30'
       AW_SESSION_RETENTION_DRY_RUN: 'false'
@@ -221,6 +240,9 @@ networks:
   # gains a route off the internal networks. Like any non-internal bridge it also gives `web`
   # outbound access (masqueraded), which `web` needs anyway for OIDC discovery and similar calls.
   web-ingress: {}
+  # Only `seaweedfs` joins it, to publish its S3 port on the host's loopback. Like `web-ingress`
+  # it gives its member outbound access (masqueraded).
+  storage-ingress: {}
   provider-egress:
     name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in .env}-provider-egress
     attachable: true

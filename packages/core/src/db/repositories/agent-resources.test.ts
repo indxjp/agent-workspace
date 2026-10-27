@@ -7,11 +7,13 @@ import { agents } from '../schema/agents.js';
 import { files } from '../schema/files.js';
 import { mcpServers } from '../schema/mcp-servers.js';
 import { memberships } from '../schema/memberships.js';
+import { skillRevisions } from '../schema/skill-revisions.js';
 import { skills } from '../schema/skills.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
 import { workspaces } from '../schema/workspaces.js';
 import { createDatabaseAgentResourceRepositoryProvider } from './agent-resources.js';
+import { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
 import { createDatabaseWorkspaceScopeResolver, type WorkspaceScope } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
 
@@ -163,12 +165,91 @@ describe.skipIf(!hasDatabase)('AgentResourceRepository against PostgreSQL', () =
       files: [{ fileId: fileA, access: 'read' as const }],
       skillIds: [skillA],
       connectorIds: [connectorA],
+      storageGrants: [],
     };
     await expect(repo.replace(agentA, assignments)).resolves.toMatchObject({
       kind: 'updated',
       assignments,
     });
     await expect(repo.get(agentA)).resolves.toEqual(assignments);
+  });
+
+  it('refuses a file under .attachments/ as an unknown file, whatever its case (ADR-0146 D6)', async () => {
+    const repo = createDatabaseAgentResourceRepositoryProvider(isolated.db).forScope(scopeA);
+    for (const path of ['.attachments/s1/u1/a.pdf', '.Attachments/s1/u2/b.pdf']) {
+      const fileId = crypto.randomUUID();
+      await isolated.db.insert(files).values({
+        id: fileId,
+        workspaceId: workspaceA,
+        path,
+        kind: 'file',
+        storageKey: path,
+        ownerPrincipalId: principalA,
+        createdBy: userA,
+      });
+      await expect(
+        repo.replace(agentA, {
+          files: [{ fileId, access: 'read' }],
+          skillIds: [],
+          connectorIds: [],
+        }),
+      ).resolves.toEqual({ kind: 'unknown-file', id: fileId });
+    }
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][contract][sdk] refuses a pending upload as an unknown file', async () => {
+    const repo = createDatabaseAgentResourceRepositoryProvider(isolated.db).forScope(scopeA);
+    const fileId = crypto.randomUUID();
+    await isolated.db.insert(files).values({
+      id: fileId,
+      workspaceId: workspaceA,
+      path: 'pending/upload.pdf',
+      kind: 'file',
+      storageKey: 'pending/upload.pdf',
+      status: 'pending',
+      ownerPrincipalId: principalA,
+      createdBy: userA,
+    });
+    await expect(
+      repo.replace(agentA, { files: [{ fileId, access: 'read' }], skillIds: [], connectorIds: [] }),
+    ).resolves.toEqual({ kind: 'unknown-file', id: fileId });
+  });
+
+  // @story US-STO-14
+  it('[US-STO-14][contract][sdk] a grant follows its path to the replacement row, and a removed row grants nothing', async () => {
+    const repo = createDatabaseAgentResourceRepositoryProvider(isolated.db).forScope(scopeA);
+    const catalog = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+    const old = await catalog.putFile({
+      path: 'granted/report.pdf',
+      kind: 'file',
+      storageKey: 'granted/report.pdf',
+      sizeBytes: 1,
+      contentType: null,
+      ownerPrincipalId: principalA,
+      createdBy: userA,
+    });
+    await repo.replace(agentA, {
+      files: [{ fileId: old.id, access: 'read' }],
+      skillIds: [],
+      connectorIds: [],
+    });
+
+    const reserved = await catalog.reserve('granted/report.pdf', {
+      ownerPrincipalId: principalA,
+      sizeBytes: 2,
+      contentType: null,
+      objectId: crypto.randomUUID(),
+    });
+    const done = await catalog.confirm(reserved.row, { sizeBytes: 2, contentType: null });
+    expect(done?.replaced?.id).toBe(old.id);
+    await expect(repo.get(agentA)).resolves.toMatchObject({
+      files: [{ fileId: reserved.row.id, access: 'read' }],
+    });
+
+    await catalog.remove('granted/report.pdf');
+    await expect(repo.get(agentA)).resolves.toMatchObject({ files: [] });
+    await repo.replace(agentA, { files: [], skillIds: [], connectorIds: [] });
   });
 
   it("does not see another workspace's agent and refuses its resources", async () => {
@@ -309,6 +390,28 @@ describe.skipIf(!hasDatabase)('AgentResourceRepository against PostgreSQL', () =
       }),
     ).resolves.toMatchObject({ kind: 'unknown-connector' });
     await expect(repo.get(agentWriteAllowed)).resolves.toEqual(before);
+  });
+
+  it('stores and reads a skill revision pin, refuses one that was never published, and clears it on replace', async () => {
+    const repo = createDatabaseAgentResourceRepositoryProvider(isolated.db).forScope(scopeA);
+    const base = { files: [], skillIds: [skillA], connectorIds: [] };
+    await expect(
+      repo.replace(agentWriteAllowed, { ...base, skillRevisions: { [skillA]: 1 } }),
+    ).resolves.toEqual({ kind: 'unknown-skill-revision', id: skillA, revision: 1 });
+
+    await isolated.db
+      .insert(skillRevisions)
+      .values({ workspaceId: workspaceA, skillId: skillA, number: 1, fileCount: 1 });
+    await expect(
+      repo.replace(agentWriteAllowed, { ...base, skillRevisions: { [skillA]: 1 } }),
+    ).resolves.toMatchObject({ kind: 'updated' });
+    await expect(repo.get(agentWriteAllowed)).resolves.toMatchObject({
+      skillRevisions: { [skillA]: 1 },
+    });
+
+    await repo.replace(agentWriteAllowed, base);
+    const unpinned = await repo.get(agentWriteAllowed);
+    expect(unpinned).not.toHaveProperty('skillRevisions');
   });
 
   // A tool connector (ADR-0113 C15) is assignable: compose hands it to the engine as a gateway

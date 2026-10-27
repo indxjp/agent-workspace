@@ -1,4 +1,8 @@
-import type { RuntimeDriverId, RuntimeRunSpec } from '@agent-workspace/runtime';
+import type {
+  RuntimeCapabilities,
+  RuntimeDriverId,
+  RuntimeRunSpec,
+} from '@agent-workspace/runtime/driver';
 import { networkPolicyFloor } from '@indx-workspace/contracts/policy-ceiling';
 
 import type { AgentRecord } from '../agents/contract';
@@ -9,13 +13,23 @@ import type { LaunchContext } from '../runs/environment';
 import { missingRuntimeProfile, runStartRefusalError } from './run-preflight';
 import type { RuntimeSettings } from './run-request';
 
+/** How the run's files reach the target: the driver's `RuntimeCapabilities.fileTransfer`. */
+export type FileTransfer = RuntimeCapabilities['fileTransfer'];
+
 export type RuntimeLaunchTarget = RuntimeRunSpec &
-  Readonly<{ runnerUrl: string; workspaceRoot: string; toolSandboxOrigin?: string }>;
+  Readonly<{
+    runnerUrl: string;
+    workspaceRoot: string;
+    toolSandboxOrigin?: string;
+    fileTransfer: FileTransfer;
+  }>;
 
 export type RuntimeDriverTarget = Readonly<{
   driver: RuntimeDriverId;
   runnerUrl: string;
   workspaceRoot: string;
+  /** The driver's declared `fileTransfer`; the launcher hydrates by it, never by the driver id. */
+  fileTransfer: FileTransfer;
   /** Allocate/resolve a session-affine runtime instead of using the legacy fixed URL. */
   allocate?: (
     context: LaunchContext,
@@ -214,6 +228,7 @@ export function createRuntimeRunResolver(
         ...spec,
         runnerUrl: allocation?.runnerUrl ?? target.runnerUrl,
         workspaceRoot: allocation?.workspaceRoot ?? target.workspaceRoot,
+        fileTransfer: target.fileTransfer,
         ...(allocation?.toolSandboxOrigin === undefined
           ? {}
           : { toolSandboxOrigin: allocation.toolSandboxOrigin }),

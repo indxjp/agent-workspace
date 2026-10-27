@@ -10,9 +10,9 @@ import {
 import {
   readIdParam,
   readJsonBody,
-  toResponse,
   withWorkspaceProfileStore,
 } from '../../../../server/runtimes/http';
+import { apiResultResponse } from '../../../../server/http/json-transport';
 import { enforceableNetworkPoliciesFromRegistry } from '../../../../server/runtimes/registry';
 import { requireResourceAccess } from '../../../../server/resources/authorise';
 
@@ -40,7 +40,7 @@ export async function GET(
     (store) => getRuntimeProfile(store, id),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /** `PATCH /api/runtime-profiles/:id` — apply a partial update, validated against §15.1's schema. */
@@ -60,7 +60,7 @@ export async function PATCH(
     },
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }
 
 /** `DELETE /api/runtime-profiles/:id` — 204 on success, 404 if the workspace has no such profile. */
@@ -76,5 +76,5 @@ export async function DELETE(
     (store) => deleteRuntimeProfile(store, id),
     access.principal.workspaceId,
   );
-  return toResponse(result);
+  return apiResultResponse(result);
 }

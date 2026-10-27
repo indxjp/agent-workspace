@@ -9,13 +9,11 @@
  * rather than by asserting each is "some 404" independently — two 404s with different bodies
  * would still be an oracle.
  */
+import { clearApplicationContext } from '../../../../server/application-context';
+import { installTestDomains } from '../../../../server/application-context-fixtures';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../../../../server/rbac/testing';
-import {
-  clearWorkspacesRuntime,
-  configureWorkspacesRuntime,
-} from '../../../../server/workspaces/runtime';
 import { createMemoryWorkspaceRepository } from '../../../../server/workspaces/testing';
 import { GET, PATCH } from './route';
 
@@ -25,7 +23,7 @@ const WORKSPACE_B = 'c75a16a5-ab05-4309-9cbb-449baf33c4c1';
 const WORKSPACE_C = '6b41fd4a-7bcb-4068-8a76-a59530ec35a6';
 
 afterEach(() => {
-  clearWorkspacesRuntime();
+  clearApplicationContext();
 });
 
 async function seed() {
@@ -42,27 +40,29 @@ async function seed() {
   const otherRoleId = (await harness.directory.findUserByEmail('other-role@example.com'))?.id;
   if (memberId === undefined || otherRoleId === undefined) throw new Error('seed failed');
 
-  configureWorkspacesRuntime({
-    repository: createMemoryWorkspaceRepository({
-      workspaces: [
-        {
-          id: WORKSPACE_A,
-          slug: WORKSPACE_A,
-          name: 'Alpha',
-          members: [
-            { userId: memberId, role: 'owner' },
-            { userId: otherRoleId, role: 'builder' },
-          ],
-        },
-        {
-          id: WORKSPACE_B,
-          slug: WORKSPACE_B,
-          name: 'Beta',
-          members: [{ userId: memberId, role: 'viewer' }],
-        },
-        { id: WORKSPACE_C, slug: WORKSPACE_C, name: 'Gamma', members: [] },
-      ],
-    }),
+  installTestDomains({
+    workspaces: {
+      repository: createMemoryWorkspaceRepository({
+        workspaces: [
+          {
+            id: WORKSPACE_A,
+            slug: WORKSPACE_A,
+            name: 'Alpha',
+            members: [
+              { userId: memberId, role: 'owner' },
+              { userId: otherRoleId, role: 'builder' },
+            ],
+          },
+          {
+            id: WORKSPACE_B,
+            slug: WORKSPACE_B,
+            name: 'Beta',
+            members: [{ userId: memberId, role: 'viewer' }],
+          },
+          { id: WORKSPACE_C, slug: WORKSPACE_C, name: 'Gamma', members: [] },
+        ],
+      }),
+    },
   });
   return { harness, memberId, otherRoleId };
 }

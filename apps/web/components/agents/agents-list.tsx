@@ -35,15 +35,17 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import type { AgentResource } from '../../contracts/agents';
+import { browserClient } from '../../lib/browser-client';
 import { ShareDialog } from '../shares/share-dialog';
 import {
   describeModel,
-  describeRequestFailure,
   filterAgentsByName,
   formatCreatedAt,
   instructionsPreview,
   type RequestProblem,
 } from './model';
+import { loadAgents } from './agent-requests-model';
+import { BuiltinBadge } from './builtin-badge';
 
 // ── Transcribed class strings ───────────────────────────────────────────────────────────────────
 
@@ -93,57 +95,14 @@ export function AgentsListScreen() {
   useEffect(() => {
     let cancelled = false;
 
-    void (async () => {
-      let response: Response;
-      try {
-        response = await fetch('/api/agents', { headers: { accept: 'application/json' } });
-      } catch (error) {
-        if (!cancelled) {
-          setState({
-            kind: 'problem',
-            problem: {
-              kind: 'transport',
-              reason: `The request to load agents failed: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          });
-        }
-        return;
-      }
-      if (!response.ok) {
-        const problem = await describeRequestFailure(response, () => response.json());
-        if (!cancelled) setState({ kind: 'problem', problem });
-        return;
-      }
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        if (!cancelled) {
-          setState({
-            kind: 'problem',
-            problem: {
-              kind: 'transport',
-              reason: 'The server answered 200 with a body that was not JSON.',
-            },
-          });
-        }
-        return;
-      }
-      const agents = (body as { agents?: unknown }).agents;
-      if (!cancelled) {
-        setState(
-          Array.isArray(agents)
-            ? { kind: 'loaded', agents: agents as AgentResource[] }
-            : {
-                kind: 'problem',
-                problem: {
-                  kind: 'transport',
-                  reason: 'The server answered 200 without an "agents" array.',
-                },
-              },
-        );
-      }
-    })();
+    void loadAgents(browserClient()).then((result) => {
+      if (cancelled) return;
+      setState(
+        result.ok
+          ? { kind: 'loaded', agents: result.value }
+          : { kind: 'problem', problem: result.problem },
+      );
+    });
 
     return () => {
       cancelled = true;
@@ -239,6 +198,7 @@ export function AgentsListScreen() {
                           >
                             {agent.name}
                           </Link>
+                          <BuiltinBadge builtin={agent.builtin} />
                         </div>
                         <div className="mt-2">
                           <ShareDialog

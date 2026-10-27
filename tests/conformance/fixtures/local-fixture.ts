@@ -9,7 +9,10 @@
  * This is the same seam, used the same way, with a fixture in the caller's role instead of
  * `apps/runner`.
  */
-import { createLocalDriver, LOCAL_RUNTIME_CAPABILITIES } from '@agent-workspace/runtime';
+import {
+  createLocalDriver,
+  LOCAL_RUNTIME_CAPABILITIES,
+} from '@agent-workspace/runtime/driver/local';
 import type { RuntimeDriver } from '../types.js';
 import {
   createFixtureStarter,

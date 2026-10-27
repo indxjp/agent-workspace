@@ -3,7 +3,69 @@ title: "Define"
 description: "The `@indx-workspace/sdk/define` exports: defineAgent, defineSurface, mcp, skill, files and toAgentVersionBody — agents and surfaces as code."
 ---
 
-<Note>This page is generated from `packages/sdk/src/define/index.ts`, `packages/sdk/src/define/agent.ts`, `packages/sdk/src/define/surface.ts`, `packages/sdk/src/define/references.ts`, `packages/sdk/src/define/version-body.ts`, `packages/sdk/src/define/errors.ts`, `packages/sdk/src/define/brand.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+<Note>This page is generated from `packages/sdk/src/define/index.ts`, `packages/sdk/src/define/agent.ts`, `packages/sdk/src/define/surface.ts`, `packages/sdk/src/define/references.ts`, `packages/sdk/src/define/version-body.ts`, `packages/sdk/src/define/from-version-body.ts`, `packages/sdk/src/define/errors.ts`, `packages/sdk/src/define/brand.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## agentFromVersionBody
+
+The inverse of `toAgentVersionBody` for an Agent Workspace project: the agent a body came
+from, with what the body only names taken from the project. Nothing is left out silently.
+
+- Every `resources.files` grant becomes `files(path, access)`, in body order, including those
+  knowledge implied, so `toAgentVersionBody()` appends nothing and gives the same list.
+- Each `resources.connectors` name becomes the tool a module exports under that name (the
+  exact value, so spec, `allow`, auth and `identity` survive; `imports` says which module), or
+  `mcp(name)` when `project.connectors` has the name (its entry is returned in `connectors`).
+- `aw-dev-tools` becomes the code tools `source.codeToolNames` names (else `body.toolBundles`,
+  in the bundles' name order), each the `defineTool()` export of that name, expanded in place.
+  A bundle that pins another declaration than the module's tool, or that `codeToolNames` does
+  not name, is dropped at `toolBundles.N` with its tool; so is a named tool with no bundle.
+  `digest` is not compared: the SDK has no bundle bytes, and push pins it again. A bundle with
+  no declaration (written before hosted sandboxes) matches by name.
+  A repeated name, a name that a connector or module tool also has, and `codeToolNames` for a
+  body with no `aw-dev-tools` are drops too (`codeToolNames.N`, the connector entry, `codeToolNames`).
+- A name no module and no connector supplies (an inline tool looks the same), a name both
+  supply (push refuses a tool with a connector's name), and code tools no source names or no
+  module exports are drops.
+- Last, the agent goes through `toAgentVersionBody()` again and the result is compared with
+  the body, `toolBundles` aside: every differing path no drop covers becomes a drop, so a body
+  field `defineAgent()` cannot write is reported at its path.
+
+```ts
+agentFromVersionBody(source: AgentVersionSource): { readonly value: AgentFromVersionBody; readonly dropped: readonly VersionBodyDrop[]; }
+```
+
+## AgentFromVersionBody
+
+The agent `agentFromVersionBody` rebuilt, and what it took from the project.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agent` | `DefinedAgent` | Yes | Made by `defineAgent()`, instructions inline (the body's text). |
+| `imports` | `readonly { readonly kind: "openapi" \| "postgres" \| "code"; readonly name: string; readonly module: string; readonly exportName: string; }[]` | Yes | Each tool of `agent.tools` that comes from a module, in `agent.tools` order. |
+| `connectors` | `Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "api-key" \| "bearer"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | Yes | The `agent-workspace.yaml` `connectors:` entries the agent's `mcp()` tools need, verbatim. |
+
+## AgentVersionSource
+
+What `agentFromVersionBody` reads: the body, and the project it belongs to.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `body` | `Readonly<{ definition: Readonly<{ apiVersion: "agentworkspace.dev/v1"; kind: "AgentDefinition"; agent: Readonly<{ name: string; instructions: string; permissions: Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>; model: string \| null; modelConnectionName: string \| null; runtimeProfileName: string \| null; }>; policy: Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions: boolean; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }> \| Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }> \| Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>; policySource: "stored" \| "compiled"; resources: Readonly<{ files: readonly Readonly<{ path: string; access: "read" \| "read-write"; }>[]; skills: readonly string[]; connectors: readonly string[]; skillRevisions?: Readonly<Record<string, number>> \| undefined; }>; }>; surfaces: readonly Readonly<{ name: string; agent: string; title?: string \| undefined; theme?: Readonly<{ colour?: string \| undefined; radius?: number \| undefined; mode?: "light" \| "dark" \| "system" \| undefined; density?: "compact" \| "comfortable" \| undefined; locale?: "en" \| "ja" \| undefined; logo?: Readonly<{ text: string; }> \| Readonly<{ url: string; }> \| undefined; }> \| undefined; layout?: "dock" \| "side" \| "page" \| "inline" \| undefined; parts?: Readonly<{ greeting?: string \| undefined; suggestedPrompts?: readonly string[] \| undefined; disclaimer?: string \| undefined; toolTrace?: "hidden" \| "collapsed" \| "full" \| undefined; history?: boolean \| undefined; feedback?: boolean \| undefined; attachments?: boolean \| undefined; agentSwitcher?: Readonly<{ agents: readonly string[]; }> \| undefined; }> \| undefined; toolResults?: Readonly<Record<string, "text" \| "card" \| "table">> \| undefined; allowedOrigins?: readonly string[] \| undefined; limits?: Readonly<{ turnsPerConversation?: number \| undefined; }> \| undefined; }>[]; toolBundles?: readonly Readonly<{ tool: string; digest: string; description?: string \| undefined; inputSchema?: Readonly<Record<string, unknown>> \| undefined; outputSchema?: Readonly<Record<string, unknown>> \| undefined; timeoutMs?: number \| undefined; secrets?: readonly string[] \| undefined; allowedDomains?: readonly string[] \| undefined; }>[] \| undefined; description?: string \| undefined; subagents?: readonly Readonly<{ name: string; }>[] \| undefined; knowledge?: readonly (Readonly<{ kind: "files"; paths: readonly string[]; }> \| Readonly<{ kind: "connector"; name: string; }>)[] \| undefined; }>` | Yes |  |
+| `project` | `undefined \| Pick<Readonly<{ apiVersion: "agentworkspace.dev/v2"; kind: "Project"; name: string; environments: Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>; engine?: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| undefined; models?: Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>> \| undefined; connectors?: Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "api-key" \| "bearer"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>> \| undefined; policy?: Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: number \| undefined; builder?: Readonly<{ allow: readonly string[]; }> \| undefined; network?: undefined; approval?: undefined; }> \| undefined; platforms?: Readonly<{ 'claude-managed-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'copilot-studio'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'm365-declarative-agent'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'microsoft-foundry'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'gemini-enterprise'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'aws-agentcore'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-claude-agent-sdk'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-mastra'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-openai-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; }> \| undefined; }>, "engine" \| "connectors" \| "models">` | No | The parsed `agent-workspace.yaml`, or what stands for it. |
+| `toolModules` | `undefined \| readonly ToolModuleExport[]` | No | Every tool the project's modules export; see `toolModulesOf`. |
+| `surfaces` | `undefined \| readonly DefinedSurface[]` | No | The project's surfaces that name this agent: `body.surfaces` must be exactly theirs. |
+| `codeToolNames` | `undefined \| readonly string[]` | No | The agent's code tools, in order, which the body only names as `aw-dev-tools`; each must be a `defineTool()` export in `toolModules`. Absent, the names come from `body.toolBundles`. |
+
+## builtinSkill
+
+Assigns a skill the platform ships with every workspace (`'office-reader'`: xlsx, docx, PDF and
+ASCII DXF to text). It is the same reference as `skill`; the control plane installs the
+skill's files into the workspace when a version naming it is saved, so no code or import is
+needed.
+
+```ts
+builtinSkill(name: BuiltinSkillName): SkillReference
+```
 
 ## CODE_TOOL_DEFAULT_TIMEOUT_MS
 
@@ -83,7 +145,7 @@ Every key not listed here is refused, as a type error and at run time.
 | `knowledge` | `undefined \| readonly ({ readonly kind: "files"; readonly paths: readonly string[]; } \| { readonly kind: "connector"; readonly name: string; })[]` | No | Knowledge sources; see `KnowledgeSource`. |
 | `instructions` | `string \| { readonly file: string; }` | Yes | The system prompt, inline, or `{ file: './instructions.md' }`. |
 | `model` | `undefined \| string \| { readonly connection: string; readonly id?: string \| undefined; }` | No | Which model runs the agent; see `ModelReference`. Left out, `'default'`. |
-| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| Flatten<{ readonly id: "claude-agent-sdk"; } & Omit<Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions?: boolean \| undefined; }>; }>, "engine" \| "limits" \| "tools" \| "skills" \| "withheldPermissions"> & { readonly autoApprove?: readonly string[] \| undefined; }> \| Flatten<{ readonly id: "openai-agents"; } & Omit<Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>, "engine" \| "limits" \| "tools" \| "skills" \| "withheldPermissions">> \| Flatten<{ readonly id: "pi"; } & Omit<Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>, "engine" \| "limits" \| "tools" \| "skills" \| "withheldPermissions">> \| Flatten<{ readonly id: "mastra"; } & Omit<Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>, "engine" \| "limits" \| "tools" \| "skills" \| "withheldPermissions">>` | No | Which engine runs the agent loop; see `EngineChoice`. Left out, `claude-agent-sdk`. |
+| `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| Flatten<{ readonly id: "claude-agent-sdk"; } & Omit<Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; tools: Readonly<{ base: readonly string[] \| "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" \| "acceptEdits" \| "bypassPermissions" \| "plan" \| "dontAsk" \| "auto"; allowDangerouslySkipPermissions?: boolean \| undefined; }>; requireApproval?: readonly string[] \| undefined; handoff?: true \| undefined; }>, "engine" \| "tools" \| "skills" \| "limits" \| "withheldPermissions"> & { readonly autoApprove?: readonly string[] \| undefined; readonly requireApproval?: readonly string[] \| undefined; }> \| Flatten<{ readonly id: "openai-agents"; } & Omit<Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; reasoningEffort?: "minimal" \| "low" \| "medium" \| "high" \| undefined; parallelToolCalls?: boolean \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>, "engine" \| "tools" \| "skills" \| "limits" \| "withheldPermissions">> \| Flatten<{ readonly id: "pi"; } & Omit<Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; thinkingLevel?: "minimal" \| "low" \| "medium" \| "high" \| "off" \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>, "engine" \| "tools" \| "skills" \| "limits" \| "withheldPermissions">> \| Flatten<{ readonly id: "mastra"; } & Omit<Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> \| Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number \| null; maxBudgetUsd: number \| null; }>; toolCallConcurrency?: number \| undefined; withheldPermissions?: readonly ("readFiles" \| "writeFiles" \| "runCommands" \| "unrestrictedNetwork")[] \| undefined; }>, "engine" \| "tools" \| "skills" \| "limits" \| "withheldPermissions">>` | No | Which engine runs the agent loop; see `EngineChoice`. Left out, `claude-agent-sdk`. |
 | `permissions` | `undefined \| DefinePermissions` | No | The permission switches; any left out are off. |
 | `tools` | `undefined \| readonly (McpTool \| OpenApiTool \| PostgresTool \| CodeTool)[]` | No | Tools the agent may call, each made by `mcp()`, `openapiTool()`, `postgresTool()` or `defineTool()`. |
 | `skills` | `undefined \| readonly SkillReference[]` | No | Skills assigned to the agent, each made by `skill()`. |
@@ -137,7 +199,7 @@ Defines one surface as code — the hosted widget an agent answers in: its name 
 where it may be embedded (`allowedOrigins`) with its `limits`.
 
 The input is exactly the contract's `SurfaceDefinitionSchema` (contract C3): the result parses
-unchanged with it. Rung 2 is complete (ADR-0108 SD10); `audience` and attachments are refused.
+unchanged with it. Rung 2 is complete (ADR-0108 SD10), attachments included (`parts.attachments`, ADR-0146); `audience` is refused.
 
 ```ts
 defineSurface(input: SurfaceDefinitionInput): DefinedSurface
@@ -215,10 +277,10 @@ settings (`{ id: 'openai-agents', reasoningEffort: 'high' }`, `{ id: 'pi', think
 - `"openai-agents"`
 - `"pi"`
 - `"mastra"`
-- `Flatten<{ readonly id: "claude-agent-sdk"; } & Omit<Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions?: boolean | undefined; }>; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions"> & { readonly autoApprove?: readonly string[] | undefined; }>`
-- `Flatten<{ readonly id: "openai-agents"; } & Omit<Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions">>`
-- `Flatten<{ readonly id: "pi"; } & Omit<Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions">>`
-- `Flatten<{ readonly id: "mastra"; } & Omit<Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions">>`
+- `Flatten<{ readonly id: "claude-agent-sdk"; } & Omit<Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions?: boolean | undefined; }>; requireApproval?: readonly string[] | undefined; handoff?: true | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions"> & { readonly autoApprove?: readonly string[] | undefined; readonly requireApproval?: readonly string[] | undefined; }>`
+- `Flatten<{ readonly id: "openai-agents"; } & Omit<Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions">>`
+- `Flatten<{ readonly id: "pi"; } & Omit<Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions">>`
+- `Flatten<{ readonly id: "mastra"; } & Omit<Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions">>`
 
 ## EngineSettings
 
@@ -226,12 +288,15 @@ The engine-native settings of each engine, keyed by `id`: what the contract's po
 that engine carries beyond the portable `skills` and `limits`, the Claude tool grammar and an
 engine switch's `withheldPermissions`. The Claude arm adds `autoApprove`: tool rules the run
 pre-approves, so a tool the permissions grant does not stop on a permission prompt nobody can
-answer. A rule for a tool the permissions turn off is refused.
+answer, and `requireApproval`: tool names whose every call waits for a human's approval (ADR-0145
+D3). A rule for a tool the permissions turn off is refused, and so is a tool in both lists.
+`handoff: true` offers the `handoff_to_person` tool: the run ends after an `agent.handoff` frame
+(ADR-0145 D4).
 
-- `Flatten<{ readonly id: "claude-agent-sdk"; } & Omit<Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions?: boolean | undefined; }>; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions"> & { readonly autoApprove?: readonly string[] | undefined; }>`
-- `Flatten<{ readonly id: "openai-agents"; } & Omit<Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions">>`
-- `Flatten<{ readonly id: "pi"; } & Omit<Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions">>`
-- `Flatten<{ readonly id: "mastra"; } & Omit<Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "limits" | "tools" | "skills" | "withheldPermissions">>`
+- `Flatten<{ readonly id: "claude-agent-sdk"; } & Omit<Readonly<{ engine: "claude-agent-sdk"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; tools: Readonly<{ base: readonly string[] | "claude_code_preset"; autoApprove: readonly string[]; deny: readonly string[]; permissionMode: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto"; allowDangerouslySkipPermissions?: boolean | undefined; }>; requireApproval?: readonly string[] | undefined; handoff?: true | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions"> & { readonly autoApprove?: readonly string[] | undefined; readonly requireApproval?: readonly string[] | undefined; }>`
+- `Flatten<{ readonly id: "openai-agents"; } & Omit<Readonly<{ engine: "openai-agents"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; reasoningEffort?: "minimal" | "low" | "medium" | "high" | undefined; parallelToolCalls?: boolean | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions">>`
+- `Flatten<{ readonly id: "pi"; } & Omit<Readonly<{ engine: "pi"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; thinkingLevel?: "minimal" | "low" | "medium" | "high" | "off" | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions">>`
+- `Flatten<{ readonly id: "mastra"; } & Omit<Readonly<{ engine: "mastra"; skills: Readonly<{ mode: "all"; }> | Readonly<{ mode: "allowlist"; names: readonly string[]; }>; limits: Readonly<{ maxTurns: number | null; maxBudgetUsd: number | null; }>; toolCallConcurrency?: number | undefined; withheldPermissions?: readonly ("readFiles" | "writeFiles" | "runCommands" | "unrestrictedNetwork")[] | undefined; }>, "engine" | "tools" | "skills" | "limits" | "withheldPermissions">>`
 
 ## FileAccess
 
@@ -353,9 +418,11 @@ Which model the agent runs on.
 
 ## openapiTool
 
-Gives the agent a read-only HTTP API as a tool, described by an OpenAPI document (contract
-C15). It becomes a catalog connector of `name` when the project is pushed, and the agent's
-version names it in `resources.connectors`. Only `GET` and `HEAD` operations can be allowed.
+Gives the agent an HTTP API as a tool, described by an OpenAPI document (contract C15). It
+becomes a catalog connector of `name` when the project is pushed, and the agent's version names
+it in `resources.connectors`. Reads (`GET`, `HEAD`) run freely; every write operation
+(`POST`, `PUT`, `PATCH`, `DELETE`) is implicitly `requireApproval` and runs only for a call a
+person approved.
 
 ```ts
 openapiTool({
@@ -396,9 +463,10 @@ credential value.
 | `name` | `string` | Yes |  |
 | `spec` | `string` | Yes | The `https:` URL or project-relative path, as written; nothing has read it. |
 | `allow` | `readonly string[]` | Yes |  |
-| `auth` | `"none" \| "bearer" \| { readonly header: string; }` | Yes |  |
+| `auth` | `"bearer" \| "none" \| { readonly header: string; }` | Yes |  |
 | `baseUrl` | `undefined \| string` | No |  |
 | `credential` | `undefined \| ToolCredentialReference` | No | The secret the credential is read from; present exactly when `auth` is not `none`. |
+| `identity` | `undefined \| ToolCredentialReference` | No | The secret that signs the identity assertion (ADR-0142 D1); absent when not opted in. |
 
 ## OpenApiToolInput
 
@@ -408,9 +476,10 @@ What `openapiTool` takes: every key not listed here is refused.
 | --- | --- | --- | --- |
 | `name` | `string` | Yes | The connector's name in the workspace, 1–200 characters; the agent's tools name it. |
 | `spec` | `string` | Yes | The OpenAPI document: an `https://` URL with no fragment and no credential in it, or a project-relative path such as `openapi/orders.json`. It is read when the project is pushed, never here. |
-| `allow` | `readonly string[]` | Yes | The `GET <glob>`, `HEAD <glob>` or `operationId:<id>` rules that pick the operations. |
+| `allow` | `readonly string[]` | Yes | The `<METHOD> <glob>` or `operationId:<id>` rules that pick the operations. A rule that picks a write (`POST`, `PUT`, `PATCH`, `DELETE`) is admitted; the operation is then implicitly `requireApproval`, and the gateway runs it only for an approved call. |
 | `auth` | `undefined \| Readonly<{ secret: string; }> \| { readonly header: string; readonly credential: SecretReference; }` | No | The credential, by secret reference. Left out, the API is called with no credential. |
 | `baseUrl` | `undefined \| string` | No | The base URL to call; left out, the document's first server. |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt in to the signed identity assertion (ADR-0142 D1): the secret that signs it. The API verifies the `x-aw-identity` header on each call with `verifyIdentity`. |
 
 ## postgresTool
 
@@ -467,20 +536,24 @@ secret(name: string): DefinedSecret
 ## skill
 
 Assigns a skill to the agent, by name: lower-case letters, digits and inner hyphens, at most 64
-characters, as the workspace's skill names are written.
+characters, as the workspace's skill names are written. Without `options.revision` the agent
+follows the skill's current files; with it, the version pins that immutable revision, which must
+be published before the version is saved.
 
 ```ts
-skill(name: string): SkillReference
+skill(name: string, options?: SkillOptions): SkillReference
 ```
 
 ## SkillReference
 
 A skill the agent may use, by name. Made by `skill`; it lands in the version's
-`resources.skills` and in the policy's skill allowlist.
+`resources.skills` and in the policy's skill allowlist, and a pinned `revision` in its
+`resources.skillRevisions`.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
+| `revision` | `undefined \| number` | No |  |
 | `[DEFINE_BRAND]` | `"skill"` | Yes |  |
 
 ## toAgentVersionBody
@@ -506,14 +579,18 @@ How the definition maps:
   keys, each absent when the agent leaves it out. Every `files` knowledge path the agent does
   not already grant is appended to `resources.files` with `read` access; a path it grants keeps
   its access. A `connector` source is already in `resources.connectors` through its `mcp()` tool.
+- `engine.requireApproval` is stored as the policy's `requireApproval`, sorted and without
+  duplicates; an empty list changes nothing.
+- `engine.handoff: true` is stored as the policy's `handoff: true` and forces the stored policy;
+  left out changes nothing.
 - `engine` left out → `options.defaultEngine` (the project's `engine`, contract C12), else
   `claude-agent-sdk`.
 - The policy is **compiled** (`policySource: 'compiled'`) when the engine is `claude-agent-sdk`
   and no limit has a value (`limits` left out, `{}` or every limit `undefined`) and no
-  `autoApprove` rule is declared: it is then exactly the policy the server compiles from the
-  permissions and skills, and follows later changes to them. It is **stored** otherwise — any
-  limit with a value, any `autoApprove` rule (the policy's `tools.autoApprove`, nothing else
-  changed), or any other engine, even with no settings, since the server compiles a policy only
+  `autoApprove` or `requireApproval` rule is declared: it is then exactly the policy the server
+  compiles from the permissions and skills, and follows later changes to them. It is **stored**
+  otherwise — any limit with a value, any `autoApprove` rule (the policy's `tools.autoApprove`,
+  nothing else changed), any `requireApproval` rule, `handoff: true`, or any other engine, even with no settings, since the server compiles a policy only
   for its default engine.
 
 ```ts
@@ -558,6 +635,26 @@ registers the tool reads the document and the secret values, then parses the res
 toolDefinitionsOf(agent: DefinedAgent): readonly ToolDefinition[]
 ```
 
+## ToolModuleExport
+
+One tool a project module exports: what aw's loader evaluates under `tools/` (or any module).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `module` | `string` | Yes | The module's project-relative POSIX path, as aw reports a tool's file: `tools/crm.ts`. |
+| `exportName` | `string` | Yes | `default`, or the named export: `crm`. |
+| `tool` | `OpenApiTool \| PostgresTool \| CodeTool` | Yes |  |
+
+## toolModulesOf
+
+The tools a set of evaluated modules export: every `openapiTool()`, `postgresTool()` and
+`defineTool()` value, sorted by module path, then export name. Pure: the caller evaluates the
+modules, as aw's loader does, and passes each namespace.
+
+```ts
+toolModulesOf(modules: readonly { readonly path: string; readonly namespace: Readonly<Record<string, unknown>>; }[]): readonly ToolModuleExport[]
+```
+
 ## ToolRun
 
 The function in a run file, typed from its declaration:
@@ -575,3 +672,12 @@ What the tool host passes a run function besides the arguments.
 | `signal` | `AbortSignal` | Yes | Aborted when the call times out or the run ends. |
 | `runId` | `string` | Yes | The run that called the tool. |
 | `agent` | `string` | Yes | The calling agent's name. |
+
+## VersionBodyDrop
+
+A part of the body that `agentFromVersionBody` could not write back, and why.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes | Dotted, under the body: `definition.resources.connectors.1`. |
+| `reason` | `string` | Yes |  |

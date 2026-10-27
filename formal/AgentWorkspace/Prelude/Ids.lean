@@ -26,10 +26,13 @@ namespace AgentWorkspace
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 inductive IdKind where
   | workspace | user | userIdentity | membership | principal | apiKey | invitation
-  | browserToken | cliSession | agent | agentFile | agentGrant | agentConnector | agentSkill | agentVersion
-  | agentVersionEvaluation | agentPointerMove | endpointClient | oauthToken | skill | file
+  | browserToken | cliSession | agent | agentFile | agentGrant | agentConnector | agentSkill | agentStorageGrant
+  | agentVersion | agentVersionStorageGrant
+  | agentVersionEvaluation | agentPointerMove | endpointClient | oauthToken | skill | skillRevision
+  | file | fileText
   | connector | modelConnection | runtimeProfile | runtimeVerification | secret | project | session | run | runToken
-  | runUsageRecord | runFeedback | share | shareView | auditEvent
+  | runUsageRecord | runFeedback | share | shareView | auditEvent | trigger | triggerDelivery
+  | storageConnection | storageMigrationRun | builderToolCall
   deriving DecidableEq, Repr, Inhabited, Hashable, Ord
 
 namespace IdKind
@@ -37,9 +40,10 @@ namespace IdKind
 /-- Every identifier kind, in the order of the list above. -/
 def all : List IdKind :=
   [workspace, user, userIdentity, membership, principal, apiKey, invitation, browserToken,
-    cliSession, agent, agentFile, agentGrant, agentConnector, agentSkill, agentVersion, agentVersionEvaluation, agentPointerMove, endpointClient, oauthToken, skill, file,
+    cliSession, agent, agentFile, agentGrant, agentConnector, agentSkill, agentStorageGrant, agentVersion, agentVersionStorageGrant, agentVersionEvaluation, agentPointerMove, endpointClient, oauthToken, skill, skillRevision, file, fileText,
     connector, modelConnection, runtimeProfile, runtimeVerification, secret, project, session, run, runToken,
-    runUsageRecord, runFeedback, share, shareView, auditEvent]
+    runUsageRecord, runFeedback, share, shareView, auditEvent, trigger, triggerDelivery,
+    storageConnection, storageMigrationRun, builderToolCall]
 
 theorem mem_all (k : IdKind) : k ∈ all := by cases k <;> decide
 
@@ -59,13 +63,17 @@ def toWire : IdKind → String
   | agentGrant => "agent-grant"
   | agentConnector => "agent-connector"
   | agentSkill => "agent-skill"
+  | agentStorageGrant => "agent-storage-grant"
   | agentVersion => "agent-version"
+  | agentVersionStorageGrant => "agent-version-storage-grant"
   | agentVersionEvaluation => "agent-version-evaluation"
   | agentPointerMove => "agent-pointer-move"
   | endpointClient => "endpoint-client"
   | oauthToken => "oauth-token"
   | skill => "skill"
+  | skillRevision => "skill-revision"
   | file => "file"
+  | fileText => "file-text"
   | connector => "connector"
   | modelConnection => "model-connection"
   | runtimeProfile => "runtime-profile"
@@ -80,6 +88,11 @@ def toWire : IdKind → String
   | share => "share"
   | shareView => "share-view"
   | auditEvent => "audit-event"
+  | trigger => "trigger"
+  | triggerDelivery => "trigger-delivery"
+  | storageConnection => "storage-connection"
+  | storageMigrationRun => "storage-migration-run"
+  | builderToolCall => "builder-tool-call"
 
 /-- The kind a wire spelling denotes, if any. -/
 def ofWire? : String → Option IdKind
@@ -97,13 +110,17 @@ def ofWire? : String → Option IdKind
   | "agent-grant" => some agentGrant
   | "agent-connector" => some agentConnector
   | "agent-skill" => some agentSkill
+  | "agent-storage-grant" => some agentStorageGrant
   | "agent-version" => some agentVersion
+  | "agent-version-storage-grant" => some agentVersionStorageGrant
   | "agent-version-evaluation" => some agentVersionEvaluation
   | "agent-pointer-move" => some agentPointerMove
   | "endpoint-client" => some endpointClient
   | "oauth-token" => some oauthToken
   | "skill" => some skill
+  | "skill-revision" => some skillRevision
   | "file" => some file
+  | "file-text" => some fileText
   | "connector" => some connector
   | "model-connection" => some modelConnection
   | "runtime-profile" => some runtimeProfile
@@ -118,6 +135,11 @@ def ofWire? : String → Option IdKind
   | "share" => some share
   | "share-view" => some shareView
   | "audit-event" => some auditEvent
+  | "trigger" => some trigger
+  | "trigger-delivery" => some triggerDelivery
+  | "storage-connection" => some storageConnection
+  | "storage-migration-run" => some storageMigrationRun
+  | "builder-tool-call" => some builderToolCall
   | _ => none
 
 private theorem ofWire?_toWire (k : IdKind) : ofWire? (toWire k) = some k := by
@@ -160,8 +182,13 @@ abbrev AgentFileId := Id .agentFile
 abbrev AgentGrantId := Id .agentGrant
 abbrev AgentConnectorId := Id .agentConnector
 abbrev AgentSkillId := Id .agentSkill
+/-- One folder of a storage connection an agent may reach (`agent_storage_grants`, #1693). -/
+abbrev AgentStorageGrantId := Id .agentStorageGrant
 /-- One immutable, numbered version of an agent's definition (`agent_versions`, #442). -/
 abbrev AgentVersionId := Id .agentVersion
+/-- One folder of a storage connection one agent version grants (`agent_version_storage_grants`,
+#1694). -/
+abbrev AgentVersionStorageGrantId := Id .agentVersionStorageGrant
 /-- One server-scored evaluation of an agent version (`agent_version_evaluations`, #618). -/
 abbrev AgentVersionEvaluationId := Id .agentVersionEvaluation
 /-- One recorded move of an agent's version pointer (`agent_pointer_moves`, #615). -/
@@ -173,7 +200,11 @@ abbrev EndpointClientId := Id .endpointClient
 ADR-0134 part 3). -/
 abbrev OAuthTokenId := Id .oauthToken
 abbrev SkillId := Id .skill
+/-- One published, immutable revision of a skill (`skill_revisions`, SDK-19). -/
+abbrev SkillRevisionId := Id .skillRevision
 abbrev FileId := Id .file
+/-- One extracted, searchable text chunk of a file (`file_texts`). -/
+abbrev FileTextId := Id .fileText
 /-- A connector is a row of `mcp_servers`. -/
 abbrev ConnectorId := Id .connector
 abbrev ModelConnectionId := Id .modelConnection
@@ -192,6 +223,18 @@ abbrev RunFeedbackId := Id .runFeedback
 abbrev ShareId := Id .share
 abbrev ShareViewId := Id .shareView
 abbrev AuditEventId := Id .auditEvent
+/-- What starts a run without a person at the keyboard: a webhook or a schedule (`triggers`,
+ADR-0144). -/
+abbrev TriggerId := Id .trigger
+/-- One claimed `(trigger, delivery_key)` slot of a firing (`trigger_deliveries`, ADR-0144). -/
+abbrev TriggerDeliveryId := Id .triggerDelivery
+/-- One verify pass of the move off the old object naming (`storage_migration_runs`, the storage
+design, §06). -/
+abbrev StorageMigrationRunId := Id .storageMigrationRun
+/-- A bucket or folder a workspace connected (`storage_connections`, the storage design, §05). -/
+abbrev StorageConnectionId := Id .storageConnection
+/-- One tool call of a Builder run, as the journal keeps it (`builder_tool_calls`, issue #1845). -/
+abbrev BuilderToolCallId := Id .builderToolCall
 
 /-- `run_events` is keyed by `(run_id, sequence)` (`run_events_pkey`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]

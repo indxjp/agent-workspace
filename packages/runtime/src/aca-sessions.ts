@@ -17,6 +17,9 @@ import type {
 } from './driver.js';
 import { fetchAcaSessionsAccessToken } from './azure-auth.js';
 
+/** The subpath `@agent-workspace/runtime/driver/aca-sessions` carries its credential helpers too. */
+export * from './azure-auth.js';
+
 export const ACA_SESSIONS_MANAGEMENT_API_VERSION = '2025-02-02-preview';
 
 export type AcaSessionsNetworkStatus = 'EgressEnabled' | 'EgressDisabled';
@@ -46,6 +49,7 @@ export function createAcaSessionsCapabilities(
     managedByProvider: true,
     // Pools may keep ready instances or scale from zero, so there is no honest single value.
     typicalStartMs: null,
+    fileTransfer: 'push-archive',
   };
 }
 
@@ -595,29 +599,6 @@ export function createAcaSessionsDriver<TRequest, TEvent>(
 
     async isLive(runtime) {
       return (await client.getSession(assertHandle(runtime))) !== null;
-    },
-
-    async putFiles(runtime, archive) {
-      const response = await access(runtime).request('/files', {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-tar' },
-        body: archive,
-        // Required by Node's fetch for a streaming request body; browsers ignore the extra field.
-        ...({ duplex: 'half' } as Record<string, unknown>),
-      });
-      await requireSuccessfulResponse('hydrate workspace', response);
-      await response.body?.cancel();
-    },
-
-    async getFiles(runtime, paths) {
-      const path = new URL('/files', 'https://runtime.invalid');
-      for (const requestedPath of paths) path.searchParams.append('path', requestedPath);
-      const response = await access(runtime).request(`${path.pathname}${path.search}`);
-      await requireSuccessfulResponse('collect workspace files', response);
-      if (response.body === null) {
-        throw new Error('aca-sessions runtime: collect workspace files returned no response body.');
-      }
-      return response.body;
     },
   };
 }

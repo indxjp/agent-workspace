@@ -27,6 +27,7 @@
  *   live; an unknown session, a wrong key and another agent's session answer alike. A resume
  *   mints a fresh token and leaves earlier ones to expire on their own.
  */
+import { log } from '../../telemetry/logger';
 import type {
   AgentVersionEnvironment,
   AgentVersionPointerRecord,
@@ -228,7 +229,7 @@ export function withDeploymentOrigin(
   if (listed.includes(origin)) return surface;
   const merged = SurfaceAllowedOriginsSchema.safeParse([...listed, origin]);
   if (!merged.success || !origin.startsWith('https://')) {
-    console.warn(
+    log.warn(
       `[surfaces] ${FRONTEND_ORIGIN_VARIABLE} is not an https origin this surface can list, and is ignored.`,
     );
     return surface;
@@ -284,14 +285,32 @@ async function publisherOf(
   };
 }
 
+/**
+ * The scope of the workspace this deployment serves (`WORKSPACE_SLUG`), or `null` when the slug is
+ * unusable or names no workspace. The one resolver behind the hosted surfaces and the A2A cards.
+ */
+export async function resolveDeploymentScope(
+  env: Readonly<Record<string, string | undefined>>,
+  scopes: Pick<WorkspaceScopeResolver, 'forWorkspaceSlug'>,
+): Promise<WorkspaceScope | null> {
+  const slug = readDeploymentWorkspaceSlug(env);
+  return slug.ok ? scopes.forWorkspaceSlug(slug.slug) : null;
+}
+
 export function createSurfaceSessionsRuntime(
   dependencies: SurfaceSessionsDependencies,
 ): SurfaceSessionsRuntime {
+  // Every hosted surface and A2A agent card answers "not found" for an unusable slug, which looks
+  // like an empty deployment; say why once, at startup, rather than on every request.
+  const deploymentSlug = readDeploymentWorkspaceSlug(dependencies.env());
+  if (!deploymentSlug.ok) {
+    log.warn(
+      `[surfaces] ${deploymentSlug.reason} Every hosted surface and A2A agent card will answer "not found" until it is fixed.`,
+    );
+  }
   const runtime: SurfaceSessionsRuntime = {
     async resolve(name: string, mode: SurfaceMode): Promise<ResolvedSurface | null> {
-      const slug = readDeploymentWorkspaceSlug(dependencies.env());
-      if (!slug.ok) return null;
-      const scope = await dependencies.scopes.forWorkspaceSlug(slug.slug);
+      const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
       if (scope === null) return null;
       const picked = await pickSurfaceVersion(
         dependencies.agentVersions.forScope(scope),
@@ -304,7 +323,7 @@ export function createSurfaceSessionsRuntime(
       if (!surface.success) {
         // Every saved surface was parsed on the way in; one that no longer parses was written by
         // an older contract. It is not served, and the log names it so it can be re-saved.
-        console.error(
+        log.error(
           `[surfaces] the surface "${name}" of agent ${pointed.agentId} version ` +
             `${String(pointed.number)} no longer parses and is not served: ${surface.error.message}`,
         );
@@ -386,7 +405,7 @@ export function createSurfaceSessionsRuntime(
           agentVersionId: versionId,
         });
         if (outcome.kind !== 'created' && outcome.kind !== 'existing') {
-          console.error(
+          log.error(
             `[surfaces] no session could be opened for agent ${agent.id}: ${outcome.kind}.`,
           );
           return GONE;
@@ -462,9 +481,7 @@ export function createSurfaceSessionsRuntime(
     },
 
     async servedSurfaces(): Promise<readonly ServedSurface[]> {
-      const slug = readDeploymentWorkspaceSlug(dependencies.env());
-      if (!slug.ok) return [];
-      const scope = await dependencies.scopes.forWorkspaceSlug(slug.slug);
+      const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
       if (scope === null) return [];
       const names = await dependencies.agentVersions.forScope(scope).listPointedSurfaceNames();
       // ponytail: one names query plus a resolve per surface on every cross-origin run call;

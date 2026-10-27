@@ -221,6 +221,10 @@ export type McpToolNameForm = (typeof MCP_TOOL_NAME_FORMS)[number];
 export const SESSION_STREAM_KEY_SCHEMES = ['project-key-prefixed', 'opaque'] as const;
 export type SessionStreamKeyScheme = (typeof SESSION_STREAM_KEY_SCHEMES)[number];
 
+/** The entry fields an engine can use as its session-entry idempotency key. */
+export const SESSION_ENTRY_KEY_FIELDS = ['uuid', 'id', 'key'] as const;
+export type SessionEntryKeyField = (typeof SESSION_ENTRY_KEY_FIELDS)[number];
+
 export interface EngineCatalogueEntry<TSettings extends z.ZodRawShape = z.ZodRawShape> {
   /** Shown by `GET /api/engines` and the UI. */
   readonly displayName: string;
@@ -237,6 +241,20 @@ export interface EngineCatalogueEntry<TSettings extends z.ZodRawShape = z.ZodRaw
   readonly permissionTools: Readonly<Record<AgentPermissionKey, readonly string[]>>;
   readonly mcpToolName: McpToolNameForm;
   readonly sessionStreamKey: SessionStreamKeyScheme;
+  /** The entry field the session store upserts on, or null for append-only (R-01 §7). */
+  readonly sessionEntryKey: SessionEntryKeyField | null;
+  /**
+   * Whether the engine can be asked for output shaped by a JSON Schema (ADR-0143). Kept here, not
+   * in `capabilities`, until the public `structuredOutput` capability key lands with the run
+   * contract's `outputSchema` field: a new capability key changes the `GET /api/engines` body.
+   */
+  readonly structuredOutput: boolean;
+  /**
+   * Whether the engine can stop a run on a tool call that needs a person's approval (ADR-0145 D5).
+   * Kept here, not in `capabilities`, until the public approval slice (P5-4) lands: a new
+   * capability key changes the `GET /api/engines` body.
+   */
+  readonly approvals: boolean;
 }
 
 /**
@@ -287,6 +305,14 @@ function permissionToolsOf(
  *   with the port's provisional table (ADR-0074 D7). `wireProtocols` lists Anthropic Messages
  *   first and both OpenAI dialects after it: Mastra takes an explicit AI SDK provider for each, so
  *   every connection is reached in its own native dialect and the gateway never translates.
+ *
+ * `structuredOutput` is `true` for every engine but `pi`: `claude-agent-sdk` hands the schema to its
+ * `outputFormat` option, `openai-agents` to `outputType` and `mastra` to `structuredOutput`. `pi`
+ * alone refuses an output schema by name.
+ * `approvals` is `true` for `claude-agent-sdk` alone (its `canUseTool` callback, ADR-0145 D5); the other
+ * three refuse `requireApproval`. Claude gates only the tools its SDK asks `canUseTool` about: `Bash`,
+ * `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch` and connector tools
+ * (`mcp__…`), never `Read`, `Glob` or `Grep`.
  */
 export const ENGINE_CATALOGUE = {
   'claude-agent-sdk': {
@@ -309,6 +335,10 @@ export const ENGINE_CATALOGUE = {
     permissionTools: CLAUDE_PERMISSION_TOOL_DENIALS,
     mcpToolName: 'mcp__server__tool',
     sessionStreamKey: 'project-key-prefixed',
+    // R-01 §7: "retries can redeliver, so `append()` must upsert on `entry.uuid`".
+    sessionEntryKey: 'uuid',
+    structuredOutput: true,
+    approvals: true,
   },
   'openai-agents': {
     displayName: 'OpenAI Agents SDK',
@@ -338,6 +368,12 @@ export const ENGINE_CATALOGUE = {
     permissionTools: permissionToolsOf(OPENAI_AGENTS_TOOL_PERMISSION),
     mcpToolName: 'tool',
     sessionStreamKey: 'opaque',
+    // Its entries carry no key (`packages/engine-openai-agents/src/session.ts` appends wrapped
+    // items), so the store is append-only; a key invented from an id-looking field would claim an
+    // idempotency the engine never promised.
+    sessionEntryKey: null,
+    structuredOutput: true,
+    approvals: false,
   },
   pi: {
     displayName: 'pi coding agent',
@@ -362,6 +398,11 @@ export const ENGINE_CATALOGUE = {
     permissionTools: permissionToolsOf(PI_TOOL_PERMISSION),
     mcpToolName: 'tool',
     sessionStreamKey: 'opaque',
+    // pi's JSONL lines each carry an `id`, unique within the session (its header's is the session
+    // id), and `packages/engine-pi` mirrors each line once (ENG-08, #307).
+    sessionEntryKey: 'id',
+    structuredOutput: false,
+    approvals: false,
   },
   mastra: {
     displayName: 'Mastra',
@@ -389,6 +430,11 @@ export const ENGINE_CATALOGUE = {
     permissionTools: permissionToolsOf(MASTRA_TOOL_PERMISSION),
     mcpToolName: 'server_tool',
     sessionStreamKey: 'opaque',
+    // `packages/engine-mastra` journals a Mastra thread as one entry per record, keyed `thread` or
+    // `message:<id>`, so a message Mastra updates replaces its entry in place (ENG-10, #309).
+    sessionEntryKey: 'key',
+    structuredOutput: true,
+    approvals: false,
   },
 } as const satisfies { readonly [E in EngineId]: EngineCatalogueEntry };
 

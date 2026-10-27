@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { NAVIGATION, activeNavId, crumbsFor } from './navigation';
+import { NAVIGATION, activeNavId, crumbsFor, managesWorkspace } from './navigation';
 
 /** docs/spec.md §44, in order, both groups flattened. */
 const SPEC_44_ORDER = [
@@ -22,6 +22,7 @@ const SPEC_44_ORDER = [
   'Connectors',
   'Runs',
   'Models',
+  'Storage',
   'Users',
   'API Keys',
   'Runtimes',
@@ -40,6 +41,7 @@ describe('the main navigation is spec §44', () => {
     expect(NAVIGATION.map((group) => group.label)).toEqual([null, 'Administration']);
     expect(NAVIGATION[1]?.items.map((item) => item.label)).toEqual([
       'Models',
+      'Storage',
       'Users',
       'API Keys',
       'Runtimes',
@@ -65,6 +67,7 @@ describe('which entries actually go somewhere', () => {
       ['connectors', '/connectors'],
       ['runs', '/runs'],
       ['models', '/admin/models'],
+      ['storage', '/admin/storage'],
       ['users', '/admin/users'],
       ['apikeys', '/admin/api-keys'],
       ['runtimes', '/admin/runtimes'],
@@ -75,6 +78,21 @@ describe('which entries actually go somewhere', () => {
 
   it('marks the remaining entries inert, by id, so a forgotten href is visible here', () => {
     expect(items.filter((item) => item.href === null).map((item) => item.id)).toEqual([]);
+  });
+});
+
+describe('the entries only managers see', () => {
+  it('marks Storage, and only Storage, as for Owners and Admins', () => {
+    expect(items.filter((item) => item.managersOnly === true).map((item) => item.id)).toEqual([
+      'storage',
+    ]);
+    expect(['owner', 'admin'].map(managesWorkspace)).toEqual([true, true]);
+    expect(['builder', 'member', 'viewer', undefined].map(managesWorkspace)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
   });
 });
 
@@ -114,6 +132,7 @@ describe('crumbsFor', () => {
   });
 
   it('prefixes an administration screen with its group heading', () => {
+    expect(crumbsFor('/admin/storage')).toEqual(['Administration', 'Storage']);
     expect(crumbsFor('/admin/settings')).toEqual(['Administration', 'Settings']);
   });
 

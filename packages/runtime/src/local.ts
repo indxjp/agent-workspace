@@ -74,6 +74,7 @@ export const LOCAL_RUNTIME_CAPABILITIES: RuntimeCapabilities = {
   gpu: false,
   managedByProvider: false,
   typicalStartMs: 0,
+  fileTransfer: 'local-disk',
 };
 
 /**
@@ -149,6 +150,11 @@ export const LOCAL_CAPABILITY_BASIS: Readonly<Record<keyof RuntimeCapabilities, 
       kind: 'structural',
       reason:
         'Not "fast" — *absent*. `create()` ensures a directory exists and starts no sandbox, so there is no start-up to time. `0` is the claim that nothing is started; `null` would be the claim that the driver cannot say, and it can.',
+    },
+    fileTransfer: {
+      kind: 'structural',
+      reason:
+        'The runner shares the control plane host, so its workspace is a directory on the same disk: the archive is extracted there and nothing is pushed over the network.',
     },
   };
 
@@ -259,8 +265,9 @@ export function auditCapabilityRecord(
 /**
  * The audit of this driver's own record, evaluated at import.
  *
- * `packages/runtime/src/index.test.ts` imports this package, so this gate runs in CI on every
- * build — which is the difference between a rule an ADR states and a rule the repository keeps.
+ * `env.test.ts` and `azure-lazy.test.ts` import this module (as do the conformance fixtures under
+ * `tests/conformance/`), so this gate runs in CI on every build — which is the difference between
+ * a rule an ADR states and a rule the repository keeps.
  */
 export const LOCAL_CAPABILITY_AUDIT: CapabilityAudit = auditCapabilityRecord(
   LOCAL_RUNTIME_CAPABILITIES,

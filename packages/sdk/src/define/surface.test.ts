@@ -24,6 +24,7 @@ const FULL = {
     toolTrace: 'full',
     history: true,
     feedback: true,
+    attachments: true,
     agentSwitcher: { agents: ['Billing', 'Returns'] },
   },
   toolResults: { lookup_order: 'card', list_orders: 'table' },
@@ -77,7 +78,7 @@ describe('defineSurface', () => {
     [{ limits: { messagesPerMinute: 10 } }, ['limits']],
     [{ parts: { agentSwitcher: { agents: ['a', 'a'] } } }, ['parts.agentSwitcher.agents.1']],
     [{ toolResults: { x: 'chart' } }, ['toolResults.x']],
-    [{ parts: { attachments: true } }, ['parts']],
+    [{ parts: { attachments: 'yes' } }, ['parts.attachments']],
     [{ name: 'Main' }, ['name']],
   ])('refuses %j', (extra, paths) => {
     expect(pathsOf(extra)).toStrictEqual(paths);

@@ -35,6 +35,35 @@ describe('defineSlot', () => {
     expect(defineSlot<object>(KEY).current()).toBe(value);
   });
 
+  it('getOrCreate() installs init() once and returns the same instance afterwards', () => {
+    const slot = defineSlot<Map<string, number>>(KEY);
+    let calls = 0;
+    const init = (): Map<string, number> => {
+      calls += 1;
+      return new Map();
+    };
+    const first = slot.getOrCreate(init);
+    expect(slot.getOrCreate(init)).toBe(first);
+    expect(slot.current()).toBe(first);
+    expect(calls).toBe(1);
+  });
+
+  it('getOrCreate() returns a value that was already set without calling init', () => {
+    const slot = defineSlot<object>(KEY);
+    const value = {};
+    slot.set(value);
+    expect(
+      slot.getOrCreate(() => {
+        throw new Error('init must not run');
+      }),
+    ).toBe(value);
+  });
+
+  it('getOrCreate() shares the created value between two slots with the same key', () => {
+    const created = defineSlot<object>(KEY).getOrCreate(() => ({}));
+    expect(defineSlot<object>(KEY).getOrCreate(() => ({}))).toBe(created);
+  });
+
   it('keeps different keys apart', () => {
     defineSlot<object>(KEY).set({});
     expect(defineSlot<object>(OTHER_KEY).current()).toBeNull();

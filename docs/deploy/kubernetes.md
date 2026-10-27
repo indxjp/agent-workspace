@@ -30,11 +30,11 @@ already sets its cloud's storage class and load-balancer annotation. The three S
 reads are created from the rendered `acme-ai/.env`; no credential is written into a values file.
 Split that file across them as follows, and put each variable in exactly one:
 
-| Secret                       | Variables from the rendered `.env`                                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `external.databaseUrlSecret` | `DATABASE_URL`                                                                                                                                                                                                                                                                                                                                                                    |
-| `external.objectStoreSecret` | `OBJECT_STORAGE_BACKEND`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_FORCE_PATH_STYLE`, `AWS_REGION`                                                                                                                                                                                 |
-| `secrets.applicationSecret`  | everything else the file sets — `MASTER_KEY_PROVIDER`, `GCP_MASTER_KEY_SECRET`, `MASTER_ENCRYPTION_KEY`, `SESSION_SECRET`, `GATEWAY_TOKEN_SECRET`, `RUNNER_MANAGER_TOKEN`, `BOOTSTRAP_ADMIN`, `BOOTSTRAP_ADMIN_PASSWORD`, `GATEWAY_PRICING_JSON`, the `AW_*` and `WORKSPACE_*` values, the three service addresses, and the four `OIDC_*` values when the profile names an issuer |
+| Secret                       | Variables from the rendered `.env`                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `external.databaseUrlSecret` | `DATABASE_URL`                                                                                                                                                                                                                                                                                                                                                                                     |
+| `external.objectStoreSecret` | `AW_STORAGE_URL`, `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `AWS_REGION`. An older `.env`'s storage location variables are ignored: leave them out                                                                                                                                                                                 |
+| `secrets.applicationSecret`  | everything else the file sets — `MASTER_KEY_PROVIDER`, `GCP_MASTER_KEY_SECRET`, `MASTER_ENCRYPTION_KEY`, `SESSION_SECRET`, `GATEWAY_TOKEN_SECRET`, `RUNNER_MANAGER_TOKEN`, `BOOTSTRAP_ADMIN`, `BOOTSTRAP_ADMIN_PASSWORD`, `GATEWAY_PRICING_JSON`, the other `AW_*` values and the `WORKSPACE_*` values, the three service addresses, and the four `OIDC_*` values when the profile names an issuer |
 
 Do not put a key in two of them. Each Deployment lists all three under `envFrom`, and `envFrom`
 resolves a duplicate key by source order — the last one wins. The rendered `.env` sets
@@ -66,6 +66,20 @@ address per run.
 `X-Forwarded-For`. Change it if your chain differs, as
 [Client addresses behind a proxy](single-vm.md#client-addresses-behind-a-proxy-aw_trusted_proxy_hops)
 explains.
+
+## Object storage
+
+Put `AW_STORAGE_URL` in the Secret named by `external.objectStoreSecret`; it reaches the pods
+through `envFrom`. The chart has no `AW_STORAGE_URL` value of its own. It still reads the legacy
+Secret keys `OBJECT_STORAGE_ACCESS_KEY_ID` and `OBJECT_STORAGE_SECRET_ACCESS_KEY` and maps them onto
+`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, so keep those keys there when the S3 endpoint needs
+an explicit credential. The old location keys are ignored: each one still set logs one
+`storage_setting_ignored` warning that names it, and with `AW_STORAGE_URL` unset nothing is read
+from the old location, so files, skills and session state are off. Remove them; the
+[migration table](../sdk/site/concepts/data-plane.mdx#migrating-from-the-old-variables) maps each
+one to the URL. The URL never carries a key. To limit the pods to their bucket and prefix, use the IAM policy
+in [Protect stored files](../sdk/site/features/self-host-securely.mdx#protect-stored-files) on the
+IRSA role below.
 
 ## AWS workload identity and KMS
 
@@ -111,6 +125,12 @@ same logical KMS key and no Agent Workspace value changes. To move to a differen
 If startup cannot decrypt the blob, the encrypted-secrets subsystem stays uninstalled. It never
 falls back to `MASTER_ENCRYPTION_KEY`, a generated key or plaintext storage.
 
+A `MASTER_ENCRYPTION_KEY` that is set but malformed (with `MASTER_KEY_PROVIDER=local-key`) also
+leaves that subsystem uninstalled, and in addition fails web's readiness probe, `GET /api/readyz`,
+so the rollout stops. The probe answer and the boot log both name the variable and the expected
+format (64 hex characters) and never its value. See the
+[runbook](../operations/runbook.md#service-health-and-rollout).
+
 ## Render before touching a cluster
 
 Supply an immutable digest for each of the four images:
@@ -137,7 +157,8 @@ The chart denies all ingress and egress for every pod in the namespace and then 
 release needs, selected by each pod's `app.kubernetes.io/name` label: DNS for every pod of the
 release (`dns.namespace`, `dns.podSelector`; `values-openshift.yaml` sets the OpenShift DNS
 operator's), the database port for web, the migrate Job, the gateway and the runner manager, runner
-manager to gateway, and web to runner manager. The database rule opens only `database.port` (5432)
+manager to gateway, web to runner manager, and gateway to web on 3000 (the Builder's `aw-control`
+tools). The database rule opens only `database.port` (5432)
 until you narrow it with `database.cidr` (an external PostgreSQL's address range) or
 `database.podSelector` (an in-cluster one's labels). The default deny also covers a PostgreSQL pod
 in the same namespace, so it needs its own ingress policy from the chart's pods; running it in

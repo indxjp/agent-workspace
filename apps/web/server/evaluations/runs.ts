@@ -25,11 +25,11 @@ import {
 import { z } from 'zod';
 
 import { isUuid } from '../agents/contract';
-import { problem, type ApiResult } from '../agents/handlers';
+import { formatIssues, problem, type ApiResult } from '../http/result';
 import { agentVersionNotFound } from '../agent-versions/problems';
 import type { WorkspaceAgentVersionStore } from '../agent-versions/store';
 import { readBoundedJson } from '../http/json-transport';
-import type { Principal, RunApiEnvironment } from '../runs/environment';
+import type { RunPrincipal, RunApiEnvironment } from '../runs/environment';
 import { runCase } from './handlers';
 import { score } from './score';
 
@@ -79,7 +79,7 @@ function notFound(): ApiResult {
 export async function startEvaluationRun(
   raw: unknown,
   agentId: string,
-  principal: Principal,
+  principal: RunPrincipal,
   dependencies: EvaluationRunDependencies & {
     readonly store: Pick<WorkspaceAgentVersionStore, 'find'>;
   },
@@ -90,9 +90,7 @@ export async function startEvaluationRun(
       EVALUATION_PROBLEM_CODES.invalid_body,
       'invalid_body',
       'The body is not an evaluation run request.',
-      parsed.error.issues.map(
-        (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
-      ),
+      formatIssues(parsed.error.issues),
     );
   }
   const { version, cases } = parsed.data;
@@ -127,7 +125,7 @@ const StoredResultsSchema = z.array(EvaluationCaseResultSchema);
 export async function advanceEvaluationRun(
   raw: unknown,
   agentId: string,
-  principal: Principal,
+  principal: RunPrincipal,
   dependencies: EvaluationRunDependencies,
 ): Promise<ApiResult> {
   const parsed = AdvanceEvaluationRunRequestSchema.safeParse(raw);
@@ -136,9 +134,7 @@ export async function advanceEvaluationRun(
       EVALUATION_PROBLEM_CODES.invalid_body,
       'invalid_body',
       'The body is not an evaluation advance request.',
-      parsed.error.issues.map(
-        (issue) => `${issue.path.map(String).join('.') || '(root)'}: ${issue.message}`,
-      ),
+      formatIssues(parsed.error.issues),
     );
   }
   const { evaluationId } = parsed.data;
@@ -242,7 +238,7 @@ export async function advanceEvaluationRun(
 export async function getEvaluationRun(
   agentId: string,
   evaluationId: string | null,
-  principal: Principal,
+  principal: RunPrincipal,
   dependencies: Pick<EvaluationRunDependencies, 'runs'>,
 ): Promise<ApiResult> {
   const evaluations = dependencies.runs?.evaluationRuns;

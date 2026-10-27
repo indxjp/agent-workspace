@@ -17,7 +17,11 @@ inputs:
 runs:
   using: composite
   steps:
+    # On the MS-A2 host the build jobs also hand their archives over on disk ($AW_CI_HANDOFF_DIR, set
+    # in each runner's .env; ci.yml "Hand the ... over on this host"), and a job there reads that copy.
+    # A job without the variable (Blacksmith, ADR-0053 Amendment 2026-10-23b) downloads the artifact.
     - name: Wait for the build artifacts
+      id: wait
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -25,6 +29,8 @@ runs:
       run: |
         set -euo pipefail
         run="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+        handoff="${AW_CI_HANDOFF_DIR:+$AW_CI_HANDOFF_DIR/$GITHUB_RUN_ID}"
+        local=true
         # artifact name, then the name prefix of the ci.yml job that uploads it
         wanted=("workspace-build|build · every workspace")
         [ "$EMBEDDED" = true ] && wanted+=("embedded-build|build · embedded")
@@ -32,8 +38,9 @@ runs:
           artifact="${entry%%|*}"
           producer="${entry#*|}"
           for attempt in $(seq 181); do
+            [ -n "$handoff" ] && [ -f "$handoff/$artifact.tar.zst" ] && break
             count="$(gh api "$run/artifacts?name=$artifact" --jq '.total_count')"
-            [ "$count" -gt 0 ] && break
+            [ "$count" -gt 0 ] && { local=false; break; }
             if [ "$attempt" = 181 ]; then
               echo "::error::the $artifact artifact did not appear within 30 minutes"
               exit 1
@@ -46,15 +53,17 @@ runs:
             esac
           done
         done
+        echo "local=$local" >> "$GITHUB_OUTPUT"
 
     - name: Download the workspace build
+      if: steps.wait.outputs.local != 'true'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
       with:
         name: workspace-build
         path: ${{ runner.temp }}/workspace-build
 
     - name: Download the embedded build
-      if: inputs.embedded == 'true'
+      if: inputs.embedded == 'true' && steps.wait.outputs.local != 'true'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
       with:
         name: embedded-build
@@ -62,6 +71,14 @@ runs:
 
     - name: Unpack the workspace build
       shell: bash
+      env:
+        LOCAL: ${{ steps.wait.outputs.local }}
+        EMBEDDED: ${{ inputs.embedded }}
       run: |
         set -euo pipefail
-        for archive in "$RUNNER_TEMP"/workspace-build/*.tar.zst; do tar --zstd -xf "$archive"; done
+        if [ "$LOCAL" = true ]; then
+          tar --zstd -xf "$AW_CI_HANDOFF_DIR/$GITHUB_RUN_ID/workspace-build.tar.zst"
+          if [ "$EMBEDDED" = true ]; then tar --zstd -xf "$AW_CI_HANDOFF_DIR/$GITHUB_RUN_ID/embedded-build.tar.zst"; fi
+        else
+          for archive in "$RUNNER_TEMP"/workspace-build/*.tar.zst; do tar --zstd -xf "$archive"; done
+        fi

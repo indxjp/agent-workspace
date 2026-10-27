@@ -399,6 +399,43 @@
   resize: vertical;
 }
 
+.aw-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.aw-attach {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.aw-attach:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+.aw-chip {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.aw-chip button {
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
 .aw-send {
   padding-inline: 16px;
   border: 0;

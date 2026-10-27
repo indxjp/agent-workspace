@@ -306,11 +306,11 @@ document's schema.
 
 ## Idempotency, webhooks, versioning
 
-- **Idempotency:** `runs.start` (and every other write) is not idempotent — a retried request
-  after a lost response may create a second row, and there is no `Idempotency-Key` header to
-  prevent it. Detect a duplicate yourself; see [Retries and
-  idempotency](/guides/retries-and-idempotency). Tracked as
-  [S-6](/concepts/roadmap#s-6-idempotency-keys).
+- **Idempotency:** send an `Idempotency-Key` header (1 to 255 characters) on
+  `POST /api/agents/:id/runs` and reuse it when you retry: the same key and body answer `202` with
+  the original run, and a different body under the key is `409 run_idempotency_conflict`. Every
+  other write is not idempotent; see [Retries and idempotency](/guides/retries-and-idempotency).
+  Tracked as [S-6](/concepts/roadmap#s-6-idempotency-keys).
 - **Webhooks:** nothing calls back into your service when a run finishes — poll `GET
 /api/runs/:id`, or keep a connection open on `GET /api/runs/:id/events`. See [Integrate a
   backend](/building/backend). Tracked as

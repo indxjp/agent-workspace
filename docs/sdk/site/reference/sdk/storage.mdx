@@ -1,0 +1,162 @@
+---
+title: "StorageClient"
+description: "Every method of StorageClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/storage.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`aw.storage` — the storage design, §05: connected buckets and folders.
+
+## connections.list
+
+```ts
+async list(options?: RequestOptions): Promise<readonly StorageConnectionResource[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly StorageConnectionResource[]>`
+
+**Route:** `GET /api/storage-connections`
+
+## connections.get
+
+By id (a UUID, one request) or by name (one `list` call). The server's `get` takes an id only
+and a name is never UUID-shaped, so the two cannot be confused. An unknown name is the same
+`404 storage_connection_not_found` the server answers for an unknown id.
+
+```ts
+async get(idOrName: string, options?: RequestOptions): Promise<StorageConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `idOrName` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<StorageConnectionResource>`
+
+**Route:** `GET /api/storage-connections/:idOrName`
+
+## connections.create
+
+```ts
+create(input: CreateStorageConnectionInput, options?: RequestOptions): Promise<StorageConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateStorageConnectionInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<StorageConnectionResource>`
+
+**Route:** `POST /api/storage-connections`
+
+## connections.update
+
+Rename or reconfigure; a `url` that moves the connection needs a new `credential` with it.
+
+```ts
+async update(id: string, patch: UpdateStorageConnectionPatch, options?: RequestOptions): Promise<StorageConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `patch` | `UpdateStorageConnectionPatch` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<StorageConnectionResource>`
+
+**Route:** `PATCH /api/storage-connections/:id`
+
+## connections.remove
+
+Delete the connection and its credential; `409 storage_connection_in_use` while an agent holds a grant.
+
+```ts
+async remove(id: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/storage-connections/:id`
+
+## connections.rotateCredential
+
+Replace the stored credential: the one write path to it after creation.
+
+```ts
+async rotateCredential(id: string, credential: StorageConnectionCredential, options?: RequestOptions): Promise<StorageConnectionResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `credential` | `StorageConnectionCredential` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<StorageConnectionResource>`
+
+**Route:** `PUT /api/storage-connections/:id/credential`
+
+## connections.test
+
+Open the connection and list one entry of an allowed folder. A failed probe is still a `200`
+carrying `{ ok: false, code }`, so it resolves rather than throws; only a missing connection
+or a refused request is an `ApiProblemError`.
+
+```ts
+async test(id: string, options?: RequestOptions): Promise<StorageConnectionTestOutcome>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<StorageConnectionTestOutcome>`
+
+**Route:** `POST /api/storage-connections/:id/test`
+
+## connections.browse
+
+Every entry of one folder, page after page until the server sends no `next`. Without a
+`prefix` it yields the connection's allowed prefixes.
+
+```ts
+async *browse(id: string, options?: BrowseStorageOptions): AsyncGenerator<StorageConnectionBrowseEntry, void, undefined>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `BrowseStorageOptions` | No |
+
+**Returns:** `AsyncGenerator<StorageConnectionBrowseEntry, void, undefined>`
+
+## BrowseStorageOptions
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `prefix` | `undefined \| string` | No | The folder to list, inside the connection's allowed prefixes; omit it for the allowed prefixes. |
+| `cursor` | `undefined \| string` | No | Resume after a `next` this client was given earlier; `browse` follows `next` by itself. |
+| `signal` | `undefined \| AbortSignal` | No |  |
+
+## StorageConnectionBrowseEntry
+
+One file or folder of a browsed connection; `size` is set for a file.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `kind` | `"file" \| "folder"` | Yes |  |
+| `size` | `undefined \| number` | No |  |

@@ -13,7 +13,7 @@
  * The application half (run concealment, principal selection, the workspace resolvers and
  * `authorise`) is `apps/web/formal/authz-tenancy.test.ts` (decision D-012).
  */
-import { validateTenantSessionScope } from '@agent-workspace/core';
+import { validateTenantSessionScope } from '@agent-workspace/run-protocol';
 import {
   createInMemoryWorkspaceScopeResolver,
   ForgedWorkspaceScopeError,

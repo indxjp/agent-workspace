@@ -1,5 +1,6 @@
 import type {
   AgentResourceAssignments,
+  AgentResourceAssignmentsInput,
   AgentResourceRepository,
   AgentResourceRepositoryProvider,
   ReplaceAgentResourcesOutcome,
@@ -10,7 +11,7 @@ export interface WorkspaceAgentResourceStore {
   get(agentId: string): Promise<AgentResourceAssignments | null>;
   replace(
     agentId: string,
-    assignments: AgentResourceAssignments,
+    assignments: AgentResourceAssignmentsInput,
   ): Promise<ReplaceAgentResourcesOutcome>;
 }
 

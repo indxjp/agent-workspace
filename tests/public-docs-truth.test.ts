@@ -213,7 +213,7 @@ describe('current public documentation follows executable truth', () => {
     for (const fact of [
       'openapiTool(',
       "secret('ORDERS_TOKEN')",
-      'connector_write_unsupported',
+      'approval_required',
       'tool_upstream_timeout',
       'advisory',
     ]) {

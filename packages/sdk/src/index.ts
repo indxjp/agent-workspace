@@ -41,10 +41,12 @@ import { SecretsClient } from './resources/secrets.js';
 import { SessionsClient } from './resources/sessions.js';
 import { SharesClient } from './resources/shares.js';
 import { SkillsClient } from './resources/skills.js';
+import { StorageClient } from './resources/storage.js';
 import { ToolBundlesClient } from './resources/toolBundles.js';
 import { TeamClient } from './resources/team.js';
 import { AuthClient } from './resources/auth.js';
 import { TokensClient } from './resources/tokens.js';
+import { TriggersClient } from './resources/triggers.js';
 import { WorkspacesClient } from './resources/workspaces.js';
 
 export type { ClientAuth, ClientOptions, RequestOptions } from './http.js';
@@ -74,12 +76,14 @@ export type {
   PlatformsClient,
 } from './resources/platforms.js';
 export type {
+  DownloadUrlInput,
   FileDownload,
   FilesClient,
   ListFilesQuery,
   RemoveFileOptions,
   UploadBody,
   UploadFileOptions,
+  UploadUrlInput,
 } from './resources/files.js';
 export type { ModelConnectionsClient, ModelsClient } from './resources/models.js';
 export type { AuditClient, MetricsClient, ObservabilityClient } from './resources/observability.js';
@@ -91,6 +95,9 @@ export type {
 export type {
   FollowRunOptions,
   RunEventsOptions,
+  RunOutputFile,
+  RunResult,
+  RunResultOptions,
   RunStreamEnd,
   RunsClient,
   StartRunInput,
@@ -110,7 +117,27 @@ export type {
   TranscriptAddress,
 } from './resources/sessions.js';
 export type { SharesClient } from './resources/shares.js';
-export type { SkillsClient } from './resources/skills.js';
+export type {
+  SkillImportBody,
+  SkillImportFile,
+  SkillImportInput,
+  SkillsClient,
+} from './resources/skills.js';
+export type {
+  BrowseStorageOptions,
+  StorageClient,
+  StorageConnectionBrowseEntry,
+  StorageConnectionsClient,
+} from './resources/storage.js';
+export type {
+  CreateStorageConnectionInput,
+  StorageConnectionBrowseResponse,
+  StorageConnectionCredential,
+  StorageConnectionProblemCode,
+  StorageConnectionResource,
+  StorageConnectionTestOutcome,
+  UpdateStorageConnectionPatch,
+} from '@indx-workspace/contracts/storage-connections';
 export type { ToolBundlesClient } from './resources/toolBundles.js';
 export type {
   ApiKeysClient,
@@ -121,9 +148,18 @@ export type {
 } from './resources/team.js';
 export type { AuthClient } from './resources/auth.js';
 export type { MintTokenOptions, TokensClient } from './resources/tokens.js';
+export type { TriggersClient } from './resources/triggers.js';
 export type { SharingPolicyClient, WorkspacesClient } from './resources/workspaces.js';
 export type { RunEventFrame } from './events/run-events.js';
 export type { MeResponse } from '@indx-workspace/contracts/team';
+export {
+  IDENTITY_ASSERTION_HEADER,
+  verifyIdentity,
+  type IdentityAssertionPayload,
+  type IdentityAssertionProblemCode,
+  type IdentityExpectation,
+  type IdentityVerification,
+} from '@indx-workspace/contracts/identity-assertion';
 
 /**
  * One authenticated connection to a control plane, with a client per resource family — and one
@@ -149,6 +185,8 @@ export interface AgentWorkspaceClient {
   readonly models: ModelsClient;
   readonly files: FilesClient;
   readonly skills: SkillsClient;
+  /** `/api/storage-connections` — the storage design, §05: connect a bucket or folder and browse it. */
+  readonly storage: StorageClient;
   /** `/api/tool-bundles` — issue #790 (ADR-0118 TS1): content-addressed code-tool bundles. */
   readonly toolBundles: ToolBundlesClient;
   readonly connectors: ConnectorsClient;
@@ -166,6 +204,8 @@ export interface AgentWorkspaceClient {
   readonly platforms: PlatformsClient;
   /** `/api/endpoint-clients` — issue #949, ADR-0134: what an external platform may reach, and its keys. */
   readonly endpointClients: EndpointClientsClient;
+  /** `/api/triggers` — issue #1295, ADR-0144: start a run of one agent from a webhook URL. */
+  readonly triggers: TriggersClient;
   readonly team: TeamClient;
   readonly shares: SharesClient;
   readonly observability: ObservabilityClient;
@@ -189,11 +229,13 @@ export function createClient(options: ClientOptions): AgentWorkspaceClient {
     models: new ModelsClient(http),
     files: new FilesClient(http),
     skills: new SkillsClient(http),
+    storage: new StorageClient(http),
     toolBundles: new ToolBundlesClient(http),
     connectors: new ConnectorsClient(http),
     engines: new EnginesClient(http),
     platforms: new PlatformsClient(http),
     endpointClients: new EndpointClientsClient(http),
+    triggers: new TriggersClient(http),
     team: new TeamClient(http),
     shares: new SharesClient(http),
     observability: new ObservabilityClient(http),

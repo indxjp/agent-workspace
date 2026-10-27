@@ -11,25 +11,28 @@
  *   - Rotate   → `POST   /api/model-connections/:id/credential` (write-only; never pre-filled,
  *                 never redisplayed — the input's initial value is always `''`, never derived
  *                 from `connection`, which carries no credential field to derive it from)
- *   - Remove   → `POST   /api/agents` (read, to preview who is affected) then
+ *   - Remove   → `GET    /api/agents` (read, to preview who is affected) then
  *                `DELETE /api/model-connections/:id` (only after the caller types the connection's
  *                 name — `confirmationMatches` — so cancelling never issues the delete request at all)
  */
 import { useState, type FormEvent } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
 import { CREDENTIAL_INPUT_PROPS } from '../shell/credential-input';
 
 import {
-  agentsReferencing,
+  referencingAgents,
+  removeConnection,
+  rotateCredential,
+  testAfterRotation,
+  updateConnection,
+} from './connections-model';
+import {
   confirmationMatches,
   connectionStatus,
   editableConfigFields,
-  formatApiError,
   isEditFormValid,
   providerLabel,
-  readAgentSummaries,
-  readModelConnections,
-  updateConnectionPayload,
   type EditFormValues,
   type ModelConnectionView,
   type ReferencingAgent,
@@ -58,14 +61,6 @@ function editValuesFrom(connection: ModelConnectionView): EditFormValues {
     deployment: connection.config.deployment ?? '',
     apiVersion: connection.config.apiVersion ?? '',
   };
-}
-
-async function parseJson(response: Response): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
 }
 
 export function ProviderDetailPanel({
@@ -107,15 +102,8 @@ export function ProviderDetailPanel({
     if (!isEditFormValid(values, connection.provider)) return;
     setSaving(true);
     setSaveError(null);
-    void fetch(`/api/model-connections/${connection.id}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify(updateConnectionPayload(values, connection.provider)),
-    })
-      .then(async (response) => {
-        const body: unknown = await parseJson(response);
-        if (!response.ok) throw new Error(formatApiError(body));
-        const [updated] = readModelConnections({ models: [body] });
+    void updateConnection(browserClient(), connection, values)
+      .then((updated) => {
         if (updated !== undefined) onUpdated(updated);
       })
       .catch((error: unknown) =>
@@ -130,32 +118,16 @@ export function ProviderDetailPanel({
     setRotating(true);
     setRotateError(null);
     setRotateMessage(null);
-    void fetch(`/api/model-connections/${connection.id}/credential`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ apiKey: rotateKey }),
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(formatApiError(await parseJson(response)));
+    const client = browserClient();
+    void rotateCredential(client, connection.id, rotateKey)
+      .then(() => {
         // Never pre-filled, never redisplayed: the value that was just typed is discarded the
         // moment the request that consumes it succeeds, not kept around for a retry to reuse.
         setRotateKey('');
         setRotateMessage('Credential rotated. Testing the connection…');
-        return fetch(`/api/model-connections/${connection.id}/test`, {
-          method: 'POST',
-          headers: { accept: 'application/json' },
-        });
+        return testAfterRotation(client, connection.id);
       })
-      .then(async (response) => {
-        const body = (await parseJson(response)) as { message?: unknown } | null;
-        const message =
-          typeof body?.message === 'string' ? body.message : `HTTP ${String(response.status)}`;
-        setRotateMessage(
-          response.ok
-            ? `Credential rotated. ${message}`
-            : `Credential rotated. Test failed: ${message}`,
-        );
-      })
+      .then(setRotateMessage)
       .catch((error: unknown) =>
         setRotateError(error instanceof Error ? error.message : String(error)),
       )
@@ -167,17 +139,8 @@ export function ProviderDetailPanel({
     setConfirmText('');
     setDeleteError(null);
     setPreview({ kind: 'loading' });
-    void fetch('/api/agents', { headers: { accept: 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
-        return response.json() as Promise<unknown>;
-      })
-      .then((body) => {
-        setPreview({
-          kind: 'loaded',
-          referencing: agentsReferencing(readAgentSummaries(body), connection.id),
-        });
-      })
+    void referencingAgents(browserClient(), connection.id)
+      .then((referencing) => setPreview({ kind: 'loaded', referencing }))
       .catch(() => setPreview({ kind: 'error' }));
   }
 
@@ -185,14 +148,8 @@ export function ProviderDetailPanel({
     if (!confirmationMatches(confirmText, connection.name)) return;
     setDeleting(true);
     setDeleteError(null);
-    void fetch(`/api/model-connections/${connection.id}`, {
-      method: 'DELETE',
-      headers: { accept: 'application/json' },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(formatApiError(await parseJson(response)));
-        onRemoved(connection.id);
-      })
+    void removeConnection(browserClient(), connection.id)
+      .then(() => onRemoved(connection.id))
       .catch((error: unknown) =>
         setDeleteError(error instanceof Error ? error.message : String(error)),
       )

@@ -21,8 +21,10 @@ import {
 import {
   claudeFileGrantDenials,
   compileClaudeToolPolicy,
+  splitApprovals,
+  unapprovableRules,
   type ClaudeToolPolicyInputs,
-} from '@agent-workspace/engine-claude-agent-sdk';
+} from '@agent-workspace/engine-claude-agent-sdk/testing';
 import type { AgentPermissions, AgentToolPolicy } from '@indx-workspace/contracts/agents';
 import { describe, expect, it } from 'vitest';
 
@@ -122,6 +124,14 @@ describe('engine-compose: the Claude tool policy the adapter compiles', () => {
     // The refinement, stated by the vector itself: what the adapter compiles is what compose
     // produced before ENG-04b moved the mapping.
     expect(toolPolicy(outcome['target'], id)).toEqual(toolPolicy(outcome['current'], id));
+
+    // The approval gate (#1300): what reaches `allowedTools`, what is left to `canUseTool`, and
+    // whether the compile refuses a gate the SDK would never ask about.
+    const requireApproval = strings(request['requireApproval'], 'requireApproval');
+    const split = splitApprovals(compiled.autoApprove, requireApproval);
+    expect(split.allowedTools).toEqual(strings(outcome['allowedTools'], 'allowedTools'));
+    expect(split.deferred).toEqual(strings(outcome['deferred'], 'deferred'));
+    expect(unapprovableRules(requireApproval).length > 0).toBe(bool(outcome['refused'], 'refused'));
   });
 });
 

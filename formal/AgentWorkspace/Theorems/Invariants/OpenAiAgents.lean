@@ -76,7 +76,7 @@ theorem tool_pairing_holds (ctx : FrameContext) (events : List Event) :
 example :
     mapAll { localTools := ["read_file"], hasMcp := false }
         [.toolOutput true (some "call_9") "x" false] =
-      [.malformed "a tool output for a call no tool call announced"] := by decide
+      [.malformed "a tool output for a call no tool call announced"] := by decide +kernel
 
 /-- The adapter stops at or before `limits.maxTurns`, and a run the limit cut short ends with
 `agent.result {stopReason: 'max_turns'}` carrying the turns it took. -/
@@ -102,7 +102,7 @@ theorem the_run_stops_at_or_before_max_turns (ctx : FrameContext) (announced : L
 
 /-- Witness: `maxTurns: 2` over a looping agent ends after two turns with `max_turns`. -/
 example :
-    runOutcome (some 2) 5 = (2, .maxTurns) ∧ runOutcome (some 2) 1 = (1, .endTurn) := by decide
+    runOutcome (some 2) 5 = (2, .maxTurns) ∧ runOutcome (some 2) 1 = (1, .endTurn) := by decide +kernel
 
 /-! ## The provisional budget (ADR-0074 D7, #342) -/
 
@@ -168,6 +168,6 @@ theorem no_response_starts_after_the_budget_is_spent (cap spent : Nat) (costs : 
 second response with `max_budget`, and a 1 USD cap lets a two-response run finish. -/
 example :
     budgetRunFrom 100 0 [60, 60, 60, 60] = (2, .maxBudget) ∧
-      budgetRunFrom 1000000 0 [60, 60] = (2, .endTurn) := by decide
+      budgetRunFrom 1000000 0 [60, 60] = (2, .endTurn) := by decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.OpenAiAgents

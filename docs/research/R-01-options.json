@@ -1,8 +1,8 @@
 {
   "$comment": "Generated from the shipped sdk.d.ts of @anthropic-ai/claude-agent-sdk. Source of truth for tests/sdk-surface.test.ts (R-01).",
   "package": "@anthropic-ai/claude-agent-sdk",
-  "version": "0.3.296",
-  "claudeCodeVersion": "2.1.296",
+  "version": "0.3.310",
+  "claudeCodeVersion": "2.1.310",
   "retrieved": "2026-09-26",
   "querySignature": "function query(_params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options; }): Query",
   "optionCount": 69,

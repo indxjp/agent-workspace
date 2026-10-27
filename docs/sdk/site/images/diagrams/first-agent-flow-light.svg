@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="960" height="360" role="img" aria-labelledby="title desc">
+  <title id="title">Your first agent in three steps</title>
+  <desc id="desc">npm create writes the project files; npm run dev starts aw dev in one Node process; then use the try page, aw chat in the terminal, or the web console.</desc>
+  <style>
+    .bg{fill:#ffffff}
+    .box{fill:#f6f8fc;stroke:#d0d7e2;stroke-width:1.5}
+    .pbox{fill:#eef3fd;stroke:#2f5fd0;stroke-width:1.5}
+    .inner{fill:#ffffff;stroke:#d0d7e2;stroke-width:1.5}
+    .edge{fill:none;stroke:#2f5fd0;stroke-width:2}
+    .link{fill:none;stroke:#d0d7e2;stroke-width:2}
+    .bound{fill:none;stroke:#2f5fd0;stroke-width:1.5;stroke-dasharray:6 5}
+    text{font-family:Geist,ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;fill:#0f172a}
+    .t{font-size:16px;font-weight:600}
+    .s{font-size:13px;fill:#475569}
+    .m{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+    .lbl{font-size:12px;fill:#2f5fd0;font-weight:600}
+    .ml{font-family:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;fill:#2f5fd0}
+    .arrow{fill:#2f5fd0}
+  </style>
+  <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0L10 5L0 10z"/></marker></defs>
+  <rect class="bg" width="960" height="360" rx="16"/>
+  <rect class="box" x="20" y="40" width="300" height="300" rx="12"/>
+  <text class="lbl" x="40" y="68">STEP 1</text>
+  <text class="t" x="40" y="92">Create the project</text>
+  <text class="m" x="40" y="120">npm create @indx-workspace@latest</text>
+  <text class="m" x="40" y="140">  my-agent -- --yes</text>
+  <text class="s" x="40" y="176">writes plain files you commit:</text>
+  <text class="m" x="40" y="202">agent-workspace.yaml</text>
+  <text class="m" x="40" y="224">agents/assistant.ts</text>
+  <text class="m" x="40" y="246">surfaces/main.ts</text>
+  <text class="m" x="40" y="268">skills/refund-policy/SKILL.md</text>
+  <text class="m" x="40" y="290">evals/assistant.yaml</text>
+  <text class="m" x="40" y="312">AGENTS.md · package.json</text>
+  <rect class="pbox" x="370" y="40" width="240" height="300" rx="12"/>
+  <text class="lbl" x="390" y="68">STEP 2</text>
+  <text class="t" x="390" y="92">Run it</text>
+  <text class="m" x="390" y="120">cd my-agent</text>
+  <text class="m" x="390" y="140">npm run dev</text>
+  <text class="s" x="390" y="176">starts aw dev:</text>
+  <text class="s" x="390" y="200">one Node process</text>
+  <text class="s" x="390" y="222">embedded PostgreSQL</text>
+  <text class="s" x="390" y="244">no Docker</text>
+  <text class="s" x="390" y="280">every save under agents/,</text>
+  <text class="s" x="390" y="302">skills/ or surfaces/ syncs</text>
+  <text class="lbl" x="660" y="30">STEP 3 · USE IT</text>
+  <rect class="box" x="660" y="40" width="280" height="88" rx="12"/>
+  <text class="t" x="680" y="68">Try page</text>
+  <text class="m" x="680" y="92">127.0.0.1:3000/p/s/main/try</text>
+  <text class="s" x="680" y="114">chat with the agent in a browser</text>
+  <rect class="box" x="660" y="146" width="280" height="88" rx="12"/>
+  <text class="t" x="680" y="174">Terminal</text>
+  <text class="m" x="680" y="198">npx aw chat</text>
+  <text class="s" x="680" y="220">a line per tool call</text>
+  <rect class="box" x="660" y="252" width="280" height="88" rx="12"/>
+  <text class="t" x="680" y="280">Web console</text>
+  <text class="m" x="680" y="304">127.0.0.1:3000</text>
+  <text class="s" x="680" y="326">agents, runs, tool calls, cost</text>
+  <path class="edge" d="M320 190H366" marker-end="url(#a)"/>
+  <path class="edge" d="M610 160H632V84H656" marker-end="url(#a)"/>
+  <path class="edge" d="M610 190H656" marker-end="url(#a)"/>
+  <path class="edge" d="M610 220H632V296H656" marker-end="url(#a)"/>
+</svg>

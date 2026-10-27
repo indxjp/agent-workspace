@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { SETUP_QUESTIONS } from '@indx-workspace/contracts/setup';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { JourneyFailure } from '../journey/harness.mjs';
+import { JourneyFailure, quickstartCommands } from '../journey/harness.mjs';
 import { watchDev } from '../journey/run.mjs';
 
 import { extractClaims, extractRepositoryClaims } from './extract.mjs';
@@ -17,11 +17,11 @@ import type { Machine } from './run.d.mts';
 import {
   compileSources,
   exitCodeOf,
+  ownedRows,
   parseArguments,
   runPage,
   runPlans,
   save,
-  shardPlans,
   staticRows,
   summaryMarkdown,
   tscDiagnostics,
@@ -39,7 +39,6 @@ describe('the switches', () => {
       staticOnly: false,
       machine: 'container',
       shell: 'sh',
-      shard: { index: 1, count: 1 },
     });
   });
 
@@ -57,28 +56,6 @@ describe('the switches', () => {
     const options = parseArguments(['--model', 'live'], {});
     expect(options).toMatchObject({ live: true, apiKey: '' });
     expect(parseArguments(['--model', 'live'], { ANTHROPIC_API_KEY: '  ' }).apiKey).toBe('');
-  });
-
-  it('takes a shard and refuses one outside 1 <= i <= n <= 9', () => {
-    expect(parseArguments(['--shard', '2/3'], {}).shard).toEqual({ index: 2, count: 3 });
-    for (const shard of ['0/2', '3/2', '1/10', '1', 'a/b']) {
-      expect(() => parseArguments(['--shard', shard], {})).toThrow('--shard is');
-    }
-  });
-
-  it('shards pages round-robin and keeps a repeated page with the page it repeats', () => {
-    const plan = (page: string, sameAsPage?: string) => ({
-      page,
-      slug: page,
-      blocks: [],
-      ...(sameAsPage === undefined ? {} : { sameAsPage }),
-    });
-    const plans = [plan('a'), plan('b'), plan('c', 'a'), plan('d'), plan('e', 'b')];
-    const pages = (index: number) =>
-      shardPlans(plans, { index, count: 2 }).map((each) => each.page);
-    expect(pages(1)).toEqual(['a', 'c', 'd']);
-    expect(pages(2)).toEqual(['b', 'e']);
-    expect(shardPlans(plans, { index: 1, count: 1 })).toEqual(plans);
   });
 
   it('refuses an unknown model and an unknown switch', () => {
@@ -131,6 +108,38 @@ describe('the run plan', () => {
       page('a.mdx', ['npm create x', 'npm create x my-agent -- --yes && cd my-agent', 'ls']),
     );
     expect(plan?.blocks.map((block) => block.fresh)).toEqual([true, true, undefined]);
+  });
+
+  it("leaves a page to the first-hour leg only when its every block is the leg's commands", () => {
+    const owned = ['npm create x my-agent -- --yes', 'cd my-agent', 'npm run dev'];
+    const block = 'npm create x my-agent -- --yes\ncd my-agent\nnpm run dev';
+    const [twice] = runPlans(page('a.mdx', [block, block]));
+    const [more] = runPlans(page('b.mdx', [block, 'npx aw platforms list']));
+    if (twice === undefined || more === undefined) throw new Error('no plan');
+    expect(ownedRows(twice, owned)?.map((row) => [row.where, row.result])).toEqual([
+      ['a.mdx:1', 'owned by journey-e2e first-hour (T1-T3 run these commands)'],
+      ['a.mdx:7', 'owned by journey-e2e first-hour (T1-T3 run these commands)'],
+    ]);
+    expect(exitCodeOf(ownedRows(twice, owned) ?? [])).toBe(0);
+    expect(ownedRows(more, owned)).toBeNull();
+    // Off the journey's machine, registry or model nothing is owned: every page runs.
+    expect(ownedRows(twice, [])).toBeNull();
+  });
+
+  it("owns the repository's install block pages through quickstart.mdx", () => {
+    const owned = quickstartCommands(
+      readFileSync(path.join(ROOT, 'docs/sdk/site/getting-started/quickstart.mdx'), 'utf8'),
+    );
+    const pages = runPlans(extractRepositoryClaims(ROOT))
+      .filter((plan) => ownedRows(plan, owned) !== null)
+      .map((plan) => plan.page);
+    expect(pages).toEqual(
+      expect.arrayContaining([
+        'README.md',
+        'docs/sdk/site/getting-started/quickstart.mdx',
+        'sites/lp/index.html',
+      ]),
+    );
   });
 
   it('runs pages with the same commands once', () => {
@@ -360,7 +369,8 @@ describe('the workflow that runs the claims', () => {
     expect(existsSync(path.join(ROOT, '.github', 'workflows', 'docs-claims.yml'))).toBe(false);
     const needs = /^ {4}needs:\s*\[([^\]]*)\]$/mu.exec(jobBlock('ci-success'))?.[1] ?? '';
     expect(needs.split(',').map((job) => job.trim())).toContain('docs-claims');
-    expect(workflow).not.toMatch(/^ {4}if:/mu);
+    // Only the heavy-tier condition (ci.yml, COST) may skip the job.
+    expect(workflow).not.toMatch(/^ {4}if:(?! >-\r?\n {6}github\.event_name == 'schedule')/mu);
     expect(workflow).toContain('run: node tests/docs-claims/run.mjs');
     // Built once by ci.yml's `build` job and restored here, never rebuilt.
     expect(workflow).toContain('uses: ./.github/actions/workspace-build');
@@ -399,7 +409,11 @@ describe('the install-live workflow', () => {
   const stepsUsing = (text: string) => steps.filter((step) => step.includes(text));
 
   it('runs on the three operating systems, from the public registry, with the real model', () => {
-    for (const os of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
+    for (const os of [
+      '[self-hosted, ms-a2]',
+      'blacksmith-6vcpu-macos-latest',
+      'blacksmith-4vcpu-windows-2025',
+    ]) {
       expect(source).toContain(`os: ${os}`);
     }
     expect(source).toContain('REGISTRY: https://registry.npmjs.org/');

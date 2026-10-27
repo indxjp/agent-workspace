@@ -2,20 +2,34 @@ apiVersion: agentworkspace.dev/v2
 kind: Project
 name: ringi-review
 engine: claude-agent-sdk
-# The rule book, the authority matrix and the ringi archive are your own MCP server
-# (mcp/ringi-archive.mjs). A project file names only remote connectors, so run it over Streamable
-# HTTP for `aw dev`:
-#   MCP_TRANSPORT=http PORT=8790 node mcp/ringi-archive.mjs
+# The rule book and the ringi archive are workspace files the agent finds with the platform's
+# `search_files`; upload them once, rules for everyone and the archive by department folder
+# (the backend narrows each run to the folders the filer may read):
+#   (cd data && for f in rules/*.md ringi/*/*.json; do aw files upload "$f" "$f"; done)
+# The one connector is the authority table (mcp/authority-server.mjs). A project file names only
+# remote connectors, so run it over Streamable HTTP for `aw dev`; it needs no caller identity:
+#   MCP_TRANSPORT=http PORT=8790 node mcp/authority-server.mjs
 connectors:
-  ringi-archive:
+  authority:
     url: http://127.0.0.1:8790/mcp
     transport: http
+# The workflow system is an openapiTool() in tools/workflow.ts: `aw dev` reads
+# apis/workflow.openapi.json and takes WORKFLOW_TOKEN from its environment; the identity assertion
+# the tool opts in with is signed with the workspace secret WORKFLOW_IDENTITY_SECRET:
+#   aw secrets set WORKFLOW_IDENTITY_SECRET
+#   WORKFLOW_TOKEN=... aw dev
+# The document's `servers` is the company's workflow system (workflow.example.co.jp). To try the
+# project, run the bundled stand-in and set servers[0].url to http://127.0.0.1:8791/api/v1:
+#   WORKFLOW_TOKEN=... IDENTITY_SECRET=... IDENTITY_AUDIENCE=<tool-id> IDENTITY_WORKSPACE=<workspace-id> \
+#     PORT=8791 node workflow/fake-workflow.mjs
 policy:
-  # The ceiling no agent in this project can widen: the reviewer reads, it never writes.
+  # The ceiling no agent in this project can widen: the reviewer writes no files and runs nothing.
   permissions:
     writeFiles: false
     runCommands: false
     unrestrictedNetwork: false
+  # The only openapiTool any agent in this project may use.
+  tools: [workflow]
   limits:
     maxBudgetUsd: 1
   promotion:

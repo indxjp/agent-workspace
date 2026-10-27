@@ -623,6 +623,24 @@ describe('the loader carries catalog tools with their files (issue #549)', () =>
     expect(result.tools).toEqual([{ file: 'agents/support.ts', definition: ORDERS_DEFINITION }]);
   });
 
+  it('carries the identity an openapiTool declares through the loader child (ADR-0142)', async () => {
+    const root = await project({
+      'agents/support.ts': toolAgent('support'),
+      'tools/orders.ts': ordersTool().replace(
+        "auth: secret('ORDERS_TOKEN'),",
+        "auth: secret('ORDERS_TOKEN'),\n  identity: secret('ORDERS_IDENTITY_KEY'),",
+      ),
+    });
+    const result = await load(root);
+    expect(result.problems).toEqual([]);
+    expect(result.tools).toEqual([
+      {
+        file: 'tools/orders.ts',
+        definition: { ...ORDERS_DEFINITION, identity: { secret: 'ORDERS_IDENTITY_KEY' } },
+      },
+    ]);
+  });
+
   it('gives one entry for a tool two agents import', async () => {
     const root = await project({
       'agents/a.ts': toolAgent('a'),

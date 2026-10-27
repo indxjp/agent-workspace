@@ -12,8 +12,9 @@
  *   the model imports it.
  *
  * Every citation is validated while rendering: a `doc` citation's file must exist and its
- * `#anchor` must be a heading of that file; a `ts` citation's file must exist and contain its
- * `#symbol` as a word. `--write` rewrites the outputs; `--check` renders into memory (and the
+ * `#anchor` must be a heading of that file; a `ts` citation's file must exist and, for source
+ * files, declare its `#symbol` (see `declaredNames`: a mention in a comment, an import or a use
+ * does not count); a data file (`.sql`, `.tf`, `.json`) must contain it as a word. `--write` rewrites the outputs; `--check` renders into memory (and the
  * Lean outputs into a temporary directory) and fails on any difference, as `docs:check` does.
  * `--no-lake` skips the two Lean executables and renders from the committed JSON.
  */
@@ -23,6 +24,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
+
+import ts from 'typescript';
 
 import { FORMAL_ROOT, REPOSITORY_ROOT, runLake } from './lake.mjs';
 
@@ -121,14 +125,121 @@ function escapeRegExp(symbol) {
   return symbol.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
-/** @param {readonly Entry[]} entries @returns {string[]} */
-function citationFailures(entries) {
+const SOURCE_FILE = /\.[cm]?[jt]sx?$/u;
+
+const DATABASE_OBJECT_BUILDERS =
+  /^(?:check|index|uniqueIndex|unique|primaryKey|pgTable|pgEnum|oneOf)$/u;
+
+/**
+ * A string literal that names a database object in a Drizzle schema: the first argument of
+ * `check('name', …)`, `index('name')`, `uniqueIndex('name')`, or the `name` of a `foreignKey({…})`.
+ * @param {ts.StringLiteralLike} node
+ */
+function namesDatabaseObject(node) {
+  const parent = node.parent;
+  if (ts.isCallExpression(parent)) {
+    return (
+      DATABASE_OBJECT_BUILDERS.test(parent.expression.getText()) && parent.arguments[0] === node
+    );
+  }
+  return (
+    ts.isPropertyAssignment(parent) && ts.isIdentifier(parent.name) && parent.name.text === 'name'
+  );
+}
+
+/**
+ * What a source file declares, read from its syntax tree so that comments, imports and plain uses
+ * never count. `names` holds, at any depth, the name of every function, class, interface, type
+ * alias, enum, namespace and variable binding, every member of a declared type (class, interface,
+ * type literal, enum), every local export name (`export { a as b }`), every property of an object
+ * literal (a composition root's wiring, a table's columns), and every string literal that
+ * names a database object (`namesDatabaseObject`). `strings` holds the text
+ * of every string literal, which the few citations of a CLI command or flag (`runs wait`) resolve
+ * against because they are not identifiers.
+ * @param {string} file
+ * @param {string} source
+ * @returns {{ names: Set<string>, strings: Set<string> }}
+ */
+function declaredNames(file, source) {
+  const names = new Set();
+  const strings = new Set();
+  /** @param {ts.Node | undefined} name */
+  const addName = (name) => {
+    if (name === undefined) return;
+    if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isPrivateIdentifier(name)) {
+      names.add(name.text);
+    } else if (ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)) {
+      for (const element of name.elements) {
+        if (ts.isBindingElement(element)) addName(element.name);
+      }
+    }
+  };
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  /** @param {ts.Node} node */
+  const visit = (node) => {
+    if (ts.isStringLiteralLike(node)) strings.add(node.text);
+    if (
+      ts.isFunctionDeclaration(node) ||
+      ts.isClassDeclaration(node) ||
+      ts.isInterfaceDeclaration(node) ||
+      ts.isTypeAliasDeclaration(node) ||
+      ts.isEnumDeclaration(node) ||
+      ts.isModuleDeclaration(node) ||
+      ts.isVariableDeclaration(node) ||
+      ts.isPropertyDeclaration(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node) ||
+      ts.isPropertySignature(node) ||
+      ts.isMethodSignature(node) ||
+      ts.isEnumMember(node)
+    ) {
+      addName(node.name);
+    } else if (ts.isExportSpecifier(node)) {
+      names.add(node.name.text);
+    } else if (ts.isPropertyAssignment(node) || ts.isShorthandPropertyAssignment(node)) {
+      addName(node.name);
+    } else if (ts.isStringLiteralLike(node) && namesDatabaseObject(node)) {
+      names.add(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return { names, strings };
+}
+
+/** @type {Map<string, { names: Set<string>, strings: Set<string> }>} */
+const declarationCache = new Map();
+
+/**
+ * @param {string} file
+ * @param {string} source
+ * @param {string} fragment
+ */
+function isCitedSymbolDeclared(file, source, fragment) {
+  if (!SOURCE_FILE.test(file)) {
+    return new RegExp(`(?<![\\w$])${escapeRegExp(fragment)}(?![\\w$])`, 'u').test(source);
+  }
+  let declared = declarationCache.get(source);
+  if (declared === undefined) {
+    declared = declaredNames(file, source);
+    declarationCache.set(source, declared);
+  }
+  return /^[\w$]+$/u.test(fragment) ? declared.names.has(fragment) : declared.strings.has(fragment);
+}
+
+/**
+ * @param {readonly Entry[]} entries
+ * @param {(relative: string) => string | null} [read]
+ * @returns {string[]}
+ */
+export function citationFailures(entries, read = readCited) {
   /** @type {string[]} */
   const failures = [];
   for (const entry of entries) {
     for (const citation of entry.doc) {
       const { file, fragment } = splitCitation(citation);
-      const source = readCited(file);
+      const source = read(file);
       if (source === null) failures.push(`${entry.name}: doc ${citation}: no such file`);
       else if (fragment !== '' && !headingSlugs(source).has(fragment)) {
         failures.push(`${entry.name}: doc ${citation}: no heading with that anchor`);
@@ -136,13 +247,10 @@ function citationFailures(entries) {
     }
     for (const citation of entry.ts) {
       const { file, fragment } = splitCitation(citation);
-      const source = readCited(file);
+      const source = read(file);
       if (source === null) failures.push(`${entry.name}: ts ${citation}: no such file`);
-      else if (
-        fragment !== '' &&
-        !new RegExp(`(?<![\\w$])${escapeRegExp(fragment)}(?![\\w$])`, 'u').test(source)
-      ) {
-        failures.push(`${entry.name}: ts ${citation}: symbol not found in the file`);
+      else if (fragment !== '' && !isCitedSymbolDeclared(file, source, fragment)) {
+        failures.push(`${entry.name}: ts ${citation}: symbol not declared in the file`);
       }
     }
   }
@@ -493,4 +601,10 @@ async function main() {
   );
 }
 
-await main();
+const invokedPath = process.argv[1];
+if (
+  invokedPath !== undefined &&
+  pathToFileURL(path.resolve(invokedPath)).href === import.meta.url
+) {
+  await main();
+}

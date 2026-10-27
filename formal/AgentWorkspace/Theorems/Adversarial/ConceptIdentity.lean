@@ -37,13 +37,13 @@ theorem foreign_principal_cannot_mint_a_browser_token (st : Er.Core.State)
     (hp : p ∈ st .workspacePrincipals) (hid : p.get "id" = t.get "minted_by_principal_id") :
     p.get "workspace_id" = t.get "workspace_id" :=
   paired_parent_same_workspace (t := .browserTokens)
-    (fk := fkOf .browserTokens "browser_tokens_minter_workspace_fk") hc (by decide) (by decide) ht
-    (not_null_present (t := .browserTokens) hc (by decide) ht) hp hid
+    (fk := fkOf .browserTokens "browser_tokens_minter_workspace_fk") hc (by decide +kernel) (by decide +kernel) ht
+    (not_null_present (t := .browserTokens) hc (by decide +kernel) ht) hp hid
 
 example : (⟨[("id", "p2"), ("workspace_id", "w1"), ("kind", "api_key"), ("api_key_id", "k1"),
     ("activated_at", "1000"), ("acts_for_principal_id", "p1"), ("created_at", "1000")]⟩ : Row).get "workspace_id" = some "w1" :=
   foreign_principal_cannot_mint_a_browser_token W w_consistent (t := (W .browserTokens).head!)
-    (by decide) (by decide) (by decide)
+    (by decide +kernel) (by decide +kernel) (by decide +kernel)
 
 /-- Whatever run id a run-scoped browser-token row names, in every consistent state the run with
 that id belongs to the token's workspace: a token cannot be scoped to another workspace's run. -/
@@ -54,15 +54,15 @@ theorem foreign_run_cannot_scope_a_browser_token (st : Er.Core.State)
     (hset : (t.get "run_id").isSome = true) (hr : run ∈ st .runs)
     (hid : run.get "id" = t.get "run_id") : run.get "workspace_id" = t.get "workspace_id" := by
   have hws : (t.get "workspace_id").isSome = true := by
-    have := not_null_present (t := .browserTokens) (cols := ["workspace_id"]) hc (by decide) ht
+    have := not_null_present (t := .browserTokens) (cols := ["workspace_id"]) hc (by decide +kernel) ht
     simpa [Row.present] using this
   exact paired_parent_same_workspace (t := .browserTokens)
-    (fk := fkOf .browserTokens "browser_tokens_run_workspace_fk") hc (by decide) (by decide) ht
+    (fk := fkOf .browserTokens "browser_tokens_run_workspace_fk") hc (by decide +kernel) (by decide +kernel) ht
     (by simp [fkOf, Row.present, catalogue, TableSpec.foreignKey?, hset, hws]) hr hid
 
 example : ((W .runs).head!).get "workspace_id" = ((W .browserTokens).head!).get "workspace_id" :=
-  foreign_run_cannot_scope_a_browser_token W w_consistent (by decide) (by decide) (by decide)
-    (by decide)
+  foreign_run_cannot_scope_a_browser_token W w_consistent (by decide +kernel) (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)
 
 /-- Whatever session id a session-scoped browser-token row names, in every consistent state the
 session with that id belongs to the token's workspace. -/
@@ -73,16 +73,16 @@ theorem foreign_session_cannot_scope_a_browser_token (st : Er.Core.State)
     (hset : (t.get "session_id").isSome = true) (hs : s ∈ st .sessions)
     (hid : s.get "id" = t.get "session_id") : s.get "workspace_id" = t.get "workspace_id" := by
   have hws : (t.get "workspace_id").isSome = true := by
-    have := not_null_present (t := .browserTokens) (cols := ["workspace_id"]) hc (by decide) ht
+    have := not_null_present (t := .browserTokens) (cols := ["workspace_id"]) hc (by decide +kernel) ht
     simpa [Row.present] using this
   exact paired_parent_same_workspace (t := .browserTokens)
-    (fk := fkOf .browserTokens "browser_tokens_session_workspace_fk") hc (by decide) (by decide)
+    (fk := fkOf .browserTokens "browser_tokens_session_workspace_fk") hc (by decide +kernel) (by decide +kernel)
     ht (by simp [fkOf, Row.present, catalogue, TableSpec.foreignKey?, hset, hws]) hs hid
 
 example : ((W .sessions).head!).get "workspace_id" =
     ((W .browserTokens).getD 1 default).get "workspace_id" :=
-  foreign_session_cannot_scope_a_browser_token W w_consistent (by decide) (by decide) (by decide)
-    (by decide)
+  foreign_session_cannot_scope_a_browser_token W w_consistent (by decide +kernel) (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)
 
 /-- Whatever membership id a principal row names, in every consistent state the membership with
 that id belongs to the principal's workspace: no principal is backed by another workspace's
@@ -95,17 +95,17 @@ theorem foreign_membership_cannot_back_a_principal (st : Er.Core.State)
     (hid : m.get "id" = p.get "membership_id") : m.get "workspace_id" = p.get "workspace_id" := by
   have hws : (p.get "workspace_id").isSome = true := by
     have := not_null_present (t := .workspacePrincipals) (cols := ["workspace_id"]) hc
-      (by decide) hp
+      (by decide +kernel) hp
     simpa [Row.present] using this
   exact paired_parent_same_workspace (t := .workspacePrincipals)
     (fk := fkOf .workspacePrincipals "workspace_principals_membership_workspace_fk") hc
-    (by decide) (by decide) hp
+    (by decide +kernel) (by decide +kernel) hp
     (by simp [fkOf, Row.present, catalogue, TableSpec.foreignKey?, hset, hws]) hm hid
 
 example : ((W .memberships).head!).get "workspace_id" =
     ((W .workspacePrincipals).head!).get "workspace_id" :=
-  foreign_membership_cannot_back_a_principal W w_consistent (by decide) (by decide) (by decide)
-    (by decide)
+  foreign_membership_cannot_back_a_principal W w_consistent (by decide +kernel) (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)
 
 /-- Whatever API-key id a principal row names, in every consistent state the key with that id
 belongs to the principal's workspace. -/
@@ -117,17 +117,17 @@ theorem foreign_api_key_cannot_back_a_principal (st : Er.Core.State)
     (hid : k.get "id" = p.get "api_key_id") : k.get "workspace_id" = p.get "workspace_id" := by
   have hws : (p.get "workspace_id").isSome = true := by
     have := not_null_present (t := .workspacePrincipals) (cols := ["workspace_id"]) hc
-      (by decide) hp
+      (by decide +kernel) hp
     simpa [Row.present] using this
   exact paired_parent_same_workspace (t := .workspacePrincipals)
     (fk := fkOf .workspacePrincipals "workspace_principals_api_key_workspace_fk") hc
-    (by decide) (by decide) hp
+    (by decide +kernel) (by decide +kernel) hp
     (by simp [fkOf, Row.present, catalogue, TableSpec.foreignKey?, hset, hws]) hk hid
 
 example : ((W .apiKeys).head!).get "workspace_id" =
     ((W .workspacePrincipals).getD 1 default).get "workspace_id" :=
-  foreign_api_key_cannot_back_a_principal W w_consistent (by decide) (by decide) (by decide)
-    (by decide)
+  foreign_api_key_cannot_back_a_principal W w_consistent (by decide +kernel) (by decide +kernel) (by decide +kernel)
+    (by decide +kernel)
 
 /-- A principal row in one workspace that names another workspace's membership makes the state
 inconsistent: the forged row is refused. -/
@@ -160,7 +160,7 @@ theorem browser_token_acts_only_on_its_own_scoped_row (t : BrowserToken) (row : 
   cases ht : t.scope <;> cases row <;> simp [scopeOpen, ScopedRow.scope] <;> intros <;> simp_all
 
 example : (ScopedRow.run ⟨"r"⟩ .running).scope = advToken.scope :=
-  browser_token_acts_only_on_its_own_scoped_row _ _ advMinter (.membership true) 100 (by decide)
+  browser_token_acts_only_on_its_own_scoped_row _ _ advMinter (.membership true) 100 (by decide +kernel)
 
 /-- A token minted for run `R` cannot act on any other run `R′`, whatever that run's status, the
 minter, or the instant. -/
@@ -181,7 +181,7 @@ example : browserTokenAdmitted advToken (some (.run ⟨"r2"⟩ .running)) advMin
       (.membership true) 100 = false ∧
     browserTokenAdmitted advToken (some (.run ⟨"r"⟩ .running)) advMinter
       (.membership true) 100 = true :=
-  ⟨token_for_one_run_cannot_act_on_another_run _ ⟨"r"⟩ ⟨"r2"⟩ rfl (by decide) _ _ _ _, by decide⟩
+  ⟨token_for_one_run_cannot_act_on_another_run _ ⟨"r"⟩ ⟨"r2"⟩ rfl (by decide +kernel) _ _ _ _, by decide⟩
 
 /-- A token minted for session `S` cannot act on any other session `S′`. -/
 @[aw_spec (tier := T3) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
@@ -201,7 +201,7 @@ example : browserTokenAdmitted { advToken with scope := .session ⟨"s"⟩ }
       (some (.session ⟨"s2"⟩ .active)) advMinter (.membership true) 100 = false ∧
     browserTokenAdmitted { advToken with scope := .session ⟨"s"⟩ }
       (some (.session ⟨"s"⟩ .active)) advMinter (.membership true) 100 = true :=
-  ⟨token_for_one_session_cannot_act_on_another_session _ ⟨"s"⟩ ⟨"s2"⟩ rfl (by decide) _ _ _ _,
+  ⟨token_for_one_session_cannot_act_on_another_session _ ⟨"s"⟩ ⟨"s2"⟩ rfl (by decide +kernel) _ _ _ _,
     by decide⟩
 
 /-- Whatever principal row a caller gets a browser token checked against, an admitted token acts
@@ -222,9 +222,9 @@ example : browserTokenAdmitted advToken (some (.run ⟨"r"⟩ .running))
     browserTokenAdmitted advToken (some (.run ⟨"r"⟩ .running))
       { advMinter with id := ⟨"p2"⟩ } (.membership true) 100 = false ∧
     advMinter.workspace = advToken.workspace :=
-  ⟨by decide, by decide,
+  ⟨by decide +kernel, by decide +kernel,
     (browser_token_acts_only_as_its_minter_in_its_workspace _ (some (.run ⟨"r"⟩ .running)) _
-      (.membership true) 100 (by decide)).2⟩
+      (.membership true) 100 (by decide +kernel)).2⟩
 
 /-! ## A key never outlives the principal it acts for (issue #509, S1-24) -/
 
@@ -270,7 +270,7 @@ example : apiKeyAdmitted localKey localKeyPrincipal 100 (some ⟨admin none, tru
     apiKeyAdmitted localKey localKeyPrincipal 100 (some ⟨admin (some 50), true⟩) = false ∧
     apiKeyAdmitted localKey localKeyPrincipal 100 (some ⟨admin none, false⟩) = false ∧
     apiKeyAdmitted localKey localKeyPrincipal 100 none = false :=
-  ⟨by decide,
+  ⟨by decide +kernel,
     (key_never_outlives_the_principal_it_acts_for _ _ _ rfl _
       (fun t h => by cases h; exact Or.inl rfl) (.apiKey (some localKey)) 100).1,
     (key_never_outlives_the_principal_it_acts_for _ _ _ rfl _
@@ -283,6 +283,6 @@ does not keep it admitted either. -/
 example : apiKeyAdmitted localKey localKeyPrincipal 100
       (some ⟨{ admin none with workspace := ⟨"w2"⟩ }, true⟩) = false ∧
     apiKeyAdmitted localKey localKeyPrincipal 100
-      (some ⟨{ admin none with source := .apiKey ⟨"k9"⟩ }, true⟩) = false := by decide
+      (some ⟨{ admin none with source := .apiKey ⟨"k9"⟩ }, true⟩) = false := by decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.ConceptIdentity

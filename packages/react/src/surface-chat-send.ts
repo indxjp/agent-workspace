@@ -29,6 +29,7 @@ import type {
   SurfaceSessionResponse,
 } from '@indx-workspace/contracts/surfaces';
 
+import { prepareAttachment } from './attachment-image.js';
 import type { Run, Speaker } from './run-model.js';
 import type { SurfaceStrings } from './locale.js';
 import {
@@ -42,7 +43,9 @@ import {
 import {
   openSurfaceSession,
   postRunFeedback,
+  uploadSurfaceAttachment,
   type RunFeedbackResult,
+  type SurfaceAttachmentResult,
   type SurfaceSessionResult,
 } from './session.js';
 import {
@@ -66,6 +69,10 @@ export interface SurfaceChatTransport {
     runId: string,
     request: RunFeedbackRequest,
   ) => Promise<RunFeedbackResult>;
+  readonly uploadAttachment: (
+    session: SurfaceSessionResponse,
+    file: File,
+  ) => Promise<SurfaceAttachmentResult>;
   readonly clientFor: (session: SurfaceSessionResponse) => AgentWorkspaceClient;
 }
 
@@ -87,6 +94,8 @@ export function browserSurfaceChatTransport(
         baseUrl,
       ),
     postFeedback: (token, runId, request) => postRunFeedback(runId, token, request, fetch, baseUrl),
+    uploadAttachment: (session, file) =>
+      uploadSurfaceAttachment(session.sessionId, session.token, file, fetch, baseUrl),
     clientFor: (session) =>
       createClient({
         baseUrl: baseUrl ?? window.location.origin,
@@ -203,24 +212,54 @@ async function bootstrap(
     : new SurfaceChatRefusal(result.message, null, null);
 }
 
+/** An upload answered `401`: the same sign as a start's, that the session's token expired. */
+class TokenExpired extends Error {}
+
 async function startRun(
   driver: SurfaceChatDriver,
   prompt: string,
+  files: readonly File[],
 ): Promise<{ readonly client: AgentWorkspaceClient; readonly runId: string }> {
+  // A resumed session keeps its uploads, so a retry after `401` sends only what is still missing.
+  const uploaded = new Map<File, { readonly sessionId: string; readonly fileId: string }>();
+  const upload = async (session: SurfaceSessionResponse, file: File): Promise<string> => {
+    const kept = uploaded.get(file);
+    if (kept?.sessionId === session.sessionId) return kept.fileId;
+    // Downscaled here, not when picked, so a Send pressed mid-encode still carries the file.
+    const result = await driver.transport.uploadAttachment(session, await prepareAttachment(file));
+    if (result.kind === 'uploaded') {
+      uploaded.set(file, { sessionId: session.sessionId, fileId: result.attachment.fileId });
+      return result.attachment.fileId;
+    }
+    if (result.kind === 'problem') {
+      if (result.status === 401) throw new TokenExpired();
+      throw new SurfaceChatRefusal(result.message, result.code, result.retryAfterSeconds);
+    }
+    throw new SurfaceChatRefusal(
+      result.unreachable === true ? driver.strings.unreachable : result.message,
+      null,
+      null,
+    );
+  };
   const attempt = async (
     session: SurfaceSessionResponse,
   ): Promise<{ readonly client: AgentWorkspaceClient; readonly runId: string }> => {
     const client = driver.transport.clientFor(session);
+    const attachments: { fileId: string }[] = [];
+    for (const file of files) attachments.push({ fileId: await upload(session, file) });
     const started = await client.runs.start(session.agentId, {
       prompt,
       sessionId: session.sessionId,
+      ...(attachments.length === 0 ? {} : { attachments }),
     });
     return { client, runId: started.run.id };
   };
   try {
     return await attempt(driver.session.current ?? (await bootstrap(driver)));
   } catch (error) {
-    if (!(error instanceof ApiProblemError) || error.status !== 401) throw error;
+    const expired =
+      error instanceof TokenExpired || (error instanceof ApiProblemError && error.status === 401);
+    if (!expired) throw error;
     // The session's token expired: open the session once more, and send the message there.
     return attempt(await bootstrap(driver));
   }
@@ -272,15 +311,17 @@ async function followRun(
   }
 }
 
-/** Send the visitor's message `prompt` and follow its run to the end of its stream. */
+/** Send the visitor's message `prompt` with `files` attached, and follow its run to the end. */
 export async function sendSurfaceMessage(
   driver: SurfaceChatDriver,
   messageId: string,
   prompt: string,
+  files: readonly File[] = [],
 ): Promise<void> {
-  driver.show(withVisitorMessage(driver.current(), driver.agentName, messageId, prompt));
+  const shown = files.length === 0 ? prompt : `${prompt}\n\n${files.map((f) => f.name).join('\n')}`;
+  driver.show(withVisitorMessage(driver.current(), driver.agentName, messageId, shown));
   try {
-    const { client, runId } = await startRun(driver, prompt);
+    const { client, runId } = await startRun(driver, prompt, files);
     appendSurfaceRun(driver.history, driver.surfaceName, driver.agentName, runId);
     await followRun(driver, client, runId);
   } catch (error) {

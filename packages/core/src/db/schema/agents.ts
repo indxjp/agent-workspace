@@ -8,17 +8,18 @@
  * connectors) needs `agent_files` / `agent_skills` / `agent_mcp_servers`, which do not exist yet,
  * so it alone is still absent here.
  *
- * **The built-in General agent is an ordinary row in this table** (§19.5 rule 3). There is no
- * `is_builtin` column, no reserved id and no branch anywhere that treats one name specially.
- * The seed inserts it exactly the way the UI would insert a user-created agent, and
- * `seed.test.ts` asserts that the row is distinguishable from a user-created agent only by its
- * name. If a later wave needs to know "is this the default agent", the answer is a workspace
- * setting pointing at an agent id — not a flag on the agent.
+ * **The built-in General agent is an ordinary row in this table** (§19.5 rule 3). It has no
+ * reserved id and no branch treats its name specially: the seed inserts it exactly the way the UI
+ * would insert a user-created agent, and `seed.test.ts` asserts that the row is distinguishable
+ * from a user-created agent only by its name. Its `builtin_key` is NULL. The one agent the
+ * platform provisions and people cannot edit, the Builder, is marked by `builtin_key`
+ * (ADR-0108 B-D1); "which agent is the default" is still a workspace setting, not a flag here.
  */
 import {
   check,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -33,6 +34,9 @@ import {
   AGENT_PERMISSION_KEYS,
   AgentPermissionsSchema,
   AgentToolPermissionModeSchema,
+  BUILTIN_AGENT_KEYS,
+  BuiltinAgentKeySchema,
+  type BuiltinAgentKey,
 } from '@indx-workspace/contracts/agents';
 import {
   ENGINE_CATALOGUE,
@@ -202,6 +206,11 @@ export function parseAgentPolicy(value: unknown): AgentStoredPolicy | null {
   return value === null || value === undefined ? null : AgentStoredPolicy.parse(value);
 }
 
+/** Parse an `agents.builtin_key` read from the database; NULL stays `undefined` (R-15 §4). */
+export function parseBuiltinKey(value: unknown): BuiltinAgentKey | undefined {
+  return value === null || value === undefined ? undefined : BuiltinAgentKeySchema.parse(value);
+}
+
 export const agents = pgTable(
   'agents',
   {
@@ -271,6 +280,13 @@ export const agents = pgTable(
     createdBy: uuid('created_by'),
     ownerPrincipalId: uuid('owner_principal_id').notNull(),
     /**
+     * Which built-in agent this row is, or NULL for every ordinary agent. Unique per workspace
+     * where set (`agents_workspace_builtin_key`), so a workspace holds at most one of each. Set
+     * in the insert that creates the row and never changed. No CHECK: a second key would need a
+     * DROP CONSTRAINT migration, and {@link parseBuiltinKey} fails closed on read.
+     */
+    builtinKey: text('builtin_key', { enum: BUILTIN_AGENT_KEYS }),
+    /**
      * When first-run setup last configured and tested this agent, or `NULL` for an agent setup never
      * touched (issue #393, PR #403 review). The composer selects the workspace's most recently
      * configured one before the user chooses an agent. Recorded on the agent rather than as an id
@@ -286,11 +302,37 @@ export const agents = pgTable(
      * `agents_materialised_version_fk`.
      */
     materialisedVersionId: uuid('materialised_version_id'),
+    /**
+     * Lineage of an agent made by an agent (issue #1851): the creating agent, the version of it that
+     * was running and the run that saved this row. All NULL for a person-made agent, and for every
+     * row that existed before the columns did (no backfill). `created_by` above stays the *user*.
+     *
+     * The single-column reference carries `ON DELETE SET NULL` and the composite
+     * `agents_created_by_agent_workspace_fk` below the tenant pairing, the way
+     * `model_connection_id` does: a composite `SET NULL` would null the NOT NULL `workspace_id` too.
+     * Deleting the creator therefore keeps the version and run, which still say how the row was
+     * made, and `agents_created_by_agent_lineage_check` allows exactly that state.
+     */
+    createdByAgentId: uuid('created_by_agent_id').references((): AnyPgColumn => agents.id, {
+      onDelete: 'set null',
+    }),
+    createdByAgentVersion: integer('created_by_agent_version'),
+    /** A run id is text and carries no reference: runs are purged on their own schedule. */
+    createdByRunId: text('created_by_run_id'),
+    /**
+     * The durable archived state, with the semantics of `projects.archived_at`: NULL means active,
+     * and no CHECK ties it to `created_at`. Nothing writes it yet; the auto-archive sweep and the
+     * restore route do (issue #1851, slice 4).
+     */
+    archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex('agents_workspace_name_key').on(table.workspaceId, table.name),
+    uniqueIndex('agents_workspace_builtin_key')
+      .on(table.workspaceId, table.builtinKey)
+      .where(sql`${table.builtinKey} is not null`),
     // The target a tenant-paired reference to an agent needs. `id` is already the primary key,
     // so this adds no new restriction on the data; it exists because PostgreSQL will only
     // accept `REFERENCES agents (id, workspace_id)` when (id, workspace_id) is unique.
@@ -303,6 +345,7 @@ export const agents = pgTable(
     index('agents_model_connection_idx').on(table.modelConnectionId),
     index('agents_runtime_profile_idx').on(table.runtimeProfileId),
     index('agents_owner_principal_idx').on(table.ownerPrincipalId),
+    index('agents_created_by_agent_idx').on(table.createdByAgentId),
     // §25: an agent must not be able to spend another workspace's provider credential. The
     // single-column reference above says the connection exists; this one says it belongs to
     // *this* workspace. `MATCH SIMPLE` (PostgreSQL's default) does not enforce a composite
@@ -341,7 +384,20 @@ export const agents = pgTable(
       foreignColumns: materialisedVersionForeignColumns(),
       name: 'agents_materialised_version_fk',
     }),
+    // Lineage is tenant-paired: the creator must be an agent of this workspace. MATCH SIMPLE leaves
+    // NULL unchecked, so a deleted creator (`SET NULL` above) is not an error here.
+    foreignKey({
+      columns: [table.createdByAgentId, table.workspaceId],
+      foreignColumns: [table.id, table.workspaceId],
+      name: 'agents_created_by_agent_workspace_fk',
+    }),
     check('agents_name_not_blank', sql`length(btrim(${table.name})) > 0`),
+    // The version and the run are both present or both absent, and a creator id needs them. The
+    // creator id alone may be NULL (its agent was deleted); the other two may never be half set.
+    check(
+      'agents_created_by_agent_lineage_check',
+      sql`(${table.createdByAgentVersion} is null) = (${table.createdByRunId} is null) and (${table.createdByAgentId} is null or ${table.createdByAgentVersion} is not null)`,
+    ),
   ],
 );
 

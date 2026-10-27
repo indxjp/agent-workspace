@@ -21,7 +21,7 @@ const MINIMUM_SECRET_LENGTH = 4;
 const SECRET_NAME = /PASSWORD|PASSPHRASE|SECRET|TOKEN|CREDENTIAL|KEY$/iu;
 
 /** `scheme://userinfo@` — greedy up to the authority's last `@`, so `p@ss` cannot split it. */
-const URL_USERINFO = /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/giu;
+const URL_USERINFO = /([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/giu;
 
 function userinfoPasswords(text: string): string[] {
   const passwords: string[] = [];

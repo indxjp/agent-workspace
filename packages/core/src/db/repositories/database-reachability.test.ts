@@ -199,7 +199,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 /** `…/packages/core/src/db/repositories/<this file>` → the repository root, six levels up. */
 const repoRoot = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..', '..', '..');
@@ -216,8 +216,15 @@ const posix = (value: string): string => value.split(path.sep).join('/');
  */
 const realRepoRoot = realpathSync(repoRoot);
 
-/** One absolute path, resolved through any symlinks, as a repository-relative posix path. */
-function repoRelativeReal(absolute: string): string {
+/**
+ * One absolute path, resolved through any symlinks, as a repository-relative posix path.
+ *
+ * Remembered per path: the tree does not change while this file runs, and the same few thousand
+ * paths are asked about once per project and once per specifier.
+ */
+const repoRelativeReal = memoised(resolveRepoRelativeReal);
+
+function resolveRepoRelativeReal(absolute: string): string {
   let real = absolute;
   try {
     real = realpathSync(absolute);
@@ -232,9 +239,7 @@ function repoRelativeReal(absolute: string): string {
  * The package that owns the database layer.
  *
  * A file inside it is on the same side of the module boundary as the layer, and its imports into
- * the layer's *source* are that package's own business — `packages/core/src/schemas.ts` imports the
- * `AgentPermissions` Zod schema from `db/schema/agents.ts` rather than restating §17 Step 4 twice,
- * and that is the shape it is meant to be. What this gate constrains is every file *outside* this
+ * the layer's *source* are that package's own business, and that is the shape it is meant to be. What this gate constrains is every file *outside* this
  * directory, which can reach the layer only through the `exports` map read below — and, for every
  * file including this package's own, a path into the layer's build output.
  */
@@ -288,6 +293,8 @@ const NON_MODULE_EXTENSIONS = new Set([
   '.md',
   '.mdx',
   '.npmrc',
+  // A manual a tool reads (tests/gallery/manual-search/data/manuals).
+  '.pdf',
   '.png',
   '.ps1',
   '.sh',
@@ -801,6 +808,38 @@ function specifiersIn(relative: string): ReadModule {
   return { specifiers: found, unvouched };
 }
 
+/** One answer per argument, computed the first time it is asked for. */
+function memoised<T>(answer: (key: string) => T): (key: string) => T {
+  const known = new Map<string, T>();
+  return (key) => {
+    if (!known.has(key)) known.set(key, answer(key));
+    return known.get(key) as T;
+  };
+}
+
+/**
+ * `ts.sys`, with the filesystem questions the resolver asks remembered. Every lookup below — one
+ * per project, per specifier, per string handed to an unvouched call — probes the same
+ * `node_modules` directories and the same candidate filenames, and the tree does not change while
+ * this file runs, so the second answer is the first one. The answers are the filesystem's; nothing
+ * is assumed about which probes matter.
+ *
+ * Existence, real paths and listings only — never file contents, which would keep every file the
+ * 49 programs read alive for the whole run.
+ */
+const probes = {
+  fileExists: memoised((fileName) => ts.sys.fileExists(fileName)),
+  directoryExists: memoised((directory) => ts.sys.directoryExists(directory)),
+  realpath: memoised((file) => (ts.sys.realpath ?? ((same: string): string => same))(file)),
+  getDirectories: memoised((directory) => ts.sys.getDirectories(directory)),
+};
+const fileSystem: ts.ModuleResolutionHost = {
+  ...probes,
+  readFile: (fileName): string | undefined => ts.sys.readFile(fileName),
+  getCurrentDirectory: (): string => ts.sys.getCurrentDirectory(),
+  useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
+};
+
 /** The host `ts.getParsedCommandLineOfConfigFile` reads a `tsconfig.json` through. */
 const parseConfigHost: ts.ParseConfigFileHost = {
   useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
@@ -854,7 +893,11 @@ function parseProject(relative: string): Project {
   if (parsed === undefined) {
     throw new Error(`${relative} did not parse, so this gate cannot resolve anything under it.`);
   }
-  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  // Each program parses its own files and is dropped as soon as its membership is read. Sharing
+  // parsed trees between programs was measured faster but kept every program reachable through
+  // them, and the fork ran out of heap; one program alive at a time is the memory bound.
+  const host = Object.assign(ts.createCompilerHost(parsed.options), probes);
+  const program = ts.createProgram({ rootNames: parsed.fileNames, options: parsed.options, host });
   return {
     configPath: relative,
     options: parsed.options,
@@ -951,7 +994,7 @@ function resolvedFiles(from: string, specifier: string): readonly string[] {
       specifier,
       absolute,
       context.options,
-      ts.sys,
+      fileSystem,
       context.cache,
     );
     if (resolved.resolvedModule !== undefined) {
@@ -993,7 +1036,7 @@ function layerFileNamedBy(from: string, candidate: string): string | null {
       candidate,
       absolute,
       context.options,
-      ts.sys,
+      fileSystem,
       context.cache,
     );
     const file = resolved.resolvedModule?.resolvedFileName;
@@ -1260,8 +1303,11 @@ describe('no export subpath is a second door into the database layer', () => {
       throw new Error(`${OWNING_PACKAGE}tsconfig.json did not parse, so this gate cannot run.`);
     }
     // `include: ["src"]` is what that project compiles, so a `default` condition pointing into
-    // `dist/` is not in it. Each condition's own file is added as a root, and `allowJs` is turned
-    // on for the compiled halves, so the checker can be asked about the module a consumer loads.
+    // `dist/` is not in it. The program is rooted at each condition's own file alone — the checker
+    // follows their imports to every declaration site, so rooting it at the project's other ~230
+    // files (tests included) only made it parse and bind files nothing below asks about, which is
+    // what pushed this case past its timeout under coverage. `allowJs` is turned on for the
+    // compiled halves, so the checker can be asked about the module a consumer loads.
     const conditionRoots = allTargets.map((row) => {
       const absolute = path.join(repoRoot, row.target);
       if (!existsSync(absolute)) {
@@ -1274,10 +1320,22 @@ describe('no export subpath is a second door into the database layer', () => {
       }
       return absolute;
     });
-    const program = ts.createProgram({
-      rootNames: [...parsed.fileNames, ...conditionRoots],
-      options: { ...parsed.options, allowJs: true, checkJs: false, noEmit: true },
-    });
+    // A declaration in a dependency is never inside the layer, which is the only place this case
+    // looks, so a dependency's own source is handed to the compiler empty instead of being read,
+    // parsed and bound. The export surfaces pulled in through the storage and secrets subpaths
+    // reach AWS, Azure and gRPC SDKs, ~1,900 declaration files that nothing below asks about.
+    const options = { ...parsed.options, allowJs: true, checkJs: false, noEmit: true };
+    const host = ts.createCompilerHost(options);
+    const readSource = host.getSourceFile.bind(host);
+    host.getSourceFile = (
+      fileName,
+      languageVersionOrOptions,
+      ...rest
+    ): ts.SourceFile | undefined =>
+      posix(fileName).includes('/node_modules/')
+        ? ts.createSourceFile(fileName, '', languageVersionOrOptions, false, ts.ScriptKind.TS)
+        : readSource(fileName, languageVersionOrOptions, ...rest);
+    const program = ts.createProgram({ rootNames: conditionRoots, options, host });
     const checker = program.getTypeChecker();
     const byRelative = new Map<string, ts.SourceFile>();
     for (const file of program.getSourceFiles()) {
@@ -1471,6 +1529,14 @@ describe('the public barrel re-exports the repository layer and nothing else', (
 });
 
 describe('the declared escape refuses to load outside a test process', () => {
+  // The cold import of the database layer takes seconds under CI load, so it is paid here, under the
+  // hook timeout, and not inside the timed case. The import runs in a real test process, where the
+  // module's own guard passes; the case then drives the exported guard under a modified env.
+  let assertTestProcess: () => void;
+  beforeAll(async () => {
+    ({ assertTestProcess } = await import('./unscoped.js'));
+  }, 60_000);
+
   it('calls its guard as a top-level statement, so the refusal runs at import', () => {
     // Structural, and derived by parsing rather than by grepping: the guard is only a control if
     // it is invoked at module scope. A function that is exported and never called is the defect
@@ -1515,8 +1581,7 @@ describe('the declared escape refuses to load outside a test process', () => {
     }
   });
 
-  it('throws when the process has not identified itself as a test runner', async () => {
-    const { assertTestProcess } = await import('./unscoped.js');
+  it('throws when the process has not identified itself as a test runner', () => {
     const before = { vitest: process.env['VITEST'], node: process.env['NODE_ENV'] };
     try {
       delete process.env['VITEST'];

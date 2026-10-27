@@ -152,7 +152,7 @@ export type EngineSubagent = {
  * schema, and a copy of it here would be a copy this package has to keep current for every adapter
  * — while the *record keys* are what the port actually has to promise, because they are what an
  * engine's tool names are derived from. The adapter validates the values it is about to hand its
- * own SDK.
+ * own SDK. Adapters validate an entry with `McpServerRecordSchema` from `@indx-workspace/contracts`.
  */
 export type EnginePortableConfig = {
   readonly name: string;
@@ -206,6 +206,12 @@ export type EngineRunRequest = {
   /** The engine-native policy arm. `unknown` until this engine's adapter parses it. */
   readonly policy: unknown;
   readonly session: EngineSessionSelector;
+  /**
+   * A JSON Schema object (root `type: "object"`) the run's final answer must satisfy, or absent
+   * (ADR-0143). The engine enforces it; the contract validates its shape. An engine whose catalogue
+   * entry says `structuredOutput: false` refuses a request that carries one.
+   */
+  readonly outputSchema?: Readonly<Record<string, unknown>> | undefined;
   /**
    * The model connection, handed over programmatically — or `null` when the request did not
    * carry one.
@@ -372,6 +378,22 @@ export type EngineStartContext = {
   readonly sessionStore?: EngineSessionStore | undefined;
   /** Spec §14.3's `POST /interrupt`, and the only cancellation this port offers. */
   readonly abortController?: AbortController | undefined;
+  /** Where and with what the run's `search_files` tool asks the control plane (ADR-0147). */
+  readonly fileSearch?: EngineFileSearchLink | undefined;
+};
+
+/** The control plane's base URL and the run's own signed bearer; never a provider credential. */
+export type EngineFileSearchLink = { readonly baseUrl: string; readonly token: string };
+
+/**
+ * The tool call a run stopped on because it needs a person's approval (ADR-0145 D5).
+ * `canonicalCall` is the exact text an approval must match; it is the only place the call's
+ * arguments appear, so a consumer that logs `toolName` and `toolUseId` leaks none of them.
+ */
+export type EngineApprovalRequest = {
+  readonly toolName: string;
+  readonly toolUseId: string;
+  readonly canonicalCall: string;
 };
 
 /**
@@ -398,6 +420,11 @@ export type EngineConnection = {
   interrupt(): Promise<void>;
   /** See {@link SessionDurabilityVerdict}. Meaningful once `frames` has been exhausted. */
   sessionDurability(): SessionDurabilityVerdict;
+  /**
+   * The call the run stopped on for want of approval, or `null`. Absent on an engine that cannot
+   * stop for approval. Meaningful once `frames` has been exhausted.
+   */
+  approvalRequest?(): EngineApprovalRequest | null;
 };
 
 /**

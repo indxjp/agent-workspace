@@ -3,6 +3,14 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/cli`, with the
 same version (ADR-0082).
 
+## 0.6.11 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.
+
+## 0.6.10 — unreleased
+
+No changes to this package. Released in lock-step with the storage release (`AW_STORAGE_URL`, storage connections, catalog and downloads).
+
 ## 0.6.9 — 2026-10-14
 
 No changes to this package. Released alongside the install-live harness fix (#1128) so the gallery use cases are verified live against the published packages.

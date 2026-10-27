@@ -6,7 +6,7 @@
  * here, unchanged in member names, optionality and type text (`spec-transcription.test.ts`
  * checks this mechanically), as a `type` rather than an `interface` for the same reason
  * `driver.ts` gives for `RuntimeHandle` and `RuntimeCapabilities` — consistency with
- * `packages/core/src/types.ts`.
+ * `packages/run-protocol/src/types.ts`.
  *
  * Runtime HTTP boundaries validate values before constructing this type. The runner manager's
  * schema lives beside that boundary in `apps/runner/src/runtime-run-spec.ts`; this module remains

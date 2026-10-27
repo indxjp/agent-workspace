@@ -30,7 +30,7 @@ inputs:
   server:
     description: Cache server base URL (vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER).
     required: false
-    default: ""
+    default: ''
   audience:
     description: >-
       OIDC audience the cache server expects (deploy-gcp.sh AUDIENCE, which
@@ -61,10 +61,10 @@ runs:
           *) echo "::error::nx-remote-cache: unknown kind '$KIND' (expected write|read|off)"; exit 1 ;;
         esac
         # Defense in depth: the plan step already asserts this, and the
-        # server would refuse anyway — but a pull_request run must never even
-        # ASK for write.
-        if [ "$EVENT_NAME" = "pull_request" ] && [ "$KIND" = "write" ]; then
-          echo "::error::pull_request run resolved to remote-cache kind 'write' — refusing. See NX_REMOTE_CACHE_KIND in the workflow's env."
+        # server would refuse anyway — but a pull_request or merge-queue
+        # (merge_group) run must never even ASK for write.
+        if { [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "merge_group" ]; } && [ "$KIND" = "write" ]; then
+          echo "::error::$EVENT_NAME run resolved to remote-cache kind 'write' — refusing. See NX_REMOTE_CACHE_KIND in the workflow's env."
           exit 1
         fi
         [ -n "$SERVER" ] || local_only "no server URL"

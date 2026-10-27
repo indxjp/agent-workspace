@@ -6,6 +6,14 @@
     {
       "path": "/api/cron/retention",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/triggers",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/storage-cleanup",
+      "schedule": "0 5 * * *"
     }
   ]
 }

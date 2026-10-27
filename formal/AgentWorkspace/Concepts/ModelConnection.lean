@@ -82,11 +82,9 @@ structure ConfigRule where
   required : List ConfigField
   deriving DecidableEq, Repr
 
-/-- `MODEL_PROVIDER_CONFIG_RULES` (and the server's `PROVIDER_CONFIG_SPEC`): the Anthropic
-providers and OpenAI take an optional `baseUrl`, OpenAI-compatible requires it, and Azure OpenAI
-requires all three fields. -/
+/-- `MODEL_PROVIDER_CONFIG_RULES`: the Anthropic providers and OpenAI take an optional `baseUrl`,
+OpenAI-compatible requires it, and Azure OpenAI requires all three fields. -/
 @[aw_spec (ts := "packages/contracts/src/models.ts#MODEL_PROVIDER_CONFIG_RULES")
-  (ts := "apps/web/server/models/contract.ts#PROVIDER_CONFIG_SPEC")
   (doc := "docs/sdk/04-api-specification.md#53-model-connections-and-models--awmodels")]
 def rule : Provider → ConfigRule
   | .anthropic => ⟨[.baseUrl], []⟩

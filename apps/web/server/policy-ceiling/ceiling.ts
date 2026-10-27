@@ -23,7 +23,7 @@ import {
   type AgentPermissions,
   type AgentPolicy,
 } from '../../contracts/agents';
-import { problem, type ApiResult } from '../agents/handlers';
+import { problem, type ApiResult } from '../http/result';
 import { engineForStoredPolicy } from '../engines/session-engine';
 import type { DeploymentDefaultModels } from '../models/deployment-default';
 
@@ -49,6 +49,13 @@ export interface RequestCeiling {
 
 /** Binds the deployment's ceiling to a request; installed only when a ceiling is configured. */
 export type CeilingFor = (request: Request, workspaceId: string) => RequestCeiling;
+
+/**
+ * The deployment's policy ceiling (issue #535), as the agents and version runtimes carry it:
+ * `disabled` only when `AW_DEPLOYMENT_POLICY` is unset, never on a config error.
+ */
+export type DeploymentCeiling =
+  { readonly kind: 'enforced'; readonly ceilingFor: CeilingFor } | { readonly kind: 'disabled' };
 
 /** Who acts, as the composition root's principal identity reports it. */
 export interface CeilingActor {

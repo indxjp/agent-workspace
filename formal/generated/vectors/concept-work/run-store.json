@@ -78,6 +78,24 @@
     "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
     "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
     "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input": {"operations": [{"target": "awaiting_approval", "op": "finish", "at": 101}], "createdAt": 100},
+   "id": "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "queued",
+    "startedAt": null,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
    "input": {"operations": [{"target": "completed", "op": "finish", "at": 101}], "createdAt": 100},
    "id": "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"completed\"}]",
    "expected":
@@ -174,6 +192,26 @@
    {"operations": [{"op": "markRunning", "at": 101}, {"target": "running", "op": "finish", "at": 102}],
     "createdAt": 100},
    "id": "store/[{\"at\":101,\"op\":\"markRunning\"},{\"at\":102,\"op\":\"finish\",\"target\":\"running\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "running",
+    "startedAt": 101,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations": [{"op": "markRunning", "at": 101}, {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id": "store/[{\"at\":101,\"op\":\"markRunning\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
    "expected":
    {"wellFormed": true,
     "totalTokens": 0,
@@ -296,6 +334,28 @@
     "createdAt": 100},
    "id":
    "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"queued\"},{\"at\":102,\"op\":\"finish\",\"target\":\"running\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "queued",
+    "startedAt": null,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "queued", "op": "finish", "at": 101}, {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"queued\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
    "expected":
    {"wellFormed": true,
     "totalTokens": 0,
@@ -439,6 +499,28 @@
     "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
    "input":
    {"operations":
+    [{"target": "running", "op": "finish", "at": 101}, {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"running\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "queued",
+    "startedAt": null,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
     [{"target": "running", "op": "finish", "at": 101}, {"target": "completed", "op": "finish", "at": 102}],
     "createdAt": 100},
    "id":
@@ -503,6 +585,159 @@
     "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
     "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
    "input":
+   {"operations": [{"target": "awaiting_approval", "op": "finish", "at": 101}, {"op": "markRunning", "at": 102}],
+    "createdAt": 100},
+   "id": "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"markRunning\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "running",
+    "startedAt": 102,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "awaiting_approval", "op": "finish", "at": 101}, {"target": "queued", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"finish\",\"target\":\"queued\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "queued",
+    "startedAt": null,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "awaiting_approval", "op": "finish", "at": 101}, {"target": "running", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"finish\",\"target\":\"running\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "queued",
+    "startedAt": null,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "awaiting_approval", "op": "finish", "at": 101},
+     {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "queued",
+    "startedAt": null,
+    "endedAt": null,
+    "durationMs": null,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "awaiting_approval", "op": "finish", "at": 101}, {"target": "completed", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"finish\",\"target\":\"completed\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "completed",
+    "startedAt": 102,
+    "endedAt": 102,
+    "durationMs": 0,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "awaiting_approval", "op": "finish", "at": 101}, {"target": "failed", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"finish\",\"target\":\"failed\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "failed",
+    "startedAt": 102,
+    "endedAt": 102,
+    "durationMs": 0,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "awaiting_approval", "op": "finish", "at": 101}, {"target": "cancelled", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"awaiting_approval\"},{\"at\":102,\"op\":\"finish\",\"target\":\"cancelled\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "cancelled",
+    "startedAt": 102,
+    "endedAt": 102,
+    "durationMs": 0,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
    {"operations": [{"target": "completed", "op": "finish", "at": 101}, {"op": "markRunning", "at": 102}],
     "createdAt": 100},
    "id": "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"completed\"},{\"at\":102,\"op\":\"markRunning\"}]",
@@ -549,6 +784,28 @@
     "createdAt": 100},
    "id":
    "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"completed\"},{\"at\":102,\"op\":\"finish\",\"target\":\"running\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "completed",
+    "startedAt": 101,
+    "endedAt": 101,
+    "durationMs": 0,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "completed", "op": "finish", "at": 101}, {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"completed\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
    "expected":
    {"wellFormed": true,
     "totalTokens": 0,
@@ -693,6 +950,28 @@
     "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
     "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
    "input":
+   {"operations":
+    [{"target": "failed", "op": "finish", "at": 101}, {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"failed\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "failed",
+    "startedAt": 101,
+    "endedAt": 101,
+    "durationMs": 0,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
    {"operations": [{"target": "failed", "op": "finish", "at": 101}, {"target": "completed", "op": "finish", "at": 102}],
     "createdAt": 100},
    "id":
@@ -802,6 +1081,28 @@
     "createdAt": 100},
    "id":
    "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"cancelled\"},{\"at\":102,\"op\":\"finish\",\"target\":\"running\"}]",
+   "expected":
+   {"wellFormed": true,
+    "totalTokens": 0,
+    "status": "cancelled",
+    "startedAt": 101,
+    "endedAt": 101,
+    "durationMs": 0,
+    "costUsd": "0.000000",
+    "accountingState": "pending"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Invariants.ConceptWork.store_operations_preserve_run_checks",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_stamps_follow_the_status",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.store_durations_are_exact",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.finished_run_has_a_duration",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.new_run_is_queued_unpriced_and_well_formed",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.duration_needs_both_timestamps"],
+   "input":
+   {"operations":
+    [{"target": "cancelled", "op": "finish", "at": 101}, {"target": "awaiting_approval", "op": "finish", "at": 102}],
+    "createdAt": 100},
+   "id":
+   "store/[{\"at\":101,\"op\":\"finish\",\"target\":\"cancelled\"},{\"at\":102,\"op\":\"finish\",\"target\":\"awaiting_approval\"}]",
    "expected":
    {"wellFormed": true,
     "totalTokens": 0,

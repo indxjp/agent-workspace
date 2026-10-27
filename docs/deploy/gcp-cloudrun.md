@@ -78,10 +78,10 @@ inspect <reference>` prints each one's digest:
 gcloud auth configure-docker asia-northeast1-docker.pkg.dev
 AR=asia-northeast1-docker.pkg.dev/acme-prod/agent-workspace
 for name in web gateway runner runtime-claude-agent-sdk; do
-  digest=$(docker buildx imagetools inspect "ghcr.io/indxdev/agent-workspace/$name:0.2.1" \
+  digest=$(docker buildx imagetools inspect "ghcr.io/indxjp/agent-workspace/$name:0.2.1" \
     --format '{{json .Manifest}}' | jq -r .digest)
   docker buildx imagetools create --tag "$AR/$name:0.2.1" \
-    "ghcr.io/indxdev/agent-workspace/$name@$digest"
+    "ghcr.io/indxjp/agent-workspace/$name@$digest"
 done
 export AW_WEB_IMAGE=$AR/web:0.2.1 AW_GATEWAY_IMAGE=$AR/gateway:0.2.1
 export AW_RUNNER_IMAGE=$AR/runner:0.2.1 AW_RUNTIME_IMAGE=$AR/runtime-claude-agent-sdk:0.2.1

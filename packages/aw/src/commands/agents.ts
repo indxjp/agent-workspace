@@ -1,12 +1,14 @@
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
+import { AGENT_VERSION_NUMBER_MAX } from '@indx-workspace/contracts/agent-versions';
 import {
   AGENT_DEFINITION_ON_MISSING,
   translatePolicyForEngineSwitch,
   type AgentDefinition,
   type AgentPolicy,
   type AgentResource,
-  type AgentResourceAssignments,
+  type AgentResourceAssignmentsInput,
   type EngineSwitchTranslation,
 } from '@indx-workspace/contracts/agents';
 import { isWithholdingEngine, type EngineId } from '@indx-workspace/contracts/engines';
@@ -15,6 +17,8 @@ import { z } from 'zod';
 import {
   command,
   enumValue,
+  integerValue,
+  isOn,
   positional,
   readBody,
   value,
@@ -23,6 +27,8 @@ import {
   type CommandContext,
 } from '../command.js';
 import { UsageError } from '../io.js';
+import { exportAgentAsCode } from '../project/index.js';
+import { projectRoot } from './project.js';
 import {
   AgentAssignmentsBody,
   AgentDefinitionBody,
@@ -33,7 +39,17 @@ import {
   exact,
 } from '../inputs.js';
 
-const AGENT_COLUMNS = ['id', 'name', 'model', 'modelConnectionId', 'runtimeProfileId', 'updatedAt'];
+const AGENT_EXPORT_FORMATS = ['json', 'ts'] as const;
+
+const AGENT_COLUMNS = [
+  'id',
+  'name',
+  'model',
+  'modelConnectionId',
+  'runtimeProfileId',
+  'updatedAt',
+  'builtin',
+];
 
 /**
  * `agents create`'s `--skill`/`--connector`/`--grant-file` (S-13/K-2, issue #234), composed into
@@ -49,7 +65,7 @@ function parseFileAccess(raw: string): 'read' | 'read-write' {
   );
 }
 
-function readAssignmentFlags(context: CommandContext): AgentResourceAssignments | null {
+function readAssignmentFlags(context: CommandContext): AgentResourceAssignmentsInput | null {
   const skillIds = values(context, 'skill');
   const connectorIds = values(context, 'connector');
   const grantFiles = values(context, 'grant-file');
@@ -246,10 +262,19 @@ async function readDefinition(context: CommandContext): Promise<AgentDefinition>
  * §5.9 — `aw agents`. Archive/restore (RF-201) has no command until its route exists. `remove` cascades through the agent's sessions and runs today.
  */
 export const agentCommands: readonly Command[] = [
-  command('agents list', '', 'Every agent', async ({ client, signal }) => ({
-    value: await client.agents.list({ signal }),
-    columns: AGENT_COLUMNS,
-  })),
+  command('agents list', '', 'Every agent', async ({ client, signal, mode }) => {
+    const agents = await client.agents.list({ signal });
+    // --json and --jsonl keep the wire value (`builtin: 'builder'`); the table says "Built-in".
+    const machine = mode.json || mode.jsonl;
+    return {
+      value: machine
+        ? agents
+        : agents.map((agent) =>
+            agent.builtin === undefined ? agent : { ...agent, builtin: 'Built-in' },
+          ),
+      columns: AGENT_COLUMNS,
+    };
+  }),
   command('agents get', '<id>', 'One agent', async (context) => ({
     value: await context.client.agents.get(positional(context, 0, 'id'), {
       signal: context.signal,
@@ -389,10 +414,35 @@ export const agentCommands: readonly Command[] = [
   ),
   command(
     'agents export',
-    '<id>',
-    'The agent as a portable, name-keyed definition (K-1): aw agents export <id> > agent.json',
+    '<id> [--format json|ts] [--agent-version <n>] [--out <dir>] [--force]',
+    'The agent as a portable definition (K-1): aw agents export <id> > agent.json; --format ts writes agents/<name>.ts and .md for aw push',
     async (context) => {
-      const definition = await context.client.agents.export(positional(context, 0, 'id'), {
+      const id = positional(context, 0, 'id');
+      const format = enumValue(context, 'format', AGENT_EXPORT_FORMATS) ?? 'json';
+      if (format === 'ts') {
+        const version = integerValue(context, 'agent-version');
+        if (version !== undefined && version > AGENT_VERSION_NUMBER_MAX) {
+          throw new UsageError('--agent-version is out of range');
+        }
+        const root = projectRoot(context);
+        await exportAgentAsCode({
+          client: context.client,
+          io: context.io,
+          signal: context.signal,
+          agentId: id,
+          out: path.resolve(root, value(context, 'out') ?? '.'),
+          version,
+          force: isOn(context, 'force'),
+        });
+        return undefined;
+      }
+      for (const flag of ['agent-version', 'out'] as const) {
+        if (value(context, flag) !== undefined) {
+          throw new UsageError(`--${flag} needs --format ts`);
+        }
+      }
+      if (isOn(context, 'force')) throw new UsageError('--force needs --format ts');
+      const definition = await context.client.agents.export(id, {
         signal: context.signal,
       });
       // Always JSON, whatever the output mode: the output is a file format, not a report.

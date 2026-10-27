@@ -12,7 +12,7 @@
  * adapter. The platform's authoritative prices are the gateway's `GATEWAY_PRICING_JSON`
  * (`packages/gateway/src/pricing.ts`), a deployment-owned catalogue that exists only in the gateway
  * process. This adapter may not import `packages/gateway` (an engine adapter depends only on the
- * port, `contracts`, `core` and its own SDK — `docs/architecture.md`), and the sandbox the adapter
+ * port, `contracts` and its own SDK — `docs/architecture.md`), and the sandbox the adapter
  * runs in never sees the gateway's environment. So the cap is priced from that small table,
  * with the gateway's arithmetic (integer micro-dollars, rates as decimal strings per million
  * tokens). It is an **estimate that stops a run**, never a charge: settlement stays the gateway's

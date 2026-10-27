@@ -86,7 +86,7 @@ example :
     upgradeLegacy someSystemSubtypes someResultSubtypes someEventTypes
         (legacyEnvelope "malformed" (.str "nope")) =
       toAgentFrames (classify someSystemSubtypes someResultSubtypes someEventTypes (.str "nope")) :=
-  by decide
+  by decide +kernel
 
 /-- And the upgraded frames are what the model says they are, arm by arm, so the equality above is
 not two functions agreeing on nothing. -/
@@ -94,6 +94,6 @@ example :
     upgradeLegacy someSystemSubtypes someResultSubtypes someEventTypes
         (legacyEnvelope "sdk-event" assistantMessage) =
       [.message (some "msg_1") .assistant [.text "Reading."],
-       .toolCall "tool_1" "Read" .read .null] := by decide
+       .toolCall "tool_1" "Read" .read .null] := by decide +kernel
 
 end AgentWorkspace.Theorems.Refinement.AgentFrames

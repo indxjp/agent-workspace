@@ -34,15 +34,16 @@ import { API_ROUTES, type ApiRoute } from '@indx-workspace/contracts/routes';
 
 import { POST as postRunFeedback } from './app/api/runs/[id]/feedback/route';
 import { proxy } from './proxy';
-import { installRunApi, resetRunApi } from './server/runs/environment';
-import { InMemoryRunStore } from './server/runs/store';
-import {
-  clearSurfaceSessionsRuntime,
-  configureSurfaceSessionsRuntime,
-} from './server/surfaces/public/runtime';
+import { InMemoryRunStore } from './server/runs/memory-store';
 import { isAgentEndpointRoute } from './server/auth/agent-endpoint-routes';
 import { acceptsApiKey, isApiKeyRoute, matchApiRoute } from './server/auth/api-key-routes';
 import { MIN_SESSION_SECRET_LENGTH } from './server/auth/session';
+import {
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from './server/application-context-fixtures';
+import { clearApplicationContext } from './server/application-context';
 
 // The exact argument shape `adapter.js` uses when it re-reads a proxy response's `Location`.
 const ADAPTER_OPTIONS = { forceLocale: false, headers: {}, nextConfig: {} } as const;
@@ -120,7 +121,8 @@ function concretePath(path: string): string {
 
 /**
  * Catalogue routes the proxy passes through for a reason other than an API key — sign-in, the
- * invitation acceptance, setup detection and the runner's per-run token on `/api/sessions/**` — so
+ * invitation acceptance, a trigger's fire URL, setup detection and the runner's per-run token on
+ * `/api/sessions/**` — so
  * a refusal of the key on them cannot be observed through `proxy()`; the derived matcher is
  * asserted for them instead.
  */
@@ -130,6 +132,7 @@ function passesWithoutAKey(route: ApiRoute): boolean {
     route.path.startsWith('/api/setup/') ||
     route.security === 'endpoint-credential' ||
     route.path === '/api/invitations/:id/accept' ||
+    route.path === '/api/triggers/:id/fire/:secret' ||
     route.path === '/api/auth/cli-device' ||
     (route.method === 'POST' && route.path === '/api/auth/cli-token') ||
     (route.method === 'POST' && route.path === '/api/auth/workspace')
@@ -280,8 +283,9 @@ describe('the paths apps/web/proxy.ts admits on a bearer API key', () => {
       API_ROUTES.filter((entry) => !entry.path.startsWith('/api/')).map(
         (entry) => `${entry.method} ${entry.path}`,
       ),
-    ).toEqual(['POST /mcp/projects/:name']);
+    ).toEqual(['POST /mcp/projects/:name', 'POST /mcp/builder']);
     expect(isAgentEndpointRoute('POST', '/mcp/projects/x')).toBe(true);
+    expect(isAgentEndpointRoute('POST', '/mcp/builder')).toBe(true);
     for (const route of API_ROUTES.filter((entry) => entry.path.startsWith('/api/'))) {
       expect(matchApiRoute(route.method, concretePath(route.path)), route.path).toEqual({
         kind: 'served',
@@ -452,6 +456,34 @@ describe('the paths apps/web/proxy.ts admits on a bearer browser token', () => {
     }
   });
 
+  // Issue #251 (N-4): the two presign shapes, exactly POST /api/files/:id/{upload,download}-urls.
+  it('passes the two presign POSTs through, and nothing next to them', async () => {
+    const send = (method: string, pathname: string) =>
+      proxy(
+        new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), {
+          method,
+          headers: { authorization: BROWSER_TOKEN_HEADER },
+        }),
+      );
+    for (const pathname of ['/api/files/ZmlsZQ/upload-urls', '/api/files/ZmlsZQ/download-urls']) {
+      const minted = await send('POST', pathname);
+      expect(minted.headers.get(PASSED_THROUGH), pathname).toBe('1');
+    }
+    for (const [method, pathname] of [
+      ['GET', '/api/files/ZmlsZQ/upload-urls'],
+      ['POST', '/api/files/ZmlsZQ/upload-urls/x'],
+      ['POST', '/api/files/ZmlsZQ/upload-complete'],
+      ['POST', '/api/files/ZmlsZQ'],
+      ['POST', '/api/files'],
+      ['GET', '/api/files/ZmlsZQ'],
+      ['POST', '/api/files/ZmlsZQ/upload'],
+    ] as const) {
+      const response = await send(method, pathname);
+      expect(response.status, `${method} ${pathname}`).toBe(401);
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+    }
+  });
+
   it('end to end: a session token rates its own run through proxy() and the route (204)', async () => {
     const store = new InMemoryRunStore();
     const sessionId = crypto.randomUUID();
@@ -465,7 +497,7 @@ describe('the paths apps/web/proxy.ts admits on a bearer browser token', () => {
       ownerPrincipalId: SAMPLE_ID,
     });
     const recorded: string[] = [];
-    installRunApi({
+    installTestRunApi({
       authenticate: () =>
         Promise.resolve({
           principalId: SAMPLE_ID,
@@ -500,7 +532,7 @@ describe('the paths apps/web/proxy.ts admits on a bearer browser token', () => {
       expect(response.status).toBe(204);
       expect(recorded).toEqual([`${run.id} up`]);
     } finally {
-      resetRunApi();
+      resetTestRunApi();
     }
   });
 
@@ -518,12 +550,22 @@ describe('the paths apps/web/proxy.ts admits on a bearer browser token', () => {
   });
 });
 
-describe('the one path apps/web/proxy.ts admits for Vercel Cron (ADR-0120 clause 7)', () => {
+describe('the three paths apps/web/proxy.ts admits for Vercel Cron (ADR-0120 clause 7, ADR-0144 D5, #1674)', () => {
   const send = (method: string, pathname: string) =>
     proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method }));
 
   it('passes GET /api/cron/retention through with no session; the route checks CRON_SECRET', async () => {
     const response = await send('GET', '/api/cron/retention');
+    expect(response.headers.get(PASSED_THROUGH)).toBe('1');
+  });
+
+  it('passes GET /api/cron/triggers through with no session; the route checks CRON_SECRET', async () => {
+    const response = await send('GET', '/api/cron/triggers');
+    expect(response.headers.get(PASSED_THROUGH)).toBe('1');
+  });
+
+  it('passes GET /api/cron/storage-cleanup through with no session; the route checks CRON_SECRET', async () => {
+    const response = await send('GET', '/api/cron/storage-cleanup');
     expect(response.headers.get(PASSED_THROUGH)).toBe('1');
   });
 
@@ -542,7 +584,108 @@ describe('the one path apps/web/proxy.ts admits for Vercel Cron (ADR-0120 clause
       ['POST', '/api/cron/retention'],
       ['DELETE', '/api/cron/retention'],
       ['GET', '/api/cron/retention/extra'],
+      ['POST', '/api/cron/triggers'],
+      ['DELETE', '/api/cron/triggers'],
+      ['GET', '/api/cron/triggers/extra'],
+      ['POST', '/api/cron/storage-cleanup'],
+      ['GET', '/api/cron/storage-cleanup/extra'],
       ['GET', '/api/cron'],
+    ] as const) {
+      const response = await send(method, pathname);
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+    }
+  });
+});
+
+describe('the readiness probe apps/web/proxy.ts admits (issue #1562)', () => {
+  const send = (method: string, pathname: string) =>
+    proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method }));
+
+  it('passes GET /api/readyz through with no session, as a kubelet probe sends it', async () => {
+    const response = await send('GET', '/api/readyz');
+    expect(response.headers.get(PASSED_THROUGH)).toBe('1');
+  });
+
+  it('keeps every other method and neighbouring path behind the session gate', async () => {
+    for (const [method, pathname] of [
+      ['POST', '/api/readyz'],
+      ['GET', '/api/readyz/extra'],
+      ['GET', '/api/ready'],
+    ] as const) {
+      const response = await send(method, pathname);
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+    }
+  });
+});
+
+describe('the pre-authentication paths and the page redirect of apps/web/proxy.ts', () => {
+  const previousSecret = process.env['SESSION_SECRET'];
+  beforeAll(() => {
+    process.env['SESSION_SECRET'] = 'k'.repeat(MIN_SESSION_SECRET_LENGTH);
+  });
+  afterAll(() => {
+    if (previousSecret === undefined) delete process.env['SESSION_SECRET'];
+    else process.env['SESSION_SECRET'] = previousSecret;
+  });
+  const send = (method: string, pathname: string) =>
+    proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method }));
+
+  it('passes setup, the OIDC exchange and invitation acceptance through with no session', async () => {
+    for (const [method, pathname] of [
+      ['GET', '/api/setup/runtime-detect'],
+      ['POST', '/api/setup'],
+      ['GET', '/api/auth/login'],
+      ['GET', '/api/auth/workspace'],
+      ['POST', '/api/auth/callback'],
+      ['POST', '/api/auth/workspace'],
+      ['POST', `/api/invitations/${SAMPLE_ID}/accept`],
+    ] as const) {
+      const response = await send(method, pathname);
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBe('1');
+    }
+  });
+
+  it('keeps every other method and neighbouring path behind the session gate', async () => {
+    for (const [method, pathname] of [
+      ['POST', '/api/setup/runtime-detect'],
+      ['GET', '/api/setup'],
+      ['POST', '/api/auth/login'],
+      ['GET', '/api/auth/callback'],
+      ['GET', `/api/invitations/${SAMPLE_ID}/accept`],
+      ['POST', `/api/invitations/${SAMPLE_ID}/accept/extra`],
+    ] as const) {
+      const response = await send(method, pathname);
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+      expect(response.status, `${method} ${pathname}`).toBe(401);
+    }
+  });
+
+  it('redirects a session-less page visit to /signin, and lets the sign-in page itself through', async () => {
+    const page = await send('GET', '/agents');
+    expect(page.status).toBe(307);
+    expect(new URL(String(page.headers.get('location'))).pathname).toBe('/signin');
+    const signin = await send('GET', '/signin');
+    expect(signin.headers.get(PASSED_THROUGH)).toBe('1');
+  });
+});
+
+describe('the one path apps/web/proxy.ts admits for a trigger fire (ADR-0144)', () => {
+  const FIRE = '/api/triggers/7d0c3f5e-0000-4000-8000-000000000001/fire/awcs_live_x';
+  const send = (method: string, pathname: string) =>
+    proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method }));
+
+  it('passes POST through with no session; the route checks the secret in the path', async () => {
+    expect((await send('POST', FIRE)).headers.get(PASSED_THROUGH)).toBe('1');
+  });
+
+  it('keeps every other method, the management routes and neighbouring paths behind the gate', async () => {
+    for (const [method, pathname] of [
+      ['GET', FIRE],
+      ['PUT', FIRE],
+      ['POST', '/api/triggers'],
+      ['POST', '/api/triggers/7d0c3f5e-0000-4000-8000-000000000001/secret'],
+      ['POST', '/api/triggers/7d0c3f5e-0000-4000-8000-000000000001/fire'],
+      ['POST', `${FIRE}/extra`],
     ] as const) {
       const response = await send(method, pathname);
       expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
@@ -614,14 +757,40 @@ describe('the path apps/web/proxy.ts admits for a project tool endpoint (ADR-013
   });
 });
 
+describe('the path apps/web/proxy.ts admits for the Builder door (#1846 slice 5b)', () => {
+  const send = (method: string, pathname: string, headers: Record<string, string> = {}) =>
+    proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method, headers }));
+
+  it('passes a POST through with or without a credential, so the handler answers 401 itself', async () => {
+    expect((await send('POST', '/mcp/builder')).headers.get(PASSED_THROUGH)).toBe('1');
+    expect(
+      (await send('POST', '/mcp/builder', { authorization: API_KEY_HEADER })).headers.get(
+        PASSED_THROUGH,
+      ),
+    ).toBe('1');
+  });
+
+  it('passes nothing next to it, and no other method on it', async () => {
+    for (const [method, pathname] of [
+      ['GET', '/mcp/builder'],
+      ['POST', '/mcp/builder/extra'],
+      ['POST', '/mcp/builders'],
+    ] as const) {
+      const response = await send(method, pathname, { authorization: API_KEY_HEADER });
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+    }
+  });
+});
+
 describe('the paths apps/web/proxy.ts admits for the OAuth server (ADR-0134 part 3)', () => {
   const send = (method: string, pathname: string, headers: Record<string, string> = {}) =>
     proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method, headers }));
 
-  it('passes the seven routes through with no cookie and no credential', async () => {
+  it('passes the eight routes through with no cookie and no credential', async () => {
     for (const [method, pathname] of [
       ['GET', '/.well-known/oauth-authorization-server'],
       ['GET', '/.well-known/oauth-protected-resource/mcp/projects/support'],
+      ['GET', '/.well-known/oauth-protected-resource/mcp/builder'],
       ['GET', '/.well-known/oauth-protected-resource/api/a2a/agents/support-bot'],
       ['GET', '/oauth/authorize'],
       ['POST', '/oauth/authorize'],
@@ -777,33 +946,38 @@ describe('the frame-ancestors policy apps/web/proxy.ts sets on the hosted surfac
     const SHOP = 'https://shop.example.com';
     let resolveFails = false;
     beforeAll(() => {
-      configureSurfaceSessionsRuntime({
-        resolve: (name) => {
-          if (resolveFails) return Promise.reject(new Error('the database is down'));
-          return Promise.resolve(
-            name === 'main'
-              ? {
-                  workspaceId: '33333333-3333-4333-8333-333333333333',
-                  agentId: '22222222-2222-4222-8222-222222222222',
-                  agentName: 'support',
-                  environment: 'local' as const,
-                  versionId: '55555555-5555-4555-8555-555555555555',
-                  versionNumber: 1,
-                  promoted: false,
-                  surface: { name: 'main', agent: 'support', allowedOrigins: [SHOP] },
-                }
-              : null,
-          );
+      installTestDomains({
+        surfaces: {
+          kind: 'serving',
+          runtime: {
+            resolve: (name) => {
+              if (resolveFails) return Promise.reject(new Error('the database is down'));
+              return Promise.resolve(
+                name === 'main'
+                  ? {
+                      workspaceId: '33333333-3333-4333-8333-333333333333',
+                      agentId: '22222222-2222-4222-8222-222222222222',
+                      agentName: 'support',
+                      environment: 'local' as const,
+                      versionId: '55555555-5555-4555-8555-555555555555',
+                      versionNumber: 1,
+                      promoted: false,
+                      surface: { name: 'main', agent: 'support', allowedOrigins: [SHOP] },
+                    }
+                  : null,
+              );
+            },
+            open: () => Promise.reject(new Error('the proxy never opens a session')),
+            checkModel: () => Promise.reject(new Error('the proxy never checks a model')),
+            visitorSurface: () => Promise.resolve(null),
+            servedSurfaces: () =>
+              Promise.resolve([{ name: 'main', agent: 'support', allowedOrigins: [SHOP] }]),
+          },
         },
-        open: () => Promise.reject(new Error('the proxy never opens a session')),
-        checkModel: () => Promise.reject(new Error('the proxy never checks a model')),
-        visitorSurface: () => Promise.resolve(null),
-        servedSurfaces: () =>
-          Promise.resolve([{ name: 'main', agent: 'support', allowedOrigins: [SHOP] }]),
       });
     });
     afterAll(() => {
-      clearSurfaceSessionsRuntime();
+      clearApplicationContext();
     });
 
     it("frames the page from 'self' and the listed origins, and nothing else", async () => {
@@ -867,6 +1041,9 @@ describe('the frame-ancestors policy apps/web/proxy.ts sets on the hosted surfac
       ['GET', '/api/runs/run-1/events'],
       ['POST', '/api/agents/agent-1/runs'],
       ['POST', '/api/runs/run-1/feedback'],
+      ['POST', '/api/files/ZmlsZQ/upload-urls'],
+      ['POST', '/api/files/ZmlsZQ/download-urls'],
+      ['POST', '/api/sessions/session-1/attachments'],
     ] as const;
     const crossOrigin = (method: string, pathname: string, headers: Record<string, string>) =>
       proxy(

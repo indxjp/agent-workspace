@@ -7,7 +7,7 @@ open AgentWorkspace.Contracts AgentWorkspace.Lifecycle
 /-- Interrupt and launcher finish under one per-run commit, so only the winner publishes. -/
 @[aw_spec (tier := T4)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#the-event-stream")
-  (ts := "apps/web/server/composition/register.ts#interruptRun")
+  (ts := "apps/web/server/composition/wiring/run-api.ts#interruptRun")
   (ts := "apps/web/server/runs/launcher.ts#createRunnerLauncher")]
 theorem interrupt_conclude_race_agrees :
     let current := runActions ({} : RunState)

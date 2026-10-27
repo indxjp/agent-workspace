@@ -3,9 +3,33 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
+import { browserClient } from '../../lib/browser-client';
 import { CREDENTIAL_INPUT_PROPS } from '../shell/credential-input';
-
-import { resourcePathHeaders } from '../../contracts/files';
+import {
+  createApiKey,
+  createFolder,
+  createSkill,
+  deleteConnector,
+  deleteFile,
+  errorText,
+  type ResourcesClient,
+  listFiles,
+  loadApiKeys,
+  loadConnectors,
+  loadMe,
+  loadSkill,
+  loadSkills,
+  probeSettings,
+  renameFile,
+  revokeApiKey,
+  saveSkill,
+  SETTINGS_ENDPOINTS,
+  submitConnector,
+  testConnector,
+  uploadFile,
+} from './resources-model';
+import type { ConnectorAuthType } from '@indx-workspace/contracts/connectors';
+import { fileRouteId } from '@indx-workspace/contracts/files';
 
 const CARD = 'rounded-(--radius) border border-border bg-surface p-5 shadow-(--shadow)';
 const INPUT = 'rounded border border-border-strong bg-bg px-3 py-2 text-sm text-text';
@@ -23,58 +47,31 @@ function title(name: string, description: string, action?: React.ReactNode) {
   );
 }
 
-function useJson(url: string) {
+/** A page's one read, kept until the next one arrives; `load` must be stable between renders. */
+function useJson(load: (client: ResourcesClient) => Promise<Record<string, unknown>>) {
   const [value, setValue] = useState<Record<string, unknown> | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const reload = useCallback(async () => {
     setProblem(null);
-    const response = await fetch(url, {
-      cache: 'no-store',
-      headers: { accept: 'application/json' },
-    });
-    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) throw new Error(problemMessage(body, response.status));
-    setValue(body);
-  }, [url]);
+    setValue(await load(browserClient()));
+  }, [load]);
   useEffect(() => {
-    void reload().catch((error: unknown) =>
-      setProblem(error instanceof Error ? error.message : String(error)),
-    );
+    void reload().catch((error: unknown) => setProblem(errorText(error)));
   }, [reload]);
   return { value, problem, loading: value === null && problem === null, reload, setProblem };
 }
 
-function problemMessage(body: Record<string, unknown>, status: number): string {
-  const error = body['error'];
-  if (typeof error === 'object' && error !== null) {
-    const message = (error as Record<string, unknown>)['message'];
-    const details = (error as Record<string, unknown>)['details'];
-    if (typeof message === 'string') {
-      return Array.isArray(details) && details.every((detail) => typeof detail === 'string')
-        ? `${message} ${details.join(' ')}`
-        : message;
-    }
-  }
-  return `Request returned ${String(status)}.`;
-}
-
-async function checkedJson(response: Response): Promise<Record<string, unknown>> {
-  const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!response.ok) throw new Error(problemMessage(body, response.status));
-  return body;
-}
-
 /**
- * Sends a destructive `DELETE` and reloads the list. A refusal or a network failure shows in the
+ * Sends a destructive call and reloads the list. A refusal or a network failure shows in the
  * screen's status line instead of a silent reload that looks like success.
  */
-function deleteThenReload(state: ReturnType<typeof useJson>, url: string): void {
-  void fetch(url, { method: 'DELETE' })
-    .then(checkedJson)
+function deleteThenReload(
+  state: ReturnType<typeof useJson>,
+  remove: (client: ResourcesClient) => Promise<unknown>,
+): void {
+  remove(browserClient())
     .then(() => state.reload())
-    .catch((error: unknown) =>
-      state.setProblem(error instanceof Error ? error.message : String(error)),
-    );
+    .catch((error: unknown) => state.setProblem(errorText(error)));
 }
 
 function rows(value: Record<string, unknown> | null, key: string): Record<string, unknown>[] {
@@ -136,22 +133,6 @@ function Status({ problem }: { problem: string | null }) {
       {problem}
     </p>
   );
-}
-
-/**
- * The `:id` segment `/api/files/[id]` accepts: the base64url of the workspace-relative path, as
- * minted by `server/files/file-id.ts`. `GET /api/files` reports the relational catalog id in
- * `id` — the value the agent editor assigns resources with — which that route does not resolve.
- */
-function fileRouteId(path: string): string {
-  return base64(path).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-}
-
-function base64(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 /**
@@ -315,19 +296,11 @@ function useFilesState(path: string): FilesFetchState {
   const [problem, setProblem] = useState<string | null>(null);
   const reload = useCallback(async () => {
     setProblem(null);
-    const response = await fetch(`/api/files?path=${encodeURIComponent(path)}`, {
-      cache: 'no-store',
-      headers: { accept: 'application/json' },
-    });
-    const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) throw new Error(problemMessage(body, response.status));
-    setValue({ files: toFileRows(body) });
+    setValue({ files: toFileRows({ files: await listFiles(browserClient(), path) }) });
   }, [path]);
   useEffect(() => {
     setValue(null);
-    void reload().catch((error: unknown) =>
-      setProblem(error instanceof Error ? error.message : String(error)),
-    );
+    void reload().catch((error: unknown) => setProblem(errorText(error)));
   }, [reload]);
   return { value, problem, loading: value === null && problem === null, reload, setProblem };
 }
@@ -564,6 +537,7 @@ export function FileTable({
 export function FilesScreen() {
   const browser = useFileBrowser();
   const [renaming, setRenaming] = useState<FileTableRenameState | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
   const fileRows = sortedRows(browser.state.value === null ? [] : browser.state.value.files);
 
   const createFolderFrom = async (event: FormEvent<HTMLFormElement>) => {
@@ -574,11 +548,7 @@ export function FilesScreen() {
       browser.state.setProblem('A folder name is a single name, not a path.');
       return;
     }
-    const response = await fetch('/api/files', {
-      method: 'POST',
-      headers: resourcePathHeaders('x-folder-path', joinPath(browser.path, name)),
-    });
-    await checkedJson(response);
+    await createFolder(browserClient(), joinPath(browser.path, name));
     element.reset();
     await browser.state.reload();
   };
@@ -589,15 +559,12 @@ export function FilesScreen() {
     const form = new FormData(element);
     const file = form.get('file');
     if (!(file instanceof File) || file.size === 0) return;
-    const response = await fetch('/api/files', {
-      method: 'POST',
-      headers: {
-        'content-type': file.type || 'application/octet-stream',
-        ...resourcePathHeaders('x-file-path', joinPath(browser.path, file.name)),
-      },
-      body: file,
-    });
-    if (!response.ok) throw new Error(`Upload returned ${String(response.status)}.`);
+    setUploading(file.name);
+    try {
+      await uploadFile(browserClient(), joinPath(browser.path, file.name), file);
+    } finally {
+      setUploading(null);
+    }
     element.reset();
     await browser.state.reload();
   };
@@ -610,25 +577,11 @@ export function FilesScreen() {
       return;
     }
     try {
-      const response = await fetch(`/api/files/${fileRouteId(row.path)}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ newPath }),
-      });
-      const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!response.ok) throw new Error(problemMessage(body, response.status));
-      // `PATCH` reports a subtree move as `200` with `{status:'partial'|'ok'}` rather than a
-      // non-2xx status (`server/files/handlers.ts`'s `moveSubtree`) — `response.ok` alone cannot
-      // tell "moved" from "moved some of it and stopped", so the body is inspected either way.
-      if (body['status'] === 'partial') {
-        throw new Error(
-          `Move did not finish: ${String(body['moved'])} of ${String(body['total'])} items moved; the rest are still at the old location.`,
-        );
-      }
+      await renameFile(browserClient(), row.path, newPath);
       setRenaming(null);
       await browser.state.reload();
     } catch (error) {
-      browser.state.setProblem(error instanceof Error ? error.message : String(error));
+      browser.state.setProblem(errorText(error));
       await browser.state.reload();
     }
   };
@@ -640,40 +593,12 @@ export function FilesScreen() {
         : `Delete "${fileName(row.path)}"? This cannot be undone.`;
     if (!window.confirm(impact)) return;
     try {
-      let response = await fetch(`/api/files/${fileRouteId(row.path)}`, { method: 'DELETE' });
-      if (response.status === 409) {
-        // Non-empty folder without `?recursive=true` (`server/files/handlers.ts`'s
-        // `deleteSubtree`) — the confirmation states the descendant impact before retrying with
-        // recursive semantics, rather than silently escalating or silently giving up.
-        const conflict = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-        const code = (conflict['error'] as Record<string, unknown> | undefined)?.['code'];
-        if (
-          code !== 'folder_not_empty' ||
-          !window.confirm(
-            `"${fileName(row.path)}" is not empty. Delete it and everything inside it?`,
-          )
-        ) {
-          throw new Error(problemMessage(conflict, response.status));
-        }
-        response = await fetch(`/api/files/${fileRouteId(row.path)}?recursive=true`, {
-          method: 'DELETE',
-        });
-      }
-      if (response.status !== 204) {
-        const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-        if (!response.ok) throw new Error(problemMessage(body, response.status));
-        // Same `200` vs. body-status distinction as the rename path above, for `deleteSubtree`.
-        if (body['status'] === 'partial') {
-          const deleted = Array.isArray(body['deleted']) ? body['deleted'].length : 0;
-          const remaining = Array.isArray(body['remaining']) ? body['remaining'].length : 0;
-          throw new Error(
-            `Delete did not finish: ${String(deleted)} removed, ${String(remaining)} still present. Try again.`,
-          );
-        }
-      }
+      await deleteFile(browserClient(), row.path, () =>
+        window.confirm(`"${fileName(row.path)}" is not empty. Delete it and everything inside it?`),
+      );
       await browser.state.reload();
     } catch (error) {
-      browser.state.setProblem(error instanceof Error ? error.message : String(error));
+      browser.state.setProblem(errorText(error));
       // Never remove the row optimistically: reload and let the server's own listing say what is
       // actually still there, which is what keeps a `partial` result from looking like success.
       await browser.state.reload();
@@ -693,18 +618,21 @@ export function FilesScreen() {
       <form
         className={`${CARD} mb-5 flex flex-wrap items-center gap-3`}
         onSubmit={(event) =>
-          void upload(event).catch((error: unknown) =>
-            browser.state.setProblem(error instanceof Error ? error.message : String(error)),
-          )
+          void upload(event).catch((error: unknown) => browser.state.setProblem(errorText(error)))
         }
       >
         <label className="flex flex-col gap-1 text-sm">
           Upload a file to this folder
           <input className={INPUT} name="file" required type="file" />
         </label>
-        <button className={BUTTON} type="submit">
+        <button className={BUTTON} disabled={uploading !== null} type="submit">
           Upload here
         </button>
+        {uploading === null ? null : (
+          <p className="w-full text-sm text-muted" role="status">
+            Uploading {uploading}…
+          </p>
+        )}
         <p className="w-full text-sm text-muted">
           Agents see a file only after it is granted. Add{' '}
           <code>files(&apos;&lt;folder or file path&gt;&apos;)</code> to the agent&apos;s
@@ -715,7 +643,7 @@ export function FilesScreen() {
         className={`${CARD} mb-5 flex flex-wrap items-center gap-3`}
         onSubmit={(event) =>
           void createFolderFrom(event).catch((error: unknown) =>
-            browser.state.setProblem(error instanceof Error ? error.message : String(error)),
+            browser.state.setProblem(errorText(error)),
           )
         }
       >
@@ -803,7 +731,7 @@ export function FilePicker({
 }
 
 export function SkillsScreen() {
-  const state = useJson('/api/skills');
+  const state = useJson(loadSkills);
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const element = event.currentTarget;
@@ -812,12 +740,7 @@ export function SkillsScreen() {
     const description = formString(form, 'description').trim();
     const instructions = formString(form, 'instructions').trim();
     const source = updateSkillSource('', name, description, instructions);
-    const response = await fetch('/api/skills', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, files: [{ path: 'SKILL.md', contentBase64: base64(source) }] }),
-    });
-    await checkedJson(response);
+    await createSkill(browserClient(), name, source);
     element.reset();
     await state.reload();
   };
@@ -833,9 +756,7 @@ export function SkillsScreen() {
       <form
         className={`${CARD} mb-5 grid gap-3`}
         onSubmit={(event) =>
-          void create(event).catch((error: unknown) =>
-            state.setProblem(error instanceof Error ? error.message : String(error)),
-          )
+          void create(event).catch((error: unknown) => state.setProblem(errorText(error)))
         }
       >
         <input
@@ -883,7 +804,7 @@ export function SkillsScreen() {
 }
 
 export function SkillDetailScreen({ name }: { name: string }) {
-  const state = useJson(`/api/skills/${encodeURIComponent(name)}`);
+  const state = useJson(useCallback((client: ResourcesClient) => loadSkill(client, name), [name]));
   const skill = state.value?.['skill'];
   const detail =
     typeof skill === 'object' && skill !== null ? (skill as Record<string, unknown>) : null;
@@ -894,15 +815,7 @@ export function SkillDetailScreen({ name }: { name: string }) {
     const description = formString(form, 'description').trim();
     const instructions = formString(form, 'instructions').trim();
     const source = updateSkillSource(display(detail?.['source']), name, description, instructions);
-    const response = await fetch(`/api/skills/${encodeURIComponent(name)}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        enabled,
-        files: [{ path: 'SKILL.md', contentBase64: base64(source) }],
-      }),
-    });
-    await checkedJson(response);
+    await saveSkill(browserClient(), name, enabled, source);
     await state.reload();
   };
   return (
@@ -924,9 +837,7 @@ export function SkillDetailScreen({ name }: { name: string }) {
         <form
           className={`${CARD} grid gap-3`}
           onSubmit={(event) =>
-            void save(event).catch((error: unknown) =>
-              state.setProblem(error instanceof Error ? error.message : String(error)),
-            )
+            void save(event).catch((error: unknown) => state.setProblem(errorText(error)))
           }
         >
           <label className="grid gap-1 text-sm">
@@ -963,6 +874,19 @@ export function SkillDetailScreen({ name }: { name: string }) {
                   .join(', ')
               : 'none'}
           </div>
+          <div className="text-xs text-muted">
+            Published revisions (newest first; publish with <code>aw skills publish</code>):{' '}
+            {Array.isArray(detail['revisions']) && detail['revisions'].length > 0
+              ? detail['revisions']
+                  .map((revision) =>
+                    typeof revision === 'object' && revision !== null
+                      ? `#${display((revision as Record<string, unknown>)['number'])}`
+                      : '',
+                  )
+                  .filter(Boolean)
+                  .join(', ')
+              : 'none'}
+          </div>
           <button className={BUTTON} type="submit">
             Save changes
           </button>
@@ -973,7 +897,7 @@ export function SkillDetailScreen({ name }: { name: string }) {
 }
 
 export function ConnectorsScreen() {
-  const state = useJson('/api/connectors');
+  const state = useJson(loadConnectors);
   const [probe, setProbe] = useState<string | null>(null);
   return (
     <>
@@ -1008,20 +932,9 @@ export function ConnectorsScreen() {
             <button
               className={BUTTON}
               onClick={() =>
-                void fetch(`/api/connectors/${String(connector.id)}/test-connection`, {
-                  method: 'POST',
-                })
-                  .then(checkedJson)
-                  .then((body) =>
-                    setProbe(
-                      body['ok'] === true
-                        ? `${String(connector.name)} connection passed.`
-                        : `${String(connector.name)}: ${display(body['message']) || 'Connection failed.'}`,
-                    ),
-                  )
-                  .catch((error: unknown) =>
-                    state.setProblem(error instanceof Error ? error.message : String(error)),
-                  )
+                void testConnector(browserClient(), String(connector.id), String(connector.name))
+                  .then(setProbe)
+                  .catch((error: unknown) => state.setProblem(errorText(error)))
               }
               type="button"
             >
@@ -1031,9 +944,8 @@ export function ConnectorsScreen() {
               className={BUTTON}
               onClick={() => {
                 if (window.confirm(`Delete connector ${String(connector.name)}?`))
-                  deleteThenReload(
-                    state,
-                    `/api/connectors/${encodeURIComponent(String(connector.id))}`,
+                  deleteThenReload(state, (client) =>
+                    deleteConnector(client, String(connector.id)),
                   );
               }}
               type="button"
@@ -1052,40 +964,23 @@ export function ConnectorsScreen() {
 
 export function ConnectorNewScreen() {
   const [message, setMessage] = useState<string | null>(null);
-  const [authType, setAuthType] = useState('none');
+  const [authType, setAuthType] = useState<ConnectorAuthType>('none');
   const submit = async (element: HTMLFormElement, dryRun: boolean) => {
     const form = new FormData(element);
-    const transport = formString(form, 'transport');
-    const endpoint = formString(form, 'endpoint').trim();
-    const credential = formString(form, 'credential');
-    const common = {
-      name: formString(form, 'name').trim(),
-      transport,
-      authType,
+    const result = await submitConnector(
+      browserClient(),
+      {
+        name: formString(form, 'name').trim(),
+        transport: formString(form, 'transport'),
+        endpoint: formString(form, 'endpoint').trim(),
+        args: formString(form, 'args'),
+        authType,
+        credential: formString(form, 'credential'),
+      },
       dryRun,
-      ...(authType === 'none' ? {} : { credential }),
-    };
-    const body =
-      transport === 'stdio'
-        ? {
-            ...common,
-            command: endpoint,
-            args: formString(form, 'args').split(/\s+/u).filter(Boolean),
-          }
-        : { ...common, url: endpoint };
-    const response = await fetch('/api/connectors', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const result = await checkedJson(response);
-    if (dryRun)
-      setMessage(
-        result['ok'] === true
-          ? 'Connection test passed.'
-          : display(result['message']) || 'Connection test failed.',
-      );
-    else window.location.assign('/connectors');
+    );
+    if (result === null) window.location.assign('/connectors');
+    else setMessage(result);
   };
   return (
     <>
@@ -1136,7 +1031,7 @@ export function ConnectorNewScreen() {
           className={INPUT}
           name="authType"
           value={authType}
-          onChange={(event) => setAuthType(event.target.value)}
+          onChange={(event) => setAuthType(event.target.value as ConnectorAuthType)}
         >
           <option value="none">No authentication</option>
           <option value="api-key">API key</option>
@@ -1187,7 +1082,7 @@ export function ConnectorNewScreen() {
 
 /**
  * The role dropdown of the API Keys form. A key's role is capped at the caller's role
- * (`conferRole`: an admin may confer admin and viewer, an owner may confer every role), so `owner`
+ * (`conferRole`: an admin may confer every role but owner, an owner every role), so `owner`
  * is offered only to a signed-in owner; anyone else would be refused with a 403.
  */
 export function ApiKeyRoleSelect({ callerRole }: { callerRole: unknown }) {
@@ -1228,22 +1123,19 @@ export function ApiKeyRow(props: {
 }
 
 export function ApiKeysScreen() {
-  const state = useJson('/api/api-keys');
-  const me = useJson('/api/me');
+  const state = useJson(loadApiKeys);
+  const me = useJson(loadMe);
   const [presented, setPresented] = useState<string | null>(null);
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const element = event.currentTarget;
     const form = new FormData(element);
-    const response = await fetch('/api/api-keys', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: form.get('name'), role: form.get('role'), expiresAt: null }),
-    });
-    const body = (await response.json()) as { key?: unknown };
-    if (!response.ok || typeof body.key !== 'string')
-      throw new Error(`Create key returned ${String(response.status)}.`);
-    setPresented(body.key);
+    const key = await createApiKey(
+      browserClient(),
+      formString(form, 'name'),
+      formString(form, 'role'),
+    );
+    setPresented(key);
     element.reset();
     await state.reload();
   };
@@ -1260,9 +1152,7 @@ export function ApiKeysScreen() {
       <form
         className={`${CARD} mb-5 flex gap-3`}
         onSubmit={(event) =>
-          void create(event).catch((error: unknown) =>
-            state.setProblem(error instanceof Error ? error.message : String(error)),
-          )
+          void create(event).catch((error: unknown) => state.setProblem(errorText(error)))
         }
       >
         <input className={INPUT} name="name" placeholder="Key name" required />
@@ -1274,9 +1164,9 @@ export function ApiKeysScreen() {
           <ApiKeyRow
             key={key.id}
             name={key.name}
-            prefix={key['prefix']}
+            prefix={key['keyPrefix']}
             revoked={key['revokedAt'] != null}
-            onRevoke={() => deleteThenReload(state, `/api/api-keys/${encodeURIComponent(key.id)}`)}
+            onRevoke={() => deleteThenReload(state, (client) => revokeApiKey(client, key.id))}
           />
         ))}
       </div>
@@ -1285,15 +1175,10 @@ export function ApiKeysScreen() {
 }
 
 export function SettingsScreen() {
-  const endpoints = ['/api/files', '/api/skills', '/api/connectors', '/api/users', '/api/api-keys'];
+  const endpoints = SETTINGS_ENDPOINTS;
   const [statuses, setStatuses] = useState<Record<string, number>>({});
   useEffect(() => {
-    void Promise.all(
-      endpoints.map(
-        async (endpoint) =>
-          [endpoint, (await fetch(endpoint, { cache: 'no-store' })).status] as const,
-      ),
-    ).then((entries) => setStatuses(Object.fromEntries(entries)));
+    void probeSettings(browserClient()).then(setStatuses);
   }, []);
   return (
     <>

@@ -12,7 +12,7 @@
  *   - `checks.json`: the checks that are not closed sets, table by table, and their exact SQL as
  *     the model's snapshot (`MODEL_SNAPSHOT`) renders it.
  *   - `check-rows.json`: row verdicts of `runs_ended_at_iff_terminal` and
- *     `audit_events_subject_id_shape` against `isTerminalRunStatus` / `terminalRunStatuses` and
+ *     `audit_events_subject_id_shape` against `isStoppedRunStatus` / `stoppedRunStatuses` and
  *     `isUuid`.
  *   - `transcript-keys.json`: `PROJECT_KEY_PATTERN`, `validateTenantSessionScope` and the
  *     transcript subpath grammar (`TranscriptSubkeysResponseSchema`).
@@ -35,6 +35,7 @@ import {
 } from '@indx-workspace/contracts/projects';
 import {
   ACCOUNTING_STATES,
+  isStoppedRunStatus,
   isTerminalRunStatus,
   MODEL_PROVIDERS,
   RUN_STATUSES,
@@ -49,7 +50,7 @@ import {
   SessionResourceSchema,
   TranscriptSubkeysResponseSchema,
 } from '@indx-workspace/contracts/sessions';
-import { validateTenantSessionScope } from '@agent-workspace/core';
+import { validateTenantSessionScope } from '@agent-workspace/run-protocol';
 import * as schema from '@agent-workspace/core/db/unscoped';
 import * as drizzleModule from 'drizzle-orm';
 import * as pgCoreModule from 'drizzle-orm/pg-core';
@@ -319,8 +320,8 @@ describe('work check verdicts', () => {
     if (check === 'runs_ended_at_iff_terminal') {
       const status = asRunStatus(input['status'], vector.id);
       const ended = asBoolean(input['endedAt'], vector.id);
-      expect(isTerminalRunStatus(status) === ended).toBe(holds);
-      expect((schema.terminalRunStatuses as readonly string[]).includes(status) === ended).toBe(
+      expect(isStoppedRunStatus(status) === ended).toBe(holds);
+      expect((schema.stoppedRunStatuses as readonly string[]).includes(status) === ended).toBe(
         holds,
       );
     } else {

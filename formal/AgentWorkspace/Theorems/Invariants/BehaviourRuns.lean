@@ -94,6 +94,6 @@ theorem committed_run_write_preserves_er (s : State)
 theorem response_excludes_credential_keys (reply : Reply) :
     "tokenSecret" ∉ reply.allKeys ∧ "tokenHash" ∉ reply.allKeys := by
   simp [Reply.allKeys, Reply.publicKeys, runResourceKeys]
-  split <;> decide
+  split <;> decide +kernel
 
 end AgentWorkspace.Theorems.Invariants.BehaviourRuns

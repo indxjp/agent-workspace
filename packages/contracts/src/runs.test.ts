@@ -1,20 +1,34 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { AGENT_VERSION_NUMBER_MAX } from './agent-versions.js';
 import {
   InterruptRunResponseSchema,
   MAX_PROMPT_CHARS,
+  MAX_RUN_ATTACHMENTS,
+  MAX_RUN_FILE_SCOPE_PATHS,
+  OUTPUT_SCHEMA_DIALECT,
+  OUTPUT_SCHEMA_MAX_BYTES,
+  OUTPUT_SCHEMA_MAX_DEPTH,
+  OUTPUT_SCHEMA_UNSATISFIED,
+  OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+  RUN_IDEMPOTENCY_PROBLEM_CODES,
   RUN_START_PROBLEM_CODES,
   RUN_LIST_MAX_LIMIT,
   RUN_PREPARATION_FAILED,
+  RUN_FILE_CORRUPT,
   RUNTIME_CAPACITY_EXHAUSTED,
   RevokeRunTokensResponseSchema,
+  RunApprovalRequestSchema,
+  RunApprovalResponseSchema,
   RunListResponseSchema,
   RunResourceSchema,
   StartRunRequestSchema,
   StartRunResponseSchema,
   isRunStartProblemCode,
+  isStoppedRunStatus,
   isTerminalRunStatus,
+  outputSchemaViolation,
   parseRunFailure,
   runListSearchParams,
 } from './runs.js';
@@ -29,6 +43,7 @@ const run = {
   projectId: null,
   initiatingUserId: null,
   sessionId: '55555555-5555-4555-8555-555555555555',
+  agentVersion: null,
   status: 'queued',
   createdAt: '2026-09-21T10:00:00.000Z',
   startedAt: null,
@@ -49,8 +64,10 @@ const run = {
   },
   cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
   error: null,
+  output: null,
   accountingState: 'pending',
   accountingError: null,
+  pendingApproval: null,
 };
 
 describe('RunResourceSchema', () => {
@@ -77,6 +94,17 @@ describe('RunResourceSchema', () => {
     expect(RunResourceSchema.safeParse({ ...run, extra: true }).success).toBe(false);
     const withoutUsage = Object.fromEntries(Object.entries(run).filter(([key]) => key !== 'usage'));
     expect(RunResourceSchema.safeParse(withoutUsage).success).toBe(false);
+  });
+
+  it('names the agent version the run executed, or null for a legacy session', () => {
+    expect(RunResourceSchema.safeParse({ ...run, agentVersion: 3 }).success).toBe(true);
+    expect(RunResourceSchema.safeParse({ ...run, agentVersion: null }).success).toBe(true);
+    expect(RunResourceSchema.safeParse({ ...run, agentVersion: 0 }).success).toBe(false);
+    expect(RunResourceSchema.safeParse({ ...run, agentVersion: 1.5 }).success).toBe(false);
+    const withoutVersion = Object.fromEntries(
+      Object.entries(run).filter(([key]) => key !== 'agentVersion'),
+    );
+    expect(RunResourceSchema.safeParse(withoutVersion).success).toBe(false);
   });
 
   it('rejects a negative token count and an epoch-number timestamp', () => {
@@ -126,6 +154,50 @@ describe('StartRunRequestSchema', () => {
     const body = { prompt: 'hi', version: 2 };
     expect(StartRunRequestSchema.safeParse({ ...body, sessionId: CONNECTION }).success).toBe(false);
     expect(StartRunRequestSchema.safeParse({ ...body, sessionId: null }).success).toBe(true);
+  });
+
+  it('accepts one to ten attachments and refuses none, eleven, a repeat, or a malformed item', () => {
+    const attach = (attachments: unknown): boolean =>
+      StartRunRequestSchema.safeParse({ prompt: 'hi', attachments }).success;
+    const ids = (count: number): { fileId: string }[] =>
+      Array.from({ length: count }, (_, index) => ({ fileId: `file-${index}` }));
+    expect(attach(ids(1))).toBe(true);
+    expect(attach(ids(MAX_RUN_ATTACHMENTS))).toBe(true);
+    expect(attach([])).toBe(false);
+    expect(attach(ids(MAX_RUN_ATTACHMENTS + 1))).toBe(false);
+    expect(attach([{ fileId: 'a' }, { fileId: 'a' }])).toBe(false);
+    expect(attach([{ fileId: 'a', access: 'write' }])).toBe(false);
+    expect(attach([{ fileId: '' }])).toBe(false);
+    expect(attach([{}])).toBe(false);
+    expect(attach('a')).toBe(false);
+    expect(attach(null)).toBe(false);
+  });
+
+  it('accepts a subject of 1 to 256 characters and refuses an empty, long or non-string one', () => {
+    for (const subject of ['a', 'x'.repeat(256)]) {
+      expect(StartRunRequestSchema.parse({ prompt: 'hi', subject }).subject).toBe(subject);
+    }
+    for (const subject of ['', 'x'.repeat(257), 7, null]) {
+      expect(StartRunRequestSchema.safeParse({ prompt: 'hi', subject }).success).toBe(false);
+    }
+  });
+
+  it('accepts one to 100 canonical fileScope paths and refuses the rest (issue #1539)', () => {
+    const scope = (fileScope: unknown): boolean =>
+      StartRunRequestSchema.safeParse({ prompt: 'hi', fileScope }).success;
+    const paths = (count: number): string[] =>
+      Array.from({ length: count }, (_, index) => `docs/p-${index}.md`);
+    expect(scope(['docs/alice'])).toBe(true);
+    expect(scope(paths(MAX_RUN_FILE_SCOPE_PATHS))).toBe(true);
+    expect(scope([])).toBe(false);
+    expect(scope(paths(MAX_RUN_FILE_SCOPE_PATHS + 1))).toBe(false);
+    expect(scope(['a', 'a'])).toBe(false);
+    for (const bad of ['/a', 'a/', 'a/../b', 'a//b', '', './a', 'a\\b', 'a\0b', 'x'.repeat(1025)]) {
+      expect(scope([bad])).toBe(false);
+    }
+    expect(scope('docs')).toBe(false);
+    expect(scope([7])).toBe(false);
+    expect(scope(null)).toBe(false);
   });
 
   it('refuses a session id that is not a UUID', () => {
@@ -197,6 +269,44 @@ describe('runListSearchParams', () => {
   });
 });
 
+describe('awaiting_approval (ADR-0145)', () => {
+  it('is stopped but not terminal', () => {
+    expect(isTerminalRunStatus('awaiting_approval')).toBe(false);
+    expect(isStoppedRunStatus('awaiting_approval')).toBe(true);
+    expect(isStoppedRunStatus('completed')).toBe(true);
+    expect(isStoppedRunStatus('running')).toBe(false);
+  });
+
+  it('carries the pending call on the run resource', () => {
+    const pending = { toolName: 'Bash', canonicalCall: 'Bash {}' };
+    expect(
+      RunResourceSchema.safeParse({ ...run, status: 'awaiting_approval', pendingApproval: pending })
+        .success,
+    ).toBe(true);
+  });
+
+  it('validates the decision request and its response', () => {
+    expect(RunApprovalRequestSchema.safeParse({ decision: 'approve' }).success).toBe(true);
+    expect(RunApprovalRequestSchema.safeParse({ decision: 'reject', comment: 'no' }).success).toBe(
+      true,
+    );
+    expect(RunApprovalRequestSchema.safeParse({ decision: 'maybe' }).success).toBe(false);
+    expect(RunApprovalRequestSchema.safeParse({ decision: 'approve', extra: 1 }).success).toBe(
+      false,
+    );
+    expect(RunApprovalResponseSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('RUN_IDEMPOTENCY_PROBLEM_CODES (ADR-0151)', () => {
+  it('declares the two refusals an Idempotency-Key can draw, snake_case', () => {
+    expect(RUN_IDEMPOTENCY_PROBLEM_CODES).toEqual({
+      invalid_idempotency_key: 400,
+      run_idempotency_conflict: 409,
+    });
+  });
+});
+
 describe('RUN_START_PROBLEM_CODES (issue #393)', () => {
   it('declares one 422 per missing piece a run start can name, and 403 for the ceiling', () => {
     expect(RUN_START_PROBLEM_CODES).toEqual({
@@ -210,8 +320,27 @@ describe('RUN_START_PROBLEM_CODES (issue #393)', () => {
       runtime_connection_missing: 422,
       runtime_connection_credential_unavailable: 422,
       runtime_not_verified: 422,
+      run_attachments_unreadable: 422,
+      run_attachments_too_large: 422,
+      run_attachments_unsupported_runtime: 422,
+      run_attachments_untranscribable: 422,
+      run_files_too_large: 422,
+      run_storage_grant_unavailable: 422,
+      run_subject_forbidden: 403,
+      run_file_scope_not_granted: 403,
       policy_cannot_widen: 403,
+      daily_cost_cap_reached: 429,
+      daily_cost_unavailable: 503,
+      builder_model_unavailable: 503,
     });
+    // Issue #1539: a widening fileScope fails the run at launch with a coded refusal.
+    expect(isRunStartProblemCode('run_file_scope_not_granted')).toBe(true);
+    // ADR-0146 Decision 4 (issue #1307): attachments on an agent that cannot read files.
+    expect(isRunStartProblemCode('run_attachments_unreadable')).toBe(true);
+    expect(isRunStartProblemCode('run_attachments_too_large')).toBe(true);
+    expect(isRunStartProblemCode('run_attachments_unsupported_runtime')).toBe(true);
+    // Issue #1313: audio on a connection whose provider cannot transcribe it.
+    expect(isRunStartProblemCode('run_attachments_untranscribable')).toBe(true);
     // BH061-002: a lapsed Test Runtime pass is a coded refusal, not an opaque preparation failure.
     expect(isRunStartProblemCode('runtime_not_verified')).toBe(true);
     // Issue #785: a lowered `open` the driver cannot enforce is a coded refusal.
@@ -297,6 +426,12 @@ describe('parseRunFailure', () => {
       message: 'send the message again.',
     });
     expect(isRunStartProblemCode(RUNTIME_CAPACITY_EXHAUSTED)).toBe(false);
+    // The storage design, §04: a stored file whose bytes no longer match its row.
+    expect(parseRunFailure(`${RUN_FILE_CORRUPT}: a granted file is corrupt.`)).toEqual({
+      code: 'run_file_corrupt',
+      message: 'a granted file is corrupt.',
+    });
+    expect(isRunStartProblemCode(RUN_FILE_CORRUPT)).toBe(false);
     expect(parseRunFailure('runner_capacity_exhausted: busy')).toEqual({
       code: null,
       message: 'runner_capacity_exhausted: busy',
@@ -310,5 +445,240 @@ describe('StartRunRequestSchema version range', () => {
       StartRunRequestSchema.safeParse({ prompt: 'hi', version }).success;
     expect(accepts(AGENT_VERSION_NUMBER_MAX)).toBe(true);
     expect(accepts(AGENT_VERSION_NUMBER_MAX + 1)).toBe(false);
+  });
+});
+
+describe('RunResourceSchema.output (ADR-0143)', () => {
+  it('requires the key and accepts null or an answer with its structured value', () => {
+    const withoutOutput: Record<string, unknown> = { ...run };
+    delete withoutOutput['output'];
+    expect(RunResourceSchema.safeParse(withoutOutput).success).toBe(false);
+    expect(RunResourceSchema.safeParse({ ...run, output: null }).success).toBe(true);
+    const answered = RunResourceSchema.safeParse({
+      ...run,
+      status: 'completed',
+      output: { text: 'done', structured: { total: 3 } },
+    });
+    expect(answered.success).toBe(true);
+    expect(
+      RunResourceSchema.safeParse({ ...run, output: { text: 'done', structured: null } }).success,
+    ).toBe(true);
+  });
+
+  it('rejects an unknown key inside output and a missing text', () => {
+    expect(
+      RunResourceSchema.safeParse({ ...run, output: { text: 'a', structured: 1, extra: 1 } })
+        .success,
+    ).toBe(false);
+    expect(RunResourceSchema.safeParse({ ...run, output: { structured: 1 } }).success).toBe(false);
+  });
+});
+
+describe('outputSchema limits (ADR-0143)', () => {
+  const valid = { type: 'object', properties: { total: { type: 'number' } } };
+  const limitOf = (schema: unknown): string | undefined => outputSchemaViolation(schema)?.limit;
+
+  function nested(
+    levels: number,
+    leaf: Record<string, unknown> = { type: 'string' },
+  ): Record<string, unknown> {
+    let schema = leaf;
+    for (let level = 1; level < levels; level += 1) {
+      schema = { type: 'object', properties: { next: schema } };
+    }
+    return schema;
+  }
+
+  it('accepts a plain schema, a 2020-12 declaration, local $defs and a z.toJSONSchema output', () => {
+    expect(outputSchemaViolation(valid)).toBeNull();
+    expect(outputSchemaViolation({ ...valid, $schema: OUTPUT_SCHEMA_DIALECT })).toBeNull();
+    expect(
+      outputSchemaViolation({
+        type: 'object',
+        properties: { line: { $ref: '#/$defs/line' } },
+        $defs: { line: { type: 'object', properties: { sku: { type: 'string' } } } },
+      }),
+    ).toBeNull();
+    const generated = z.toJSONSchema(
+      z.object({
+        email: z.email(),
+        id: z.uuid(),
+        at: z.iso.datetime(),
+        code: z.string().regex(/^A/u),
+      }),
+      { target: 'draft-2020-12' },
+    );
+    expect(generated['type']).toBe('object');
+    expect(outputSchemaViolation(generated)).toBeNull();
+  });
+
+  it('refuses a root that is not an object schema (root_type)', () => {
+    expect(limitOf({ type: 'string' })).toBe('root_type');
+    expect(limitOf({ properties: {} })).toBe('root_type');
+    expect(limitOf({ type: ['object', 'null'] })).toBe('root_type');
+    expect(limitOf([])).toBe('root_type');
+    expect(limitOf(null)).toBe('root_type');
+    expect(outputSchemaViolation({ type: 'array' })?.message.startsWith('root_type:')).toBe(true);
+  });
+
+  it('refuses a schema over 32 KiB and accepts one exactly at the bound (size)', () => {
+    const at = (bytes: number): Record<string, unknown> => {
+      const base = { type: 'object', description: '' };
+      const overhead = new TextEncoder().encode(JSON.stringify(base)).length;
+      return { ...base, description: 'x'.repeat(bytes - overhead) };
+    };
+    expect(outputSchemaViolation(at(OUTPUT_SCHEMA_MAX_BYTES))).toBeNull();
+    expect(limitOf(at(OUTPUT_SCHEMA_MAX_BYTES + 1))).toBe('size');
+    expect(limitOf({ type: 'object', n: 1n })).toBe('size');
+  });
+
+  it('counts bytes, not characters', () => {
+    const wide = { type: 'object', description: 'あ'.repeat(OUTPUT_SCHEMA_MAX_BYTES / 3) };
+    expect(limitOf(wide)).toBe('size');
+  });
+
+  it('refuses another dialect (dialect)', () => {
+    expect(limitOf({ ...valid, $schema: 'http://json-schema.org/draft-07/schema#' })).toBe(
+      'dialect',
+    );
+  });
+
+  it('refuses a remote, unresolved or non-$defs $ref and any $dynamicRef (ref)', () => {
+    const withRef = (ref: unknown): unknown => ({
+      type: 'object',
+      properties: { a: { $ref: ref } },
+      $defs: { known: { type: 'string' } },
+    });
+    expect(limitOf(withRef('https://example.com/schema.json'))).toBe('ref');
+    expect(limitOf(withRef('#/properties/other'))).toBe('ref');
+    expect(limitOf(withRef('#'))).toBe('ref');
+    expect(limitOf(withRef('#/$defs/missing'))).toBe('ref');
+    expect(limitOf(withRef('#/$defs/known/extra'))).toBe('ref');
+    expect(limitOf(withRef(7))).toBe('ref');
+    expect(outputSchemaViolation(withRef('#/$defs/known'))).toBeNull();
+    expect(limitOf({ type: 'object', properties: { a: { $dynamicRef: '#node' } } })).toBe('ref');
+  });
+
+  it('does not read $ref text inside const, enum or default data', () => {
+    expect(
+      outputSchemaViolation({
+        type: 'object',
+        properties: { a: { const: { $ref: 'https://example.com' } } },
+        default: { $ref: 'x' },
+      }),
+    ).toBeNull();
+  });
+
+  it('allows 16 nested levels and refuses 17 (depth)', () => {
+    expect(outputSchemaViolation(nested(OUTPUT_SCHEMA_MAX_DEPTH))).toBeNull();
+    expect(limitOf(nested(OUTPUT_SCHEMA_MAX_DEPTH + 1))).toBe('depth');
+    expect(
+      limitOf({
+        type: 'object',
+        properties: {
+          a: { items: { anyOf: [nested(OUTPUT_SCHEMA_MAX_DEPTH - 2)] } },
+        },
+      }),
+    ).toBe('depth');
+  });
+
+  it('refuses a recursive $ref, directly or through another definition (ref)', () => {
+    expect(
+      limitOf({
+        type: 'object',
+        properties: { root: { $ref: '#/$defs/node' } },
+        $defs: {
+          node: { type: 'object', properties: { children: { items: { $ref: '#/$defs/node' } } } },
+        },
+      }),
+    ).toBe('ref');
+    expect(limitOf({ type: 'object', $defs: { a: { $ref: '#/$defs/a' } } })).toBe('ref');
+    expect(
+      limitOf({
+        type: 'object',
+        properties: { a: { $ref: '#/$defs/a' } },
+        $defs: {
+          a: { type: 'object', properties: { b: { $ref: '#/$defs/b' } } },
+          b: { anyOf: [{ $ref: '#/$defs/a' }] },
+        },
+      }),
+    ).toBe('ref');
+  });
+
+  it('measures a referenced definition at the level that uses it (depth)', () => {
+    // The root is level 1, `a` stands at level 2 and reaches its reference at level 9, so `b`
+    // starts at level 9: 8 levels of `b` end at 16, 9 levels end at 17.
+    const chain = (levelsOfB: number): unknown => ({
+      type: 'object',
+      properties: { a: { $ref: '#/$defs/a' } },
+      $defs: { a: nested(8, { $ref: '#/$defs/b' }), b: nested(levelsOfB) },
+    });
+    expect(outputSchemaViolation(chain(8))).toBeNull();
+    expect(limitOf(chain(9))).toBe('depth');
+  });
+
+  it('accepts a definition shared by several references', () => {
+    const line = { type: 'object', properties: { sku: { type: 'string' } } };
+    expect(
+      outputSchemaViolation({
+        type: 'object',
+        properties: {
+          first: { $ref: '#/$defs/line' },
+          rest: { type: 'array', items: { $ref: '#/$defs/line' } },
+          pair: { allOf: [{ $ref: '#/$defs/line' }, { $ref: '#/$defs/line' }] },
+        },
+        $defs: { line },
+      }),
+    ).toBeNull();
+  });
+
+  it('follows a definition shared by many references only once per level', () => {
+    // 15 definitions, each referencing the next 64 times: walking every reference would take
+    // 64^14 steps.
+    const defs: Record<string, unknown> = { d14: { type: 'string' } };
+    for (let index = 13; index >= 0; index -= 1) {
+      defs[`d${index}`] = {
+        anyOf: Array.from({ length: 64 }, () => ({ $ref: `#/$defs/d${index + 1}` })),
+      };
+    }
+    expect(
+      outputSchemaViolation({
+        type: 'object',
+        properties: { a: { $ref: '#/$defs/d0' } },
+        $defs: defs,
+      }),
+    ).toBeNull();
+  });
+
+  it('is applied by StartRunRequestSchema, naming the limit', () => {
+    expect(StartRunRequestSchema.safeParse({ prompt: 'go', outputSchema: valid }).success).toBe(
+      true,
+    );
+    for (const [schema, limit] of [
+      [{ type: 'string' }, 'root_type'],
+      [{ ...valid, $schema: 'https://example.com/other' }, 'dialect'],
+      [{ ...valid, properties: { a: { $ref: 'https://example.com/a' } } }, 'ref'],
+      [nested(OUTPUT_SCHEMA_MAX_DEPTH + 1), 'depth'],
+      [{ type: 'object', description: 'x'.repeat(OUTPUT_SCHEMA_MAX_BYTES) }, 'size'],
+    ] as const) {
+      const parsed = StartRunRequestSchema.safeParse({ prompt: 'go', outputSchema: schema });
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message.startsWith(`${limit}:`)).toBe(true);
+    }
+    expect(StartRunRequestSchema.safeParse({ prompt: 'go', outputSchema: [] }).success).toBe(false);
+  });
+
+  it('still refuses an unknown key beside outputSchema', () => {
+    expect(
+      StartRunRequestSchema.safeParse({ prompt: 'go', outputSchema: valid, schema: valid }).success,
+    ).toBe(false);
+  });
+});
+
+describe('parseRunFailure output_schema_unsatisfied (ADR-0143)', () => {
+  it('reads the code back without matching prose', () => {
+    expect(
+      parseRunFailure(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`),
+    ).toEqual({ code: 'output_schema_unsatisfied', message: OUTPUT_SCHEMA_UNSATISFIED_MESSAGE });
   });
 });

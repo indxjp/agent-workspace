@@ -3,6 +3,19 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts`, with
 the same version (ADR-0082 D3).
 
+## 0.6.11 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.
+
+## 0.6.10 — unreleased
+
+### Security
+
+- Next.js moves to 16.4.2, which fixes an unauthenticated remote code execution
+  ([GHSA-2464-fhr4-w9xw](https://github.com/advisories/GHSA-2464-fhr4-w9xw)) and an App Router
+  denial of service ([GHSA-p3m5-59mp-jv5r](https://github.com/advisories/GHSA-p3m5-59mp-jv5r)) in
+  Next.js 16.0.0 to 16.4.0.
+
 ## 0.6.9 — 2026-10-14
 
 No changes to this package. Released alongside the install-live harness fix (#1128) so the gallery use cases are verified live against the published packages.

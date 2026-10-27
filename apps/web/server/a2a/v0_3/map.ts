@@ -17,6 +17,9 @@ export function taskState(status: RunStatus): A2aTaskState {
       return 'submitted';
     case 'running':
       return 'working';
+    case 'awaiting_approval':
+      // The run stopped for a person's decision (ADR-0145); `input-required` is A2A's word for it.
+      return 'input-required';
     case 'completed':
       return 'completed';
     case 'failed':

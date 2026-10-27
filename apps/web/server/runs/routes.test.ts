@@ -39,7 +39,10 @@ const HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'
 
 function exportedMethods(source: string): string[] {
   return HTTP_METHODS.filter((method) =>
-    new RegExp(`export\\s+(?:async\\s+)?function\\s+${method}\\b`).test(source),
+    // Both forms Next.js serves: a declared handler, or one wrapped by `server/http/route.ts`.
+    new RegExp(`export\\s+(?:(?:async\\s+)?function\\s+${method}\\b|const\\s+${method}\\s*=)`).test(
+      source,
+    ),
   );
 }
 
@@ -52,6 +55,7 @@ const OWNED_ROUTES: ReadonlyArray<readonly [file: string, methods: readonly stri
   ['runs/[id]/route.ts', ['GET', 'POST']],
   ['runs/[id]/events/route.ts', ['GET']],
   ['runs/[id]/interrupt/route.ts', ['POST']],
+  ['runs/[id]/approval/route.ts', ['POST']],
   ['runs/[id]/revoke-tokens/route.ts', ['POST']],
   ['agents/[id]/runs/route.ts', ['POST']],
 ];

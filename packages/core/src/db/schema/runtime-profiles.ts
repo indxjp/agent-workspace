@@ -20,26 +20,20 @@
  * the `secrets` table (§23) already stores an encrypted blob under a workspace-scoped id, which is
  * exactly what an "endpoint + credentials" pair is.
  *
- * `driver` is a closed set of ten values, hand-typed FOUR times, not three: independently in
- * `packages/runtime/src/driver.ts`'s `RuntimeDriverId` (spec §14.2), in this task's own Zod copy
- * in `packages/core/src/schemas.ts`, in this file's `runtimeProfileDrivers` below, AND — the copy
- * that is easy to miss — in the `CHECK` constraint text `drizzle-kit generate` compiled into
- * `migrations/0002_w3_runtime_profiles.sql` and that migration alone actually applies to a real
- * database. `packages/core` may not depend on `packages/runtime` (no manifest in this wave may
- * gain a dependency — ADR-0041) and a database CHECK cannot reference a TypeScript type, which is
- * why the first three are hand-typed rather than imported; the migration file is hand-typed for a
- * different reason — it is a generated artifact nothing re-generates or diffs in CI.
+ * `driver` is a closed set of values: the contracts' `RUNTIME_DRIVERS`, exported below as
+ * `runtimeProfileDrivers`. The `CHECK` constraint text `drizzle-kit generate` compiled into
+ * `migrations/0002_w3_runtime_profiles.sql` is the one copy that cannot import it, and that
+ * migration alone is what a real database enforces.
  *
- * `runtime-profiles.test.ts` (this file's sibling) pins all four. Its first `describe` pins this
- * package's two copies (`runtimeDriverIds`, `runtimeProfileDrivers`) to each other AND to
- * `docs/spec.md` §14.2's own union, read and parsed at test time — not to
- * `packages/runtime/src/driver.ts` directly, because `RuntimeDriverId` there is a `type`, not a
- * `const`, so there is no runtime value to import even without the ADR-0041 dependency ban.
+ * `runtime-profiles.test.ts` (this file's sibling) pins it. Its first `describe` pins this
+ * package's two lists (`runtimeDriverIds`, `runtimeProfileDrivers`) to each other AND to
+ * `docs/spec.md` §14.2's own union, read and parsed at test time. `packages/runtime`'s
+ * `RuntimeDriverId` is a `type`, not a `const`, so there is no runtime value to compare;
  * `packages/runtime/src/spec-transcription.test.ts` pins `driver.ts` to the same spec text from its
- * side, so those three meet at `docs/spec.md`. Its second `describe` (W3-CP-06-B4, round 3) pins
- * the fourth: it parses `migrations/*.sql`'s committed `runtime_profiles_driver_valid` CHECK
- * constraint directly and compares it to `runtimeProfileDrivers` — not to the spec, since the
- * migration is a generated artifact of this file, not of the spec — closing the loop transitively.
+ * side. Its second `describe` (W3-CP-06-B4, round 3) parses `migrations/*.sql`'s committed
+ * `runtime_profiles_driver_valid` CHECK constraint directly and compares it to
+ * `runtimeProfileDrivers` — not to the spec, since the migration is a generated artifact of this
+ * file, not of the spec — closing the loop transitively.
  *
  * Round 2 added the first `describe` and believed it closed W3-CP-06-B4 by naming "three copies,
  * not one" here; it did not name the migration, so a driver added to the spec and to all three
@@ -61,30 +55,15 @@ import {
 import { integer, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
+import { RUNTIME_DRIVERS } from '@indx-workspace/contracts/runtimes';
+
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
 import { oneOf } from './one-of.js';
 import { secrets } from './secrets.js';
 import { workspaces } from './workspaces.js';
 
-/**
- * Spec §14.2's `RuntimeDriverId`, verbatim. See this file's header for why it is one of four
- * hand-typed copies rather than an import.
- */
-export const runtimeProfileDrivers = [
-  'local',
-  'sandbox-runtime',
-  'docker',
-  'kubernetes',
-  'gke-agent-sandbox',
-  'aca-sessions',
-  'aws-agentcore',
-  'aws-ecs',
-  'cloud-run-sandbox',
-  'cloud-run-service',
-  'external',
-  'vercel-sandbox',
-  'cloudflare-sandbox',
-] as const;
+/** Spec §14.2's `RuntimeDriverId`: the contracts' `RUNTIME_DRIVERS`. */
+export const runtimeProfileDrivers = RUNTIME_DRIVERS;
 export type RuntimeProfileDriver = (typeof runtimeProfileDrivers)[number];
 
 /** Spec §15.1's `networkPolicy`. */

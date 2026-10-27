@@ -1,40 +1,46 @@
 import type { Server } from 'node:http';
 import { pathToFileURL } from 'node:url';
 
+import { type RuntimeDriverId, type RuntimeHandle } from '@agent-workspace/runtime/driver';
 import {
   ACA_SESSIONS_MANAGEMENT_API_VERSION,
   createAcaSessionsDriver,
   createAcaSessionsRestClient,
-  createCloudflareSandboxDriver,
+  fetchAcaSessionsAccessToken,
+} from '@agent-workspace/runtime/driver/aca-sessions';
+import {
   createCloudRunAdminClient,
   createCloudRunDriver,
-  assertBuildIdPinnedTemplates,
-  createDockerDriver,
-  createE2bProvider,
-  createExternalDriver,
-  createKubernetesDriver,
-  createVercelSandboxProvider,
-  dockerRuntimeName,
-  fetchAcaSessionsAccessToken,
   fetchCloudRunAccessToken,
   fetchCloudRunIdentityToken,
-  inClusterKubernetesClient,
-  EngineImageConfigurationError,
-  readEngineImageMap,
+} from '@agent-workspace/runtime/driver/cloud-run';
+import { createCloudflareSandboxDriver } from '@agent-workspace/runtime/driver/cloudflare-sandbox';
+import {
+  createDockerDriver,
+  dockerRuntimeName,
   type DockerCommand,
   type DockerReapReport,
-  type EngineImageMap,
+} from '@agent-workspace/runtime/driver/docker';
+import {
+  assertBuildIdPinnedTemplates,
+  createE2bProvider,
+  createExternalDriver,
+} from '@agent-workspace/runtime/driver/external';
+import {
+  createKubernetesDriver,
+  inClusterKubernetesClient,
   type KubernetesResourceClient,
-  type RuntimeHandle,
-} from '@agent-workspace/runtime';
+} from '@agent-workspace/runtime/driver/kubernetes';
+import { createVercelSandboxProvider } from '@agent-workspace/runtime/driver/vercel-sandbox';
+import {
+  EngineImageConfigurationError,
+  readEngineImageMap,
+  type EngineImageMap,
+} from '@agent-workspace/runtime/engine-images';
 
 import { ADAPTER_ENGINE_IDS } from './engines.js';
-import {
-  createRunnerManagerServer,
-  createShutdownGate,
-  type RunnerManagerOptions,
-  type ShutdownGate,
-} from './manager.js';
+import { createRunnerManagerServer, type RunnerManagerOptions } from './manager.js';
+import { createShutdownGate, type ShutdownGate } from './shutdown-gate.js';
 import { listen, parsePort } from './server.js';
 import { createToolSandboxes, TOOL_SANDBOX_ENGINE } from './tool-sandbox.js';
 
@@ -599,7 +605,7 @@ export function kubernetesRuntimeOrigin(handle: RuntimeHandle): string {
   return `http://${pod}.${namespace}.svc:8080`;
 }
 
-const SERVED_RUNTIME_DRIVERS = [
+export const SERVED_RUNTIME_DRIVERS = [
   'docker',
   'cloud-run-service',
   'aca-sessions',
@@ -607,7 +613,7 @@ const SERVED_RUNTIME_DRIVERS = [
   'vercel-sandbox',
   'cloudflare-sandbox',
   'kubernetes',
-] as const;
+] as const satisfies readonly RuntimeDriverId[];
 
 /**
  * A `RUNTIME_DRIVER` this manager does not serve (#818). It is refused before any driver is built,
@@ -744,6 +750,39 @@ export async function shutdownRunnerManager(
 
 const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
+/**
+ * The signal listener: the first signal runs `shutdown` and exits with its outcome, a second one
+ * leaves at once. A shutdown that throws is still a failed stop, so it exits 2 like
+ * `sandboxes-left` instead of crashing through the unhandled-rejection path with exit 1.
+ */
+export function createShutdownSignalHandler(
+  shutdown: () => Promise<ManagerShutdownOutcome>,
+  exit: (code: number) => void = (code) => process.exit(code),
+  log: Pick<NodeJS.WriteStream, 'write'> = process.stderr,
+): (signal: NodeJS.Signals) => void {
+  let stopping = false;
+  return (signal) => {
+    if (stopping) {
+      log.write(`runner manager: second ${signal}; leaving now\n`);
+      exit(2);
+      return;
+    }
+    stopping = true;
+    log.write(`runner manager: ${signal} received; removing sandboxes\n`);
+    shutdown().then(
+      (outcome) => {
+        exit(outcome === 'clean' ? 0 : 2);
+      },
+      (error: unknown) => {
+        log.write(
+          `runner manager: shutdown failed: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        exit(2);
+      },
+    );
+  };
+}
+
 const invokedPath = process.argv[1];
 if (invokedPath !== undefined && import.meta.url === pathToFileURL(invokedPath).href) {
   startRunnerManager()
@@ -751,18 +790,7 @@ if (invokedPath !== undefined && import.meta.url === pathToFileURL(invokedPath).
       process.stdout.write(
         `runner manager listening on ${address.address}:${String(address.port)}\n`,
       );
-      let stopping = false;
-      const stop = (signal: NodeJS.Signals): void => {
-        if (stopping) {
-          process.stderr.write(`runner manager: second ${signal}; leaving now\n`);
-          process.exit(2);
-        }
-        stopping = true;
-        process.stderr.write(`runner manager: ${signal} received; removing sandboxes\n`);
-        void shutdown().then((outcome) => {
-          process.exit(outcome === 'clean' ? 0 : 2);
-        });
-      };
+      const stop = createShutdownSignalHandler(shutdown);
       for (const signal of SHUTDOWN_SIGNALS) process.on(signal, stop);
     })
     .catch((error: unknown) => {

@@ -178,16 +178,22 @@ private def toolPolicyVector (c : Case) : Vector :=
              (c.readOnly.map fun (path, directory) =>
                  Json.mkObj [("path", Json.str path),
                    ("directory", Lean.toJson directory)]).toArray),
-         ("guarded", Lean.toJson c.guarded)],
+         ("guarded", Lean.toJson c.guarded),
+         ("requireApproval", Lean.toJson c.requireApproval)],
     expected :=
       Json.mkObj
         [("wireFileGrantDeny", Lean.toJson (wireFileGrantDeny c)),
          ("target", toolPolicyJson (target c)),
-         ("current", toolPolicyJson (current c))],
+         ("current", toolPolicyJson (current c)),
+         ("allowedTools", Lean.toJson (allowed c)),
+         ("deferred", Lean.toJson (deferred c)),
+         ("refused", Lean.toJson (refused c))],
     witnesses :=
       [ts "Refinement" "EngineToolPolicy" "adapter_matches_compose_on_every_case",
        ts "Refinement" "EngineToolPolicy" "the_permission_floor_survives_every_stored_policy",
-       ts "Refinement" "EngineToolPolicy" "the_compose_side_guard_changes_nothing"] }
+       ts "Refinement" "EngineToolPolicy" "the_compose_side_guard_changes_nothing",
+       ts "Refinement" "EngineToolPolicy" "no_call_needing_approval_is_auto_approved",
+       ts "Refinement" "EngineToolPolicy" "a_gate_canUseTool_never_sees_is_refused"] }
 
 def toolPolicyVectors : List Vector := cases.map toolPolicyVector
 

@@ -13,12 +13,10 @@
  *
  *   * `any`  — every row of the resource in the caller's workspace;
  *   * `own`  — the rows the caller owns, and no others;
- *   * `permitted` — the rows an agent-permission mechanism has granted to the caller. §21 uses
- *     this shape once, in Viewer's *"Run **permitted** agents"*, and neither §21 nor §27's table
- *     list contains a mechanism that could populate it. It therefore **denies**, and says why:
- *     an undecidable predicate is refused, never assumed satisfied (ADR-0031). It is a separate
- *     value from `none` so that the day the mechanism lands, the change is one word in one table
- *     rather than an archaeology exercise;
+ *   * `permitted` — the rows the caller owns plus the rows an `agent_grants` row grants to the
+ *     caller (issue #117, ADR-0152). §21 uses this shape in Viewer's *"Run **permitted** agents"*
+ *     and Builder's *"run agents … where permitted"*. A grant the handler cannot confirm denies:
+ *     an undecidable predicate is refused, never assumed satisfied (ADR-0031);
  *   * `none` — no rows.
  *
  * Each role is declared as a fallback plus the resources §21 names for it. The fallback is
@@ -111,6 +109,9 @@ const SPEC_34_SUB_RESOURCES: Readonly<Record<Resource, readonly string[]>> = {
   'runtime-profiles': [],
   runtimes: [],
   secrets: [],
+  // Issue #1690. `credential`, `test` and `browse` are declared by
+  // `declarations/STO-503-STORAGE-CONNECTIONS-1690.ts`.
+  'storage-connections': [],
   // §34 prints `POST /api/sessions/:id/messages`. Sending a message to a session is what spends
   // money and executes an agent, so `parseOperation` reads it as `run` on `sessions`.
   sessions: ['messages'],
@@ -122,6 +123,9 @@ const SPEC_34_SUB_RESOURCES: Readonly<Record<Resource, readonly string[]>> = {
   // Issue #236. A minted token names no row of its own and has no `:id`, so there is nothing a
   // sub segment under it could address — same reasoning as `me`.
   tokens: [],
+  // Issue #1293 (ADR-0144). §34 never printed `triggers`; its `secret` (rotate) sub-resource is the
+  // task's own to declare, in `declarations/PT-TRIGGERS-1293.ts`.
+  triggers: [],
   users: [],
   workspaces: [],
 };
@@ -243,10 +247,18 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
       // words, not a least-privilege reading of an ambiguity.
       agents: EVERYTHING,
       'api-keys': MANAGE,
-      connectors: MANAGE,
+      // ADR-0152 (roles are monotonic): `EVERYTHING`, not `MANAGE`, because Builder runs its own
+      // connectors and `MANAGE` would leave Admin narrower than Builder on `run`.
+      connectors: EVERYTHING,
       // Issue #949 (ADR-0134): an endpoint client is credential-bearing configuration like an API
       // key, which Admin manages; `EVERYTHING` so an Admin can bind any agent the workspace may run.
       'endpoint-clients': EVERYTHING,
+      // Issue #1293 (ADR-0144 D3): a trigger starts runs without a person at the keyboard, which
+      // is configuration of the workspace's agents; Admin manages every one. No route classifies
+      // as `run` here (a firing is the public ingress, never a role's call), but the cell is
+      // `EVERYTHING` rather than `MANAGE` because Builder holds `run: own` and roles are monotonic
+      // (ADR-0152).
+      triggers: EVERYTHING,
       // "Users" is the capability; a membership is how a user is attached to a workspace with a
       // role. Managing users without managing their membership is not a capability §21 could
       // have meant, because §21's user model has no other way to say who belongs where.
@@ -277,6 +289,9 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
       // Issue #968 — the platform catalogue, same cell and reading as `engines`.
       platforms: READ_ONLY,
       'model-connections': MANAGE,
+      // Issue #1690 (storage design Q-22): Owner and Admin connect and change a bucket; Member
+      // (the `builder` role) may see which connections exist, Viewer may not.
+      'storage-connections': MANAGE,
       models: MANAGE,
       // "runtimes" — §34 prints the resource as `runtime-profiles` and §15 names them.
       'runtime-profiles': MANAGE,
@@ -287,6 +302,11 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
       // an API key — both of which Admin manages and nothing wider grants. §14.9 names no role;
       // this is the least-privilege reading, matching `runtime-profiles` immediately above.
       'runtime-connections': MANAGE,
+      // ADR-0152 (roles are monotonic): §21's Admin clause does not name projects, and the
+      // literal reading left Admin with no grant here while Builder holds its own. `MANAGE` —
+      // every project in the workspace, no run verb because a project has nothing to run (Builder
+      // holds none either). `GET /api/projects` already lists every project for an Admin.
+      projects: MANAGE,
       // §21's sharing block, verbatim: "Admin  revoke or suspend any share in the workspace, see
       // the shared-links page."
       shares: MANAGE,
@@ -339,14 +359,23 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
     fallback: NOTHING,
     byResource: {
       // "where permitted" names no mechanism. The least-privilege reading that still leaves the
-      // clause with meaning is that a Builder creates freely and edits or runs what it owns.
-      agents: OWN_WRITES,
+      // clause with meaning is that a Builder creates freely and edits what it owns.
+      //
+      // ADR-0152 (roles are monotonic) makes `run` `permitted`, which `applyGrant` reads as "own
+      // or granted": Viewer runs the agents an `agent_grants` row names, and `own` alone did not
+      // admit that, so a granted Builder was denied what a granted Viewer was allowed. A Builder
+      // still may not run an agent it neither owns nor was granted.
+      agents: { ...OWN_WRITES, run: 'permitted' },
       skills: OWN_WRITES,
       files: OWN_WRITES,
       connectors: OWN_WRITES,
       // Issue #949: a Builder creates freely and edits or revokes the clients it created; the
       // handler also refuses binding an agent the Builder could not itself run.
       'endpoint-clients': OWN_WRITES,
+      // Issue #1293 (ADR-0144 D3): a Builder creates a trigger for an agent it may run and edits,
+      // rotates or removes the ones it owns; the firing runs as that owner, so the handler also
+      // refuses an agent the Builder could not itself run.
+      triggers: OWN_WRITES,
       // Issue #790: as Admin's cell; a Builder saves versions of its own agents, so it uploads the
       // bundles those versions pin. Viewer keeps none.
       'tool-bundles': MANAGE,
@@ -358,6 +387,8 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
       // routes refuse a credential-looking `driverConfig` key), so the read discloses sizing and
       // network policy, never secret material. ADR-0088 records this grant and its alternatives.
       'runtime-profiles': READ_ONLY,
+      // Issue #1690 (Q-22): a Member reads the connections an agent can be granted; never writes.
+      'storage-connections': READ_ONLY,
       // §21's sharing block: "Builder  share own agents, projects and sessions to workspace or
       // public link." Projects and sessions are therefore the Builder's own, and shares over them
       // are the Builder's own.
@@ -389,8 +420,8 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
     fallback: NOTHING,
     byResource: {
       // Reading the agent list is what makes "run permitted agents" a sentence about something a
-      // Viewer can do at all, and no clause of §21 restricts reading. Running is `permitted`,
-      // which denies until a mechanism exists — see this file's header and the ADR.
+      // Viewer can do at all, and no clause of §21 restricts reading. Running is `permitted`:
+      // the agents this Viewer owns or an `agent_grants` row names — see this file's header.
       agents: { read: 'any', write: 'none', run: 'permitted' },
       // "view their own sessions".
       sessions: OWN_READS,

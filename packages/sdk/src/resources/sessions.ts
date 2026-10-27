@@ -11,6 +11,11 @@ import {
   type UpdateSessionPatch,
 } from '@indx-workspace/contracts/sessions';
 
+import {
+  SurfaceAttachmentResponseSchema,
+  type SurfaceAttachmentResponse,
+} from '@indx-workspace/contracts/surfaces';
+
 import { segment, type HttpClient, type RequestOptions } from '../http.js';
 import { walkPages } from '../pagination.js';
 
@@ -166,5 +171,28 @@ export class SessionsClient {
       signal: options.signal,
     });
     return response.session;
+  }
+
+  /**
+   * Hand one file to a session you may write to (`POST /api/sessions/:id/attachments`); the answer
+   * names the catalogue row to send as `attachments: [{ fileId }]` on `runs.start`. The same
+   * concealed `404 file_not_found` answers a session you may not write to and an archived project.
+   */
+  public attach(
+    sessionId: string,
+    file: File,
+    options: RequestOptions = {},
+  ): Promise<SurfaceAttachmentResponse> {
+    return this.#http.json({
+      operation: 'sessions.attach',
+      method: 'POST',
+      path: `/api/sessions/${segment(sessionId)}/attachments`,
+      query: new URLSearchParams({ name: file.name }),
+      rawBody: file,
+      headers: { 'content-type': file.type === '' ? 'application/octet-stream' : file.type },
+      expect: [201],
+      schema: SurfaceAttachmentResponseSchema,
+      signal: options.signal,
+    });
   }
 }

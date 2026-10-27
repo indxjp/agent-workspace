@@ -90,7 +90,7 @@ example :
       writeAllowed c "/workspacex/a.md" = false ∧
       writeAllowed c "/workspace" = false ∧ writeAllowed c "." = false ∧
       writeAllowed c "docs-private/a.md" = true ∧
-      writeAllowed c "/workspace/docs-private/a.md" = true := by decide
+      writeAllowed c "/workspace/docs-private/a.md" = true := by decide +kernel
 
 /-- No removal or move the filesystem wrapper permits takes a protected location with it: the path
 resolved inside the workspace, may itself be written, and its subtree holds no read-only grant of
@@ -145,7 +145,7 @@ example :
       removeAllowed c "x/../contracts/" = false ∧ removeAllowed c "/workspace/contracts" = false ∧
       removeAllowed c "contracts/signed.pdf" = false ∧ removeAllowed c ".mastra" = false ∧
       removeAllowed c "contracts-old" = true ∧ removeAllowed c "contracts/other.pdf" = true := by
-  decide
+  decide +kernel
 
 /-- Every model request an accepted configuration can issue targets the gateway's base URL plus
 `/v1` and the connection's own protocol path, carries the run token as `Authorization: Bearer`,
@@ -172,7 +172,7 @@ example :
       modelRequests (connectionFor .openaiResponses "http://gateway:8787" "run-token") =
         [("http://gateway:8787/v1/responses", "Bearer run-token")] ∧
       modelRequests (connectionFor .openaiChatCompletions "http://gateway:8787" "run-token") =
-        [("http://gateway:8787/v1/chat/completions", "Bearer run-token")] := by decide
+        [("http://gateway:8787/v1/chat/completions", "Bearer run-token")] := by decide +kernel
 
 /-- The model of every accepted agent is the explicit provider `mastraProviderSpec` decides, at
 the gateway's `/v1`: built with `createAnthropic` and the token as its `authToken` exactly for the
@@ -225,7 +225,7 @@ example :
     installedEnvironment
         [("MASTRA_TELEMETRY_DISABLED", "0"), ("ANTHROPIC_BASE_URL", ""), ("HOME", "/root")] =
       [("MASTRA_TELEMETRY_DISABLED", "1"), ("MASTRA_OFFLINE", "1"), ("HOME", "/root")] := by
-  decide
+  decide +kernel
 
 /-- An accepted request's **platform** environment (`request.env`) carries no provider credential,
 and no variable of it is a database connection variable by the `DATABASE_ENV` pattern
@@ -254,6 +254,6 @@ example :
       isDatabaseEnvName "_DATABASE_URL" = false ∧ isDatabaseEnvName "DATABASE_URLS" = false ∧
       isDatabaseEnvName "PGDATA" = false ∧ isDatabaseEnvName "TURSO_" = false ∧
       isDatabaseEnvName "X-DATABASE_URL" = false := by
-  decide
+  decide +kernel
 
 end AgentWorkspace.Theorems.Adversarial.Mastra

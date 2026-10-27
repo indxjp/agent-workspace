@@ -30,6 +30,7 @@ import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { CONTRACTS_VERSION } from '@indx-workspace/contracts';
+import type { MembershipRoleName } from '@indx-workspace/contracts/team';
 
 import { LAUNCHER_SIGNALS, type LauncherSignal } from './launcher-signals.js';
 import type { LoopbackPortState } from './embedded-db.js';
@@ -81,7 +82,7 @@ interface LauncherWorkspace {
 interface LauncherMembership {
   readonly workspaceId: string;
   readonly userId: string;
-  readonly role: 'owner' | 'admin' | 'builder' | 'viewer';
+  readonly role: MembershipRoleName;
 }
 
 /** What the launcher needs from the database root (`openDatabaseRoot`). */

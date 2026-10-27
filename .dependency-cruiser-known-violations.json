@@ -1,0 +1,772 @@
+[
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agents/agent-grants-store.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agents/policy.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/agents/resource-store.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/audit/runtime.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/cli-auth/local-credential.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/cli-auth/runtime.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/compose/runtime-provider-credential.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/register.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "dynamic-import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/services.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/session-launch.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/session-rbac.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/setup-persist.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/setup-reconciliation.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/setup-runtime-connection.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/setup.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/storage.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/agents.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/endpoints.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/projects.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/run-launcher.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/run-resources.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/run-runtime.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/runtime-resolver.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/subsystems.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/composition/wiring/tokens-surfaces.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/connectors/tools.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/files/http.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/models/memory-store.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/pagination/list-cursor.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/pagination/testing.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/rbac/postgres-directory.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/resources/catalog-store.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/environment.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runs/repository-store.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/runtimes/connections.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/secrets/memory-store.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/delete.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/http.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/pending-delete.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/skills/service.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/loader/test-runtime.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/surfaces/public/composition.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/workspaces/run-gate.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "apps/web/server/workspaces/runtime.ts",
+    "to": "packages/core/src/db/index.ts",
+    "unresolvedTo": "@agent-workspace/core/db",
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "domain-does-not-import-persistence"
+    }
+  }
+]

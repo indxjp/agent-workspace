@@ -4,11 +4,12 @@
  * and for a Builder on another principal's agent before any export runs. The full role matrix is
  * `rbac/authorisation-matrix.test.ts`'s, derived from the route declaration.
  */
+import { log as webLogger } from '../telemetry/logger';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   PLATFORM_EXPORT_MAX_BYTES,
@@ -16,36 +17,27 @@ import {
   PlatformExportResponseSchema,
   type PlatformExportResponse,
 } from '@indx-workspace/contracts/platforms';
-import { decodeUstar } from '@agent-workspace/runtime';
+import { decodeUstar } from '@agent-workspace/runtime/transfer';
 
 import { POST as exportsRoute } from '../../app/api/agents/[id]/platform-exports/route';
 import { POST as archivesRoute } from '../../app/api/agents/[id]/platform-archives/route';
 import { POST as saveVersion } from '../../app/api/agents/[id]/versions/route';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../agent-versions/fixtures';
 import { createInMemoryAgentVersionStoreProvider } from '../agent-versions/memory-store';
-import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../agent-versions/runtime';
+import { clearApplicationContext } from '../application-context';
+import { installTestDomains } from '../application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
-import {
-  clearAgentsRuntime,
-  configureAgentsRuntime,
-  type WorkspaceResolution,
-} from '../agents/runtime';
+import { type WorkspaceResolution } from '../agents/runtime';
 import { createInMemoryConnectorsStoreProvider } from '../connectors/memory-store';
-import { clearConnectorsRuntime, configureConnectorsRuntime } from '../connectors/runtime';
-import { clearFilesRuntime, configureFilesRuntime } from '../files/runtime';
+import type { EndpointClientsRuntime } from '../endpoint-clients/runtime';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 import { skillFileKey } from '../skills/keys';
+import type { WorkspaceSkillsStoreProvider } from '../storage/store';
 import {
   createLocalFilesystemObjectStoreProvider,
   type ObjectContent,
-  type ObjectStoreProvider,
-} from '../skills/object-store-bridge';
-import { clearSkillsRuntime, configureSkillsRuntime } from '../skills/runtime';
+} from '@agent-workspace/core/storage';
 
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';
 const OTHER_WORKSPACE = '77777777-7777-4777-8777-777777777777';
@@ -114,7 +106,7 @@ function skillStoreWithGet(
     key: string,
     read: (key: string) => Promise<ObjectContent | null>,
   ) => Promise<ObjectContent | null>,
-): ObjectStoreProvider {
+): WorkspaceSkillsStoreProvider {
   const provider = createLocalFilesystemObjectStoreProvider(skillsRoot);
   return {
     forWorkspace: (workspaceId) => {
@@ -126,6 +118,8 @@ function skillStoreWithGet(
         list: (prefix) => inner.list(prefix),
         listPrefix: (prefix) => inner.listPrefix(prefix),
         copyObject: (source, destination) => inner.copyObject(source, destination),
+        read: (key, options) => inner.read(key, options),
+        listPage: (prefix, options) => inner.listPage(prefix, options),
       };
     },
   };
@@ -158,35 +152,52 @@ beforeEach(async () => {
     contentType: null,
   });
 
-  configureAgentsRuntime({ agents, resolveWorkspace });
-  configureAgentVersionsRuntime({
-    versions: createInMemoryAgentVersionStoreProvider({
-      agents,
-      references: { [WORKSPACE]: { skill: [{ id: 's1', name: 'triage-guide' }] } },
-    }),
+  installTestDomains({ agents: { agents, resolveWorkspace } });
+  installTestDomains({
+    agentVersions: {
+      versions: createInMemoryAgentVersionStoreProvider({
+        agents,
+        references: { [WORKSPACE]: { skill: [{ id: 's1', name: 'triage-guide' }] } },
+      }),
+    },
   });
-  configureConnectorsRuntime({
-    resolveWorkspace,
-    connectors: createInMemoryConnectorsStoreProvider(),
-    recordAudit: () => Promise.resolve(),
-    identifyActor: () => Promise.resolve(null),
+  installTestDomains({
+    connectors: {
+      kind: 'serving',
+      runtime: {
+        resolveWorkspace,
+        connectors: createInMemoryConnectorsStoreProvider(),
+        recordAudit: () => Promise.resolve(),
+        identifyActor: () => Promise.resolve(null),
+      },
+    },
+    // The export lists the workspace's endpoint clients; this workspace has none.
+    endpointClients: {
+      list: () => Promise.resolve([]),
+    } as Partial<EndpointClientsRuntime> as EndpointClientsRuntime,
   });
-  configureSkillsRuntime({ resolveWorkspace, store: skillStore });
-  configureFilesRuntime({ resolveWorkspace, store: skillStore });
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: (request) => {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const actor = request.headers.get(ACTOR_HEADER);
-      if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
-      return Promise.resolve(
-        Principal.fromApiKey({
-          ...ACTORS[actor],
-          apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
-          workspaceId,
-          label: `${actor} export key`,
-        }),
-      );
+  installTestDomains({
+    skills: { kind: 'serving', runtime: { resolveWorkspace, store: skillStore } },
+  });
+  installTestDomains({
+    files: { kind: 'serving', runtime: { resolveWorkspace, store: skillStore } },
+  });
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: (request) => {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const actor = request.headers.get(ACTOR_HEADER);
+        if (workspaceId === null || actor === null || !isActor(actor)) return Promise.resolve(null);
+        return Promise.resolve(
+          Principal.fromApiKey({
+            ...ACTORS[actor],
+            apiKeyId: ACTORS[actor].principalId.replace(/^a/u, 'b'),
+            workspaceId,
+            label: `${actor} export key`,
+          }),
+        );
+      },
     },
   });
 
@@ -219,12 +230,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearConnectorsRuntime();
-  clearSkillsRuntime();
-  clearFilesRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
   await rm(skillsRoot, { recursive: true, force: true });
 });
 
@@ -323,7 +329,7 @@ describe('POST /api/agents/:id/platform-exports', () => {
       reads.push(key);
       return read(key);
     });
-    configureSkillsRuntime({ resolveWorkspace, store });
+    installTestDomains({ skills: { kind: 'serving', runtime: { resolveWorkspace, store } } });
 
     const response = await post(exportsRoute, { actor: 'builderA' });
 
@@ -337,15 +343,29 @@ describe('POST /api/agents/:id/platform-exports', () => {
     const store = skillStoreWithGet((key, read) =>
       key === blobKey ? Promise.resolve(null) : read(key),
     );
-    configureSkillsRuntime({ resolveWorkspace, store });
+    installTestDomains({ skills: { kind: 'serving', runtime: { resolveWorkspace, store } } });
 
-    await expect(post(exportsRoute, { actor: 'builderA' })).rejects.toThrow(
-      /listed but could not/u,
-    );
+    const log = vi.spyOn(webLogger, 'error').mockImplementation(() => undefined);
+
+    const response = await post(exportsRoute, { actor: 'builderA' });
+
+    expect(response.status).toBe(500);
+    expect(await errorOf(response)).toEqual({
+      code: 'internal_error',
+      message: 'The request could not be completed.',
+    });
+    expect(log).toHaveBeenCalledWith('[platforms] export failed', {
+      error: expect.objectContaining({
+        cause: expect.objectContaining({
+          message: expect.stringMatching(/listed but could not/u) as unknown,
+        }) as unknown,
+      }) as unknown,
+    });
+    log.mockRestore();
   });
 
   it('answers 503 when the skills store is not configured', async () => {
-    clearSkillsRuntime();
+    installTestDomains({ skills: { kind: 'unavailable' } });
     const response = await post(exportsRoute, { actor: 'builderA' });
     expect(response.status).toBe(503);
     expect((await errorOf(response)).code).toBe('agent_policy_not_configured');
@@ -365,6 +385,7 @@ describe('POST /api/agents/:id/platform-archives', () => {
     expect(response.headers.get('content-disposition')).toBe(
       'attachment; filename="support-triage-claude-managed-agents-v1.tar"',
     );
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     const entries = decodeUstar(new Uint8Array(await response.arrayBuffer()));
     expect(entries.map((entry) => entry.path)).toStrictEqual(json.files.map((file) => file.path));
     for (const file of json.files) {

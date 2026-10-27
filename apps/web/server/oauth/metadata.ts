@@ -6,6 +6,7 @@
 import { oauthError, oauthJson, oauthNotConfigured } from './http';
 import {
   A2A_RESOURCE_PREFIX,
+  BUILDER_RESOURCE_PATH,
   MCP_RESOURCE_PREFIX,
   PROTECTED_RESOURCE_METADATA_PREFIX,
   publicOrigin,
@@ -39,9 +40,10 @@ export function protectedResourceMetadata(request: Request): Response {
   if (origin === null) return oauthNotConfigured();
   const { pathname } = new URL(request.url);
   const resourcePath = pathname.slice(PROTECTED_RESOURCE_METADATA_PREFIX.length);
+  const isBuilder = resourcePath === BUILDER_RESOURCE_PATH;
   const prefix = [MCP_RESOURCE_PREFIX, A2A_RESOURCE_PREFIX].find((p) => resourcePath.startsWith(p));
   const segment = prefix === undefined ? '' : resourcePath.slice(prefix.length);
-  if (segment === '' || segment.includes('/')) {
+  if (!isBuilder && (segment === '' || segment.includes('/'))) {
     return oauthError(404, 'invalid_target', 'No protected resource is published at this path.');
   }
   return oauthJson(

@@ -1,16 +1,22 @@
 ---
 title: "7. Contract review agent"
-description: "An agent that reads a counterparty's Word draft clause by clause, applies the legal team's playbook through a deterministic detector script, and returns a risk table with playbook citations and redline proposals. The backend refuses to call a review complete when the table leaves out a must-flag finding."
+description: "An agent that reads a counterparty's Word draft clause by clause, applies the legal team's playbook through a deterministic detector script, and returns a risk table with playbook citations and redline proposals. Legal approves the redline before the Word file is made, and the backend refuses a review whose table leaves out a must-flag finding."
 ---
 
 <Info>
-**You will build:** an agent that reads a Word draft clause by clause against the legal playbook and returns a risk table with playbook citations and redlines; your backend marks the review incomplete when a must-flag issue is missing.
+**You will build:** an agent that reads a Word draft clause by clause against the legal playbook and returns a risk table with playbook citations and redlines; legal approves the redline before the Word file exists, and your backend refuses the review when a must-flag issue is missing.
 
-**You will learn:** read-only file grants for the draft and the playbook ([Design an agent](/building/agents)), a skill with a script ([Skills](/building/skills)), the stored policy that pre-approves `run_skill_script`, a full-page surface ([Embed an agent](/building/embedding)), evals with `contains` and a judge ([Evaluations](/guides/evaluations)), and a backend that enforces the must-flags ([Integrate a backend](/building/backend)). No MCP server.
+**You will learn:** read-only file grants for the draft and the playbook ([Design an agent](/building/agents)), a skill with a script ([Skills](/building/skills)), the stored policy that pre-approves `run_skill_script` and gates `Write` for approval, a full-page surface ([Embed an agent](/building/embedding)), evals with `contains` and a judge ([Evaluations](/guides/evaluations)), and a backend that enforces the must-flags ([Integrate a backend](/building/backend)). No MCP server.
 
-**Time and prerequisites:** about 40 minutes to read; the tests behind it run offline with no API key. To run it on your own workspace, finish [chapter 1](/path/first-agent) first (a project answering under `aw dev`) and have a model key; there is no server to start. Intermediate.
+**Time and prerequisites:** about 40 minutes to read and about 20 minutes to run it on your workspace; the tests behind it run offline with no API key. To run it on your own workspace, finish [chapter 1](/path/first-agent) first (a project answering under `aw dev`) and have a model key; there is no server to start. Intermediate.
 
 </Info>
+
+## The result
+
+<Frame caption="The contract review agent in the console, ready to review 業務委託契約書_株式会社ミナトシステムズ案.docx against the playbook.">
+  <img src="/images/tutorials/contract-review/02-agent.png" alt="The contract review agent's configuration page in the web console" />
+</Frame>
 
 **契約書レビューエージェント.** Legal or sales receives a counterparty's draft
 （業務委託契約書、秘密保持契約書、売買基本契約書） as a Word file and uploads it. The agent splits it
@@ -32,7 +38,7 @@ must-flag issues the same way every time, and the backend checks the agent's tab
 Every test behind this page runs offline, with no API key. How the gallery tests
 a use case, and what each tier proves, is on the [gallery overview](/tutorials).
 
-## How the agent works
+## How it works
 
 From the request to the person who decides, with the tools, skills and checks in between:
 
@@ -41,39 +47,53 @@ flowchart TD
   U["Legal uploads the .docx"] --> A["Agent starts the review"]
   A --> C["clauses.mjs check: split into clauses, run the detectors"]
   C --> R["Agent re-reads each flagged clause (clauses.mjs split) against its rule"]
-  R --> T["Risk table with a PB citation and a redline per row"]
-  T --> B{"Backend: every must-flag covered?"}
-  B -- "no" --> I["Incomplete, with the missing findings"]
-  B -- "yes" --> OK["Complete"]
-  I --> L["Legal decides"]
-  OK --> L
+  R --> D["clauses.mjs redline: the agent Writes the redline (gated)"]
+  D --> L{"Legal reads the redline"}
+  L -- "rejects with a comment" --> D
+  L -- "approves" --> W["Agent builds the .docx and the risk table"]
+  W --> B{"Backend: every must-flag covered?"}
+  B -- "no" --> I["Refused, with the missing findings"]
+  B -- "yes" --> OK["Review returned"]
 ```
 
-## What you build
+## Before you start
+
+- [ ] You finished [chapter 1](/path/first-agent): a project answering under `aw dev`.
+- [ ] A model key, only to run it on your workspace. The tests need no key.
+- [ ] Nothing to start: this use case has no server.
+- [ ] The code: every file on this page is in the gallery folder `tests/gallery/contract-review/`, and paths below are relative to it. Blocks titled with `file=` are exact copies. How the gallery tests a use case is on the [gallery overview](/tutorials).
+
+## The pieces
 
 ```mermaid
 flowchart TD
-  U["Legal uploads the draft<br/>your app, aw.files.upload"] --> B["Your backend<br/>reviewContract()"]
+  U["Legal drops the draft<br/>on the page, attached to the run"] --> B["Your backend<br/>reviewContract()"]
   P["Legal desk page<br/>surface legal-desk"] --> A
   B -- "runs.start / follow" --> A["Agent contract-review<br/>readFiles + runCommands"]
-  A -- "skill" --> C["contract-playbook<br/>clauses.mjs split / check"]
+  A -- "builtinSkill" --> O["office-reader<br/>ooxml.mjs docx / write"]
+  A -- "skill" --> C["contract-playbook<br/>clauses.mjs split / check / redline"]
   A -- "files('contracts')" --> D["Uploaded drafts"]
+  A -- "files('drafts', 'read-write')" --> W["Scratch JSON"]
   A -- "files('playbook')" --> R["Playbook PB-01…PB-09<br/>審査基準 + 標準条項"]
   B -- "same check, in-process" --> C
-  B --> T["Risk table<br/>complete / incomplete + missing"]
+  B --> T["Redline for legal to approve,<br/>then risk table + .docx, or a refusal"]
 ```
 
 | Piece | File | SDK |
 | --- | --- | --- |
-| The agent | `agents/contract-review.ts`, `agents/contract-review.md` | `defineAgent`, `skill`, `files` |
-| The playbook | `data/playbook/PB-01-liability-cap.md` … `PB-09-subcontracting.md` | `aw files upload` |
+| The agent | `agents/contract-review.ts`, `agents/contract-review.md` | `defineAgent`, `skill`, `builtinSkill`, `files` |
+| The playbook | `data/playbook/PB-01-liability-cap.md` … `PB-09-subcontracting.md` | `aw files upload`, searched with the platform's `search_files` |
 | Clauses and detectors | `skills/contract-playbook/SKILL.md`, `scripts/clauses.mjs` | a skill with a script |
 | The legal desk | `surfaces/legal-desk.ts` | `defineSurface` (`layout: 'page'`) |
 | What "good" means | `evals/contract-review.yaml` | `aw eval`, `policy.promotion.minEvalScore` |
 | The app's call | `backend/review.ts` | `runs.start`, `runs.follow` via `runAndRead` |
 | Test drafts | `data/drafts.ts`, written to .docx by the test | `writeDocx` |
 
-## 1. Write the playbook as files
+## Build it
+
+Each step is one file or one concern, with the reason for it and a check to make before you go on.
+
+### 1. Write the playbook as files
 
 Each rule is one Markdown file with an id, a severity, whether it is a must-flag, the criterion
 （審査基準） and the standard clause （標準条項） the redline starts from:
@@ -103,22 +123,33 @@ PB-01 to PB-06 are the six must-flags. PB-07 (a perpetual confidentiality duty),
 later than 60 days) and PB-09 (subcontracting without consent) are ordinary findings: the agent
 should raise them, but the backend does not hold the review back when it judges them away. The
 playbook is uploaded to the file store as `playbook/` and granted read-only, so legal edits a rule
-without touching the agent.
+without touching the agent. The platform's `search_files` finds a rule by its words over that
+folder, so the playbook needs no index server of its own.
 
-## 2. Split the draft into clauses and run the detectors
+**Check:** `PB-01` to `PB-06` carry `mustFlag: true`; `PB-07` to `PB-09` do not, and a search for `損害賠償 上限` over the `playbook` grant returns only `PB-01-liability-cap.md`.
 
-The platform stores the .docx as bytes and parses nothing. This use case's skill reads the .docx
-itself, turns its paragraphs into clauses and findings, and prints a clause's text with `split`. It
-is Node with no packages, because the run's sandbox has Node and a skill cannot bring npm
-dependencies:
+### 2. Split the draft into clauses and run the detectors
 
-The agent runs `check` with one `run_skill_script` call. `clauses.mjs` reads the `.docx` itself, so there is no pipe:
+The platform stores the .docx as bytes and parses nothing, and this use case's skill no longer
+reads a .docx either: the built-in `office-reader` skill does. The agent reads the draft into
+paragraphs with `ooxml.mjs docx` and saves that JSON to the team's folder under `drafts/` (the one
+read-write scratch grant, `drafts/<team>/` for the run: see step 8), because a skill script runs in
+a sandbox and cannot import another package:
+
+```json title="illustrative" claim="illustrative"
+{ "skill": "office-reader", "script": "ooxml.mjs", "args": ["docx", "contracts/営業一部/業務委託契約書_….docx"] }
+```
+
+The use case's own skill, `clauses.mjs`, takes only that paragraphs JSON. It turns the paragraphs
+into clauses and findings, and prints a clause's text with `split`. It is Node with no packages,
+because a skill cannot bring npm dependencies. The agent runs `check` with one `run_skill_script`
+call:
 
 ```json title="illustrative" claim="illustrative"
 {
   "skill": "contract-playbook",
   "script": "clauses.mjs",
-  "args": ["check", "contracts/業務委託契約書_….docx", "--playbook", "playbook"]
+  "args": ["check", "drafts/業務委託契約書_….json", "--playbook", "playbook"]
 }
 ```
 
@@ -179,11 +210,13 @@ floor holds: every planted issue in the three drafts is found, a contract writte
 playbook's standard clauses raises nothing, and removing only the 反社 clause produces exactly one
 finding, an absence with no clause number.
 
-## 3. Write the table format as a skill
+**Check:** every planted issue in the three drafts is found, a contract in the playbook's standard clauses raises nothing, and removing only the 反社 clause gives exactly one finding, an absence with no clause number.
+
+### 3. Write the table format as a skill
 
 ```md title="skills/contract-playbook/SKILL.md (excerpt)" file="tests/gallery/contract-review/skills/contract-playbook/SKILL.md#excerpt"
 - `mustFlag: true` の指摘は、必ずリスク表に1行として載せる。リスクが低いと判断した場合も行は残し、
-  理由にそう判断した根拠を書く。システムがこの行の有無を照合し、欠けていれば審査は未完了になる。
+  理由にそう判断した根拠を書く。システムがこの行の有無を照合し、欠けていれば審査は差し戻される。
 
 | 条項 | 論点 | リスク度 | 理由 | 修正文案 |
 | --- | --- | --- | --- | --- |
@@ -191,51 +224,74 @@ finding, an absence with no clause number.
 | 欠落 | 反社会的勢力の排除 | 高 | 排除条項がない〔PB-06〕 | （新設）甲及び乙は、… |
 ```
 
-The table is Markdown rather than fenced JSON because the same answer is what legal reads on the
-legal desk page, where a table renders and JSON does not. A run has no output schema either way,
-so the backend parses text in both cases.
+The table is Markdown because that is what legal reads on the legal desk page, where a table
+renders and JSON does not. The backend does not parse it: the run also returns the same rows as
+structured output (step 7), so the table is for people and the rows are for the check.
 
-## 4. Define the agent
+**Check:** the table has the five columns 条項, 論点, リスク度, 理由 and 修正文案, and a must-flag row stays even when the risk is rated low.
+
+### 4. Define the agent
 
 ```ts title="agents/contract-review.ts" file="tests/gallery/contract-review/agents/contract-review.ts"
-import { defineAgent, files, skill } from '@indx-workspace/sdk/define';
+import { builtinSkill, defineAgent, files, skill } from '@indx-workspace/sdk/define';
 
 export default defineAgent({
   name: 'contract-review',
   instructions: { file: './contract-review.md' },
   model: 'default',
   // A run is unattended: without autoApprove the SDK stops the skill script's call on an approval prompt.
-  engine: { id: 'claude-agent-sdk', autoApprove: ['mcp__agent-workspace__run_skill_script'] },
-  // It reads the playbook and runs the skill script, which reads the draft itself; it writes
-  // nothing and reaches no network. `runCommands` is what offers `run_skill_script`, which runs `clauses.mjs`.
-  permissions: { readFiles: true, runCommands: true },
-  skills: [skill('contract-playbook')],
-  files: [files('contracts', 'read'), files('playbook', 'read')],
+  // The one thing legal decides is the redline: the agent saves it with `Write`, and the run waits
+  // there for an approval (ADR-0145) before the Word file is made. Every other file is written by a
+  // script, so that `Write` is the run's only gated call.
+  engine: {
+    id: 'claude-agent-sdk',
+    autoApprove: ['mcp__agent-workspace__run_skill_script', 'mcp__agent-workspace__search_files'],
+    requireApproval: ['Write'],
+  },
+  // office-reader turns the draft into paragraphs JSON in `drafts` (the one read-write scratch
+  // grant); contract-playbook checks that JSON, and once legal approves the redline, office-reader
+  // writes the redlined copy to `outputs/` (the folder the run collects; the backend reads it back
+  // with `runs.outputs`). It reaches no network. `runCommands` is what offers `run_skill_script`.
+  // A question about a playbook rule is answered with the platform's `search_files` over the granted
+  // `playbook` folder: no index and no connector of ours.
+  permissions: { readFiles: true, writeFiles: true, runCommands: true },
+  // Pinned to revision 1 of the playbook (`aw skills publish`): each review's run names this
+  // version, and the version names the rules that applied, so a later edit cannot change the answer.
+  skills: [builtinSkill('office-reader'), skill('contract-playbook', { revision: 1 })],
+  files: [files('contracts', 'read'), files('playbook', 'read'), files('drafts', 'read-write')],
   limits: { maxTurns: 20, maxBudgetUsd: 1 },
 });
 ```
 
-The instructions (`agents/contract-review.md`) give the order (read, check, re-read each flagged
-clause against its rule, write the table) and the limits: no reasons the text does not support,
-no swallowed script errors, and no 「締結して問題ありません」. There are no connectors. The project
-file allows commands, because the scripts need them, and nothing else:
+The instructions (`agents/contract-review.md`) give the order (read the draft with office-reader,
+check, re-read each flagged clause against its rule, `Write` the redline and wait for legal, then make the redlined copy and write the table) and the limits: no reasons the
+text does not support, no swallowed script errors, and no 「締結して問題ありません」. When someone asks
+what a rule says (「PB-04 の審査基準を説明して」), the agent answers from the platform's own
+`search_files` over the `playbook` folder, citing only what the snippet shows; the nine rules need
+no index of ours. There are no connectors. The project file allows commands and writing to `drafts/` and `outputs/`, and nothing else:
 
 ```yaml title="agent-workspace.yaml (excerpt) (illustrative)" claim="illustrative"
 policy:
-  permissions: { writeFiles: false, runCommands: true, unrestrictedNetwork: false }
+  permissions: { writeFiles: true, runCommands: true, unrestrictedNetwork: false }
   limits: { maxBudgetUsd: 1 }
   promotion: { minEvalScore: 0.9 }
 ```
 
 <Warning>
   `runCommands: true` offers `run_skill_script`, a Node process with no shell that reads the run's
-  working directory and cannot write the read-only grants on `contracts` and `playbook`. A run has
-  nobody to approve the call, so the agent declares
-  `engine: { id: 'claude-agent-sdk', autoApprove: ['mcp__agent-workspace__run_skill_script'] }`, and
-  `aw push` stores it. `Bash` stays denied under a read-only grant.
+  working directory and cannot write the read-only grants on `contracts` and `playbook`; with
+  `writeFiles: true` it writes only `drafts/` and `outputs/`. A run has
+  nobody to approve the skill script's call, so the agent declares
+  `autoApprove` for `run_skill_script` and `search_files` (`search_files` only reads the folders
+  granted), and `aw push` stores it. `Write` is not there: the agent lists it under
+  `requireApproval`, so the redline's `Write` is the one call the run stops on. Every other file
+  (the reader's JSON, the Word copy) is written by a script. `Bash` stays denied
+  under a read-only grant.
 </Warning>
 
-## 5. Put it on a page
+**Check:** the agent can read files, write `drafts/` and `outputs/` and run commands, `Write` is the only gated call, and the policy has `unrestrictedNetwork: false`.
+
+### 5. Put it on a page
 
 ```ts title="surfaces/legal-desk.ts (illustrative)" claim="illustrative"
 export default defineSurface({
@@ -247,7 +303,7 @@ export default defineSurface({
   parts: {
     greeting: '契約書ドラフトを契約管理画面でアップロードし、ファイル名を入力してください。…',
     suggestedPrompts: [
-      'contracts/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューして',
+      'contracts/営業一部/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューして',
       '第6条の修正文案を、上限を委託料12か月分にして書き直して',
       'PB-04 の審査基準を説明して',
     ],
@@ -259,25 +315,29 @@ export default defineSurface({
 });
 ```
 
-The surface refuses attachments (probe `surface-attachments`), so legal cannot drop the Word file
-into the chat. The upload happens in your contract-management app with `aw.files.upload`, and the
-page is where legal asks follow-ups on the same session.
+`parts.attachments` lets legal drop the Word file into the page. Your contract-management app
+passes the uploaded file's id and name, and who is signed in, to `reviewContract`, which attaches
+the file to the run, so the prompt names no draft path and the agent reads the draft from the
+attached path. The page is also where
+legal asks follow-ups on the same session.
 
-## 6. Say what "good" means
+**Check:** the surface uses `layout: 'page'` with `attachments` on, and the prompt names no path.
+
+### 6. Say what "good" means
 
 Each must-flag is pinned twice: a `contains` on its 〔PB-xx〕 citation, and a `judge` rubric that
 checks the row's risk and that the proposal actually fixes the problem.
 
 ```yaml title="evals/contract-review.yaml (excerpt)" file="tests/gallery/contract-review/evals/contract-review.yaml#excerpt"
   - name: 反社条項の欠落を指摘する
-    input: contracts/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューしてください。
+    input: contracts/営業一部/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューしてください。
     expect:
       contains: ['〔PB-06〕', '欠落']
       judge: >
         リスク表に、反社会的勢力の排除条項が契約書にないことを指摘する行があり、リスク度が「高」で、
         修正文案として新設する排除条項（表明保証と無催告解除）が書かれていること。
   - name: 標準どおりの条項を指摘しない
-    input: contracts/売買基本契約書_北陸精工株式会社案.docx をレビューしてください。
+    input: contracts/購買部/売買基本契約書_北陸精工株式会社案.docx をレビューしてください。
     expect:
       contains: ['〔PB-08〕', '〔PB-09〕']
       notContains: ['〔PB-01〕', '〔PB-05〕', '〔PB-06〕']
@@ -286,58 +346,139 @@ checks the row's risk and that the proposal actually fixes the problem.
 The full file has six cases, including one that asks 「このまま締結してよいか」 and fails if the agent
 says yes.
 
-## 7. Call it from the backend and enforce the must-flags
+**Check:** each must-flag is pinned by a `contains` on its 〔PB-xx〕 citation and a `judge`; the file has six cases.
+
+### 7. Call it from the backend and enforce the must-flags
 
 ```ts title="backend/review.ts (excerpt) (illustrative)" claim="illustrative"
+// 1. The agent's Write of the redline is gated, so the run pauses on it: legal reads the redline.
+//    The run is scoped to the signed-in reviewer's deal teams (step 8).
 export async function reviewContract(aw, agentId, request, sessionId?) {
-  const deterministic = check(readDocx(request.docx).paragraphs, request.playbook);
-  const reading = await runAndRead(aw, agentId, {
-    prompt: reviewPrompt(request.path),
-    sessionId: sessionId ?? null,
-  });
-  const table = parseRiskTable(reading.answer);
-  const { missing, downgraded } = enforceMustFlags(table.rows, deterministic);
-  return {
-    status: table.found && missing.length === 0 ? 'complete' : 'incomplete',
-    rows: table.rows, missing, downgraded, malformed: table.malformed, …
-  };
+  const team = teamOfAttachment(request);   // throws NoContractAccess before any run
+  return untilLegal(
+    runAndRead(
+      aw,
+      agentId,
+      {
+        subject: request.reviewer,
+        fileScope: [...fileScopeFor(request.reviewer, request.access), `drafts/${team}`],
+        prompt: reviewPrompt(team),
+        attachments: [{ fileId: request.file.id }],
+        sessionId: sessionId ?? null,
+      },
+      ContractReviewAnswerSchema,   // { review: string, rows: RiskRow[] }
+    ),
+    request,
+    team,
+  );   // { status: 'awaiting_legal', runId, redline } or a refusal
+}
+
+// 2. Legal decides. Rejecting with a comment pauses again on the revised redline; approving
+//    continues the session, which makes the .docx and answers the rows.
+export async function decideReview(aw, awaiting, { approve, comment }) {
+  const { run } = approve
+    ? await aw.runs.approve(awaiting.runId, { comment })
+    : await aw.runs.reject(awaiting.runId, { comment });
+  if (!approve) return untilLegal(readRun(aw, run.id, ContractReviewAnswerSchema), awaiting.request);
+  const { output } = await readRun(aw, run.id, ContractReviewAnswerSchema);   // typed, not parsed
+  const { missing, downgraded } = enforceMustFlags(output.rows, deterministic);
+  …   // { status: 'reviewed', rows, downgraded, redline } or { status: 'refused', problems }
 }
 ```
 
-The backend already has the draft's bytes, so it runs the same `check` in-process, independently
-of whatever the agent ran. A must-flag finding is covered when a row cites the same rule for the
-same clause (or, for an absence, any row citing the rule). When the agent leaves one out, the
-review is `incomplete` and `missing` lists the findings, which your app shows to legal instead of
-a clean-looking table. A covered must-flag the agent rated lower than the playbook goes to
-`downgraded`: shown beside the agent's reason, not refused, because that judgement is legal's.
-A row without a 〔PB-xx〕 citation or with a risk other than 高/中/低 goes to `malformed`, never
-dropped silently.
+The redline pauses the run, so the Word file does not exist until legal says yes: a rejection with
+a comment (「第6条の上限額を…」) starts a continuation that revises the 【修正案】 paragraphs and
+pauses again, and a second decision on the same run is refused with
+`409 run_not_awaiting_approval`. Before showing the redline, the backend checks that the paused
+call is a `Write` to the redline's own file and that its content parses as paragraphs.
 
-## 8. Run it
+The backend already has the draft's bytes, so after the approval it runs the same `check`
+in-process, independently of whatever the agent ran. A must-flag finding is covered when a row
+cites the same rule for the same clause (or, for an absence, any row citing the rule). When the
+agent leaves one out, or the Word file lacks a 【修正案】 for it, the review is `refused` and
+`problems` lists the findings, which your app shows to legal instead of a clean-looking table. A
+covered must-flag the agent rated lower than the playbook goes to
+`downgraded`: shown beside the agent's reason, not refused, because that judgement is legal's.
+The schema settles the shape of each row: a rule number in `PB-xx` form (at least one), a risk of
+高/中/低 and a clause as 「第6条」 or `null`. An answer that does not fit fails the run
+(`output_schema_unsatisfied`) instead of reaching the backend, so there is no table to read around.
+
+An approval request lasts 24 hours (ADR-0157); after that the run ends and the review starts
+again. A legal meeting that decides the redline on the next day has to be booked inside that
+window, or the app starts a new review.
+
+**Check:** `reviewContract` returns `awaiting_legal` with the redline and no Word file yet; after `decideReview` approves, a table that forgets the 反社 clause comes back `refused`, with the finding listed in `problems`.
+
+### 8. Scope each review to the reviewer's deal teams
+
+The `contracts` grant belongs to the agent, so on its own every reviewer who opens the page reaches
+every draft in it. Who may read which draft is your app's table, and the platform enforces it per
+run (`runs.start({ subject, fileScope })`: `fileScope` only narrows the agent's grants, and a path
+outside them is `403 run_file_scope_not_granted`). The drafts sit in one folder per deal team,
+`data/contracts/<deal-team>/<file>.docx`, and `data/access.json` says which teams each legal member
+belongs to:
+
+```json title="data/access.json" file="tests/gallery/contract-review/data/access.json"
+{
+  "佐藤": { "teams": ["営業一部"] },
+  "鈴木": { "teams": ["購買部"] }
+}
+```
+
+`reviewContract` takes the signed-in member as `reviewer` and starts every run with
+`subject: <reviewer>` and a `fileScope` of their `contracts/<team>` folders, `playbook`, and the
+scratch folder `drafts/<team>` of the attached draft's team. `search_files` and the run's files then
+cover only those paths: the agent never sees another team's contract, nor another team's redline
+JSON, whatever the prompt says. `decideReview` needs no scope of its own, because the continuation
+keeps the paused run's subject and `fileScope` (ADR-0157).
+
+Two refusals happen before any run starts, as `NoContractAccess`:
+
+- A member whom `access.json` does not list, or lists with no team, is refused; they never get an unscoped run.
+- An attachment that is not one of this session's uploads, under one of the reviewer's own team
+  folders, is refused. The platform grants an attachment after it narrows the scope (the attached
+  file stays readable under any `fileScope`), so without this check a reviewer could attach another
+  team's contract by its file id.
+
+`drafts/<team>` must exist for a run scoped to it to write there, and a folder exists once a file is
+uploaded into it: the project ships `data/drafts/<team>/.gitkeep` for that, and the upload commands
+below put it there. The backend names the folder in the prompt (`作業フォルダ: drafts/<team>/`), and
+the agent's instructions write the redline JSON only in that folder.
+
+**Check:** a 営業一部 reviewer's `search_files` for a phrase only 購買部's contract holds finds nothing, and the run records `subject` and `fileScope`; a member with no team, or an attachment from another team, is refused with no run started.
+
+## Run it
 
 <Steps>
   <Step title="Offline, in the test suite">
     Writes the three drafts to real .docx files, lays them out with the playbook and the skill
     the way the runner lays out a run's working directory, runs the scripts the way
-    `run_skill_script` would, and runs `reviewContract` against a scripted workspace: once with a table that covers
-    every must-flag, once with a table that forgets the 反社 clause and the auto-renewal. Eight
-    tests, no API key.
+    `run_skill_script` would, and runs `reviewContract` and `decideReview` against a scripted workspace: a pause on the redline, an approval,
+    a rejection that pauses again, and a table that forgets the 反社 clause and the auto-renewal. The Word
+    files go through office-reader's `ooxml.mjs`, as in a run. Twenty-four tests, no API key.
   </Step>
   <Step title="On your workspace">
     ```sh title="illustrative" claim="illustrative"
-    for f in data/contracts/*.docx; do aw files upload "contracts/$(basename "$f")" "$f"; done
+    for f in data/contracts/*/*.docx; do aw files upload "contracts/$(basename "$(dirname "$f")")/$(basename "$f")" "$f"; done
+    for f in data/drafts/*/.gitkeep; do aw files upload "drafts/$(basename "$(dirname "$f")")/.gitkeep" "$f"; done
     for f in data/playbook/*.md; do aw files upload "playbook/$(basename "$f")" "$f"; done
-    aw push --yes          # imports the skill, saves the agent and the legal-desk surface
+    aw skills import ./skills/contract-playbook                      # publish refuses a skill the workspace does not have yet
+    aw skills publish contract-playbook ./skills/contract-playbook   # the first publish is revision 1, the one the agent pins
+    aw push --yes          # saves the agent (as the next version) and the legal-desk surface
     ```
-    A grant on a folder resolves once a file is uploaded into it, so neither folder needs an `aw files mkdir`. `data/contracts/` holds the three drafts as Word files; they are generated from `data/drafts.ts`, and the gallery's test fails when they drift from it. If `aw dev` refused the agent with `agent_definition_references_missing [file:playbook]` before the upload, `aw push --yes` syncs it, and so does saving the agent file again.
+    Publish before you push: a pin on a revision that does not exist is refused with `422 agent_definition_references_missing`. A grant on a folder resolves once a file is uploaded into it, so neither folder needs an `aw files mkdir`. `data/contracts/<deal-team>/` holds the three drafts as Word files (two teams, 営業一部 and 購買部); they are generated from `data/drafts.ts`, and the gallery's test fails when they drift from it. If `aw dev` refused the agent with `agent_definition_references_missing [file:playbook]` before the upload, `aw push --yes` syncs it, and so does saving the agent file again.
   </Step>
   <Step title="Review a draft">
     ```sh title="illustrative" claim="illustrative"
-    aw chat contract-review -p "contracts/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューしてください。"
+    aw chat contract-review -p "contracts/営業一部/業務委託契約書_株式会社ミナトシステムズ案.docx をレビューしてください。"
     aw eval contract-review   # the six cases, on a real model
     ```
   </Step>
 </Steps>
+
+<Frame caption="The same agent on its page in the console, after `aw push`.">
+  <img src="/images/tutorials/contract-review/02-agent.png" alt="The contract-review agent's page in the console" />
+</Frame>
 
 ## Where the SDK stands
 
@@ -347,34 +488,31 @@ it; `probe` means a test asserts the capability is still missing and fails the d
 
 {/* benchmark:start */}
 
-Score: **50 / 100** (✅ = 1, 🟡 = 0.5, ❌ = 0, over the capabilities this use case needs).
+Score: **100 / 100** (✅ = 1, 🟡 = 0.5, ❌ = 0, over the capabilities this use case needs).
 
 | Capability | Today | Evidence | What it means for you |
 | --- | --- | --- | --- |
-| Agent as code | ✅ | contract | defineAgent with one skill, two read-only file grants and a page surface passes the server contract offline; no connector is needed. |
-| Grounded search | 🟡 | contract | Grounding is your playbook: Markdown rules in the file store plus a detector script that returns rule ids and standard clauses; nine rules need no retrieval. |
-| Document parsing | 🟡 | contract | Word is parsed by the skill script `clauses.mjs`, which reads the `.docx` itself. The agent calls it through `run_skill_script`, a Node process with no shell that reads the granted folders and cannot write them, so it runs beside the read-only grants on `contracts` and `playbook`; the agent pre-approves `mcp__agent-workspace__run_skill_script` in `autoApprove`. |
-| Structured output | ❌ | probe | The risk table comes back as Markdown in the answer; the backend parses it and reports unreadable rows instead of trusting a schema. |
-| Human approval | 🟡 | probe | Legal decides outside the run: the backend returns complete or incomplete with the missing must-flags, and your contract system records the decision. |
-| Write to systems | ❌ | source | A redlined .docx the agent writes is not returned to the file store (persistPaths collects the wrong directory); the proposals come back in the answer, and your backend can build the .docx with writeDocx. |
-| Per-user scope | 🟡 | source | The `contracts` grant is per agent, not per person: everyone with the page reaches every draft in it, so keep one folder per deal team or one agent per team. |
-| Embedded UI | 🟡 | probe | defineSurface publishes the legal-desk page, but it refuses attachments: legal uploads the draft in your app with `aw.files.upload` and names the file in the chat. |
+| Agent as code | ✅ | contract | defineAgent with the built-in `office-reader` skill and one of its own, two read-only file grants, one read-write scratch grant and a page surface passes the server contract offline; no connector is needed. |
+| Grounded search | ✅ | contract | The nine playbook rules are Markdown files found with the platform’s search_files over the granted `playbook` folder; applying them stays a detector script (`clauses.mjs check`) that returns rule ids and standard clauses, because that is a deterministic check, not retrieval. |
+| Document parsing | ✅ | contract | The agent reads the Word draft with the built-in `office-reader` skill (`ooxml.mjs docx <file> drafts/<name>.json`, which saves the paragraphs itself), and runs the playbook script `clauses.mjs` on that JSON; the script opens no `.docx` and refuses one by name. `clauses.mjs redline` prints the redlined paragraphs, the agent `Write`s them, and once legal approves, `office-reader` (`ooxml.mjs write`) makes the Word file in `outputs/`. The agent pre-approves `mcp__agent-workspace__run_skill_script` in `autoApprove`; the redline’s `Write` is the one gated call. |
+| Structured output | ✅ | contract | The risk rows come back typed (`runs.result` with a Zod schema, kept by the approval continuation), next to the Markdown legal reads; your backend only compares them with the deterministic check and refuses a review that leaves out a must-flag finding. |
+| Human approval | ✅ | contract | The redline’s `Write` is gated (`requireApproval`), so the run pauses on it and no Word file exists yet; `reviewContract` answers with the redline paragraphs legal reads. Approving continues the same session, makes the `.docx` and returns the typed rows; rejecting with a comment sends the redline back and the revised one pauses again. An approval request expires after 24 hours and then ends the run, so a decision that waits longer than that means starting the review again. |
+| Write to systems | ✅ | contract | The agent’s redlined .docx comes back with the approved run (`runs.outputs`); the backend checks it carries a 【修正案】 for every must-flag finding and builds no Word file itself. |
+| Per-user scope | ✅ | contract | Contracts live at `contracts/<deal-team>/<file>.docx`. The legal desk starts each run with `subject: <signed-in reviewer>` and `fileScope` = the `contracts/<team>` folders `access.json` gives that member, plus `playbook` and the scratch folder `drafts/<team>`, so `search_files` and the run’s files cover only those paths; a member with no team, or an attachment that is not one of the session’s uploads under their teams, is refused before any run starts. The agent’s own grants (the contracts and playbook it reads, the drafts it writes) are still granted per agent. |
+| Embedded UI | ✅ | contract | defineSurface publishes the legal-desk page with `parts.attachments` on, so legal drops the draft in; your app passes its file id to `runs.start` and the agent reads the attached path, so nobody uploads first and names the file in the chat. |
 | Evals | ✅ | contract | Six cases: each must-flag is pinned by its 〔PB-xx〕 with `contains` and judged by a rubric, plus a no-false-positive case and a no-verdict case. |
-| Audit and cost | 🟡 | source | Runs record tokens and cost, but a skill has no revisions: keep the playbook in git and store its commit with each review to show which rules applied. |
+| Audit and cost | ✅ | contract | The agent pins `skill('contract-playbook', { revision: 1 })`, published with `aw skills publish`. A review’s run reports `agentVersion`, `agents.versions.list` gives that version’s `resources.skillRevisions`, and `skills.get` lists the revision’s number, file count and date. Reading a revision’s bytes back is not offered, so the trail ends at that metadata. |
 
 {/* benchmark:end */}
 
 **Verdict: buildable today, with a deterministic floor you own.** The agent definition, the
 skills and the page are the SDK's; the parts that are yours are the clause splitter and detectors
-(about 500 lines of dependency-free Node, comments included), the table parser and the must-flag
-check (about 180 lines). What would remove code from this page:
+(about 580 lines of dependency-free Node, comments included) and the must-flag check (about 180
+lines). What would remove code from this page:
 
-- **Structured output** would replace the Markdown table parser with typed rows
-  (probe `run-output-schema`).
-- **Returning files from a run** would let the agent hand back a redlined .docx; today a file the
-  agent writes does not reach the file store, so the backend would build one from the table with
-  `writeDocx`.
-- **Attachments in a surface** would let legal drop the draft into the page (probe
-  `surface-attachments`).
-- **Skill revisions** would let a review record which playbook version it applied
-  ([N-1](/concepts/roadmap)); today keep the playbook in git and store the commit with each review.
+- **Reading a revision's files back** would finish the audit trail: today it ends at the revision's
+  number, file count and date ([Revisions](/building/skills#revisions)).
+
+<Card title="Next: 8. Meeting minutes agent" icon="arrow-right" href="/tutorials/meeting-minutes">
+  The agent that turns a meeting transcript into 議事録 and registers action items after a person approves them.
+</Card>

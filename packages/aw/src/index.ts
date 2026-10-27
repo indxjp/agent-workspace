@@ -12,7 +12,6 @@ import { realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import process from 'node:process';
 import { createInterface as createCallbackInterface } from 'node:readline';
-import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
 import { chooseFromMenu, MenuCancelledError, type MenuSpec } from '@indx-workspace/sdk/project';
@@ -20,6 +19,7 @@ import { chooseFromMenu, MenuCancelledError, type MenuSpec } from '@indx-workspa
 import {
   InterruptedError,
   isInteractive,
+  promptLine,
   readStreamWithIdleTimeout,
   type ChatTerminal,
   type CliIo,
@@ -32,18 +32,21 @@ import { nodeVersionWarning } from './version.js';
 export type { CliIo } from './io.js';
 export { main } from './main.js';
 
-/** One line from the terminal; the interface is opened and closed per question. */
-async function prompt(question: string, signal?: AbortSignal): Promise<string> {
-  const terminal = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    return await terminal.question(question, signal === undefined ? {} : { signal });
-  } catch (error) {
-    // Ctrl-C and Ctrl-D, like `signal` (SIGINT/SIGTERM), are an interrupt, as for `promptSecret`.
-    if (error instanceof Error && error.name === 'AbortError') throw new InterruptedError();
-    throw error;
-  } finally {
-    terminal.close();
-  }
+/** How long the terminal is read for what was typed ahead; it is already buffered, so this is short. */
+const DISCARD_WINDOW_MS = 30;
+
+/** Reads and drops what is waiting on the terminal, in raw mode so a half-typed line counts too. */
+async function discardInput(): Promise<void> {
+  const { stdin } = process;
+  if (!stdin.isTTY) return;
+  const drop = (): void => undefined;
+  stdin.setRawMode(true);
+  stdin.on('data', drop);
+  stdin.resume();
+  await new Promise((resolve) => setTimeout(resolve, DISCARD_WINDOW_MS));
+  stdin.off('data', drop);
+  stdin.pause();
+  stdin.setRawMode(false);
 }
 
 /** A setup menu on the terminal; Ctrl-C is the same interrupt as at any other prompt. */
@@ -116,7 +119,13 @@ function processIo(signal: AbortSignal): CliIo {
     ...(interactive
       ? {
           prompt: (question: string, own?: AbortSignal) =>
-            prompt(question, own === undefined ? signal : AbortSignal.any([signal, own])),
+            promptLine(
+              process.stdin,
+              process.stdout,
+              question,
+              own === undefined ? signal : AbortSignal.any([signal, own]),
+            ),
+          discardInput,
           choose: (spec: MenuSpec) => choose(spec, signal),
           promptSecret: (question: string) =>
             promptSecret(question, process.stdin, process.stdout, signal),

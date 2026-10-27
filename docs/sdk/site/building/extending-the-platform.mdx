@@ -40,9 +40,11 @@ code with no compatibility promise that even a contributor does not treat as an 
 A runtime driver (Extend) decides _where_ an agent's sandbox runs — a local process, a Docker
 container, a Kubernetes pod, a managed cloud sandbox. Existing drivers live one file each under
 `packages/runtime/src/`: `local.ts`, `docker.ts`, `kubernetes.ts`, `cloud-run.ts`,
-`aca-sessions.ts`. Each is re-exported from the package's single entry
-point, `packages/runtime/src/index.ts` (`export * from './<driver>.js'`), which is also the
-package's only `package.json` export — `packages/runtime` declares no subpaths.
+`aca-sessions.ts`. Each driver is its own `package.json` subpath,
+`@agent-workspace/runtime/driver/<name>` (`./driver/local`, `./driver/docker`, …), so importing
+one driver never loads another. The contract is `@agent-workspace/runtime/driver`
+(`packages/runtime/src/index.ts`); the package has no bare `.` export. A cloud SDK a driver needs
+is loaded with a dynamic `import()` on the driver's first call, never when the module is imported.
 
 The interface is `RuntimeDriver<TRequest, TEvent>`, the whole of it, in
 `packages/runtime/src/driver.ts`:
@@ -82,6 +84,7 @@ type RuntimeCapabilities = {
   readonly gpu: boolean;
   readonly managedByProvider: boolean;
   readonly typicalStartMs: number | null;
+  readonly fileTransfer: 'push-archive' | 'local-disk';
 };
 
 type RuntimeRunSpec = {
@@ -120,9 +123,6 @@ type RuntimeDriver<TRequest, TEvent> = {
   create(config: RuntimeConfig): Promise<RuntimeHandle>;
   startAgent(runtime: RuntimeHandle, request: TRequest): Promise<AgentConnection<TEvent>>;
   destroy(runtime: RuntimeHandle): Promise<void>;
-  /** Optional — implement only when the driver cannot mount a volume. */
-  putFiles?(runtime: RuntimeHandle, archive: ReadableStream): Promise<void>;
-  getFiles?(runtime: RuntimeHandle, paths: string[]): Promise<ReadableStream>;
 };
 ```
 
@@ -154,10 +154,9 @@ own tests and by `apps/web/app/api/runtimes/[id]/runtimes-route.test.ts`.
   driver must not import `apps/runner` or `apps/web`. `no-circular-dependencies` and
   `no-unresolved-imports` apply to every file in `apps/` and `packages/`, this one included.
 - `pnpm package-exports:check` (`scripts/check-package-exports.mjs`) validates that every target a
-  package's `package.json` `exports` map names actually resolves to a file on disk. Since
-  `packages/runtime` exports only `.`, a new driver file reaches consumers through
-  `packages/runtime/src/index.ts`'s `export *` — forgetting that line is invisible to the
-  TypeScript compiler but fails this gate.
+  package's `package.json` `exports` map names actually resolves to a file on disk. A new driver
+  file reaches consumers only through its own `./driver/<name>` entry in
+  `packages/runtime/package.json`; that entry must name a file that exists, or this gate fails.
 - `packages/runtime/package.json` declares no `@agent-workspace/*` dependency, so a driver here
   cannot reach `@anthropic-ai/claude-agent-sdk` either: `tests/no-sdk-import.test.ts` asserts that
   the **only** file in the whole tracked tree allowed to import that package is
@@ -195,8 +194,10 @@ type AnthropicMessageRequest = { model: string; [key: string]: unknown };
 type AnthropicCountTokensRequest = { model: string; [key: string]: unknown };
 type AnthropicCountTokensResponse = { input_tokens: number };
 
+type RegisteredProviderId = 'anthropic' | 'openai' | 'azure-openai' | 'openai-compatible';
+
 type RequestContext = {
-  providerId: string;
+  providerId: RegisteredProviderId;
   credential: string;
   requestId: string;
   settings: Readonly<Record<string, unknown>>;

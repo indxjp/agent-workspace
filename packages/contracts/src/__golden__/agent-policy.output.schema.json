@@ -60,6 +60,17 @@
           ],
           "additionalProperties": false
         },
+        "requireApproval": {
+          "readOnly": true,
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "handoff": {
+          "type": "boolean",
+          "const": true
+        },
         "skills": {
           "oneOf": [
             {

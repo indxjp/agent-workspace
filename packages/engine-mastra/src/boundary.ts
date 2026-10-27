@@ -41,6 +41,10 @@ import type * as MastraMcpModule from '@mastra/mcp';
 import type * as MastraMemoryModule from '@mastra/memory';
 
 import {
+  OUTPUT_SCHEMA_UNSATISFIED,
+  OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
+} from '@indx-workspace/contracts/runs';
+import {
   credentialRejectedError,
   executeRunSkillScript,
   isGatewayTokenRefusal,
@@ -73,7 +77,7 @@ import {
 } from './workspace.js';
 
 /** The pinned Mastra release. `engine.test.ts` holds it to this package's manifest. */
-export const MASTRA_CORE_VERSION = '1.76.0';
+export const MASTRA_CORE_VERSION = '1.79.0';
 
 /**
  * What the runner process's environment must say before Mastra loads (ADR-0084 D4). Each is read
@@ -89,7 +93,6 @@ type MastraModules = {
   readonly storage: typeof MastraStorageModule;
   readonly tools: typeof MastraToolsModule;
   readonly workspace: typeof MastraWorkspaceModule;
-  readonly mcp: typeof MastraMcpModule;
   readonly memory: typeof MastraMemoryModule;
   readonly anthropic: typeof AnthropicProviderModule;
   readonly openai: typeof OpenAiProviderModule;
@@ -129,17 +132,16 @@ function loadMastra(): Promise<MastraModules> {
       if (!(name in installed)) delete process.env[name];
     }
     for (const [name, value] of Object.entries(installed)) process.env[name] = value;
-    const [agent, storage, tools, workspace, mcp, memory, anthropic, openai] = await Promise.all([
+    const [agent, storage, tools, workspace, memory, anthropic, openai] = await Promise.all([
       import('@mastra/core/agent'),
       import('@mastra/core/storage'),
       import('@mastra/core/tools'),
       import('@mastra/core/workspace'),
-      import('@mastra/mcp'),
       import('@mastra/memory'),
       import('@ai-sdk/anthropic'),
       import('@ai-sdk/openai'),
     ]);
-    return { agent, storage, tools, workspace, mcp, memory, anthropic, openai };
+    return { agent, storage, tools, workspace, memory, anthropic, openai };
   })();
   return loading;
 }
@@ -510,7 +512,29 @@ type RunState = {
   errored: boolean;
   /** Set when an error chunk is the provider refusing the key (issue #690). */
   rejection: Error | null;
+  /** Set when an error chunk is Mastra's own structured-output check failing (ADR-0143). */
+  schemaFailure: boolean;
+  /** The validated value of Mastra's `object-result` chunk, once it has arrived. */
+  object: { readonly value: unknown } | null;
 };
+
+/**
+ * Whether `error` is Mastra's structured-output failure: a `MastraError` whose `id` starts
+ * `STRUCTURED_OUTPUT_` (schema mismatch, a truncated answer), or the AI SDK's
+ * `NoObjectGeneratedError`. Read by id or name, never by message. Mastra's own
+ * `isStructuredOutputFormatError` also counts `AI_JSONParseError` and `AI_TypeValidationError`,
+ * but the AI SDK raises those for a malformed provider stream chunk too, which is not the answer
+ * failing the schema, so they are left as a plain failed run.
+ */
+function isStructuredOutputError(error: unknown): boolean {
+  if (!isRecord(error)) return false;
+  if (typeof error['id'] === 'string' && error['id'].startsWith('STRUCTURED_OUTPUT_')) return true;
+  return error['name'] === 'AI_NoObjectGeneratedError';
+}
+
+function outputSchemaUnsatisfied(): Error {
+  return new Error(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`);
+}
 
 /** Fold one chunk into the run's state. Answers `true` when the budget cap has been reached. */
 function observe(state: RunState, chunk: unknown, compiled: MastraCompiled): boolean {
@@ -519,7 +543,9 @@ function observe(state: RunState, chunk: unknown, compiled: MastraCompiled): boo
   if (chunk['type'] === 'error') {
     state.errored = true;
     state.rejection = rejectedKeyFailure(payload['error']);
+    state.schemaFailure = isStructuredOutputError(payload['error']);
   }
+  if (chunk['type'] === 'object-result') state.object = { value: chunk['object'] };
   if (chunk['type'] === 'finish') state.finish = chunk;
   if (chunk['type'] === 'tool-output') {
     // A subagent's chunks arrive wrapped in its tool call's output. Its steps cost money, so they
@@ -598,6 +624,10 @@ function stopReasonOf(
   return mastraStopReason(input);
 }
 
+/** What Mastra's `structuredOutput.schema` takes; the contract fixes the JSON Schema root at `object`. */
+type MastraOutputSchema = NonNullable<
+  MastraAgentModule.AgentExecutionOptions['structuredOutput']
+>['schema'];
 type MastraAgentConfig = ConstructorParameters<typeof MastraAgentModule.Agent>[0];
 type MastraPin<Fact extends true> = Fact;
 
@@ -697,10 +727,11 @@ export async function* startMastraRun(
       workspace: workspaceFor(modules, view, `${workspace.id}-subagent-${String(index)}`),
     };
   });
+  // Only a run with connectors pays for `@mastra/mcp`; the environment is installed by now.
   const client =
     compiled.mcpServers.length === 0
       ? null
-      : new modules.mcp.MCPClient({
+      : new (await import('@mastra/mcp')).MCPClient({
           id: `agent-workspace-${randomUUID()}`,
           servers: Object.fromEntries(
             compiled.mcpServers.map((server) => [server.name, mcpServerDefinition(server)]),
@@ -720,6 +751,8 @@ export async function* startMastraRun(
     finish: null,
     errored: false,
     rejection: null,
+    schemaFailure: false,
+    object: null,
   };
 
   async function* run(): AsyncGenerator<MastraEvent, void, void> {
@@ -769,14 +802,26 @@ export async function* startMastraRun(
       workspace,
       memory,
     });
-    const output = await agent.stream(prompt, {
+    const streamOptions = {
       memory: { thread: compiled.memory.threadId, resource: compiled.memory.resourceId },
       abortSignal: abort.signal,
       ...(compiled.limits.maxSteps === null ? {} : { maxSteps: compiled.limits.maxSteps }),
       ...(compiled.agent.toolCallConcurrency === null
         ? {}
         : { toolCallConcurrency: compiled.agent.toolCallConcurrency }),
-    });
+    };
+    // 'strict': a mismatch is an `error` chunk, not a silently dropped value. No `model`: the
+    // agent's own gateway connection answers.
+    const output =
+      compiled.outputSchema === null
+        ? await agent.stream(prompt, streamOptions)
+        : await agent.stream(prompt, {
+            ...streamOptions,
+            structuredOutput: {
+              schema: compiled.outputSchema as MastraOutputSchema,
+              errorStrategy: 'strict',
+            },
+          });
     for await (const typed of output.fullStream) {
       // Read as data from here on: the frame mapper, not Mastra's types, decides what a chunk is.
       const chunk: unknown = typed;
@@ -795,15 +840,24 @@ export async function* startMastraRun(
       if (state.finish !== null) yield { kind: 'mastra', chunk: state.finish };
       // A rejected key fails the run with a message that says so, after its frames.
       if (state.rejection !== null) throw state.rejection;
+      if (state.schemaFailure) throw outputSchemaUnsatisfied();
       return;
     }
+    const stopReason = stopReasonOf(state, compiled, deps.signal.aborted);
+    // Mastra sends no `object-result` for an empty answer and no error either, so a schema asked
+    // for and not delivered is a miss all the same.
+    const unsatisfied = compiled.outputSchema !== null && state.object === null;
     yield {
       kind: 'run_completed',
-      stopReason: stopReasonOf(state, compiled, deps.signal.aborted),
+      stopReason,
       steps: state.steps,
       usage: state.usage,
       finish: state.finish,
+      ...(stopReason === 'end_turn' && !unsatisfied
+        ? { output: { text: await output.text, structured: state.object?.value ?? null } }
+        : {}),
     };
+    if (unsatisfied && stopReason === 'end_turn') throw outputSchemaUnsatisfied();
   }
 
   let failure: { readonly error: unknown } | null = null;
@@ -840,9 +894,12 @@ export function mastraProcessEnvironmentHolds(): boolean {
   );
 }
 
-/** Load Mastra with its switches in place, without running anything. For the adapter's tests. */
+/**
+ * Load Mastra, and the MCP client a run with connectors needs, with its switches in place, without
+ * running anything. For the adapter's tests, so no scenario pays the import inside its own budget.
+ */
 export async function preloadMastra(): Promise<void> {
-  await loadMastra();
+  await Promise.all([loadMastra(), import('@mastra/mcp')]);
 }
 
 /** The copy and move options the guarded filesystem accepts, in platform-owned types. */

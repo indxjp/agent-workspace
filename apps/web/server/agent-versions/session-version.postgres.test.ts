@@ -27,13 +27,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createRepositoryAgentResourceStoreProvider } from '../agents/resource-store';
 import { createRepositoryAgentStoreProvider } from '../agents/store';
 import type { RegisteredComposition } from '../composition/register';
-import { currentSharesRuntime } from '../shares/core/runtime';
-import { getRunApi, installRunApi, type LaunchContext } from '../runs/environment';
+import { getRunApi, type LaunchContext } from '../runs/environment';
 import { FIXTURE_PERMISSIONS, FIXTURE_POLICY, versionRequest, type FixtureEdits } from './fixtures';
 import { createAgentVersion } from './handlers';
 import { setAgentPointer } from './pointers';
-import { currentAgentVersionsRuntime } from './runtime';
 import { createRunAgentReader } from './session-version';
+import { applicationContext } from '../application-context';
+import { installTestRunApi } from '../application-context-fixtures';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 const CONTROLLED_ENV = ['DATABASE_URL', 'SESSION_SECRET', 'RUNNER_URL', 'NEXT_RUNTIME'] as const;
@@ -129,7 +129,7 @@ describe.skipIf(!hasDatabase)('a session runs the version it started with (Postg
     instructions: string,
     edits: FixtureEdits = {},
   ): Promise<string> {
-    const store = await currentAgentVersionsRuntime()?.versions.forWorkspace(workspaceId);
+    const store = await applicationContext()?.agentVersions.versions.forWorkspace(workspaceId);
     const row = await root.agents.forScope(scope).get(agentId);
     if (store === undefined || store === null || row === null) throw new Error('wired');
     const saved = await createAgentVersion(
@@ -273,7 +273,7 @@ describe.skipIf(!hasDatabase)('a session runs the version it started with (Postg
   it('pins a share visitor’s session and keeps running its version after a push', async () => {
     const agentId = await createAgent('Shared');
     const v1 = await push(agentId, 1, 'Version one.');
-    const shares = currentSharesRuntime();
+    const shares = applicationContext()?.shares ?? null;
     if (shares === null) throw new Error('the shares runtime was installed');
     const share = await root.shares.forScope(scope).create({
       token: `pub_${agentId}`,
@@ -292,7 +292,7 @@ describe.skipIf(!hasDatabase)('a session runs the version it started with (Postg
     });
     const installed = api();
     const launched: LaunchContext[] = [];
-    installRunApi({ ...installed, launch: (context) => launched.push(context) });
+    installTestRunApi({ ...installed, launch: (context) => launched.push(context) });
     try {
       const sessionId = crypto.randomUUID();
       await shares.runPublic({ workspaceId, share, prompt: 'First.', sessionId });
@@ -315,7 +315,7 @@ describe.skipIf(!hasDatabase)('a session runs the version it started with (Postg
       ]);
       expect(launched[1]?.permissionOverride).toMatchObject({ readFiles: true });
     } finally {
-      installRunApi(installed);
+      installTestRunApi(installed);
     }
   }, 60_000);
 });

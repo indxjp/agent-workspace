@@ -16,12 +16,9 @@
  * untouched.
  */
 import type { WorkspaceDirectory } from '../rbac/directory';
-import {
-  problem,
-  type ApiResult,
-  type OwnershipOutcome,
-  type OwnershipResolver,
-} from '../rbac/http';
+import { problemWithDetail as problem } from '../http/result';
+import type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
+import type { ApiResult } from '../http/result';
 import type { Ownership } from '../rbac/decide';
 import type { Principal } from '../rbac/principal';
 import { LOCAL_RUNTIME_API_KEY_NAME_PREFIX } from './local-credential';

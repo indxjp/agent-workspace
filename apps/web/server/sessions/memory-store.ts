@@ -24,6 +24,7 @@ import {
   type TranscriptKey,
   type TranscriptSessionListing,
   type TranscriptStore,
+  unstorableTextPath,
 } from './transcript';
 
 interface StoredTranscript {
@@ -44,6 +45,17 @@ export class InMemoryTranscriptStore implements TranscriptStore {
 
   append(key: TranscriptKey, entries: readonly TranscriptEntry[]): Promise<void> {
     const id = transcriptKeyId(key);
+    // The durable store's `jsonb` column refuses these and rolls the whole batch back; this one
+    // refuses the same batch the same way, so a test against memory cannot pass an append that
+    // a deployment would fail.
+    const unstorable = entries
+      .map((entry, index) => unstorableTextPath(entry, `entries[${String(index)}]`))
+      .find((path) => path !== null);
+    if (unstorable !== undefined) {
+      return Promise.reject(
+        new Error(`${unstorable} cannot be stored (NUL, unpaired surrogate or nesting too deep)`),
+      );
+    }
     return this.#serialiser.run(id, () => {
       const existing = this.#transcripts.get(id);
       this.#transcripts.set(id, {

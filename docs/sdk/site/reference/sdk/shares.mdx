@@ -29,7 +29,8 @@ async list(options?: RequestOptions): Promise<readonly ShareListItem[]>
 
 Publish a share of a subject the caller may share. `400 invalid_share` names what the route
 refused: a field outside the contract, an option the subject type does not take, a public
-share while the workspace's policy has public sharing off, or `runnable` mode.
+share while the workspace's policy has public sharing off, `runnable` mode, or a `transcript`
+naming a run outside the shared session.
 
 The command is sent exactly as given — the server owns every default (`mode`, `expiry`, the
 runnable budget) and the share's content.

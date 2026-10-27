@@ -1,1 +1,20 @@
+# Default owner for everything.
 * @indxjp/maintainers
+
+# Security-sensitive paths (engineering audit W4-5, F-17): rbac, auth, oauth, secrets,
+# gateway tokens and the runtime drivers. A change here needs a recorded review. The main
+# ruleset does not yet require code-owner review (ADR-0149); these entries make the
+# reviewer explicit now and become blocking when it does.
+/apps/runner/ @indxjp/maintainers
+/apps/web/server/auth/ @indxjp/maintainers
+/apps/web/server/oauth/ @indxjp/maintainers
+/apps/web/server/rbac/ @indxjp/maintainers
+/apps/web/server/secrets/ @indxjp/maintainers
+/apps/web/server/tokens/ @indxjp/maintainers
+/apps/web/app/api/auth/ @indxjp/maintainers
+/apps/web/app/api/secrets/ @indxjp/maintainers
+/apps/web/app/api/tokens/ @indxjp/maintainers
+/apps/web/app/oauth/ @indxjp/maintainers
+/packages/core/src/auth/ @indxjp/maintainers
+/packages/core/src/secrets/ @indxjp/maintainers
+/packages/gateway/src/tokens/ @indxjp/maintainers

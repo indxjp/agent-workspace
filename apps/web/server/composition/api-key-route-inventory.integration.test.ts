@@ -27,6 +27,7 @@ import crypto from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { API_ROUTES, type ApiRoute } from '@indx-workspace/contracts/routes';
 import { NextRequest } from 'next/server';
@@ -42,6 +43,7 @@ import {
   mcpServers,
   runs as runRows,
   sessions as sessionRows,
+  triggers,
   workspacePrincipals,
   workspaces,
   type IsolatedTestDatabase,
@@ -66,14 +68,12 @@ if (!hasDatabase) {
 }
 
 const CONTROLLED_ENV = [
-  'AW_FILE_STORAGE_ROOT',
+  'AW_STORAGE_URL',
   'AW_RUNTIME_VERIFICATION_FILE',
-  'AW_SKILL_STORAGE_ROOT',
   'DATABASE_URL',
   'GATEWAY_TOKEN_SECRET',
   'MASTER_ENCRYPTION_KEY',
   'NEXT_RUNTIME',
-  'OBJECT_STORAGE_BUCKET',
   'RUNNER_MANAGER_TOKEN',
   'RUNNER_MANAGER_URL',
   'RUNNER_URL',
@@ -271,13 +271,11 @@ describe.skipIf(!hasDatabase)(
       process.env['SESSION_SECRET'] = 'api-key-route-inventory-secret-at-least-32-characters';
       process.env['MASTER_ENCRYPTION_KEY'] = crypto.randomBytes(32).toString('hex');
       process.env['RUNNER_URL'] = 'http://127.0.0.1:9';
-      process.env['AW_FILE_STORAGE_ROOT'] = path.join(storageRoot, 'files');
-      process.env['AW_SKILL_STORAGE_ROOT'] = path.join(storageRoot, 'skills');
+      process.env['AW_STORAGE_URL'] = pathToFileURL(storageRoot).href;
       for (const name of [
         'AW_RUNTIME_VERIFICATION_FILE',
         'GATEWAY_TOKEN_SECRET',
         'NEXT_RUNTIME',
-        'OBJECT_STORAGE_BUCKET',
         'RUNNER_MANAGER_TOKEN',
         'RUNNER_MANAGER_URL',
       ] as const) {
@@ -394,6 +392,20 @@ describe.skipIf(!hasDatabase)(
         .insert(endpointClientAgents)
         .values({ clientId: endpointClientId, workspaceId, agentId });
       seeded.set('/api/endpoint-clients', endpointClientId);
+      // A key cannot create a trigger either (it is owned by a member), so the row is inserted
+      // directly for the Viewer probes to address.
+      const triggerId = crypto.randomUUID();
+      await isolated.db.insert(triggers).values({
+        id: triggerId,
+        workspaceId,
+        agentId,
+        name: 'inventory-trigger',
+        kind: 'webhook',
+        promptTemplate: 'Handle {{body}}',
+        ownerPrincipalId: ownerKeyPrincipal.id,
+        secretHash: '0'.repeat(64),
+      });
+      seeded.set('/api/triggers', triggerId);
       const sessionId = crypto.randomUUID();
       await isolated.db.insert(sessionRows).values({
         id: sessionId,

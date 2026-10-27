@@ -6,8 +6,10 @@ import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import { describe, expect, it } from 'vitest';
 
 import {
+  approvalsRefusal,
   forkRefusal,
   normaliseRequestGrants,
+  outputSchemaRefusal,
   parsePolicyArm,
   provisionalBudget,
   refuse,
@@ -235,6 +237,33 @@ describe('forkRefusal', () => {
     expect(
       forkRefusal('mastra', ENGINE_CATALOGUE.mastra.capabilities, { mode: 'fresh' }),
     ).toBeNull();
+  });
+});
+
+describe('outputSchemaRefusal', () => {
+  it('refuses an output schema on an engine without structured output, naming it', () => {
+    const refused = outputSchemaRefusal('pi', false, { type: 'object' });
+    expect(refused?.code).toBe('engine_capability_unsupported');
+    expect(refused?.reason).toContain('pi declares structuredOutput: false');
+  });
+
+  it('lets a request through with no schema, or on an engine with structured output', () => {
+    expect(outputSchemaRefusal('pi', false, undefined)).toBeNull();
+    expect(outputSchemaRefusal('claude-agent-sdk', true, { type: 'object' })).toBeNull();
+  });
+});
+
+describe('approvalsRefusal', () => {
+  it('refuses requireApproval on an engine without approvals, naming the rules', () => {
+    const refused = approvalsRefusal('pi', false, ['Write', 'mcp__gh__push']);
+    expect(refused?.code).toBe('engine_capability_unsupported');
+    expect(refused?.reason).toContain('pi declares approvals: false');
+    expect(refused?.reason).toContain('"mcp__gh__push"');
+  });
+
+  it('lets a request through with no rules, or on an engine with approvals', () => {
+    expect(approvalsRefusal('pi', false, [])).toBeNull();
+    expect(approvalsRefusal('claude-agent-sdk', true, ['Write'])).toBeNull();
   });
 });
 

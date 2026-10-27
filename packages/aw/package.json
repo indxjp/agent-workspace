@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/aw",
-  "version": "0.6.9",
+  "version": "0.6.11",
   "description": "aw, the command line for the Agent Workspace API: one command per SDK method, with JSON output and stable exit codes.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -64,9 +64,9 @@
     "@indx-workspace/contracts": "workspace:*",
     "@indx-workspace/platforms": "workspace:*",
     "@indx-workspace/sdk": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "esbuild": "0.28.2",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "peerDependencies": {
     "@indx-workspace/cli": "workspace:*"
@@ -81,7 +81,7 @@
     "@types/node": "26.6.5",
     "@typescript/native": "npm:typescript@7.0.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.3"
+    "vitest": "5.0.5"
   },
   "nx": {
     "targets": {

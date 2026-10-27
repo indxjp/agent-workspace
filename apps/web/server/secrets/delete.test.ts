@@ -6,20 +6,21 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { POST as createRoute, GET as listRoute } from '../../app/api/secrets/route';
-import { DELETE as deleteRoute } from '../../app/api/secrets/[id]/route';
+import { DELETE as deleteRoute, PUT as replaceRoute } from '../../app/api/secrets/[id]/route';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { parseRole, type Role } from '../rbac/roles';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 import type { SecretResource } from './contract';
 import { createInMemorySecretsStoreProvider } from './memory-store';
-import { clearSecretsRuntime, configureSecretsRuntime } from './runtime';
 import type { SecretReferrers } from './store';
+import { installTestDomains } from '../application-context-fixtures';
+import { clearApplicationContext } from '../application-context';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
 const CONNECTOR_ID = '55555555-5555-4555-8555-555555555555';
 const MODEL_CONNECTION_ID = '66666666-6666-4666-8666-666666666666';
+const STORAGE_CONNECTION_ID = '77777777-7777-4777-8777-777777777777';
 const WORKSPACE_HEADER = 'x-test-workspace';
 const ROLE_HEADER = 'x-test-role';
 const PLAINTEXT = 'sk-ant-delete-test-value-never-echoed';
@@ -27,41 +28,47 @@ const PLAINTEXT = 'sk-ant-delete-test-value-never-echoed';
 const referenced = new Map<string, SecretReferrers>();
 
 afterEach(() => {
-  clearSecretsRuntime();
-  clearRbacRuntime();
+  clearApplicationContext();
   referenced.clear();
 });
 
 function useRuntime(): void {
-  configureSecretsRuntime({
-    secrets: createInMemorySecretsStoreProvider((_workspaceId, secretId) => {
-      return referenced.get(secretId) ?? null;
-    }),
-    resolveWorkspace(request) {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      return Promise.resolve(
-        workspaceId === null
-          ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-          : { kind: 'workspace', workspaceId },
-      );
+  installTestDomains({
+    secrets: {
+      kind: 'serving',
+      runtime: {
+        secrets: createInMemorySecretsStoreProvider((_workspaceId, secretId) => {
+          return referenced.get(secretId) ?? null;
+        }),
+        resolveWorkspace(request) {
+          const workspaceId = request.headers.get(WORKSPACE_HEADER);
+          return Promise.resolve(
+            workspaceId === null
+              ? { kind: 'unauthenticated', reason: 'no test workspace header' }
+              : { kind: 'workspace', workspaceId },
+          );
+        },
+      },
     },
   });
-  configureRbacRuntime({
-    directory: createMemoryDirectory(),
-    identify(request) {
-      const workspaceId = request.headers.get(WORKSPACE_HEADER);
-      const role = parseRole(request.headers.get(ROLE_HEADER)) ?? 'owner';
-      return Promise.resolve(
-        workspaceId === null
-          ? null
-          : Principal.fromApiKey({
-              principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-              workspaceId,
-              role,
-              label: 'Secret delete test',
-            }),
-      );
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory(),
+      identify(request) {
+        const workspaceId = request.headers.get(WORKSPACE_HEADER);
+        const role = parseRole(request.headers.get(ROLE_HEADER)) ?? 'owner';
+        return Promise.resolve(
+          workspaceId === null
+            ? null
+            : Principal.fromApiKey({
+                principalId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                apiKeyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                workspaceId,
+                role,
+                label: 'Secret delete test',
+              }),
+        );
+      },
     },
   });
 }
@@ -120,6 +127,7 @@ describe('DELETE /api/secrets/:id', () => {
     referenced.set(secret.id, {
       connectorIds: [CONNECTOR_ID],
       modelConnectionIds: [MODEL_CONNECTION_ID],
+      storageConnectionIds: [STORAGE_CONNECTION_ID],
     });
 
     const refused = await remove(secret.id, WORKSPACE_A);
@@ -129,7 +137,11 @@ describe('DELETE /api/secrets/:id', () => {
     expect(JSON.parse(text)).toMatchObject({
       error: {
         code: 'secret_in_use',
-        details: [`connector:${CONNECTOR_ID}`, `model-connection:${MODEL_CONNECTION_ID}`],
+        details: [
+          `connector:${CONNECTOR_ID}`,
+          `model-connection:${MODEL_CONNECTION_ID}`,
+          `storage-connection:${STORAGE_CONNECTION_ID}`,
+        ],
       },
     });
 
@@ -143,6 +155,35 @@ describe('DELETE /api/secrets/:id', () => {
     const again = await remove(secret.id, WORKSPACE_A);
     expect(again.status).toBe(404);
     expect(await again.json()).toMatchObject({ error: { code: 'secret_not_found' } });
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][api][sdk] refuses to replace the credential of a storage connection', async () => {
+    useRuntime();
+    const secret = await createIn(WORKSPACE_A);
+    referenced.set(secret.id, {
+      connectorIds: [],
+      modelConnectionIds: [],
+      storageConnectionIds: [STORAGE_CONNECTION_ID],
+    });
+
+    const refused = await replaceRoute(
+      new Request(`https://example.invalid/api/secrets/${secret.id}`, {
+        method: 'PUT',
+        headers: {
+          [WORKSPACE_HEADER]: WORKSPACE_A,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ value: `${PLAINTEXT}-rotated` }),
+      }),
+      { params: Promise.resolve({ id: secret.id }) },
+    );
+    expect(refused.status).toBe(409);
+    const text = await refused.text();
+    expect(text).not.toContain(PLAINTEXT);
+    expect(JSON.parse(text)).toMatchObject({
+      error: { code: 'secret_in_use', details: [`storage-connection:${STORAGE_CONNECTION_ID}`] },
+    });
   });
 
   it('answers 400 invalid_secret_id for a malformed id', async () => {

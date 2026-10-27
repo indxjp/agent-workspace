@@ -14,6 +14,7 @@
  * own compiler settings.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createInMemoryCatalogStore } from './resources/catalog-store.memory';
 
 import { negotiateContractsVersion, servedContractsHeaders } from './versioning/contracts-version';
 
@@ -64,9 +65,10 @@ import {
   FileResponseSchema,
   fileRouteId,
   FILES_PROBLEM_CODES,
-  MAX_SUBTREE_OBJECTS,
   MAX_UPLOAD_BYTES,
   MoveFileResponseSchema,
+  PresignedUrlSchema,
+  resourcePathHeaders,
   SubtreeDeleteOutcomeSchema,
 } from '@indx-workspace/contracts/files';
 import {
@@ -120,11 +122,15 @@ import {
   ACCOUNTING_STATES,
   InterruptRunResponseSchema,
   MAX_PROMPT_CHARS,
+  MAX_RUN_ATTACHMENTS,
   MODEL_PROVIDERS,
   RevokeRunTokensResponseSchema,
+  RUN_APPROVAL_COMMENT_MAX_LENGTH,
+  RUN_APPROVAL_PROBLEM_CODES,
   RUN_LIST_MAX_LIMIT,
   RUN_STATUSES,
   RUN_START_PROBLEM_CODES,
+  RunApprovalResponseSchema,
   RunResourceSchema,
   StartRunRequestSchema,
 } from '@indx-workspace/contracts/runs';
@@ -215,11 +221,12 @@ import {
   agentToolKinds as coreAgentToolKinds,
   classifySdkEvent,
   toAgentFrames,
-} from '@agent-workspace/core';
+} from '@agent-workspace/run-protocol';
 import {
   type AgentRepository,
   type AuditEventRepository,
   type AuditEventRepositoryProvider,
+  createInMemoryCatalog,
   createInMemoryWorkspaceScopeResolver,
   engineIds as schemaEngineIds,
   RUN_FEEDBACK_COMMENT_MAX_LENGTH as CORE_RUN_FEEDBACK_COMMENT_MAX_LENGTH,
@@ -236,22 +243,42 @@ import { auditActions as serverAuditActions } from '@agent-workspace/core/db/uns
 import { createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
 import { createProviderRegistry } from '@agent-workspace/gateway/providers/registry';
 import { classifyRunEventFrame, parseSseFrame } from '@indx-workspace/sdk/events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import {
+  StorageConnectionBrowseResponseSchema,
+  StorageConnectionListResponseSchema,
+  StorageConnectionResourceSchema,
+  StorageConnectionTestOutcomeSchema,
+  STORAGE_CONNECTION_PROBLEM_CODES,
+} from '@indx-workspace/contracts/storage-connections';
+import { createInMemoryStorageConnectionRepositoryProvider } from '@agent-workspace/core/db';
+import { createInMemorySecretsService } from '@agent-workspace/core/secrets';
+
+import {
+  browseStorageConnection,
+  createStorageConnection,
+  deleteStorageConnection,
+  getStorageConnection,
+  listStorageConnections,
+  rotateStorageConnectionCredential,
+  testStorageConnection,
+  updateStorageConnection,
+} from './storage-connections/handlers';
+import { createRepositoryStorageConnectionsStoreProvider } from './storage-connections/store';
 
 import { GET as getAuditEvents } from '../app/api/audit-events/route';
 import { GET as getMetrics } from '../app/api/metrics/route';
 import { POST as postProjectSession } from '../app/api/projects/[id]/sessions/route';
 import { POST as switchWorkspaceRoute } from '../app/api/auth/workspace/route';
 import { POST as mintTokenRoute } from '../app/api/tokens/route';
-import { toShareResource } from '../app/api/shares/route';
+import { toShareResource } from './shares/core/resource';
 import {
   GET as readSharingPolicy,
   PATCH as patchSharingPolicy,
 } from '../app/api/sharing-policies/route';
 import { toAgentResource } from './agents/contract';
-import { problem } from './agents/handlers';
+import { problem } from './http/result';
 import { compiledPolicyFor, policyFor } from './agents/policy';
-import { clearAuditRuntime, configureAuditRuntime } from './audit/runtime';
 import { keysetPageOf } from './pagination/testing';
 import { listEngines } from './engines/handlers';
 import { listPlatforms } from './platforms/catalogue';
@@ -280,23 +307,23 @@ import { createInMemoryConnectorsStoreProvider } from './connectors/memory-store
 import { type TestConnectionOutcome as ServerTestConnectionOutcome } from './connectors/test-connection';
 import { DomainError } from './errors';
 import { encodeFileId } from './files/file-id';
+import { requireFilePath } from './files/handlers';
+import { boundedBodyStream, toResponse } from './files/http';
+import { createCatalogFilesWorld, type CatalogFilesWorld } from './files/catalog-runtime-fixtures';
 import {
-  type ApiResult,
-  createFolder,
-  deleteSubtree,
-  downloadFile,
-  listFiles,
-  MAX_SUBTREE_OBJECTS as SERVER_MAX_SUBTREE_OBJECTS,
-  moveSubtree,
-  renameFile,
-  requireFilePath,
-  uploadFile,
-} from './files/handlers';
-import { MAX_UPLOAD_BYTES as SERVER_MAX_UPLOAD_BYTES, toResponse } from './files/http';
+  createInMemoryObjectStore,
+  storageObjectName,
+  type ObjectStoreV2,
+} from '@agent-workspace/core/storage';
+import { GET as listFilesRoute, POST as uploadFileRoute } from '../app/api/files/route';
 import {
-  createLocalFilesystemObjectStoreProvider,
-  type ObjectStore,
-} from './files/object-store-bridge';
+  DELETE as deleteFileRoute,
+  GET as downloadFileRoute,
+  PATCH as renameFileRoute,
+} from '../app/api/files/[id]/route';
+import { POST as downloadUrlsRoute } from '../app/api/files/[id]/download-urls/route';
+import { POST as uploadUrlsRoute } from '../app/api/files/[id]/upload-urls/route';
+import { POST as completeUploadRoute } from '../app/api/files/[id]/upload-complete/route';
 import { errorResponse } from './http/error-response';
 import {
   acceptInvitation,
@@ -324,7 +351,6 @@ import {
 import { createInMemoryModelsStoreProvider } from './models/memory-store';
 import { probeModelConnection } from './models/probe';
 import { toProjectResource } from './projects/resource';
-import { clearProjectsRuntime, configureProjectsRuntime } from './projects/runtime';
 import {
   API_KEY_PREFIX as SERVER_API_KEY_PREFIX,
   KEY_ID_LENGTH as SERVER_KEY_ID_LENGTH,
@@ -350,22 +376,12 @@ import { problem as rbacProblem } from './rbac/http';
 import { createMemoryDirectory } from './rbac/memory-directory';
 import { Principal, PRINCIPAL_KINDS as SERVER_PRINCIPAL_KINDS } from './rbac/principal';
 import { ROLES } from './rbac/roles';
-import { clearTokensRuntime, configureTokensRuntime } from './tokens/runtime';
-import {
-  clearWorkspacesRuntime,
-  configureWorkspacesRuntime,
-  type WorkspaceRepositoryPort,
-} from './workspaces/runtime';
-import { clearRbacRuntime, configureRbacRuntime } from './rbac/runtime';
+import type { WorkspaceRepositoryPort } from './workspaces/runtime';
 import { installRbacHarness, TEST_WORKSPACE_ID } from './rbac/testing';
-import {
-  MAX_PROMPT_CHARS as SERVER_MAX_PROMPT_CHARS,
-  parseStartRunBody,
-  renderRun,
-  startRun,
-} from './runs/api';
-import { InMemoryRunStore } from './runs/store';
-import { installRunApi, resetRunApi } from './runs/environment';
+import { parseStartRunBody, renderRun, startRun } from './runs/api';
+import { MAX_PROMPT_CHARS as SERVER_MAX_PROMPT_CHARS } from './runs/service';
+import { decideRunApproval } from './runs/approval';
+import { InMemoryRunStore } from './runs/memory-store';
 import { engineCapabilityRefusal } from './agents/policy';
 import {
   classifyEventName,
@@ -374,7 +390,14 @@ import {
   sseControlFrame,
   sseFrame,
 } from './runs/sse';
-import { accountingStates, MAX_RUN_LIST_LIMIT, type RunRecord, runStatuses } from './runs/store';
+import {
+  accountingStates,
+  ApprovalDecisionError,
+  type CreateRunInput,
+  MAX_RUN_LIST_LIMIT,
+  type RunRecord,
+  runStatuses,
+} from './runs/store';
 import {
   createInMemoryRuntimeConnectionStoreProvider,
   createRuntimeConnection,
@@ -399,7 +422,6 @@ import {
 import { createSecret, listSecrets, replaceSecret } from './secrets/handlers';
 import { createInMemorySecretsStoreProvider } from './secrets/memory-store';
 import { listTranscriptSubkeys, loadTranscript, serializeSession } from './sessions/api';
-import { installSessionApi, resetSessionApi } from './sessions/environment';
 import { InMemoryTranscriptStore } from './sessions/memory-store';
 import {
   MAX_SUBPATH_LENGTH as SERVER_MAX_SUBPATH_LENGTH,
@@ -407,19 +429,18 @@ import {
   SUBPATH_PATTERN as SERVER_SUBPATH_PATTERN,
 } from './sessions/transcript';
 import { parsePublishShareRequest, PublishShareRequestSchema } from './shares/core/input';
-import {
-  clearSharesRuntime,
-  configureSharesRuntime,
-  type WorkspaceSharing,
-} from './shares/core/runtime';
+import { type WorkspaceSharing } from './shares/core/runtime';
 import {
   exportSkill,
   getSkill,
-  importSkill,
+  importSkill as importSkillInto,
   listSkills,
-  patchSkill,
+  patchSkill as patchSkillIn,
   requireSkillName,
 } from './skills/handlers';
+import { createSkillRowsWorld } from './skills/rows-fixture';
+import type { SkillRowsWriter } from './skills/tree';
+import type { SkillObjects } from './storage/store';
 import { isValidSkillName } from './skills/keys';
 import { recentRunTelemetry, recordRunTelemetry } from './telemetry/runtime';
 import {
@@ -445,6 +466,12 @@ import { createAgentVersion } from './agent-versions/handlers';
 import { createInMemoryAgentStoreProvider } from './agents/memory-store';
 import { createInMemoryAgentVersionStoreProvider } from './agent-versions/memory-store';
 import { setAgentPointer } from './agent-versions/pointers';
+import { clearApplicationContext } from './application-context';
+import {
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from './application-context-fixtures';
 
 const WORKSPACE = '44444444-4444-4444-8444-444444444444';
 const AGENT = '11111111-1111-4111-8111-111111111111';
@@ -494,6 +521,19 @@ describe('runs', () => {
     expect(parsed.accountingError).not.toContain('relation');
   });
 
+  it('renders a run with and without an output into the published RunResource (ADR-0143)', () => {
+    expect(RunResourceSchema.parse(renderRun(queued)).output).toBeNull();
+    const output = { text: '{"a":1}', structured: { a: 1 } };
+    const completed: RunRecord = {
+      ...queued,
+      status: 'completed',
+      startedAt: new Date('2026-09-21T10:00:01.000Z'),
+      endedAt: new Date('2026-09-21T10:00:02.000Z'),
+      output,
+    };
+    expect(RunResourceSchema.parse(renderRun(completed)).output).toEqual(output);
+  });
+
   it('pins run_feedback’s rating set and comment cap to RunFeedbackRequestSchema (issue #539)', () => {
     // `packages/core` may not import the contracts, so the table restates both; same watcher as
     // `engineIds` below. The contract's `rating` enum is built from `RUN_FEEDBACK_RATINGS`.
@@ -521,7 +561,7 @@ describe('runs', () => {
     expect([...coreAgentStopReasons]).toEqual([...AGENT_STOP_REASONS]);
     expect(CORE_AGENT_FRAME_RAW_MAX_BYTES).toBe(AGENT_FRAME_RAW_MAX_BYTES);
     // And every frame the Claude mapping produces satisfies the published union — the hole the
-    // restatement opens, closed by a test rather than left to a comment (see `core/src/types.ts`).
+    // restatement opens, closed by a test rather than left to a comment (see `run-protocol/src/types.ts`).
     for (const message of [
       { type: 'system', subtype: 'init', session_id: 'sess_1' },
       {
@@ -566,6 +606,130 @@ describe('runs', () => {
     expect(InterruptRunResponseSchema.safeParse({ run: renderRun(cancelled) }).success).toBe(true);
   });
 
+  it('renders a paused run, with its pending call, into the published RunResource (issue #1301)', () => {
+    const paused: RunRecord = {
+      ...queued,
+      status: 'awaiting_approval',
+      startedAt: new Date('2026-09-21T10:00:01.000Z'),
+      endedAt: new Date('2026-09-21T10:00:02.000Z'),
+      pendingApproval: { toolName: 'send_email', canonicalCall: '{"to":"a@b.c"}' },
+    };
+    const parsed = RunResourceSchema.parse(renderRun(paused));
+    expect(parsed.status).toBe('awaiting_approval');
+    expect(parsed.pendingApproval).toEqual(paused.pendingApproval);
+  });
+
+  /**
+   * The approval route's 202 body and every refusal it can answer, from the real handler, against
+   * the published schema and `RUN_APPROVAL_PROBLEM_CODES` (issue #1301). A code renamed or answered
+   * under another status on either side fails here.
+   */
+  describe('approval decisions', () => {
+    /** Refuses every decision for `reason`, as the repository store does under its lock. */
+    class RefusingRunStore extends InMemoryRunStore {
+      constructor(readonly reason: 'already-decided' | 'expired') {
+        super();
+      }
+
+      override create(input: CreateRunInput): Promise<RunRecord> {
+        return input.decides === undefined
+          ? super.create(input)
+          : Promise.reject(new ApprovalDecisionError(input.decides, this.reason));
+      }
+    }
+
+    afterEach(() => {
+      resetTestRunApi();
+    });
+
+    async function installPaused(store: InMemoryRunStore): Promise<string> {
+      installTestRunApi({
+        authenticate: () =>
+          Promise.resolve({
+            principalId: '77777777-7777-4777-8777-777777777777',
+            ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
+            userId: '66666666-6666-4666-8666-666666666666',
+            workspaceId: WORKSPACE,
+            role: 'owner' as const,
+            scope: null,
+          }),
+        findAgent: (principal, agentId) =>
+          Promise.resolve(
+            agentId === AGENT
+              ? { id: AGENT, workspaceId: principal.workspaceId, engine: 'claude-agent-sdk' }
+              : null,
+          ),
+        openSession: () => Promise.resolve({ id: SESSION, agentId: AGENT, engine: null }),
+        ownsRun: () => Promise.resolve(true),
+        store,
+        launch: () => undefined,
+      });
+      const id = crypto.randomUUID();
+      await store.create({
+        engine: 'claude-agent-sdk',
+        id,
+        workspaceId: WORKSPACE,
+        agentId: AGENT,
+        sessionId: SESSION,
+      });
+      await store.markRunning(id);
+      await store.awaitApproval(id, { toolName: 'send_email', canonicalCall: '{}' });
+      return id;
+    }
+
+    function decide(runId: string, body: unknown): Promise<Response> {
+      return decideRunApproval(
+        new Request(`http://web/api/runs/${runId}/approval`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+        runId,
+      );
+    }
+
+    it('answers 202 with the published RunApprovalResponseSchema, then run_not_awaiting_approval', async () => {
+      const id = await installPaused(new InMemoryRunStore());
+      const tooLong = await decide(id, {
+        decision: 'approve',
+        comment: 'x'.repeat(RUN_APPROVAL_COMMENT_MAX_LENGTH + 1),
+      });
+      expect(tooLong.status).toBe(400);
+
+      const accepted = await decide(id, {
+        decision: 'approve',
+        comment: 'x'.repeat(RUN_APPROVAL_COMMENT_MAX_LENGTH),
+      });
+      expect(accepted.status).toBe(202);
+      const body = RunApprovalResponseSchema.parse(await accepted.json());
+      expect(body.events).toBe(`/api/runs/${body.run.id}/events`);
+
+      const again = await decide(id, { decision: 'reject' });
+      expect(ApiProblemSchema.parse(await again.json()).error.code).toBe(
+        'run_not_awaiting_approval',
+      );
+      expect(again.status).toBe(RUN_APPROVAL_PROBLEM_CODES.run_not_awaiting_approval);
+    });
+
+    it('answers every published approval refusal under its published status', async () => {
+      const refusals = [
+        ['already-decided', 'approval_already_decided'],
+        ['expired', 'approval_expired'],
+      ] as const;
+      for (const [reason, code] of refusals) {
+        const id = await installPaused(new RefusingRunStore(reason));
+        const response = await decide(id, { decision: 'approve' });
+        expect(ApiProblemSchema.parse(await response.json()).error.code).toBe(code);
+        expect(response.status).toBe(RUN_APPROVAL_PROBLEM_CODES[code]);
+      }
+      // Every published code is one the route answers, and the reverse.
+      expect(Object.keys(RUN_APPROVAL_PROBLEM_CODES).sort()).toEqual(
+        ['run_not_awaiting_approval', ...refusals.map(([, code]) => code)].sort(),
+      );
+      expect(new Set(Object.values(RUN_APPROVAL_PROBLEM_CODES))).toEqual(new Set([409]));
+    });
+  });
+
   it('publishes RevokeRunTokensResponseSchema for the repository’s own outcome vocabulary (issue #235, S-15)', () => {
     for (const outcome of ['revoked', 'already-revoked', 'not-found'] as const) {
       expect(
@@ -576,6 +740,8 @@ describe('runs', () => {
   });
 
   it('accepts a start-run body as the SDK sends it, and rejects what the SDK rejects', () => {
+    const attachmentList = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({ fileId: `file-${String(index)}` }));
     const bodies: readonly unknown[] = [
       { prompt: 'hello', sessionId: null, modelConnectionId: null, model: null },
       { prompt: 'hello', sessionId: SESSION, modelConnectionId: null, model: null },
@@ -594,6 +760,26 @@ describe('runs', () => {
       { prompt: 'hello', version: 1.5 },
       { prompt: 'hello', version: '2' },
       { prompt: 'hello', sessionId: SESSION, version: 2 },
+      { prompt: 'hello', attachments: [{ fileId: 'a' }] },
+      { prompt: 'hello', sessionId: SESSION, attachments: [{ fileId: 'a' }, { fileId: 'b' }] },
+      { prompt: 'hello', attachments: attachmentList(MAX_RUN_ATTACHMENTS) },
+      { prompt: 'hello', attachments: [] },
+      { prompt: 'hello', attachments: attachmentList(MAX_RUN_ATTACHMENTS + 1) },
+      { prompt: 'hello', attachments: [{ fileId: 'a' }, { fileId: 'a' }] },
+      { prompt: 'hello', attachments: [{ fileId: 'a', access: 'write' }] },
+      { prompt: 'hello', attachments: [{ fileId: '' }] },
+      { prompt: 'hello', attachments: [{}] },
+      { prompt: 'hello', attachments: ['a'] },
+      { prompt: 'hello', attachments: 'a' },
+      { prompt: 'hello', attachments: null },
+      { prompt: 'hello', outputSchema: { type: 'object' } },
+      { prompt: 'hello', sessionId: SESSION, outputSchema: { type: 'object' } },
+      { prompt: 'hello', outputSchema: { type: 'array' } },
+      { prompt: 'hello', outputSchema: { type: 'object', $schema: 'draft-07' } },
+      { prompt: 'hello', outputSchema: { type: 'object', $ref: 'https://example.com/a' } },
+      { prompt: 'hello', outputSchema: { type: 'object', description: 'x'.repeat(40_000) } },
+      { prompt: 'hello', outputSchema: 'object' },
+      { prompt: 'hello', outputSchema: null },
     ];
     for (const body of bodies) {
       expect(
@@ -880,12 +1066,12 @@ describe('problems', () => {
     const ENGINE_SESSION = '44444444-4444-4444-8444-444444444444';
 
     afterEach(() => {
-      resetRunApi();
+      resetTestRunApi();
       clearEnginesRegisteredForTests();
     });
 
     it('renders session_engine_mismatch from the real run route as the published envelope', async () => {
-      installRunApi({
+      installTestRunApi({
         authenticate: () =>
           Promise.resolve({
             principalId: '77777777-7777-4777-8777-777777777777',
@@ -1355,26 +1541,111 @@ describe('secrets', () => {
 describe('files', () => {
   const FILES_WORKSPACE = '44444444-4444-4444-8444-444444444444';
   const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
-  let filesRootDir: string;
-  let store: ObjectStore;
+  const idContext = (id: string) => ({ params: Promise.resolve({ id }) });
+  let world: CatalogFilesWorld;
 
-  beforeEach(async () => {
-    filesRootDir = await mkdtemp(path.join(os.tmpdir(), 'sdk-conformance-files-'));
-    store = createLocalFilesystemObjectStoreProvider(filesRootDir).forWorkspace(FILES_WORKSPACE);
-  });
-
-  afterEach(async () => {
-    await rm(filesRootDir, { recursive: true, force: true });
-  });
-
-  function jsonBody(result: ApiResult): unknown {
-    if (result.kind !== 'json') throw new Error(`expected a JSON result, got ${result.kind}`);
-    return result.body;
+  function install(objects?: ObjectStoreV2): void {
+    world = createCatalogFilesWorld({
+      catalogs: createInMemoryCatalogStore(),
+      scopes: createInMemoryWorkspaceScopeResolver(
+        [FILES_WORKSPACE].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
+      ),
+      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: FILES_WORKSPACE }),
+      ...(objects === undefined ? {} : { objects }),
+    });
+    installTestDomains({ files: { kind: 'serving', runtime: world.runtime } });
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({
+          users: [
+            {
+              email: 'owner@example.test',
+              name: 'Owner',
+              workspaceId: FILES_WORKSPACE,
+              role: 'owner',
+            },
+          ],
+        }),
+        identify: () =>
+          Promise.resolve(
+            Principal.fromApiKey({
+              principalId: '37d41bbb-42d1-4a16-8f5d-de3fef42eed0',
+              apiKeyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+              workspaceId: FILES_WORKSPACE,
+              role: 'owner',
+              label: 'conformance',
+            }),
+          ),
+      },
+    });
   }
 
-  function problemOf(result: ApiResult): { status: number; code: string } {
-    const body = jsonBody(result) as { error: { code: string } };
-    return { status: result.status, code: body.error.code };
+  beforeEach(() => {
+    install();
+  });
+
+  afterEach(() => {
+    clearApplicationContext();
+  });
+
+  const call = (method: string, url: string, init: RequestInit = {}): Request =>
+    new Request(`https://example.invalid${url}`, { method, ...init });
+  const upload = (filePath: string, body: string, contentType?: string): Promise<Response> =>
+    uploadFileRoute(
+      call('POST', '/api/files', {
+        body,
+        headers: {
+          ...resourcePathHeaders('x-file-path', filePath),
+          ...(contentType === undefined ? {} : { 'content-type': contentType }),
+        },
+      }),
+    );
+  const folder = (folderPath: string): Promise<Response> =>
+    uploadFileRoute(call('POST', '/api/files', { headers: { 'x-folder-path': folderPath } }));
+  const list = (under: string | null): Promise<Response> =>
+    listFilesRoute(
+      call('GET', under === null ? '/api/files' : `/api/files?path=${encodeURIComponent(under)}`),
+    );
+  const download = (filePath: string): Promise<Response> =>
+    downloadFileRoute(
+      call('GET', `/api/files/${encodeFileId(filePath)}`),
+      idContext(encodeFileId(filePath)),
+    );
+  const rename = (filePath: string, newPath: string): Promise<Response> =>
+    renameFileRoute(
+      call('PATCH', `/api/files/${encodeFileId(filePath)}`, {
+        body: JSON.stringify({ newPath }),
+        headers: { 'content-type': 'application/json' },
+      }),
+      idContext(encodeFileId(filePath)),
+    );
+  const remove = (filePath: string, recursive: boolean): Promise<Response> =>
+    deleteFileRoute(
+      call('DELETE', `/api/files/${encodeFileId(filePath)}${recursive ? '?recursive=true' : ''}`),
+      idContext(encodeFileId(filePath)),
+    );
+  const mint = (
+    route: typeof uploadUrlsRoute,
+    sub: 'upload-urls' | 'download-urls',
+    filePath: string,
+    body: unknown,
+  ): Promise<Response> =>
+    route(
+      call('POST', `/api/files/${encodeFileId(filePath)}/${sub}`, {
+        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json' },
+      }),
+      idContext(encodeFileId(filePath)),
+    );
+  const complete = (filePath: string): Promise<Response> =>
+    completeUploadRoute(
+      call('POST', `/api/files/${encodeFileId(filePath)}/upload-complete`),
+      idContext(encodeFileId(filePath)),
+    );
+
+  async function problemOf(response: Response): Promise<{ status: number; code: string }> {
+    const body = (await response.json()) as { error: { code: string } };
+    return { status: response.status, code: body.error.code };
   }
 
   it('mints the same route id for a path as the server does', () => {
@@ -1390,55 +1661,42 @@ describe('files', () => {
   });
 
   it('renders uploads, folders, listings and renames into the published shapes', async () => {
-    const uploaded = await uploadFile(store, {
-      path: 'reports/q3 summary.md',
-      contentType: 'text/markdown',
-      body: utf8('# Q3'),
-    });
+    const uploaded = await upload('reports/q3 summary.md', '# Q3', 'text/markdown');
     expect(uploaded.status).toBe(201);
-    expect(FileResponseSchema.safeParse(jsonBody(uploaded)).success).toBe(true);
+    expect(FileResponseSchema.safeParse(await uploaded.json()).success).toBe(true);
 
-    const untyped = await uploadFile(store, {
-      path: 'raw.bin',
-      contentType: null,
-      body: utf8('x'),
-    });
-    expect(FileResponseSchema.parse(jsonBody(untyped)).file.contentType).toBeNull();
-
-    const created = await createFolder(store, 'empty');
+    const created = await folder('empty');
     expect(created.status).toBe(201);
-    const createdFolder = FileResponseSchema.parse(jsonBody(created)).file;
+    const createdFolder = FileResponseSchema.parse(await created.json()).file;
     expect(createdFolder).toMatchObject({ kind: 'folder', sizeBytes: null, lastModified: null });
 
-    const listed = await listFiles(store, null);
+    await upload('raw.bin', 'x');
+    const listed = await list(null);
     expect(listed.status).toBe(200);
-    const listing = FileListResponseSchema.parse(jsonBody(listed));
+    const listing = FileListResponseSchema.parse(await listed.json());
     expect(listing.files.map((file) => [file.path, file.kind])).toEqual([
       ['empty', 'folder'],
       ['raw.bin', 'file'],
       ['reports', 'folder'],
     ]);
-    expect(
-      FileListResponseSchema.safeParse(jsonBody(await listFiles(store, 'reports'))).success,
-    ).toBe(true);
+    expect(FileListResponseSchema.safeParse(await (await list('reports')).json()).success).toBe(
+      true,
+    );
 
-    const asFolder = await downloadFile(store, 'reports');
+    const asFolder = await download('reports');
     expect(asFolder.status).toBe(200);
-    expect(FileResponseSchema.safeParse(jsonBody(asFolder)).success).toBe(true);
+    expect(FileResponseSchema.safeParse(await asFolder.json()).success).toBe(true);
 
-    const renamed = await renameFile(store, 'raw.bin', { newPath: 'renamed.bin' });
+    const renamed = await rename('raw.bin', 'renamed.bin');
     expect(renamed.status).toBe(200);
-    expect(MoveFileResponseSchema.safeParse(jsonBody(renamed)).success).toBe(true);
-    expect(FileResponseSchema.parse(jsonBody(renamed)).file.path).toBe('renamed.bin');
+    const renamedBody: unknown = await renamed.json();
+    expect(MoveFileResponseSchema.safeParse(renamedBody).success).toBe(true);
+    expect(FileResponseSchema.parse(renamedBody).file.path).toBe('renamed.bin');
   });
 
   it('serves a download as an inert attachment with the two-form filename the SDK parses', async () => {
-    await uploadFile(store, {
-      path: '案件/見積 書.txt',
-      contentType: 'text/plain',
-      body: utf8('hi'),
-    });
-    const response = toResponse(await downloadFile(store, '案件/見積 書.txt'));
+    await upload('案件/見積 書.txt', 'hi', 'text/plain');
+    const response = await download('案件/見積 書.txt');
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/plain');
     expect(response.headers.get('content-disposition')).toBe(
@@ -1448,45 +1706,38 @@ describe('files', () => {
   });
 
   it('renders every subtree outcome into the published unions', async () => {
-    await uploadFile(store, { path: 'tree/one.txt', contentType: null, body: utf8('1') });
-    await uploadFile(store, { path: 'tree/deep/two.txt', contentType: null, body: utf8('2') });
+    await upload('tree/one.txt', '1');
+    await upload('tree/deep/two.txt', '2');
 
-    const moved = await moveSubtree(store, null, 'tree', { newPath: 'moved' });
+    const moved = await rename('tree', 'moved');
     expect(moved.status).toBe(200);
-    expect(MoveFileResponseSchema.safeParse(jsonBody(moved)).success).toBe(true);
-    expect(jsonBody(moved)).toEqual({ status: 'ok', moved: 2 });
-    expect(jsonBody(await moveSubtree(store, null, 'moved', { newPath: 'moved' }))).toEqual({
-      status: 'ok',
-      moved: 0,
-    });
+    const movedBody = (await moved.json()) as { status: string; moved: number };
+    expect(MoveFileResponseSchema.safeParse(movedBody).success).toBe(true);
+    expect(movedBody.status).toBe('ok');
+    expect(movedBody.moved).toBeGreaterThanOrEqual(2);
 
-    const refused = await deleteSubtree(store, 'moved', false);
-    expect(refused === null ? null : problemOf(refused)).toEqual({
-      status: 409,
-      code: 'folder_not_empty',
-    });
+    const refused = await remove('moved', false);
+    expect(await problemOf(refused)).toEqual({ status: 409, code: 'folder_not_empty' });
 
-    const deleted = await deleteSubtree(store, 'moved', true);
-    expect(deleted?.status).toBe(200);
-    expect(
-      deleted === null ? null : SubtreeDeleteOutcomeSchema.safeParse(jsonBody(deleted)).success,
-    ).toBe(true);
-    expect(await deleteSubtree(store, 'moved', true)).toBeNull();
+    const deleted = await remove('moved', true);
+    expect(deleted.status).toBe(200);
+    expect(SubtreeDeleteOutcomeSchema.safeParse(await deleted.json()).success).toBe(true);
+    expect((await remove('moved', true)).status).toBe(204);
   });
 
   it('answers each documented refusal with a code and status the contract publishes', async () => {
-    await uploadFile(store, { path: 'file.txt', contentType: null, body: utf8('x') });
-    await createFolder(store, 'dir');
-    const refusals: readonly ApiResult[] = [
-      await listFiles(store, '../outside'),
-      await createFolder(store, '.claude/cache'),
-      await uploadFile(store, { path: 'dir', contentType: null, body: utf8('x') }),
-      await createFolder(store, 'file.txt'),
-      await renameFile(store, 'missing.txt', { newPath: 'x.txt' }),
-      await moveSubtree(store, null, 'dir', { newPath: 'dir/inner' }),
-      await moveSubtree(store, null, 'nowhere', { newPath: 'somewhere' }),
+    await upload('file.txt', 'x');
+    await folder('dir');
+    const refusals = [
+      await list('../outside'),
+      await folder('.claude/cache'),
+      await upload('dir', 'x'),
+      await folder('file.txt'),
+      await rename('missing.txt', 'x.txt'),
+      await rename('dir', 'dir/inner'),
+      await rename('nowhere', 'somewhere'),
     ];
-    const seen = refusals.map(problemOf);
+    const seen = await Promise.all(refusals.map(problemOf));
     expect(seen).toEqual([
       { status: 400, code: 'invalid_path' },
       { status: 400, code: 'reserved_path' },
@@ -1500,15 +1751,95 @@ describe('files', () => {
       expect(FILES_PROBLEM_CODES[code as keyof typeof FILES_PROBLEM_CODES]).toBe(status);
     }
     const unminted = requireFilePath('not base64url!');
-    expect(unminted.ok ? null : problemOf(unminted.result)).toEqual({
+    expect(unminted.ok ? null : await problemOf(toResponse(unminted.result))).toEqual({
       status: 404,
       code: 'file_not_found',
     });
   });
 
-  it('shares the upload and subtree bounds with the server', () => {
-    expect(SERVER_MAX_UPLOAD_BYTES).toBe(MAX_UPLOAD_BYTES);
-    expect(SERVER_MAX_SUBTREE_OBJECTS).toBe(MAX_SUBTREE_OBJECTS);
+  it('renders presigned URLs into the published shape, or 501 when the store cannot sign', async () => {
+    const plain = createInMemoryObjectStore();
+    const signing: ObjectStoreV2 = {
+      ...plain,
+      capabilities: { ...plain.capabilities, sign: true },
+      createSignedUrl: (key, request) =>
+        Promise.resolve({
+          url: `https://store.example/${key}?ttl=${String(request.expiresInSeconds)}`,
+          headers: request.contentType === undefined ? {} : { 'content-type': 'text/plain' },
+        }),
+    };
+    install(signing);
+    await upload('doc.txt', 'x', 'text/plain');
+
+    const up = await mint(uploadUrlsRoute, 'upload-urls', 'new.txt', {
+      contentType: 'text/plain',
+      sizeBytes: 3,
+      ttlSeconds: 120,
+    });
+    expect(up.status).toBe(201);
+    expect(PresignedUrlSchema.parse(await up.json())).toMatchObject({
+      method: 'PUT',
+      path: 'new.txt',
+    });
+
+    const down = await mint(downloadUrlsRoute, 'download-urls', 'doc.txt', { ttlSeconds: 120 });
+    expect(down.status).toBe(201);
+    expect(PresignedUrlSchema.parse(await down.json())).toMatchObject({
+      method: 'GET',
+      path: 'doc.txt',
+    });
+
+    // The step the SDK runs after the PUT: complete answers the published `{ file }`, or 409.
+    const pending = await (await world.catalogs.forWorkspace(FILES_WORKSPACE)).pending('new.txt');
+    if (pending?.objectId === null || pending?.objectId === undefined) {
+      throw new Error('minting an upload link must leave a pending row');
+    }
+    await world.objects.write(
+      storageObjectName(FILES_WORKSPACE, 'files', pending.objectId),
+      utf8('abc'),
+      { contentType: 'text/plain' },
+    );
+    const completed = await complete('new.txt');
+    expect(completed.status).toBe(200);
+    expect(FileResponseSchema.parse(await completed.json()).file).toMatchObject({
+      path: 'new.txt',
+      sizeBytes: 3,
+    });
+    await mint(uploadUrlsRoute, 'upload-urls', 'never-put.txt', { sizeBytes: 3 });
+    expect(await problemOf(await complete('never-put.txt'))).toEqual({
+      status: 409,
+      code: 'upload_not_verified',
+    });
+    expect(FILES_PROBLEM_CODES.upload_not_verified).toBe(409);
+
+    install();
+    await upload('doc.txt', 'x', 'text/plain');
+    for (const refused of [
+      await mint(uploadUrlsRoute, 'upload-urls', 'new.txt', { sizeBytes: 3, ttlSeconds: 120 }),
+      await mint(downloadUrlsRoute, 'download-urls', 'doc.txt', { ttlSeconds: 120 }),
+    ]) {
+      expect(await problemOf(refused)).toEqual({
+        status: 501,
+        code: 'direct_transfer_unsupported',
+      });
+    }
+    expect(FILES_PROBLEM_CODES.direct_transfer_unsupported).toBe(501);
+  });
+
+  it('bounds uploads at the contract limit', () => {
+    const oversized = new Request('http://localhost/api/files', {
+      method: 'POST',
+      headers: { 'content-length': String(MAX_UPLOAD_BYTES + 1) },
+    });
+    const bounded = boundedBodyStream(oversized);
+    expect(bounded).toMatchObject({ ok: false, result: { status: 413 } });
+    const atLimit = boundedBodyStream(
+      new Request('http://localhost/api/files', {
+        method: 'POST',
+        headers: { 'content-length': String(MAX_UPLOAD_BYTES) },
+      }),
+    );
+    expect(atLimit.ok).toBe(true);
   });
 });
 
@@ -1519,6 +1850,19 @@ describe('skills', () => {
   const skillsBase64 = (text: string): string => Buffer.from(text, 'utf8').toString('base64');
   const skillMdEntry = { path: 'SKILL.md', contentBase64: skillsBase64(SKILL_MD_TEXT) };
   const skillsStore = () => createInMemoryObjectStoreProvider().forWorkspace(SKILLS_WORKSPACE);
+  // The handlers write a skill as catalog rows; each test gets a fresh in-memory catalog behind them.
+  let skillRows: SkillRowsWriter;
+  beforeEach(() => {
+    skillRows = createSkillRowsWorld(
+      createInMemoryObjectStore(),
+      SKILLS_WORKSPACE,
+      createInMemoryCatalog().forWorkspace(SKILLS_WORKSPACE),
+    ).rows;
+  });
+  const importSkill = (store: SkillObjects, body: unknown) =>
+    importSkillInto(store, body, skillRows);
+  const patchSkill = (store: SkillObjects, name: string, body: unknown) =>
+    patchSkillIn(store, name, body, skillRows);
   /**
    * The one piece of `apps/web/app/api/skills/route.ts`'s `GET` this suite composes by hand: an
    * in-memory stand-in for the catalog's `putSkill`, at the same fidelity `skillsStore()` above
@@ -1582,7 +1926,7 @@ describe('skills', () => {
     expect(created.data.skill.allowedTools).toEqual(['Read', 'Grep']);
     expect(created.data.skill.fileCount).toBe(2);
 
-    const fetched = await getSkill(store, 'demo');
+    const fetched = await getSkill(store, 'demo', skillRows);
     expect(fetched.status).toBe(200);
     const fetchedBody = fetched.body as {
       skill: { name: string; enabled: boolean; source: string | null };
@@ -1591,7 +1935,7 @@ describe('skills', () => {
       SkillResponseSchema.safeParse({ skill: await withCatalogId(fetchedBody.skill) }).success,
     ).toBe(true);
 
-    const listed = await listSkills(store);
+    const listed = await listSkills(store, skillRows);
     expect(listed.status).toBe(200);
     const listedBody = listed.body as {
       skills: Array<{ name: string; enabled: boolean; source: string | null }>;
@@ -1617,7 +1961,7 @@ describe('skills', () => {
     expect(updated.data.skill.enabled).toBe(false);
     expect(updated.data.skill.files.map((file) => file.path)).toEqual(['SKILL.md', 'notes.txt']);
 
-    const exported = await exportSkill(store, 'demo');
+    const exported = await exportSkill(store, 'demo', skillRows);
     expect(exported.status).toBe(200);
     const directory = SkillExportResponseSchema.safeParse(exported.body);
     expect(directory.success, JSON.stringify(directory)).toBe(true);
@@ -1685,8 +2029,8 @@ describe('skills', () => {
           files: [skillMdEntry, { path: 'skill.md', contentBase64: '' }],
         }),
       ],
-      ['skill_not_found', getSkill(store, 'absent')],
-      ['skill_not_found', exportSkill(store, 'absent')],
+      ['skill_not_found', getSkill(store, 'absent', skillRows)],
+      ['skill_not_found', exportSkill(store, 'absent', skillRows)],
       ['empty_patch', patchSkill(store, 'demo', {})],
       ['cannot_remove_skill_md', patchSkill(store, 'demo', { removeFiles: ['skill.MD'] })],
       [
@@ -2507,13 +2851,11 @@ describe('shares', () => {
           return Promise.resolve();
         },
         revoke: unused,
-        setSuspended: unused,
         stop: unused,
         reserveVisitorMessage: unused,
-        linkRun: unused,
       },
-      views: { record: unused, count: unused, countVisitorSince: unused },
-      audit: { write: () => Promise.resolve(), count: unused, list: unused },
+      views: { record: unused, count: unused },
+      audit: { write: () => Promise.resolve() },
     };
 
     const roleOf = (request: Request): 'owner' | 'admin' =>
@@ -2530,40 +2872,44 @@ describe('shares', () => {
       });
 
     afterEach(() => {
-      clearSharesRuntime();
-      clearRbacRuntime();
+      clearApplicationContext();
     });
 
     it('answers both routes through the real handlers with the published envelope', async () => {
-      configureSharesRuntime({
-        resolveActor: (request) =>
-          Promise.resolve({
-            kind: 'workspace',
-            workspaceId: SHARES_WORKSPACE,
-            principalId: SHARES_PRINCIPAL,
-            ownerPrincipalId: SHARES_PRINCIPAL,
-            userId: null,
-            userLabel: 'Conformance key',
-            role: roleOf(request),
-          }),
-        forWorkspace: () => Promise.resolve(sharing),
-        resolvePublic: unused,
-        sharingMaterials: unused,
-        subjectOwnership: unused,
-        runPublic: unused,
-      });
-      configureRbacRuntime({
-        directory: createMemoryDirectory(),
-        identify: (request) =>
-          Promise.resolve(
-            Principal.fromApiKey({
-              principalId: SHARES_PRINCIPAL,
-              apiKeyId: '0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c0c',
+      installTestDomains({
+        shares: {
+          resolveActor: (request) =>
+            Promise.resolve({
+              kind: 'workspace',
               workspaceId: SHARES_WORKSPACE,
+              principalId: SHARES_PRINCIPAL,
+              ownerPrincipalId: SHARES_PRINCIPAL,
+              userId: null,
+              userLabel: 'Conformance key',
               role: roleOf(request),
-              label: 'Conformance key',
             }),
-          ),
+          forWorkspace: () => Promise.resolve(sharing),
+          resolvePublic: unused,
+          sharingMaterials: unused,
+          sessionRuns: unused,
+          subjectOwnership: unused,
+          runPublic: unused,
+        },
+      });
+      installTestDomains({
+        rbac: {
+          directory: createMemoryDirectory(),
+          identify: (request) =>
+            Promise.resolve(
+              Principal.fromApiKey({
+                principalId: SHARES_PRINCIPAL,
+                apiKeyId: '0c0c0c0c-0c0c-4c0c-8c0c-0c0c0c0c0c0c',
+                workspaceId: SHARES_WORKSPACE,
+                role: roleOf(request),
+                label: 'Conformance key',
+              }),
+            ),
+        },
       });
 
       const read = await readSharingPolicy(policyRequest('GET', 'admin'));
@@ -2620,9 +2966,7 @@ describe('sessions', () => {
   };
 
   afterEach(() => {
-    resetSessionApi();
-    clearProjectsRuntime();
-    clearRbacRuntime();
+    clearApplicationContext();
   });
 
   it('serialises a fresh session row and a resumable, titled one into the published shape', () => {
@@ -2658,18 +3002,20 @@ describe('sessions', () => {
 
   it('renders the transcript and subkeys routes into the published envelopes', async () => {
     const store = new InMemoryTranscriptStore();
-    installSessionApi({
-      authenticate: () =>
-        Promise.resolve({
-          kind: 'user',
-          principalId: SESSIONS_PRINCIPAL,
-          ownerPrincipalId: SESSIONS_PRINCIPAL,
-          userId: null,
-          workspaceId: SESSIONS_WORKSPACE,
-          role: 'builder',
-        }),
-      canAccessSession: () => Promise.resolve(true),
-      store,
+    installTestDomains({
+      sessions: {
+        authenticate: () =>
+          Promise.resolve({
+            kind: 'user',
+            principalId: SESSIONS_PRINCIPAL,
+            ownerPrincipalId: SESSIONS_PRINCIPAL,
+            userId: null,
+            workspaceId: SESSIONS_WORKSPACE,
+            role: 'builder',
+          }),
+        canAccessSession: () => Promise.resolve(true),
+        store,
+      },
     });
     const main = { projectKey: SESSIONS_WORKSPACE, sessionId: SESSIONS_PROVIDER_ID };
     await store.append(main, [
@@ -2705,18 +3051,20 @@ describe('sessions', () => {
 
   it('renders the same published envelopes when the request omits projectKey (issue #235, S-21)', async () => {
     const store = new InMemoryTranscriptStore();
-    installSessionApi({
-      authenticate: () =>
-        Promise.resolve({
-          kind: 'user',
-          principalId: SESSIONS_PRINCIPAL,
-          ownerPrincipalId: SESSIONS_PRINCIPAL,
-          userId: null,
-          workspaceId: SESSIONS_WORKSPACE,
-          role: 'builder',
-        }),
-      canAccessSession: () => Promise.resolve(true),
-      store,
+    installTestDomains({
+      sessions: {
+        authenticate: () =>
+          Promise.resolve({
+            kind: 'user',
+            principalId: SESSIONS_PRINCIPAL,
+            ownerPrincipalId: SESSIONS_PRINCIPAL,
+            userId: null,
+            workspaceId: SESSIONS_WORKSPACE,
+            role: 'builder',
+          }),
+        canAccessSession: () => Promise.resolve(true),
+        store,
+      },
     });
     const main = { projectKey: SESSIONS_WORKSPACE, sessionId: SESSIONS_PROVIDER_ID };
     await store.append(main, [{ type: 'user', uuid: 'u-1' }]);
@@ -2774,6 +3122,7 @@ describe('sessions', () => {
       update: unused,
       archive: unused,
       restore: unused,
+      discardIfUnused: () => Promise.resolve(false),
     };
     const files: ProjectFileRepository = { list: unused, add: unused, remove: unused };
     const mcpServers: ProjectMcpServerRepository = { list: unused, add: unused, remove: unused };
@@ -2786,6 +3135,7 @@ describe('sessions', () => {
       list: unused,
       get: unused,
       create: unused,
+      createWithAssignments: unused,
       update: unused,
       delete: unused,
       replacePolicy: unused,
@@ -2797,22 +3147,26 @@ describe('sessions', () => {
       role: 'builder',
       label: 'Builder key',
     });
-    configureProjectsRuntime({
-      resolveActor: () =>
-        Promise.resolve({
-          kind: 'workspace',
-          workspaceId: SESSIONS_WORKSPACE,
-          principalId: SESSIONS_PRINCIPAL,
-          ownerPrincipalId: SESSIONS_PRINCIPAL,
-          userId: null,
-          userLabel: 'Builder key',
-        }),
-      forWorkspace: () =>
-        Promise.resolve({ projects, files, mcpServers, audit, agents, sessions, agentVersions }),
+    installTestDomains({
+      projects: {
+        resolveActor: () =>
+          Promise.resolve({
+            kind: 'workspace',
+            workspaceId: SESSIONS_WORKSPACE,
+            principalId: SESSIONS_PRINCIPAL,
+            ownerPrincipalId: SESSIONS_PRINCIPAL,
+            userId: null,
+            userLabel: 'Builder key',
+          }),
+        forWorkspace: () =>
+          Promise.resolve({ projects, files, mcpServers, audit, agents, sessions, agentVersions }),
+      },
     });
-    configureRbacRuntime({
-      directory: createMemoryDirectory({ users: [] }),
-      identify: () => Promise.resolve(principal),
+    installTestDomains({
+      rbac: {
+        directory: createMemoryDirectory({ users: [] }),
+        identify: () => Promise.resolve(principal),
+      },
     });
     const response = await postProjectSession(
       new Request(`https://control.example/api/projects/${SESSIONS_PROJECT}/sessions`, {
@@ -2849,6 +3203,7 @@ describe('observability', () => {
       action: 'agent-changed',
       subjectId: OBSERVABILITY_AGENT,
       subjectLabel: 'Customer Support Agent',
+      details: null,
       createdAt: new Date('2026-09-21T10:00:01.000Z'),
     },
     {
@@ -2860,6 +3215,7 @@ describe('observability', () => {
       action: 'public-sharing-policy-changed',
       subjectId: null,
       subjectLabel: 'Public sharing',
+      details: null,
       createdAt: new Date('2026-09-21T10:00:00.000Z'),
     },
   ];
@@ -2897,9 +3253,9 @@ describe('observability', () => {
     );
     try {
       if (options.configured === false) {
-        clearAuditRuntime();
+        clearApplicationContext();
       } else {
-        configureAuditRuntime({ scopes, repositories });
+        installTestDomains({ audit: { scopes, repositories } });
       }
       const response = await harness.call(getAuditEvents, {
         method: 'GET',
@@ -3007,10 +3363,12 @@ describe('observability', () => {
     expect(anonymous.status).toBe(401);
     expect(ApiProblemSchema.parse(anonymous.body).error.code).toBe('unauthenticated');
 
+    // The audit domain and the RBAC gate live in one application context, so with none installed
+    // the gate answers first.
     const unconfigured = await callAuditRoute('', { configured: false });
     expect(unconfigured.status).toBe(503);
     expect(ApiProblemSchema.parse(unconfigured.body).error.code).toBe(
-      'audit_runtime_not_configured',
+      'rbac_runtime_not_configured',
     );
   });
 
@@ -3031,24 +3389,29 @@ describe('tokens (issue #236, SDK-04, S-1)', () => {
     const harness = installRbacHarness([
       { email: TOKENS_OWNER.email, name: 'Owner', workspaceId: TOKENS_WORKSPACE_ID, role: 'owner' },
     ]);
-    configureTokensRuntime({
-      findTarget: (principal, scope) =>
-        Promise.resolve(
-          scope.id === TOKENS_RUN_ID
-            ? { kind: 'found', ownerPrincipalId: principal.principalId }
-            : { kind: 'not-found' },
-        ),
-      issue: async (_principal, scope) => {
-        if (scope.id !== TOKENS_RUN_ID) return null;
-        const minted = await mintBrowserToken();
-        return { token: minted.presented, expiresAt: new Date(Date.now() + 300_000) };
+    installTestDomains({
+      tokens: {
+        kind: 'serving',
+        runtime: {
+          findTarget: (principal, scope) =>
+            Promise.resolve(
+              scope.id === TOKENS_RUN_ID
+                ? { kind: 'found', ownerPrincipalId: principal.principalId }
+                : { kind: 'not-found' },
+            ),
+          issue: async (_principal, scope) => {
+            if (scope.id !== TOKENS_RUN_ID) return null;
+            const minted = await mintBrowserToken();
+            return { token: minted.presented, expiresAt: new Date(Date.now() + 300_000) };
+          },
+        },
       },
     });
     return {
       harness,
       cleanup: () => {
         harness.teardown();
-        clearTokensRuntime();
+        clearApplicationContext();
       },
     };
   }
@@ -3136,6 +3499,7 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
     };
     return {
       listForUser: notImplemented,
+      ownerPrincipalId: notImplemented,
       get: (id) => Promise.resolve(id === record.id ? { ...record } : null),
       getForMember: (id) =>
         Promise.resolve(id === record.id ? { ...record, role: 'owner' as const } : null),
@@ -3158,8 +3522,8 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
         },
       ],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
-    configureWorkspacesRuntime({ repository: switchWorkspaceRepository() });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
+    installTestDomains({ workspaces: { repository: switchWorkspaceRepository() } });
     const previousSecret = process.env['SESSION_SECRET'];
     process.env['SESSION_SECRET'] = SWITCH_SECRET;
     try {
@@ -3193,8 +3557,7 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
     } finally {
       if (previousSecret === undefined) delete process.env['SESSION_SECRET'];
       else process.env['SESSION_SECRET'] = previousSecret;
-      clearRbacRuntime();
-      clearWorkspacesRuntime();
+      clearApplicationContext();
     }
   });
 
@@ -3210,8 +3573,8 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
         },
       ],
     });
-    configureRbacRuntime({ directory, identify: () => Promise.resolve(null) });
-    configureWorkspacesRuntime({ repository: switchWorkspaceRepository() });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
+    installTestDomains({ workspaces: { repository: switchWorkspaceRepository() } });
     const previousSecret = process.env['SESSION_SECRET'];
     process.env['SESSION_SECRET'] = SWITCH_SECRET;
     try {
@@ -3238,8 +3601,7 @@ describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
     } finally {
       if (previousSecret === undefined) delete process.env['SESSION_SECRET'];
       else process.env['SESSION_SECRET'] = previousSecret;
-      clearRbacRuntime();
-      clearWorkspacesRuntime();
+      clearApplicationContext();
     }
   });
 });
@@ -3306,9 +3668,7 @@ describe('agent versions (S1-05, issue #443)', () => {
           versions: [record],
           pointers: [
             {
-              agentId: AGENT,
               environment: 'local',
-              versionId: record.id,
               number: 1,
               updatedAt: new Date('2026-10-01T11:00:00.000Z'),
             },
@@ -3472,7 +3832,12 @@ describe('agent pointers and create-from-version (S1-06, issue #444)', () => {
 
   it('serialises a pointer move, a create-from-version and its dry run into the published shapes', async () => {
     const { agents, store } = await workspace();
-    const owner = { principalId: OWNER, ownerPrincipalId: OWNER, userId: null };
+    const owner = {
+      principalId: OWNER,
+      ownerPrincipalId: OWNER,
+      userId: null,
+      actorLabel: 'owner key',
+    };
     const checked = await createAgentFromVersion(fromVersionRequest({ dryRun: true }), owner, {
       store,
       agents,
@@ -3498,7 +3863,12 @@ describe('agent pointers and create-from-version (S1-06, issue #444)', () => {
 
   it('answers every refusal with a published code and status', async () => {
     const { agents, store } = await workspace();
-    const owner = { principalId: OWNER, ownerPrincipalId: OWNER, userId: null };
+    const owner = {
+      principalId: OWNER,
+      ownerPrincipalId: OWNER,
+      userId: null,
+      actorLabel: 'owner key',
+    };
     const actor = { principalId: OWNER, userId: null, actor: 'conformance key' };
     const first = await createAgentFromVersion(
       fromVersionRequest({ surfaces: [fixtureSurface('main')] }),
@@ -3585,7 +3955,12 @@ describe('agent pointers and create-from-version (S1-06, issue #444)', () => {
       });
     }
     const { agents, store } = await workspace();
-    const owner = { principalId: OWNER, ownerPrincipalId: OWNER, userId: null };
+    const owner = {
+      principalId: OWNER,
+      ownerPrincipalId: OWNER,
+      userId: null,
+      actorLabel: 'owner key',
+    };
     const { version } = fromVersionRequest();
 
     const checked = await createAgentFromVersion(fromVersionRequest({ dryRun: true }), owner, {
@@ -3694,5 +4069,102 @@ describe('policy_cannot_widen (issue #535)', () => {
       'policy_cannot_widen',
       details,
     ]);
+  });
+});
+
+describe('storage connections (issue #1691)', () => {
+  const STORAGE_WORKSPACE = '99999999-9999-4999-8999-999999999999';
+
+  it('renders every route answer into the published shape and refuses under the published status', async () => {
+    const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'aw-conformance-storage-')));
+    try {
+      const principal = Principal.fromApiKey({
+        principalId: '77777777-7777-4777-8777-777777777777',
+        apiKeyId: '66666666-6666-4666-8666-666666666666',
+        workspaceId: STORAGE_WORKSPACE,
+        role: 'owner',
+        label: 'conformance',
+      });
+      const runtime = {
+        store: createRepositoryStorageConnectionsStoreProvider({
+          repositories: createInMemoryStorageConnectionRepositoryProvider(),
+          scopes: createInMemoryWorkspaceScopeResolver([
+            { id: STORAGE_WORKSPACE, slug: 'storage' },
+          ]),
+          secrets: createInMemorySecretsService(),
+        }),
+        fileRoots: [root],
+        egress: { production: true, allowHosts: [] },
+        isConnectionGranted: () => Promise.resolve(false),
+        audit: () => Promise.resolve(),
+      };
+      const created = await createStorageConnection(runtime, principal, {
+        name: 'conformance',
+        url: `file://${root}`,
+        allowedPrefixes: ['reports'],
+      });
+      expect(created.status).toBe(201);
+      const { id } = StorageConnectionResourceSchema.parse(created.body);
+      const remote = StorageConnectionResourceSchema.parse(
+        (
+          await createStorageConnection(runtime, principal, {
+            name: 'remote',
+            url: 's3://acme-data/exports?endpoint=https://s3.eu-west-1.amazonaws.com',
+            allowedPrefixes: ['reports'],
+            credential: { provider: 's3', accessKeyId: 'id', secretAccessKey: 'secret' },
+          })
+        ).body,
+      );
+      StorageConnectionListResponseSchema.parse(
+        (await listStorageConnections(runtime, principal)).body,
+      );
+      StorageConnectionResourceSchema.parse(
+        (await getStorageConnection(runtime, principal, id)).body,
+      );
+      StorageConnectionResourceSchema.parse(
+        (await updateStorageConnection(runtime, principal, id, { writeAllowed: true })).body,
+      );
+      StorageConnectionResourceSchema.parse(
+        (
+          await rotateStorageConnectionCredential(runtime, principal, remote.id, {
+            provider: 's3',
+            accessKeyId: 'id',
+            secretAccessKey: 'rotated',
+          })
+        ).body,
+      );
+      StorageConnectionTestOutcomeSchema.parse(
+        (await testStorageConnection(runtime, principal, id)).body,
+      );
+      await mkdir(path.join(root, 'reports'), { recursive: true });
+      await writeFile(path.join(root, 'reports/a.txt'), 'a');
+      const browsed = StorageConnectionBrowseResponseSchema.parse(
+        (
+          await browseStorageConnection(
+            runtime,
+            principal,
+            id,
+            'https://aw.example.com/x?prefix=reports',
+          )
+        ).body,
+      );
+      expect(browsed.entries).toContainEqual({ path: 'reports/a.txt', kind: 'file', size: 1 });
+      expect((await deleteStorageConnection(runtime, principal, id)).status).toBe(204);
+
+      const unknown = '55555555-5555-4555-8555-555555555555';
+      for (const refused of [
+        await getStorageConnection(runtime, principal, unknown),
+        await createStorageConnection(runtime, principal, {
+          name: 'remote',
+          url: remote.url,
+          allowedPrefixes: ['reports'],
+        }),
+      ]) {
+        const { code } = ApiProblemSchema.parse(refused.body).error;
+        expect(STORAGE_CONNECTION_PROBLEM_CODES).toHaveProperty(code, refused.status);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

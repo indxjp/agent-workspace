@@ -9,10 +9,10 @@ import {
   TOOL_BUNDLE_PROBLEM_CODES,
 } from '@indx-workspace/contracts/agent-versions';
 
-import { problem, type ApiResult } from '../agents/handlers';
+import { problem, type ApiResult } from '../http/result';
 import { readBoundedJson } from '../http/json-transport';
-import type { ObjectStore } from '../skills/object-store-bridge';
-import { currentSkillsRuntime } from '../skills/runtime';
+import type { ObjectStore } from '@agent-workspace/core/storage';
+import { applicationContext } from '../application-context';
 import { toolBundleLookup, type ToolBundleLookup } from './handlers';
 
 /** Base64 of the largest bundle, plus room for the JSON envelope. */
@@ -28,7 +28,8 @@ export function toolBundlesNotConfigured(): ApiResult {
 
 /** The object store of `workspaceId`, or `null` when this deployment has no skills storage. */
 export function openToolBundleStore(workspaceId: string): ObjectStore | null {
-  return currentSkillsRuntime()?.store.forWorkspace(workspaceId) ?? null;
+  const skills = applicationContext()?.skills;
+  return skills?.kind === 'serving' ? skills.runtime.store.forWorkspace(workspaceId) : null;
 }
 
 /** The version pipeline's lookup over `workspaceId`'s bundles, or `null` without storage. */

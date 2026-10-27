@@ -36,42 +36,44 @@ open AgentWorkspace.Concepts.RunEvent AgentWorkspace.Concepts.Usage
   (ts := "packages/core/src/db/schema/projects.ts#projectVisibilities")]
 theorem project_visibility_is_the_visibility_check :
     (catalogue .projects).oneOfCheck? "projects_visibility_valid" =
-      some ("visibility", WireEnum.wires ProjectVisibility) := by decide
+      some ("visibility", WireEnum.wires ProjectVisibility) := by decide +kernel
 
 /-- The session statuses are exactly `sessions_status_valid`'s values, in order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/sessions.ts#SESSION_STATUSES")
   (ts := "packages/core/src/db/schema/sessions.ts#sessionStatuses")]
 theorem session_status_is_the_status_check :
     (catalogue .sessions).oneOfCheck? "sessions_status_valid" =
-      some ("status", WireEnum.wires SessionStatus) := by decide
+      some ("status", WireEnum.wires SessionStatus) := by decide +kernel
 
-/-- The run statuses of the contract are exactly `runs_status_valid`'s values, in order. -/
+/-- The run statuses of the contract, `awaiting_approval` (ADR-0145) included, are exactly
+`runs_status_valid`'s values, in order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#RUN_STATUSES")
   (ts := "packages/core/src/db/schema/runs.ts#runStatuses")]
 theorem run_status_is_the_status_check :
-    (catalogue .runs).oneOfCheck? "runs_status_valid" = some ("status", WireEnum.wires RunStatus) := by
-  decide
+    (catalogue .runs).oneOfCheck? "runs_status_valid" =
+      some ("status", WireEnum.wires RunStatus) := by
+  decide +kernel
 
 /-- The model providers are exactly `runs_provider_valid`'s values, in order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#MODEL_PROVIDERS")
   (ts := "packages/core/src/db/schema/model-connections.ts#modelProviders")]
 theorem model_provider_is_the_provider_check :
     (catalogue .runs).oneOfCheck? "runs_provider_valid" =
-      some ("provider", WireEnum.wires ModelProvider) := by decide
+      some ("provider", WireEnum.wires ModelProvider) := by decide +kernel
 
 /-- The accounting states are exactly `runs_accounting_state_valid`'s values, in order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/runs.ts#ACCOUNTING_STATES")
   (ts := "packages/core/src/db/schema/runs.ts#accountingStates")]
 theorem accounting_state_is_the_accounting_check :
     (catalogue .runs).oneOfCheck? "runs_accounting_state_valid" =
-      some ("accounting_state", WireEnum.wires AccountingState) := by decide
+      some ("accounting_state", WireEnum.wires AccountingState) := by decide +kernel
 
 /-- The audit actions are exactly `audit_events_action_valid`'s values, in order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/observability.ts#AUDIT_ACTIONS")
   (ts := "packages/core/src/db/schema/audit-events.ts#auditActions")]
 theorem audit_action_is_the_action_check :
     (catalogue .auditEvents).oneOfCheck? "audit_events_action_valid" =
-      some ("action", WireEnum.wires AuditAction) := by decide
+      some ("action", WireEnum.wires AuditAction) := by decide +kernel
 
 /-- The terminal statuses inlined into `runs_ended_at_iff_terminal` are the contract's terminal
 statuses, and the priced accounting states are exactly those `isPriced` names. -/
@@ -81,7 +83,7 @@ theorem check_value_lists_match_the_concepts :
     terminalWires = ((WireEnum.all : List RunStatus).filter RunStatus.isTerminal).map WireEnum.toWire ∧
       pricedWires =
         ((WireEnum.all : List AccountingState).filter AccountingState.isPriced).map WireEnum.toWire := by
-  decide
+  decide +kernel
 
 /-! ## Every check of the work tables is refined -/
 
@@ -93,16 +95,16 @@ theorem check_value_lists_match_the_concepts :
 theorem every_work_check_is_refined :
     (workTables.all fun t => (otherChecks t).all fun n => (workCheck n).isSome) ∧
       workCheckSql.map Prod.fst = workTables.flatMap otherChecks := by
-  decide
+  decide +kernel
 
-/-- The work tables carry 16 checks that are not closed sets and 13 closed-set checks. -/
+/-- The work tables carry 25 checks that are not closed sets and 19 closed-set checks. -/
 @[aw_spec (tier := T0)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
 theorem work_check_counts :
-    (workTables.flatMap otherChecks).length = 16 ∧
-      (workTables.flatMap fun t => (catalogue t).checks).length = 29 := by
-  decide
+    (workTables.flatMap otherChecks).length = 25 ∧
+      (workTables.flatMap fun t => (catalogue t).checks).length = 44 := by
+  decide +kernel
 
 /-! ## Foreign keys and their cardinality (generated) -/
 
@@ -153,20 +155,20 @@ elab "aw_work_fk_cardinality_theorems" : command => do
           ((catalogue $tIdent).foreignKey? $(Syntax.mkStrLit fk.name)).map
               (fun fk => (fk.refTable, fkCardinality catalogue $tIdent fk)) =
             some ($(mkIdent (``TableName ++ ctorName (TableName.toWire fk.refTable))),
-              $(mkIdent (cardinalityTerm card))) := by decide))
+              $(mkIdent (cardinalityTerm card))) := by decide +kernel))
 
 end Generator
 
 aw_work_fk_cardinality_theorems
 
-/-- The work tables declare 41 foreign keys: 29 whose every column is `NOT NULL` and 12 with a
+/-- The work tables declare 49 foreign keys: 35 whose every column is `NOT NULL` and 14 with a
 nullable column. -/
 @[aw_spec (tier := T0)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem work_foreign_key_counts :
-    workForeignKeys.length = 41 ∧
-      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 29 := by
-  decide
+    workForeignKeys.length = 49 ∧
+      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 35 := by
+  decide +kernel
 
 /-! ## Concept rows -/
 
@@ -224,7 +226,7 @@ private theorem parse_repr (n : Nat) : parseNat? (Nat.repr n) = some n := by
       exact absurd (by simp [← String.toList_eq_nil_iff, hl, h]) this.1
     | cons _ _ => rfl
   have hall : (Nat.toDigits 10 n).all Char.isDigit = true :=
-    List.all_eq_true.mpr fun c hc => Nat.isDigit_of_mem_toDigits (by decide) (by decide) hc
+    List.all_eq_true.mpr fun c hc => Nat.isDigit_of_mem_toDigits (by decide +kernel) (by decide +kernel) hc
   simp only [parseNat?, hl, hne, hall, Bool.not_false, Bool.and_self, ite_true]
   exact congrArg some (Option.some.inj hsome).symm
 
@@ -244,7 +246,7 @@ def rowFits (t : TableName) (cells : List (String × Option String)) : Bool :=
 /-! ### Projects -/
 
 private theorem project_nd (p : Project) : ((projectCells p).map Prod.fst).Nodup := by
-  simp only [projectCells, List.map_cons, List.map_nil]; decide
+  simp only [projectCells, List.map_cons, List.map_nil]; decide +kernel
 
 private theorem project_get (p : Project) (c : String) :
     (ofCells (projectCells p)).get c = ((projectCells p).lookup c).bind id :=
@@ -278,7 +280,7 @@ theorem project_invariants_are_the_row_checks (p : Project) :
 /-! ### Sessions, transcripts and messages -/
 
 private theorem session_nd (s : Session) : ((sessionCells s).map Prod.fst).Nodup := by
-  simp only [sessionCells, List.map_cons, List.map_nil]; decide
+  simp only [sessionCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every session encodes to a row that fits `sessions`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/sessions.ts#sessions")
@@ -293,7 +295,7 @@ theorem session_row_fits (s : Session) : rowFits .sessions (sessionCells s) = tr
     simp [WireEnum.toWire, SessionStatus.toWire, Engines.EngineId.toWire])
 
 private theorem transcript_nd (t : Transcript) : ((transcriptCells t).map Prod.fst).Nodup := by
-  simp only [transcriptCells, List.map_cons, List.map_nil]; decide
+  simp only [transcriptCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every transcript encodes to a row that fits `session_transcripts`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/session-transcripts.ts#sessionTranscripts")]
@@ -304,7 +306,7 @@ theorem transcript_row_fits (t : Transcript) :
   simp [transcriptCells, List.lookup_cons, TableSpec.hasColumn]
 
 private theorem message_nd (m : TranscriptMessage) : ((messageCells m).map Prod.fst).Nodup := by
-  simp only [messageCells, List.map_cons, List.map_nil]; decide
+  simp only [messageCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every transcript message encodes to a row that fits `session_messages`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/session-messages.ts#sessionMessages")]
@@ -317,7 +319,7 @@ theorem message_row_fits (m : TranscriptMessage) :
 /-! ### Runs, events, tokens and usage records -/
 
 private theorem run_nd (r : Run) : ((runCells r).map Prod.fst).Nodup := by
-  simp only [runCells, List.map_cons, List.map_nil]; decide
+  simp only [runCells, List.map_cons, List.map_nil]; decide +kernel
 
 private theorem run_get (r : Run) (c : String) :
     (ofCells (runCells r)).get c = ((runCells r).lookup c).bind id :=
@@ -393,8 +395,56 @@ private theorem run_unpriced_check (r : Run) :
   simp only [workCheckHolds, workCheck, h1, h2, Run.unpricedCostZero]
   cases r.accountingState <;> rfl
 
-/-- The run invariants are exactly the six row checks of `runs` that are not closed sets: a run
-is well formed if and only if its row passes all of them. -/
+/-- `runs_output_only_when_completed` constrains `output`, which the run concept does not carry
+(the cells hold no `output`), so it holds on every run's row. -/
+private theorem run_output_check (r : Run) :
+    workCheckHolds "runs_output_only_when_completed" (ofCells (runCells r)) = true := by
+  have h : (ofCells (runCells r)).get "output" = none := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp [workCheckHolds, workCheck, h]
+
+private theorem run_pending_check (r : Run) :
+    workCheckHolds "runs_awaiting_approval_has_pending" (ofCells (runCells r)) =
+      r.pendingWhenAwaiting := by
+  have h1 : (ofCells (runCells r)).get "status" = some (WireEnum.toWire r.status) := by
+    rw [run_get]; rfl
+  have h2 : (ofCells (runCells r)).get "pending_approval" = r.pendingApproval := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp only [workCheckHolds, workCheck, h1, h2, Option.all_some, Run.pendingWhenAwaiting]
+  cases r.status <;> rfl
+
+private theorem run_deadline_check (r : Run) :
+    workCheckHolds "runs_awaiting_approval_has_deadline" (ofCells (runCells r)) =
+      r.deadlineWhenAwaiting := by
+  have h1 : (ofCells (runCells r)).get "status" = some (WireEnum.toWire r.status) := by
+    rw [run_get]; rfl
+  have h2 : (ofCells (runCells r)).get "approval_deadline_at" = r.approvalDeadlineAt.map instant := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp only [workCheckHolds, workCheck, h1, h2, Option.all_some, Run.deadlineWhenAwaiting,
+    Option.isSome_map]
+  cases r.status <;> rfl
+
+/-- `runs_consumed_approvals_never_queued` and `runs_idempotency_key_has_hash` constrain
+`approvals_consumed_at` and the idempotency columns, which the run concept does not carry (the
+cells hold none of them), so they hold on every run's row. -/
+private theorem run_consumed_check (r : Run) :
+    workCheckHolds "runs_consumed_approvals_never_queued" (ofCells (runCells r)) = true := by
+  have h : (ofCells (runCells r)).get "approvals_consumed_at" = none := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp [workCheckHolds, workCheck, h]
+
+private theorem run_idempotency_check (r : Run) :
+    workCheckHolds "runs_idempotency_key_has_hash" (ofCells (runCells r)) = true := by
+  have h1 : (ofCells (runCells r)).get "idempotency_key" = none := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  have h2 : (ofCells (runCells r)).get "idempotency_request_hash" = none := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp [workCheckHolds, workCheck, h1, h2]
+
+/-- The run invariants are exactly the eleven row checks of `runs` that are not closed sets: a run
+is well formed if and only if its row passes all of them (`runs_output_only_when_completed`,
+`runs_consumed_approvals_never_queued` and `runs_idempotency_key_has_hash` hold trivially, since a
+run concept carries no output and none of the consumed-approval or idempotency columns). -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")
   (ts := "packages/core/src/db/schema/runs.ts#runs_price_version_matches_accounting_state")
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
@@ -402,10 +452,12 @@ theorem run_invariants_are_the_row_checks (r : Run) :
     ((otherChecks .runs).all fun n => workCheckHolds n (ofCells (runCells r))) = r.wellFormed := by
   simp only [otherChecks, catalogue, List.filterMap_cons, List.filterMap_nil, List.all_cons,
     List.all_nil, Bool.and_true, run_ended_check, run_after_check, run_counters_check,
-    run_currency_check, run_price_check, run_unpriced_check, Run.wellFormed, Bool.and_assoc]
+    run_currency_check, run_price_check, run_unpriced_check, run_output_check, run_pending_check,
+    run_deadline_check, run_consumed_check, run_idempotency_check, Run.wellFormed, Bool.and_assoc]
+  cases r.pendingWhenAwaiting <;> cases r.deadlineWhenAwaiting <;> simp
 
 private theorem event_nd (e : RunEvent) : ((runEventCells e).map Prod.fst).Nodup := by
-  simp only [runEventCells, List.map_cons, List.map_nil]; decide
+  simp only [runEventCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every run event encodes to a row that fits `run_events`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]
@@ -415,7 +467,7 @@ theorem run_event_row_fits (e : RunEvent) : rowFits .runEvents (runEventCells e)
   simp [runEventCells, List.lookup_cons, TableSpec.hasColumn]
 
 private theorem token_nd (t : RunToken) : ((runTokenCells t).map Prod.fst).Nodup := by
-  simp only [runTokenCells, List.map_cons, List.map_nil]; decide
+  simp only [runTokenCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every run token encodes to a row that fits `run_tokens`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/run-tokens.ts#runTokens")]
@@ -445,7 +497,7 @@ theorem run_token_invariants_are_the_row_checks (t : RunToken) :
   cases t.revokedAt <;> simp [instant_round_trips]
 
 private theorem usage_nd (u : UsageRecord) : ((usageCells u).map Prod.fst).Nodup := by
-  simp only [usageCells, List.map_cons, List.map_nil]; decide
+  simp only [usageCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every usage record encodes to a row that fits `run_usage_records`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/run-usage-records.ts#runUsageRecords")]
@@ -473,7 +525,7 @@ theorem usage_invariants_are_the_row_checks (u : UsageRecord) :
 /-! ### Audit events -/
 
 private theorem audit_nd (e : AuditEvent) : ((auditCells e).map Prod.fst).Nodup := by
-  simp only [auditCells, List.map_cons, List.map_nil]; decide
+  simp only [auditCells, List.map_cons, List.map_nil]; decide +kernel
 
 /-- Every audit event encodes to a row that fits `audit_events`. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")]
@@ -496,9 +548,11 @@ theorem audit_invariants_are_the_row_checks (e : AuditEvent) :
   have h2 : (ofCells (auditCells e)).get "subject_label" = some e.subjectLabel := by rw [g]; rfl
   have h3 : (ofCells (auditCells e)).get "subject_id" = e.subjectId := by
     rw [g]; simp [auditCells, List.lookup_cons]
+  have h4 : (ofCells (auditCells e)).get "details" = none := by
+    rw [g]; simp [auditCells, List.lookup_cons]
   simp only [otherChecks, catalogue, List.filterMap_cons, List.filterMap_nil, List.all_cons,
-    List.all_nil, Bool.and_true, workCheckHolds, workCheck, h1, h2, h3, Option.all_some,
-    AuditEvent.wellFormed, Bool.and_assoc]
+    List.all_nil, Bool.and_true, workCheckHolds, workCheck, h1, h2, h3, h4, Option.all_some,
+    Option.isNone_none, Bool.true_or, Bool.true_and, AuditEvent.wellFormed, Bool.and_assoc]
 
 /-! ## The constraints are satisfiable -/
 
@@ -538,6 +592,11 @@ def run : Run :=
 
 /-- A queued run of the same session, as a store creates it. -/
 def queuedRun : Run := Run.create ⟨"r2"⟩ ⟨"w1"⟩ ⟨"s1"⟩ 6
+
+/-- The queued run's row: it continues the completed one, as a decision's continuation does
+(ADR-0151). The run concept does not carry `continues_run_id`, so the cell is added here. -/
+def queuedRunCells : List (String × Option String) :=
+  runCells queuedRun ++ [("continues_run_id", some "r1")]
 
 /-- The completed run's first durable event. -/
 def event : RunEvent :=
@@ -582,7 +641,7 @@ def stateBlobCells : List (String × Option String) :=
   [("workspace_id", some "w1"), ("session_id", some "s1"),
    ("engine", some "claude-agent-sdk"), ("blob_key", some "state.tar"),
    ("storage_key", some "session-state/s1/claude-agent-sdk/state.tar"),
-   ("size_bytes", some "3"), ("sha256", some "ab12"),
+   ("status", some "ready"), ("size_bytes", some "3"), ("sha256", some "ab12"),
    ("created_at", some (instant 3)), ("updated_at", some (instant 3))]
 
 /-- The `er-core` witness (two workspaces, a member, a principal, a connection, an agent) with a
@@ -597,7 +656,7 @@ def state : State
   | .sessionStateStreams => [ofCells stateStreamCells]
   | .sessionStateEntries => [ofCells stateEntryCells]
   | .sessionStateBlobs => [ofCells stateBlobCells]
-  | .runs => [ofCells (runCells run), ofCells (runCells queuedRun)]
+  | .runs => [ofCells (runCells run), ofCells queuedRunCells]
   | .runEvents => [ofCells (runEventCells event)]
   -- A thumbs up, with a comment, on the completed run's answer.
   | .runFeedback =>
@@ -610,6 +669,38 @@ def state : State
   | .surfaceSessionKeys =>
     [ofCells [("session_id", some "s1"), ("workspace_id", some "w1"), ("surface_name", some "main"),
       ("agent_id", some "a1"), ("key_hash", some "h1"), ("created_at", some (instant 3))]]
+  -- A webhook trigger and a weekday-morning schedule of the agent, both run as `p1`, and the
+  -- one delivery the webhook has claimed, which started the completed run (ADR-0144).
+  | .triggers =>
+    [ofCells [("id", some "tr1"), ("workspace_id", some "w1"), ("agent_id", some "a1"),
+      ("name", some "Deploy hook"), ("kind", some "webhook"),
+      ("prompt_template", some "Summarise {{body}}"), ("enabled", some "true"),
+      ("owner_principal_id", some "p1"),
+      ("secret_hash", some "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+      ("last_fired_at", some (instant 4)), ("created_at", some (instant 1)),
+      ("updated_at", some (instant 4))],
+     ofCells [("id", some "tr2"), ("workspace_id", some "w1"), ("agent_id", some "a1"),
+      ("name", some "Morning digest"), ("kind", some "schedule"),
+      ("prompt_template", some "Summarise yesterday."), ("cron", some "0 9 * * 1-5"),
+      ("timezone", some "Asia/Tokyo"), ("enabled", some "true"),
+      ("owner_principal_id", some "p1"), ("created_at", some (instant 1)),
+      ("updated_at", some (instant 1))]]
+  -- One verify pass of the move off the old object naming: four objects checked, none old, none
+  -- wrong (the storage design, §06).
+  | .storageMigrationRuns =>
+    [ofCells [("id", some "smr1"), ("finished_at", some (instant 5)),
+      ("rows_checked", some "4"), ("legacy_rows", some "0"), ("mismatches", some "0"),
+      ("stage", some "finalize"), ("skipped_ownerless", some "0"), ("skipped_path_taken", some "0"),
+      ("skipped_failed", some "0")]]
+  | .builderToolCalls =>
+    [ofCells [("id", some "btc1"), ("workspace_id", some "w1"), ("run_id", some "engine-run-1"),
+      ("call_id", some "toolu_1"), ("tool", some "draft_check"), ("decision", some "run"),
+      ("outcome", some "ok"), ("input_json", some "{}"), ("trace_id", some "trace-1"),
+      ("model_id", some "model-1"), ("prompt_version", some "prompt-1"),
+      ("created_at", some (instant 4))]]
+  | .triggerDeliveries =>
+    [ofCells [("id", some "td1"), ("workspace_id", some "w1"), ("trigger_id", some "tr1"),
+      ("delivery_key", some "evt-1"), ("run_id", some "r1"), ("created_at", some (instant 4))]]
   -- The agent version the session is pinned to (issue #612), so `sessions_agent_version_fk` has
   -- a parent.
   | .agentVersions =>
@@ -627,7 +718,7 @@ end Witness
 
 /-- The work constraints are jointly satisfiable, and not only by an empty database: the witness
 state is consistent under every constraint of the catalogue and every refined check, has a row in
-every work table, and uses every one of the cluster's 41 foreign keys. -/
+every work table, and uses every one of the cluster's 48 foreign keys. -/
 @[aw_spec (tier := T0)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
@@ -657,29 +748,29 @@ theorem decimal_text_edge_cases :
       (["0.5", "0.001000", "12345678.123456", "7"].all isNonNegDecimal) = true ∧
       (["1e3", "", "-", ".5", "1.", "--1", "+1", "1.2.3", "0x10", " 1", "1 ", "-.5", "NaN"].all
         fun s => !isDecimal s && !isZeroDecimal s && !isNonNegDecimal s) = true := by
-  decide
+  decide +kernel
 
 /-- `PROJECT_KEY_PATTERN`'s bounds are exact: 64 key characters pass and 65 do not, the empty key
 does not, and neither does a key with a character outside `[A-Za-z0-9_-]`. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN")
-  (ts := "packages/core/src/schemas.ts#SDK_PROJECT_DIR_NAME")]
+  (ts := "packages/run-protocol/src/schemas.ts#SDK_PROJECT_DIR_NAME")]
 theorem project_key_edge_cases :
     isProjectKey (String.ofList (List.replicate 64 'a')) = true ∧
       isProjectKey (String.ofList (List.replicate 65 'a')) = false ∧
       isProjectKey "" = false ∧ isProjectKey "a/b" = false ∧ isProjectKey "a.b" = false ∧
       isProjectKey "A-z_09" = true := by
-  decide
+  decide +kernel
 
 /-- `SDK_WINDOWS_DEVICE_NAME` matches the reserved names in any case and nothing longer or
 shorter: `con`, `PRN`, `Aux`, `nul`, `com0`…`COM9`, `lpt0`…`LPT9`, but not `con1`, `com10`,
 `coms` or `co`. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")]
+@[aw_spec (tier := T0) (ts := "packages/run-protocol/src/schemas.ts#SDK_WINDOWS_DEVICE_NAME")]
 theorem windows_device_name_edge_cases :
     (["con", "PRN", "Aux", "nul", "com0", "COM9", "lpt1", "LPT9", "cOm5"].all isWindowsDeviceName)
         = true ∧
       (["con1", "com10", "coms", "co", "", "lpt", "console", "nul_"].all
         (!isWindowsDeviceName ·)) = true := by
-  decide
+  decide +kernel
 
 /-! ## The model's counter fold -/
 

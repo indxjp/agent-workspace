@@ -1,0 +1,78 @@
+---
+title: "Use the Builder tools from Claude Code"
+description: "Register a Builder client, connect Claude Code to your workspace with one claude mcp add command, and read the catalogue, the examples and the draft checks as yourself."
+---
+
+<Info>
+
+- **Read this when:** you want an outside MCP client such as Claude Code to look up what the Builder
+  knows, without opening the console.
+- **You will learn:** how to register the client, the one command that connects it, which three tools
+  it gets, and what a refusal means.
+- **You need:** a workspace where the `builder` feature is enabled and a role that can sign in.
+
+</Info>
+
+The Builder is the part of the platform that drafts agents. An outside MCP client reaches it through
+one read-only door, `POST /mcp/builder`, signed in as you with the role you hold in the workspace.
+The door is available once the `builder` feature is enabled for your workspace; until then it answers
+`builder_disabled`.
+
+**What you can do**
+
+- [Register the client](#register-the-client)
+- [Connect Claude Code](#connect-claude-code)
+- [Know what the client can call](#know-what-the-client-can-call)
+- [Know what a refusal means](#know-what-a-refusal-means)
+
+## Register the client
+
+Create a client of the `builder` kind. It names no agent and has no key: it authorizes through
+OAuth consent only. Then register the address Claude Code will return to after you approve it.
+
+```bash title="register the client (illustrative)" claim="illustrative"
+aw endpoint-clients create --kind builder --name claude-code
+aw endpoint-clients update <id> --redirect-uri http://localhost:8765/callback
+```
+
+The first command prints the client id; use it as `<id>` above and below.
+
+## Connect Claude Code
+
+Add the door as an HTTP MCP server, with the client id and the same callback port you registered:
+
+```bash title="connect Claude Code (illustrative)" claim="illustrative"
+claude mcp add --transport http aw-builder https://aw.example.com/mcp/builder \
+  --client-id <id> --callback-port 8765
+```
+
+Replace `aw.example.com` with the address of your workspace. In Claude Code, open `/mcp`, pick
+`aw-builder` and sign in. The consent page names the client, the member who registered it and the
+address it will send you back to; approve it only if all three are what you expect. The token lasts
+one hour and renews until you revoke the client.
+
+## Know what the client can call
+
+`tools/list` returns exactly three tools, all read-only:
+
+| Tool           | What it does                                                           |
+| -------------- | ---------------------------------------------------------------------- |
+| `catalog_list` | Lists engines, models, skills, connectors, files and runtime profiles. |
+| `examples_get` | Returns a worked example of an agent definition.                       |
+| `draft_check`  | Checks a draft you pass in and reports what is wrong with it.          |
+
+Each call runs with your role, as it would in the console. The door grants nothing an Admin could
+not already do, and no action reserved for an Owner.
+
+## Know what a refusal means
+
+| Code               | Meaning                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------- |
+| `read_only_client` | You called a tool that writes or spends, such as `draft_save`. Save in the app instead.        |
+| `unknown_tool`     | The name is not a Builder tool. Names are matched exactly: no trimming, case change or prefix. |
+| `builder_disabled` | The `builder` feature is not enabled for the workspace.                                        |
+| `not_permitted`    | Your role does not allow that read.                                                            |
+
+A write or spend tool is refused before anything is read or written, and the refusal leaves no
+record of a change. To stop the client, revoke it with `aw endpoint-clients revoke <id>`; its tokens
+stop working at once.

@@ -125,6 +125,20 @@ describe('the OpenAI Agents frame mapper', () => {
     expect(frames[1]).toMatchObject({ stopReason: 'max_turns', turns: 2, engineCostUsd: null });
   });
 
+  it('carries the answer onto agent.result when run_completed has one, and no key when it has none', () => {
+    const completed = {
+      kind: 'run_completed',
+      stopReason: 'end_turn',
+      turns: 1,
+      usage: null,
+    } as const;
+    const output = { text: '{"a":1}', structured: { a: 1 } };
+    const [withOutput] = mapper().map({ ...completed, output });
+    expect(AgentFrameSchema.safeParse(withOutput).success).toBe(true);
+    expect(withOutput).toMatchObject({ frame: 'agent.result', output });
+    expect(mapper().map(completed)[0]).not.toHaveProperty('output');
+  });
+
   it('sums response usage, cached and reasoning details included', () => {
     const once = addResponseUsage(null, {
       inputTokens: 10,

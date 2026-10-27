@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { EngineImageConfigurationError } from '@agent-workspace/runtime';
+import { EngineImageConfigurationError } from '@agent-workspace/runtime/engine-images';
 
 import { listEngines } from './handlers';
 import {

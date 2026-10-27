@@ -1,7 +1,7 @@
 /**
- * The wire edge of the version routes (S1-05, issue #443; ADR-0101): the serialisers from core's
- * version records into `@indx-workspace/contracts/agent-versions`' shapes, and the request-body
- * byte bound.
+ * The wire edge of the version routes (S1-05, issue #443; ADR-0101): the serialisers from the
+ * structural rows core's version records satisfy into `@indx-workspace/contracts/agent-versions`'
+ * shapes, and the request-body byte bound.
  *
  * Core stores a version body as `jsonb` and hands it back as `unknown` (it cannot import the
  * contracts). Every body is therefore re-parsed with `AgentVersionBodySchema` on its way out. A row
@@ -9,12 +9,6 @@
  * invariant break and throws (surfacing as `500 internal_error`), never a row silently dropped from
  * the listing or served unparsed.
  */
-import type {
-  AgentPointerMoveRecord,
-  AgentVersionListing,
-  AgentVersionPointerRecord,
-  AgentVersionRecord,
-} from '@agent-workspace/core/db';
 import {
   AGENT_VERSION_SUMMARY_MAX_LENGTH,
   AGENT_VERSION_SURFACES_MAX,
@@ -24,6 +18,7 @@ import {
   type AgentVersionListResponse,
   type AgentVersionPointer,
   type AgentVersionResource,
+  type AgentVersionVia,
 } from '@indx-workspace/contracts/agent-versions';
 import {
   AGENT_DEFINITION_FILE_PATH_MAX_LENGTH,
@@ -124,8 +119,44 @@ export const MAX_CREATE_AGENT_BODY_BYTES = Math.max(
   MAX_AGENT_VERSION_BODY_BYTES + CREATE_FROM_VERSION_ENVELOPE_BYTES,
 );
 
+/** What the mappers read of a stored version; core's `AgentVersionRecord` satisfies it. */
+export interface AgentVersionRow {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly agentId: string;
+  readonly number: number;
+  readonly summary: string;
+  readonly via: AgentVersionVia;
+  readonly body: unknown;
+  readonly createdByPrincipalId: string;
+  readonly createdAt: Date;
+}
+
+/** What the mappers read of a pointer; core's `AgentVersionPointerRecord` satisfies it. */
+export interface AgentVersionPointerRow {
+  readonly environment: AgentVersionPointer['environment'];
+  readonly number: number;
+  readonly updatedAt: Date;
+}
+
+/** What the mappers read of a pointer move; core's `AgentPointerMoveRecord` satisfies it. */
+export interface AgentPointerMoveRow {
+  readonly environment: AgentPointerMove['environment'];
+  readonly number: number;
+  readonly reason: AgentPointerMove['reason'];
+  readonly movedByPrincipalId: AgentPointerMove['movedByPrincipalId'];
+  readonly movedAt: Date;
+}
+
+/** What the list mapper reads of an agent's history; core's `AgentVersionListing` satisfies it. */
+export interface AgentVersionListingRows {
+  readonly versions: readonly AgentVersionRow[];
+  readonly pointers: readonly AgentVersionPointerRow[];
+  readonly materialisedVersionId: string | null;
+}
+
 /** One stored version as `AgentVersionResourceSchema` publishes it. Throws on a corrupt body. */
-export function toAgentVersionResource(record: AgentVersionRecord): AgentVersionResource {
+export function toAgentVersionResource(record: AgentVersionRow): AgentVersionResource {
   const body = AgentVersionBodySchema.safeParse(record.body);
   if (!body.success) {
     throw new Error(
@@ -147,7 +178,7 @@ export function toAgentVersionResource(record: AgentVersionRecord): AgentVersion
 }
 
 /** One pointer as `AgentVersionPointerSchema` publishes it. */
-export function toAgentVersionPointer(record: AgentVersionPointerRecord): AgentVersionPointer {
+export function toAgentVersionPointer(record: AgentVersionPointerRow): AgentVersionPointer {
   return {
     environment: record.environment,
     number: record.number,
@@ -156,7 +187,7 @@ export function toAgentVersionPointer(record: AgentVersionPointerRecord): AgentV
 }
 
 /** One pointer history row as `AgentPointerMoveSchema` publishes it (issue #615). */
-export function toAgentPointerMove(record: AgentPointerMoveRecord): AgentPointerMove {
+export function toAgentPointerMove(record: AgentPointerMoveRow): AgentPointerMove {
   return {
     environment: record.environment,
     number: record.number,
@@ -171,8 +202,8 @@ export function toAgentPointerMove(record: AgentPointerMoveRecord): AgentPointer
  * publishes them.
  */
 export function toAgentVersionListResponse(
-  listing: AgentVersionListing,
-  moves: readonly AgentPointerMoveRecord[],
+  listing: AgentVersionListingRows,
+  moves: readonly AgentPointerMoveRow[],
   evaluations: readonly AgentVersionEvaluation[],
 ): AgentVersionListResponse {
   return {

@@ -12,6 +12,13 @@
  */
 import type { ImplementedRuntimeDriver } from '@indx-workspace/contracts/project-file';
 import type { ExternalRuntimeProvider, RuntimeDriver } from '@indx-workspace/contracts/runtimes';
+// A value import: `generate-profile-schema.mjs` loads this file through Node's type stripping,
+// which resolves the contracts to their `dist`, so `docs:check` and `docs:generate` build
+// `@indx-workspace/contracts` before running the generator.
+import {
+  AZURE_CONTAINER_NAME_PATTERN,
+  BUCKET_NAME_PATTERN,
+} from '@indx-workspace/contracts/storage-url';
 import { z } from 'zod';
 
 /** The profile format this release reads and writes, as the document's `apiVersion`. */
@@ -26,8 +33,7 @@ export type DeploymentCloud = (typeof DEPLOYMENT_CLOUDS)[number];
 
 /**
  * Spec §14.2's `RuntimeDriverId`, derived from the runtime contract in `@indx-workspace/contracts`
- * (a type-only import: this file is also loaded by `generate-profile-schema.mjs` through Node's
- * type stripping before any package is built, so no value may be imported from the contracts).
+ * (a type-only import, so the type costs nothing at run time).
  * `packages/embedded/src/runtime-pins.test.ts` holds this type equal to `packages/runtime`'s.
  */
 export type RuntimeDriverId = RuntimeDriver;
@@ -148,12 +154,6 @@ function anyCase(scheme: string): string {
     /[a-z]/u.test(character) ? `[${character}${character.toUpperCase()}]` : character,
   ).join('');
 }
-
-/** S3 and GCS bucket names: `[a-z0-9.-]`, 3–63 characters, no separator at either end. */
-const BUCKET = '[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]';
-
-/** Azure container names: `[a-z0-9-]`, 3–63 characters, no hyphen at either end, never `--`. */
-const AZURE_CONTAINER = '(?!.*--)[a-z0-9][a-z0-9-]{1,61}[a-z0-9]';
 
 /** The scheme of a `scheme://rest` value, or `null` when the value carries no scheme. */
 function schemeOf(value: string): string | null {
@@ -285,12 +285,17 @@ function relationalStore(cloud: DeploymentCloud) {
 function objectStore(cloud: DeploymentCloud) {
   const acceptsLocalFilesystem = CLOUDS_ACCEPTING_LOCAL_FILESYSTEM.includes(cloud);
   const accepted = [
-    { pattern: `${anyCase('s3')}://${BUCKET}`, shown: 's3://<bucket>' },
+    { pattern: `${anyCase('s3')}://${BUCKET_NAME_PATTERN}`, shown: 's3://<bucket>' },
     ...(cloud === 'gcp'
-      ? [{ pattern: `${anyCase('gcs')}://${BUCKET}`, shown: 'gcs://<bucket>' }]
+      ? [{ pattern: `${anyCase('gcs')}://${BUCKET_NAME_PATTERN}`, shown: 'gcs://<bucket>' }]
       : []),
     ...(cloud === 'azure'
-      ? [{ pattern: `${anyCase('azblob')}://${AZURE_CONTAINER}`, shown: 'azblob://<container>' }]
+      ? [
+          {
+            pattern: `${anyCase('azblob')}://${AZURE_CONTAINER_NAME_PATTERN}`,
+            shown: 'azblob://<container>',
+          },
+        ]
       : []),
     ...(acceptsLocalFilesystem
       ? [{ pattern: LOCAL_FILESYSTEM_OBJECT_STORE, shown: LOCAL_FILESYSTEM_OBJECT_STORE }]

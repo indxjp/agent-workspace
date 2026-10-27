@@ -1,4 +1,6 @@
+import { log } from '../telemetry/logger';
 import type { RuntimeNetworkPolicy } from '../../contracts/runtimes';
+import { defineSlot } from '../runtime-slot';
 
 export type RuntimeRegistryEntry = Readonly<{
   id: string;
@@ -136,9 +138,7 @@ export function createWebRuntimeRegistry<TRequest, TEvent>(
       await test(driverId, 'agent-workspace runtime re-verification', scope);
       return true;
     } catch (error) {
-      console.error(
-        `[runtimes] re-verifying ${driverId} failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      log.error(`[runtimes] re-verifying ${driverId} failed`, { error });
       return false;
     }
   };
@@ -156,22 +156,18 @@ export function createWebRuntimeRegistry<TRequest, TEvent>(
   };
 }
 
-interface GlobalRegistry {
-  __agentWorkspaceDriverRegistry__?: WebRuntimeRegistry;
-}
-
-const globalRegistry = globalThis as typeof globalThis & GlobalRegistry;
+const slot = defineSlot<WebRuntimeRegistry>('__agentWorkspaceDriverRegistry__');
 
 export function configureWebRuntimeRegistry(registry: WebRuntimeRegistry): void {
-  globalRegistry.__agentWorkspaceDriverRegistry__ = registry;
+  slot.set(registry);
 }
 
 export function clearWebRuntimeRegistry(): void {
-  delete globalRegistry.__agentWorkspaceDriverRegistry__;
+  slot.clear();
 }
 
 export function currentWebRuntimeRegistry(): WebRuntimeRegistry | null {
-  return globalRegistry.__agentWorkspaceDriverRegistry__ ?? null;
+  return slot.current();
 }
 
 /**

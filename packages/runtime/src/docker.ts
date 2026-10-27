@@ -50,6 +50,7 @@ export const DOCKER_RUNTIME_CAPABILITIES: DockerRuntimeCapabilities = {
   gpu: false,
   managedByProvider: false,
   typicalStartMs: 500,
+  fileTransfer: 'push-archive',
   networkPolicyEnforcement: {
     none: 'network',
     restricted: 'proxy',
@@ -176,6 +177,14 @@ export type DockerDriver<TRequest, TEvent> = RuntimeDriver<TRequest, TEvent> &
 
 /** How often the driver checks its sandboxes against their deadlines. */
 export const DOCKER_REAP_INTERVAL_MS = 15_000;
+
+/**
+ * Docker's answer to an `rm` of a container another call (a reaper tick, `destroy`) is still
+ * removing. That removal may yet fail, so the `rm` is repeated until it settles.
+ */
+const DOCKER_REMOVAL_IN_PROGRESS = /removal of container \S+ is already in progress/iu;
+const DOCKER_REMOVAL_ATTEMPTS = 50;
+const DOCKER_REMOVAL_RETRY_MS = 200;
 
 /** The agent's `--memory` budget when the run spec sets no `memoryMb`. */
 const DOCKER_DEFAULT_MEMORY_MB = 1_024;
@@ -636,14 +645,23 @@ export function createDockerDriver<TRequest, TEvent>(
     reaperTimer.unref();
   }
 
+  /** `rm --force --volumes` one container, repeated while another removal of it is in progress. */
+  async function removeContainer(container: string): Promise<DockerCommandResult> {
+    for (let attempt = 1; ; attempt += 1) {
+      const result = await docker(['rm', '--force', '--volumes', container]);
+      if (!DOCKER_REMOVAL_IN_PROGRESS.test(result.stderr) || attempt >= DOCKER_REMOVAL_ATTEMPTS) {
+        return result;
+      }
+      await new Promise((resolve) => setTimeout(resolve, DOCKER_REMOVAL_RETRY_MS));
+    }
+  }
+
   /** `rm --force --volumes` each container. Never throws; an already-gone container counts as removed. */
   async function removeContainers(containers: Iterable<string>): Promise<DockerReapReport> {
     const outcomes = await Promise.all(
       [...containers].map(async (container) => ({
         container,
-        result: await docker(['rm', '--force', '--volumes', container]).catch((error: unknown) =>
-          commandFailure(error),
-        ),
+        result: await removeContainer(container).catch((error: unknown) => commandFailure(error)),
       })),
     );
     const removed: string[] = [];
@@ -984,12 +1002,12 @@ export function createDockerDriver<TRequest, TEvent>(
         return;
       }
       const known = assertLive(runtime, 'destroy');
-      const result = await docker(['rm', '--force', '--volumes', known.externalId]);
+      const result = await removeContainer(known.externalId);
       // A reaper tick racing this call may have removed the container first; it is gone either way.
       if (!/No such container/iu.test(result.stderr)) requireSuccessful(result, 'remove container');
       const session = sessions.get(known.id);
       if (session !== undefined) {
-        const proxy = await docker(['rm', '--force', '--volumes', session.proxy]);
+        const proxy = await removeContainer(session.proxy);
         if (!/No such container/iu.test(proxy.stderr))
           requireSuccessful(proxy, 'remove egress proxy');
         const networkFailure = await removeSessionNetwork(known.id);

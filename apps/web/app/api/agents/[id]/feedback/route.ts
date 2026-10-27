@@ -6,20 +6,18 @@
  */
 import type { NextRequest } from 'next/server';
 
-import { errorResponse } from '../../../../../server/http/error-response';
+import { route } from '../../../../../server/http/route';
 import { listAgentFeedback } from '../../../../../server/runs/feedback';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET(
+async function serveGet(
   request: NextRequest,
   context: RouteContext<'/api/agents/[id]/feedback'>,
 ): Promise<Response> {
-  try {
-    const { id } = await context.params;
-    return await listAgentFeedback(request, id);
-  } catch (cause) {
-    return errorResponse(cause, { component: 'runs', operation: 'list-feedback' });
-  }
+  const { id } = await context.params;
+  return listAgentFeedback(request, id);
 }
+
+export const GET = route({ component: 'runs', operation: 'list-feedback' }, serveGet);

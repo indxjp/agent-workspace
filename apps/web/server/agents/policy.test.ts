@@ -110,6 +110,7 @@ function fakeAssignments(
           files: [],
           skillIds: [...(byWorkspaceAgent[`${workspaceId}:${agentId}`] ?? [])],
           connectorIds: [],
+          storageGrants: [],
         }),
       replace: () => Promise.reject(new Error('unused')),
     }),

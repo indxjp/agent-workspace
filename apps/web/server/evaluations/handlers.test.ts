@@ -1,10 +1,17 @@
 import type { AgentVersionRecord } from '@agent-workspace/core/db';
+import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { EvaluationResourceSchema } from '@indx-workspace/contracts/evaluations';
 import type { AgentFrame } from '@indx-workspace/contracts/run-events';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { LaunchContext, Principal, RunApiEnvironment } from '../runs/environment';
-import { InMemoryRunStore, type RunStatus } from '../runs/store';
+import type {
+  LaunchContext,
+  RunLimitsOverride,
+  RunPrincipal,
+  RunApiEnvironment,
+} from '../runs/environment';
+import { InMemoryRunStore } from '../runs/memory-store';
+import type { RunOutput, RunStatus } from '../runs/store';
 import {
   createModelJudge,
   evaluateAgentVersion,
@@ -16,7 +23,7 @@ const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const VERSION_ID = '44444444-4444-4444-8444-444444444444';
 const EVALUATION_ID = '55555555-5555-4555-8555-555555555555';
-const PRINCIPAL: Principal = {
+const PRINCIPAL: RunPrincipal = {
   principalId: '77777777-7777-4777-8777-777777777777',
   ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
   userId: null,
@@ -31,16 +38,32 @@ type Script =
       readonly frames: readonly AgentFrame[];
       readonly status: RunStatus;
       readonly error?: string;
+      readonly output?: RunOutput;
+      /** Stop for approval on this call instead of ending: `status` is then not used. */
+      readonly pause?: { readonly toolName: string; readonly canonicalCall: string };
     }
   | 'hang';
 
+const PLAN_WRITE = { file_path: 'outputs/plan.json', content: '{}' };
+
 const SCRIPTS: Readonly<Record<string, Script>> = {
+  // The pause has no `agent.tool.call` frame before it, so the paused call must come from the run.
+  'Plan the consolidation': {
+    frames: [assistantSays('Plan ready for approval.')],
+    status: 'awaiting_approval',
+    pause: { toolName: 'Write', canonicalCall: canonicalCall('Write', PLAN_WRITE) },
+  },
   'Where is order 1042?': { frames: ORDER_STATUS_FRAMES, status: 'completed' },
   'I want my money back now': {
     frames: [assistantSays('I am sorry. I cannot refund it, but I can help.')],
     status: 'completed',
   },
   'Use the tool': { frames: [toolCall('orders_refund'), assistantSays('Done.')], status: 'failed' },
+  'Draft the change set': {
+    frames: [assistantSays('Drafted.')],
+    status: 'completed',
+    output: { text: 'Drafted.', structured: { width: 140, height: 90, drawingNo: 'BRK-1101' } },
+  },
   'Never answers': 'hang',
   'Bad key': {
     frames: [],
@@ -54,6 +77,7 @@ interface Setup {
   readonly judge?: RunApiEnvironment['judgeEvaluationCase'];
   readonly preflight?: RunApiEnvironment['preflight'];
   readonly deadlineMs?: number;
+  readonly limits?: RunLimitsOverride;
   /** Delay before `openSession` answers, in milliseconds. */
   readonly openSessionDelayMs?: number;
 }
@@ -63,18 +87,29 @@ function setUp(setup: Setup = {}) {
   const playing: Promise<void>[] = [];
   const recorded: unknown[] = [];
   const interrupted: string[] = [];
+  /** The `outputSchema` each launched run was started with (`undefined` when it had none). */
+  const schemas: (Readonly<Record<string, unknown>> | undefined)[] = [];
   /** The version each opened session pinned, and each preflight checked. */
   const pins: { session: (string | undefined)[]; preflight: (string | undefined)[] } = {
     session: [],
     preflight: [],
   };
-  const play = async ({ run, prompt }: LaunchContext) => {
+  /** The `limits` each launched run was started with (`undefined` when it had none). */
+  const limitsSeen: (RunLimitsOverride | undefined)[] = [];
+  const play = async ({ run, prompt, outputSchema, limits }: LaunchContext) => {
+    schemas.push(outputSchema);
+    limitsSeen.push(limits);
     const script = SCRIPTS[prompt];
     if (script === undefined || script === 'hang') return;
     for (const frame of script.frames) {
       await store.append(run.id, { type: frame.frame, data: frame });
     }
-    await store.finish(run.id, script.status, script.error ?? null, true);
+    if (script.pause !== undefined) {
+      await store.markRunning(run.id);
+      await store.awaitApproval(run.id, script.pause);
+      return;
+    }
+    await store.finish(run.id, script.status, script.error ?? null, true, script.output ?? null);
   };
   const runs: RunApiEnvironment = {
     authenticate: () => Promise.resolve(PRINCIPAL),
@@ -128,13 +163,14 @@ function setUp(setup: Setup = {}) {
     store: { find: (_agentId, number) => Promise.resolve(number === 7 ? version : null) },
     runs,
     ...(setup.deadlineMs === undefined ? {} : { deadlineMs: setup.deadlineMs }),
+    ...(setup.limits === undefined ? {} : { limits: setup.limits }),
   };
   const evaluate = async (body: unknown) => {
     const result = await evaluateAgentVersion(body, AGENT, PRINCIPAL, dependencies);
     await Promise.all(playing);
     return result;
   };
-  return { evaluate, recorded, interrupted, pins, store };
+  return { evaluate, recorded, interrupted, pins, schemas, limitsSeen, store };
 }
 
 const ORDER_CASE = {
@@ -147,6 +183,14 @@ const REFUND_CASE = {
   name: 'no refund promises',
   input: 'I want my money back now',
   expect: { judge: 'Stays polite and does not promise a refund' },
+};
+
+const DRAFT_SCHEMA = { type: 'object', properties: { width: { type: 'number' } } };
+const DRAFT_CASE = {
+  name: 'the outline is 140 x 90',
+  input: 'Draft the change set',
+  outputSchema: DRAFT_SCHEMA,
+  expect: { output: { width: 140, height: 90 } },
 };
 
 /** `pending`, whose `settled()` fails unless it has already settled: no waiting on real time. */
@@ -180,6 +224,32 @@ describe('evaluateAgentVersion (issue #618)', () => {
       ['model_credential_rejected'],
       ['run_failed'],
     ]);
+  });
+
+  describe('in-process run limits', () => {
+    it('starts every case run under the limits its caller passes', async () => {
+      const { evaluate, limitsSeen } = setUp({ limits: { maxBudgetUsd: 0.3 } });
+      await evaluate({ version: 7, cases: [ORDER_CASE, ORDER_CASE_AGAIN] });
+      expect(limitsSeen).toEqual([{ maxBudgetUsd: 0.3 }, { maxBudgetUsd: 0.3 }]);
+    });
+
+    it('starts no limits when its caller passes none', async () => {
+      const { evaluate, limitsSeen } = setUp();
+      await evaluate({ version: 7, cases: [ORDER_CASE] });
+      expect(limitsSeen).toEqual([undefined]);
+    });
+
+    it('refuses a limits key in the body: it is not part of the request', async () => {
+      const { evaluate, limitsSeen } = setUp();
+      const result = await evaluate({
+        version: 7,
+        cases: [ORDER_CASE],
+        limits: { maxBudgetUsd: 100 },
+      });
+      expect(result.status).toBe(400);
+      expect(result.body).toMatchObject({ error: { code: 'invalid_body' } });
+      expect(limitsSeen).toEqual([]);
+    });
   });
 
   it('runs every case, scores it, stores the row and answers 201', async () => {
@@ -229,6 +299,125 @@ describe('evaluateAgentVersion (issue #618)', () => {
     expect(recorded).toHaveLength(1);
   });
 
+  describe('a case that expects the approval pause (issue #1569)', () => {
+    const PLAN_CASE = {
+      name: 'stops at the plan write',
+      input: 'Plan the consolidation',
+      expect: {
+        awaitsApproval: true,
+        tool: 'Write',
+        toolInput: { file_path: 'outputs/plan.json' },
+        contains: ['Plan ready'],
+      },
+    };
+
+    it('passes when the run pauses on the expected call, and the run is cancelled', async () => {
+      const { evaluate, interrupted, store } = setUp();
+      const result = await evaluate({ version: 7, cases: [PLAN_CASE] });
+      const evaluation = EvaluationResourceSchema.parse(result.body);
+      expect(evaluation.results.map((r) => [r.name, r.passed, r.failures])).toEqual([
+        [PLAN_CASE.name, true, []],
+      ]);
+      const runId = evaluation.results[0]?.runId ?? '';
+      expect(runId).not.toBe('');
+      await vi.waitFor(async () => {
+        expect((await store.get(runId))?.status).toBe('cancelled');
+      });
+      expect(interrupted).toEqual([runId]);
+    });
+
+    it('scores the paused call: a different tool or input fails its case, and the run is still cancelled', async () => {
+      const { evaluate, interrupted } = setUp();
+      const result = await evaluate({
+        version: 7,
+        cases: [
+          { ...PLAN_CASE, name: 'other tool', expect: { awaitsApproval: true, tool: 'Edit' } },
+          {
+            ...PLAN_CASE,
+            name: 'other path',
+            expect: {
+              awaitsApproval: true,
+              tool: 'Write',
+              toolInput: { file_path: 'outputs/other.json' },
+            },
+          },
+          { ...PLAN_CASE, name: 'wrong text', expect: { awaitsApproval: true, contains: ['zzz'] } },
+        ],
+      });
+      const evaluation = EvaluationResourceSchema.parse(result.body);
+      expect(evaluation.results.map((r) => r.failures)).toEqual([
+        ['tool: Edit was not called'],
+        ['toolInput: no call of Write had {"file_path":"outputs/other.json"}'],
+        ['contains: "zzz" is not in the answer'],
+      ]);
+      await vi.waitFor(() => {
+        expect(interrupted).toHaveLength(3);
+      });
+    });
+
+    it('reads the answer so far for the judge', async () => {
+      const prompts: string[] = [];
+      const { evaluate } = setUp({
+        judge: (_principal, _agent, _version, prompt) => {
+          prompts.push(prompt);
+          return Promise.resolve('{"pass": true, "reason": "ok"}');
+        },
+      });
+      const result = await evaluate({
+        version: 7,
+        cases: [
+          {
+            ...PLAN_CASE,
+            expect: { awaitsApproval: true, judge: 'Stops before writing anything' },
+          },
+        ],
+      });
+      expect(EvaluationResourceSchema.parse(result.body).results[0]?.failures).toEqual([]);
+      expect(prompts[0]).toContain('Plan ready for approval.');
+    });
+
+    it('fails with run_not_awaiting_approval when the run completes', async () => {
+      const { evaluate, interrupted } = setUp();
+      const result = await evaluate({
+        version: 7,
+        cases: [{ ...ORDER_CASE, expect: { ...ORDER_CASE.expect, awaitsApproval: true } }],
+      });
+      const evaluation = EvaluationResourceSchema.parse(result.body);
+      expect(evaluation.results.map((r) => [r.passed, r.failures])).toEqual([
+        [false, ['run_not_awaiting_approval']],
+      ]);
+      expect(interrupted).toEqual([]);
+    });
+
+    it('fails with run_awaiting_approval without the flag, and still interrupts the run', async () => {
+      const { evaluate, interrupted, store } = setUp();
+      const result = await evaluate({
+        version: 7,
+        cases: [{ ...PLAN_CASE, expect: { tool: 'Write' } }],
+      });
+      const evaluation = EvaluationResourceSchema.parse(result.body);
+      expect(evaluation.results.map((r) => [r.passed, r.failures])).toEqual([
+        [false, ['run_awaiting_approval']],
+      ]);
+      const runId = evaluation.results[0]?.runId ?? '';
+      await vi.waitFor(async () => {
+        expect((await store.get(runId))?.status).toBe('cancelled');
+      });
+      expect(interrupted).toEqual([runId]);
+    });
+
+    it('refuses awaitsApproval together with output as invalid_body', async () => {
+      const { evaluate, recorded } = setUp();
+      const result = await evaluate({
+        version: 7,
+        cases: [{ ...DRAFT_CASE, expect: { awaitsApproval: true, output: { width: 140 } } }],
+      });
+      expect(result.status).toBe(400);
+      expect(result.body).toMatchObject({ error: { code: 'invalid_body' } });
+      expect(recorded).toEqual([]);
+    });
+  });
+
   it('runs every case on a new session pinned to the requested version, not to local', async () => {
     // The fake store has no pointers at all: only the requested version decides the pin.
     const { evaluate, pins } = setUp();
@@ -264,6 +453,23 @@ describe('evaluateAgentVersion (issue #618)', () => {
     });
     await evaluate({ version: 7, cases: [REFUND_CASE] });
     expect(asked).toEqual(['version-7-connection']);
+  });
+
+  it('starts a case with its outputSchema and passes it on the structured output', async () => {
+    const { evaluate, schemas } = setUp();
+    const result = await evaluate({ version: 7, cases: [DRAFT_CASE, ORDER_CASE] });
+    const evaluation = EvaluationResourceSchema.parse(result.body);
+    expect(evaluation.results.map((r) => r.failures)).toEqual([[], []]);
+    expect(schemas).toEqual([DRAFT_SCHEMA, undefined]);
+  });
+
+  it('fails a case whose structured output lacks the expected value', async () => {
+    const { evaluate } = setUp();
+    const wrong = { ...DRAFT_CASE, expect: { output: { width: 141 } } };
+    const result = await evaluate({ version: 7, cases: [wrong] });
+    expect(EvaluationResourceSchema.parse(result.body).results[0]?.failures).toEqual([
+      'output: the structured output did not have {"width":141}',
+    ]);
   });
 
   it.each([

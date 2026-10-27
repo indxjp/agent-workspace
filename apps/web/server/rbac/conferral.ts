@@ -26,30 +26,24 @@
  * **A caller may confer a role only if the caller's own grants dominate that role's grants, over
  * every resource and every operation.**
  *
- * The obvious alternative is a privilege ordering — `owner > admin > builder > viewer` — and it is
- * wrong here: `permissions.ts` reads §21's Admin clause literally where §21 is silent, so Admin
- * has *no* grant over `projects` and cannot run a connector, while Builder holds both over its own
- * rows (ADR-0116 closed the earlier `skills` and `files` gap; these two remain).
- * The four roles are therefore **not** a total order under this table, and an ordering asserted in
- * code would be asserting something the table contradicts (ADR-0016). Domination asks the table
- * instead, so the day §21's reading changes, the conferral matrix changes with it and there is no
- * second place to edit.
+ * The obvious alternative is a privilege ordering — `owner > admin > builder > viewer`. ADR-0152
+ * made the table monotonic in that order (`permissions.test.ts` asserts it over every cell), so
+ * today the two answers agree. Domination still asks the table rather than the order, so the
+ * table stays the one place a grant is written (ADR-0016) and a cell that broke monotonicity
+ * would change the conferral matrix instead of being silently contradicted by it.
  *
- * Domination is computed over {@link RESOURCES} × the three operations. There is no fifth answer
- * and no default: where the two grants cannot be compared the conferral is **refused**, not
- * allowed (ADR-0015, ADR-0031). That happens for exactly one grant width — `permitted`, whose
- * extent §21 leaves undefined — and it is why {@link Conferral} has three effects rather than two.
+ * Domination is computed over {@link RESOURCES} × the three operations, and per cell it is the
+ * formal model's breadth order `Grant.le` (`formal/AgentWorkspace/Authz/Permissions.lean`):
+ * `none` ⊆ `own` ⊆ `permitted` ⊆ `any`, where `permitted` is "own or granted" (ADR-0152). The
+ * order is total over the four widths, so every cell is either dominated or not; a caller or
+ * requested role that is not one of the four is **refused** (ADR-0015, ADR-0031), which is why
+ * {@link Conferral} has three effects rather than two.
  *
  * ## What this rule costs, stated rather than discovered later
  *
- * `conferral.test.ts` derives the whole matrix from {@link ROLES} and asserts these two cells by
- * name, because they are product consequences and not only code ones:
- *
- *   * an **Admin may not confer Owner** — that is the fix;
- *   * an **Admin may not confer Builder** either, because Builder holds its own `projects` and
- *     runs its own `connectors` while §21's Admin clause grants neither, so an Admin conferring
- *     Builder would be handing out a capability the Admin does not hold. Admin may confer Admin
- *     and Viewer.
+ * `conferral.test.ts` derives the whole matrix from {@link ROLES} and asserts it: a role may confer
+ * itself and every role below it, and no role above it. An **Admin may not confer Owner** — that is
+ * the fix — because Owner holds `secrets` and Admin does not.
  */
 import { grantsFor, RESOURCES, type Grant, type Resource } from './permissions';
 import { parseRole, ROLES, type Role } from './roles';
@@ -67,35 +61,19 @@ import { parseRole, ROLES, type Role } from './roles';
 declare const CONFERRED: unique symbol;
 export type ConferredRole = Role & { readonly [CONFERRED]: true };
 
-/**
- * Whether one grant is at least as wide as another.
- *
- * `undecidable` is not "probably fine". It is the answer for `permitted`, which §21 uses once —
- * Viewer's *"Run **permitted** agents"* — and for which neither §21 nor §27 defines a mechanism,
- * so its extent is unknown in both directions.
- */
-export type Domination = 'dominates' | 'does-not' | 'undecidable';
+/** Whether one grant is at least as wide as another. */
+export type Domination = 'dominates' | 'does-not';
+
+/** Each width's rank in the formal model's `Grant.le` chain: `none` ⊆ `own` ⊆ `permitted` ⊆ `any`. */
+const BREADTH: Readonly<Record<Grant, number>> = { none: 0, own: 1, permitted: 2, any: 3 };
 
 /**
- * Does a caller holding `held` hold at least everything `conferred` would grant?
- *
- * Positive by construction: every `dominates` answer names the reason it is one, and the final
- * `else` is a refusal rather than a fall-through (ADR-0015).
+ * Does a caller holding `held` hold at least everything `conferred` would grant? Exactly
+ * `Grant.le conferred held` in the formal model: `permitted` is "own or granted" (ADR-0152), so it
+ * contains `own`, and `own` does not contain a granted row.
  */
 export function dominates(held: Grant, conferred: Grant): Domination {
-  // `any` is the widest grant there is, so it covers every other.
-  if (held === 'any') return 'dominates';
-  // `none` is the narrowest, so every grant covers it — including `none` itself.
-  if (conferred === 'none') return 'dominates';
-  // The same width on both sides is the same set of rows.
-  if (held === conferred) return 'dominates';
-  // One side is `permitted` and the other is not. `permitted` denies today, but its *extent* is
-  // what this comparison needs and §21 defines none, so neither containment can be asserted.
-  if (held === 'permitted' || conferred === 'permitted') return 'undecidable';
-  // What is left is `none` or `own` on the left against a strictly wider grant on the right.
-  if (held === 'none' || held === 'own') return 'does-not';
-  const unreachable: never = held;
-  throw new Error(`unclassified grant ${JSON.stringify(unreachable)} — refusing to confer`);
+  return BREADTH[conferred] <= BREADTH[held] ? 'dominates' : 'does-not';
 }
 
 /** One (resource, operation) pair at which a conferral was decided. */
@@ -177,17 +155,6 @@ export function conferRole(callerRole: unknown, requested: unknown): Conferral {
               `"${conferred}" ${operation} on "${resource}" with width "${wanted[operation]}", ` +
               `and grants the caller's own role "${caller}" only "${held[operation]}" there. ` +
               `Conferring it would hand out a capability the caller has not got.`,
-            witness,
-          };
-        case 'undecidable':
-          return {
-            effect: 'refuse',
-            because:
-              `Whether "${caller}" holds everything "${conferred}" would be granted cannot be ` +
-              `decided at ${operation} on "${resource}": one side is "permitted", a width spec ` +
-              `§21 uses without defining a mechanism, so its extent is unknown in both ` +
-              `directions. An undecidable conferral is refused, never allowed ` +
-              `(ADR-0015, ADR-0031).`,
             witness,
           };
         default: {

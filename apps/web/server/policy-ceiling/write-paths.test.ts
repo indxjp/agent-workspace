@@ -20,21 +20,20 @@ import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
 } from '../agent-versions/memory-store';
+import { clearApplicationContext } from '../application-context';
 import {
-  clearAgentVersionsRuntime,
-  configureAgentVersionsRuntime,
-} from '../agent-versions/runtime';
+  installTestDomains,
+  installTestRunApi,
+  resetTestRunApi,
+} from '../application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
-import { clearAgentsRuntime, configureAgentsRuntime } from '../agents/runtime';
 import type { AgentStoreProvider } from '../agents/store';
 import { setupCeilingRefusal } from '../composition/setup';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { clearRbacRuntime, configureRbacRuntime } from '../rbac/runtime';
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { startRun } from '../runs/api';
-import { installRunApi, resetRunApi } from '../runs/environment';
-import { InMemoryRunStore } from '../runs/store';
+import { InMemoryRunStore } from '../runs/memory-store';
 import { recordingCeilingFor, type RecordingCeiling } from './fixtures';
 
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';
@@ -76,34 +75,50 @@ function versionWithModel(model: string, dryRun?: true): ReturnType<typeof versi
 function install(ceiling: boolean): void {
   const assignments = new Map<string, AgentResourceAssignments>();
   const ceilingFor = ceiling ? { ceilingFor: recording.ceilingFor } : {};
-  configureAgentsRuntime({
-    agents,
-    agentResources: {
-      forWorkspace: (workspaceId) => ({
-        get: async (id) =>
-          (await agents.forWorkspace(workspaceId).get(id)) === null
-            ? null
-            : (assignments.get(id) ?? { files: [], skillIds: [], connectorIds: [] }),
-        replace: async (id, next) => {
-          if ((await agents.forWorkspace(workspaceId).get(id)) === null) {
-            return { kind: 'not-found' as const };
-          }
-          assignments.set(id, next);
-          return { kind: 'updated' as const, assignments: next };
-        },
-      }),
+  const deploymentCeiling = ceiling
+    ? ({ kind: 'enforced', ceilingFor: recording.ceilingFor } as const)
+    : ({ kind: 'disabled' } as const);
+  installTestDomains({
+    agents: {
+      agents,
+      agentResources: {
+        forWorkspace: (workspaceId) => ({
+          get: async (id) =>
+            (await agents.forWorkspace(workspaceId).get(id)) === null
+              ? null
+              : (assignments.get(id) ?? {
+                  files: [],
+                  skillIds: [],
+                  connectorIds: [],
+                  storageGrants: [],
+                }),
+          replace: async (id, next) => {
+            if ((await agents.forWorkspace(workspaceId).get(id)) === null) {
+              return { kind: 'not-found' as const };
+            }
+            const stored = { ...next, storageGrants: next.storageGrants ?? [] };
+            assignments.set(id, stored);
+            return { kind: 'updated' as const, assignments: stored };
+          },
+        }),
+      },
+      skillCatalog: {
+        forWorkspace: () =>
+          Promise.resolve({ listSkills: () => Promise.resolve([]) } as unknown as Awaited<
+            ReturnType<ResourceCatalogStoreProvider['forWorkspace']>
+          >),
+      },
+      resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
+      ceiling: deploymentCeiling,
     },
-    skillCatalog: {
-      forWorkspace: () =>
-        Promise.resolve({ listSkills: () => Promise.resolve([]) } as unknown as Awaited<
-          ReturnType<ResourceCatalogStoreProvider['forWorkspace']>
-        >),
-    },
-    resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
-    ...ceilingFor,
   });
-  configureAgentVersionsRuntime({ versions, ...ceilingFor });
-  installRunApi({
+  installTestDomains({
+    agentVersions: {
+      versions,
+      ceiling: deploymentCeiling,
+    },
+  });
+  installTestRunApi({
     authenticate: () =>
       Promise.resolve({
         principalId: OWNER,
@@ -153,26 +168,26 @@ beforeEach(async () => {
   });
   recording = recordingCeilingFor(CEILING, { connectors: { [CRM]: 'crm' } });
   launched = 0;
-  configureRbacRuntime({
-    directory: createMemoryDirectory({ users: [] }),
-    identify: () =>
-      Promise.resolve(
-        Principal.fromApiKey({
-          principalId: OWNER,
-          apiKeyId: 'b0000000-0000-4000-8000-000000000001',
-          workspaceId: WORKSPACE,
-          role: 'owner',
-          label: 'owner key',
-        }),
-      ),
+  installTestDomains({
+    rbac: {
+      directory: createMemoryDirectory({ users: [] }),
+      identify: () =>
+        Promise.resolve(
+          Principal.fromApiKey({
+            principalId: OWNER,
+            apiKeyId: 'b0000000-0000-4000-8000-000000000001',
+            workspaceId: WORKSPACE,
+            role: 'owner',
+            label: 'owner key',
+          }),
+        ),
+    },
   });
 });
 
 afterEach(() => {
-  clearAgentsRuntime();
-  clearAgentVersionsRuntime();
-  clearRbacRuntime();
-  resetRunApi();
+  clearApplicationContext();
+  resetTestRunApi();
 });
 
 function request(method: string, path: string, body: unknown): Request {
@@ -290,7 +305,7 @@ const WRITE_PATHS: readonly WritePath[] = [
             model: ALLOWED_MODEL,
             permissions: PERMISSIONS,
           },
-          assignments: { files: [], skillIds: [], connectorIds: [CRM] },
+          assignments: { files: [], skillIds: [], connectorIds: [CRM], storageGrants: [] },
         }),
       ),
     unceiled: 201,
@@ -332,6 +347,7 @@ const WRITE_PATHS: readonly WritePath[] = [
           files: [],
           skillIds: [],
           connectorIds: [CRM],
+          storageGrants: [],
         }),
         idContext(),
       ),

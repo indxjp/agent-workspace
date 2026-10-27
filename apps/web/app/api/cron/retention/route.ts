@@ -3,14 +3,14 @@
  * authenticated by `CRON_SECRET` alone (ADR-0120 clause 7). Inert (404) wherever `CRON_SECRET` is
  * unset. The logic is `server/sessions/retention-cron.ts`.
  */
-import {
-  getRetentionCronPass,
-  handleRetentionCron,
-} from '../../../../server/sessions/retention-cron';
+import { applicationContext } from '../../../../server/application-context';
+import { handleRetentionCron } from '../../../../server/sessions/retention-cron';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export function GET(request: Request): Promise<Response> {
-  return handleRetentionCron(request, { env: process.env, pass: getRetentionCronPass() });
+  const retention = applicationContext()?.sessions.retention;
+  const pass = retention?.kind === 'cron' ? retention.pass : null;
+  return handleRetentionCron(request, { env: process.env, pass });
 }

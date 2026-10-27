@@ -321,6 +321,43 @@ describe('toAgentVersionBody', () => {
     expect(issues.map((issue) => issue.path)).toStrictEqual(['engine.autoApprove.0']);
   });
 
+  it('stores a requireApproval rule, sorted and without duplicates', () => {
+    const body = toAgentVersionBody(
+      defineAgent({
+        ...MINIMAL,
+        engine: {
+          id: 'claude-agent-sdk',
+          requireApproval: ['mcp__gh__merge', 'mcp__gh__create_issue', 'mcp__gh__merge'],
+        },
+      }),
+    );
+
+    expect(body.definition.policySource).toBe('stored');
+    expect(body.definition.policy).toMatchObject({
+      requireApproval: ['mcp__gh__create_issue', 'mcp__gh__merge'],
+    });
+  });
+
+  it('keeps the policy compiled for an empty requireApproval', () => {
+    const body = toAgentVersionBody(
+      defineAgent({ ...MINIMAL, engine: { id: 'claude-agent-sdk', requireApproval: [] } }),
+    );
+
+    expect(body.definition.policySource).toBe('compiled');
+  });
+
+  it('stores handoff: true and forces the stored policy; left out changes nothing', () => {
+    const on = toAgentVersionBody(
+      defineAgent({ ...MINIMAL, engine: { id: 'claude-agent-sdk', handoff: true } }),
+    );
+    expect(on.definition.policySource).toBe('stored');
+    expect(on.definition.policy).toMatchObject({ handoff: true });
+
+    const off = toAgentVersionBody(defineAgent({ ...MINIMAL, engine: { id: 'claude-agent-sdk' } }));
+    expect(off.definition.policySource).toBe('compiled');
+    expect(off.definition.policy).not.toHaveProperty('handoff');
+  });
+
   it('gives the same body, key order included, for the same definition', () => {
     const agent = defineAgent({ ...MINIMAL, tools: [mcp('github')] });
 
@@ -521,5 +558,41 @@ describe('toAgentVersionBody defaultEngine (contract C12)', () => {
     );
 
     expect(issues.map((issue) => issue.path)).toStrictEqual(['options.defaultEngine']);
+  });
+});
+
+describe('toAgentVersionBody skill revisions', () => {
+  it('lands a pinned revision under the skill name and leaves an unpinned skill out', () => {
+    const body = toAgentVersionBody(
+      defineAgent({
+        ...MINIMAL,
+        skills: [skill('contract-playbook', { revision: 3 }), skill('triage')],
+      }),
+    );
+    expect(AgentVersionBodySchema.parse(body)).toStrictEqual(body);
+    expect(body.definition.resources.skills).toStrictEqual(['contract-playbook', 'triage']);
+    expect(body.definition.resources.skillRevisions).toStrictEqual({ 'contract-playbook': 3 });
+  });
+
+  it('emits no skillRevisions key when nothing is pinned', () => {
+    const unpinned = toAgentVersionBody(defineAgent({ ...MINIMAL, skills: [skill('triage')] }));
+    expect(Object.keys(unpinned.definition.resources)).toStrictEqual([
+      'files',
+      'skills',
+      'connectors',
+    ]);
+  });
+
+  it('keeps the pin through defineAgent', () => {
+    const agent = defineAgent({ ...MINIMAL, skills: [skill('triage', { revision: 1 })] });
+    expect(agent.skills?.[0]).toMatchObject({ name: 'triage', revision: 1 });
+  });
+
+  it.each([0, 1.5, -1, 2_147_483_648])('refuses the revision %s', (revision) => {
+    expect(issuesOf(() => skill('triage', { revision }))).not.toHaveLength(0);
+  });
+
+  it('refuses an option other than revision', () => {
+    expect(issuesOf(() => skill('triage', { latest: true } as never))).not.toHaveLength(0);
   });
 });

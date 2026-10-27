@@ -1,3 +1,4 @@
+import { log } from '../telemetry/logger';
 import { guardedFetch, loadEgressPolicyFromEnv } from '@agent-workspace/core';
 
 import type { ResolvedModelConnection } from './store';
@@ -78,7 +79,7 @@ export async function probeModelConnection(
       retryable: true,
       cause: error,
     });
-    console.error('[models] provider connection probe failed', failure);
+    log.error('[models] provider connection probe failed', { error: failure });
     return {
       ok: false,
       status: null,

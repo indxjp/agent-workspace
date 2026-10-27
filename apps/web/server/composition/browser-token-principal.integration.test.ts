@@ -221,6 +221,25 @@ describe.skipIf(!hasDatabase)('the browser-token verifier, against PostgreSQL', 
     await expect(installed.identify(bearerRequest(presented))).resolves.toBeNull();
   }, 180_000);
 
+  it('refuses a token while its scoped run is paused at awaiting_approval (ADR-0145 D1)', async () => {
+    const { db, root: opened, workspaceId, principalId, runId, installed } = await fixture();
+    const presented = await issueToken(
+      db,
+      { kind: 'run', id: runId },
+      { workspaceId, principalId },
+    );
+    await expect(installed.identify(bearerRequest(presented))).resolves.not.toBeNull();
+
+    const scope = await opened.scopes.forWorkspaceId(workspaceId);
+    if (scope === null) throw new Error('workspace did not resolve');
+    const runs = opened.runs.forScope(scope);
+    expect((await runs.markRunning(runId)).kind).toBe('moved');
+    const paused = await runs.awaitApproval(runId, { toolName: 'send_email', canonicalCall: '{}' });
+    expect(paused.kind).toBe('moved');
+
+    await expect(installed.identify(bearerRequest(presented))).resolves.toBeNull();
+  }, 180_000);
+
   it('refuses a token once its scoped session is archived', async () => {
     const { db, root: opened, workspaceId, principalId, sessionId, installed } = await fixture();
     const presented = await issueToken(

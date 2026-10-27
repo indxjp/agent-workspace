@@ -189,5 +189,5 @@ checkTool(input: ToolConnectorBody, options?: RequestOptions & { readonly connec
 The body that creates, or re-registers, an `openapi` or `postgres` connector (C15): the
 contract's create body without `dryRun`.
 
-- `Omit<Readonly<{ kind: "openapi"; name: string; document: string; allow: readonly string[]; baseUrl?: string | undefined; auth?: "none" | "bearer" | Readonly<{ header: string; }> | undefined; credential?: string | undefined; dryRun?: true | undefined; }>, "dryRun">`
-- `Omit<Readonly<{ kind: "postgres"; name: string; credential: string; tables: readonly string[]; readOnly: boolean; maxRows?: number | undefined; dryRun?: true | undefined; }>, "dryRun">`
+- `Omit<Readonly<{ kind: "openapi"; name: string; document: string; allow: readonly string[]; baseUrl?: string | undefined; auth?: "bearer" | "none" | Readonly<{ header: string; }> | undefined; credential?: string | undefined; identity?: Readonly<{ secret: string; }> | undefined; dryRun?: true | undefined; }>, "dryRun">`
+- `Omit<Readonly<{ kind: "postgres"; name: string; credential: string; tables: readonly string[]; readOnly: true; maxRows?: number | undefined; dryRun?: true | undefined; }>, "dryRun">`

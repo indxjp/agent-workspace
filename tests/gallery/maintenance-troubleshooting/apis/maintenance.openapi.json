@@ -1,0 +1,83 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "設備保全システム API",
+    "version": "1.0.0",
+    "description": "解決したトラブルを過去トラに記録する。設備・対応者・項目の検査は保全システム自身が行う。"
+  },
+  "servers": [{ "url": "https://maintenance.example.co.jp/api/v1" }],
+  "security": [{ "bearer": [] }],
+  "components": {
+    "securitySchemes": { "bearer": { "type": "http", "scheme": "bearer" } },
+    "schemas": {
+      "Resolution": {
+        "type": "object",
+        "required": ["machineId", "symptom", "cause", "action"],
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "description": "設備番号（PR-02）または設備名（プレス2号機）"
+          },
+          "symptom": { "type": "string", "maxLength": 300 },
+          "cause": { "type": "string", "maxLength": 300 },
+          "action": { "type": "string", "maxLength": 300 },
+          "durationMin": { "type": "integer", "minimum": 1, "maximum": 1440 }
+        }
+      },
+      "Logged": {
+        "type": "object",
+        "required": ["logged", "id", "machineId", "cause", "action", "technician", "citation"],
+        "properties": {
+          "logged": { "type": "boolean" },
+          "id": { "type": "string", "description": "T-0001 形式の過去トラ番号" },
+          "machineId": { "type": "string" },
+          "machineName": { "type": "string" },
+          "date": { "type": "string", "format": "date" },
+          "symptom": { "type": "string" },
+          "cause": { "type": "string" },
+          "action": { "type": "string" },
+          "durationMin": { "type": ["integer", "null"] },
+          "technician": {
+            "type": "string",
+            "description": "サインイン済みの技術者。保全システムが付ける"
+          },
+          "reviewed": { "type": "boolean", "description": "熟練者のレビュー前は false" },
+          "citation": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    }
+  },
+  "paths": {
+    "/resolutions": {
+      "post": {
+        "operationId": "logResolution",
+        "summary": "技術者が確認した解決済みトラブルを過去トラに1件記録する（技術者が承認した呼び出しだけが実行される）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/Resolution" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "記録した（熟練者のレビュー待ち）",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Logged" } }
+            }
+          },
+          "422": {
+            "description": "設備が見つからない、または項目が不正",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

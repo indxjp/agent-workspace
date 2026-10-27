@@ -22,29 +22,33 @@
  * prove that events written by the first instance replay after a process-level composition reset.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
+import fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgentFrameSchema } from '@indx-workspace/contracts/run-events';
+import { RUN_STATUSES } from '@indx-workspace/contracts/runs';
 import { RUN_STATUS_EVENT_NAME, RUN_STATUS_NAMES } from '@indx-workspace/react/run-model';
-import { classifySdkEvent, toAgentFrames } from '@agent-workspace/core';
+import { classifySdkEvent, toAgentFrames } from '@agent-workspace/run-protocol';
 
 import { upgradeEventStream } from './agent-frames';
 import { listRuns as listRunsOverHttp, readRun as readRunOverHttp } from './api';
-import { installRunApi, resetRunApi } from './environment';
+import { InMemoryRunStore } from './memory-store';
+import { createRepositoryRunStore } from './repository-store';
 import {
-  createRepositoryRunStore,
-  InMemoryRunStore,
+  ApprovalDecisionError,
+  IdempotencyKeyTakenError,
   isTerminalRunStatus,
   MAX_RUN_LIST_LIMIT,
   runStatuses,
   SessionBusyError,
   terminalRunStatuses,
+  type ApprovalCall,
   type CreateRunInput,
   type ListRunsInput,
   type RunRecord,
@@ -54,6 +58,7 @@ import {
 } from './store';
 import { PLATFORM_EVENT_NAMES, RUN_STATUS_EVENT } from './sse';
 import type { PlatformEventName, SseEvent, SseWireEvent } from './sse';
+import { installTestRunApi, resetTestRunApi } from '../application-context-fixtures';
 
 /** Take `count` events from a handle, then close it. */
 async function take(events: AsyncIterable<SseEvent>, count: number): Promise<SseEvent[]> {
@@ -155,7 +160,11 @@ describe('the run status vocabulary', () => {
         throw new Error(`${name} not found in packages/core/src/db/schema/runs.ts`);
       return [...(match[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
     };
-    expect([...runStatuses]).toEqual(read('runStatuses'));
+    // Both lists are the contract's `RUN_STATUSES` itself: the schema imports it rather than
+    // restating it (F-12), and `store.ts` re-exports it, so the check is that both do.
+    expect(schema).toContain("import { RUN_STATUSES } from '@indx-workspace/contracts/runs';");
+    expect(schema).toContain('export const runStatuses = RUN_STATUSES;');
+    expect(runStatuses).toBe(RUN_STATUSES);
     expect([...terminalRunStatuses]).toEqual(read('terminalRunStatuses'));
   });
 
@@ -176,29 +185,37 @@ describe('the run status vocabulary', () => {
 });
 
 describe('the run list page-size ceiling', () => {
-  it('is one number written in four places, and they agree', () => {
-    // `MAX_RUN_LIST_LIMIT` exists three times under that name: in the repository, which enforces it
-    // for every direct caller; in `api.ts`, which turns a larger `limit` into `400 invalid_limit`
-    // before any store is reached; and in `store.ts`, so `InMemoryRunStore` refuses what the
-    // repository refuses. The last two are restatements rather than imports for the reason the run
-    // status vocabulary above is — `apps/web` reaches `@agent-workspace/core` through `import type`
-    // only. This test is what stops them from drifting apart silently; the conformance suite's
-    // `listRuns` block is what stops the *message* they refuse with from drifting.
+  it('is one number written in three places, and they agree', () => {
+    // `MAX_RUN_LIST_LIMIT` exists twice under that name: in the repository, which enforces it for
+    // every direct caller, and in `store.ts`, so `InMemoryRunStore` refuses what the repository
+    // refuses and `list-query.ts` turns a larger `limit` into `400 invalid_limit` before any store
+    // is reached. `store.ts` restates the repository's rather than importing it for the reason the
+    // run status vocabulary above is — `apps/web` reaches `@agent-workspace/core` through `import
+    // type` only. This test is what stops them from drifting apart silently; the conformance
+    // suite's `listRuns` block is what stops the *message* they refuse with from drifting.
     const here = path.dirname(fileURLToPath(import.meta.url));
     const declaredIn = (relative: string): number => {
       const source = readFileSync(path.join(here, relative), 'utf8');
-      const match = /const MAX_RUN_LIST_LIMIT = (\d+);/u.exec(source);
+      const match = /const MAX_RUN_LIST_LIMIT\s*=\s*(\d+);/u.exec(source);
       if (match === null) throw new Error(`MAX_RUN_LIST_LIMIT is not declared in ${relative}`);
       return Number(match[1] ?? '');
     };
     expect(declaredIn('../../../../packages/core/src/db/repositories/runs.ts')).toBe(
       MAX_RUN_LIST_LIMIT,
     );
-    expect(declaredIn('./api.ts')).toBe(MAX_RUN_LIST_LIMIT);
-    // The fourth copy, spelled differently and so read separately: `project-detail.tsx` sends it
+    // Declared once in this directory, in `store.ts`: `api.ts`, `service.ts` and `list-query.ts`
+    // import it, so a second declaration there would be a fourth copy to drift.
+    const declaring = readdirSync(here).filter(
+      (file) =>
+        /\.ts$/u.test(file) &&
+        !/\.test\.ts$/u.test(file) &&
+        /MAX_RUN_LIST_LIMIT\s*=/u.test(readFileSync(path.join(here, file), 'utf8')),
+    );
+    expect(declaring).toEqual(['store.ts']);
+    // The third copy, spelled differently and so read separately: `project-detail.tsx` sends it
     // verbatim as `limit=` to this same route, so a lowered ceiling would answer the archive-impact
     // dialog `400 invalid_limit` rather than a page. Read as text, not imported — it is browser
-    // code, and reading the declaration is the pattern the three reads above already use.
+    // code, and reading the declaration is the pattern the read above already uses.
     const archive = readFileSync(path.join(here, '../../components/projects/model.ts'), 'utf8');
     const archiveLimit = /const ARCHIVE_IMPACT_RUN_LIMIT = (\d+);/u.exec(archive);
     if (archiveLimit === null)
@@ -259,6 +276,130 @@ export function describeRunStoreConformance(label: string, make: MakeRunStoreFix
         expect(record?.sessionId).toBe(run.sessionId);
       });
 
+      // ADR-0151: a paused run takes exactly one continuation; a second decision is refused and
+      // creates nothing.
+      it('gives a paused run one continuation and refuses a second decision', async () => {
+        const { store, run, fixture } = await started();
+        await store.markRunning(run.id);
+        await store.awaitApproval(run.id, { toolName: 'send_email', canonicalCall: '{}' });
+        const continuation = { ...fixture.nextRun(), decides: run.id };
+        await store.create(continuation);
+        const second = { ...fixture.nextRun(), decides: run.id };
+
+        await expect(store.create(second)).rejects.toMatchObject({
+          constructor: ApprovalDecisionError,
+          runId: run.id,
+          reason: 'already-decided',
+        });
+        expect(await store.get(second.id)).toBeNull();
+        expect((await store.get(run.id))?.status).toBe('completed');
+        expect((await store.get(continuation.id))?.status).toBe('queued');
+      });
+
+      // ADR-0151, #250: one run per start key, per workspace and principal.
+      it('finds a run by its start key, scoped to its principal, and never frees the key', async () => {
+        const fixture = await make({});
+        const principalId = crypto.randomUUID();
+        const idempotency = { principalId, key: 'retry-1', requestHash: 'h1' };
+        const first = { ...fixture.nextRun(), idempotency };
+        await fixture.store.create(first);
+        const { workspaceId } = first;
+
+        const found = await fixture.store.findByIdempotencyKey(workspaceId, principalId, 'retry-1');
+        expect({ id: found?.run.id, requestHash: found?.requestHash }).toEqual({
+          id: first.id,
+          requestHash: 'h1',
+        });
+        await expect(
+          fixture.store.findByIdempotencyKey(workspaceId, crypto.randomUUID(), 'retry-1'),
+        ).resolves.toBeNull();
+        await expect(
+          fixture.store.findByIdempotencyKey(workspaceId, principalId, 'retry-2'),
+        ).resolves.toBeNull();
+
+        // Not even a finished run frees its key.
+        await fixture.store.finish(first.id, 'completed', null);
+        await expect(fixture.store.create({ ...fixture.nextRun(), idempotency })).rejects.toThrow(
+          IdempotencyKeyTakenError,
+        );
+        const other = { ...fixture.nextRun(), idempotency: { ...idempotency, principalId: 'p2' } };
+        await expect(fixture.store.create(other)).resolves.toMatchObject({ id: other.id });
+      });
+
+      // #1440: both stores give one answer when a held key meets a `decides` that cannot be
+      // decided. The decision is judged first, so the caller hears why the decision failed.
+      it('answers already-decided, not key-taken, for a held key with a decided `decides`', async () => {
+        const fixture = await make({});
+        const idempotency = { principalId: crypto.randomUUID(), key: 'k', requestHash: 'h' };
+        const first = { ...fixture.nextRun(), idempotency };
+        await fixture.store.create(first);
+        await fixture.store.finish(first.id, 'completed', null);
+
+        const refused = await fixture.store
+          .create({ ...fixture.nextRun(), idempotency, decides: first.id })
+          .catch((error: unknown) => error);
+        expect(refused).toBeInstanceOf(ApprovalDecisionError);
+        expect((refused as ApprovalDecisionError).reason).toBe('already-decided');
+      });
+
+      it('leaves the paused run awaiting approval when the continuation’s key is taken', async () => {
+        const fixture = await make({});
+        const call: ApprovalCall = { toolName: 'send_email', canonicalCall: '{"to":"a@b.c"}' };
+        const idempotency = { principalId: crypto.randomUUID(), key: 'k', requestHash: 'h' };
+        const holder = { ...fixture.nextRun(), idempotency };
+        await fixture.store.create(holder);
+        await fixture.store.finish(holder.id, 'completed', null);
+        const paused = fixture.nextRun();
+        await fixture.store.create(paused);
+        await fixture.store.markRunning(paused.id);
+        await fixture.store.awaitApproval(paused.id, call);
+
+        await expect(
+          fixture.store.create({
+            ...fixture.nextRun(),
+            idempotency,
+            decides: paused.id,
+            approvedToolCalls: [call],
+          }),
+        ).rejects.toThrow(IdempotencyKeyTakenError);
+        expect((await fixture.store.get(paused.id))?.status).toBe('awaiting_approval');
+      });
+
+      // ADR-0151: approved calls are consumed when the run leaves `queued`, once.
+      it('stamps approvalsConsumedAt on markRunning only for a run with approved calls', async () => {
+        const fixture = await make({});
+        const call: ApprovalCall = { toolName: 'send_email', canonicalCall: '{"to":"a@b.c"}' };
+        const plain = fixture.nextRun();
+        await fixture.store.create(plain);
+        await fixture.store.markRunning(plain.id);
+        expect((await fixture.store.get(plain.id))?.approvalsConsumedAt).toBeNull();
+        await fixture.store.finish(plain.id, 'completed', null);
+
+        const approved = { ...fixture.nextRun(), approvedToolCalls: [call] };
+        await fixture.store.create(approved);
+        expect((await fixture.store.get(approved.id))?.approvalsConsumedAt).toBeNull();
+        await fixture.store.markRunning(approved.id);
+        const consumed = await fixture.store.get(approved.id);
+        expect(consumed?.approvalsConsumedAt).toBeInstanceOf(Date);
+        expect(consumed?.approvalsConsumedAt).toEqual(consumed?.startedAt);
+      });
+
+      // #1440: two starts with one key on one session race. The loser hears the key is taken, so
+      // the route replays the winner, rather than `session_busy`.
+      it('answers a concurrent start with the same key on one session with key-taken', async () => {
+        const fixture = await make({});
+        const idempotency = { principalId: crypto.randomUUID(), key: 'k', requestHash: 'h' };
+        const results = await Promise.allSettled([
+          fixture.store.create({ ...fixture.nextRun(), idempotency }),
+          fixture.store.create({ ...fixture.nextRun(), idempotency }),
+        ]);
+        expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+        const [lost] = results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason as unknown] : [],
+        );
+        expect(lost).toBeInstanceOf(IdempotencyKeyTakenError);
+      });
+
       it('returns null for a run it has never seen', async () => {
         const fixture = await make({});
         expect(await fixture.store.get(fixture.nextRun().id)).toBeNull();
@@ -309,6 +450,18 @@ export function describeRunStoreConformance(label: string, make: MakeRunStoreFix
         // ever started still gets one rather than a NULL that renders as "NaN s".
         expect(record?.startedAt).toBeInstanceOf(Date);
         expect(record?.error).toBe('the runtime never answered');
+      });
+
+      it('keeps a completed run’s output, and refuses an output on any other ending (ADR-0143)', async () => {
+        const { store, run } = await started();
+        expect((await store.get(run.id))?.output).toBeNull();
+        const output = { text: '{"a":1}', structured: { a: 1 } };
+        await expect(store.finish(run.id, 'failed', 'boom', false, output)).rejects.toThrow(
+          /cannot carry an output/,
+        );
+        expect((await store.get(run.id))?.output).toBeNull();
+        await store.finish(run.id, 'completed', null, false, output);
+        expect((await store.get(run.id))?.output).toEqual(output);
       });
 
       it('refuses to "finish" a run into a non-terminal status', async () => {
@@ -629,9 +782,6 @@ export function describeRunStoreConformance(label: string, make: MakeRunStoreFix
       it('refuses limit 0, 1.5 and 201 by name and serves exactly 200', async () => {
         const fixture = await make({});
         const { workspaceId } = fixture.nextRun();
-        if (fixture.store.listRuns === undefined) {
-          throw new Error(`${label} does not implement listRuns`);
-        }
         const listRuns = fixture.store.listRuns.bind(fixture.store);
         await expect(listRuns(workspaceId, { limit: 0 })).rejects.toThrow(
           'listRuns limit must be a safe positive integer',
@@ -646,6 +796,158 @@ export function describeRunStoreConformance(label: string, make: MakeRunStoreFix
           items: [],
           nextCursor: null,
         });
+      });
+    });
+
+    /**
+     * F-21 property 10: a model-based run of arbitrary `markRunning` / `finish` / `append`
+     * sequences against this implementation. A terminal status is absorbing (status and `endedAt`
+     * never change again, and appends are refused), every appended id is greater than the last,
+     * and the retained stream is strictly increasing and never longer than `maxEventsPerRun`. The
+     * one-run-per-idempotency-key clause (F-09, ADR-0151) is the property after this one. On a
+     * failure fast-check prints the seed and the command sequence.
+     */
+    describe('model-based lifecycle (property)', () => {
+      interface Model {
+        status: RunRecord['status'];
+        endedAt: Date | null;
+        lastId: bigint;
+      }
+      interface Real {
+        readonly store: RunStore;
+        readonly runId: string;
+      }
+
+      const settle = async (model: Model, real: Real): Promise<void> => {
+        const record = await real.store.get(real.runId);
+        expect(record?.status).toBe(model.status);
+        if (!isTerminalRunStatus(model.status)) return;
+        expect(record?.endedAt).toBeInstanceOf(Date);
+        if (model.endedAt === null) model.endedAt = record?.endedAt ?? null;
+        else expect(record?.endedAt).toEqual(model.endedAt);
+      };
+
+      const markRunning: fc.AsyncCommand<Model, Real> = {
+        check: () => true,
+        async run(model, real) {
+          expect(await real.store.markRunning(real.runId)).toBe(model.status === 'queued');
+          if (model.status === 'queued') model.status = 'running';
+          await settle(model, real);
+        },
+        toString: () => 'markRunning',
+      };
+
+      const finish = (
+        status: (typeof terminalRunStatuses)[number],
+        emit: boolean,
+      ): fc.AsyncCommand<Model, Real> => ({
+        check: () => true,
+        async run(model, real) {
+          await real.store.finish(
+            real.runId,
+            status,
+            status === 'completed' ? null : 'stopped',
+            emit,
+          );
+          if (!isTerminalRunStatus(model.status)) model.status = status;
+          await settle(model, real);
+        },
+        toString: () => `finish(${status}, ${String(emit)})`,
+      });
+
+      const append = (data: number): fc.AsyncCommand<Model, Real> => ({
+        check: () => true,
+        async run(model, real) {
+          const result = await real.store.append(real.runId, { type: 'assistant', data });
+          if (isTerminalRunStatus(model.status)) {
+            expect(result.kind).toBe('rejected');
+          } else {
+            if (result.kind !== 'appended') throw new Error(`append refused: ${result.reason}`);
+            expect(result.event.id > model.lastId).toBe(true);
+            model.lastId = result.event.id;
+          }
+          await settle(model, real);
+        },
+        toString: () => `append(${String(data)})`,
+      });
+
+      const commands = fc.commands(
+        [
+          fc.constant(markRunning),
+          fc
+            .tuple(fc.constantFrom(...terminalRunStatuses), fc.boolean())
+            .map(([s, e]) => finish(s, e)),
+          fc.integer({ min: 0, max: 99 }).map(append),
+        ],
+        { maxCommands: 12 },
+      );
+
+      it('keeps terminal absorbing, ids increasing and retention within its bound', async () => {
+        await fc.assert(
+          fc.asyncProperty(fc.integer({ min: 1, max: 4 }), commands, async (max, sequence) => {
+            const { store, run } = await started(max);
+            const real: Real = { store, runId: run.id };
+            const model: Model = { status: 'queued', endedAt: null, lastId: 0n };
+            await fc.asyncModelRun(() => ({ model, real }), sequence);
+            if (!isTerminalRunStatus(model.status)) await store.finish(run.id, 'completed', null);
+            const handle = await store.openStream(run.id, null);
+            if (handle === null) throw new Error('run had no event stream');
+            const ids: bigint[] = [];
+            for await (const event of handle.events) ids.push(event.id);
+            expect(ids.length).toBeLessThanOrEqual(max);
+            ids.slice(1).forEach((id, index) => expect(id > (ids[index] ?? id)).toBe(true));
+          }),
+          { numRuns: 25 },
+        );
+      });
+    });
+
+    /**
+     * F-09 / ADR-0151: whatever sequence of starts reuses a small pool of keys, each key names
+     * exactly one run — the first start's, with the first start's request hash — and every later
+     * start under it is refused. Each run is finished before the next start, so the session is free
+     * and only the key decides.
+     */
+    describe('start keys (property)', () => {
+      it('gives each key exactly one run, the first one', async () => {
+        await fc.assert(
+          fc.asyncProperty(
+            fc.array(fc.tuple(fc.integer({ min: 0, max: 2 }), fc.constantFrom('h1', 'h2')), {
+              maxLength: 8,
+            }),
+            async (starts) => {
+              const fixture = await make({});
+              const principalId = crypto.randomUUID();
+              const model = new Map<string, { runId: string; requestHash: string }>();
+              let workspaceId = '';
+              for (const [index, requestHash] of starts) {
+                const key = `key-${String(index)}`;
+                const run = {
+                  ...fixture.nextRun(),
+                  idempotency: { principalId, key, requestHash },
+                };
+                workspaceId = run.workspaceId;
+                const held = model.get(key);
+                if (held === undefined) {
+                  await fixture.store.create(run);
+                  await fixture.store.finish(run.id, 'completed', null);
+                  model.set(key, { runId: run.id, requestHash });
+                } else {
+                  await expect(fixture.store.create(run)).rejects.toThrow(IdempotencyKeyTakenError);
+                }
+              }
+              for (const [key, held] of model) {
+                const found = await fixture.store.findByIdempotencyKey(
+                  workspaceId,
+                  principalId,
+                  key,
+                );
+                expect({ runId: found?.run.id, requestHash: found?.requestHash }).toEqual(held);
+              }
+            },
+          ),
+          { numRuns: 20 },
+        );
       });
     });
   });
@@ -1232,14 +1534,9 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
         findRunWorkspace: (runId: string): Promise<string | null> =>
           core.findRunWorkspace(db, runId),
       });
-      // `listRuns` is optional on the port (see `store.ts`'s own comment on why); the
-      // repository-backed implementation always supplies it. Wrapped in an arrow function rather
-      // than referenced directly, both to check that once and to avoid detaching a method from
-      // its receiver (`@typescript-eslint/unbound-method`).
+      // Wrapped in an arrow function rather than referenced directly, to avoid detaching a method
+      // from its receiver (`@typescript-eslint/unbound-method`).
       const listRuns = (workspaceId: string, input: ListRunsInput): Promise<RunListPage> => {
-        if (acmeStore.listRuns === undefined) {
-          throw new Error('createRepositoryRunStore did not implement listRuns');
-        }
         return acmeStore.listRuns(workspaceId, input);
       };
       // The *repository* directly, scope-bound to Acme — unlike `RunStore.get()`, which this
@@ -1446,9 +1743,6 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
       const db = isolated.db;
       const { workspaceId, sessionId } = await seedWorkspace();
       const store = makeStore();
-      if (store.listRuns === undefined) {
-        throw new Error('createRepositoryRunStore did not implement listRuns');
-      }
 
       const marker = crypto.randomUUID();
       const ids = Array.from({ length: 6 }, () => crypto.randomUUID());
@@ -1480,9 +1774,6 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
     it('keyset pagination does not skip runs created by concurrent RunRepository.create() calls (round 2 finding 1: Promise.all)', async () => {
       const { workspaceId, userId, principalId, agentId } = await seedWorkspace();
       const store = makeStore();
-      if (store.listRuns === undefined) {
-        throw new Error('createRepositoryRunStore did not implement listRuns');
-      }
 
       // One session per run: a session takes one run at a time.
       const ids = Array.from({ length: 40 }, () => crypto.randomUUID());
@@ -1523,9 +1814,36 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
       await expect(start(crypto.randomUUID())).resolves.toMatchObject({ status: 'queued' });
     });
 
+    it('serves a run core holds at awaiting_approval, with the call it waits on', async () => {
+      const { workspaceId, agentId, sessionId } = await seedWorkspace();
+      const store = makeStore();
+      const run = await store.create({
+        engine: 'claude-agent-sdk',
+        id: crypto.randomUUID(),
+        workspaceId,
+        agentId,
+        sessionId,
+      });
+      await store.markRunning(run.id);
+      const scope = await core
+        .createDatabaseWorkspaceScopeResolver(isolated.db)
+        .forWorkspaceId(workspaceId);
+      if (scope === null) throw new Error('fixture workspace did not resolve');
+      const paused = await core
+        .createDatabaseRunRepositoryProvider(isolated.db)
+        .forScope(scope)
+        .awaitApproval(run.id, { toolName: 'send_email', canonicalCall: '{}' });
+      expect(paused.kind).toBe('moved');
+
+      await expect(store.get(run.id)).resolves.toMatchObject({
+        status: 'awaiting_approval',
+        pendingApproval: { toolName: 'send_email', canonicalCall: '{}' },
+      });
+    });
+
     /**
      * The same defect again, this time through the HTTP route's base64url-encoded cursor
-     * (`api.ts`'s `encodeRunListCursor`/`decodeRunListCursor`) rather than the repository's cursor
+     * (`list-query.ts`'s `encodeRunListCursor`/`decodeRunListCursor`) rather than the repository's cursor
      * object directly — round 2 finding 1 named `api.ts:334`'s `toISOString()` as an independent
      * place the same truncation happened, on every cursor this route ever handed a client.
      */
@@ -1540,7 +1858,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
         .insert(core.runs)
         .values(ids.map((id) => ({ id, workspaceId, sessionId, model: marker })));
 
-      installRunApi({
+      installTestRunApi({
         authenticate: () =>
           Promise.resolve({
             principalId,
@@ -1563,7 +1881,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
         expect(new Set(collected).size).toBe(collected.length);
         expect(collected.sort()).toEqual([...ids].sort());
       } finally {
-        resetRunApi();
+        resetTestRunApi();
       }
     });
 
@@ -1575,7 +1893,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
       body: () => Promise<void>,
     ): Promise<void> {
       const principalId = requireMembershipPrincipalId(workspaceId, userId);
-      installRunApi({
+      installTestRunApi({
         authenticate: () =>
           Promise.resolve({
             principalId,
@@ -1594,7 +1912,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
       try {
         await body();
       } finally {
-        resetRunApi();
+        resetTestRunApi();
       }
     }
 
@@ -2122,11 +2440,8 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
         };
       });
 
-      /** The fixture's `RunStore.listRuns`, or a failure naming the store that lacks it. */
+      /** The fixture's `RunStore.listRuns` for its own workspace. */
       const list = (input: ListRunsInput): Promise<RunListPage> => {
-        if (fixture.store.listRuns === undefined) {
-          throw new Error('createRepositoryRunStore did not implement listRuns');
-        }
         return fixture.store.listRuns(fixture.workspaceId, input);
       };
       const listIds = async (input: ListRunsInput): Promise<string[]> =>
@@ -2252,7 +2567,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
           body: () => Promise<void>,
         ): Promise<void> => {
           const principalId = requireMembershipPrincipalId(fixture.workspaceId, principal.userId);
-          installRunApi({
+          installTestRunApi({
             authenticate: () =>
               Promise.resolve({
                 ...principal,
@@ -2270,7 +2585,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
           try {
             await body();
           } finally {
-            resetRunApi();
+            resetTestRunApi();
           }
         };
         const asOwner = (body: () => Promise<void>): Promise<void> =>
@@ -2439,9 +2754,6 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
         const db = isolated.db;
         const { workspaceId, userId, sessionId } = await seedWorkspace();
         const store = makeStore();
-        if (store.listRuns === undefined) {
-          throw new Error('createRepositoryRunStore did not implement listRuns');
-        }
         const listRuns = store.listRuns.bind(store);
         const model = crypto.randomUUID();
         const micros = ['122999', '123000', '123999', '124000'] as const;
@@ -2511,7 +2823,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
 /**
  * **Nothing that a deployment runs constructs {@link InMemoryRunStore}.**
  *
- * Round 1 of verification found `store.ts` claiming that `apps/web/instrumentation.ts` "refuses to
+ * Round 1 of verification found `store.ts` (now split into `store.ts` and `memory-store.ts`) claiming that `apps/web/instrumentation.ts` "refuses to
  * install it unless an operator asked for it by name", of a mechanism that did not exist. Round 2
  * found its replacement — "its two real consumers are this file's own conformance suite and
  * `…/acceptance/instrumentation.ts`" — also false: there are more importers than that, and the
@@ -2525,7 +2837,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
  *   1. every tracked path is a module this block parses or a file no `import` specifier can
  *      resolve to, decided by extension; an extension in neither set fails by name;
  *   2. every module that imports the name `InMemoryRunStore` from a specifier resolving to
- *      `store.ts` is either a `*.test.ts`/`*.test.tsx` suite, or a harness — a module that names
+ *      `memory-store.ts` is either a `*.test.ts`/`*.test.tsx` suite, or a harness — a module that names
  *      the `AW_ACCEPTANCE_HARNESS` environment variable it refuses to run without. Any other
  *      importer is a hard failure naming the file, because that is a module a deployment could
  *      load.
@@ -2588,9 +2900,9 @@ describe.skipIf(!hasDatabase)('the PostgreSQL run store', () => {
  *
  * A call, a construction or a tagged template that is neither of those two constructs does not fall
  * out of the walk unread. It is asked one question — *is this call handed a string that resolves to
- * `store.ts`, by a callee this file cannot vouch for?* — and it leaves with one of two verdicts:
- * **refused**, naming the file, the callee as written and the module; or **decided**, meaning no
- * string this gate can read at that call site names `store.ts`.
+ * `memory-store.ts`, by a callee this file cannot vouch for?* — and it leaves with one of two
+ * verdicts: **refused**, naming the file, the callee as written and the module; or **decided**,
+ * meaning no string this gate can read at that call site names `memory-store.ts`.
  *
  * "Vouched for" is not a list of callee names. It is: the callee is rooted at an identifier this
  * file declares and does not bind straight to another reference. So a property chain ending in
@@ -2630,8 +2942,10 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
     return toPosix(path.relative(realRoot, real));
   };
 
-  /** This module, repository-relative — derived from this file's own path, not written down. */
-  const storeModule = relativeReal(fileURLToPath(import.meta.url).replace(/\.test\.ts$/u, '.ts'));
+  /** The in-memory store module, repository-relative — derived from this file's own path. */
+  const storeModule = relativeReal(
+    fileURLToPath(import.meta.url).replace(/store\.test\.ts$/u, 'memory-store.ts'),
+  );
 
   const MODULE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
   const NON_MODULE_EXTENSIONS = new Set([
@@ -2661,6 +2975,8 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
     '.md',
     '.mdx',
     '.npmrc',
+    // A manual a tool reads (tests/gallery/manual-search/data/manuals).
+    '.pdf',
     '.png',
     '.ps1',
     '.sh',
@@ -2860,7 +3176,7 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
   };
 
   /**
-   * Does this specifier, written in `from`, name `store.ts` under **any** project whose program
+   * Does this specifier, written in `from`, name `memory-store.ts` under **any** project whose program
    * contains `from`, or under the widened set? The union is deliberate: adding a configuration file
    * to the tree adds contexts and removes none, and `resolutionsOf` is monotone in its contexts, so
    * an importer this gate already classifies cannot be taken away by adding one. That sentence is
@@ -2870,7 +3186,7 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
     resolutionsOf(from, specifier).includes(storeModule);
 
   /**
-   * Does one string read at an arbitrary call site name `store.ts`?
+   * Does one string read at an arbitrary call site name `memory-store.ts`?
    *
    * The same two questions `resolutionsOf` asks — the compiler once per context, then the
    * filesystem — with neither of its two failures. A string handed to an arbitrary call is not
@@ -3042,7 +3358,7 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
   /**
    * The one computed dynamic import the Owner decided, recorded in ADR-0115 and held identically
    * by `packages/core/src/db/repositories/database-reachability.test.ts`: the module it names is
-   * chosen by the developer at run time and is never `store.ts`. Exact repository paths only,
+   * chosen by the developer at run time and is never `memory-store.ts`. Exact repository paths only,
    * never a glob; the assertion below pins the list to exactly this entry.
    */
   const COMPUTED_IMPORT_DECISIONS: ReadonlyMap<string, string> = new Map([
@@ -3064,8 +3380,8 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
 
     /**
      * A static `import` declaration is the only shape this gate can read a bound name out of, so
-     * every other way of reaching `store.ts` is a hard failure rather than a quiet `false`: a
-     * `const { InMemoryRunStore } = await import('./store')` in a route handler would otherwise be
+     * every other way of reaching `memory-store.ts` is a hard failure rather than a quiet `false`: a
+     * `const { InMemoryRunStore } = await import('./memory-store')` in a route handler would otherwise be
      * invisible to a classifier that looked only at import declarations (ADR-0027 clause 3).
      */
     const walk = (node: ts.Node): void => {
@@ -3091,7 +3407,7 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
         // clause 1). The first arm reads a specifier out of the two constructs this gate names.
         // The `else` does not ask whether the callee is a resolver — no list of callee names ever
         // finishes answering that — it asks whether the call is handed a string that resolves to
-        // `store.ts` by a callee this file cannot vouch for, and refuses that.
+        // `memory-store.ts` by a callee this file cannot vouch for, and refuses that.
         const callee = ts.isTaggedTemplateExpression(node) ? node.tag : node.expression;
         const dynamic = ts.isCallExpression(node) && callee.kind === ts.SyntaxKind.ImportKeyword;
         const required =
@@ -3120,19 +3436,19 @@ describe('nothing a deployment loads constructs the in-memory run store', () => 
             }
           }
           // The other arm, and a decision rather than a fall-through: no string this gate can read
-          // at this call site resolves to `store.ts`, so at this call site nothing names it. What
+          // at this call site resolves to `memory-store.ts`, so at this call site nothing names it. What
           // that leaves outside is in the header — a specifier arriving through a parameter, a
           // computation, or the source text handed to `eval`.
         } else {
           if (argument === undefined || !ts.isStringLiteralLike(argument)) {
             // A decided exception (ADR-0115), for the one file and the dynamic kind it names: it
-            // is read as having no edge from this call, so nothing here names `store.ts`.
+            // is read as having no edge from this call, so nothing here names `memory-store.ts`.
             if (dynamic && COMPUTED_IMPORT_DECISIONS.has(from)) {
               ts.forEachChild(node, walk);
               return;
             }
             // The specifier is a run-time value, so this gate cannot tell whether it names
-            // `store.ts`. In verification round 3 a module that put `'./store'` in a `const` and
+            // `memory-store.ts`. In verification round 3 a module that put `'./store'` in a `const` and
             // awaited a dynamic import of that binding constructed the class, while a check for a
             // string literal argument reported nothing.
             throw new Error(

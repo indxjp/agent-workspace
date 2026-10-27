@@ -5,7 +5,7 @@ import {
   shareRunCharges,
   shareViews,
   shares,
-  terminalRunStatuses,
+  stoppedRunStatuses,
   workspaces,
   type NewShare,
   type Share,
@@ -83,7 +83,7 @@ async function countInFlightRuns(
       and(
         eq(shareRunCharges.workspaceId, workspaceId),
         eq(shareRunCharges.shareId, shareId),
-        notInArray(runs.status, [...terminalRunStatuses]),
+        notInArray(runs.status, [...stoppedRunStatuses]),
       ),
     );
   return Number(rows[0]?.value ?? 0);

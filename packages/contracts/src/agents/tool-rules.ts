@@ -130,6 +130,150 @@ export const GrantingToolRuleSchema = z.string().superRefine((value, ctx) => {
   }
 });
 
+/** Whether `toolName` matches `glob`, where `*` is any run of characters and `?` any one. */
+function globMatches(glob: string, toolName: string): boolean {
+  const source = Array.from(glob, (char) => {
+    if (char === '*') return '[\\s\\S]*';
+    if (char === '?') return '[\\s\\S]';
+    return char.replace(/[\\^$.+()[\]{}|]/g, '\\$&');
+  }).join('');
+  return new RegExp(`^${source}$`, 'u').test(toolName);
+}
+
+/**
+ * Whether `rule` names `toolName`, by tool name alone. A glob head (`mcp__gh__*`) matches by
+ * pattern, any other rule by equality. A scoped rule (`Bash(git *)`) covers its whole tool: this
+ * decision never sees the call's input, and over-matching asks too often where under-matching would
+ * skip an approval.
+ */
+function ruleCoversTool(rule: string, toolName: string): boolean {
+  const head = toolRuleHead(rule);
+  return TOOL_RULE_GLOB_CHARS.test(head) ? globMatches(head, toolName) : head === toolName;
+}
+
+/**
+ * Whether a call to `toolName` needs a human's approval under `rules` (ADR-0145 D3). The one
+ * decision: the engine's `canUseTool` and the gateway's write backstop both call it, so they cannot
+ * disagree. Pure; it reads the tool name only.
+ */
+export function needsApproval(rules: readonly string[], toolName: string): boolean {
+  return rules.some((rule) => ruleCoversTool(rule, toolName));
+}
+
+/**
+ * A rule that is allowed to *require approval*: `engine.requireApproval` (ADR-0145 D3). A granting
+ * rule, minus the scoped form: {@link needsApproval} decides by tool name, so `Bash(git push *)`
+ * could only be honoured by gating every `Bash` call, and a rule is refused rather than widened.
+ */
+export const RequireApprovalRuleSchema = GrantingToolRuleSchema.superRefine((value, ctx) => {
+  const kind = parseAgentToolRule(value).kind;
+  if (kind === 'scoped') {
+    ctx.addIssue({
+      code: 'custom',
+      message: `${JSON.stringify(value)} has a '(specifier)'. Approval is decided by tool name, so name the whole tool: ${JSON.stringify(toolRuleHead(value))}.`,
+    });
+  }
+  // Claude Code permission rules match a connector tool only by exact name or `mcp__<server>__*`, so
+  // the `ask` rule a partial glob compiles to would never match and a workspace allow rule would win.
+  if (kind === 'mcp-glob') {
+    const rest = value.slice(TOOL_RULE_MCP_PREFIX.length);
+    const server = rest.slice(0, rest.indexOf('__'));
+    if (rest !== `${server}__*`) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `${JSON.stringify(value)} is a partial connector glob. Claude Code matches a connector tool only by its exact name or by 'mcp__${server}__*', so name the tool or gate the whole server.`,
+      });
+    }
+  }
+});
+
+/**
+ * The Claude tools an `Edit` / `Edit(path)` allow rule approves: Claude Code checks every built-in
+ * file write against `Edit` rules, so `autoApprove: ['Edit(//ws/**)']` approves a `Write` call too.
+ */
+const CLAUDE_EDIT_RULE_TOOLS: readonly string[] = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'];
+
+/**
+ * Whether the auto-approval `approved` and the gate `required` could both match one tool: each is
+ * tested against the other's tool name, and an `Edit` rule against every tool it approves
+ * ({@link CLAUDE_EDIT_RULE_TOOLS}).
+ */
+export function approvalOverlapsGate(approved: string, required: string): boolean {
+  const approvedHead = toolRuleHead(approved);
+  return (
+    ruleCoversTool(approved, toolRuleHead(required)) ||
+    ruleCoversTool(required, approvedHead) ||
+    (approvedHead === 'Edit' &&
+      CLAUDE_EDIT_RULE_TOOLS.some((tool) => ruleCoversTool(required, tool)))
+  );
+}
+
+/**
+ * The indexes of `requireApproval` rules that also match an `autoApprove` rule (ADR-0145 D3: "a tool
+ * that matches both lists is refused when the agent is saved"), by {@link approvalOverlapsGate}.
+ */
+export function conflictingApprovalRules(
+  autoApprove: readonly string[],
+  requireApproval: readonly string[],
+): number[] {
+  // ponytail: two partial globs (`mcp__gh__a*`, `mcp__gh__*b`) can overlap unreported; safe at run time
+  // because the Claude adapter's `splitApprovals` also moves prefix-compatible globs. Upgrade: glob intersection.
+  const conflicts: number[] = [];
+  for (const [index, required] of requireApproval.entries()) {
+    if (autoApprove.some((approved) => approvalOverlapsGate(approved, required))) {
+      conflicts.push(index);
+    }
+  }
+  return conflicts;
+}
+
+/**
+ * The canonical JSON text of a JSON value (RFC 8785): object members sorted by UTF-16 code unit,
+ * no whitespace, numbers and strings as ECMAScript serialises them (`-0` is `0`). Anything that is
+ * not JSON throws rather than being dropped or coerced, so two different values never share a key.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError(`${String(value)} is not a JSON number`);
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    const items: string[] = [];
+    for (let index = 0; index < value.length; index += 1) {
+      if (!(index in value)) throw new TypeError(`array hole at index ${index}`);
+      items.push(canonicalJson(value[index]));
+    }
+    return `[${items.join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const prototype: unknown = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError('only plain objects are JSON values');
+    }
+    const members = Object.entries(value)
+      .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+      .map(([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`);
+    return `{${members.join(',')}}`;
+  }
+  throw new TypeError(`a ${typeof value} is not a JSON value`);
+}
+
+/**
+ * The canonical text of one tool call, `{"input":…,"name":…}` in RFC 8785 canonical JSON, so one
+ * approval binds a tool name and its exact arguments (ADR-0145 D2.1). It is not hashed; the digest is
+ * taken where the request is stored.
+ *
+ * @throws {TypeError} when `input` is not a JSON value (`undefined`, a non-finite number, a bigint, a
+ *   function, a symbol, a non-plain object such as a `Date` or `Map`, an array hole). A caller deciding
+ *   whether to run a call must treat the throw as "needs approval", never as "allowed".
+ */
+export function canonicalCall(name: string, input: unknown): string {
+  return canonicalJson({ input, name });
+}
+
 /** A rule that is allowed to *remove* something: `disallowedTools`. The wildcard arm is legitimate here. */
 export const DenyingToolRuleSchema = z.string().superRefine((value, ctx) => {
   const parsed = parseAgentToolRule(value);
