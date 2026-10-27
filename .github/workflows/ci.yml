@@ -853,7 +853,7 @@ jobs:
         run: |
           set -euo pipefail
           # MS-A2 runs several jobs at once: the container is named per runner and gets a free port.
-          name="aw-ci-s3-$RUNNER_NAME"
+          name="aw-ci-s3-${RUNNER_NAME// /-}"
           docker rm -f "$name" > /dev/null 2>&1 || true
           docker run --rm -d --name "$name" \
             -e AWS_ACCESS_KEY_ID=agent_workspace -e AWS_SECRET_ACCESS_KEY=agent_workspace \
@@ -885,13 +885,13 @@ jobs:
           set -euo pipefail
           # Named per runner, on free ports (MS-A2 runs several jobs at once). fake-gcs-server
           # listens on the same port it publishes, because its -external-url must match it.
-          docker rm -f "aw-ci-azurite-$RUNNER_NAME" "aw-ci-gcs-$RUNNER_NAME" > /dev/null 2>&1 || true
-          docker run --rm -d --name "aw-ci-azurite-$RUNNER_NAME" -p 127.0.0.1::10000 \
+          docker rm -f "aw-ci-azurite-${RUNNER_NAME// /-}" "aw-ci-gcs-${RUNNER_NAME// /-}" > /dev/null 2>&1 || true
+          docker run --rm -d --name "aw-ci-azurite-${RUNNER_NAME// /-}" -p 127.0.0.1::10000 \
             mcr.microsoft.com/azure-storage/azurite@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5 \
             azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
-          azurite="$(docker port "aw-ci-azurite-$RUNNER_NAME" 10000/tcp | head -1 | sed 's/.*://')"
+          azurite="$(docker port "aw-ci-azurite-${RUNNER_NAME// /-}" 10000/tcp | head -1 | sed 's/.*://')"
           gcs="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
-          docker run --rm -d --name "aw-ci-gcs-$RUNNER_NAME" -p "127.0.0.1:$gcs:$gcs" \
+          docker run --rm -d --name "aw-ci-gcs-${RUNNER_NAME// /-}" -p "127.0.0.1:$gcs:$gcs" \
             fsouza/fake-gcs-server@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef \
             -scheme http -backend memory -port "$gcs" -external-url "http://127.0.0.1:$gcs"
           # Azurite answers an unauthenticated request with an HTTP status, so any answer means up.
@@ -1090,7 +1090,7 @@ jobs:
       # MS-A2 is not thrown away after the job, so the emulators would keep running.
       - name: Stop the object-store emulators
         if: always()
-        run: docker rm -f "aw-ci-s3-$RUNNER_NAME" "aw-ci-azurite-$RUNNER_NAME" "aw-ci-gcs-$RUNNER_NAME" > /dev/null 2>&1 || true
+        run: docker rm -f "aw-ci-s3-${RUNNER_NAME// /-}" "aw-ci-azurite-${RUNNER_NAME// /-}" "aw-ci-gcs-${RUNNER_NAME// /-}" > /dev/null 2>&1 || true
 
   # The release checks that used to follow the tests in heavy-checks: none of them reads the
   # PostgreSQL or S3 service, so they run on their own runner beside the test shards. The image
@@ -2140,12 +2140,12 @@ jobs:
         run: |
           set -euo pipefail
           network="$(docker inspect "$(docker compose ps -q web)" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{end}}')"
-          docker run --detach --rm --name "aw-e2e-mcp-$RUNNER_NAME" --network-alias aw-e2e-mcp --network "$network"             --volume "$PWD:/workspace:ro" --workdir /workspace             --env E2E_MCP_HOST=0.0.0.0 node:24-alpine node tests/e2e/mcp-fixture.mjs
+          docker run --detach --rm --name "aw-e2e-mcp-${RUNNER_NAME// /-}" --network-alias aw-e2e-mcp --network "$network"             --volume "$PWD:/workspace:ro" --workdir /workspace             --env E2E_MCP_HOST=0.0.0.0 node:24-alpine node tests/e2e/mcp-fixture.mjs
           for attempt in $(seq 1 30); do
-            docker exec "aw-e2e-mcp-$RUNNER_NAME" wget -qO- http://127.0.0.1:4319/healthz && exit 0
+            docker exec "aw-e2e-mcp-${RUNNER_NAME// /-}" wget -qO- http://127.0.0.1:4319/healthz && exit 0
             sleep 1
           done
-          docker logs "aw-e2e-mcp-$RUNNER_NAME"
+          docker logs "aw-e2e-mcp-${RUNNER_NAME// /-}"
           exit 1
 
       # The harness drives a real model: the repository secret ANTHROPIC_API_KEY reaches this step
@@ -2211,7 +2211,7 @@ jobs:
       - name: Tear down
         if: always()
         run: |
-          docker rm --force "aw-e2e-mcp-$RUNNER_NAME" || true
+          docker rm --force "aw-e2e-mcp-${RUNNER_NAME// /-}" || true
           # This run's sandboxes and proxies, found by their run-unique images, then the images.
           for image in "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE"; do
             docker ps --all --quiet --filter "ancestor=$image" | xargs --no-run-if-empty docker rm --force
@@ -2295,7 +2295,7 @@ jobs:
         run: |
           set -euo pipefail
           # MS-A2 runs several jobs at once: the container is named per runner and gets a free port.
-          name="aw-ci-s3-$RUNNER_NAME"
+          name="aw-ci-s3-${RUNNER_NAME// /-}"
           docker rm -f "$name" > /dev/null 2>&1 || true
           docker run --rm -d --name "$name" \
             -e AWS_ACCESS_KEY_ID=agent_workspace -e AWS_SECRET_ACCESS_KEY=agent_workspace \
@@ -2343,7 +2343,7 @@ jobs:
       # MS-A2 is not thrown away after the job, so the S3 test server would keep running.
       - name: Stop the S3 test server
         if: always() && matrix.suite.s3
-        run: docker rm -f "aw-ci-s3-$RUNNER_NAME" > /dev/null 2>&1 || true
+        run: docker rm -f "aw-ci-s3-${RUNNER_NAME// /-}" > /dev/null 2>&1 || true
 
   browser:
     name: Browser keyboard and accessibility smoke
