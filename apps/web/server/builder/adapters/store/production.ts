@@ -94,6 +94,7 @@ export function createAgentStore(deps: AgentStoreDependencies): AgentStorePort {
             principalId: principal.principalId,
             ownerPrincipalId: principal.ownerPrincipalId,
             userId: principal.userId,
+            role: principal.role,
             actorLabel: actor,
             ...(req.createdByAgent === undefined
               ? {}
@@ -130,7 +131,12 @@ export function createAgentStore(deps: AgentStoreDependencies): AgentStorePort {
       const pointed = await setAgentPointer(
         { environment: 'local', version: number, expectedVersion: req.baseVersion },
         agent,
-        { principalId: principal.principalId, userId: principal.userId, actor },
+        {
+          principalId: principal.principalId,
+          userId: principal.userId,
+          role: principal.role,
+          actor,
+        },
         { ...pipeline, store },
       );
       if (pointed.status === 200) return { ok: true, agentId: agent.id, version: number };

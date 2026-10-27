@@ -55,7 +55,9 @@ import {
   surfaceNameTaken,
   withReferenceRetry,
 } from './problems';
+import { builderNameRefusal } from '../agents/builder-name';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
+import type { Role } from '../rbac/roles';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import type { StorageConnectionLookup } from './storage-grants';
 import type { WorkspaceAgentVersionStore } from './store';
@@ -74,6 +76,8 @@ export interface CreateFromVersionOwner {
   readonly principalId: string;
   readonly ownerPrincipalId: string;
   readonly userId: string | null;
+  /** The actor's workspace role, which decides whether a reserved name may be given (#1851); absent is a Member. */
+  readonly role?: Role | undefined;
   /** The actor's audit label, for the `storage-grant-changed` row of the first version. */
   readonly actorLabel: string;
   /** Marks the new agent as this built-in, in the insert that creates it (#1848). */
@@ -147,6 +151,8 @@ export async function createAgentFromVersion(
   const { policyToStore } = validated;
   const { store } = dependencies;
   const { definition } = draft.body;
+  const reserved = builderNameRefusal(dependencies.ceiling, owner.role, definition.agent.name);
+  if (reserved !== null) return reserved;
 
   if (request.dryRun === true) {
     const name = definition.agent.name;

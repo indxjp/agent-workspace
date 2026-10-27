@@ -653,11 +653,13 @@ Every operation the item routes of one agent serve, named for the built-in refus
 
 ## BUILTIN_AGENT_PROBLEM_CODES
 
-Problem codes of the built-in agents, with their HTTP status.
+Problem codes of the built-in agents, with their HTTP status: the Builder is read-only, and a name
+the deployment's `builder.allow` lists is for a workspace Owner or Admin to give (#1851).
 
 | Key | Value |
 | --- | --- |
 | `builtin_agent_read_only` | `403` |
+| `builder_name_reserved` | `403` |
 
 ## BuiltinAgentKey
 
@@ -684,6 +686,11 @@ Problem codes of the built-in agents, with their HTTP status.
 - `"start-evaluation-run"`
 - `"export"`
 - `"export-archive"`
+
+## BuiltinAgentProblemCode
+
+- `"builtin_agent_read_only"`
+- `"builder_name_reserved"`
 
 ## canonicalCall
 

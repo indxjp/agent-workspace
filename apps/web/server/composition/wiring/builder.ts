@@ -11,6 +11,7 @@ import {
   productionBuilderPorts,
   type BuilderRunDatabase,
 } from '../../builder/transport/composition';
+import { createAllowedOwnerWarning } from '../../builder/transport/allowed-owner-warning';
 import { createBuilderCallerVerifier, type BuilderDoor } from '../../builder/transport/mcp';
 import type { Connectors } from '../../connectors/runtime';
 import type { Models } from '../../models/runtime';
@@ -21,6 +22,7 @@ import type { Runtimes } from '../../runtimes/runtime';
 import { catalogNotConfigured, listSkillsWithIds } from '../../skills/service';
 import type { Skills } from '../../skills/runtime';
 import type { StorageConnections } from '../../storage-connections/runtime';
+import { log } from '../../telemetry/logger';
 import { openToolBundleLookup } from '../../tool-bundles/http';
 
 type Scope = NonNullable<Awaited<ReturnType<AuditDeps['scopes']['forWorkspaceId']>>>;
@@ -65,6 +67,11 @@ export function wireBuilder(input: BuilderWiringInput): BuilderDoor {
             database: root,
             directory: input.directory,
             agents: input.agents,
+            ceiling: input.policyCeiling,
+            onAllowedAgent: createAllowedOwnerWarning({
+              directory: input.directory,
+              warn: (message, fields) => log.warn(message, fields),
+            }),
           },
     ),
     ports: !serving

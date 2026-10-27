@@ -36,6 +36,8 @@ interface Registered {
   revoked: boolean;
 }
 
+type AgentRow = Partial<Pick<AgentRecord, 'builtin' | 'name' | 'createdByAgent'>>;
+
 interface RunRow {
   readonly sessionId: string;
   readonly workspaceId: string;
@@ -54,13 +56,11 @@ function setup(): {
     registerAs?: { readonly runId?: string },
   ) => Promise<string>;
   readonly tokens: ReturnType<typeof createRunTokenCodec>;
-  readonly agentRows: Map<string, Pick<AgentRecord, 'builtin'>>;
+  readonly agentRows: Map<string, AgentRow>;
   readonly deps: RunCallerDeps<WorkspaceScope>;
 } {
   const now = { value: START };
-  const agentRows = new Map<string, Pick<AgentRecord, 'builtin'>>([
-    [AGENT, { builtin: 'builder' }],
-  ]);
+  const agentRows = new Map<string, AgentRow>([[AGENT, { builtin: 'builder' }]]);
   const tokens = createRunTokenCodec({ secret: SECRET, now: () => now.value });
   const scopes = createInMemoryWorkspaceScopeResolver([
     { id: WORKSPACE, slug: WORKSPACE },
@@ -145,13 +145,28 @@ function setup(): {
       database,
       directory,
       agents: {
-        forWorkspace: () => ({ get: (id) => Promise.resolve(agentRows.get(id) ?? null) }),
+        forWorkspace: () => ({
+          get: (id) => {
+            const row = agentRows.get(id);
+            return Promise.resolve(
+              row === undefined ? null : { name: 'agent', ownerPrincipalId: MEMBER, ...row },
+            );
+          },
+        }),
       },
+      ceiling: null,
     },
   };
 }
 
 const bearer = (token: string): string => `Bearer ${token}`;
+
+const ALLOWED = { builder: { allow: ['planner'] } } as const;
+const createdByAgent = { agentId: null, version: 1, runId: 'run-0' } as const;
+const allowed = (deps: RunCallerDeps<WorkspaceScope>): RunCallerDeps<WorkspaceScope> => ({
+  ...deps,
+  ceiling: ALLOWED,
+});
 
 /** The door around the real verifier; these tests never get as far as a tool. */
 const doorOf = (verifyCaller: BuilderDoor['verifyCaller']): BuilderDoor => ({
@@ -424,11 +439,11 @@ describe('the Builder-only door (#1846)', () => {
     for (const spy of logged) expect(spy).not.toHaveBeenCalled();
   });
 
-  it('admits the run of a user agent and resolves it to an agent creator, not the Builder', async () => {
+  it('admits the run of an allowed, person-made agent and resolves it to an agent creator, not the Builder', async () => {
     const s = setup();
-    s.agentRows.set(AGENT, {});
+    s.agentRows.set(AGENT, { name: 'planner' });
     const token = await s.issue(member);
-    const verified = await verifyRunCaller(bearer(token), s.deps);
+    const verified = await verifyRunCaller(bearer(token), allowed(s.deps));
     expect(verified).toMatchObject({ ok: true, caller: { agentId: AGENT, principalId: MEMBER } });
     if (!verified.ok) throw new Error('the run was not admitted');
 
@@ -456,15 +471,62 @@ describe('the Builder-only door (#1846)', () => {
     expect(await authorization.creator(ctx)).toMatchObject({ kind: 'agent', body });
   });
 
-  it('admits a user agent whose token carries no person as reads-only', async () => {
+  it('admits an allowed agent whose token carries no person as reads-only', async () => {
     const s = setup();
-    s.agentRows.set(AGENT, {});
+    s.agentRows.set(AGENT, { name: 'planner' });
     const token = await s.issue();
-    expect(await verifyRunCaller(bearer(token), s.deps)).toMatchObject({
+    expect(await verifyRunCaller(bearer(token), allowed(s.deps))).toMatchObject({
       ok: false,
       code: 'no_caller',
       reads: true,
     });
+  });
+
+  it.each([
+    [
+      'an agent the deployment does not list',
+      { name: 'other' },
+      { builder: { allow: ['planner'] } },
+    ],
+    ['an allowed agent made by an agent', { name: 'planner', createdByAgent }, ALLOWED],
+    ['an agent whose name differs in case', { name: 'Planner' }, ALLOWED],
+    ['an agent under a deployment with no ceiling', { name: 'planner' }, null],
+  ])(
+    'refuses the run of %s before the shell, whatever its token carries',
+    async (_label, row, ceiling) => {
+      const s = setup();
+      s.agentRows.set(AGENT, row);
+      const token = await s.issue(member);
+      const verified = await verifyRunCaller(bearer(token), { ...s.deps, ceiling });
+      expect(verified).toEqual({ ok: false, code: 'not_allowed_to_build', reads: false });
+      const response = await serveBuilderMcp(
+        rpc(token, 'tools/list'),
+        doorOf(createBuilderCallerVerifier({ ...s.deps, ceiling })),
+      );
+      expect(response.status).toBe(403);
+    },
+  );
+
+  it('tells the owner warning of an allowed agent, and not of the Builder or a refused agent', async () => {
+    const s = setup();
+    const told: unknown[] = [];
+    const deps = {
+      ...allowed(s.deps),
+      onAllowedAgent: (workspaceId: string, agent: unknown) => {
+        told.push([workspaceId, agent]);
+        return Promise.resolve();
+      },
+    };
+    const token = await s.issue(member);
+
+    await verifyRunCaller(bearer(token), deps);
+    s.agentRows.set(AGENT, { name: 'planner', createdByAgent });
+    await verifyRunCaller(bearer(token), deps);
+    expect(told).toEqual([]);
+
+    s.agentRows.set(AGENT, { name: 'planner' });
+    await verifyRunCaller(bearer(token), deps);
+    expect(told).toEqual([[WORKSPACE, { id: AGENT, name: 'planner', ownerPrincipalId: MEMBER }]]);
   });
 
   it('lets a Builder run through as before', async () => {

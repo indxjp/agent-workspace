@@ -23,6 +23,7 @@ import { ApiProblem } from '@indx-workspace/contracts';
 import { AuditEvent } from '@indx-workspace/contracts/observability';
 import { AuditEventListResponse } from '@indx-workspace/contracts/observability';
 import { AuditListQuery } from '@indx-workspace/contracts/observability';
+import { BuiltinAgentProblemCode } from '@indx-workspace/contracts/agents';
 import { CliTokenResponse } from '@indx-workspace/contracts/cli-auth';
 import { ConnectorResource } from '@indx-workspace/contracts/connectors';
 import { CreateAgentFromVersionRequestInput } from '@indx-workspace/contracts/agent-versions';
@@ -301,6 +302,8 @@ export interface BrowseStorageOptions extends RequestOptions {
     readonly cursor?: string;
     readonly prefix?: string;
 }
+
+export { BuiltinAgentProblemCode }
 
 // @public
 export type ClientAuth = {

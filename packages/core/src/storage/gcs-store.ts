@@ -614,10 +614,19 @@ export async function createGcsObjectStoreFromConfig(
   const storage = new Storage(await gcsStorageOptions(config));
   const bucket = storage.bucket(bucketName);
   try {
-    const [exists] = await bucket.exists();
-    if (!exists) throw new GcsBucketUnavailableError(bucketName, 'missing');
+    // List one object instead of `bucket.exists()`: that call is `storage.buckets.get`, which the
+    // roles a customer grants (Object Viewer, Object User) and the platform's objectAdmin lack.
+    // `storage.objects.list` is in all of them.
+    const prefix = storeKeyPrefix(config.keyPrefix);
+    await bucket.getFiles({
+      maxResults: 1,
+      autoPaginate: false,
+      ...(prefix === '' ? {} : { prefix }),
+    });
   } catch (error) {
-    if (error instanceof GcsBucketUnavailableError) throw error;
+    if ((error as { code?: unknown }).code === 404) {
+      throw new GcsBucketUnavailableError(bucketName, 'missing');
+    }
     throw new GcsBucketUnavailableError(bucketName, 'unreachable', error);
   }
   const client = createNativeGcsClient(bucket);

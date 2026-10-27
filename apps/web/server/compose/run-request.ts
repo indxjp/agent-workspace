@@ -92,6 +92,7 @@ import type { RuntimeSettings } from './run-request-runtime-settings';
 import {
   assertCallerForIdentity,
   assertMayReachAwControl,
+  awControlServerFor,
   assertToolNamesFit,
   codeToolsServedBySandbox,
   toolMcpServersFor,
@@ -756,6 +757,7 @@ export async function buildRunRequestFor(
         context.run.id,
       )),
       ...toolMcpServersFor(pendingTools, gateway.baseUrl, token),
+      ...awControlServerFor(agent, ceiling, gateway.baseUrl, token),
     },
   };
 

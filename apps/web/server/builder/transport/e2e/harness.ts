@@ -21,6 +21,7 @@ import {
   ScriptedModelScriptSchema,
   type ScriptedModelScript,
 } from '@indx-workspace/contracts/models';
+import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import type { RunStatus } from '@indx-workspace/contracts/runs';
 import { vi } from 'vitest';
 
@@ -28,6 +29,7 @@ import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
 } from '../../../agent-versions/memory-store';
+import type { AgentRecord } from '../../../agents/contract';
 import { createInMemoryAgentStoreProvider } from '../../../agents/memory-store';
 import { draftBody } from '../../adapters/checker/checker.contract';
 import { BUILDER_APPROVAL_RULES } from '../../agent/definition';
@@ -186,6 +188,10 @@ export function builderDoor(options: {
   readonly runStore?: RunStore;
   /** Ports that replace production's, e.g. one that throws; every other port stays production's. */
   readonly override?: Partial<BuilderPorts>;
+  /** The agent every started run belongs to, as the door's caller check sees it; the Builder when absent. */
+  readonly runAgent?: Pick<AgentRecord, 'name' | 'createdByAgent'>;
+  /** The deployment's `AW_DEPLOYMENT_POLICY`, as the door's caller check reads it; none when absent. */
+  readonly ceiling?: ProjectPolicy | null;
 }): Door {
   const tokens = createRunTokenCodec({ secret: SECRET });
   const { scopes } = options;
@@ -412,9 +418,17 @@ export function builderDoor(options: {
       agents: {
         forWorkspace: () => ({
           get: (id: string) =>
-            Promise.resolve(id === BUILDER_AGENT ? { builtin: 'builder' as const } : null),
+            Promise.resolve(
+              id !== BUILDER_AGENT
+                ? null
+                : {
+                    ownerPrincipalId: 'principal-owner',
+                    ...(options.runAgent ?? { name: 'builder', builtin: 'builder' as const }),
+                  },
+            ),
         }),
       },
+      ceiling: options.ceiling ?? null,
     }),
     ports: spied({
       ...(options.featureOn

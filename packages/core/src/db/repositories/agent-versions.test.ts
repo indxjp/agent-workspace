@@ -36,6 +36,8 @@ import {
   resolveFromRows,
   storageGrantChange,
 } from './agent-versions-resolution.js';
+import { lockAgentCreations } from './agent-versions-shared.js';
+import { createDatabaseAgentRepositoryProvider } from './agents.js';
 import {
   createDatabaseAgentVersionRepositoryProvider,
   type AgentPointerAudit,
@@ -2438,5 +2440,31 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     expect(back).toMatchObject({ kind: 'adopted', profile: { id: again.profile.id } });
     await expect(row(unprofiled)).resolves.toMatchObject({ runtimeProfileId: again.profile.id });
     await expect(profilesD.list()).resolves.toHaveLength(2);
+  });
+
+  it('makes a console create wait for the creation lock, so the quota count cannot miss it', async () => {
+    const resolver = createDatabaseWorkspaceScopeResolver(isolated.db);
+    const scope = await resolver.forWorkspaceId(workspaceA);
+    if (scope === null) throw new Error('workspace fixture did not resolve');
+    const consoleAgents = createDatabaseAgentRepositoryProvider(isolated.db).forScope(scope);
+    const order: string[] = [];
+    let pending: Promise<unknown> = Promise.resolve();
+    await isolated.db.transaction(async (tx) => {
+      await lockAgentCreations(tx, workspaceA);
+      pending = consoleAgents
+        .create({
+          name: 'console-waits-for-lock',
+          instructions: '',
+          modelConnectionId: null,
+          model: null,
+          permissions: READ_ONLY,
+          ownerPrincipalId: principalA,
+        })
+        .then(() => order.push('created'));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      order.push('lock released');
+    });
+    await pending;
+    expect(order).toEqual(['lock released', 'created']);
   });
 });

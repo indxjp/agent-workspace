@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
 import { HttpClient } from '../http.js';
+import type { BuiltinAgentProblemCode } from '../index.js';
 import { fetchDouble, fixtures, jsonResponse as json, type RecordedRequest } from '../testing.js';
 import { AgentsClient } from './agents.js';
 import type {
@@ -191,6 +192,26 @@ describe('AgentsClient.create from a version (S1-09, issue #447)', () => {
     expect(failure).toBeInstanceOf(ApiProblemError);
     const problem = failure as ApiProblemError;
     expect([problem.status, problem.code]).toEqual([409, 'agent_name_conflict']);
+  });
+
+  it('surfaces 403 builder_name_reserved on a create and on a rename', async () => {
+    const { agents } = client(() =>
+      json(403, { error: { code: 'builder_name_reserved', message: 'This name is reserved.' } }),
+    );
+    for (const refused of [
+      agents.create(fromVersion),
+      agents.update(AGENT, { name: 'hr-onboarding-coordinator' }),
+    ]) {
+      const problem = (await refused.catch((e: unknown) => e)) as ApiProblemError;
+      expect(problem).toBeInstanceOf(ApiProblemError);
+      expect([problem.status, problem.code]).toEqual([403, 'builder_name_reserved']);
+    }
+  });
+
+  it('types the built-in agent problem codes, builder_name_reserved among them', () => {
+    expectTypeOf<BuiltinAgentProblemCode>().toEqualTypeOf<
+      'builtin_agent_read_only' | 'builder_name_reserved'
+    >();
   });
 
   it('takes the legacy path for a legacy input carrying version: undefined', async () => {

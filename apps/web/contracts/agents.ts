@@ -26,6 +26,7 @@ export {
   AgentToolPolicySchema,
   agentRequestIssueMessages,
   BUILTIN_AGENT_PROBLEM_CODES,
+  type BuiltinAgentProblemCode,
   claudeBaseToolPolicyFor,
   CreateAgentInputSchema,
   CreateAgentWithAssignmentsResponseSchema,

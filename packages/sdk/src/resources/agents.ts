@@ -109,6 +109,8 @@ export class AgentsClient {
    *   the key is sent, never silently dropped;
    * - `409 agent_name_conflict` — another agent of this workspace already has the name (issue
    *   #480); no `details`;
+   * - `403 builder_name_reserved` — the name is one the deployment's `builder.allow` lists, which
+   *   only a workspace Owner or Admin may give (#1851); `update` refuses a rename to it the same way;
    * - `409 surface_name_taken` — a surface name is already another agent's (C9); `details` is
    *   `[surface:<name>]` for each;
    * - `422 agent_definition_references_missing` — each `details` entry is `<kind>:<name>`;

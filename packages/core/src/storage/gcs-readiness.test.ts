@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const exists = vi.fn<() => Promise<[boolean]>>();
 interface FakeListedFile {
   readonly name: string;
   readonly metadata: {
@@ -14,7 +13,7 @@ const getFiles = vi.fn<() => Promise<[FakeListedFile[]]>>();
 vi.mock('@google-cloud/storage', () => ({
   Storage: class {
     bucket(name: string) {
-      return { name, exists, getFiles };
+      return { name, getFiles };
     }
   },
 }));
@@ -23,12 +22,11 @@ import { createGcsObjectStoreProviderFromConfig, GcsBucketUnavailableError } fro
 
 describe('native GCS readiness', () => {
   beforeEach(() => {
-    exists.mockReset();
     getFiles.mockReset();
   });
 
   it('refuses a missing bucket so composition leaves the API on its concealing 503 path', async () => {
-    exists.mockResolvedValue([false]);
+    getFiles.mockRejectedValue(Object.assign(new Error('Not Found'), { code: 404 }));
     await expect(
       createGcsObjectStoreProviderFromConfig({ bucket: 'missing-bucket' }),
     ).rejects.toBeInstanceOf(GcsBucketUnavailableError);
@@ -46,7 +44,9 @@ describe('native GCS readiness', () => {
   });
 
   it('keeps missing and unreachable readiness outcomes distinct without exposing a cause', async () => {
-    exists.mockResolvedValueOnce([false]).mockRejectedValueOnce(new Error('token=secret'));
+    getFiles
+      .mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }))
+      .mockRejectedValueOnce(new Error('token=secret'));
     const missing = await createGcsObjectStoreProviderFromConfig({ bucket: 'missing' }).catch(
       (error: unknown) => error,
     );
@@ -60,7 +60,6 @@ describe('native GCS readiness', () => {
   });
 
   it('preserves the safe trailing delimiter used for a prefixed native listing', async () => {
-    exists.mockResolvedValue([true]);
     getFiles.mockResolvedValue([[]]);
     const provider = await createGcsObjectStoreProviderFromConfig({
       bucket: 'available-bucket',
@@ -70,12 +69,16 @@ describe('native GCS readiness', () => {
       provider.forWorkspace('11111111-1111-4111-8111-111111111111').list(''),
     ).resolves.toEqual([]);
     expect(getFiles).toHaveBeenCalledWith({
+      maxResults: 1,
+      autoPaginate: false,
+      prefix: 'files/',
+    });
+    expect(getFiles).toHaveBeenCalledWith({
       prefix: 'files/workspaces/11111111-1111-4111-8111-111111111111/',
     });
   });
 
   it('drops native names outside the key grammar instead of failing the whole listing', async () => {
-    exists.mockResolvedValue([true]);
     getFiles.mockResolvedValue([
       [
         {

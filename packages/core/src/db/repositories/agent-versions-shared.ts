@@ -58,6 +58,24 @@ export function bodySubagentNames(body: unknown): readonly string[] {
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export type Executor = Database | Transaction;
 
+/** Serialise every pointer write in one workspace and environment (C9), until the transaction ends. */
+export async function lockPointerWrites(
+  tx: Transaction,
+  workspaceId: string,
+  environment: string,
+): Promise<void> {
+  const key = `agent_version_pointers:${workspaceId}:${environment}`;
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+}
+
+/**
+ * Serialise every agent creation in one workspace. A creation from a version points `local` at its
+ * first version, so it takes that pointer lock; a console create takes the same one, so the quota
+ * count that runs under it cannot miss a console-made agent.
+ */
+export const lockAgentCreations = (tx: Transaction, workspaceId: string): Promise<void> =>
+  lockPointerWrites(tx, workspaceId, 'local');
+
 export const VERSION_COLUMNS = {
   id: agentVersions.id,
   workspaceId: agentVersions.workspaceId,

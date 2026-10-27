@@ -23,6 +23,7 @@ import {
   createDatabaseResourceCatalogRepositoryProvider,
   createDatabaseWorkspaceScopeResolver,
   createIsolatedTestDatabase,
+  files,
   memberships,
   users,
   workspacePrincipals,
@@ -66,6 +67,12 @@ interface World {
   readonly catalogs: ResourceCatalogStoreProvider;
   readonly scopes: WorkspaceScopeResolver;
   readonly a: Member;
+  /**
+   * Ready file rows with an object id and no object behind them, written straight into the catalog
+   * (one bulk insert on PostgreSQL), like a raw insert: the folder move is the thing under test,
+   * not 10,000 uploads.
+   */
+  seed(paths: readonly string[]): Promise<void>;
 }
 
 const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
@@ -73,10 +80,23 @@ const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
 
 function memoryWorld(): Promise<World> {
   const a = { workspaceId: crypto.randomUUID(), principalId: crypto.randomUUID(), userId: null };
+  const catalogs = createInMemoryCatalogStore();
   return Promise.resolve({
-    catalogs: createInMemoryCatalogStore(),
+    catalogs,
     scopes: createInMemoryWorkspaceScopeResolver([{ id: a.workspaceId, slug: 'acme' }]),
     a,
+    seed: (paths) => {
+      const catalog = catalogs.forWorkspaceSync(a.workspaceId);
+      for (const path of paths) {
+        catalog.seed({
+          path,
+          status: 'ready',
+          ownerPrincipalId: a.principalId,
+          objectId: crypto.randomUUID(),
+        });
+      }
+      return Promise.resolve();
+    },
   });
 }
 
@@ -100,14 +120,35 @@ async function postgresMember(db: IsolatedTestDatabase['db']): Promise<Member> {
 
 async function postgresWorld(): Promise<World> {
   if (isolated === undefined) throw new Error('the test database did not start');
-  const scopes = createDatabaseWorkspaceScopeResolver(isolated.db);
+  const { db } = isolated;
+  const scopes = createDatabaseWorkspaceScopeResolver(db);
+  const a = await postgresMember(db);
   return {
     catalogs: createResourceCatalogStoreProvider({
-      repositories: createDatabaseResourceCatalogRepositoryProvider(isolated.db),
+      repositories: createDatabaseResourceCatalogRepositoryProvider(db),
       scopes,
     }),
     scopes,
-    a: await postgresMember(isolated.db),
+    a,
+    seed: async (paths) => {
+      const rows = paths.map((path) => {
+        const objectId = crypto.randomUUID();
+        return {
+          workspaceId: a.workspaceId,
+          path,
+          kind: 'file' as const,
+          storageKey: `files/${objectId}`,
+          objectId,
+          sizeBytes: 1,
+          contentType: 'text/plain',
+          ownerPrincipalId: a.principalId,
+          createdBy: a.userId,
+        };
+      });
+      for (let at = 0; at < rows.length; at += 2000) {
+        await db.insert(files).values(rows.slice(at, at + 2000));
+      }
+    },
   };
 }
 
@@ -265,24 +306,18 @@ function defineSuite(name: string, setup: () => Promise<World>) {
         params(path),
       );
 
-    /** Ready rows with an object id and no object behind them: the catalog is the thing under test. */
+    /**
+     * `count` ready files under `folder`, seeded in bulk. Seeding them through `reserve` and
+     * `confirm` was 20,000 transactions, serialised because every `reserve` locks the shared parent
+     * folder's path: about 63 s of this test's 64 s on a 2-CPU PostgreSQL, and past the 180 s
+     * timeout on a GitHub-hosted runner, while the move itself took 0.3 s.
+     */
     async function seedRows(folder: string, count: number): Promise<void> {
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
       await catalog.createFolder(folder, { ownerPrincipalId: world.a.principalId });
-      for (let at = 0; at < count; at += 100) {
-        await Promise.all(
-          Array.from({ length: Math.min(100, count - at) }, async (_, index) => {
-            const reserved = await catalog.reserve(`${folder}/f-${String(at + index)}.txt`, {
-              ownerPrincipalId: world.a.principalId,
-              sizeBytes: 1,
-              contentType: 'text/plain',
-              objectId: crypto.randomUUID(),
-              area: 'files',
-            });
-            await catalog.confirm(reserved.row, { sizeBytes: 1, contentType: 'text/plain' });
-          }),
-        );
-      }
+      await world.seed(
+        Array.from({ length: count }, (_, index) => `${folder}/f-${String(index)}.txt`),
+      );
     }
 
     // @story US-STO-03

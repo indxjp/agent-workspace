@@ -25,10 +25,13 @@ import {
 } from './agents.js';
 
 describe('built-in agents (#1848)', () => {
-  it('has the one key, and the read-only problem code at 403', () => {
+  it('has the one key, and the read-only and reserved-name problem codes at 403', () => {
     expect(BUILTIN_AGENT_KEYS).toEqual(['builder']);
     expect(BuiltinAgentKeySchema.safeParse('other').success).toBe(false);
-    expect(BUILTIN_AGENT_PROBLEM_CODES).toEqual({ builtin_agent_read_only: 403 });
+    expect(BUILTIN_AGENT_PROBLEM_CODES).toEqual({
+      builtin_agent_read_only: 403,
+      builder_name_reserved: 403,
+    });
   });
 
   it('carries the marker on a resource only as a known key', () => {

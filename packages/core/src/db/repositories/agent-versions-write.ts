@@ -48,6 +48,7 @@ import {
   appliedRuntimeProfileId,
   bodySubagentNames,
   ConflictRow,
+  lockPointerWrites,
   surfacesOf,
   VERSION_COLUMNS,
   type Transaction,
@@ -210,14 +211,8 @@ export function agentVersionWrites(
 > {
   const { candidatesByName, parentsOf } = subagentLookups(workspaceId);
 
-  /** Serialise every pointer write in one workspace and environment (C9). */
-  const lockPointers = async (
-    tx: Transaction,
-    environment: AgentVersionEnvironment,
-  ): Promise<void> => {
-    const key = `agent_version_pointers:${workspaceId}:${environment}`;
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
-  };
+  const lockPointers = (tx: Transaction, environment: AgentVersionEnvironment): Promise<void> =>
+    lockPointerWrites(tx, workspaceId, environment);
 
   /**
    * The agents this workspace created since `since`, whoever made them: the one count behind the
@@ -651,8 +646,9 @@ export function agentVersionWrites(
         materialised.policy === null ? null : AgentStoredPolicySchema.parse(materialised.policy);
       try {
         return await db.transaction(async (tx) => {
-          // The key is `workspace:environment`, and every create uses FIRST_ENVIRONMENT ('local'), so
-          // this serialises every creation in the workspace: the quota count below cannot race.
+          // Every create uses FIRST_ENVIRONMENT ('local'), and a console create takes the same lock
+          // (`lockAgentCreations`), so this serialises every creation in the workspace: the quota
+          // count below cannot race.
           await lockPointers(tx, environment);
           if (
             input.quota !== undefined &&

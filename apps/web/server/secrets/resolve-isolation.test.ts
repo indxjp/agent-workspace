@@ -528,7 +528,13 @@ describe('nothing reachable from a secrets route can construct a live secrets se
         .map((v) => `${v.root} reaches the package via: ${v.chain.join(' -> ')}`)
         .join('\n'),
     ).toEqual([]);
-  });
+    // CPU-bound by design, not a wait: it parses every file the walk reaches once (217 today, each
+    // through the TypeScript parser and resolver, both cached). Measured 0.36 s on a dev machine
+    // (0.25 s parsing, 0.07 s resolving). The GitHub-hosted release gate (2-4 vCPU, coverage on,
+    // every test file of the shard in parallel) ran the same shard's CPU-bound tests about 14x
+    // slower (the in-memory folder move in move-delete.test.ts: 1.8 s here, 25 s there), which put
+    // this one past the 5 s default.
+  }, 30_000);
 
   const PLANTED = 'apps/web/server/secrets/planted.ts';
   const SECRETS = '@agent-workspace/core/secrets';

@@ -78,7 +78,12 @@ export async function ensureBuilderAgent(
   if (store === null) throw new Error(`Workspace ${workspaceId} has no agent version store.`);
   const agents = agentProvider.forWorkspace(workspaceId);
   const pipeline = { ...options, store };
-  const actor = { principalId: owner.principalId, userId: owner.userId, actor: owner.actorLabel };
+  const actor = {
+    principalId: owner.principalId,
+    userId: owner.userId,
+    role: owner.role,
+    actor: owner.actorLabel,
+  };
   // ponytail: lists every agent per call; add a `findBuiltin` store method if it shows in a profile.
   const findBuilder = async (): Promise<AgentRecord | undefined> =>
     (await agents.list()).find(isBuilderAgent);

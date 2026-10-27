@@ -36,7 +36,7 @@ Unit 16 is one pull request per cloud; this record decides only the Google Cloud
    identity. The old storage service account, HMAC key, HMAC Secret Manager entry, and `AWS_*`
    object-store variables are removed from the GCP Cloud Run module.
 4. Terraform grants only the web service account `roles/storage.objectAdmin` for object operations
-   and bucket-scoped `roles/storage.legacyBucketReader` for the startup metadata readiness probe.
+   and bucket-scoped `roles/storage.legacyBucketReader` for the startup readiness probe (a one-object list, `storage.objects.list`, which objectAdmin also holds).
    Composition bounds that probe to ten seconds. The separate state bucket and its Cloud Storage
    FUSE mount are unchanged.
 5. The fake-backed contract suite runs in normal CI. A real-service run must use a throwaway bucket

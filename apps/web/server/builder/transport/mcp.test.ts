@@ -406,6 +406,7 @@ describe('the real verifier behind the door', () => {
         throw new Error('the agents must not be read for a token that does not verify');
       },
     },
+    ceiling: null,
   });
 
   for (const [label, headers] of [
