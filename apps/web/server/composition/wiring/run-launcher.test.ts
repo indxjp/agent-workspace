@@ -3,8 +3,11 @@ import {
   type ModelConnectionRecord,
 } from '@agent-workspace/core/db';
 import { bytesToStream, createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
+import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { describe, expect, it, vi } from 'vitest';
 
+import { buildRunRequestFor } from '../../compose/run-request';
+import { awControlServerFor } from '../../compose/run-request-tool-connectors';
 import type { RuntimeLaunchTarget } from '../../compose/runtime-profile';
 import { writeBackStorage } from '../../compose/storage-writeback';
 import { DomainError } from '../../errors';
@@ -244,6 +247,92 @@ describe('the storage write-back wiring', () => {
     expect(vi.mocked(writeBackStorage).mock.calls.at(-1)?.[0].folders).toEqual(
       new Map([['storage/acme-data/reports', folder]]),
     );
+  });
+});
+
+describe("the policy ceiling a run is composed under (#1851: a project's policy never grants aw-control)", () => {
+  const NAME = 'hr-onboarding-coordinator';
+  const PROJECT = '88888888-8888-4888-8888-888888888888';
+  // What a project file's `policy.builder.allow` would be if it were stored with the project.
+  const projectPolicy: ProjectPolicy = { builder: { allow: [NAME] } };
+
+  /** Launches a run in a project through the real wiring; returns what compose was handed. */
+  async function composedUnder(deployment: ProjectPolicy | null) {
+    const projectsGot: string[] = [];
+    createCompositionRunLauncher({
+      root: {
+        recordAuditEvent: () => Promise.resolve(),
+        runs: { forScope: () => ({ snapshotFileGrants: () => Promise.resolve(true) }) },
+      },
+      scopes: { forWorkspaceId: () => Promise.resolve({}) },
+      sessionRows: { forScope: () => ({ get: () => Promise.resolve({ projectId: PROJECT }) }) },
+      recordRunTelemetry: () => undefined,
+      secretsService: null,
+      modelsApi: null,
+      runnerManager: null,
+      resolveProviderCredential: () => Promise.resolve(null),
+      filesRuntime: null,
+      runResources: { load: () => Promise.resolve({}) },
+      runAgentOf: () => Promise.resolve({ agent: { name: NAME } }),
+      readRunAgent: () => Promise.reject(new Error('unused')),
+      runStorageConnections: null,
+      wave5Repositories: () =>
+        Promise.resolve({
+          projects: {
+            get: (id: string) => {
+              projectsGot.push(id);
+              return Promise.resolve({ id, instructions: null, policy: projectPolicy });
+            },
+          },
+        }),
+      runs: { snapshotModel: () => Promise.resolve(), get: () => Promise.resolve(null) },
+      runPreflight: {
+        resolveModel: () =>
+          Promise.resolve({
+            ok: true,
+            connectionId: 'conn-1',
+            model: 'claude-sonnet-4-5',
+            provider: 'anthropic',
+            layer: 'agent',
+            connectionName: 'Anthropic',
+            validated: true,
+          }),
+      },
+      gateway: {},
+      gatewaySettings: { ok: false },
+      hostLaunch: {},
+      runtimeResolver: {},
+      launchedModels: new Map(),
+      revokeAllRunTokensFor: () => Promise.resolve(),
+      policyCeiling: deployment,
+    } as never);
+    const options = vi.mocked(createRunnerLauncher).mock.calls.at(-1)?.[0];
+    await options?.buildRunRequest({ ...(await launchContext()), attachments: [] }, {
+      runnerUrl: 'http://runner.test',
+      workspaceRoot: '/workspace',
+    } as RuntimeLaunchTarget);
+    const args = vi.mocked(buildRunRequestFor).mock.calls.at(-1) ?? [];
+    return { projectsGot, projectId: args[9], ceiling: args[12] };
+  }
+  const doorFor = (ceiling: unknown) =>
+    awControlServerFor({ name: NAME }, ceiling as ProjectPolicy | null, 'http://gateway:4000', 't');
+
+  it('composes under the deployment policy only, however the run is in a project that lists the agent', async () => {
+    const { projectsGot, projectId, ceiling } = await composedUnder(null);
+    // The project was loaded and handed to compose, so the project is in play...
+    expect(projectsGot).toEqual([PROJECT]);
+    expect(projectId).toBe(PROJECT);
+    // ...yet the ceiling compose was given is the deployment's (none), so the agent gets no door.
+    expect(ceiling).toBeNull();
+    expect(doorFor(ceiling)).toEqual({});
+  });
+
+  it('gives the door when the deployment policy lists the agent, with the same project', async () => {
+    const deployment: ProjectPolicy = { builder: { allow: [NAME] } };
+    const { projectId, ceiling } = await composedUnder(deployment);
+    expect(projectId).toBe(PROJECT);
+    expect(ceiling).toBe(deployment);
+    expect(Object.keys(doorFor(ceiling))).toEqual(['aw-control']);
   });
 });
 

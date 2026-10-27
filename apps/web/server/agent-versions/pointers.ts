@@ -70,6 +70,7 @@ import {
 import { AW_DEV_TOOLS_CONNECTOR } from '@indx-workspace/contracts/tool-connectors';
 import type { z } from 'zod';
 
+import { builderNameRefusal } from '../agents/builder-name';
 import type { AgentRecord } from '../agents/contract';
 import { toAgentResource } from '../agents/contract';
 import { agentNotFound } from '../agents/handlers';
@@ -94,12 +95,15 @@ import {
 } from './problems';
 import { decidePromote, decideRollback, rollbackHistory, type PromoteDecision } from './release';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
+import type { Role } from '../rbac/roles';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 
 /** Who moves the pointer: the authenticated principal's ids and its display attribution. */
 export interface PointerActor {
   readonly principalId: string;
   readonly userId: string | null;
+  /** The actor's workspace role, which decides whether a reserved name may be given (#1851); absent is a Member. */
+  readonly role?: Role | undefined;
   /** The compatibility identity the audit trail labels the actor with (`Principal.actor`). */
   readonly actor: string;
 }
@@ -222,6 +226,11 @@ async function pointAt(
     dryRun: move.dryRun,
   });
   if (!validated.ok) return { kind: 'refused', result: validated.result };
+  // Only the local pointer rewrites the agent row, so only it can rename the agent.
+  if (environment === 'local' && definition.agent.name !== agent.name) {
+    const reserved = builderNameRefusal(dependencies.ceiling, actor.role, definition.agent.name);
+    if (reserved !== null) return { kind: 'refused', result: reserved };
+  }
   if (move.dryRun) return { kind: 'checked' };
   const materialised = (references: ResolvedReferences): MaterialisedAgent =>
     materialise(definition, references, validated.policyToStore);

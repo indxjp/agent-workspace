@@ -6,14 +6,19 @@ import {
   IDENTITY_ASSERTION_TTL_SECONDS,
   signIdentity,
 } from '@indx-workspace/contracts/identity-assertion';
+import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import {
+  AW_CONTROL_CONNECTOR,
   AW_DEV_TOOLS_CONNECTOR,
+  GATEWAY_AW_CONTROL_PATH,
   TOOL_NAME_MAX_LENGTH,
   TOOL_SANDBOX_CONNECTOR_URL,
   gatewayToolPath,
   isReservedConnectorName,
 } from '@indx-workspace/contracts/tool-connectors';
 
+import type { AgentRecord } from '../agents/contract';
+import { awControlAllowed } from '../builder/agent/aw-control-allowed';
 import { DomainError } from '../errors';
 import type { RunAgent } from '../agent-versions/session-version';
 import { CONNECTOR_IDENTITY_UNSUPPORTED } from '../connectors/identity';
@@ -174,6 +179,26 @@ export function assertMayReachAwControl(resources: AgentRunResourceSelection): v
     code,
     publicMessage: `${code}: ${BUILDER_REFUSAL_CODES[code].fix}`,
   });
+}
+
+/**
+ * The platform's `aw-control` server at the gateway for a run that {@link awControlAllowed}, with the
+ * run token as its only credential; nothing for any other run.
+ */
+export function awControlServerFor(
+  agent: Pick<AgentRecord, 'builtin' | 'name' | 'createdByAgent'>,
+  deploymentCeiling: ProjectPolicy | null,
+  gatewayBaseUrl: string,
+  token: string,
+): Record<string, { type: 'http'; url: string; headers: Record<string, string> }> {
+  if (!awControlAllowed(agent, deploymentCeiling)) return {};
+  return {
+    [AW_CONTROL_CONNECTOR]: {
+      type: 'http',
+      url: `${gatewayBaseUrl}${GATEWAY_AW_CONTROL_PATH}`,
+      headers: { authorization: `Bearer ${token}` },
+    },
+  };
 }
 
 /**

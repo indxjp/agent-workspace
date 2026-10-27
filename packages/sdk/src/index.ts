@@ -148,6 +148,7 @@ export type {
 } from './resources/team.js';
 export type { AuthClient } from './resources/auth.js';
 export type { MintTokenOptions, TokensClient } from './resources/tokens.js';
+export type { BuiltinAgentProblemCode } from '@indx-workspace/contracts/agents';
 export type { TriggersClient } from './resources/triggers.js';
 export type { SharingPolicyClient, WorkspacesClient } from './resources/workspaces.js';
 export type { RunEventFrame } from './events/run-events.js';

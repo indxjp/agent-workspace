@@ -281,10 +281,17 @@ describe('the upload `aw deploy` makes to Vercel', () => {
         const result = spawnSync(command, args, { cwd: staged, encoding: 'utf8' });
         return { status: result.status, output: `${result.stdout}${result.stderr}` };
       };
+      // The staged copy can sit on another filesystem than the store (a hosted runner's /tmp), and
+      // pnpm then swaps in an empty store that an offline install cannot fill. Naming the checkout's
+      // store keeps it; pnpm copies instead of hard linking across the filesystems.
+      const store = spawnSync('pnpm', ['store', 'path'], { cwd: checkout, encoding: 'utf8' });
+      expect(store.status, store.stderr).toBe(0);
       // The rendered install and build, offline: a store missing a package fails here, never skips.
       const installed = run('pnpm', [
         'install',
         '--offline',
+        '--store-dir',
+        store.stdout.trim(),
         '--frozen-lockfile',
         '--filter',
         `{./${directory}}...`,

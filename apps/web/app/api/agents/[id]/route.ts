@@ -22,6 +22,7 @@ import {
 import { type ApiResult } from '../../../../server/http/result';
 import { saveConsoleEdit } from '../../../../server/agent-versions/http';
 import { judgeAgent } from '../../../../server/policy-ceiling/ceiling';
+import { builderNameRefusal } from '../../../../server/agents/builder-name';
 import { isUuid } from '../../../../server/agents/contract';
 import {
   readAgentIdParam,
@@ -95,9 +96,14 @@ async function servePatch(request: Request, context: AgentRouteContext): Promise
           ? runtime.ceiling.ceilingFor(request, workspaceId)
           : null;
       const judge = async (patch: UpdateAgentPatch): Promise<ApiResult | null> => {
-        if (ceiling === null || !isUuid(id)) return null;
-        const current = await store.get(id);
-        if (current === null) return null;
+        const current = isUuid(id) ? await store.get(id) : null;
+        // An edit that keeps the stored name renames nothing, so it is not refused (#1851).
+        const reserved =
+          patch.name === undefined || patch.name === current?.name
+            ? null
+            : builderNameRefusal(ceiling, principal.role, patch.name);
+        if (reserved !== null) return reserved;
+        if (ceiling === null || current === null || !isUuid(id)) return null;
         const assignments = await runtime.agentResources?.forWorkspace(workspaceId).get(id);
         const next = { ...current, ...patch };
         return judgeAgent(next, assignments?.connectorIds ?? [], ceiling, {

@@ -57,3 +57,44 @@ describe('[US-BLD-04][api][run] a token that is no longer good is refused', () =
     await expectRefusedBeforeAnyPort(door, token);
   });
 });
+
+describe('[US-BLD-07][api][run] a run that composition gave no aw-control is refused at the door', () => {
+  const allow = { builder: { allow: ['planner'] } } as const;
+  const madeByAgent = { agentId: null, version: 1, runId: 'run-0' } as const;
+
+  it.each([
+    ['an agent the deployment does not list', { name: 'planner' }, null],
+    ['an allowed agent made by an agent', { name: 'planner', createdByAgent: madeByAgent }, allow],
+  ])(
+    '%s: every tool is not_allowed_to_build, with no journal row and no port',
+    async (_l, runAgent, ceiling) => {
+      const door = builderDoor({ featureOn: true, scopes: scopes(), runAgent, ceiling });
+      const { token } = await door.start({ role: 'builder' }, MODEL);
+
+      for (const [tool, args] of CALLS) {
+        await expect(door.call(token, tool, args)).resolves.toMatchObject({
+          status: 403,
+          isError: true,
+          result: { code: 'not_allowed_to_build' },
+        });
+      }
+      expect(door.journal).toHaveLength(0);
+      expect(door.portCalls).toEqual([]);
+    },
+  );
+
+  it('control: an allowed, person-made agent reaches the shell and is journalled', async () => {
+    const door = builderDoor({
+      featureOn: true,
+      scopes: scopes(),
+      runAgent: { name: 'planner' },
+      ceiling: allow,
+    });
+    const { token } = await door.start({ role: 'builder' }, MODEL);
+
+    await expect(door.call(token, 'catalog_list', { kinds: ['engines'] })).resolves.toMatchObject({
+      status: 200,
+    });
+    expect(door.journal).toHaveLength(1);
+  });
+});

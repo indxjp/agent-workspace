@@ -693,6 +693,7 @@ export const BUILTIN_AGENT_OPERATIONS: readonly ["read", "update", "delete", "up
 // @public
 export const BUILTIN_AGENT_PROBLEM_CODES: {
     readonly builtin_agent_read_only: 403;
+    readonly builder_name_reserved: 403;
 };
 
 // @public (undocumented)
@@ -705,6 +706,9 @@ export const BuiltinAgentKeySchema: z.ZodEnum<{
 
 // @public (undocumented)
 export type BuiltinAgentOperation = (typeof BUILTIN_AGENT_OPERATIONS)[number];
+
+// @public (undocumented)
+export type BuiltinAgentProblemCode = keyof typeof BUILTIN_AGENT_PROBLEM_CODES;
 
 // @public
 export function canonicalCall(name: string, input: unknown): string;

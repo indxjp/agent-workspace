@@ -592,7 +592,17 @@ export async function createS3ObjectStoreFromConfig(
         : {}),
     });
   if (config.createBucketIfMissing === false) {
-    await client.send(new HeadBucketCommand({ Bucket: config.bucket }));
+    // List one key under the prefix instead of HeadBucket: the guide's policy grants s3:ListBucket
+    // only with an `s3:prefix` condition, which HeadBucket (no prefix) fails, so a customer
+    // following the guide would be refused. A missing bucket is still a 404 (NoSuchBucket).
+    const prefix = storeKeyPrefix(config.keyPrefix);
+    await client.send(
+      new ListObjectsV2Command({
+        Bucket: config.bucket,
+        MaxKeys: 1,
+        ...(prefix === '' ? {} : { Prefix: prefix }),
+      }),
+    );
   } else {
     await ensureS3Bucket(client, config.bucket);
   }

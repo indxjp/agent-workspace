@@ -1,7 +1,8 @@
 import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
-import { builderAllows, type ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
+import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
 import { isUuid } from '../../../agents/contract';
+import { awControlAllowed } from '../../agent/aw-control-allowed';
 import { ownershipOf } from '../../../agents/run-ownership';
 import { decide, type Ownership } from '../../../rbac/decide';
 import { isBuilderAgent } from '../../agent/is-builder-agent';
@@ -73,11 +74,11 @@ export function createAuthorization(deps: AuthorizationDeps): AuthorizationPort 
         (await versions?.find(agentId, agentVersion))?.body,
       );
       if (!body.success) return null;
-      const madeByAgent = agent.createdByAgent !== undefined;
+      const madeByAgent = agent.createdByAgent != null;
       return {
         kind: 'agent',
         body: body.data,
-        allowedToBuild: !madeByAgent && builderAllows(deps.ceiling, agent.name),
+        allowedToBuild: awControlAllowed(agent, deps.ceiling),
         madeByAgent,
       };
     },

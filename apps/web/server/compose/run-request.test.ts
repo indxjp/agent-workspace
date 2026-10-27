@@ -30,6 +30,7 @@ import type { RunAgent } from '../agent-versions/session-version';
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import { withStoredConnectorIds } from '../agents/policy';
 import type { AgentPermissions, AgentPolicy } from '../../contracts/agents';
+import type { AgentRecord } from '../agents/contract';
 import { createInMemoryModelsStoreProvider } from '../models/memory-store';
 import type { DeploymentDefaultModels } from '../models/deployment-default';
 import type { DiscoverModelsResult, DiscoveredModel } from '../models/discovery';
@@ -2807,6 +2808,7 @@ async function compose(
   principal: Partial<LaunchContext['principal']>,
   subject?: string,
   builtin?: 'builder',
+  options: { agent?: Partial<AgentRecord>; ceiling?: ProjectPolicy | null } = {},
 ) {
   const issued: unknown[] = [];
   const gateway: RunTokenIssuer = {
@@ -2818,8 +2820,10 @@ async function compose(
   };
   const { context, agents } = await launchContext();
   const row = await rowRunAgent(agents, context);
-  const runAgent: RunAgent =
-    builtin === undefined ? row : { ...row, agent: { ...row.agent, builtin } };
+  const runAgent: RunAgent = {
+    ...row,
+    agent: { ...row.agent, ...(builtin === undefined ? {} : { builtin }), ...options.agent },
+  };
   const run = () =>
     buildRunRequestFor(
       {
@@ -2838,6 +2842,7 @@ async function compose(
       null,
       undefined,
       () => Promise.resolve(),
+      options.ceiling ?? null,
     );
   return { run, issued };
 }
@@ -2985,6 +2990,69 @@ describe('buildRunRequestFor — the aw-control door (#1846)', () => {
       connectorNames: { [MCP_KEY]: 'aw-control' },
     };
     const { run, issued } = await compose(resources, apiKey);
+    await expect(run()).rejects.toMatchObject({ code: 'not_allowed_to_build' });
+    expect(issued).toEqual([]);
+  });
+});
+
+describe('buildRunRequestFor — who gets the aw-control tools (#1851 slice 2, B2)', () => {
+  const NAME = 'hr-onboarding-coordinator';
+  const ceiling: ProjectPolicy = { builder: { allow: [NAME] } };
+  const none: AgentRunResourceSelection = { files: [], skills: [], mcpServers: {} };
+  const madeByAgent = { agentId: null, version: 1, runId: 'run-1' } as const;
+  const door = {
+    type: 'http',
+    url: 'http://gateway:4000/v1/tools/aw-control/mcp',
+    headers: { authorization: 'Bearer run-token' },
+  };
+  const awControlOf = async (
+    agent: Partial<AgentRecord>,
+    ceilingForRun: ProjectPolicy | null,
+    builtin?: 'builder',
+  ) => {
+    const { run } = await compose(none, member, undefined, builtin, {
+      agent,
+      ceiling: ceilingForRun,
+    });
+    return (await run()).portable.mcpServers['aw-control'];
+  };
+
+  it("[US-BLD-07][api][sdk] an allowed, person-made agent's run has the aw-control tools", async () => {
+    expect(await awControlOf({ name: NAME }, ceiling)).toEqual(door);
+  });
+
+  it('gives the Builder the tools with no ceiling at all', async () => {
+    expect(await awControlOf({ name: 'builder' }, null, 'builder')).toEqual(door);
+  });
+
+  it('does not give an allowed agent made by an agent the tools', async () => {
+    expect(await awControlOf({ name: NAME, createdByAgent: madeByAgent }, ceiling)).toBeUndefined();
+  });
+
+  it.each([
+    ['an unlisted name', { name: 'other' }, ceiling],
+    ['no ceiling', { name: NAME }, null],
+    ['an empty allow-list', { name: NAME }, { builder: { allow: [] } }],
+    ['a different case', { name: 'HR-Onboarding-Coordinator' }, ceiling],
+    ['leading padding', { name: ` ${NAME}` }, ceiling],
+    ['trailing padding', { name: `${NAME} ` }, ceiling],
+  ] satisfies Array<[string, Partial<AgentRecord>, ProjectPolicy | null]>)(
+    'does not give an agent with %s the tools',
+    async (_label, agent, ceilingForRun) => {
+      expect(await awControlOf(agent, ceilingForRun)).toBeUndefined();
+    },
+  );
+
+  it('still refuses an allowed agent that reaches a workspace connector of that name', async () => {
+    const connector: AgentRunResourceSelection = {
+      ...none,
+      mcpServers: { [MCP_KEY]: { type: 'http', url: 'https://mcp.example.test/mcp' } },
+      connectorNames: { [MCP_KEY]: 'aw-control' },
+    };
+    const { run, issued } = await compose(connector, member, undefined, undefined, {
+      agent: { name: NAME },
+      ceiling,
+    });
     await expect(run()).rejects.toMatchObject({ code: 'not_allowed_to_build' });
     expect(issued).toEqual([]);
   });

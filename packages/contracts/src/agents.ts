@@ -62,6 +62,7 @@ export {
   type AgentResourceAssignmentsInput,
   type BuiltinAgentKey,
   type BuiltinAgentOperation,
+  type BuiltinAgentProblemCode,
   type CreateAgentInput,
   type CreateAgentOptions,
   type CreateAgentWithAssignmentsResponse,

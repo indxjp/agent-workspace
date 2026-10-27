@@ -15,6 +15,7 @@ import { problem, type ApiResult } from '../http/result';
 import { judgeAgent } from '../policy-ceiling/ceiling';
 import { installBuiltinSkillsNamedBy } from '../skills/builtin';
 import { openToolBundleLookup } from '../tool-bundles/http';
+import { builderNameRefusal } from './builder-name';
 import { parseAssignments } from './contract';
 import { createAgent as createParsedAgent } from './handlers';
 import { withAuthorisedWorkspaceStore } from './http';
@@ -67,6 +68,7 @@ export async function createAgent(request: Request): Promise<ApiResult> {
         principalId: principal.principalId,
         ownerPrincipalId: principal.ownerPrincipalId,
         userId: principal.userId,
+        role: principal.role,
         actorLabel: principal.actor,
       };
       // Issue #535: every form is judged against the deployment's ceiling before it writes; the
@@ -77,11 +79,12 @@ export async function createAgent(request: Request): Promise<ApiResult> {
           : null;
       const judgeCreate =
         (connectorIds: readonly string[]) =>
-        (input: CreateAgentInput): Promise<ApiResult | null> =>
-          judgeAgent({ ...input, policy: null }, connectorIds, ceiling, {
+        async (input: CreateAgentInput): Promise<ApiResult | null> =>
+          builderNameRefusal(ceiling, principal.role, input.name) ??
+          (await judgeAgent({ ...input, policy: null }, connectorIds, ceiling, {
             id: null,
             label: input.name,
-          });
+          }));
       const form = createForm(body.value);
       if (form === 'mixed') {
         return problem(

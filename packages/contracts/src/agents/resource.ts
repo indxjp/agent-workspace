@@ -25,8 +25,15 @@ export const BUILTIN_AGENT_KEYS = ['builder'] as const;
 export const BuiltinAgentKeySchema = z.enum(BUILTIN_AGENT_KEYS);
 export type BuiltinAgentKey = z.infer<typeof BuiltinAgentKeySchema>;
 
-/** Problem codes of the built-in agents, with their HTTP status. */
-export const BUILTIN_AGENT_PROBLEM_CODES = { builtin_agent_read_only: 403 } as const;
+/**
+ * Problem codes of the built-in agents, with their HTTP status: the Builder is read-only, and a name
+ * the deployment's `builder.allow` lists is for a workspace Owner or Admin to give (#1851).
+ */
+export const BUILTIN_AGENT_PROBLEM_CODES = {
+  builtin_agent_read_only: 403,
+  builder_name_reserved: 403,
+} as const;
+export type BuiltinAgentProblemCode = keyof typeof BUILTIN_AGENT_PROBLEM_CODES;
 
 /** Every operation the item routes of one agent serve, named for the built-in refusal (#1848). */
 export const BUILTIN_AGENT_OPERATIONS = [

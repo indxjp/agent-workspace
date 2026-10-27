@@ -1,8 +1,12 @@
 import type { BuilderRefusalCode } from '@indx-workspace/contracts/builder';
+import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { isStoppedRunStatus } from '@indx-workspace/contracts/runs';
 import type { RunTokenCodec } from '@agent-workspace/gateway/tokens';
 
 import type { AgentRecord } from '../../agents/contract';
+import type { AllowedAgent } from './allowed-owner-warning';
+import { isBuilderAgent } from '../agent/is-builder-agent';
+import { awControlAllowed } from '../agent/aw-control-allowed';
 import { verifyActiveRunToken, type RunTokenDatabase } from '../../gateway/run-token-verifier';
 import type { DirectoryRoot } from '../../rbac/directory';
 import type { Role } from '../../rbac/roles';
@@ -51,9 +55,18 @@ export interface RunCallerDeps<Scope> {
   /** Where the run's agent is read: a run of an agent the workspace no longer has is refused. */
   readonly agents: {
     forWorkspace(workspaceId: string): {
-      get(id: string): Promise<Pick<AgentRecord, 'builtin'> | null>;
+      get(
+        id: string,
+      ): Promise<Pick<
+        AgentRecord,
+        'builtin' | 'name' | 'createdByAgent' | 'ownerPrincipalId'
+      > | null>;
     };
   };
+  /** The deployment's `AW_DEPLOYMENT_POLICY` and nothing else: a project file's policy never grants the door. */
+  readonly ceiling: ProjectPolicy | null;
+  /** Told of each run of an allow-listed, non-Builder agent that the door admits; it must not throw. */
+  readonly onAllowedAgent?: (workspaceId: string, agent: AllowedAgent) => Promise<void>;
 }
 
 const refuse = (code: RunCallerRefusal['code']): RunCallerRefusal => ({
@@ -84,9 +97,17 @@ export async function verifyRunCaller<Scope>(
       agentId: claims.agentId,
     };
     const readsOnly: RunCallerRefusal = { ok: false, code: 'no_caller', reads: true, run };
-    // Any agent's run may knock; who it is, and what it may do, is decided downstream from the agent row.
+    // A run of an agent that composition gave no `aw-control` is refused here, before the shell
+    // journals anything; what a run that did get it may do is decided downstream from the agent row.
     const agent = await deps.agents.forWorkspace(claims.workspaceId).get(claims.agentId);
-    if (agent === null) return refuse('not_allowed_to_build');
+    // This reads the agent's current name, not the name its run started under: an Admin renaming
+    // the agent mid-run changes the answer from that run's next call on.
+    if (agent === null || !awControlAllowed(agent, deps.ceiling)) {
+      return refuse('not_allowed_to_build');
+    }
+    if (!isBuilderAgent(agent)) {
+      await deps.onAllowedAgent?.(claims.workspaceId, { ...agent, id: claims.agentId });
+    }
     const caller = claims.caller;
     if (caller === undefined) return readsOnly;
     // ponytail: api-key callers stay read-only until the token names the key that started the run.

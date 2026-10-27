@@ -45,7 +45,7 @@ import {
   type AgentResourceAssignmentsInput,
   type ReplaceAgentResourcesOutcome,
 } from './agent-resources.js';
-import type { Executor } from './agent-versions-shared.js';
+import { lockAgentCreations, type Executor } from './agent-versions-shared.js';
 import {
   agents,
   parseAgentPermissions,
@@ -372,24 +372,28 @@ export function createDatabaseAgentRepositoryProvider(db: Executor): AgentReposi
 
         async create(input: CreateAgentInput): Promise<CreateAgentOutcome> {
           try {
-            const rows = await db
-              .insert(agents)
-              .values({
-                // Not from the caller. An insert cannot name a workspace; it inherits the scope's.
-                workspaceId: checked.workspaceId,
-                name: input.name,
-                instructions: input.instructions,
-                modelConnectionId: input.modelConnectionId,
-                model: input.model,
-                runtimeProfileId: input.runtimeProfileId ?? null,
-                permissions: { ...input.permissions },
-                ownerPrincipalId: input.ownerPrincipalId,
-                createdBy: input.createdBy ?? null,
-                createdByAgentId: input.createdByAgent?.agentId ?? null,
-                createdByAgentVersion: input.createdByAgent?.version ?? null,
-                createdByRunId: input.createdByAgent?.runId ?? null,
-              })
-              .returning(AGENT_COLUMNS);
+            const rows = await db.transaction(async (tx) => {
+              // The quota count reads `agents`, so a creation from any door waits its turn.
+              await lockAgentCreations(tx, checked.workspaceId);
+              return tx
+                .insert(agents)
+                .values({
+                  // Not from the caller. An insert cannot name a workspace; it inherits the scope's.
+                  workspaceId: checked.workspaceId,
+                  name: input.name,
+                  instructions: input.instructions,
+                  modelConnectionId: input.modelConnectionId,
+                  model: input.model,
+                  runtimeProfileId: input.runtimeProfileId ?? null,
+                  permissions: { ...input.permissions },
+                  ownerPrincipalId: input.ownerPrincipalId,
+                  createdBy: input.createdBy ?? null,
+                  createdByAgentId: input.createdByAgent?.agentId ?? null,
+                  createdByAgentVersion: input.createdByAgent?.version ?? null,
+                  createdByRunId: input.createdByAgent?.runId ?? null,
+                })
+                .returning(AGENT_COLUMNS);
+            });
             const row = rows[0];
             if (row === undefined) {
               throw new Error('the insert returned no row');

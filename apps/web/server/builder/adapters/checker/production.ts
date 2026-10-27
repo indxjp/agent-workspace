@@ -73,6 +73,7 @@ export function createChecker(deps: CheckerDependencies): CheckerPort {
               principalId: principal.principalId,
               ownerPrincipalId: principal.ownerPrincipalId,
               userId: principal.userId,
+              role: principal.role,
               actorLabel: 'Builder',
             },
             { ...pipeline, store, agents },
