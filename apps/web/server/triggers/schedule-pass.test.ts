@@ -5,8 +5,10 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
 import { Principal } from '../rbac/principal';
 import { TEST_WORKSPACE_ID } from '../rbac/testing';
 import type { LaunchContext, RunApiEnvironment } from '../runs/environment';
@@ -165,6 +167,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  clearFeatureSwitches();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -329,6 +332,34 @@ describe('runSchedulePass', () => {
       runSchedulePass({ root: root(), runtime: runtime(), runs: () => null, log }),
     ).rejects.toThrow('run API');
     expect(released).toBe(1);
+  });
+});
+
+describe('runSchedulePass and a workspace with triggers switched off (ADR-0160 D7)', () => {
+  it('skips the workspace without reading its triggers, and is not refused', async () => {
+    const trigger = add(schedule());
+    configureFeatureSwitches({
+      enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== 'triggers')),
+    });
+
+    const result = await pass();
+
+    expect(result).toEqual({ leaseHeld: false, workspaces: 1, fired: 0, skipped: 0, failed: 0 });
+    expect(launches).toHaveLength(0);
+    expect(deliveries.size).toBe(0);
+    expect(pruned).toEqual([]);
+    expect(triggers.get(trigger.id)?.lastFiredAt).toBeNull();
+    expect(released).toBe(1);
+  });
+
+  it('fires again once the switch is back on', async () => {
+    add(schedule());
+    configureFeatureSwitches({
+      enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== 'triggers')),
+    });
+    await pass();
+    clearFeatureSwitches();
+    expect(await pass()).toMatchObject({ fired: 1 });
   });
 });
 

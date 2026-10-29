@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { setTimeout as sleep } from 'node:timers/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { and, eq, type SQL, sql } from 'drizzle-orm';
 import type pg from 'pg';
@@ -28,9 +28,9 @@ const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
 /** Pool size of the racing connection; the isolated database's own pool holds only four. */
 const RACE_CONNECTIONS = 10;
-
-/** How long a writer must stay blocked behind a held lock; generous for a loaded CI database. */
-const BLOCKED_MS = 300;
+/** How often, and how many times, `lockWaiters` asks `pg_locks` before it gives up. */
+const LOCK_WAITER_POLL_MS = 5;
+const LOCK_WAITER_POLLS = 400;
 
 // The storage design, §07: what memory cannot prove is one winner per path when many requests
 // arrive at once, so these cases run on PostgreSQL only.
@@ -158,22 +158,53 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   });
 
   // @story US-STO-14
-  it('[US-STO-14][contract][sdk] a confirm racing a remove never leaves a pending orphan', async () => {
+  it('[US-STO-14][contract][sdk] a confirm racing a remove has one winner, whichever reaches the path lock first', async () => {
     const input = { ownerPrincipalId: principalId, sizeBytes: 1, contentType: null };
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const path = `confirm-race/${attempt}.bin`;
+    for (const first of ['confirm', 'remove'] as const) {
+      const path = `confirm-race/${first}-first.bin`;
       const outcome = await catalog.reserve(path, input);
       expect(outcome.kind).toBe('reserved');
 
-      const [confirmed] = await Promise.all([
-        catalog.confirm(outcome.row, { sizeBytes: 2, contentType: null }),
-        catalog.remove(path),
-      ]);
+      // Both writers queue behind the held path lock in a known order, then run one after the other.
+      let release = (): void => undefined;
+      let held = (): void => undefined;
+      const lockHeld = new Promise<void>((resolve) => (held = resolve));
+      const released = new Promise<void>((resolve) => (release = resolve));
+      const holder = isolated.db.transaction(async (tx) => {
+        await tx.execute(pathLock(path));
+        held();
+        await released;
+      });
+      await lockHeld;
+      const confirm = () => catalog.confirm(outcome.row, { sizeBytes: 2, contentType: null });
+      const remove = () => catalog.remove(path);
+      let confirming: ReturnType<typeof confirm>;
+      let removing: ReturnType<typeof remove>;
+      try {
+        if (first === 'confirm') {
+          confirming = confirm();
+          await lockWaiters(1, confirming);
+          removing = remove();
+        } else {
+          removing = remove();
+          await lockWaiters(1, removing);
+          confirming = confirm();
+        }
+        await lockWaiters(2, Promise.race([confirming, removing]));
+      } finally {
+        release();
+        await holder;
+      }
+      const [confirmed, removed] = await Promise.all([confirming, removing]);
 
-      expect(confirmed === null || confirmed.row.status === 'ready').toBe(true);
+      if (first === 'confirm') {
+        expect(confirmed?.row).toMatchObject({ id: outcome.row.id, status: 'ready' });
+      } else {
+        expect(confirmed).toBeNull();
+      }
+      expect(removed.map((row) => row.id)).toEqual([outcome.row.id]);
       const rows = await rowsFor(path);
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.status).toBe('deleting');
+      expect(rows.map((row) => [row.id, row.status])).toEqual([[outcome.row.id, 'deleting']]);
       expect(await rowsAt(path)).toEqual([]);
     }
   });
@@ -243,9 +274,45 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     }
   });
 
+  it('the lock barrier fails with a clear message when no session ever waits', async () => {
+    const never = new Promise<never>(() => undefined);
+    await expect(lockWaiters(1, never, 3)).rejects.toThrow(
+      'no session waited for an advisory lock',
+    );
+  });
+
+  /**
+   * Resolves once `count` sessions of this test database wait for an advisory lock: a barrier that
+   * proves a writer reached its lock. Polled on the test pool, which no writer uses, until
+   * `settled` does, so a race it loses leaves no query running; a writer that neither waits nor
+   * settles fails the test after `polls` polls instead of spinning until the suite timeout.
+   */
+  async function lockWaiters(
+    count: number,
+    settled: Promise<unknown>,
+    polls = LOCK_WAITER_POLLS,
+  ): Promise<void> {
+    let stop = false;
+    void settled.finally(() => (stop = true)).catch(() => undefined);
+    for (let poll = 0; poll < polls; poll += 1) {
+      if (stop) return;
+      const result = await isolated.db.execute(
+        sql`select count(*)::int as waiting from pg_locks l join pg_database d on d.oid = l.database
+            where d.datname = current_database() and l.locktype = 'advisory' and not l.granted`,
+      );
+      const waiting = Number((result.rows[0] as { waiting?: unknown } | undefined)?.waiting ?? 0);
+      if (waiting >= count) return;
+      await delay(LOCK_WAITER_POLL_MS);
+    }
+    if (stop) return;
+    throw new Error(
+      `After ${String(polls)} polls, no session waited for an advisory lock (wanted ${String(count)}).`,
+    );
+  }
+
   /**
    * Hold `lock` in a transaction on the test pool, start `write` on the race pool, and prove it waits
-   * for the lock: still running after {@link BLOCKED_MS}, done once the lock is released.
+   * for the lock: queued on an advisory lock while it is held, done once the lock is released.
    */
   async function expectWaitsFor(lock: SQL, write: () => Promise<unknown>): Promise<void> {
     let held = (): void => undefined;
@@ -261,7 +328,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     let done = false;
     const writing = write().finally(() => (done = true));
     try {
-      await sleep(BLOCKED_MS);
+      await Promise.race([lockWaiters(1, writing), writing]);
       expect(done).toBe(false);
     } finally {
       release();
@@ -284,9 +351,10 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     });
     await lockHeld;
     try {
+      const writing = write();
       const outcome = await Promise.race([
-        write().then(() => 'done'),
-        sleep(BLOCKED_MS * 10).then(() => 'blocked'),
+        writing.then(() => 'done'),
+        lockWaiters(1, writing).then(() => 'blocked'),
       ]);
       expect(outcome).toBe('done');
     } finally {
@@ -453,12 +521,14 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
         sizeBytes: 1,
         contentType: null,
       });
-      await sleep(BLOCKED_MS);
+      // The rename holds `from` and waits on `to`; then the confirm, past its first read, waits on
+      // `from`.
+      await lockWaiters(1, renaming);
       let done = false;
       confirming = catalog
         .confirm(reserved.row, { sizeBytes: 2, contentType: null })
         .finally(() => (done = true));
-      await sleep(BLOCKED_MS);
+      await lockWaiters(2, Promise.race([renaming, confirming]));
       expect(done).toBe(false);
       release();
       await holder;

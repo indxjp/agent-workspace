@@ -74,6 +74,12 @@ export interface VersionsStrings {
   readonly refusals: Readonly<Record<VersionsRefusalCode, string>>;
   readonly unavailable: string;
   readonly moved: (plan: string) => string;
+  readonly archivedBadge: string;
+  readonly archivedTitle: (archivedAt: string) => string;
+  readonly restore: string;
+  readonly restoring: string;
+  readonly restoreRefusals: Readonly<Record<'forbidden' | 'agent_not_found', string>>;
+  readonly showArchived: string;
 }
 
 const EN: VersionsStrings = {
@@ -140,6 +146,7 @@ const EN: VersionsStrings = {
       'The version asks for a permission mode that is not allowed.',
     agent_not_found: 'This agent no longer exists.',
     agent_policy_not_configured: 'This deployment has no policy configured for agents.',
+    agent_archived: 'This agent is archived. Restore it before changing its versions.',
     agent_version_not_found: 'That version does not exist.',
     agent_version_number_taken: 'Another save took that version number first. Try again.',
     no_pointer: 'local points at no version, so there is nothing to promote.',
@@ -177,6 +184,15 @@ const EN: VersionsStrings = {
   },
   unavailable: 'The request could not be completed. Try again.',
   moved: (plan) => `Done: ${plan}`,
+  archivedBadge: 'Archived',
+  archivedTitle: (archivedAt) => `Archived at ${archivedAt}`,
+  restore: 'Restore',
+  restoring: 'Restoring…',
+  restoreRefusals: {
+    forbidden: 'Your role may not restore this agent.',
+    agent_not_found: 'This agent no longer exists.',
+  },
+  showArchived: 'Show archived',
 };
 
 const JA: VersionsStrings = {
@@ -243,6 +259,8 @@ const JA: VersionsStrings = {
       'このバージョンは、許可されていない権限モードを求めています。',
     agent_not_found: 'このエージェントは存在しません。',
     agent_policy_not_configured: 'この環境にはエージェントのポリシーが設定されていません。',
+    agent_archived:
+      'このエージェントはアーカイブされています。バージョンを変更するには、先に復元してください。',
     agent_version_not_found: '指定されたバージョンは存在しません。',
     agent_version_number_taken:
       '別の保存が先にそのバージョン番号を使いました。もう一度お試しください。',
@@ -284,6 +302,15 @@ const JA: VersionsStrings = {
   },
   unavailable: '処理を完了できませんでした。もう一度お試しください。',
   moved: (plan) => `完了しました: ${plan}`,
+  archivedBadge: 'アーカイブ済み',
+  archivedTitle: (archivedAt) => `アーカイブ日時: ${archivedAt}`,
+  restore: '復元',
+  restoring: '復元しています…',
+  restoreRefusals: {
+    forbidden: 'このエージェントを復元する権限がありません。',
+    agent_not_found: 'このエージェントは存在しません。',
+  },
+  showArchived: 'アーカイブ済みを表示',
 };
 
 const STRINGS: Readonly<Record<VersionsLocale, VersionsStrings>> = { en: EN, ja: JA };
@@ -297,6 +324,17 @@ export function refusalText(code: string, strings: VersionsStrings): string {
   return Object.hasOwn(strings.refusals, code)
     ? strings.refusals[code as VersionsRefusalCode]
     : strings.unavailable;
+}
+
+/** The sentence for a failed restore: its own refusals, then the tab's, else the generic one. */
+export function restoreProblemText(
+  problem: { readonly code?: string },
+  strings: VersionsStrings,
+): string {
+  const code = problem.code ?? '';
+  return Object.hasOwn(strings.restoreRefusals, code)
+    ? strings.restoreRefusals[code as keyof VersionsStrings['restoreRefusals']]
+    : refusalText(code, strings);
 }
 
 const Q_VALUE = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/u;

@@ -191,7 +191,7 @@ describe('npx served by pnpm dlx', () => {
     // pnpm a PATH and writable directories under /tmp.
     const invocation = pnpmInvocation(['-y', 'pkg'], {});
     expect(invocation.cli).toBe(DEFAULT_PNPM_CLI);
-    expect(DEFAULT_PNPM_CLI).toBe('/opt/pnpm/bin/pnpm.cjs');
+    expect(DEFAULT_PNPM_CLI).toBe('/opt/pnpm/pnpm');
     expect(invocation.env).toEqual({
       PATH: DEFAULT_PATH,
       XDG_CACHE_HOME: '/tmp/pnpm/cache',
@@ -201,14 +201,16 @@ describe('npx served by pnpm dlx', () => {
     });
     expect(DEFAULT_PATH.split(':')).toContain('/usr/local/bin');
 
-    // Spawned for real with an empty environment, it runs the fixed entry point (absent on this
-    // host, so node reports that path) instead of refusing for want of PNPM_CLI.
+    // Spawned for real with an empty environment, it runs the fixed executable (absent on this
+    // host, so the spawn reports that path) instead of refusing for want of PNPM_CLI.
     const result = spawnSync(process.execPath, [SHIM, '-y', 'pkg'], {
       encoding: 'utf8',
       env: process.platform === 'win32' ? { SYSTEMROOT: process.env['SYSTEMROOT'] ?? '' } : {},
     });
     expect(result.status).toBe(1);
-    expect(result.stderr).toMatch(/opt[\\/]pnpm[\\/]bin[\\/]pnpm\.cjs/u);
+    expect(result.stderr).toMatch(
+      /could not start \/opt\/pnpm\/pnpm: spawn \/opt\/pnpm\/pnpm ENOENT/u,
+    );
   });
 
   it('keeps every directory and PATH the caller did set', () => {
@@ -240,7 +242,7 @@ describe('npx served by pnpm dlx', () => {
   });
 
   it('passes pnpm no package-manager setting: dlx already skips the packageManager check', () => {
-    // pnpm 11 has no `manage-package-manager-versions`; `dlx` is exempt from the check (ADR-0087).
+    // pnpm has no `manage-package-manager-versions`; `dlx` is exempt from the check (ADR-0087).
     const { args } = pnpmInvocation(['pkg'], {});
     expect(args[0]).toBe('dlx');
     expect(args.some((argument) => argument.startsWith('--config.'))).toBe(false);

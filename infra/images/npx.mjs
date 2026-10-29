@@ -26,8 +26,8 @@
  * Docker driver, Kubernetes and the generated Compose runner use a read-only root filesystem where
  * only `/tmp` and `/workspace` are writable. So nothing here depends on the environment:
  *
- * - pnpm is `PNPM_CLI` when set, else the image's fixed `/opt/pnpm/bin/pnpm.cjs`, run with this
- *   Node;
+ * - pnpm is `PNPM_CLI` when set, else the image's fixed `/opt/pnpm/pnpm`, pnpm's native executable
+ *   (a JavaScript entry point, which `PNPM_CLI` may name instead, runs with this Node);
  * - pnpm's child gets a `PATH` when it has none (a package's bin needs `node` on it), and pnpm's
  *   cache, store, state and config directories go under `/tmp/pnpm` for each `XDG_*` variable the
  *   caller did not set, so a read-only home directory is never written.
@@ -41,8 +41,8 @@ import { fileURLToPath } from 'node:url';
 
 import { runInherited } from './npx-run-bin.mjs';
 
-/** Where the images install pnpm (`Dockerfile`, `runtime.Dockerfile`). */
-export const DEFAULT_PNPM_CLI = '/opt/pnpm/bin/pnpm.cjs';
+/** Where the images install pnpm's native executable (`Dockerfile`, `runtime.Dockerfile`). */
+export const DEFAULT_PNPM_CLI = '/opt/pnpm/pnpm';
 /** Debian's default search path, for a child launched with no `PATH` at all. */
 export const DEFAULT_PATH = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 /** The root pnpm's directories default to: `/tmp` stays writable under `--read-only`. */
@@ -183,5 +183,9 @@ if (
     process.stderr.write(`${error.message}\n`);
     process.exit(2);
   }
-  runInherited(process.execPath, [invocation.cli, ...invocation.args], invocation.env);
+  if (/\.[cm]?js$/u.test(invocation.cli)) {
+    runInherited(process.execPath, [invocation.cli, ...invocation.args], invocation.env);
+  } else {
+    runInherited(invocation.cli, invocation.args, invocation.env);
+  }
 }

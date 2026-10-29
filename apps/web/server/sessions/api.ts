@@ -69,6 +69,7 @@
  * and that one row decides both the archived refusal and the stream.
  */
 import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { featureRefusalResponse } from '../features/guard';
 import { apiError, isUuid, json, readJsonBody } from '../runs/http';
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import { SESSION_LIST_MAX_LIMIT } from '@indx-workspace/contracts/sessions';
@@ -117,6 +118,8 @@ export async function ready(request: Request): Promise<Ready> {
   if (env === undefined) return { ok: false, response: notConfigured() };
   const principal = await env.authenticate(request);
   if (principal === null) return { ok: false, response: unauthenticated() };
+  const disabled = await featureRefusalResponse(request, principal.workspaceId);
+  if (disabled !== null) return { ok: false, response: disabled };
   return { ok: true, env, principal };
 }
 

@@ -156,6 +156,22 @@ const fixture: Readonly<Record<string, string>> = {
   'packages/core/src/storage/backends.ts': 'export const backends = 1;\n',
   'packages/core/src/storage/uses-backends.ts': "export * from './backends';\n",
   'packages/core/src/storage/uses-backends.test.ts': "export * from './backends';\n",
+  // #1746: a raw backend factory's createSignedUrl is unbounded, so only the storage module
+  // itself (which wraps each in the scoped store) and tests may import a backend file.
+  'packages/core/src/storage/open.ts': [
+    "export * from './s3-store';",
+    "export * from './gcs-store';",
+    "export * from './azure-blob-store';",
+    '',
+  ].join('\n'),
+  'apps/web/server/files/raw-store.ts': [
+    "export * from '../../../../packages/core/src/storage/s3-store';",
+    "export * from '../../../../packages/core/src/storage/gcs-store';",
+    "export * from '../../../../packages/core/src/storage/azure-blob-store';",
+    '',
+  ].join('\n'),
+  'apps/web/server/files/raw-store.test.ts':
+    "export * from '../../../../packages/core/src/storage/s3-store';\n",
 };
 
 const reportSchema = z.object({
@@ -339,13 +355,21 @@ describe('the dependency-cruiser rules fire on planted violations', () => {
     ]);
   });
 
+  it('#1746: only the storage module and tests import a raw backend factory', () => {
+    expect(edgesOf('raw-storage-backends-stay-in-core-storage')).toStrictEqual([
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/azure-blob-store.ts',
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/gcs-store.ts',
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/s3-store.ts',
+    ]);
+  });
+
   it('reports nothing else: the allowed edges stay allowed and every import resolves', () => {
     // 5 earlier + 7 F-15 + the cli and create fence rules firing on the same planted imports
     // + 3 baseline-rule cases + the 2 wire modules the domain rule also reports + 1 F-08 (run-protocol)
     // + 3 F-08 (the Claude adapter's core import; core's engine and run-protocol imports)
     // + 4 design §07 rule 1 (one per cloud, two S3 libraries) + 2 design §07 rule 2
-    // + 1 storage backends subpath
-    expect(violations).toHaveLength(2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1);
+    // + 1 storage backends subpath + 3 raw backend factories (#1746)
+    expect(violations).toHaveLength(2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3);
   });
 });
 

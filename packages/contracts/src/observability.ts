@@ -96,12 +96,15 @@ export const AUDIT_ACTIONS = [
   'storage-connection-tested',
   'storage-connection-written',
   'storage-grant-changed',
+  // ADR-0160 D8: one row per PUT of a workspace's feature switches.
+  'workspace-features-changed',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 /**
- * What an `agent-created` row names (issue #1847), stored in `audit_events.details`, which no other
- * action may carry. `createdByAgentId` is for issue #1851 and is unused here.
+ * What an `agent-created` row names (issue #1847), stored in `audit_events.details`, which only an
+ * `agent-created` or `agent-changed` row may carry. `createdByAgentId` is for issue #1851 and is
+ * unused here.
  */
 export const AgentCreatedAuditDetailsSchema = z
   .object({
@@ -115,6 +118,18 @@ export const AgentCreatedAuditDetailsSchema = z
   .readonly();
 
 export type AgentCreatedAuditDetails = z.infer<typeof AgentCreatedAuditDetailsSchema>;
+
+/**
+ * What an `agent-changed` row may carry in `audit_events.details`: the auto-archive sweep marks the
+ * row that archived an agent with `archived: true`, and a restore marks its row `archived: false`
+ * (issue #1851). A pointer move or a runtime switch writes the same action with no details.
+ */
+export const AgentChangedAuditDetailsSchema = z
+  .object({ archived: z.boolean() })
+  .strict()
+  .readonly();
+
+export type AgentChangedAuditDetails = z.infer<typeof AgentChangedAuditDetailsSchema>;
 
 /**
  * One audit row as every item of `GET /api/audit-events` renders it: who, what, to which thing,

@@ -20,8 +20,8 @@ import {
   toObjectKey,
   UnsafeObjectKeyError,
   type ByteRange,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
+  type ObjectStoreProvider,
+  type ObjectStore,
   type ObjectStream,
   type SignedUrl,
   type StorageArea,
@@ -34,7 +34,9 @@ import {
 } from '@indx-workspace/contracts/files';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
+import { CLEANUP_MIN_AGE_MS } from './cleanup';
 import { BodyTooLargeError, measure } from './measure';
+import { promoteUpload } from './promote-upload';
 import {
   isPathPending,
   isPathTaken,
@@ -106,13 +108,27 @@ export interface SaveInput {
   readonly body: ReadableStream<Uint8Array>;
   /** The caller's one limit constant. */
   readonly maxBytes: number;
-  /** `false`: a ready row at the path answers `path_taken`. */
-  readonly replace: boolean;
+  /** The type the uploader declared; absent or `null`, the path's extension decides. */
+  readonly contentType?: string | null | undefined;
+  /**
+   * `false`: a ready row at the path answers `path_taken`. A policy is asked about that row and
+   * answers the same `path_taken` when it refuses.
+   */
+  readonly replace: boolean | ReplacePolicy;
 }
 
 /**
- * `path_changed`: the pending row was removed or moved while the bytes were written, so nothing
- * was confirmed; the object is gone and the caller may retry.
+ * May this caller overwrite `target`? `target` is the ready file the reservation will replace, as
+ * the catalog read it under its path lock (`ReserveOutcome.replaces`), never a fresh read of the
+ * path: a path can be renamed away and reused between the two, and the replacement follows the
+ * file it was reserved against.
+ */
+type ReplacePolicy = (target: CatalogFile) => Promise<boolean>;
+
+/**
+ * `path_taken`: a row at the path cannot be replaced, by this save's `replace`. `path_changed`: the
+ * pending row was removed or moved while the bytes were written, so nothing was confirmed; the
+ * object is gone and the caller may retry.
  */
 export type SaveResult =
   | { readonly ok: true; readonly row: CatalogFile }
@@ -135,6 +151,7 @@ type CreateFolderResult =
     };
 
 type RenameResult =
+  // `moved`: the files moved. A folder's own rows move too but are not counted.
   | { readonly ok: true; readonly moved: number }
   | {
       readonly ok: false;
@@ -142,7 +159,8 @@ type RenameResult =
     };
 
 type RemoveResult =
-  | { readonly ok: true; readonly removed: number }
+  /** `files`: the real path of every file this call removed, in path order. */
+  | { readonly ok: true; readonly removed: number; readonly files: readonly string[] }
   | { readonly ok: false; readonly code: 'not_found' | 'not_empty' | 'invalid_path' };
 
 interface SignDownloadRequest {
@@ -165,7 +183,7 @@ interface ReserveUploadRequest {
   readonly ttlSeconds?: number | undefined;
   readonly now?: Date;
   /** Asked only when the upload would replace a ready file: may this caller overwrite it? */
-  readonly mayReplace: () => Promise<boolean>;
+  readonly mayReplace: ReplacePolicy;
 }
 
 /**
@@ -218,9 +236,9 @@ export interface StorageService {
    */
   reserveUpload(ctx: StorageContext, request: ReserveUploadRequest): Promise<ReserveUploadResult>;
   /**
-   * Verify the object a signed `PUT` wrote (size, then SHA-256) and confirm the pending row,
-   * deleting the object it replaced. Completing a file that is already ready with its object in
-   * place answers it again.
+   * Verify the object a signed `PUT` wrote (size, then SHA-256 while copying it to an object no
+   * link names, `promote-upload.ts`) and confirm the pending row on that copy, deleting the object
+   * it replaced. Completing a file that is already ready with its object in place answers it again.
    */
   completeUpload(
     ctx: StorageContext,
@@ -312,6 +330,18 @@ function linkLifetime(ttlSeconds: number | undefined): number | null {
 }
 
 /**
+ * Whether a pending replacement may overwrite `target`, the ready file its reserve locked. A
+ * replacement the catalog named no target for is refused rather than decided on a path.
+ */
+async function mayReplace(
+  replace: boolean | ReplacePolicy,
+  target: CatalogFile | undefined,
+): Promise<boolean> {
+  if (target === undefined) return false;
+  return typeof replace === 'boolean' ? replace : replace(target);
+}
+
+/**
  * Whether a row answers a read for `area`. A `staging` row is never listed. An `artifacts` row
  * (a run output) lists as `files`: the area only decides which folder its object sits in.
  */
@@ -323,9 +353,9 @@ function listedIn(row: CatalogFile, area: StorageArea): boolean {
 export function createStorageService(deps: {
   readonly catalog: (workspaceId: string) => Promise<CatalogPort>;
   /** Unscoped, rooted at the `AW_STORAGE_URL` prefix. */
-  readonly objects: ObjectStoreV2;
+  readonly objects: ObjectStore;
   /** The area stores of the old naming, for rows without an object id. */
-  readonly legacy?: Partial<Readonly<Record<StorageArea, ObjectStoreProviderV2>>>;
+  readonly legacy?: Partial<Readonly<Record<StorageArea, ObjectStoreProvider>>>;
   /** The session-state blob catalog of a workspace; absent where no database holds one. */
   readonly sessionState?: (workspaceId: string) => Promise<SessionStateBlobCatalog>;
   /**
@@ -363,7 +393,7 @@ export function createStorageService(deps: {
     });
   }
 
-  const deleteObject = (name: string, store: ObjectStoreV2 = objects): Promise<boolean> =>
+  const deleteObject = (name: string, store: ObjectStore = objects): Promise<boolean> =>
     store.delete(name).then(
       () => true,
       (error: unknown) => {
@@ -391,7 +421,7 @@ export function createStorageService(deps: {
   // storage-bridge(#1699): legacy rows still carry their path in the object key
   /** The legacy objects a rename of `from` to `to` moves: old and new key, on the row's area store. */
   async function legacyMoves(catalog: CatalogPort, workspaceId: string, from: string, to: string) {
-    const moves: { store: ObjectStoreV2; from: string; to: string }[] = [];
+    const moves: { store: ObjectStore; from: string; to: string }[] = [];
     let cursor: string | undefined;
     do {
       const page = await catalog.list(from, cursor === undefined ? undefined : { cursor });
@@ -410,16 +440,31 @@ export function createStorageService(deps: {
   /**
    * The old object of a file row that was switched to the new naming, if one may still be there.
    * It goes with the row: a row-less old file would be adopted again and bring a removed file back.
+   * A legacy row that now holds that key (a one-step write at the old path after a rename) owns
+   * those bytes, so the twin is then `null`, as it is when that lookup fails.
    */
-  function oldTwin(workspaceId: string, row: ObjectRow) {
+  async function oldTwin(workspaceId: string, row: ObjectRow) {
     const objectId = row.objectId ?? null;
     const area = row.area ?? 'files';
     const legacy = deps.legacy?.[area];
     if (objectId === null || area !== 'files' || row.storageKey === null || legacy === undefined) {
       return null;
     }
-    if (row.storageKey === `${area}/${objectId}`) return null;
-    return { store: legacy.forWorkspace(workspaceId), name: row.storageKey };
+    const name = row.storageKey;
+    if (name === `${area}/${objectId}`) return null;
+    const held = await deps
+      .catalog(workspaceId)
+      .then((catalog) => catalog.referencing({ objectIds: [], storageKeys: [name] }))
+      .then(
+        (rows) => rows.length > 0,
+        (error: unknown) => {
+          log.warn('[storage] could not check an old-naming object; it is left in place', {
+            error,
+          });
+          return true;
+        },
+      );
+    return held ? null : { store: legacy.forWorkspace(workspaceId), name };
   }
 
   /** Delete a row's object, new naming or old; a failure is logged and left to the cleanup job. */
@@ -432,11 +477,55 @@ export function createStorageService(deps: {
       return;
     }
     await deleteObject(object.name, object.store);
-    const twin = oldTwin(workspaceId, row);
+    const twin = await oldTwin(workspaceId, row);
     if (twin !== null) await deleteObject(twin.name, twin.store);
   }
 
-  /** Delete a removed row's object, then drop the row; a failure leaves it `deleting` for the cleanup job. */
+  /**
+   * Claim a pending row for deletion before its object goes (`remove` with the snapshot): only the
+   * unchanged reservation `row` saw is claimed, so a row confirmed or reserved again since keeps
+   * its bytes. `null` when nothing was claimed; a failed claim is logged and left to the cleanup job.
+   */
+  async function claimPending(catalog: CatalogPort, row: CatalogFile): Promise<CatalogFile | null> {
+    try {
+      const [claimed] = await catalog.remove(row.targetPath ?? row.path, { pending: row });
+      return claimed ?? null;
+    } catch (error) {
+      log.warn('[storage] could not claim a pending row; the cleanup job will', {
+        rowId: row.id,
+        error,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Remove the upload pending at `path` when no ready file holds it: its reservation is claimed,
+   * then its object and row go, as for a removed file. The route has already decided the caller
+   * may (STO-111 #2). `not_found` when nothing is pending there either.
+   */
+  async function removePending(
+    ctx: Pick<StorageContext, 'workspaceId' | 'actor'>,
+    catalog: CatalogPort,
+    area: StorageArea,
+    path: string,
+  ): Promise<RemoveResult> {
+    const pending = await catalog.get(path, { includePending: true });
+    if (pending?.status !== 'pending' || !listedIn(pending, area)) {
+      return { ok: false, code: 'not_found' };
+    }
+    const claimed = await catalog.remove(path, { pending });
+    // Nothing claimed: the upload completed, or another delete took it, since it was read.
+    if (claimed.length === 0) return { ok: false, code: 'not_found' };
+    for (const r of claimed) await discard(catalog, ctx.workspaceId, r);
+    if (area === 'files') await audit(ctx, 'file-deleted', pending, path);
+    return { ok: true, removed: claimed.length, files: [path] };
+  }
+
+  /**
+   * Delete a removed row's object, then drop the row; a failure leaves it `deleting` for the cleanup
+   * job. A pending row is claimed first, and left alone when it changed since it was read.
+   */
   async function discard(catalog: CatalogPort, workspaceId: string, row: CatalogFile) {
     const object = locate(workspaceId, row);
     if (object === null) {
@@ -445,10 +534,12 @@ export function createStorageService(deps: {
       });
       return;
     }
+    const doomed = row.status === 'pending' ? await claimPending(catalog, row) : row;
+    if (doomed === null) return;
     if (!(await deleteObject(object.name, object.store))) return;
-    const twin = oldTwin(workspaceId, row);
+    const twin = await oldTwin(workspaceId, doomed);
     if (twin !== null && !(await deleteObject(twin.name, twin.store))) return;
-    await catalog.forget(row).catch((error: unknown) => {
+    await catalog.forget(doomed).catch((error: unknown) => {
       log.warn('[storage] could not forget a removed row; the cleanup job will', {
         rowId: row.id,
         error,
@@ -457,19 +548,29 @@ export function createStorageService(deps: {
   }
 
   /**
-   * Remove the pending row of a save that did not finish, and the object it wrote. The row is kept
-   * when its object could not be deleted, so the cleanup job (`stalePending`) still finds the
-   * object; until then the path answers `upload_in_progress`. A row whose `forget` fails is
-   * found the same way.
+   * Remove the pending row of a save or link that did not finish, then the object `name` it wrote.
+   * Only the reservation `row` saw is forgotten, and the object goes only when no live row
+   * references it by object id, which no rename changes: a row another caller confirmed keeps its
+   * bytes, and a removed (`deleting`) row's object goes with that row anyway. A failed `forget` or
+   * lookup keeps the object for the cleanup job.
    */
   async function abandon(catalog: CatalogPort, row: CatalogFile, name: string | null) {
-    if (name !== null && !(await deleteObject(name))) return;
     await catalog.forget(row).catch((error: unknown) => {
       log.warn('[storage] could not forget a pending row; the cleanup job will', {
         rowId: row.id,
         error,
       });
     });
+    const objectId = row.objectId ?? null;
+    if (name === null || objectId === null) return;
+    const held = await catalog.referencing({ objectIds: [objectId], storageKeys: [] }).then(
+      (rows) => rows.some((other) => other.status !== 'deleting'),
+      (error: unknown) => {
+        log.warn('[storage] could not check a saved object; the cleanup job will', { error });
+        return true;
+      },
+    );
+    if (!held) await deleteObject(name);
   }
 
   return {
@@ -511,18 +612,33 @@ export function createStorageService(deps: {
       const added = reserved.kind === 'reserved';
       const undo = () => (added ? abandon(catalog, row, null) : Promise.resolve());
 
-      // Counted after the reserve, so re-minting a pending path never counts twice.
-      // ponytail: concurrent mints can overshoot by their concurrency; count inside reserve's
-      // transaction under a workspace lock if that matters.
-      if (added && (await catalog.countPending()) > MAX_PENDING_UPLOADS_PER_WORKSPACE) {
+      const now = request.now ?? new Date();
+      // Counted after the reserve, so re-minting a pending path never counts twice. A reservation
+      // older than the longest link plus an hour can no longer be uploaded to, so it does not
+      // count, whether or not the cleanup job has removed it yet (the storage design, §05).
+      // Each mint counts after its own reservation commits, so the last one admitted counts every
+      // admitted row and the cap is never exceeded.
+      // ponytail: near the cap, concurrent mints can refuse each other until one undoes its row;
+      // count inside reserve's transaction under a workspace lock if that matters.
+      const fresh = new Date(now.getTime() - CLEANUP_MIN_AGE_MS);
+      if (added && (await catalog.countPending(fresh)) > MAX_PENDING_UPLOADS_PER_WORKSPACE) {
         await undo();
         return { ok: false, code: 'too_many_pending' };
       }
-      // A pending row at a side path replaces a ready file. Decided after the reserve, so a file
-      // that appears between a check and the reserve cannot be overwritten by mistake.
-      if ((row.targetPath ?? null) !== null && !(await request.mayReplace())) {
-        await undo();
-        return { ok: false, code: 'replace_refused' };
+      // A pending row at a side path replaces a ready file. Decided after the reserve, on the file
+      // it read under its lock, so a file that appears or moves around the check is never
+      // overwritten by mistake. A policy that fails releases this reservation and rethrows.
+      if ((row.targetPath ?? null) !== null) {
+        const allowed = await mayReplace(request.mayReplace, reserved.replaces).catch(
+          async (error: unknown) => {
+            await undo();
+            throw error;
+          },
+        );
+        if (!allowed) {
+          await undo();
+          return { ok: false, code: 'replace_refused' };
+        }
       }
       const object = locate(ctx.workspaceId, row);
       if (object === null || object.store.createSignedUrl === undefined) {
@@ -530,7 +646,6 @@ export function createStorageService(deps: {
         return { ok: false, code: 'sign_unsupported' };
       }
 
-      const now = request.now ?? new Date();
       let url: SignedUrl;
       try {
         url = await object.store.createSignedUrl(object.name, {
@@ -597,31 +712,27 @@ export function createStorageService(deps: {
       if (meta.sizeBytes > row.sizeBytes || meta.sizeBytes > request.maxBytes) return refuseLarge();
       if (meta.sizeBytes !== row.sizeBytes) return { ok: false, code: 'size_mismatch' };
 
-      // The checksum is of the bytes in the store, not of what the caller says it sent.
-      const stream = await object.store.read(object.name);
-      if (stream === null) return { ok: false, code: 'not_verified' };
-      const measured = measure(Math.min(request.maxBytes, row.sizeBytes));
-      try {
-        await stream.body.pipeThrough(measured.stream).pipeTo(new WritableStream());
-      } catch (error) {
-        if (error instanceof BodyTooLargeError) return refuseLarge();
-        throw error;
-      }
-      const { sizeBytes, sha256 } = measured.result();
-      if (sizeBytes !== row.sizeBytes) return { ok: false, code: 'size_mismatch' };
-
-      const confirmed = await catalog.confirm(row, {
-        sizeBytes,
-        sha256,
-        contentType: inferContentType(path),
-      });
-      if (confirmed === null) {
+      // The checksum is of the bytes in the store, not of what the caller says it sent, and of the
+      // copy no link can write, not of the object the link names (`promote-upload.ts`).
+      const objectId = row.objectId ?? null;
+      if (objectId === null) return { ok: false, code: 'not_verified' };
+      const promoted = await promoteUpload(
+        { objects, catalog, log },
+        ctx.workspaceId,
+        { ...row, objectId },
+        Math.min(request.maxBytes, row.sizeBytes),
+      );
+      if (promoted.kind !== 'confirmed') {
+        if (promoted.kind === 'too_large') return refuseLarge();
+        if (promoted.kind === 'missing') return { ok: false, code: 'not_verified' };
+        if (promoted.kind === 'size_mismatch') return { ok: false, code: 'size_mismatch' };
         // Confirmed by a concurrent complete, or the path moved while the object was read.
         const current = await catalog.get(path);
         return current !== null && current.id === row.id
           ? { ok: true, row: current }
           : { ok: false, code: 'not_found' };
       }
+      const confirmed = promoted.outcome;
       if (confirmed.replaced !== undefined) {
         await discard(catalog, ctx.workspaceId, confirmed.replaced);
       }
@@ -648,7 +759,7 @@ export function createStorageService(deps: {
       }
       const catalog = await deps.catalog(ctx.workspaceId);
       const objectId = newObjectId();
-      const contentType = inferContentType(path);
+      const contentType = input.contentType ?? inferContentType(path);
 
       // 1. Reserve. The database decides who wins the path.
       let reserved;
@@ -672,10 +783,23 @@ export function createStorageService(deps: {
       }
       const row = reserved.row;
       // A pending row at a side path is a replacement of a ready file. Checked after the reserve,
-      // not before it, so a file that appears between the two cannot be replaced by mistake.
-      if ((row.targetPath ?? null) !== null && !input.replace) {
-        await abandon(catalog, row, null);
-        return refuse('path_taken');
+      // on the file it read under its lock, so a file that appears between the two cannot be
+      // replaced by mistake. A policy that fails releases this reservation and the unread body,
+      // and its error is the one the caller sees.
+      if ((row.targetPath ?? null) !== null) {
+        const allowed = await mayReplace(input.replace, reserved.replaces).catch(
+          async (error: unknown) => {
+            await abandon(catalog, row, null);
+            await input.body.cancel().catch((cancelError: unknown) => {
+              log.warn('[storage] could not cancel an upload body', { error: cancelError });
+            });
+            throw error;
+          },
+        );
+        if (!allowed) {
+          await abandon(catalog, row, null);
+          return refuse('path_taken');
+        }
       }
 
       // 2. Write, measuring in the stream.
@@ -700,17 +824,9 @@ export function createStorageService(deps: {
       try {
         confirmed = await catalog.confirm(row, { ...measured.result(), contentType });
       } catch (error) {
-        // The commit may have happened with its reply lost: the object goes only if the path's
-        // ready row is not ours. A failed read leaves the object for the cleanup job.
-        await catalog.forget(row).catch((forgetError: unknown) => {
-          log.warn('[storage] could not forget a pending row; the cleanup job will', {
-            rowId: row.id,
-            error: forgetError,
-          });
-        });
-        // ponytail: a rename of a committed file inside this window hides it from the re-check.
-        const current = await catalog.get(path).catch(() => undefined);
-        if (current !== undefined && current?.objectId !== objectId) await deleteObject(name);
+        // The commit may have happened with its reply lost, and the file renamed since: `abandon`
+        // keeps an object a row still references.
+        await abandon(catalog, row, name);
         throw error;
       }
       if (confirmed === null) {
@@ -729,7 +845,7 @@ export function createStorageService(deps: {
           replacedObjectId,
         );
         // The old twin goes too: a row-less old object would be adopted again as a live file.
-        const twin = oldTwin(ctx.workspaceId, replaced);
+        const twin = await oldTwin(ctx.workspaceId, replaced);
         if (
           (await deleteObject(old)) &&
           (twin === null || (await deleteObject(twin.name, twin.store)))
@@ -933,10 +1049,25 @@ export function createStorageService(deps: {
       const moves = await legacyMoves(catalog, ctx.workspaceId, source, target);
       // Only the keys this call created, so undoing never deletes another file's bytes.
       const copied: typeof moves = [];
+      // storage-bridge(#1699): the adopt stage can give a copy a row before the catalog rename;
+      // that copy is then the row's bytes and stays. A failed lookup keeps every copy.
       const undo = async () => {
-        for (const m of copied) await deleteObject(m.to, m.store);
+        if (copied.length === 0) return;
+        const held = await catalog
+          .referencing({ objectIds: [], storageKeys: copied.map((m) => m.to) })
+          .then(
+            (rows) => new Set(rows.map((other) => other.storageKey)),
+            (error: unknown) => {
+              log.warn('[storage] could not check renamed copies; they are left in place', {
+                error,
+              });
+              return null;
+            },
+          );
+        if (held === null) return;
+        for (const m of copied) if (!held.has(m.to)) await deleteObject(m.to, m.store);
       };
-      let moved: number;
+      let moved: Awaited<ReturnType<CatalogPort['rename']>>;
       try {
         for (const m of moves) {
           const object = await m.store.read(m.from);
@@ -958,7 +1089,7 @@ export function createStorageService(deps: {
         if (isPathTaken(error)) return { ok: false, code: 'path_taken' };
         throw error;
       }
-      if (moved === 0) {
+      if (moved.rows === 0) {
         await undo();
         return { ok: false, code: 'not_found' };
       }
@@ -967,7 +1098,7 @@ export function createStorageService(deps: {
       if (row !== null && area === 'files') {
         await audit(ctx, 'file-moved', row, `${source} -> ${target}`);
       }
-      return { ok: true, moved };
+      return { ok: true, moved: moved.files };
     },
 
     // @story US-STO-04
@@ -981,9 +1112,8 @@ export function createStorageService(deps: {
       }
       const catalog = await deps.catalog(ctx.workspaceId);
       const row = await catalog.get(target);
-      if (row === null || (row.kind === 'file' && !listedIn(row, area))) {
-        return { ok: false, code: 'not_found' };
-      }
+      if (row === null) return removePending(ctx, catalog, area, target);
+      if (row.kind === 'file' && !listedIn(row, area)) return { ok: false, code: 'not_found' };
       // ponytail: a file added under the folder between this check and `remove` goes with it.
       if (row.kind === 'folder' && !recursive) {
         const inside = await catalog.list(target, { limit: 2 });
@@ -997,7 +1127,11 @@ export function createStorageService(deps: {
       }
       // Nothing marked: a concurrent delete won the race, and it audits its own delete.
       if (area === 'files' && marked.length > 0) await audit(ctx, 'file-deleted', row, target);
-      return { ok: true, removed: marked.length };
+      const removedFiles = marked
+        .filter((r) => r.kind === 'file')
+        .map((r) => r.targetPath ?? r.path)
+        .sort();
+      return { ok: true, removed: marked.length, files: removedFiles };
     },
   };
 }

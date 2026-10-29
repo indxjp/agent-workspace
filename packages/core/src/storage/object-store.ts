@@ -1,23 +1,15 @@
 /**
- * `ObjectStore` — spec §16's four methods (`put`/`get`/`delete`/`list`), and the scoping wrapper
- * that turns any backend into one that cannot be handed a key outside its own workspace.
+ * `ObjectStore` — the streaming object port (the storage design, §02 ① Storage), and the scoping
+ * wrapper that turns any backend into one that cannot be handed a key outside its own workspace.
  *
- * ## The shape spec §16 asks for, kept to four methods
+ * ## The shape of the port
  *
- * ```ts
- * interface ObjectStore {
- *   put(...)
- *   get(...)
- *   delete(...)
- *   list(...)
- * }
- * ```
- *
- * R-15 §1c records that this leaves two of §16's UI operations — rename and preview metadata —
- * unexpressed by the four methods alone, and that both are *composed* from them rather than added
- * as a fifth and sixth method: rename is `put(get(...))` then `delete`, and metadata comes back on
- * every `get`. That composition lives in `apps/web/server/files/**`, not here, because it is a
- * decision about the UI's needs, not about what an object store is.
+ * `head`, `read`, `write`, `listPage`, `delete` and `copy`, plus an optional `createSignedUrl`.
+ * Bodies are streams and listings are pages, so no member ever holds a whole object or a whole
+ * tree in memory; `streams.ts` has the small helpers (`readWhole`, `listAll`) for a caller that
+ * knows its body or listing is small. Rename and preview metadata are composed from these members
+ * in `apps/web/server/files/**`, not added here, because they are decisions about the UI's needs,
+ * not about what an object store is.
  *
  * ## Why scoping is a wrapper around a backend, not a method on it
  *
@@ -74,11 +66,11 @@ import { toObjectKey, toObjectPrefix } from './key-safety.js';
 /** Re-exported so a backend read of a bare request falls back to the one definition, not a copy. */
 export { PRESIGNED_URL_DEFAULT_TTL_SECONDS };
 
-/** One entry `list` returns: either a file with bytes, or a folder with none. */
+/** One entry `listPage` returns: either a file with bytes, or a folder with none. */
 export type ObjectListEntry =
   | {
       readonly kind: 'file';
-      /** The workspace-relative key, exactly as `put` was called with it. */
+      /** The workspace-relative key, exactly as `write` was called with it. */
       readonly key: string;
       readonly sizeBytes: number;
       readonly contentType: string | null;
@@ -91,21 +83,25 @@ export type ObjectListEntry =
     };
 
 /**
- * The one listing order every backend returns: by key, compared code unit by code unit, so the
- * order does not depend on the host's locale.
+ * Listing order by key, compared code unit by code unit, so the order does not depend on the host's
+ * locale. A backend whose pages follow another order sorts each page by that order instead.
  */
 export function compareEntryKeys(left: ObjectListEntry, right: ObjectListEntry): number {
   return left.key < right.key ? -1 : left.key > right.key ? 1 : 0;
 }
 
-/** What `put` writes. `body` is never text-decoded or re-encoded anywhere in this module. */
-export interface PutObjectInput {
-  readonly body: Uint8Array;
-  /** Recorded and returned by `get`/`list`; `null` when the caller does not know it. */
-  readonly contentType?: string | null;
+/**
+ * The order a cloud backend pages a one-level listing in: by native name, where folder `a` is
+ * `a/`, so it sorts after file `a.txt`. A page sorted any other way would not concatenate with the
+ * next page into one order.
+ */
+export function compareListingNames(left: ObjectListEntry, right: ObjectListEntry): number {
+  const leftName = left.kind === 'folder' ? `${left.key}/` : left.key;
+  const rightName = right.kind === 'folder' ? `${right.key}/` : right.key;
+  return leftName < rightName ? -1 : leftName > rightName ? 1 : 0;
 }
 
-/** What `get` returns for an object that exists. */
+/** A whole small object with its meta, as `readWhole` in `streams.ts` returns it. */
 export interface ObjectContent {
   readonly body: Uint8Array;
   readonly contentType: string | null;
@@ -246,7 +242,7 @@ export interface SignedUrlRequest {
    * store defaults it to 300 s and refuses a value outside 60..900 s before the backend is reached.
    */
   readonly expiresInSeconds?: number;
-  /** PUT: the content type the upload must carry. Recorded as known, like {@link PutObjectInput}. */
+  /** PUT: the content type the upload must carry. Recorded as known, like {@link WriteOptions}'s. */
   readonly contentType?: string | null;
   /** PUT: the byte length the upload must carry, bound into the signature where the store can. */
   readonly contentLength?: number;
@@ -260,7 +256,10 @@ export interface SignedUrlRequest {
   readonly responseContentType?: string;
   /** GET: the `Content-Disposition` the store answers with. */
   readonly responseDisposition?: string;
-  /** Test seam: the instant the URL is signed at. */
+  /**
+   * Test seam: the instant the URL is signed at. The scoped store refuses one more than a minute
+   * ahead of its clock, so a link can never start its lifetime later than it was minted.
+   */
   readonly now?: Date;
 }
 
@@ -280,69 +279,15 @@ export interface SignedUrl {
 }
 
 /**
- * Spec §16's four operations, scoped to one workspace (or, for the raw backends in this
+ * Spec §16's object operations, scoped to one workspace (or, for the raw backends in this
  * directory, operating on whatever key they are literally given — see each backend's header for
  * which one it is).
  *
  * Every key and prefix is workspace-relative: `contracts/agreement.pdf`, never a leading `/` and
  * never a `..` segment. `key-safety.ts` is what makes that a property every implementation shares
- * rather than a convention each one has to remember.
+ * rather than a convention each one has to remember. `head(key) !== null` is the "exists" check.
  */
 export interface ObjectStore {
-  /**
-   * Write `input.body` at `key`, replacing whatever was there. Creates any implied intermediate
-   * folder; does not require one to exist first, matching the S3 side, where a "folder" is
-   * only ever a prefix and never a precondition.
-   */
-  put(key: string, input: PutObjectInput): Promise<void>;
-  /** The object at `key`, or `null` if there is none. Never throws for "not found". */
-  get(key: string): Promise<ObjectContent | null>;
-  /**
-   * Remove the object at `key`. Idempotent: a `key` that does not exist is not an error, matching
-   * R-15 §1c's verified result for `DeleteObject` on both backends ("missing key -> HTTP 204, no
-   * error, on both sides").
-   */
-  delete(key: string): Promise<void>;
-  /**
-   * Every file and folder directly under `prefix` — one level, not recursive, matching
-   * `ListObjectsV2`'s `Delimiter: '/'` behaviour (R-15 §1c). `prefix` of `''` lists the workspace
-   * root. A caller that wants a whole tree calls this once per folder it discovers, the same way
-   * the S3 API itself is walked.
-   */
-  list(prefix: string): Promise<readonly ObjectListEntry[]>;
-  /**
-   * Every *file* object whose key is `prefix` itself or lies anywhere under it, however deep —
-   * the recursive counterpart to {@link list}'s one level, added for W9-FILES-131's subtree
-   * move/rename/delete. A "folder" is never itself an entry here: `object-store.ts`'s own model
-   * has no folder that is not either an explicit empty-folder marker object or implied by the
-   * files beneath it, both of which this method already reports as files. `prefix` of `''` walks
-   * the whole workspace. Empty when nothing exists at or under `prefix`, never an error.
-   */
-  listPrefix(prefix: string): Promise<readonly ObjectListEntry[]>;
-  /**
-   * Copy the object at `sourceKey` to `destinationKey`, bytes and content type both, leaving
-   * `sourceKey` untouched. A missing `sourceKey` is a no-op — nothing is written and nothing
-   * throws — the same "absence is not an error" contract {@link delete} already has, and what
-   * lets a subtree move recompute its remaining work from current store state and retry a
-   * `copyObject` call that already succeeded without it becoming an error the second time.
-   * Overwrites whatever was at `destinationKey`, matching {@link put}.
-   */
-  copyObject(sourceKey: string, destinationKey: string): Promise<void>;
-  /**
-   * A URL on the object store itself that lets its holder `GET` or `PUT` exactly `key` until it
-   * expires, without the control plane relaying the bytes. Optional: the S3, GCS and Azure Blob
-   * backends sign; the local-filesystem and in-memory backends have no URL a browser could use,
-   * so a caller treats an absent method as "direct transfer is unsupported". Performs no store I/O.
-   */
-  createSignedUrl?(key: string, request: SignedUrlRequest): Promise<SignedUrl>;
-}
-
-/**
- * {@link ObjectStore} grown to the v2 port: capabilities, `head`, streaming `read`/`write`, range
- * and conditional write. `head(key) !== null` is the "exists" check.
- */
-// storage-bridge(#1702): v2 shape beside the buffered ObjectStore until every caller has moved
-export interface ObjectStoreV2 extends ObjectStore {
   readonly capabilities: ObjectStoreCapabilities;
   /** Size, content type and etag of the object at `key`, or `null` if there is none. */
   head(key: string): Promise<ObjectMeta | null>;
@@ -358,11 +303,32 @@ export interface ObjectStoreV2 extends ObjectStore {
     options: WriteOptions,
   ): Promise<ObjectMeta>;
   /**
+   * Remove the object at `key`. Idempotent: a `key` that does not exist is not an error, matching
+   * R-15 §1c's verified result for `DeleteObject` on both backends ("missing key -> HTTP 204, no
+   * error, on both sides").
+   */
+  delete(key: string): Promise<void>;
+  /**
    * One page of the listing under `prefix`, sorted by key: one level with folders, or every file
    * beneath it (`recursive`). Pass the returned `cursor` back to continue; it is opaque.
    */
-  // storage-bridge(#1702): paged listing beside the array-returning list/listPrefix until callers move
   listPage(prefix: string, options?: ListPageOptions): Promise<ObjectPage>;
+  /**
+   * Copy the object at `sourceKey` to `destinationKey` on the store itself, bytes and content type
+   * both, leaving `sourceKey` untouched. A missing `sourceKey` is a no-op — nothing is written and
+   * nothing throws — the same "absence is not an error" contract {@link ObjectStore.delete} already
+   * has, and what lets a subtree move recompute its remaining work from current store state and
+   * retry a `copy` call that already succeeded without it becoming an error the second time.
+   * Overwrites whatever was at `destinationKey`, matching {@link ObjectStore.write}.
+   */
+  copy(sourceKey: string, destinationKey: string): Promise<void>;
+  /**
+   * A URL on the object store itself that lets its holder `GET` or `PUT` exactly `key` until it
+   * expires, without the control plane relaying the bytes. Optional: the S3, GCS and Azure Blob
+   * backends sign; the local-filesystem and in-memory backends have no URL a browser could use,
+   * so a caller treats an absent method as "direct transfer is unsupported". Performs no store I/O.
+   */
+  createSignedUrl?(key: string, request: SignedUrlRequest): Promise<SignedUrl>;
 }
 
 /** Hands out an {@link ObjectStore} bound to one workspace. See this file's header. */
@@ -370,10 +336,13 @@ export interface ObjectStoreProvider {
   forWorkspace(workspaceId: string): ObjectStore;
 }
 
-/** The v2 provider; assignable to {@link ObjectStoreProvider}. */
-// storage-bridge(#1702): provider for ObjectStoreV2
-export interface ObjectStoreProviderV2 extends ObjectStoreProvider {
-  forWorkspace(workspaceId: string): ObjectStoreV2;
+/** Tests only: a store over a new, empty bucket or container on a local emulator, and its removal. */
+export interface EmulatorObjectStore {
+  readonly provider: ObjectStoreProvider;
+  /** Deletes the bucket or container with whatever is left in it. */
+  readonly teardown: () => Promise<void>;
+  /** Writes `bytes` under a bucket-root name past the key guard, as another tool would. */
+  readonly plantRaw: (name: string, bytes: Uint8Array) => Promise<void>;
 }
 
 /** Thrown by {@link createScopedObjectStore} for a workspace id that is not a non-empty string. */
@@ -407,13 +376,7 @@ function joinPrefixed(prefix: string, relative: string): string {
  * it. See this file's header for the two-call-site design and for why `workspaceId` is a plain
  * string rather than the repository layer's `WorkspaceScope`.
  */
-export function createScopedObjectStore(backend: ObjectStoreV2, workspaceId: string): ObjectStoreV2;
-// storage-bridge(#1702): a legacy backend has no v2 members to scope
-export function createScopedObjectStore(backend: ObjectStore, workspaceId: string): ObjectStore;
-export function createScopedObjectStore(
-  backend: ObjectStore | ObjectStoreV2,
-  workspaceId: string,
-): ObjectStore | ObjectStoreV2 {
+export function createScopedObjectStore(backend: ObjectStore, workspaceId: string): ObjectStore {
   // A positive assertion, not a class-brand check (see this file's header for why there is no
   // class here to check): a workspace id this module will accept is a non-empty string, full
   // stop. The caller-exists check spec §25 wants is made one layer up, in
@@ -424,59 +387,26 @@ export function createScopedObjectStore(
   const prefix = workspaceKeyPrefix(workspaceId);
 
   const scoped: ObjectStore = {
-    async put(key, input) {
-      const relative = toObjectKey(key);
-      await backend.put(joinPrefixed(prefix, relative), input);
-    },
-    async get(key) {
-      const relative = toObjectKey(key);
-      return backend.get(joinPrefixed(prefix, relative));
-    },
+    ...scopeV2(backend, prefix),
     async delete(key) {
       const relative = toObjectKey(key);
       await backend.delete(joinPrefixed(prefix, relative));
     },
-    async list(rawPrefix) {
-      const relative = toObjectPrefix(rawPrefix);
-      const fullPrefix = joinPrefixed(prefix, relative);
-      const entries = await backend.list(fullPrefix);
-      // Strip this workspace's own prefix back off before handing entries to the caller: the
-      // caller never supplied it, so it must not appear in what comes back either.
-      const stripLen = prefix.length + 1; // `${prefix}/`
-      return entries.map((entry) =>
-        entry.kind === 'folder'
-          ? { ...entry, key: entry.key.slice(stripLen) }
-          : { ...entry, key: entry.key.slice(stripLen) },
-      );
-    },
-    async listPrefix(rawPrefix) {
-      const relative = toObjectPrefix(rawPrefix);
-      const fullPrefix = joinPrefixed(prefix, relative);
-      const entries = await backend.listPrefix(fullPrefix);
-      const stripLen = prefix.length + 1;
-      return entries.map((entry) => ({ ...entry, key: entry.key.slice(stripLen) }));
-    },
-    async copyObject(sourceKey, destinationKey) {
-      const relativeSource = toObjectKey(sourceKey);
-      const relativeDestination = toObjectKey(destinationKey);
-      await backend.copyObject(
-        joinPrefixed(prefix, relativeSource),
-        joinPrefixed(prefix, relativeDestination),
-      );
-    },
   };
-  const withV2 = isV2(backend) ? { ...scoped, ...scopeV2(backend, prefix) } : scoped;
   const sign = backend.createSignedUrl?.bind(backend);
-  if (sign === undefined) return withV2;
+  if (sign === undefined) return scoped;
   return {
-    ...withV2,
+    ...scoped,
     async createSignedUrl(key, request) {
       const fullKey = joinPrefixed(prefix, toObjectKey(key));
-      const bounded = boundSignedUrlRequest(request, isV2(backend) ? backend.capabilities : null);
+      const bounded = boundSignedUrlRequest(request, backend.capabilities);
       return sign(fullKey, bounded);
     },
   };
 }
+
+/** How far ahead of this host's clock a caller-supplied signing instant may be. */
+const SIGNING_CLOCK_SKEW_MS = 60_000;
 
 /**
  * The lifetime and length bound every signed link carries (the storage design, §04 "Large uploads
@@ -485,7 +415,7 @@ export function createScopedObjectStore(
  */
 function boundSignedUrlRequest(
   request: SignedUrlRequest,
-  capabilities: ObjectStoreCapabilities | null,
+  capabilities: ObjectStoreCapabilities,
 ): SignedUrlRequest {
   // @story US-STO-02
   // @story US-STO-05
@@ -497,25 +427,31 @@ function boundSignedUrlRequest(
   ) {
     throw new SignedUrlUnsupportedError('The signed link expiry is out of range.');
   }
+  // A past instant only shortens the link; a future one would start its lifetime later.
+  if (request.now !== undefined) {
+    const signedAt = request.now.getTime();
+    if (!Number.isFinite(signedAt)) {
+      throw new SignedUrlUnsupportedError('The signing instant is not a valid time.');
+    }
+    if (signedAt > Date.now() + SIGNING_CLOCK_SKEW_MS) {
+      throw new SignedUrlUnsupportedError('The signing instant is in the future.');
+    }
+  }
   if (request.requireBoundContentLength === true) {
     if (request.contentLength === undefined) {
       throw new SignedUrlUnsupportedError('A bound upload length needs a contentLength.');
     }
-    if (capabilities !== null && !capabilities.boundLengthSign) {
+    if (!capabilities.boundLengthSign) {
       throw new SignedUrlUnsupportedError('This store cannot bind an upload length.');
     }
   }
   return { ...request, expiresInSeconds };
 }
 
-function isV2(backend: ObjectStore | ObjectStoreV2): backend is ObjectStoreV2 {
-  return 'capabilities' in backend;
-}
-
 function scopeV2(
-  backend: ObjectStoreV2,
+  backend: ObjectStore,
   prefix: string,
-): Pick<ObjectStoreV2, 'capabilities' | 'head' | 'read' | 'write' | 'listPage'> {
+): Omit<ObjectStore, 'delete' | 'createSignedUrl'> {
   return {
     capabilities: backend.capabilities,
     async head(key) {
@@ -558,21 +494,18 @@ function scopeV2(
         entries: page.entries.map((entry) => ({ ...entry, key: entry.key.slice(stripLen) })),
       };
     },
+    async copy(sourceKey, destinationKey) {
+      const relativeSource = toObjectKey(sourceKey);
+      const relativeDestination = toObjectKey(destinationKey);
+      await backend.copy(
+        joinPrefixed(prefix, relativeSource),
+        joinPrefixed(prefix, relativeDestination),
+      );
+    },
   };
 }
 
 /** Build an {@link ObjectStoreProvider} from any raw backend. Every backend module uses this. */
-export function scopedObjectStoreProvider(backend: ObjectStoreV2): ObjectStoreProviderV2;
-// storage-bridge(#1702): a legacy backend has no v2 members to scope
-export function scopedObjectStoreProvider(backend: ObjectStore): ObjectStoreProvider;
-export function scopedObjectStoreProvider(
-  backend: ObjectStore | ObjectStoreV2,
-): ObjectStoreProvider | ObjectStoreProviderV2 {
-  return {
-    // Both arms are the same call: the guard only lets overload resolution see which backend it has.
-    forWorkspace: (workspaceId: string) =>
-      isV2(backend)
-        ? createScopedObjectStore(backend, workspaceId)
-        : createScopedObjectStore(backend, workspaceId),
-  };
+export function scopedObjectStoreProvider(backend: ObjectStore): ObjectStoreProvider {
+  return { forWorkspace: (workspaceId: string) => createScopedObjectStore(backend, workspaceId) };
 }

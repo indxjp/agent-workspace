@@ -252,6 +252,35 @@ export async function buildOpenApiDocument(repoRoot) {
             'x-agent-workspace-frames': body.frames.map((name) => ref(component(name, 'output'))),
           },
         };
+      case 'multipart': {
+        /** @type {Record<string, unknown>} */
+        const properties = {};
+        /** @type {Record<string, unknown>} */
+        const encoding = {};
+        for (const part of body.parts) {
+          const value =
+            part.type === 'text'
+              ? { type: 'string' }
+              : { contentMediaType: 'application/octet-stream', type: 'string' };
+          properties[part.name] =
+            part.repeated === true
+              ? { description: part.description, items: value, minItems: 1, type: 'array' }
+              : { ...value, description: part.description };
+          encoding[part.name] = {
+            contentType: part.type === 'text' ? 'text/plain' : 'application/octet-stream',
+          };
+        }
+        return {
+          'multipart/form-data': {
+            encoding,
+            schema: {
+              properties,
+              required: body.parts.map((part) => part.name),
+              type: 'object',
+            },
+          },
+        };
+      }
       default:
         throw new Error(`unexpected body kind ${body.kind}`);
     }
@@ -297,9 +326,19 @@ export async function buildOpenApiDocument(repoRoot) {
       responses,
       summary: route.summary,
       tags: [route.tag],
+      'x-agent-workspace-feature': route.feature,
     };
     if (route.request !== undefined && route.request.kind !== 'none') {
-      operation['requestBody'] = { content: content(route.request, 'input'), required: true };
+      /** @type {Record<string, Record<string, unknown>>} */
+      const accepted = { ...content(route.request, 'input') };
+      for (const older of route.deprecatedRequests ?? []) {
+        for (const [mediaType, media] of Object.entries(content(older, 'input'))) {
+          // OpenAPI has no per-media-type flag; the schema's own `deprecated` carries it.
+          const schema = /** @type {Record<string, unknown>} */ (media['schema']);
+          accepted[mediaType] = { ...media, schema: { ...schema, deprecated: true } };
+        }
+      }
+      operation['requestBody'] = { content: accepted, required: true };
     }
     if (route.deprecated === true) operation['deprecated'] = true;
     if (route.security !== undefined) {

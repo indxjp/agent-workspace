@@ -7,9 +7,19 @@
  * that cannot be imported by a test without dragging the framework's routing conventions in, so
  * the less that lives there the more of this task is actually covered.
  */
+import {
+  AGENT_LIST_PROBLEM_CODES,
+  AgentListQuerySchema,
+  type AgentListArchived,
+  type BuiltinAgentOperation,
+} from '@indx-workspace/contracts/agents';
+
 import { applicationContext } from '../application-context';
 import { AGENT_INSTRUCTIONS_MAX_LENGTH } from '../../contracts/agents';
 import { problem, type ApiResult } from '../http/result';
+import { isUuid } from './contract';
+import { agentNotFound, refuseBuiltinWrite } from './handlers';
+import { resolverForRow } from '../resources/item-ownership';
 import type { WorkspaceAgentStore } from './store';
 import type { AgentsRuntime } from './runtime';
 import { readBoundedJson, readRouteParam } from '../http/json-transport';
@@ -73,6 +83,46 @@ export async function readJsonBody(
   request: Request,
 ): Promise<{ ok: true; value: unknown } | { ok: false; result: ApiResult }> {
   return readBoundedJson(request, { maxBytes: MAX_REQUEST_BODY_BYTES, problem });
+}
+
+/**
+ * Read a request that must carry no body: any byte of one is refused as `malformed_body`. Only the
+ * first non-empty chunk is read, so a large body is never held.
+ */
+export async function readNoBody(request: Request): Promise<ApiResult | null> {
+  const reader = request.body?.getReader();
+  if (reader === undefined) return null;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return null;
+      if (value !== undefined && value.byteLength > 0) {
+        await reader.cancel();
+        return problem(400, 'malformed_body', 'This route takes no request body.');
+      }
+    }
+  } catch {
+    return problem(400, 'malformed_body', 'The request body could not be read.');
+  }
+}
+
+/**
+ * Issue #117: load the agent within the caller's workspace, answer an indistinguishable 404 when
+ * it is absent, and only then let `decide()` compare the owner against the caller.
+ */
+export function agentOwnership(
+  id: unknown,
+  operation: BuiltinAgentOperation,
+): (store: WorkspaceAgentStore) => OwnershipResolver {
+  return (store) =>
+    resolverForRow(
+      // `isUuid`, not merely `typeof id === 'string'`: `agents.id` is a `uuid` column, and a
+      // non-UUID string handed to `store.get` would reach PostgreSQL as an invalid literal and
+      // throw, rather than answering "not found" the way this resolver promises to.
+      () => (isUuid(id) ? store.get(id) : Promise.resolve(null)),
+      agentNotFound,
+      (row) => refuseBuiltinWrite(row, operation),
+    );
 }
 
 /**
@@ -174,6 +224,34 @@ export async function withAuthorisedWorkspaceStore(
             ),
     ),
   );
+}
+
+/**
+ * The `?archived=` option of `GET /api/agents`: `include` lists archived agents too, absent hides
+ * them. Any other value, `archived=` included, is refused rather than read as the default, so a
+ * caller that misspells it learns it saw a filtered list. Other query keys are ignored, as they
+ * were before the option existed. A repeated `archived` key is refused too, not read as its first
+ * value. The refusal never echoes what the caller sent.
+ */
+export function parseAgentListQuery(request: Request):
+  | { readonly ok: true; readonly archived: AgentListArchived | undefined }
+  | {
+      readonly ok: false;
+      readonly result: ApiResult;
+    } {
+  const values = new URL(request.url).searchParams.getAll('archived');
+  const parsed = AgentListQuerySchema.safeParse(
+    values.length === 0 ? {} : { archived: values.length === 1 ? values[0] : values },
+  );
+  if (parsed.success) return { ok: true, archived: parsed.data.archived };
+  return {
+    ok: false,
+    result: problem(
+      AGENT_LIST_PROBLEM_CODES.invalid_agent_list_query,
+      'invalid_agent_list_query',
+      'archived must be "include" once, or left out to hide archived agents.',
+    ),
+  };
 }
 
 /**

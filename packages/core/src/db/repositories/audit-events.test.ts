@@ -40,8 +40,25 @@ describe('checkedAuditEvent', () => {
 
   it('refuses details on any other action', () => {
     expect(() =>
-      checkedAuditEvent({ action: 'agent-changed', subjectLabel: 'x', details: DETAILS }),
+      checkedAuditEvent({ action: 'api-key-created', subjectLabel: 'x', details: DETAILS }),
     ).toThrow(/cannot carry details/);
+  });
+
+  it('keeps the archived marker of an agent-changed event and refuses any other details', () => {
+    const changed = { action: 'agent-changed', subjectLabel: 'x' } as const;
+    expect(() => checkedAuditEvent({ ...changed, details: { archived: true } })).not.toThrow();
+    expect(checkedAuditEvent({ ...changed, details: { archived: true } }).details).toEqual({
+      archived: true,
+    });
+    expect(() => checkedAuditEvent({ ...changed, details: DETAILS })).toThrow(
+      /AgentChangedAuditDetails/,
+    );
+    expect(checkedAuditEvent({ ...changed, details: { archived: false } }).details).toEqual({
+      archived: false,
+    });
+    expect(() => checkedAuditEvent({ ...changed, details: { archived: 'no' } })).toThrow(
+      /AgentChangedAuditDetails/,
+    );
   });
 });
 
@@ -196,10 +213,28 @@ describe.skipIf(!hasDatabase)('AuditEventRepository keyset pages against Postgre
     expect(await repository.count('agent-created')).toBe(before);
   });
 
+  it('stores the archived marker of an agent-changed event', async () => {
+    const repository = await repositoryFor(workspaceA.id);
+    await expect(
+      repository.write({
+        actorPrincipalId: null,
+        actorLabel: 'system',
+        action: 'agent-changed',
+        subjectLabel: 'archived',
+        details: { archived: true },
+      }),
+    ).resolves.toBeUndefined();
+    const page = await repository.list({ action: 'agent-changed' });
+    expect(page.items.find((e) => e.subjectLabel === 'archived')?.details).toEqual({
+      archived: true,
+    });
+  });
+
   it('refuses details on any other action in the database itself', async () => {
     await expect(
       isolated.db.insert(auditEvents).values({
         ...row(workspaceA.id, new Date()),
+        action: 'api-key-created',
         details: DETAILS,
       }),
     ).rejects.toMatchObject({

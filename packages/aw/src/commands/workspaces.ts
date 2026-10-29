@@ -1,4 +1,10 @@
 import {
+  FEATURE_DEPENDENCIES,
+  FeatureIdSchema,
+  type FeatureId,
+} from '@indx-workspace/contracts/features';
+
+import {
   booleanWord,
   command,
   positional,
@@ -7,10 +13,51 @@ import {
   type Command,
   type CommandContext,
 } from '../command.js';
+import { UsageError } from '../io.js';
 import { readStoredCredential, saveStoredCredential } from '../credentials.js';
 import { CreateWorkspaceBody, UpdateWorkspaceBody } from '../inputs.js';
 
 const WORKSPACE_COLUMNS = ['id', 'slug', 'name', 'role', 'archivedAt'];
+
+const FEATURE_COLUMNS = ['id', 'installed', 'enabled', 'needs'];
+
+async function featureRows(context: CommandContext, workspaceId: string) {
+  const { features } = await context.client.workspaces.features.list(workspaceId, {
+    signal: context.signal,
+  });
+  const needs: Partial<Record<FeatureId, readonly FeatureId[]>> = FEATURE_DEPENDENCIES;
+  return features.map((row) => ({ ...row, needs: (needs[row.id] ?? []).join(',') }));
+}
+
+async function workspaceIdFlag(context: CommandContext): Promise<string> {
+  return (
+    value(context, 'workspace') ?? (await context.client.me({ signal: context.signal })).workspaceId
+  );
+}
+
+/** `disable <id>` / `enable <id>`: read the off set, edit it, write it back (ADR-0160 D6). */
+async function switchFeature(context: CommandContext, verb: 'disable' | 'enable') {
+  const feature = FeatureIdSchema.safeParse(positional(context, 0, 'id'));
+  if (!feature.success) {
+    throw new UsageError(`<id> must be one of ${FeatureIdSchema.options.join(', ')}`);
+  }
+  const workspaceId = await workspaceIdFlag(context);
+  const current = await context.client.workspaces.features.list(workspaceId, {
+    signal: context.signal,
+  });
+  // Every row that is not on, installed or not: the server requires each uninstalled feature in
+  // `disabled`, so dropping one here would make every switch a `409 feature_not_installed`.
+  const off = current.features
+    .filter((row) => !row.enabled)
+    .map((row) => row.id)
+    .filter((id) => id !== feature.data);
+  const { features } = await context.client.workspaces.features.set(
+    workspaceId,
+    { disabled: verb === 'disable' ? [...off, feature.data] : off },
+    { signal: context.signal },
+  );
+  return { value: features.filter((row) => row.id === feature.data), columns: FEATURE_COLUMNS };
+}
 
 function archivedFlag(context: CommandContext): boolean | undefined {
   const raw = value(context, 'archived');
@@ -85,6 +132,27 @@ export const workspaceCommands: readonly Command[] = [
       }
       return { value: workspace };
     },
+  ),
+  command(
+    'workspaces features list',
+    '[--workspace <id>]',
+    'Which features are on for a workspace (default: the one you act in)',
+    async (context) => ({
+      value: await featureRows(context, await workspaceIdFlag(context)),
+      columns: FEATURE_COLUMNS,
+    }),
+  ),
+  command(
+    'workspaces features disable',
+    '<id> [--workspace <id>]',
+    'Switch a feature off for a workspace (Owner only)',
+    (context) => switchFeature(context, 'disable'),
+  ),
+  command(
+    'workspaces features enable',
+    '<id> [--workspace <id>]',
+    'Switch a feature back on for a workspace (Owner only)',
+    (context) => switchFeature(context, 'enable'),
   ),
   command(
     'workspaces sharing-policy get',

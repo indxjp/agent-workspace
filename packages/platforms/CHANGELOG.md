@@ -4,6 +4,10 @@ One heading per release, newest first. Each lists what was **added**, **deprecat
 **removed**; a removal names the release that deprecated it. Released in lock-step with
 `@indx-workspace/contracts`, with the same version.
 
+## 0.6.12 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.12 storage proof release.
+
 ## 0.6.11 — unreleased
 
 No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.

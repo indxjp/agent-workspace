@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -50,7 +51,7 @@ import {
   resolveEmbeddedDatabasePort,
   startEmbeddedDatabase,
 } from './embedded-db.js';
-import { EmbeddedDatabaseError } from './postmaster.js';
+import { EMBEDDED_POSTGRES_MAJOR, EmbeddedDatabaseError } from './postmaster.js';
 
 /**
  * Seams that find every port free, locate a fixed binary and start the mocked postmaster, so these
@@ -178,7 +179,7 @@ describe('startEmbeddedDatabase', () => {
   });
 
   it('reports an initialised cluster that will not start as is, without running initdb', async () => {
-    mocks.files.set('PG_VERSION', '16\n');
+    mocks.files.set('PG_VERSION', `${EMBEDDED_POSTGRES_MAJOR}\n`);
     const failure = exitedBeforeReady();
     mocks.start.mockRejectedValueOnce(failure);
 
@@ -187,6 +188,33 @@ describe('startEmbeddedDatabase', () => {
     );
 
     expect(mocks.initialise).not.toHaveBeenCalled();
+  });
+
+  // A data directory the PostgreSQL 17 runtime of an earlier release initialised: this server
+  // cannot open it, and initdb on it would advise emptying it, which deletes the local data.
+  it('names a data directory of another PostgreSQL major, without running initdb', async () => {
+    mocks.files.set('PG_VERSION', '17\n');
+    const failure = exitedBeforeReady();
+    mocks.start.mockRejectedValueOnce(failure);
+
+    const refusal = await startEmbeddedDatabase('C:/workspace/postgres', undefined, seams).catch(
+      (error: unknown) => error,
+    );
+
+    expect(refusal).toBeInstanceOf(EmbeddedDatabaseError);
+    expect(refusal).toMatchObject({ code: 'data_directory_version', cause: failure });
+    expect((refusal as Error).message).toContain(`PostgreSQL ${EMBEDDED_POSTGRES_MAJOR}`);
+    expect((refusal as Error).message).not.toContain('C:/workspace');
+    expect(mocks.initialise).not.toHaveBeenCalled();
+    expect(mocks.start).toHaveBeenCalledOnce();
+  });
+
+  it('expects the PostgreSQL major of the pinned embedded-postgres', () => {
+    // `node:fs`, not the mocked `node:fs/promises`.
+    const manifest = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { dependencies: Record<string, string> };
+    expect(manifest.dependencies['embedded-postgres']?.split('.')[0]).toBe(EMBEDDED_POSTGRES_MAJOR);
   });
 
   // A typed failure to start the postmaster at all is the reason; running initdb after it only

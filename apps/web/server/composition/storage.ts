@@ -3,8 +3,8 @@ import type { StorageLocation } from '@indx-workspace/contracts/storage-url';
 import { log } from '../telemetry/logger';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import type {
-  ObjectStoreProviderV2,
-  ObjectStoreV2,
+  ObjectStoreProvider,
+  ObjectStore,
   OpenObjectStoreOptions,
 } from '@agent-workspace/core/storage';
 import type { WorkspaceResolution } from '../agents/runtime';
@@ -42,7 +42,7 @@ type AreaSelection =
   | { readonly kind: 'failed'; readonly cause: unknown }
   | {
       readonly kind: 'opened';
-      readonly store: ObjectStoreProviderV2;
+      readonly store: ObjectStoreProvider;
       readonly location: StorageLocation;
       readonly settings: StorageSettings;
     };
@@ -50,10 +50,7 @@ type AreaSelection =
 const OBJECT_STORAGE_READINESS_TIMEOUT_MS = 10_000;
 
 /** Keep provider URLs and credential-bearing messages out of deployment logs. */
-export function storageReadinessFailure(
-  resource: 'files' | 'skills' | 'session-state' | 'storage',
-  cause: unknown,
-): string {
+export function storageReadinessFailure(resource: StorageArea | 'storage', cause: unknown): string {
   const errorName = safeProviderErrorName(cause);
   const statusCode = safeProviderStatusCode(cause);
   return `[compose] ${resource} API NOT installed: object storage failed readiness (name=${errorName}, status=${statusCode}).`;
@@ -163,6 +160,12 @@ async function openArea(area: StorageArea): Promise<AreaSelection> {
 }
 
 /**
+ * The skills area each storage service opened for its old-naming reads, so `installSkillsApi`
+ * serves the same store instead of opening the area a second time.
+ */
+const openedSkillsAreas = new WeakMap<StorageService, AreaSelection>();
+
+/**
  * The catalog service over the `AW_STORAGE_URL` root (new object names) and the old area stores
  * (rows without an object id). `null` when there is no shared root or it cannot be opened, and the
  * files API is then not installed: there is no path-based fallback.
@@ -206,7 +209,7 @@ async function openStorageService(
         },
       );
     }
-    return createStorageService({
+    const service = createStorageService({
       catalog: (workspaceId) => catalog.forWorkspace(workspaceId),
       objects,
       legacy,
@@ -214,6 +217,8 @@ async function openStorageService(
       ...(cleanup?.audit === undefined ? {} : { audit: cleanup.audit }),
       log,
     });
+    openedSkillsAreas.set(service, skills);
+    return service;
   } catch (error) {
     log.error(storageReadinessFailure('storage', error));
     return null;
@@ -249,7 +254,7 @@ type StorageCleanupSetup = StorageCleanupWiring & { readonly mode: CleanupMode }
  */
 async function startCleanupJob(
   selection: Extract<AreaSelection, { kind: 'opened' }>,
-  objects: ObjectStoreV2,
+  objects: ObjectStore,
   catalog: ReturnType<typeof createResourceCatalogStoreProvider>,
   sessionState: SessionStateOf,
   cleanup: StorageCleanupSetup,
@@ -323,7 +328,7 @@ interface CopyJobSetup {
 async function startCopyJob(
   copy: CopyJobSetup,
   parts: {
-    readonly objects: ObjectStoreV2;
+    readonly objects: ObjectStore;
     readonly legacy: CopyDependencies['legacy'];
     readonly catalog: ReturnType<typeof createResourceCatalogStoreProvider>;
     readonly sessionState: SessionStateOf | undefined;
@@ -403,8 +408,16 @@ function startNamingMigration(
   }
   return (async () => {
     const { openRootObjectStore } = await import('@agent-workspace/core/storage');
-    const objects = await openRootObjectStore(legacy.location, openOptionsFor(legacy.location));
-    const { runAdoptStage } = await import('../storage/migrate-naming');
+    const { recordFailedAdoptRun, runAdoptStage } = await import('../storage/migrate-naming');
+    let objects: ObjectStore;
+    try {
+      objects = await openRootObjectStore(legacy.location, openOptionsFor(legacy.location));
+    } catch (error) {
+      // The pass failed before it listed anything: record it, so an older clean row is never
+      // mistaken for its result.
+      await recordFailedAdoptRun(runs, log);
+      throw error;
+    }
     await runAdoptStage({
       objects,
       prefix: legacy.prefix,
@@ -586,7 +599,8 @@ export async function installSkillsApi(
   storage?: StorageService,
   adopt?: SkillsAdoptWiring,
 ): Promise<Skills> {
-  const selection = await openArea('skills');
+  const opened = storage === undefined ? undefined : openedSkillsAreas.get(storage);
+  const selection = opened ?? (await openArea('skills'));
   switch (selection.kind) {
     case 'refused':
       log.error(`[compose] skills API NOT installed: ${selection.reason}`);
@@ -634,7 +648,7 @@ export async function installSkillsApi(
  * two blob routes answer 503 naming the variable rather than pretending to have stored something
  * (ADR-0035).
  */
-export async function sessionStateBlobStore(): Promise<ObjectStoreProviderV2 | null> {
+export async function sessionStateBlobStore(): Promise<ObjectStoreProvider | null> {
   const selection = await openArea('session-state');
   switch (selection.kind) {
     case 'refused':
@@ -652,8 +666,12 @@ export async function sessionStateBlobStore(): Promise<ObjectStoreProviderV2 | n
       );
       return null;
     case 'opened':
+      // storage-bridge(#1699): this store only reads and purges blobs an earlier release saved; new
+      // blobs are saved through the storage service, so this line must not claim PUT works.
       log.info(
-        `[compose] session-state blobs installed: ${describePlace(selection.location, 'session-state')}`,
+        `[compose] session-state old blob store opened for reads and purges: ` +
+          `${describePlace(selection.location, 'session-state')}. New blobs are saved only ` +
+          `through the storage service.`,
       );
       return selection.store;
   }

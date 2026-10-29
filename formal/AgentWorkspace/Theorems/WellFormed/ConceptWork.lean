@@ -97,13 +97,13 @@ theorem every_work_check_is_refined :
       workCheckSql.map Prod.fst = workTables.flatMap otherChecks := by
   decide +kernel
 
-/-- The work tables carry 25 checks that are not closed sets and 19 closed-set checks. -/
+/-- The work tables carry 25 checks that are not closed sets and 20 closed-set checks. -/
 @[aw_spec (tier := T0)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
 theorem work_check_counts :
     (workTables.flatMap otherChecks).length = 25 ∧
-      (workTables.flatMap fun t => (catalogue t).checks).length = 44 := by
+      (workTables.flatMap fun t => (catalogue t).checks).length = 45 := by
   decide +kernel
 
 /-! ## Foreign keys and their cardinality (generated) -/
@@ -161,13 +161,13 @@ end Generator
 
 aw_work_fk_cardinality_theorems
 
-/-- The work tables declare 49 foreign keys: 35 whose every column is `NOT NULL` and 14 with a
+/-- The work tables declare 50 foreign keys: 36 whose every column is `NOT NULL` and 14 with a
 nullable column. -/
 @[aw_spec (tier := T0)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem work_foreign_key_counts :
-    workForeignKeys.length = 49 ∧
-      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 35 := by
+    workForeignKeys.length = 50 ∧
+      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 36 := by
   decide +kernel
 
 /-! ## Concept rows -/
@@ -697,6 +697,10 @@ def state : State
       ("call_id", some "toolu_1"), ("tool", some "draft_check"), ("decision", some "run"),
       ("outcome", some "ok"), ("input_json", some "{}"), ("trace_id", some "trace-1"),
       ("model_id", some "model-1"), ("prompt_version", some "prompt-1"),
+      ("created_at", some (instant 4))]]
+  -- The workspace has switched the surfaces feature off (ADR-0160 D6).
+  | .workspaceFeatures =>
+    [ofCells [("id", some "wf1"), ("workspace_id", some "w1"), ("feature", some "surfaces"),
       ("created_at", some (instant 4))]]
   | .triggerDeliveries =>
     [ofCells [("id", some "td1"), ("workspace_id", some "w1"), ("trigger_id", some "tr1"),

@@ -8,7 +8,7 @@ RUNNER_IMAGE=registry.example/runner@sha256:333333333333333333333333333333333333
 AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK=registry.example/runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
 # The release the images above were resolved for. `deploy` refuses a source checkout at
 # another release, because the migrations run from WEB_IMAGE and the code from the checkout.
-AGENT_WORKSPACE_VERSION=0.6.11
+AGENT_WORKSPACE_VERSION=0.6.12
 DOCKER_GID=0
 # Relational store: neon
 # The Vercel Marketplace Neon integration supplies DATABASE_URL as a project environment variable.
@@ -22,6 +22,9 @@ SEAWEEDFS_SECRET_ACCESS_KEY=
 # The loopback host port SeaweedFS is published on. Change it to run beside another project
 # that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.
 SEAWEEDFS_PORT=
+# The origins a browser may upload to SeaweedFS from through a signed link: the web service
+# in both loopback spellings, never `*`. Change it with PORT or when serving a public hostname.
+SEAWEEDFS_ALLOWED_ORIGINS=
 COMPOSE_PROFILES=
 # Where files, skills and session transcripts live, in one URL. No key or password belongs in
 # it: the credential lines below, or the workload identity, supply those.

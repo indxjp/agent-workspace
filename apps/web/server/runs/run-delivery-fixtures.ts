@@ -53,6 +53,15 @@ const TARGET = {
 
 const MODEL = 'claude-sonnet-4-5';
 
+/** Bounds a launch that never settles; a live bucket's write-back settles in seconds. */
+const SETTLE_DEADLINE_MS = 60_000;
+
+/** A launch's settled signal, resolved by `onLaunchSettled`. */
+interface Settled {
+  readonly promise: Promise<void>;
+  readonly resolve: () => void;
+}
+
 /**
  * An agent of `workspaceId` the rest of the run-start preflight accepts: a docker runtime profile
  * and a model its connection offers. The stores are in memory; discovery answers without a network.
@@ -203,7 +212,18 @@ export function installDeliveringRunApi(options: {
   const { storageWriteback } = options;
   const deliveredFolders = new WeakMap<LaunchContext, StorageWriteBackRun['folders']>();
   // A launch is over only once it has settled, after its write-back and its terminal status.
-  const settled = new Set<string>();
+  const settled = new Map<string, Settled>();
+  const settledFor = (runId: string): Settled => {
+    const known = settled.get(runId);
+    if (known !== undefined) return known;
+    let resolve: () => void = () => undefined;
+    const promise = new Promise<void>((done) => {
+      resolve = done;
+    });
+    const created = { promise, resolve };
+    settled.set(runId, created);
+    return created;
+  };
   // The `/files` archive comes just before its `/run` body, which names the run; one run at a time.
   let archive: Delivered['archive'] = [];
   const runner = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -308,24 +328,33 @@ export function installDeliveringRunApi(options: {
             storageWriteback: (run) =>
               storageWriteback({ ...run, folders: deliveredFolders.get(run.context) ?? new Map() }),
           }),
-      onLaunchSettled: (context) => settled.add(context.run.id),
+      onLaunchSettled: (context) => settledFor(context.run.id).resolve(),
     }),
   });
 
   return {
     agentId,
     async delivered(runId) {
-      for (let attempt = 0; attempt < 400; attempt += 1) {
-        const run = await store.get(runId);
-        if (run?.endedAt != null && settled.has(runId)) {
-          if (run.status !== 'completed') {
-            throw new Error(`the run ended ${run.status}: ${JSON.stringify(run.error)}`);
-          }
-          return received.get(runId) ?? { files: [], archive: [] };
-        }
-        await new Promise((resolve) => setTimeout(resolve, 5));
+      // Await the launch's own settled signal: a live bucket's write-back takes seconds, not the
+      // milliseconds a memory store does. The deadline only bounds a launch that never settles.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const deadline = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('the run never reached a terminal status')),
+          SETTLE_DEADLINE_MS,
+        );
+      });
+      try {
+        await Promise.race([settledFor(runId).promise, deadline]);
+      } finally {
+        clearTimeout(timer);
       }
-      throw new Error('the run never reached a terminal status');
+      const run = await store.get(runId);
+      if (run?.endedAt == null) throw new Error('the run never reached a terminal status');
+      if (run.status !== 'completed') {
+        throw new Error(`the run ended ${run.status}: ${JSON.stringify(run.error)}`);
+      }
+      return received.get(runId) ?? { files: [], archive: [] };
     },
   };
 }

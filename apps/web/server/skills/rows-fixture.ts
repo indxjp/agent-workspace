@@ -52,15 +52,11 @@ export async function seedBareSkill(
   skill: { readonly name: string; readonly files: readonly BareSkillFile[] },
 ): Promise<void> {
   for (const file of skill.files) {
-    await store.put(skillFileKey(skill.name, file.path), {
-      body: new Uint8Array(Buffer.from(file.contentBase64, 'base64')),
-      contentType: null,
-    });
+    const body = new Uint8Array(Buffer.from(file.contentBase64, 'base64'));
+    await store.write(skillFileKey(skill.name, file.path), body, { contentType: null });
   }
   const now = new Date().toISOString();
   const record = { name: skill.name, enabled: true, createdAt: now, updatedAt: now };
-  await store.put(skillMetaKey(skill.name), {
-    body: new TextEncoder().encode(JSON.stringify(record)),
-    contentType: 'application/json',
-  });
+  const body = new TextEncoder().encode(JSON.stringify(record));
+  await store.write(skillMetaKey(skill.name), body, { contentType: 'application/json' });
 }

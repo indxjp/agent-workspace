@@ -48,6 +48,7 @@ describe('askSetupQuestions', () => {
       '', // title
       '', // colour
       '', // platforms
+      '', // features
     ]);
     expect(answers['content.internalTools']).toStrictEqual(['openapi']);
     expect(answers['content.openapiDocument']).toBe('apis/orders.openapi.json');
@@ -56,7 +57,7 @@ describe('askSetupQuestions', () => {
   });
 
   it('skips a question whose when is false', async () => {
-    const { answers, asked } = await scripted(Array<string>(10).fill(''));
+    const { answers, asked } = await scripted(Array<string>(11).fill(''));
     expect(asked.some((prompt) => prompt.startsWith('Where is the OpenAPI document?'))).toBe(false);
     expect(answers['content.internalTools']).toStrictEqual(['none']);
     expect('content.openapiDocument' in answers).toBe(false);
@@ -75,6 +76,7 @@ describe('askSetupQuestions', () => {
       '',
       '',
       '',
+      '',
     ]);
     expect(asked[6]).toBe(asked[5]);
     expect(said).toHaveLength(1);
@@ -82,7 +84,7 @@ describe('askSetupQuestions', () => {
   });
 
   it("recommends the chosen theme's answers", async () => {
-    const { answers, asked } = await scripted(['copilot', ...Array<string>(9).fill('')]);
+    const { answers, asked } = await scripted(['copilot', ...Array<string>(10).fill('')]);
     expect(asked[3]).toMatch(/ \[copilot\] $/u);
     expect(answers['content.agentName']).toBe('copilot');
   });
@@ -118,7 +120,7 @@ describe('parseSetupFlags', () => {
       parseSetupFlags({ provider: 'openai' }),
     );
     expect(answers['admin.modelProvider']).toBe('openai');
-    expect(asked).toHaveLength(9);
+    expect(asked).toHaveLength(10);
     expect(asked.some((question) => question.startsWith("Who serves the agent's model?"))).toBe(
       false,
     );
@@ -147,8 +149,17 @@ describe('parseSetupFlags', () => {
     );
   });
 
+  it('reads --features as a comma-separated list, and refuses one missing a dependency', () => {
+    expect(parseSetupFlags({ features: 'chat,files' })).toStrictEqual({
+      'admin.features': ['chat', 'files'],
+    });
+    expect(() => parseSetupFlags({ features: 'surfaces' })).toThrow(
+      /^--features: \["surfaces"\] is not accepted/u,
+    );
+  });
+
   it('lists every flag in the help', () => {
-    expect(setupFlagsHelp()).toHaveLength(12);
+    expect(setupFlagsHelp()).toHaveLength(13);
     expect(setupFlagsHelp()[2]).toContain('--provider <');
     expect(setupFlagsHelp()[3]).toContain('--model-base-url <');
     // BH061-044: the endpoint has no default to take, so its help does not claim one.

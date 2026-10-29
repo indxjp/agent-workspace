@@ -159,6 +159,44 @@ describe('storage grants on PostgreSQL', () => {
       .where(eq(storageConnections.id, harness.connections.second));
   });
 
+  // @story US-STO-12
+  it('[US-STO-12][contract][sdk] a connection deleted after validation drops its grant instead of failing the write', async () => {
+    const harness = await open();
+    const gone = crypto.randomUUID();
+    const created = await harness.store.createAgentWithFirstVersion({
+      agent: {
+        name: 'Grant on a deleted connection',
+        instructions: 'Read.',
+        model: null,
+        permissions: FIXTURE_PERMISSIONS,
+        policy: null,
+        references: {
+          modelConnectionId: null,
+          runtimeProfileId: null,
+          skillIds: [],
+          connectorIds: [],
+          files: [],
+          storageGrants: [
+            { connectionId: gone, prefix: 'reports', access: 'read' },
+            { connectionId: harness.connections.second, prefix: 'reports', access: 'read' },
+          ],
+        },
+        ownerPrincipalId: principalId,
+        createdBy: null,
+      },
+      version: {
+        summary: 'first',
+        via: 'api',
+        body: { surfaces: [] },
+        createdByPrincipalId: principalId,
+      },
+      environment: 'local',
+    });
+    expect(created.kind).toBe('created');
+    expect(await harness.store.isConnectionGranted(gone)).toBe(false);
+    expect(await harness.store.isConnectionGranted(harness.connections.second)).toBe(true);
+  });
+
   /** Version 1 granted `connection` on a new agent; `local` then moves to version 2, which grants nothing. */
   async function grantedThenReleased(harness: StorageGrantHarness, connectionId: string) {
     const created = await harness.store.createAgentWithFirstVersion({

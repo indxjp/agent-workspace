@@ -1,6 +1,6 @@
 {
   "name": "@agent-workspace/schemas",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "private": true,
   "description": "JSON Schemas of the files an Agent Workspace project commits, generated from the CLI's Zod definitions.",
   "license": "Apache-2.0",

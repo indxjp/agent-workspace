@@ -13,6 +13,7 @@ const membershipPrincipal = {
   workspaceId: '44444444-4444-4444-8444-444444444444',
   userId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
   label: 'Aya Ito',
+  features: ['chat', 'runs'],
 };
 
 const apiKeyPrincipal = {
@@ -22,6 +23,7 @@ const apiKeyPrincipal = {
   workspaceId: membershipPrincipal.workspaceId,
   userId: null,
   label: 'ci',
+  features: ['chat', 'runs'],
 };
 
 function client(route: (request: RecordedRequest) => Response | Promise<Response>): {
@@ -125,6 +127,15 @@ describe('me', () => {
     expect(missing).toBeInstanceOf(ContractViolationError);
     expect((missing as ContractViolationError).status).toBe(200);
     expect((missing as ContractViolationError).issues.join('\n')).toContain('workspaceId');
+
+    // A server one release behind, which does not send `features` yet (ADR-0160 D8).
+    const beforeFeatures = Object.fromEntries(
+      Object.entries(membershipPrincipal).filter(([key]) => key !== 'features'),
+    );
+    const older = client(() => json(200, beforeFeatures));
+    const unsupported = await failure(readMe(older.http));
+    expect(unsupported).toBeInstanceOf(ContractViolationError);
+    expect((unsupported as ContractViolationError).issues.join('\n')).toContain('features');
   });
 
   it('reports a pre-aborted signal as an aborted transport failure', async () => {

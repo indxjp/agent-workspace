@@ -125,6 +125,9 @@ function useMemoryRuntime(): Fixture {
     update: () => Promise.reject(new Error('unused')),
     delete: () => Promise.reject(new Error('unused')),
     replacePolicy: () => Promise.reject(new Error('unused')),
+    listArchiveCandidates: () => Promise.reject(new Error('unused')),
+    archive: () => Promise.reject(new Error('unused')),
+    restore: () => Promise.reject(new Error('unused')),
   };
   let sessionSeq = 0;
   const sessions: SessionRepository = {

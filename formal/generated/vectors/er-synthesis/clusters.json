@@ -1011,6 +1011,22 @@
      {"name": "workspace_principals_acts_for_api_key_only", "clusters": ["identity"]},
      {"name": "workspace_principals_acts_for_not_self", "clusters": ["identity"]}],
     "cluster": "identity",
-    "closedSets": ["workspace_principals_kind_valid"]}}],
+    "closedSets": ["workspace_principals_kind_valid"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ErSynthesis.clusters_partition_the_tables",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.cluster_wires",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.every_other_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.only_the_default_model_pairs_are_refined_twice",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.check_semantics_follow_the_owning_cluster",
+    "AgentWorkspace.Theorems.Invariants.ErSynthesis.tenant_row_has_exactly_one_workspace"],
+   "input": {"table": "workspace_features"},
+   "id": "cluster/workspace_features",
+   "expected":
+   {"workspaceIdNotNull": true,
+    "tenancy": "scoped",
+    "rootKey": "workspace_features_workspace_id_workspaces_id_fk",
+    "otherChecks": [],
+    "cluster": "work",
+    "closedSets": ["workspace_features_feature_valid"]}}],
  "family": "er-synthesis",
  "description": "Every table's cluster, tenancy, root key and check ownership, replayed against Drizzle."}

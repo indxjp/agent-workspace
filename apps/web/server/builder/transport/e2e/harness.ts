@@ -15,12 +15,14 @@ import path from 'node:path';
 
 import { createProviderRegistry } from '@agent-workspace/gateway/providers/registry';
 import { createRunTokenCodec, type RunTokenSubject } from '@agent-workspace/gateway/tokens';
+import type { AgentVersionBody } from '@indx-workspace/contracts/agent-versions';
 import { canonicalCall, needsApproval } from '@indx-workspace/contracts/agents';
 import { AW_CONTROL_SERVER, type BuilderToolName } from '@indx-workspace/contracts/builder';
 import {
   ScriptedModelScriptSchema,
   type ScriptedModelScript,
 } from '@indx-workspace/contracts/models';
+import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import type { RunStatus } from '@indx-workspace/contracts/runs';
 import { vi } from 'vitest';
@@ -36,6 +38,8 @@ import { BUILDER_APPROVAL_RULES } from '../../agent/definition';
 import { ORDER_CASE } from '../../adapters/runner/runner.contract';
 import { BUILDER_SHIPPED_SUMMARY } from '../../agent/prompt-version';
 import type { AuditDeps } from '../../adapters/audit/store';
+import { recordingCeilingFor } from '../../../policy-ceiling/fixtures';
+import { callContextOf } from '../../testing/context';
 import { builderRunReader, productionBuilderPorts } from '../composition';
 import { createBuilderCallerVerifier, serveBuilderMcp } from '../mcp';
 import type { BuilderPorts } from '../../tools/types';
@@ -46,6 +50,9 @@ import type { Role } from '../../../rbac/roles';
 import { createMemoryDirectory } from '../../../rbac/memory-directory';
 import { createInMemoryRuntimeProfileStoreProvider } from '../../../runtimes/memory-store';
 import { ORDER_STATUS_FRAMES } from '../../../evaluations/fixtures';
+import { workspaceFeatureSwitches } from '../../../composition/feature-switches';
+import { configureFeatureSwitches } from '../../../features/runtime';
+import type { WorkspaceFeatureStore } from '../../../workspaces/features-runtime';
 import { installTestRunApi, resetTestRunApi } from '../../../application-context-fixtures';
 import type { LaunchContext, RunApiEnvironment, RunPrincipal } from '../../../runs/environment';
 import { decideRunApproval } from '../../../runs/approval';
@@ -60,7 +67,11 @@ const BUILDER_VERSION_ID = randomUUID();
 /** The prefix the engine's MCP client puts before an `aw-control` tool's own name. */
 const TOOL_PREFIX = `mcp__${AW_CONTROL_SERVER}__`;
 
-const MEMBERS = { builder: 'principal-builder', viewer: 'principal-viewer' } as const;
+const MEMBERS = {
+  builder: 'principal-builder',
+  viewer: 'principal-viewer',
+  admin: 'principal-admin',
+} as const;
 
 /** One journal row as the audit adapter hands it to the repository. */
 type JournalRow = Parameters<ReturnType<AuditDeps['repositories']['forScope']>['record']>[0];
@@ -81,19 +92,33 @@ export interface Door {
   readonly responseHeaders: readonly string[];
   /** The version store behind the Builder's saves. */
   readonly versions: InMemoryAgentVersionStoreProvider;
+  /** The workspace's `workspace_features` repository: `replaceDisabled(['builder'])` switches the Builder off. */
+  readonly workspaceFeatures: WorkspaceFeatureStore;
   /** Every run the fake run API launched: a trial, an evaluation case, an approval continuation. */
   readonly launched: readonly LaunchContext[];
   /** Every `audit_events` row the version store recorded (`agent-created`, `agent-changed`, `storage-grant-changed`), oldest first. */
   readonly auditEvents: ReturnType<InMemoryAgentVersionStoreProvider['audits']>;
   /**
-   * Starts a run of the Builder for `starter` and returns its run token. With `runId` it adopts the
-   * run an approval started (`decide`) instead of creating one.
+   * Starts a run for `starter` and returns its run token: of the Builder, or of `agentId` when it
+   * is a seeded agent. With `runId` it adopts the run an approval started (`decide`) instead of
+   * creating one.
    */
   start(
     starter: Starter,
     model: string,
     runId?: string,
+    agentId?: string,
   ): Promise<{ readonly runId: string; readonly token: string }>;
+  /**
+   * Saves `body` as a new agent the way the console does, as an Admin: an agent of its own behind
+   * the door, with a version a run can pin. `madeBy` records an agent as its creator. Answers its id.
+   */
+  seedAgent(
+    body: AgentVersionBody,
+    madeBy?: { readonly agentId: string; readonly version: number; readonly runId: string },
+  ): Promise<string>;
+  /** The stored row of a seeded or saved agent, or `null`. */
+  agent(agentId: string): Promise<AgentRecord | null>;
   /** `POST /api/runs/:id/approval` as the person who started the run; answers the continuation run's id. */
   decide(
     runId: string,
@@ -172,11 +197,11 @@ export function toolResults(transcript: Transcript): unknown[] {
 }
 
 /**
- * The door as production composes it. `featureOn` replaces only the `builder` feature input (the
- * production composition hard-wires it off until #1846 slice 3); every other port is production's.
+ * The door as production composes it, `builder` feature input included: the workspace switches are
+ * installed in the process slot over an in-memory `workspace_features` repository, on for every
+ * feature until a test calls `door.workspaceFeatures.replaceDisabled`.
  */
 export function builderDoor(options: {
-  readonly featureOn: boolean;
   /** Resolves `WORKSPACE`; a test builds it (`createInMemoryWorkspaceScopeResolver`), as no server module may name core's db. */
   readonly scopes: AuditDeps['scopes'];
   /** The workspace's connectors, when a test seeds them; an empty in-memory store otherwise. */
@@ -196,7 +221,7 @@ export function builderDoor(options: {
   const tokens = createRunTokenCodec({ secret: SECRET });
   const { scopes } = options;
   const registered = new Map<string, { runId: string; hash: string }>();
-  const runs = new Map<string, { model: string; status: RunStatus }>();
+  const runs = new Map<string, { model: string; status: RunStatus; agentId: string }>();
   const portCalls: string[] = [];
   const journal: JournalRow[] = [];
   const responses: string[] = [];
@@ -219,7 +244,7 @@ export function builderDoor(options: {
               : {
                   sessionId: SESSION,
                   workspaceId: WORKSPACE,
-                  agentId: BUILDER_AGENT,
+                  agentId: run.agentId,
                   status: run.status,
                   model: run.model,
                   agentVersion: 1,
@@ -230,12 +255,10 @@ export function builderDoor(options: {
     },
     agentVersions: {
       forScope: () => ({
-        find: (agentId: string, number: number) =>
-          Promise.resolve(
-            agentId === BUILDER_AGENT && number === 1
-              ? { id: BUILDER_VERSION_ID, number: 1, summary: BUILDER_SHIPPED_SUMMARY }
-              : null,
-          ),
+        find: async (agentId: string, number: number) =>
+          agentId === BUILDER_AGENT && number === 1
+            ? { id: BUILDER_VERSION_ID, number: 1, summary: BUILDER_SHIPPED_SUMMARY }
+            : ((await (await versions.forWorkspace(WORKSPACE))?.find(agentId, number)) ?? null),
       }),
     },
     builderToolCalls: {
@@ -278,6 +301,12 @@ export function builderDoor(options: {
     })),
   });
   const memoryAgents = createInMemoryAgentStoreProvider();
+  /** The in-memory stores drop an agent's lineage (PostgreSQL keeps it), so the harness keeps it by agent id. */
+  const lineage = new Map<string, NonNullable<AgentRecord['createdByAgent']>>();
+  const withLineage = (agent: AgentRecord | null): AgentRecord | null => {
+    const madeBy = agent === null ? undefined : lineage.get(agent.id);
+    return agent === null || madeBy === undefined ? agent : { ...agent, createdByAgent: madeBy };
+  };
   /** The in-memory store knows no built-in agent, so the Builder is added to what `get` can see. */
   const agents: typeof memoryAgents = {
     ...memoryAgents,
@@ -308,14 +337,32 @@ export function builderDoor(options: {
                 createdAt: new Date(0),
                 updatedAt: new Date(0),
               }
-            : store.get(id),
+            : withLineage(await store.get(id)),
       };
     },
   };
-  const versions = createInMemoryAgentVersionStoreProvider({
+  const memoryVersions = createInMemoryAgentVersionStoreProvider({
     agents,
     references: { [WORKSPACE]: { connector: [{ id: 'connector-crm', name: 'crm' }] } },
   });
+  const versions: typeof memoryVersions = {
+    ...memoryVersions,
+    forWorkspace: async (workspaceId) => {
+      const store = await memoryVersions.forWorkspace(workspaceId);
+      return store === null
+        ? null
+        : {
+            ...store,
+            async createAgentWithFirstVersion(input) {
+              const created = await store.createAgentWithFirstVersion(input);
+              if (created.kind === 'created' && input.agent.createdByAgent != null) {
+                lineage.set(created.agent.id, input.agent.createdByAgent);
+              }
+              return created;
+            },
+          };
+    },
+  };
   const { runStore } = options;
   const launched: LaunchContext[] = [];
   const person: RunPrincipal = {
@@ -364,10 +411,13 @@ export function builderDoor(options: {
   };
   const ports = productionBuilderPorts({
     agents,
-    deploymentPolicy: null,
+    deploymentPolicy: options.ceiling ?? null,
     versions: {
       versions,
-      ceiling: { kind: 'disabled' },
+      ceiling:
+        options.ceiling == null
+          ? { kind: 'disabled' }
+          : { kind: 'enforced', ceilingFor: recordingCeilingFor(options.ceiling).ceilingFor },
       toolHost: false,
       toolDomainsRefusal: null,
     },
@@ -388,6 +438,21 @@ export function builderDoor(options: {
     runApi: () => runApi,
   });
   const readRun = builderRunReader(database);
+  let disabledFeatures: readonly FeatureId[] = [];
+  const workspaceFeatures: WorkspaceFeatureStore = {
+    listDisabled: () => Promise.resolve(disabledFeatures),
+    replaceDisabled(next) {
+      const before = disabledFeatures;
+      disabledFeatures = FEATURE_IDS.filter((id) => next.includes(id));
+      return Promise.resolve({ before, after: disabledFeatures });
+    },
+  };
+  configureFeatureSwitches(
+    workspaceFeatureSwitches(
+      { scopes, workspaceFeatures: { forScope: () => workspaceFeatures } },
+      FEATURE_IDS,
+    ),
+  );
   /** Records which port method each call reaches; the answers are the port's own. */
   function spied<P extends Record<string, object>>(real: P): P {
     const wrapped: Record<string, object> = {};
@@ -417,25 +482,18 @@ export function builderDoor(options: {
       directory,
       agents: {
         forWorkspace: () => ({
-          get: (id: string) =>
-            Promise.resolve(
-              id !== BUILDER_AGENT
-                ? null
-                : {
-                    ownerPrincipalId: 'principal-owner',
-                    ...(options.runAgent ?? { name: 'builder', builtin: 'builder' as const }),
-                  },
-            ),
+          get: async (id: string) =>
+            id !== BUILDER_AGENT
+              ? await agents.forWorkspace(WORKSPACE).get(id)
+              : {
+                  ownerPrincipalId: 'principal-owner',
+                  ...(options.runAgent ?? { name: 'builder', builtin: 'builder' as const }),
+                },
         }),
       },
       ceiling: options.ceiling ?? null,
     }),
-    ports: spied({
-      ...(options.featureOn
-        ? { ...ports, feature: { enabled: () => Promise.resolve(true) } }
-        : ports),
-      ...options.override,
-    }),
+    ports: spied({ ...ports, ...options.override }),
     readRun: (run: Parameters<ReturnType<typeof builderRunReader>>[0]) => {
       portCalls.push('readRun');
       return readRun(run);
@@ -495,6 +553,7 @@ export function builderDoor(options: {
     ports: deps.ports,
     journal,
     versions,
+    workspaceFeatures,
     launched,
     get auditEvents() {
       return versions.audits();
@@ -531,15 +590,33 @@ export function builderDoor(options: {
         resetTestRunApi();
       }
     },
-    async start(starter, model, adopt) {
+    async seedAgent(body, madeBy) {
+      const ctx = callContextOf(
+        WORKSPACE,
+        'admin',
+        MEMBERS.admin,
+        'user-admin',
+        madeBy?.runId ?? 'seed-run',
+      );
+      const saved = await ports.store.save(ctx, {
+        body,
+        ...(madeBy === undefined
+          ? {}
+          : { createdByAgent: { agentId: madeBy.agentId, version: madeBy.version } }),
+      });
+      if (!saved.ok) throw new Error(`the fixture agent was not saved: ${saved.code}`);
+      return saved.agentId;
+    },
+    agent: (agentId) => agents.forWorkspace(WORKSPACE).get(agentId),
+    async start(starter, model, adopt, agentId = BUILDER_AGENT) {
       const runId = adopt ?? randomUUID();
-      runs.set(runId, { model, status: 'running' });
+      runs.set(runId, { model, status: 'running', agentId });
       if (runStore !== undefined && adopt === undefined) {
         await runStore.create({
           id: runId,
           engine: 'claude-agent-sdk',
           workspaceId: WORKSPACE,
-          agentId: BUILDER_AGENT,
+          agentId,
           sessionId: SESSION,
           initiatingUserId: person.userId,
           ownerPrincipalId: person.principalId,
@@ -554,7 +631,7 @@ export function builderDoor(options: {
         runId,
         sessionId: SESSION,
         workspaceId: WORKSPACE,
-        agentId: BUILDER_AGENT,
+        agentId,
         modelConnectionId: 'connection-1',
         caller,
       });

@@ -4,7 +4,7 @@ import { ApiProblemError, ContractViolationError, TransportError } from '../erro
 import { HttpClient } from '../http.js';
 import type { BuiltinAgentProblemCode } from '../index.js';
 import { fetchDouble, fixtures, jsonResponse as json, type RecordedRequest } from '../testing.js';
-import { AgentsClient } from './agents.js';
+import { AgentsClient, type ListAgentsOptions } from './agents.js';
 import type {
   AgentPolicy,
   AgentResource,
@@ -98,6 +98,19 @@ describe('AgentsClient.list/get', () => {
     expectTypeOf(first?.archivedAt).toEqualTypeOf<string | undefined>();
   });
 
+  it("lists archived agents only when asked with archived: 'include' (#1851)", async () => {
+    const { agents, calls } = client(() => json(200, { agents: [agent] }));
+    await agents.list();
+    await agents.list({ archived: 'include' });
+    expect(calls[0]?.url.search).toBe('');
+    expect(calls[1]?.url.search).toBe('?archived=include');
+    expectTypeOf<Parameters<AgentsClient['list']>[0]>().toEqualTypeOf<
+      ListAgentsOptions | undefined
+    >();
+    expectTypeOf<{ archived: 'include' }>().toExtend<ListAgentsOptions>();
+    expectTypeOf<ListAgentsOptions['archived']>().toEqualTypeOf<'include' | undefined>();
+  });
+
   it('surfaces a missing agent by code', async () => {
     const { agents } = client(() =>
       json(404, { error: { code: 'agent_not_found', message: 'No such agent.' } }),
@@ -105,6 +118,26 @@ describe('AgentsClient.list/get', () => {
     const failure = await agents.get(AGENT).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(ApiProblemError);
     expect((failure as ApiProblemError).code).toBe('agent_not_found');
+  });
+});
+
+describe('AgentsClient.restore (#1851)', () => {
+  it('posts to the restore path with no body and reads the agent', async () => {
+    const { agents, calls } = client(() => json(200, agent));
+    expect(await agents.restore(AGENT)).toEqual(agent);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.url.pathname).toBe(`/api/agents/${AGENT}/restore`);
+    expect(calls[0]?.json).toBeUndefined();
+  });
+
+  it('surfaces a refusal by status and code', async () => {
+    const { agents } = client(() =>
+      json(403, { error: { code: 'forbidden', message: 'Not allowed.' } }),
+    );
+    const problem = (await agents.restore(AGENT).catch((e: unknown) => e)) as ApiProblemError;
+    expect(problem).toBeInstanceOf(ApiProblemError);
+    expect([problem.status, problem.code]).toEqual([403, 'forbidden']);
   });
 });
 

@@ -20,6 +20,7 @@ import {
 
 import { formatIssues, problem, type ApiResult } from '../http/result';
 import type { ObjectStore } from '@agent-workspace/core/storage';
+import { readBytes } from '@agent-workspace/core/storage/streams';
 
 /** The key of the bundle with `digest`, which the caller has already matched against the pattern. */
 function bundleKey(digest: string): string {
@@ -29,14 +30,17 @@ function bundleKey(digest: string): string {
 /** The digests among `digests` this workspace has no bundle for, in the order given. */
 export type ToolBundleLookup = (digests: readonly string[]) => Promise<readonly string[]>;
 
+/** The object-store operations the tool-bundle handlers use. */
+export type ToolBundleStore = Pick<ObjectStore, 'head' | 'read' | 'write'>;
+
 /** A {@link ToolBundleLookup} over `store`. */
-export function toolBundleLookup(store: ObjectStore): ToolBundleLookup {
-  // One prefix listing per digest asked about, so the cost is bounded by the agent's tool count,
-  // not by how many bundles the workspace holds.
+export function toolBundleLookup(store: ToolBundleStore): ToolBundleLookup {
+  // One `head` per digest asked about, so the cost is bounded by the agent's tool count, not by
+  // how many bundles the workspace holds.
   return async (digests) => {
     const missing: string[] = [];
     for (const digest of digests) {
-      if ((await store.listPrefix(bundleKey(digest))).length === 0) missing.push(digest);
+      if ((await store.head(bundleKey(digest))) === null) missing.push(digest);
     }
     return missing;
   };
@@ -44,17 +48,20 @@ export function toolBundleLookup(store: ObjectStore): ToolBundleLookup {
 
 /** The bytes of the bundle with `digest`, or `null` when this workspace holds none that match it. */
 export async function readToolBundle(
-  store: ObjectStore,
+  store: ToolBundleStore,
   digest: string,
 ): Promise<Uint8Array | null> {
-  const found = await store.get(bundleKey(digest));
+  const found = await store.read(bundleKey(digest));
   if (found === null) return null;
+  // An upload is capped at TOOL_BUNDLE_MAX_BYTES, so a larger object is not a bundle.
+  const body = await readBytes(found.body, TOOL_BUNDLE_MAX_BYTES);
+  if (body === null) return null;
   // A digest names exactly one program, so bytes that do not hash to it are not the bundle.
-  return createHash('sha256').update(found.body).digest('hex') === digest ? found.body : null;
+  return createHash('sha256').update(body).digest('hex') === digest ? body : null;
 }
 
 /** Store the bytes in `contentBase64` under their digest; `created` is false when already stored. */
-export async function uploadToolBundle(store: ObjectStore, raw: unknown): Promise<ApiResult> {
+export async function uploadToolBundle(store: ToolBundleStore, raw: unknown): Promise<ApiResult> {
   const parsed = UploadToolBundleRequestSchema.safeParse(raw);
   if (!parsed.success) {
     return problem(
@@ -75,8 +82,7 @@ export async function uploadToolBundle(store: ObjectStore, raw: unknown): Promis
   const digest = createHash('sha256').update(bytes).digest('hex');
   const created = (await toolBundleLookup(store)([digest])).length > 0;
   if (created) {
-    await store.put(bundleKey(digest), {
-      body: new Uint8Array(bytes),
+    await store.write(bundleKey(digest), new Uint8Array(bytes), {
       contentType: 'text/javascript',
     });
   }
@@ -88,12 +94,12 @@ export async function uploadToolBundle(store: ObjectStore, raw: unknown): Promis
 }
 
 /** The bundle with `digest`, or `404 tool_bundle_not_found` (also for a digest that is no SHA-256). */
-export async function getToolBundle(store: ObjectStore, digest: unknown): Promise<ApiResult> {
+export async function getToolBundle(store: ToolBundleStore, digest: unknown): Promise<ApiResult> {
   const found =
     typeof digest === 'string' && TOOL_BUNDLE_DIGEST_PATTERN.test(digest)
-      ? (await store.listPrefix(bundleKey(digest))).find((entry) => entry.kind === 'file')
-      : undefined;
-  if (found?.kind !== 'file' || typeof digest !== 'string') {
+      ? await store.head(bundleKey(digest))
+      : null;
+  if (found === null || typeof digest !== 'string') {
     return problem(
       TOOL_BUNDLE_PROBLEM_CODES.tool_bundle_not_found,
       'tool_bundle_not_found',

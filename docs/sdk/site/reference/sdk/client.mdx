@@ -70,6 +70,7 @@ me(options?: RequestOptions): Promise<MeResponse>
 | `headers` | `undefined \| Readonly<Record<string, string>>` | No | Extra headers on every request, e.g. a trace id. Never used for credentials, and never the contracts version: `X-Agent-Workspace-Contracts` is always the version this SDK was built against. |
 | `timeoutMs` | `undefined \| number` | No | Abort a request that has produced no response headers within this many milliseconds. |
 | `workspace` | `undefined \| string` | No | Select this workspace (id or slug) before the first request — issue #236 (SDK-04, S-2). Honoured only for `auth: { kind: 'session' }`; the constructor throws for any other kind, since an API key and a browser token are each already bound to one fixed workspace. The switch itself runs once, memoised, the first time any request is sent, and every concurrent first caller awaits that same attempt rather than each triggering their own. |
+| `onWarning` | `undefined \| (message: string) => void` | No | Receives each deprecation warning instead of the console: a deprecated call in this client (today, a `contentBase64` skill import file) passes it a fixed message that never carries a value. Without it the first such warning in a process is one `console.warn` line; a handler that does nothing silences them. |
 
 ## RequestOptions
 

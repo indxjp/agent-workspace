@@ -29,6 +29,7 @@ import {
   requireSessionScopeMatch,
   unauthenticated,
 } from './api';
+import { featureRefusalResponse } from '../features/guard';
 import { getRunApi, type AgentFeedbackRow } from './environment';
 import { apiError, isUuid, json, readJsonBody } from './http';
 
@@ -37,6 +38,8 @@ export async function submitRunFeedback(request: Request, runId: string): Promis
   if (env === null || env.recordRunFeedback === undefined) return notConfigured();
   const principal = await env.authenticate(request);
   if (principal === null) return unauthenticated();
+  const disabled = await featureRefusalResponse(request, principal.workspaceId);
+  if (disabled !== null) return disabled;
   if (!isUuid(runId)) {
     return apiError(400, 'invalid_run_id', 'the run id in the path is not a UUID.');
   }
@@ -83,6 +86,8 @@ export async function listAgentFeedback(request: Request, agentId: string): Prom
   if (env === null || env.listAgentFeedback === undefined) return notConfigured();
   const principal = await env.authenticate(request);
   if (principal === null) return unauthenticated();
+  const disabled = await featureRefusalResponse(request, principal.workspaceId);
+  if (disabled !== null) return disabled;
   if (!isUuid(agentId)) {
     return apiError(
       RUN_FEEDBACK_LIST_PROBLEM_CODES.invalid_agent_id,

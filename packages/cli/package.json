@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/cli",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "The Agent Workspace project CLI: create-agent-workspace generates a deployment project from one validated profile, and agent-workspace starts and validates it.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",

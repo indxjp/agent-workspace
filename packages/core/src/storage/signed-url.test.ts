@@ -1,5 +1,9 @@
 import { S3Client } from '@aws-sdk/client-s3';
-import { BlobServiceClient, type UserDelegationKey } from '@azure/storage-blob';
+import {
+  BlobServiceClient,
+  type ServiceGetUserDelegationKeyResponse,
+  type UserDelegationKey,
+} from '@azure/storage-blob';
 import { Storage } from '@google-cloud/storage';
 import { generateKeyPairSync } from 'node:crypto';
 
@@ -227,10 +231,7 @@ describe('GCS createSignedUrl', () => {
   it('forwards the prefixed key and the request to the client', async () => {
     const calls: { name: string; request: SignedUrlRequest }[] = [];
     const client: GcsClient = {
-      write: () => Promise.resolve(),
-      read: () => Promise.resolve(null),
       delete: () => Promise.resolve(),
-      list: () => Promise.resolve([]),
       copy: () => Promise.resolve(),
       head: () => Promise.resolve(null),
       readStream: () => Promise.resolve(null),
@@ -271,6 +272,31 @@ describe('GCS createSignedUrl', () => {
     expect(searchParams.get('response-content-type')).toBe('application/octet-stream');
   });
 
+  // Live GCS: the SDK will not sign an expiry before this host's clock and threw a generic error,
+  // which the configured store turned into "sign failed". A window already over is a typed refusal.
+  it('refuses a window that is already over with SignedUrlUnsupportedError, before the SDK', async () => {
+    const client = offlineClient();
+    const expired = client.signUrl?.('workspaces/ws-1/a.txt', {
+      ...GET,
+      expiresInSeconds: 60,
+      now: new Date(Date.now() - 120_000),
+    });
+    await expect(expired).rejects.toBeInstanceOf(SignedUrlUnsupportedError);
+
+    // A window that started in the past and is still open is signed from that start.
+    const started = new Date(Date.now() - 30_000);
+    const open = await client.signUrl?.('workspaces/ws-1/a.txt', {
+      ...GET,
+      expiresInSeconds: 60,
+      now: started,
+    });
+    const params = new URL(open?.url ?? '').searchParams;
+    expect(params.get('X-Goog-Expires')).toBe('60');
+    expect(params.get('X-Goog-Date')).toBe(
+      `${started.toISOString().replace(/[-:]/gu, '').slice(0, 15)}Z`,
+    );
+  });
+
   it('signs a V4 URL offline with the native client', async () => {
     const client = offlineClient();
     const signed = await client.signUrl?.('workspaces/ws-1/a.txt', {
@@ -306,11 +332,7 @@ describe('Azure Blob createSignedUrl', () => {
     const names: string[] = [];
     const store = createAzureBlobObjectStoreProvider({
       assertReady: () => Promise.resolve(),
-      put: () => Promise.resolve(),
-      get: () => Promise.resolve(null),
       delete: () => Promise.resolve(),
-      listHierarchy: () => Promise.resolve([]),
-      listFlat: () => Promise.resolve([]),
       ...UNUSED_V2_MEMBERS,
       signUrl(name) {
         names.push(name);
@@ -329,11 +351,7 @@ describe('Azure Blob createSignedUrl', () => {
     const names: string[] = [];
     const store = createAzureBlobObjectStoreProvider({
       assertReady: () => Promise.resolve(),
-      put: () => Promise.resolve(),
-      get: () => Promise.resolve(null),
       delete: () => Promise.resolve(),
-      listHierarchy: () => Promise.resolve([]),
-      listFlat: () => Promise.resolve([]),
       ...UNUSED_V2_MEMBERS,
       signUrl(name) {
         names.push(name);
@@ -379,6 +397,52 @@ describe('Azure Blob createSignedUrl', () => {
     const { searchParams } = new URL(read?.url ?? '');
     expect(searchParams.get('rscd')).toBe(ATTACHMENT);
     expect(searchParams.get('rsct')).toBe('application/octet-stream');
+  });
+
+  // Live Azure answered 400 when the key's window was the SAS window and that window had already
+  // ended (a `now` in the past). Azurite does not check, so the window asked for is pinned here.
+  it('asks for a delegation key valid now, while the SAS keeps the expiry it was asked for', async () => {
+    const asked: { startsOn: Date; expiresOn: Date }[] = [];
+    class RecordingService extends BlobServiceClient {
+      public override getUserDelegationKey(
+        ...args: unknown[]
+      ): Promise<ServiceGetUserDelegationKeyResponse> {
+        const [startsOn, expiresOn] = args;
+        if (!(startsOn instanceof Date) || !(expiresOn instanceof Date)) {
+          throw new Error('expected the (startsOn, expiresOn) overload');
+        }
+        asked.push({ startsOn, expiresOn });
+        return Promise.resolve({
+          signedObjectId: '00000000-0000-0000-0000-000000000001',
+          signedTenantId: '00000000-0000-0000-0000-000000000002',
+          signedStartsOn: startsOn,
+          signedExpiresOn: expiresOn,
+          signedService: 'b',
+          signedVersion: '2023-11-03',
+          value: Buffer.from('k'.repeat(32)).toString('base64'),
+          _response: undefined as never,
+        });
+      }
+    }
+    const service = new RecordingService('https://acct.blob.core.windows.net');
+    const container = createAzureSdkBlobContainer(service.getContainerClient('files'), service);
+    const realNow = Date.now();
+    const past = new Date(realNow - 120_000);
+
+    const signed = await container.signUrl?.('workspaces/ws-1/a.txt', {
+      method: 'GET',
+      expiresInSeconds: 60,
+      responseDisposition: 'attachment',
+      now: past,
+    });
+
+    const sasExpiry = new Date(new URL(signed?.url ?? '').searchParams.get('se') ?? '');
+    expect(sasExpiry.getTime()).toBe(Math.floor((past.getTime() + 60_000) / 1_000) * 1_000);
+    expect(sasExpiry.getTime()).toBeLessThan(realNow);
+    const [key] = asked;
+    expect(key?.startsOn.getTime()).toBeLessThanOrEqual(past.getTime());
+    expect(key?.expiresOn.getTime()).toBeGreaterThan(Date.now());
+    expect(key?.expiresOn.getTime()).toBeLessThanOrEqual(realNow + 7 * 24 * 3_600_000);
   });
 
   it('mints a user-delegation SAS with the SDK container', async () => {

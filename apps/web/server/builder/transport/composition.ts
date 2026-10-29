@@ -11,6 +11,7 @@ import type { AgentStoreProvider } from '../../agents/store';
 import type { ConnectorsStoreProvider } from '../../connectors/store';
 import type { ModelsStoreProvider } from '../../models/store';
 import type { RuntimeProfileStoreProvider } from '../../runtimes/store';
+import { enabledFeaturesFor } from '../../features/runtime';
 import type { DirectoryRoot } from '../../rbac/directory';
 import type { ToolBundleLookup } from '../../tool-bundles/handlers';
 import type { ActorLabel } from '../adapters/actor-label';
@@ -73,8 +74,9 @@ export function productionBuilderPorts(root: BuilderCompositionRoot): BuilderPor
     return member.email;
   };
   return {
-    // ponytail: the `builder` feature stays off in production until #1846 slice 3 reads the workspace switch.
-    feature: { enabled: () => Promise.resolve(false) },
+    feature: {
+      enabled: async (ctx) => (await enabledFeaturesFor(ctx.workspaceId)).includes('builder'),
+    },
     approval: createApproval(root.approvals),
     authorization: createAuthorization({
       agents: root.agents,

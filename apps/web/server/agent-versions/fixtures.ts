@@ -60,6 +60,7 @@ export interface FixtureEdits {
     readonly description?: string;
     readonly inputSchema?: Record<string, unknown>;
     readonly allowedDomains?: readonly string[];
+    readonly secrets?: readonly string[];
   }[];
 }
 

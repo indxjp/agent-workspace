@@ -200,10 +200,7 @@ describe('storage connections API', () => {
     expect(texts).not.toContain(accessKeyId);
     expect(texts).not.toContain(secretAccessKey);
 
-    const scope = await scopes.forWorkspaceId(WORKSPACE_A);
-    if (scope === null) throw new Error('workspace A did not resolve');
-    const stored = await secrets.resolveByName(scope, storageConnectionSecretName(id));
-    expect(JSON.parse(stored?.value.toString('utf8') ?? 'null')).toEqual(body.credential);
+    expect(await storedCredential(id)).toEqual(body.credential);
   });
 
   // @story US-STO-12
@@ -439,7 +436,14 @@ async function storedCredential(id: string): Promise<unknown> {
   const scope = await scopes.forWorkspaceId(WORKSPACE_A);
   if (scope === null) throw new Error('workspace A did not resolve');
   const stored = await secrets.resolveByName(scope, storageConnectionSecretName(id));
-  return stored === null ? null : (JSON.parse(stored.value.toString('utf8')) as unknown);
+  if (stored === null) return null;
+  // The secret is the credential bound to the target it was supplied for.
+  const { target, credential } = JSON.parse(stored.value.toString('utf8')) as {
+    target: unknown;
+    credential: unknown;
+  };
+  expect(target).toEqual(expect.any(String));
+  return credential;
 }
 
 function reach(
@@ -840,7 +844,7 @@ describe.each(['memory', 'postgres'] as const)(
         'reports/café/e.txt',
         'reports/a&b/amp.txt',
       ];
-      for (const key of keys) await objects.put(key, { body: new TextEncoder().encode(key) });
+      for (const key of keys) await objects.write(key, new TextEncoder().encode(key), {});
       const created = await post({ name, url: `file://${dir}`, allowedPrefixes: ['reports'] });
       expect(created.status).toBe(201);
       const { id } = StorageConnectionResourceSchema.parse(await created.json());

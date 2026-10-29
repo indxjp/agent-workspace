@@ -65,7 +65,7 @@ export type {
   ImportAgentDefinitionResult,
 } from './resources/agent-definitions.js';
 export type { AgentPointersClient, AgentVersionsClient } from './resources/agent-versions.js';
-export type { AgentsClient } from './resources/agents.js';
+export type { AgentsClient, ListAgentsOptions } from './resources/agents.js';
 export type { EvaluationsClient } from './resources/evaluations.js';
 export type { ConnectorsClient, ToolConnectorBody } from './resources/connectors.js';
 export type { EndpointClientsClient } from './resources/endpointClients.js';
@@ -150,7 +150,11 @@ export type { AuthClient } from './resources/auth.js';
 export type { MintTokenOptions, TokensClient } from './resources/tokens.js';
 export type { BuiltinAgentProblemCode } from '@indx-workspace/contracts/agents';
 export type { TriggersClient } from './resources/triggers.js';
-export type { SharingPolicyClient, WorkspacesClient } from './resources/workspaces.js';
+export type {
+  SharingPolicyClient,
+  WorkspaceFeaturesClient,
+  WorkspacesClient,
+} from './resources/workspaces.js';
 export type { RunEventFrame } from './events/run-events.js';
 export type { MeResponse } from '@indx-workspace/contracts/team';
 export {

@@ -223,10 +223,8 @@ export function FileAssignments({
           grants={grants}
           connections={connections}
           listRef={grantsRef}
-          onChanged={(next) => {
-            storage.onGranted(next);
-            addRef.current?.focus();
-          }}
+          focusWhenEmpty={addRef}
+          onChanged={storage.onGranted}
         />
       )}
       <div className="mt-3">

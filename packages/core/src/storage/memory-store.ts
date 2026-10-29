@@ -42,12 +42,10 @@ import {
   scopedObjectStoreProvider,
   ObjectConflictError,
   validatedWriteKey,
-  type ObjectContent,
   type ObjectListEntry,
   type ObjectMeta,
-  type ObjectStoreV2,
-  type ObjectStoreProviderV2,
-  type PutObjectInput,
+  type ObjectStore,
+  type ObjectStoreProvider,
   type WriteOptions,
   compareEntryKeys,
 } from './object-store.js';
@@ -65,7 +63,7 @@ interface StoredObject {
  * `createLocalFilesystemObjectStore`'s is — `createScopedObjectStore` is what adds a workspace
  * prefix, and {@link createInMemoryObjectStoreProvider} is the wrapped form to use in a fixture.
  */
-export function createInMemoryObjectStore(): ObjectStoreV2 {
+export function createInMemoryObjectStore(): ObjectStore {
   const objects = new Map<string, StoredObject>();
   let version = 0;
   const metaOf = (object: StoredObject): ObjectMeta => ({
@@ -86,7 +84,57 @@ export function createInMemoryObjectStore(): ObjectStoreV2 {
     return object;
   };
 
-  const backend: ObjectStoreV2 = {
+  const listing = {
+    level(prefix): Promise<readonly ObjectListEntry[]> {
+      const safePrefix = toObjectPrefix(prefix);
+      // `''` means the root, and the root has no trailing separator to strip.
+      const scan = safePrefix === '' ? '' : `${safePrefix}/`;
+      const files: ObjectListEntry[] = [];
+      const folders = new Set<string>();
+      for (const [key, value] of objects) {
+        if (!key.startsWith(scan)) continue;
+        const remainder = key.slice(scan.length);
+        const cut = remainder.indexOf('/');
+        if (cut === -1) {
+          files.push({
+            kind: 'file',
+            key,
+            sizeBytes: value.body.byteLength,
+            contentType: value.contentType,
+            lastModified: value.lastModified,
+          });
+          continue;
+        }
+        // One level only: everything deeper is reported as the folder that contains it, once.
+        folders.add(`${scan}${remainder.slice(0, cut)}`);
+      }
+      const entries: ObjectListEntry[] = [
+        ...files,
+        ...[...folders].map((key): ObjectListEntry => ({ kind: 'folder', key })),
+      ];
+      return Promise.resolve(entries.sort(compareEntryKeys));
+    },
+
+    tree(prefix): Promise<readonly ObjectListEntry[]> {
+      const safePrefix = toObjectPrefix(prefix);
+      const matches = (key: string): boolean =>
+        safePrefix === '' || key === safePrefix || key.startsWith(`${safePrefix}/`);
+      const entries: ObjectListEntry[] = [];
+      for (const [key, value] of objects) {
+        if (!matches(key)) continue;
+        entries.push({
+          kind: 'file',
+          key,
+          sizeBytes: value.body.byteLength,
+          contentType: value.contentType,
+          lastModified: value.lastModified,
+        });
+      }
+      return Promise.resolve(entries.sort(compareEntryKeys));
+    },
+  } satisfies Parameters<typeof listPageFrom>[0];
+
+  const backend: ObjectStore = {
     capabilities: {
       sign: false,
       boundLengthSign: false,
@@ -128,24 +176,7 @@ export function createInMemoryObjectStore(): ObjectStoreV2 {
       return metaOf(store(safeKey, bytes, options.contentType ?? null));
     },
 
-    listPage: (prefix, options) => listPageFrom(backend, prefix, options),
-
-    put(key, input: PutObjectInput): Promise<void> {
-      store(toObjectKey(key), input.body, input.contentType ?? null);
-      return Promise.resolve();
-    },
-
-    get(key): Promise<ObjectContent | null> {
-      const safeKey = toObjectKey(key);
-      const found = objects.get(safeKey);
-      if (found === undefined) return Promise.resolve(null);
-      return Promise.resolve({
-        body: Uint8Array.from(found.body),
-        contentType: found.contentType,
-        sizeBytes: found.body.byteLength,
-        lastModified: found.lastModified,
-      });
-    },
+    listPage: (prefix, options) => listPageFrom(listing, prefix, options),
 
     delete(key): Promise<void> {
       const safeKey = toObjectKey(key);
@@ -155,55 +186,7 @@ export function createInMemoryObjectStore(): ObjectStoreV2 {
       return Promise.resolve();
     },
 
-    list(prefix): Promise<readonly ObjectListEntry[]> {
-      const safePrefix = toObjectPrefix(prefix);
-      // `''` means the root, and the root has no trailing separator to strip.
-      const scan = safePrefix === '' ? '' : `${safePrefix}/`;
-      const files: ObjectListEntry[] = [];
-      const folders = new Set<string>();
-      for (const [key, value] of objects) {
-        if (!key.startsWith(scan)) continue;
-        const remainder = key.slice(scan.length);
-        const cut = remainder.indexOf('/');
-        if (cut === -1) {
-          files.push({
-            kind: 'file',
-            key,
-            sizeBytes: value.body.byteLength,
-            contentType: value.contentType,
-            lastModified: value.lastModified,
-          });
-          continue;
-        }
-        // One level only: everything deeper is reported as the folder that contains it, once.
-        folders.add(`${scan}${remainder.slice(0, cut)}`);
-      }
-      const entries: ObjectListEntry[] = [
-        ...files,
-        ...[...folders].map((key): ObjectListEntry => ({ kind: 'folder', key })),
-      ];
-      return Promise.resolve(entries.sort(compareEntryKeys));
-    },
-
-    listPrefix(prefix): Promise<readonly ObjectListEntry[]> {
-      const safePrefix = toObjectPrefix(prefix);
-      const matches = (key: string): boolean =>
-        safePrefix === '' || key === safePrefix || key.startsWith(`${safePrefix}/`);
-      const entries: ObjectListEntry[] = [];
-      for (const [key, value] of objects) {
-        if (!matches(key)) continue;
-        entries.push({
-          kind: 'file',
-          key,
-          sizeBytes: value.body.byteLength,
-          contentType: value.contentType,
-          lastModified: value.lastModified,
-        });
-      }
-      return Promise.resolve(entries.sort(compareEntryKeys));
-    },
-
-    copyObject(sourceKey, destinationKey): Promise<void> {
+    copy(sourceKey, destinationKey): Promise<void> {
       const safeSource = toObjectKey(sourceKey);
       const safeDestination = toObjectKey(destinationKey);
       const found = objects.get(safeSource);
@@ -222,6 +205,6 @@ export function createInMemoryObjectStore(): ObjectStoreV2 {
  * shared map, via {@link scopedObjectStoreProvider} — the same wrapper the local-filesystem
  * provider uses, so "which workspace this key belongs to" is decided in one place for both.
  */
-export function createInMemoryObjectStoreProvider(): ObjectStoreProviderV2 {
+export function createInMemoryObjectStoreProvider(): ObjectStoreProvider {
   return scopedObjectStoreProvider(createInMemoryObjectStore());
 }

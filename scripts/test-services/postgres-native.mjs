@@ -18,7 +18,7 @@ const ATTEMPTS = 3;
 const READY_TIMEOUT_MS = 60_000;
 
 /**
- * PostgreSQL 17 from the pinned `embedded-postgres`, in a fresh directory under `os.tmpdir()` on a
+ * PostgreSQL 18 from the pinned `embedded-postgres`, in a fresh directory under `os.tmpdir()` on a
  * free 127.0.0.1 port, with `postgres` as its superuser. A start that loses its port to another
  * process is retried on a new port and a new data directory.
  *

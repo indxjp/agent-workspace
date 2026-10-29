@@ -61,6 +61,7 @@ import {
   type RunPrincipal,
   type RunApiEnvironment,
 } from './environment';
+import { featureRefusalResponse } from '../features/guard';
 import { apiError, isUuid, json, readJsonBody } from './http';
 import { encodeRunListCursor, parseRunListQuery } from './list-query';
 import { MAX_PROMPT_CHARS, startRunOnSession, type StartRunBody } from './service';
@@ -758,6 +759,8 @@ export async function listRuns(request: Request): Promise<Response> {
   if (env === null) return notConfigured();
   const principal = await env.authenticate(request);
   if (principal === null) return unauthenticated();
+  const disabled = await featureRefusalResponse(request, principal.workspaceId);
+  if (disabled !== null) return disabled;
 
   const access = decideRunListAccess(request, principal);
   if (access.kind === 'denied') return access.response;

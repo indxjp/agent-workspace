@@ -95,6 +95,7 @@ import {
 import { classifySdkEvent, type ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
 import { canonicalCall, needsApproval } from '@indx-workspace/contracts/agents';
 import {
+  EngineRefusalError,
   executeRunSkillScript,
   RUN_SKILL_SCRIPT_TOOL,
   skillScriptToolDescription,
@@ -189,7 +190,8 @@ function toSdkMcpServer(name: string, config: CompiledMcpServerConfig): SdkMcpSe
   // this function does not. A silent pass-through here is a connector the platform believes it
   // configured and the SDK did something else with.
   const unhandled: never = type;
-  throw new Error(
+  throw new EngineRefusalError(
+    'engine_policy_invalid',
     `mcpServers[${JSON.stringify(name)}] declares transport ${describe(unhandled)}, which this SDK boundary does not translate.`,
   );
 }
@@ -226,7 +228,8 @@ function isStringArray(value: unknown): value is readonly string[] {
  */
 function toSdkTools(tools: CompiledSdkOptions['tools']): NonNullable<SdkOptions['tools']> {
   if (tools === undefined) {
-    throw new Error(
+    throw new EngineRefusalError(
+      'engine_policy_invalid',
       'the compiled options carry no `tools`. Omitting it gives the run the SDK\'s default tool surface rather than the agent\'s configured one; emit an explicit list, or { type: "preset", preset: "claude_code" } (R-01 §10).',
     );
   }
@@ -234,7 +237,8 @@ function toSdkTools(tools: CompiledSdkOptions['tools']): NonNullable<SdkOptions[
   if (tools.type === 'preset' && tools.preset === 'claude_code') {
     return { type: 'preset', preset: 'claude_code' };
   }
-  throw new Error(
+  throw new EngineRefusalError(
+    'engine_policy_invalid',
     'the compiled options carry a `tools` value this boundary cannot translate: expected an array of tool rules, or { type: "preset", preset: "claude_code" }.',
   );
 }
@@ -270,13 +274,17 @@ function toSdkAgents(
 
 function toSdkSkills(skills: CompiledSdkOptions['skills']): NonNullable<SdkOptions['skills']> {
   if (skills === undefined) {
-    throw new Error(
+    throw new EngineRefusalError(
+      'engine_policy_invalid',
       "the compiled options carry no `skills`. settingSources does not empty a tenant's skill surface — R-01's probe 2 ran with settingSources: [] and still loaded the bundled Claude Code skills — so an absent `skills` key silently grants them. Emit 'all' or an explicit allowlist (which may be []). Note what [] does and does not buy: it closes the model-invoked Skill tool, and it does NOT close user-typed /name dispatch, which no option value closes (R-01 §8).",
     );
   }
   if (skills === 'all') return 'all';
   if (isStringArray(skills)) return [...skills];
-  throw new Error(`\`skills\` must be 'all' or an array of names; got ${describe(skills)}.`);
+  throw new EngineRefusalError(
+    'engine_policy_invalid',
+    `\`skills\` must be 'all' or an array of names; got ${describe(skills)}.`,
+  );
 }
 
 // ── The exported surface: platform-owned types only ──────────────────────────────────────

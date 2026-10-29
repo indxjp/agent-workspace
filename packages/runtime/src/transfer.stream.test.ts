@@ -140,7 +140,8 @@ describe('streaming ustar codec', () => {
       await expect(
         extractUstarStream(chunked(forged, 4096), path.join(root, 'out'), { maxBytes: 1024 }),
       ).rejects.toBeInstanceOf(ArchiveValidationError);
-      expect(await readdir(root)).toEqual(['out']);
+      // The header is refused as it parses, so not even the workspace is created.
+      expect(await readdir(root)).toEqual([]);
     },
   );
 
@@ -218,7 +219,7 @@ describe('streaming ustar codec', () => {
     await expect(
       extractUstarStream(chunked(archive, 1000), root, { maxBytes: 6 }),
     ).rejects.toBeInstanceOf(ArchiveTooLargeError);
-    expect(await readdir(root)).toEqual(['a']);
+    expect(await readdir(root)).toEqual([]);
   });
 
   it('[US-STO-06][unit][run] refuses a headers-only archive over the member cap', async () => {
@@ -227,7 +228,61 @@ describe('streaming ustar codec', () => {
     await expect(
       extractUstarStream(chunked(archive, 1000), root, { maxBytes: 0, maxMembers: 3 }),
     ).rejects.toBeInstanceOf(ArchiveTooLargeError);
-    expect((await readdir(root)).sort()).toEqual(['a', 'b', 'c']);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('[US-STO-06][unit][run] a refused hydrate keeps every file it would have overwritten', async () => {
+    await writeFile(path.join(root, 'a'), 'old');
+    const archive = await readStream(
+      encodeUstarStream(
+        [
+          fileEntry('a', Buffer.from('new')),
+          fileEntry('d/b', Buffer.from('two')),
+          fileEntry('c', Buffer.alloc(8)),
+        ],
+        { maxBytes: 16 },
+      ),
+    );
+    await expect(
+      extractUstarStream(chunked(archive, 1000), root, { maxBytes: 10 }),
+    ).rejects.toBeInstanceOf(ArchiveTooLargeError);
+    expect(await readdir(root)).toEqual(['a']);
+    expect(await readFile(path.join(root, 'a'), 'utf8')).toBe('old');
+  });
+
+  it('[US-STO-06][unit][run] a refused hydrate removes the workspace it created', async () => {
+    const workspace = path.join(root, 'ws');
+    const archive = await readStream(
+      encodeUstarStream([fileEntry('a', Buffer.alloc(4)), fileEntry('b', Buffer.alloc(4))], {
+        maxBytes: 8,
+      }),
+    );
+    await expect(
+      extractUstarStream(chunked(archive, 1000), workspace, { maxBytes: 6 }),
+    ).rejects.toBeInstanceOf(ArchiveTooLargeError);
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('[US-STO-06][unit][run] a member refused against the workspace undoes the members before it', async () => {
+    await writeFile(path.join(root, 'a'), 'old');
+    // A directory where the archive puts a file is refused only when the member meets the workspace.
+    await mkdir(path.join(root, 'z'));
+    const archive = await readStream(
+      encodeUstarStream(
+        [
+          fileEntry('a', Buffer.from('new')),
+          fileEntry('n/fresh', Buffer.from('fresh')),
+          fileEntry('z', Buffer.from('file')),
+        ],
+        { maxBytes: 64 },
+      ),
+    );
+    await expect(
+      extractUstarStream(chunked(archive, 1000), root, { maxBytes: 64 }),
+    ).rejects.toThrow(/not a regular file/u);
+    expect((await readdir(root)).sort()).toEqual(['a', 'z']);
+    expect(await readFile(path.join(root, 'a'), 'utf8')).toBe('old');
+    expect(await readdir(path.join(root, 'z'))).toEqual([]);
   });
 
   it('[US-STO-06][unit][run] counts a forged directory body toward the cap', async () => {
@@ -394,6 +449,22 @@ describe('streaming ustar codec', () => {
     await expect(
       extractUstarStream(chunked(Buffer.alloc(0), 1), path.join(blocker, 'ws'), { maxBytes: 1 }),
     ).rejects.toBeInstanceOf(ArchiveValidationError);
+  });
+
+  it('[US-STO-06][unit][run] creates no workspace for a header block that does not parse', async () => {
+    const workspace = path.join(root, 'ws');
+    await expect(
+      extractUstarStream(chunked(Buffer.alloc(1024, 0xff), 100), workspace, { maxBytes: 1024 }),
+    ).rejects.toBeInstanceOf(ArchiveValidationError);
+    await expect(readdir(root)).resolves.toEqual([]);
+  });
+
+  it('[US-STO-06][unit][run] an empty archive creates the workspace', async () => {
+    const workspace = path.join(root, 'ws');
+    await expect(
+      extractUstarStream(chunked(Buffer.alloc(1024), 100), workspace, { maxBytes: 1 }),
+    ).resolves.toEqual([]);
+    await expect(readdir(workspace)).resolves.toEqual([]);
   });
 
   it('[US-STO-06][unit][run] refuses to write through an existing symlink', async () => {

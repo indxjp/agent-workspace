@@ -32,6 +32,8 @@ import { parseStorageGrantPath } from '@indx-workspace/contracts/storage-connect
 import type { AgentRecord } from '../agents/contract';
 import type { AgentResourceStoreProvider } from '../agents/resource-store';
 import type { AgentStoreProvider } from '../agents/store';
+import { isBuilderAgent } from '../builder/agent/is-builder-agent';
+import { resolveBuilderDefinition } from '../builder/agent/model-connection';
 import { engineForStoredPolicy } from '../engines/session-engine';
 import { DomainError } from '../errors';
 import { toAgentVersionResource } from './contract';
@@ -112,7 +114,11 @@ export async function runAgentFromVersion(
   storedGrants: () => Promise<readonly StorageGrantRef[]> = () => Promise.resolve([]),
 ): Promise<RunAgent> {
   const { definition, toolBundles, subagents } = toAgentVersionResource(record).body;
-  const resolution = await versions.resolveDefinition(definitionReferences(definition));
+  const named = definitionReferences(definition);
+  // The Builder binds to setup's connection when there is no `default` (#1848), as provisioning did.
+  const resolution = isBuilderAgent(row)
+    ? await resolveBuilderDefinition(versions, named)
+    : await versions.resolveDefinition(named);
   if (resolution.kind === 'unresolved') throw unresolvedVersion(record, resolution);
   const materialised = materialise(definition, resolution.references, definition.policy);
   const { references } = materialised;

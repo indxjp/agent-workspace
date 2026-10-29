@@ -159,6 +159,9 @@ export function createCompositionRunLauncher({
   // The grant behind each folder compose delivered writable, so the write-back saves to the
   // connection that was delivered even when it is renamed during the run.
   const deliveredFolders = new WeakMap<LaunchContext, Map<string, DeliveredStorageFolder>>();
+  // The grant behind each folder the input archive was loaded with. The archive and compose are two
+  // loads; the write-back refuses a folder they delivered for different grants (a rename between them).
+  const hydratedFolders = new WeakMap<LaunchContext, Map<string, DeliveredStorageFolder>>();
   const recordingFolders = (context: LaunchContext): AgentRunResourceLoader => {
     const folders = new Map<string, DeliveredStorageFolder>();
     deliveredFolders.set(context, folders);
@@ -180,27 +183,38 @@ export function createCompositionRunLauncher({
             resources: runResources,
             // ponytail: compose loads the same resources again after the runtime is allocated;
             // pass one load through if launch latency matters.
-            granted: async (context) =>
-              runResourcesWithinCeiling(
+            granted: async (context) => {
+              const selection = await runResourcesWithinCeiling(
                 context,
                 await runAgentOf(context),
                 runResources,
                 policyCeiling,
                 (await projectOf(context))?.id ?? null,
-              ),
+              );
+              hydratedFolders.set(context, new Map(selection.storageFolders ?? []));
+              return selection;
+            },
             storage: filesRuntime.storage,
           }),
         }),
     ...(runStorageConnections === null
       ? {}
       : {
-          storageWriteback: (run: Omit<StorageWriteBackRun, 'folders'>) =>
+          storageWriteback: (run: Omit<StorageWriteBackRun, 'folders' | 'hydrated'>) =>
             writeBackStorage(
-              { ...run, folders: deliveredFolders.get(run.context) ?? new Map() },
+              {
+                ...run,
+                folders: deliveredFolders.get(run.context) ?? new Map(),
+                // With no archive lifecycle nothing was hydrated, so there is no second load.
+                ...(filesRuntime?.storage === undefined
+                  ? {}
+                  : { hydrated: hydratedFolders.get(run.context) ?? new Map() }),
+              },
               {
                 readRunAgent,
                 connections: runStorageConnections,
                 audit: (event) => root.recordAuditEvent(event),
+                stillRunning: async (runId) => (await runs.get(runId))?.status === 'running',
               },
             ),
         }),

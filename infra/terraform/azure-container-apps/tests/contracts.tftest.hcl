@@ -175,7 +175,7 @@ run "azure_native_data_backends_use_managed_identity" {
       for item in azurerm_container_app.web.template[0].container[0].env : item
       if contains(["OBJECT_STORAGE_BACKEND", "OBJECT_STORAGE_BUCKET", "OBJECT_STORAGE_ENDPOINT", "AW_SESSION_TRANSCRIPT_ROOT"], item.name)
     ]) == 0
-    error_message = "the web application must not also receive the legacy storage settings"
+    error_message = "the web application must not also receive the old storage settings, which the server ignores with a warning"
   }
 
   assert {
@@ -297,4 +297,30 @@ run "public_url_with_a_path_is_rejected" {
   }
 
   expect_failures = [var.public_url]
+}
+
+run "storage_blob_endpoint_reaches_the_storage_url" {
+  command = plan
+
+  variables {
+    storage_blob_endpoint = "https://stagentworkspace.blob.core.usgovcloudapi.net"
+  }
+
+  assert {
+    condition = length([
+      for item in azurerm_container_app.web.template[0].container[0].env : item
+      if item.name == "AW_STORAGE_URL" && item.value == "azblob://${azurerm_storage_account.workspace.name}/${azurerm_storage_container.workspace_objects.name}?endpoint=https://stagentworkspace.blob.core.usgovcloudapi.net"
+    ]) == 1
+    error_message = "a sovereign-cloud storage_blob_endpoint must reach AW_STORAGE_URL as its endpoint"
+  }
+}
+
+run "storage_blob_endpoint_must_be_an_https_origin" {
+  command = plan
+
+  variables {
+    storage_blob_endpoint = "http://stagentworkspace.blob.core.chinacloudapi.cn/path"
+  }
+
+  expect_failures = [var.storage_blob_endpoint]
 }

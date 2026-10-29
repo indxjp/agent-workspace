@@ -141,9 +141,8 @@ tradeoffs. They do not narrate syntax.
   | dual-read of the old object naming, legacy area providers (`sessions/` dir), `workspaceKeyPrefix`, the one-step catalog methods (`putFile`, `listFiles`, `renameFile`, `deleteFile`, `*ByPrefix`), skill marker-object fallback | #1699      |
   | JSON+base64 skill import                                                                                                                                                                                                        | #1700      |
   | inline `contentBase64` arms of the run protocol                                                                                                                                                                                 | #1701      |
-  | `ObjectStoreV2` names and buffered `get/put/list/listPrefix`                                                                                                                                                                    | #1702      |
   | Phase 1 in-place overwrite on a signed upload over an existing file                                                                                                                                                             | #1666      |
-  | optional `status` on file-catalog rows until the hand-written file-catalog fakes are replaced                                                                                                                                   | #1634      |
+  | optional `status`, `objectId`, `targetPath`, `uploadMode`, `reservationToken` and `updatedAt` on file-catalog rows until the hand-written file-catalog fakes are replaced                                                       | #1634      |
 
 - Exported reusable APIs get TSDoc when purpose, failure modes, units, or invariants are not clear
   from their signature. Do not repeat the parameter name in prose.

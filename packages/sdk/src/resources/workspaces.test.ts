@@ -1,3 +1,4 @@
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { describe, expect, it } from 'vitest';
 
 import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
@@ -172,5 +173,47 @@ describe('WorkspacesClient.select (issue #236, SDK-04, S-2)', () => {
     );
     const drift = await failure(workspaces.select('acme'));
     expect(drift).toBeInstanceOf(ContractViolationError);
+  });
+});
+
+describe('WorkspacesClient.features (ADR-0160 D6–D8)', () => {
+  const ROWS = FEATURE_IDS.map((id) => ({ id, installed: true, enabled: id !== 'files' }));
+
+  it('lists the rows from the workspace’s own route, with the id encoded', async () => {
+    const { workspaces, calls } = client(() => json(200, { features: ROWS }));
+    expect(await workspaces.features.list('ws a/b')).toEqual({ features: ROWS });
+    const [call] = calls;
+    expect(call?.method).toBe('GET');
+    expect(call?.url.href).toBe(
+      'https://aw.example.com/control/api/workspaces/ws%20a%2Fb/features',
+    );
+    expect(call?.json).toBeUndefined();
+  });
+
+  it('PUTs the whole off set and returns the rows', async () => {
+    const { workspaces, calls } = client(() => json(200, { features: ROWS }));
+    expect(await workspaces.features.set('ws-a', { disabled: ['files'] })).toEqual({
+      features: ROWS,
+    });
+    const [call] = calls;
+    expect(call?.method).toBe('PUT');
+    expect(call?.url.pathname).toBe('/control/api/workspaces/ws-a/features');
+    expect(call?.json).toEqual({ disabled: ['files'] });
+  });
+
+  it('refuses a 200 whose rows are out of the contract’s order', async () => {
+    const { workspaces } = client(() => json(200, { features: [...ROWS].reverse() }));
+    expect(await failure(workspaces.features.list('ws-a'))).toBeInstanceOf(ContractViolationError);
+  });
+
+  it('surfaces 409 feature_in_use as a typed problem carrying its details', async () => {
+    const { workspaces } = client(() =>
+      json(409, {
+        error: { code: 'feature_in_use', message: 'in use', details: ['feature:surfaces'] },
+      }),
+    );
+    const error = await failure(workspaces.features.set('ws-a', { disabled: ['chat'] }));
+    expectProblem(error, 409, 'feature_in_use');
+    expect((error as ApiProblemError).details).toEqual(['feature:surfaces']);
   });
 });

@@ -411,6 +411,17 @@ export default {
       to: { path: '^packages/core/src/storage/backends\\.ts$' },
     },
     {
+      name: 'raw-storage-backends-stay-in-core-storage',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 1 (#1746): a raw backend factory (`createS3ObjectStore`, `createGcsObjectStore`, `createAzureBlobObjectStore`, `createNativeGcsClient`) signs links with no expiry bound; the storage module wraps each in the scoped store that bounds it. So only `packages/core/src/storage/` imports a backend file. Tests may. The in-memory and local-filesystem stores are exported from the barrel on purpose, for test fakes, and are not backend files here.',
+      from: {
+        path: '^(apps|packages)/',
+        pathNot: '^packages/core/src/storage/|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+      },
+      to: { path: '^packages/core/src/storage/(?:s3-store|gcs-store|azure-blob-store)\\.ts$' },
+    },
+    {
       name: 'production-does-not-import-tests',
       severity: 'error',
       from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },

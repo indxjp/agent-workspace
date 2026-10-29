@@ -505,6 +505,8 @@ def glossary : List Term :=
      [], [.triggerDeliveries]⟩,
    ⟨"builder tool call", "one tool call of a Builder run, as its journal keeps it", [],
      [.builderToolCalls]⟩,
+   ⟨"workspace feature", "one product feature a workspace has switched off; no row means it is on",
+     ["workspace_features", "disabled feature"], [.workspaceFeatures]⟩,
    ⟨"storage migration run", "one verify pass of the move off the old object naming", [],
      [.storageMigrationRuns]⟩,
    ⟨"audit event", "one recorded control-plane action", [], [.auditEvents]⟩,

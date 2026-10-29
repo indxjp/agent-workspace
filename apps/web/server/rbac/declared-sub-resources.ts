@@ -54,6 +54,8 @@
  * refuses any file in a declaration directory that is not named for a task. An `index.ts` sitting
  * among them is a file the union would silently absorb.
  */
+import { subResources as apu24cworkspacefeatures1496 } from './declarations/AP-U2-4C-WORKSPACE-FEATURES-1496';
+import { subResources as bld8agentrestore1851 } from './declarations/BLD-8-AGENT-RESTORE-1851';
 import { subResources as dj8008promoterollback615 } from './declarations/DJ-80-08-PROMOTE-ROLLBACK-615';
 import { subResources as dj8011evaluations618 } from './declarations/DJ-80-11-EVALUATIONS-618';
 import { subResources as dj8013feedbacklist620 } from './declarations/DJ-80-13-FEEDBACK-LIST-620';
@@ -109,6 +111,8 @@ export interface SubResourceDeclaration {
  * tracked tree, so a file added without a line here fails rather than contributing nothing.
  */
 export const DECLARED_SUB_RESOURCES: readonly SubResourceDeclaration[] = [
+  ...apu24cworkspacefeatures1496,
+  ...bld8agentrestore1851,
   ...dj8008promoterollback615,
   ...dj8011evaluations618,
   ...dj8013feedbacklist620,

@@ -23,8 +23,9 @@
      "triggers",
      "trigger_deliveries",
      "storage_migration_runs",
-     "builder_tool_calls"],
-    "count": 49}},
+     "builder_tool_calls",
+     "workspace_features"],
+    "count": 50}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.projects_workspace_id_workspaces_id_fk_is_exactly_one",
     "AgentWorkspace.Theorems.Normative.ConceptWork.projects_workspace_id_workspaces_id_fk_links_exactly_one_parent",
@@ -653,6 +654,19 @@
     "AgentWorkspace.Theorems.Invariants.ConceptWork.builder_tool_calls_workspace_id_workspaces_id_fk_preserves_tenant"],
    "input": {"table": "builder_tool_calls", "name": "builder_tool_calls_workspace_id_workspaces_id_fk"},
    "id": "fk/builder_tool_calls/builder_tool_calls_workspace_id_workspaces_id_fk",
+   "expected":
+   {"tenantPreserving": true,
+    "refTable": "workspaces",
+    "refColumns": ["id"],
+    "columns": ["workspace_id"],
+    "cardinality": "exactly-one"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.workspace_features_workspace_id_workspaces_id_fk_is_exactly_one",
+    "AgentWorkspace.Theorems.Normative.ConceptWork.workspace_features_workspace_id_workspaces_id_fk_links_exactly_one_parent",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_foreign_key_counts",
+    "AgentWorkspace.Theorems.Invariants.ConceptWork.workspace_features_workspace_id_workspaces_id_fk_preserves_tenant"],
+   "input": {"table": "workspace_features", "name": "workspace_features_workspace_id_workspaces_id_fk"},
+   "id": "fk/workspace_features/workspace_features_workspace_id_workspaces_id_fk",
    "expected":
    {"tenantPreserving": true,
     "refTable": "workspaces",

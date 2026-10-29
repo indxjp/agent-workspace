@@ -9,6 +9,8 @@ import {
   clampCatalogPageLimit,
   pendingDeleteFor,
   renamedKey,
+  renameCount,
+  sameReservation,
   type ConfirmOutcome,
   type ReserveOutcome,
   type CatalogFile,
@@ -27,7 +29,14 @@ import { requireWorkspaceScope } from './scope.js';
 type Row = CatalogFile & { readonly status: FileStatus };
 
 // What a new row holds until writers record an object id and a checksum (the storage design, §04).
-const LEGACY = { objectId: null, area: 'files', sha256: null, targetPath: null } as const;
+// Only a pending row carries a reservation token.
+const LEGACY = {
+  objectId: null,
+  area: 'files',
+  sha256: null,
+  targetPath: null,
+  reservationToken: null,
+} as const;
 
 // Mirrors `files_sha256_shape`.
 const SHA256_SHAPE = /^[0-9a-f]{64}$/;
@@ -53,8 +62,8 @@ const comparePaths = (a: string, b: string): number => {
 const byPath = (a: Row, b: Row) => comparePaths(a.path, b.path);
 
 /** The error PostgreSQL's driver raises for a CHECK violation: `cause` carries code and constraint. */
-const checkViolation = (constraint: string): Error => {
-  const message = `new row for relation "files" violates check constraint "${constraint}"`;
+const checkViolation = (constraint: string, relation = 'files'): Error => {
+  const message = `new row for relation "${relation}" violates check constraint "${constraint}"`;
   return new Error(message, {
     cause: Object.assign(new Error(message), { code: '23514', constraint }),
   });
@@ -81,6 +90,16 @@ const assertRowShape = (row: Row): void => {
   };
   const constraint = Object.keys(violated).find((name) => violated[name]);
   if (constraint !== undefined) throw checkViolation(constraint);
+};
+
+/** The `skills` table's CHECKs (`schema/skills.ts`); `btrim` strips spaces only. */
+const assertSkillShape = (input: { readonly name: string; readonly skillMd: string }): void => {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(input.name)) {
+    throw checkViolation('skills_name_shape', 'skills');
+  }
+  if (input.skillMd.replaceAll(' ', '') === '') {
+    throw checkViolation('skills_skill_md_not_blank', 'skills');
+  }
 };
 
 const later = <T>(fn: () => T): Promise<T> => Promise.resolve().then(fn);
@@ -110,6 +129,8 @@ const served = (r: StoredRevision): CatalogSkillRevision => ({
 export type InMemoryWorkspaceCatalog = ResourceCatalogRepository & {
   /** Test hook, not part of the port: record that `agentId` uses the skill, as `agent_skills` does. */
   assignSkill(name: string, agentId: string): void;
+  /** Test hook, not part of the port: `agentId` no longer uses the skill. */
+  unassignSkill(name: string, agentId: string): void;
   /**
    * Test hook: assign as an agent write does, which refuses (`false`, nothing assigned) a skill
    * whose delete is pending.
@@ -178,6 +199,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             ...LEGACY,
             createdBy: row.createdBy,
             ownerPrincipalId: row.ownerPrincipalId,
+            updatedAt: new Date(),
           });
         }
       }
@@ -204,6 +226,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
       const moved = moving.map((row) => ({
         ...row,
         path: destination(row),
+        updatedAt: new Date(),
         // A row with an object id has a permanent key; only a legacy row's key is its path.
         storageKey:
           row.kind === 'file' && row.storageKey !== null && row.objectId === null
@@ -242,6 +265,8 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             status: 'deleting',
             path: sidePath(row.id),
             targetPath: logical(row),
+            reservationToken: null,
+            updatedAt: new Date(),
           };
           rows.delete(row.path);
           rows.set(deleting.path, deleting);
@@ -264,8 +289,10 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
         port('reserve', () => {
           if (isSidePath(path)) throw new Error(`${path} is a reserved catalog path.`);
           // A ready or `deleting` row holds the path. A pending one, at the path or waiting to
-          // replace it, is refreshed for its owner and refused for anyone else (FX-7).
-          const takenOrRefreshed = (holder: Row): ReserveOutcome => {
+          // replace it, is refreshed for its owner and refused for anyone else (FX-7). A relay save
+          // is never refreshed; a signed re-mint always is, and so is a retry without a mode that
+          // changes what was declared, each with a new reservation token.
+          const takenOrRefreshed = (holder: Row, replaces: Row | undefined): ReserveOutcome => {
             if (holder.status !== 'pending') return { kind: 'taken', row: holder };
             if (
               holder.ownerPrincipalId !== input.ownerPrincipalId ||
@@ -273,24 +300,33 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             ) {
               throw new CatalogPathPendingError(path);
             }
+            const withTarget = replaces === undefined ? {} : { replaces };
+            const unchanged =
+              holder.sizeBytes === input.sizeBytes && holder.contentType === input.contentType;
+            if (input.uploadMode === 'relay' || (input.uploadMode === undefined && unchanged)) {
+              return { kind: 'taken', row: holder, ...withTarget };
+            }
             const refreshed: Row = {
               ...holder,
               sizeBytes: input.sizeBytes,
               contentType: input.contentType,
+              reservationToken: crypto.randomUUID(),
+              updatedAt: new Date(),
             };
             assertRowShape(refreshed);
             rows.set(refreshed.path, refreshed);
             reservedAt.set(refreshed.id, new Date());
-            return { kind: 'taken', row: refreshed };
+            return { kind: 'taken', row: refreshed, ...withTarget };
           };
           const holder = rows.get(path);
-          const replacing =
-            input.objectId !== undefined && holder?.status === 'ready' && holder.kind === 'file';
-          if (holder !== undefined && !replacing) return takenOrRefreshed(holder);
+          // The ready file a pending replacement takes the path from.
+          const target = holder?.status === 'ready' && holder.kind === 'file' ? holder : undefined;
+          const replacing = input.objectId !== undefined && target !== undefined;
+          if (holder !== undefined && !replacing) return takenOrRefreshed(holder, undefined);
           const waiting = [...rows.values()].find(
             (r) => r.status === 'pending' && r.targetPath === path,
           );
-          if (waiting !== undefined) return takenOrRefreshed(waiting);
+          if (waiting !== undefined) return takenOrRefreshed(waiting, target);
           if (
             input.objectId !== undefined &&
             [...rows.values()].some((r) => r.objectId === input.objectId)
@@ -314,14 +350,18 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             area: input.area ?? 'files',
             targetPath: replacing ? path : null,
             uploadMode: input.uploadMode ?? null,
+            reservationToken: crypto.randomUUID(),
             createdBy: input.createdBy ?? null,
             ownerPrincipalId: input.ownerPrincipalId,
+            updatedAt: new Date(),
           };
           assertRowShape(row);
           rows.set(row.path, row);
           reservedAt.set(row.id, new Date());
           ensureParents([row]);
-          return { kind: 'reserved', row };
+          return target === undefined || !replacing
+            ? { kind: 'reserved', row }
+            : { kind: 'reserved', row, replaces: target };
         }),
       // @story US-STO-01
       createFolder: (path, input) =>
@@ -340,6 +380,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             ...LEGACY,
             createdBy: input.createdBy ?? null,
             ownerPrincipalId: input.ownerPrincipalId,
+            updatedAt: new Date(),
           };
           assertRowShape(row);
           ensureParents([row]);
@@ -350,21 +391,29 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
       confirm: (row, input) =>
         port('confirm', (): ConfirmOutcome | null => {
           const current = [...rows.values()].find((r) => r.id === row.id);
-          // A removed (`deleting`) row is never revived. Only a pending row whose storage key is
-          // unchanged is confirmed, unless `expect: 'any'` re-confirms a ready row (FX-7).
+          // A removed (`deleting`) row is never revived. Only a pending row whose storage key and
+          // reservation are unchanged is confirmed, unless `expect: 'any'` re-confirms a ready row
+          // (FX-7).
           if (
             current === undefined ||
             current.kind !== 'file' ||
             current.status === 'deleting' ||
             current.storageKey === null ||
             current.storageKey !== row.storageKey ||
-            (current.status !== 'pending' && input.expect !== 'any')
+            (current.status !== 'pending' && input.expect !== 'any') ||
+            !sameReservation(current, row)
           ) {
             return null;
           }
           const sha256 = input.sha256 ?? null;
           if (sha256 !== null && !SHA256_SHAPE.test(sha256)) {
             throw new Error('violates check constraint "files_sha256_shape"');
+          }
+          const { objectId } = input;
+          if (objectId !== undefined && [...rows.values()].some((r) => r.objectId === objectId)) {
+            throw new Error(
+              'duplicate key value violates unique constraint "files_workspace_object_key"',
+            );
           }
           const path = logical(current);
           let replaced: Row | undefined;
@@ -376,6 +425,8 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
                 status: 'deleting',
                 path: sidePath(holder.id),
                 targetPath: path,
+                reservationToken: null,
+                updatedAt: new Date(),
               };
               rows.delete(holder.path);
               rows.set(replaced.path, replaced);
@@ -387,9 +438,14 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             status: 'ready',
             path,
             targetPath: null,
+            reservationToken: null,
             sizeBytes: input.sizeBytes,
             contentType: input.contentType,
             sha256,
+            updatedAt: new Date(),
+            ...(objectId === undefined
+              ? {}
+              : { objectId, storageKey: `${current.area ?? 'files'}/${objectId}` }),
           };
           assertRowShape(ready);
           rows.set(ready.path, ready);
@@ -423,11 +479,17 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             cursor: found.length > limit ? (pageRows.at(-1)?.path ?? null) : null,
           };
         }),
-      countPending: () =>
+      countPending: (newerThan) =>
         port(
           'countPending',
           () =>
-            [...rows.values()].filter((r) => r.status === 'pending' && r.area !== 'staging').length,
+            [...rows.values()].filter(
+              (r) =>
+                r.status === 'pending' &&
+                r.area !== 'staging' &&
+                (newerThan === undefined ||
+                  (reservedAt.get(r.id)?.getTime() ?? 0) >= newerThan.getTime()),
+            ).length,
         ),
       pending: (path) =>
         port(
@@ -435,9 +497,33 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           () =>
             [...rows.values()].find((r) => r.status === 'pending' && logical(r) === path) ?? null,
         ),
-      rename: (from, to) => port('rename', () => renameByPrefix(from, to).length),
+      rename: (from, to) => port('rename', () => renameCount(renameByPrefix(from, to))),
       // @story US-STO-04
-      remove: (path) => port('remove', () => markDeleting(path)),
+      remove: (path, options) =>
+        port('remove', () => {
+          const snapshot = options?.pending;
+          if (snapshot === undefined) return markDeleting(path);
+          // Claim one reservation, only while it is still the pending row `snapshot` saw at `path`.
+          const current = [...rows.values()].find((r) => r.id === snapshot.id);
+          if (
+            current?.status !== 'pending' ||
+            logical(current) !== path ||
+            !sameReservation(current, snapshot)
+          ) {
+            return [];
+          }
+          const claimed: Row = {
+            ...current,
+            status: 'deleting',
+            path: sidePath(current.id),
+            targetPath: path,
+            reservationToken: null,
+            updatedAt: new Date(),
+          };
+          rows.delete(current.path);
+          rows.set(claimed.path, claimed);
+          return [claimed];
+        }),
       stalePending: (olderThan) =>
         port('stalePending', () =>
           [...rows.values()]
@@ -455,7 +541,14 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
       forget: (row) =>
         port('forget', () => {
           const current = [...rows.values()].find((r) => r.id === row.id);
-          if (current === undefined || current.status === 'ready') return;
+          // A ready row stays, and so does a pending row reserved again since `row` was read.
+          if (
+            current === undefined ||
+            current.status === 'ready' ||
+            !sameReservation(current, row)
+          ) {
+            return;
+          }
           rows.delete(current.path);
           reservedAt.delete(current.id);
         }),
@@ -487,9 +580,11 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             area: existing?.area ?? LEGACY.area,
             sha256: existing?.sha256 ?? LEGACY.sha256,
             targetPath: null,
+            reservationToken: null,
             // An existing row keeps its attribution, a null one included, as PostgreSQL's upsert does.
             createdBy: existing === undefined ? (input.createdBy ?? null) : existing.createdBy,
             ownerPrincipalId: existing?.ownerPrincipalId ?? input.ownerPrincipalId,
+            updatedAt: new Date(),
           };
           assertRowShape(row);
           ensureParents([row]);
@@ -507,7 +602,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             );
             if (held) throw new CatalogPathTakenError(input.path);
           }
-          const moved: Row = { ...row, ...input };
+          const moved: Row = { ...row, ...input, updatedAt: new Date() };
           assertRowShape(moved);
           rows.delete(path);
           rows.set(moved.path, moved);
@@ -555,6 +650,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
                 ...LEGACY,
                 createdBy: null,
                 ownerPrincipalId,
+                updatedAt: new Date(),
               };
               assertRowShape(row);
               rows.set(row.path, row);
@@ -578,7 +674,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           ) {
             return false;
           }
-          rows.set(current.path, { ...current, objectId, sha256 });
+          rows.set(current.path, { ...current, objectId, sha256, updatedAt: new Date() });
           return true;
         }),
       countLegacyFiles: () =>
@@ -611,6 +707,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
       getSkill: (name) => later(() => state.skills.get(name) ?? null),
       putSkill: (input) =>
         later(() => {
+          assertSkillShape(input);
           const existing = state.skills.get(input.name);
           const skill: CatalogSkill = {
             id: existing?.id ?? crypto.randomUUID(),
@@ -628,6 +725,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
         }),
       createSkill: (input) =>
         later(() => {
+          assertSkillShape(input);
           if (state.skills.has(input.name)) return null;
           const skill: CatalogSkill = {
             id: crypto.randomUUID(),
@@ -775,8 +873,10 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           status: input.status,
           ...LEGACY,
           objectId,
+          reservationToken: input.status === 'pending' ? crypto.randomUUID() : null,
           createdBy: null,
           ownerPrincipalId: input.ownerPrincipalId,
+          updatedAt: new Date(),
         });
       },
       assignSkill: (name, agentId) => {
@@ -786,6 +886,11 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           skill.id,
           (state.assignments.get(skill.id) ?? new Set()).add(agentId),
         );
+      },
+      unassignSkill: (name, agentId) => {
+        const skill = state.skills.get(name);
+        if (skill === undefined) throw new Error(`no skill named ${name} to unassign`);
+        state.assignments.get(skill.id)?.delete(agentId);
       },
       tryAssignSkill: (name, agentId) => {
         const skill = state.skills.get(name);

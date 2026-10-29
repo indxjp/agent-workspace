@@ -1,16 +1,19 @@
 /**
  * The navigation gate. Spec §44 prints the main navigation as a literal block and this file is
  * that block, typed out from the specification rather than from the implementation, compared
- * against what the shell renders. If somebody adds a fourteenth entry, reorders the five working
+ * against what the shell renders. If somebody adds a fifteenth entry, reorders the five working
  * areas, or renames "Shared links", this fails and names the difference.
  *
  * ADR-0015: the assertions are positive. The inert entries are enumerated and checked by id, not
  * inferred from "nothing threw"; a new entry that silently forgets its `href` shows up as an
  * extra id in the inert list rather than as a link that 404s.
  */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import { NAVIGATION, activeNavId, crumbsFor, managesWorkspace } from './navigation';
+import { NAVIGATION, activeNavId, crumbsFor } from './navigation';
 
 /** docs/spec.md §44, in order, both groups flattened. */
 const SPEC_44_ORDER = [
@@ -82,17 +85,24 @@ describe('which entries actually go somewhere', () => {
 });
 
 describe('the entries only managers see', () => {
-  it('marks Storage, and only Storage, as for Owners and Admins', () => {
+  // Who counts as a manager is the storage page gate's decide() question: manages-storage.test.ts.
+  it('marks Storage, and only Storage, as for managers', () => {
     expect(items.filter((item) => item.managersOnly === true).map((item) => item.id)).toEqual([
       'storage',
     ]);
-    expect(['owner', 'admin'].map(managesWorkspace)).toEqual([true, true]);
-    expect(['builder', 'member', 'viewer', undefined].map(managesWorkspace)).toEqual([
-      false,
-      false,
-      false,
-      false,
-    ]);
+  });
+});
+
+describe('the mockups’ shell', () => {
+  // `ui/assets/app.js` draws the same navigation; an entry whose icon differs there is a screen
+  // that looks one way in review and another in the product (#1835, STO-508).
+  it('gives every entry the icon the app gives it', () => {
+    const shell = readFileSync(path.resolve('ui/assets/app.js'), 'utf8');
+    const nav = shell.slice(shell.indexOf('var NAV = ['), shell.indexOf('var RECENT'));
+    const mockupIcons = [...nav.matchAll(/\{ id: "(\w+)",[^}]*\bicon: "(\w+)"/gu)].map(
+      ([, id, icon]) => [id, icon],
+    );
+    expect(mockupIcons).toEqual(items.map((item) => [item.id, item.icon]));
   });
 });
 

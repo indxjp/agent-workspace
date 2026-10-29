@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/contracts",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "The Agent Workspace API contracts: Zod schemas, route catalogue and the contracts version every client and server share.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",
@@ -70,6 +70,10 @@
     "./evaluations": {
       "types": "./src/evaluations.ts",
       "default": "./dist/evaluations.js"
+    },
+    "./features": {
+      "types": "./src/features.ts",
+      "default": "./dist/features.js"
     },
     "./feedback": {
       "types": "./src/feedback.ts",
@@ -248,6 +252,10 @@
       "./evaluations": {
         "types": "./dist/evaluations.d.ts",
         "default": "./dist/evaluations.js"
+      },
+      "./features": {
+        "types": "./dist/features.d.ts",
+        "default": "./dist/features.js"
       },
       "./feedback": {
         "types": "./dist/feedback.d.ts",

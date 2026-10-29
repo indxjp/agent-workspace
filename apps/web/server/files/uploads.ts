@@ -13,9 +13,11 @@ import {
 import { applicationContext } from '../application-context';
 import { perMinuteLimiter } from '../http/rate-limit';
 import type { StorageContext, StorageService } from '../storage/service';
+import type { CatalogFile } from '../storage/store';
 import { log } from '../telemetry/logger';
 import {
   directTransferUnsupported,
+  lastModifiedOf,
   problem,
   reservedFileWriteRefusal,
   uploadInProgress,
@@ -37,14 +39,16 @@ function signedUploadMaxBytes(): number {
 /**
  * `POST /api/files/:id/upload-urls` through the catalog service: the link is signed for a new
  * object, so a ready file's bytes are never overwritten and stay readable until completion swaps
- * the rows.
+ * the rows. `recheck` decides on the ready file the upload would replace, as the reserve locked
+ * it; `null` allows.
  */
 export async function reserveCatalogUpload(
   storage: StorageService,
   ctx: StorageContext,
   path: string,
   input: PresignUploadInput,
-  recheck: () => Promise<FileResult | null>,
+  /** Decides on the ready file the reservation would replace, as it read it under its lock. */
+  recheck: (replaced: CatalogFile) => Promise<FileResult | null>,
 ): Promise<FileResult> {
   const limit = signedUploadMaxBytes();
   if (input.sizeBytes > limit) {
@@ -66,8 +70,8 @@ export async function reserveCatalogUpload(
       contentType: input.contentType,
       ttlSeconds: input.ttlSeconds,
       now,
-      mayReplace: async () => {
-        refusal.denied = await recheck();
+      mayReplace: async (replaced) => {
+        refusal.denied = await recheck(replaced);
         return refusal.denied === null;
       },
     });
@@ -170,7 +174,7 @@ export async function completeCatalogUpload(
             kind: 'file',
             sizeBytes: row.sizeBytes,
             contentType: row.contentType,
-            lastModified: null,
+            lastModified: lastModifiedOf(row),
           },
         },
       };

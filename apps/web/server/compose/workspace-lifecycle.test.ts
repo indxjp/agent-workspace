@@ -16,9 +16,10 @@ import {
   createInMemoryObjectStore,
   storageObjectName,
   streamToBytes,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import {
+  ArchiveTooLargeError,
   bytesToStream,
   decodeUstar,
   encodeUstar,
@@ -77,9 +78,10 @@ function memoryStorage() {
   // The object store names keys by workspace, and only a lowercase UUID is a valid workspace id.
   const workspaceId = '22222222-2222-4222-8222-222222222222';
   const catalog = createInMemoryCatalog().forWorkspace(workspaceId);
+  const objects = createInMemoryObjectStore();
   const storage = createStorageService({
     catalog: () => Promise.resolve(catalog),
-    objects: createInMemoryObjectStore(),
+    objects,
     log: quietLog,
   });
   const ctx: StorageContext = { workspaceId, principalId: 'owner-1', userId: 'user-1' };
@@ -87,7 +89,7 @@ function memoryStorage() {
     ...context,
     principal: { ...context.principal, workspaceId, ownerPrincipalId: 'owner-1' },
   } as LaunchContext;
-  return { catalog, storage, ctx, launch };
+  return { catalog, objects, storage, ctx, launch };
 }
 
 const target = {
@@ -475,6 +477,25 @@ describe('promoting runtime outputs through the catalog service', () => {
     expect(await p.paths()).toEqual([]);
     expect(await p.catalog.stalePending(new Date(Date.now() + 1e9))).toEqual([]);
   });
+
+  // #1991 D2: the payload budget is checked before truncation, so a header declaring more than
+  // RUN_FILES_MAX_BYTES with no payload fails as too large only while promotion passes the budget.
+  it('refuses an archive whose declared payload exceeds the run budget before saving anything', async () => {
+    const p = promoter();
+    const header = Buffer.from(
+      encodeUstar([{ path: 'big.bin', type: 'file', mode: 0o644 }]).subarray(0, 512),
+    );
+    header.write(`${(RUN_FILES_MAX_BYTES + 1).toString(8).padStart(11, '0')}\0`, 124);
+    header.fill(0x20, 148, 156);
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148);
+
+    await expect(p.lifecycle.promoteOutputs(p.launch, target, header)).rejects.toBeInstanceOf(
+      ArchiveTooLargeError,
+    );
+    expect(await p.paths()).toEqual([]);
+    expect((await p.objects.listPage('workspaces', { recursive: true })).entries).toEqual([]);
+  });
 });
 
 interface Fixture {
@@ -536,7 +557,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const f = await setup();
       const objects = createInMemoryObjectStore();
       let writes = 0;
-      const flaky: ObjectStoreV2 = {
+      const flaky: ObjectStore = {
         ...objects,
         write: (key, body, options) => {
           writes += 1;

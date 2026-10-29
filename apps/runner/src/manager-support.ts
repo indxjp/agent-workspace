@@ -57,6 +57,18 @@ export class RunnerShuttingDownError extends Error {
 }
 
 /**
+ * The client went away before `forward` answered it: its request errored (a disconnect mid-body)
+ * or its response closed early. Nobody is left to read an answer, so the manager drops the request
+ * without logging it as a failure.
+ */
+export class ClientAbortedError extends Error {
+  public constructor(options?: ErrorOptions) {
+    super('the client disconnected before the proxied request was answered', options);
+    this.name = 'ClientAbortedError';
+  }
+}
+
+/**
  * A body field the caller got wrong. `code` is the stable public token the 400 answers with; it
  * names the field and never a value, so the control plane can show it without leaking anything.
  */
@@ -284,28 +296,53 @@ export async function forward(
     headers.set('content-type', req.headers['content-type']);
   if (req.headers.accept !== undefined) headers.set('accept', req.headers.accept);
   for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
+  const method = req.method ?? 'GET';
+  const sendsBody = method !== 'GET' && method !== 'HEAD';
+  // The node:http parser has already checked the header's syntax.
+  const declared = req.headers['content-length'];
+  if (sendsBody && declared !== undefined && Number(declared) > limit) {
+    throw new ManagerRequestError('request_too_large', 'proxied request body is too large');
+  }
   // Runtime endpoints are an authenticated isolation boundary. Following a redirect could send
   // the manager's provider bearer to a different origin (or silently turn a POST into a GET), so
   // every upstream operation rejects 3xx instead.
   // A client that disconnects once its body is sent, while the upstream has not answered yet,
   // aborts the upstream request too; the request body's own end cannot tell it.
+  // A response the pipeline destroyed with an upstream error closes too, and its socket's close
+  // then errors the request: both carry the upstream's failure, not the client's, so neither
+  // counts once `res.errored` is set. This listener runs before the pipeline's own.
   const upstream = new AbortController();
+  let clientGone = false;
+  const upstreamFailed = (): boolean => res.errored !== null;
   const abandon = (): void => {
-    if (!res.writableFinished) upstream.abort();
+    if (res.writableFinished || upstreamFailed()) return;
+    clientGone = true;
+    upstream.abort();
   };
   res.once('close', abandon);
   const init: RequestInit = {
-    method: req.method ?? 'GET',
+    method,
     headers,
     redirect: 'error',
     signal: upstream.signal,
   };
   let refusal: ManagerRequestError | undefined;
-  if (init.method !== 'GET' && init.method !== 'HEAD') {
+  // `on`, not `once`: a request can error more than once, and an unheard error would throw.
+  // A GET or HEAD body is never read; Node discards it once the response finishes, so the next
+  // request on a kept-alive socket still parses.
+  let limiter: Transform | undefined;
+  const onRequestError = (error: Error): void => {
+    if (!upstreamFailed()) clientGone = true;
+    limiter?.destroy(error);
+  };
+  req.on('error', onRequestError);
+  if (sendsBody) {
+    // Passed on, so a runtime or tool server that refuses a chunked body still gets a framed one.
+    if (declared !== undefined) headers.set('content-length', declared);
     // The body streams so manager memory stays flat at any size up to the limit (the storage
     // design, §04). Past the limit the stream errors, which aborts the upstream request.
     let size = 0;
-    const limiter = new Transform({
+    limiter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
         size += chunk.byteLength;
         if (size <= limit) return callback(null, chunk);
@@ -313,7 +350,6 @@ export async function forward(
         callback(refusal);
       },
     });
-    req.once('error', (error) => limiter.destroy(error));
     init.body = Readable.toWeb(req.pipe(limiter)) as ReadableStream<Uint8Array>;
     init.duplex = 'half';
   }
@@ -327,8 +363,11 @@ export async function forward(
     else await pipeline(Readable.fromWeb(response.body), res);
   } catch (error) {
     // fetch wraps the stream's error; the caller answers the refusal, not the wrapper.
-    throw refusal ?? error;
+    if (refusal !== undefined) throw refusal;
+    if (clientGone) throw new ClientAbortedError({ cause: error });
+    throw error;
   } finally {
+    req.off('error', onRequestError);
     res.off('close', abandon);
   }
 }

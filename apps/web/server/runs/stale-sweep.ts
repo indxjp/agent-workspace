@@ -11,6 +11,7 @@
  * revokes the run's tokens and closes its streams. One replica sweeps at a time, under the
  * maintenance lease session retention uses.
  */
+import { systemClock, type Clock } from '../clock';
 import type { RunStore } from './store';
 
 const STALE_RUN_ERROR =
@@ -30,7 +31,8 @@ export interface StaleRunSweepDependencies {
   readonly finish: RunStore['finish'];
   /** How long a run may stay open before it counts as stale: `staleRunAfterMs` in `./launcher.ts`. */
   readonly staleAfterMs: number;
-  readonly now?: () => Date;
+  /** Defaults to {@link systemClock}. */
+  readonly clock?: Clock;
 }
 
 /** One sweep: the number of runs failed, or `null` when another replica holds the lease. */
@@ -38,7 +40,7 @@ async function sweepStaleRuns(deps: StaleRunSweepDependencies): Promise<number |
   const held = await deps.lease.tryAcquire(LEASE_NAME, 60_000);
   if (held === null) return null;
   try {
-    const now = deps.now?.() ?? new Date();
+    const now = (deps.clock ?? systemClock).now();
     const stale = await deps.listStaleRunIds(new Date(now.getTime() - deps.staleAfterMs));
     for (const runId of stale) await deps.finish(runId, 'failed', STALE_RUN_ERROR, true);
     return stale.length;

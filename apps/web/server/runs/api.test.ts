@@ -330,6 +330,23 @@ describe('POST /api/agents/:id/runs', () => {
     expect(harness.launched).toHaveLength(0);
   });
 
+  it('answers 409 agent_archived for an archived agent, and creates no run', async () => {
+    const harness = install({
+      findAgent: () =>
+        Promise.resolve({
+          id: AGENT,
+          workspaceId: WORKSPACE,
+          engine: 'claude-agent-sdk',
+          archived: true,
+        }),
+    });
+    const response = await startRun(post(AGENT, { prompt: 'hi' }), AGENT);
+    expect(response.status).toBe(409);
+    expect(await errorCode(response)).toBe('agent_archived');
+    expect((await harness.store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(0);
+    expect(harness.launched).toHaveLength(0);
+  });
+
   it('denies roles without an established grant before looking up the agent', async () => {
     let lookups = 0;
     install({

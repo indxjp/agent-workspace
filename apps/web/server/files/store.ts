@@ -22,7 +22,20 @@ import {
   type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
-import type { ObjectStore, ObjectStoreProvider } from '@agent-workspace/core/storage';
+import type {
+  ObjectStoreCapabilities,
+  ObjectStore,
+  ObjectStoreProvider,
+} from '@agent-workspace/core/storage';
+
+/** What an unusable workspace id reports: every operation on it rejects before reaching a store. */
+const NO_CAPABILITIES: ObjectStoreCapabilities = {
+  sign: false,
+  boundLengthSign: false,
+  range: false,
+  conditionalPut: false,
+  fileAndFolderShareKey: false,
+};
 
 /**
  * Whether a catalog write was refused because an upload to the path, or under the folder, is
@@ -66,23 +79,27 @@ export function createRepositoryObjectStoreProvider(
         return pending;
       };
 
-      // Whether the backend signs is a property of the provider, not of the workspace, so it can be
+      // What the backend offers is a property of the provider, not of the workspace, so it can be
       // read before the scope lookup. An invalid id throws here and again, properly, in `resolved`.
       let signs: boolean;
+      let capabilities: ObjectStoreCapabilities;
       try {
-        signs = dependencies.store.forWorkspace(workspaceId).createSignedUrl !== undefined;
+        const probe = dependencies.store.forWorkspace(workspaceId);
+        signs = probe.createSignedUrl !== undefined;
+        capabilities = probe.capabilities;
       } catch {
         signs = false;
+        capabilities = NO_CAPABILITIES;
       }
 
       const scoped: ObjectStore = {
-        put: async (key, input) => (await resolved()).put(key, input),
-        get: async (key) => (await resolved()).get(key),
+        capabilities,
+        head: async (key) => (await resolved()).head(key),
+        read: async (key, options) => (await resolved()).read(key, options),
+        write: async (key, body, options) => (await resolved()).write(key, body, options),
+        listPage: async (prefix, options) => (await resolved()).listPage(prefix, options),
         delete: async (key) => (await resolved()).delete(key),
-        list: async (prefix) => (await resolved()).list(prefix),
-        listPrefix: async (prefix) => (await resolved()).listPrefix(prefix),
-        copyObject: async (source, destination) =>
-          (await resolved()).copyObject(source, destination),
+        copy: async (source, destination) => (await resolved()).copy(source, destination),
       };
       if (!signs) return scoped;
       return {

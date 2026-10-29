@@ -18,7 +18,7 @@ import {
   newObjectId,
   storageObjectName,
   streamToBytes,
-  type ObjectStoreProviderV2,
+  type ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
@@ -96,12 +96,12 @@ const quietLog = (): Logger => {
 
 /** An old store whose reads run `before` first (a user acting mid-copy) or rewrite the body. */
 function hooked(
-  base: ObjectStoreProviderV2,
+  base: ObjectStoreProvider,
   hooks: {
     readonly before?: () => Promise<unknown>;
     readonly body?: (body: ReadableStream<Uint8Array>) => ReadableStream<Uint8Array>;
   },
-): ObjectStoreProviderV2 {
+): ObjectStoreProvider {
   return {
     forWorkspace: (workspaceId) => {
       const store = base.forWorkspace(workspaceId);

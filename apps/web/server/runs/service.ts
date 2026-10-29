@@ -198,6 +198,13 @@ export async function startRunOnSession(
   // no empty session behind. A follow-up in an existing session is checked below, once the session
   // is known to be usable, because its project default depends on that session.
   const checkRunStart = async (sessionId: string | null): Promise<RunStartRefused | null> => {
+    if (agent.archived === true) {
+      return refused(
+        RUN_START_PROBLEM_CODES.agent_archived,
+        'agent_archived',
+        'This agent is archived and starts no run; restore it to run it again.',
+      );
+    }
     const capReached = await dailyCostCapRefusal(env.dailyCostCap, principal.workspaceId);
     if (capReached !== null) return capReached;
     const badLimits = limitsRefusal(input.limits);

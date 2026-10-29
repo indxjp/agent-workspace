@@ -8,6 +8,49 @@ what the policy covers are on the developer site's
 page. `@indx-workspace/contracts`, `@indx-workspace/sdk` and `@indx-workspace/aw` are released
 in lock-step with one version.
 
+## 0.6.12 — unreleased
+
+### Added
+
+- `RUN_START_PROBLEM_CODES` gains `agent_archived` (`409`): the agent is archived, so no run can
+  start on it, and a hosted surface of an archived agent opens no session.
+  `AgentChangedAuditDetailsSchema` is the `details` of an `agent-changed` audit row
+  (`{ archived: true }`).
+- `BUILTIN_AGENT_PROBLEM_CODES` gains `builder_name_reserved` (`403`): the name is one the
+  deployment's `builder.allow` lists, which only a workspace Owner or Admin may give. The closed
+  list's key type is exported as `BuiltinAgentProblemCode`.
+- `@indx-workspace/contracts/files` names two new `429` problem codes for signed links:
+  `too_many_pending_uploads`, when a workspace already holds `MAX_PENDING_UPLOADS_PER_WORKSPACE`
+  (100) unfinished uploads, and `link_rate_limited`, when it has made more than
+  `LINK_REQUESTS_PER_MINUTE_PER_WORKSPACE` (60) upload or download link requests this minute on
+  one server (with `Retry-After`). Both constants are exported.
+- `@indx-workspace/contracts/features` exports `FEATURE_IDS`, `FeatureId`, `ROUTE_FEATURES` and `RouteFeature`. Every `ApiRoute` and every `API_ROUTE_EXCLUSIONS` entry now carries a required `feature`, and the OpenAPI document gains an `x-agent-workspace-feature` extension on each operation.
+- `STORAGE_CONNECTION_SECRET_PREFIX` and `isStorageConnectionSecretName` in
+  `@indx-workspace/contracts/secret-reference`: the one definition of the secret names reserved for
+  storage connection credentials, which tool secrets, connector identities and the secrets routes
+  refuse.
+- A refused `resolveStorageSettings` result carries a `code` field, `storage_url_invalid` or `storage_endpoint_same_origin`, so a caller no longer reads the code from the start of `reason`. `code` is optional on `StorageSettings`, so a hand-built value still compiles.
+- `@indx-workspace/contracts/features` exports `FeatureIdSchema`, `FEATURE_DEPENDENCIES`, `featuresMissingDependencies`, `dependentsOf`, `FeatureListSchema` (non-empty, unique, dependency-closed), `WorkspaceFeaturesSchema`, `UpdateWorkspaceFeaturesRequestSchema` and `FEATURE_PROBLEM_CODES` (`feature_disabled` 404, `feature_in_use` 409, `feature_not_installed` 409) (ADR-0160).
+- `ProjectDocumentSchema` accepts an optional `features:` list of the features a deployment installs; absent means every feature. The schema is strict, so an `aw` or contracts release that predates this refuses a project file that carries `features:`: upgrade `aw` and `@indx-workspace/contracts` together.
+- `SETUP_QUESTIONS` gains a thirteenth question, `admin.features` (flag `features`, choices `FEATURE_IDS`, recommended every feature). The answer is optional in `SetupAnswersSchema` and `CompleteSetupAnswersSchema`, so a caller that omits it still validates and gets every feature.
+- `AUDIT_ACTIONS` gains `workspace-features-changed`, written when a workspace's feature switches change.
+- The `workspaces.features.list` and `workspaces.features.set` routes join `ROUTES` (ADR-0160 D8).
+
+### Changed
+
+- `StorageConnectionResourceSchema` parses a connection's `url` again: a URL that is not a storage URL, names a secret, or is for another provider than `provider` fails with `storage_connection_url_invalid` or `storage_connection_url_has_secret`, so a reader never acts on an unchecked URL.
+- A GCS storage connection's `serviceAccountJson` must give `service_account` as its `type`. A key with no `type` is now refused as `storage_connection_url_invalid`, like one with another `type`; a key downloaded from Google Cloud already carries it.
+- `MeResponseSchema` gains a required `features` key: the `FeatureId`s switched on for the caller's
+  workspace, in `FEATURE_IDS` order (ADR-0160 D8). An SDK or `aw` older than this release rejects
+  `GET /api/me` from this server; upgrade clients and server together.
+
+### Fixed
+
+- The OpenAPI document describes the `multipart/form-data` request of `POST /api/skills` (a text
+  `name` part, then one `file` part per skill file, `SKILL.md` first) and marks its JSON + base64
+  body deprecated. The route catalogue gains a `multipart` body kind and a route's
+  `deprecatedRequests`, so other routes can describe the same.
+
 ## 0.6.11 — unreleased
 
 ### Added

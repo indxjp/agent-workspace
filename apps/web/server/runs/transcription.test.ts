@@ -1,5 +1,6 @@
 import type { ModelConnectionRecord } from '@agent-workspace/core/db';
 import { createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import { MODEL_PROVIDERS } from '@indx-workspace/contracts/runs';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -148,8 +149,8 @@ describe('promptWithTranscripts', () => {
 describe('promptWithTranscription (the transcript reaches the turn, issue #1313)', () => {
   const store = async () => {
     const objects = createInMemoryObjectStoreProvider().forWorkspace('ws-1');
-    await objects.put('meetings/a.m4a', { body: new Uint8Array([7, 7]) });
-    await objects.put('meetings/agenda.md', { body: new TextEncoder().encode('agenda') });
+    await objects.write('meetings/a.m4a', new Uint8Array([7, 7]), {});
+    await objects.write('meetings/agenda.md', new TextEncoder().encode('agenda'), {});
     return objects;
   };
   const attachments = [file('meetings/agenda.md'), file('meetings/a.m4a')];
@@ -161,7 +162,7 @@ describe('promptWithTranscription (the transcript reaches the turn, issue #1313)
       prompt: 'minutes\n\nAttached (read-only): meetings/a.m4a',
       attachments,
       connection: openai(),
-      readBytes: async (path) => (await objects.get(path))?.body ?? null,
+      readBytes: async (path) => (await readWhole(objects, path))?.body ?? null,
       request,
     });
     expect(request).toHaveBeenCalledTimes(1);
@@ -172,7 +173,7 @@ describe('promptWithTranscription (the transcript reaches the turn, issue #1313)
 
   it('stops before the next recording once an interrupt has ended the run', async () => {
     const objects = await store();
-    await objects.put('meetings/b.wav', { body: new Uint8Array([8]) });
+    await objects.write('meetings/b.wav', new Uint8Array([8]), {});
     const request = vi.fn<typeof fetch>(() => Promise.resolve(new Response('text')));
     const stillQueued = vi.fn<() => Promise<boolean>>();
     stillQueued.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
@@ -181,7 +182,7 @@ describe('promptWithTranscription (the transcript reaches the turn, issue #1313)
         prompt: 'x',
         attachments: [file('meetings/a.m4a'), file('meetings/b.wav')],
         connection: openai(),
-        readBytes: async (path) => (await objects.get(path))?.body ?? null,
+        readBytes: async (path) => (await readWhole(objects, path))?.body ?? null,
         request,
         stillQueued,
       }),
@@ -211,7 +212,7 @@ describe('promptWithTranscription (the transcript reaches the turn, issue #1313)
         prompt: 'x',
         attachments,
         connection: openai(),
-        readBytes: async (path) => (await objects.get(path))?.body ?? null,
+        readBytes: async (path) => (await readWhole(objects, path))?.body ?? null,
         request,
       }),
     ).catch((error: unknown) => error);

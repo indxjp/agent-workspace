@@ -16,6 +16,7 @@ import {
 } from '@agent-workspace/core/db';
 
 import { SKILL_DELETE_PREFIX, skillDeleteMarkerKey, skillMetaKey } from './keys';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
 import type { SkillObjects } from '../storage/store';
 
 /**
@@ -27,7 +28,7 @@ export async function readLegacyPendingSkillDelete(
   store: SkillObjects,
   name: string,
 ): Promise<PendingSkillDelete | null> {
-  const object = await store.get(skillDeleteMarkerKey(name));
+  const object = await readWhole(store, skillDeleteMarkerKey(name));
   if (object === null) return null;
   try {
     return parsePendingSkillDelete(JSON.parse(Buffer.from(object.body).toString('utf8')));
@@ -77,7 +78,7 @@ async function pendingSkillDeleteNames(
   // storage-bridge(#1699): names pending only as legacy marker objects
   const prefix = `${SKILL_DELETE_PREFIX}/`;
   const suffix = '.json';
-  for (const entry of await store.list(SKILL_DELETE_PREFIX)) {
+  for (const entry of await listAll(store, SKILL_DELETE_PREFIX)) {
     if (entry.kind !== 'file' || !entry.key.startsWith(prefix) || !entry.key.endsWith(suffix)) {
       continue;
     }
@@ -129,7 +130,9 @@ export async function syncSkillCatalogRow(
   const row = await catalog.putSkill(input);
   if (existing?.id === row.id) return row.id;
   const raced =
-    (await store.get(skillMetaKey(input.name))) === null ||
+    // An existence test that reads the record whole: `head` bypasses the meta-column view, so it
+    // would miss a record held only in the column.
+    (await readWhole(store, skillMetaKey(input.name))) === null ||
     (await pendingSkillDelete(store, catalog, input.name)) !== null;
   if (!raced) return row.id;
   await catalog.deleteSkill(input.name);

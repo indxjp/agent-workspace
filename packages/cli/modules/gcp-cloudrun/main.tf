@@ -682,10 +682,6 @@ resource "google_cloud_run_v2_service" "web" {
         }
       }
       env {
-        name  = "GCP_PROJECT"
-        value = var.project_id
-      }
-      env {
         name  = "AW_RUNTIME_VERIFICATION_FILE"
         value = "/var/lib/agent-workspace/runtime-verifications.json"
       }

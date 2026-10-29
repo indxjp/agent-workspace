@@ -48,7 +48,7 @@ afterEach(() => {
 describe('[US-BLD-01][api][chat] the expense-refunds conversation, up to the question', () => {
   it('reads the catalog and an example, fails the check on connector:erp, and saves nothing', async () => {
     const model = await scriptedModelFile(SCRIPTS, 'expense-refunds-happy');
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, model);
 
     const results = toolResults(await door.runScripted(token, model));
@@ -70,7 +70,6 @@ describe('[US-BLD-01][api][chat] the expense-refunds conversation, after the per
   it('passes the check on crm, pauses at draft_save, saves once when approved, and closes', async () => {
     const model = await scriptedModelFile(SCRIPTS, 'expense-refunds-happy');
     const door = builderDoor({
-      featureOn: true,
       runStore: new InMemoryRunStore(),
       scopes: scopes(),
     });
@@ -111,7 +110,7 @@ describe('[US-BLD-01][api][chat] the expense-refunds conversation, after the per
 describe('[US-BLD-02][api][chat] a named error leads to a question, not a guess', () => {
   it('makes one failed check naming connector:erp, then no further tool call', async () => {
     const model = await scriptedModelFile(SCRIPTS, 'missing-connector-asks');
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, model);
 
     expect(toolResults(await door.runScripted(token, model))).toEqual([
@@ -127,7 +126,7 @@ describe('[US-BLD-02][api][run] five failed checks stop the Builder', () => {
   it('refuses the sixth draft_check with check_limit_reached; the journal holds the five and the refusal', async () => {
     const { maxFailedChecksInARow } = BUILDER_DEFAULT_LIMITS;
     const model = await scriptedModelFile(SCRIPTS, 'five-failures-stop');
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, model);
 
     const results = toolResults(await door.runScripted(token, model));
@@ -154,7 +153,7 @@ describe('[US-BLD-02][api][run] five failed checks stop the Builder', () => {
 describe('[US-BLD-04][api][run] a Viewer cannot save', () => {
   it("refuses a Viewer's draft_save with not_permitted before any executor runs", async () => {
     const model = await scriptedModelFile(SCRIPTS, 'viewer-cannot-save');
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'viewer' }, model);
 
     expect(toolResults(await door.runScripted(token, model))).toEqual([
@@ -173,7 +172,7 @@ describe('[US-BLD-04][api][run] a Viewer cannot save', () => {
 describe('[US-BLD-02][api][run] the Builder recovers from bad tool arguments', () => {
   it('answers an extra workspaceId with invalid_arguments, then passes the corrected retry', async () => {
     const model = await scriptedModelFile(SCRIPTS, 'bad-tool-args-recover');
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, model);
 
     const results = toolResults(await door.runScripted(token, model));

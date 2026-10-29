@@ -99,6 +99,44 @@ describe('createAgentVersion', () => {
     expect(saved.status).toBe(201);
   });
 
+  // @story US-STO-12
+  it('[US-STO-12][api][run] refuses a code tool that declares a storage connection credential, and saves nothing', async () => {
+    const { agent, store } = await setUp();
+    const digest = 'a'.repeat(64);
+    const deps = { store, toolBundles: () => Promise.resolve([]) };
+    const refused = await createAgentVersion(
+      versionRequest({
+        toolBundles: [
+          {
+            tool: 'lookup',
+            digest,
+            secrets: ['STORAGE_CONNECTION_77777777777747778777777777777777'],
+          },
+        ],
+      }),
+      agent,
+      PRINCIPAL,
+      deps,
+    );
+    expect(refused).toMatchObject({
+      status: 400,
+      body: {
+        error: {
+          code: 'invalid_agent_version',
+          details: [expect.stringContaining('must not name a storage connection credential')],
+        },
+      },
+    });
+    expect((await store.list(agent.id))?.versions).toEqual([]);
+    const saved = await createAgentVersion(
+      versionRequest({ toolBundles: [{ tool: 'lookup', digest, secrets: ['LOOKUP_TOKEN'] }] }),
+      agent,
+      PRINCIPAL,
+      deps,
+    );
+    expect(saved.status).toBe(201);
+  });
+
   it('refuses a domain-declaring code tool where the sandbox cannot enforce domains, and saves nothing (#1018)', async () => {
     const { agent, store } = await setUp();
     const digest = 'a'.repeat(64);

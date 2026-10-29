@@ -464,6 +464,13 @@
    ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
     "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
+   "input": {"term": "workspace feature"},
+   "id": "term/workspace feature",
+   "expected": {"tables": ["workspace_features"], "aliases": ["workspace_features", "disabled feature"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Meta.ErSynthesis.glossary_names_are_unique",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_alias_names_one_term",
+    "AgentWorkspace.Theorems.Meta.ErSynthesis.every_table_is_home_to_one_term"],
    "input": {"term": "storage migration run"},
    "id": "term/storage migration run",
    "expected": {"tables": ["storage_migration_runs"], "aliases": []}},

@@ -1,8 +1,8 @@
 import { TestServicesError } from './errors.mjs';
 
-// PostgreSQL 17 for the Docker path. The native path uses the `embedded-postgres` pin in
-// packages/embedded/package.json (17.10), so both run PostgreSQL 17.
-export const POSTGRES_IMAGE = 'postgres:17-alpine';
+// PostgreSQL 18 for the Docker path. The native path uses the `embedded-postgres` pin in
+// packages/embedded/package.json (18.4), so both run PostgreSQL 18.
+export const POSTGRES_IMAGE = 'postgres:18-alpine';
 
 // SeaweedFS (docs/adr/0066-the-s3-contract-suite-runs-against-seaweedfs.md). The image and the
 // release binaries are the same release, 4.47: the image is pinned by its multi-arch index digest,

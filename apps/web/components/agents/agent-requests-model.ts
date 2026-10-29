@@ -35,11 +35,39 @@ const outcome = <T>(request: Promise<T>, failed: string) =>
 
 const BEFORE_ANSWER = 'The request failed before the server could answer';
 
-/** `GET /api/agents`. */
+/** `GET /api/me`: whether the caller's workspace has the Builder on; a failed read leaves it off. */
+export function loadBuilderEnabled(client: AgentWorkspaceClient): Promise<boolean> {
+  return client.me().then(
+    (me) => me.features.includes('builder'),
+    () => false,
+  );
+}
+
+/** `GET /api/agents`; archived agents are left out unless `includeArchived` (`?archived=include`). */
 export function loadAgents(
   client: AgentWorkspaceClient,
+  { includeArchived = false }: { readonly includeArchived?: boolean } = {},
 ): Promise<RequestOutcome<readonly AgentResource[]>> {
-  return outcome(client.agents.list(), 'The request to load agents failed');
+  return outcome(
+    client.agents.list(includeArchived ? { archived: 'include' } : {}),
+    'The request to load agents failed',
+  );
+}
+
+/** `GET /api/agents/:id`. */
+export function getAgent(
+  client: AgentWorkspaceClient,
+  agentId: string,
+): Promise<RequestOutcome<AgentResource>> {
+  return outcome(client.agents.get(agentId), BEFORE_ANSWER);
+}
+
+/** `POST /api/agents/:id/restore`, no body; the agent as stored. */
+export function restoreAgent(
+  client: AgentWorkspaceClient,
+  agentId: string,
+): Promise<RequestOutcome<AgentResource>> {
+  return outcome(client.agents.restore(agentId), 'The request to restore this agent failed');
 }
 
 /** `GET /api/engines`: the engines this deployment offers, or why not. */

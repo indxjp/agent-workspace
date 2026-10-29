@@ -7,6 +7,14 @@
 import { z } from 'zod';
 
 // @public (undocumented)
+export type AgentChangedAuditDetails = z.infer<typeof AgentChangedAuditDetailsSchema>;
+
+// @public
+export const AgentChangedAuditDetailsSchema: z.ZodReadonly<z.ZodObject<{
+    archived: z.ZodBoolean;
+}, z.core.$strict>>;
+
+// @public (undocumented)
 export type AgentCreatedAuditDetails = z.infer<typeof AgentCreatedAuditDetailsSchema>;
 
 // @public
@@ -24,7 +32,7 @@ export const AgentCreatedAuditDetailsSchema: z.ZodReadonly<z.ZodObject<{
 }, z.core.$strict>>;
 
 // @public
-export const AUDIT_ACTIONS: readonly ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed"];
+export const AUDIT_ACTIONS: readonly ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed", "workspace-features-changed"];
 
 // @public
 export const AUDIT_LIST_DEFAULT_LIMIT = 100;
@@ -91,6 +99,7 @@ export const AuditEventListResponseSchema: z.ZodReadonly<z.ZodObject<{
             "storage-connection-tested": "storage-connection-tested";
             "storage-connection-written": "storage-connection-written";
             "storage-grant-changed": "storage-grant-changed";
+            "workspace-features-changed": "workspace-features-changed";
         }>;
         subjectId: z.ZodNullable<z.ZodString>;
         subjectLabel: z.ZodString;
@@ -149,6 +158,7 @@ export const AuditEventSchema: z.ZodReadonly<z.ZodObject<{
         "storage-connection-tested": "storage-connection-tested";
         "storage-connection-written": "storage-connection-written";
         "storage-grant-changed": "storage-grant-changed";
+        "workspace-features-changed": "workspace-features-changed";
     }>;
     subjectId: z.ZodNullable<z.ZodString>;
     subjectLabel: z.ZodString;

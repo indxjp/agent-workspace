@@ -15,8 +15,12 @@ export interface StorageMigrationRunInput {
   readonly skippedOwnerless?: number;
   readonly skippedPathTaken?: number;
   readonly skippedFailed?: number;
-  /** The `adopt` pass: no workspace failed. `null` when absent. */
+  /** The `adopt` and `skills` passes: no workspace failed and the pass finished. `null` when absent. */
   readonly clean?: boolean | null;
+  /** The `skills` pass: files of revision prefixes with no committed revision record. `null` when absent. */
+  readonly orphans?: number | null;
+  /** `2` when the pass records every outcome; `null` when absent. */
+  readonly proofVersion?: number | null;
 }
 
 type StorageMigrationStage = (typeof storageMigrationStages)[number];
@@ -55,6 +59,8 @@ export function createDatabaseStorageMigrationRunRepository(
           skippedPathTaken: storageMigrationRuns.skippedPathTaken,
           skippedFailed: storageMigrationRuns.skippedFailed,
           clean: storageMigrationRuns.clean,
+          orphans: storageMigrationRuns.orphans,
+          proofVersion: storageMigrationRuns.proofVersion,
         })
         .from(storageMigrationRuns)
         .where(eq(storageMigrationRuns.stage, stage))
@@ -76,6 +82,8 @@ export function createInMemoryStorageMigrationRuns(): StorageMigrationRunReposit
         skippedPathTaken: 0,
         skippedFailed: 0,
         clean: null,
+        orphans: null,
+        proofVersion: null,
         ...run,
         finishedAt: new Date(),
       });

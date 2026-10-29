@@ -21,7 +21,7 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 
 import type { AuditRuntime } from '../audit/runtime';
@@ -52,7 +52,7 @@ const urlFor = (form: Form): string =>
 
 type Mode = { readonly kind: 'sign' } | { readonly kind: 'fail' };
 
-function signingObjects(form: Form, mode: Mode): ObjectStoreV2 {
+function signingObjects(form: Form, mode: Mode): ObjectStore {
   const inner = createInMemoryObjectStore();
   return {
     ...inner,

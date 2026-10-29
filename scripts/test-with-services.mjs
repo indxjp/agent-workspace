@@ -1,11 +1,11 @@
 /**
- * `pnpm test`: build core and the SDK, provide PostgreSQL 17 and an S3 server, run Vitest, and
+ * `pnpm test`: build core and the SDK, provide PostgreSQL 18 and an S3 server, run Vitest, and
  * clean up after every exit path — success, failure, SIGINT, SIGTERM and SIGHUP.
  *
  * Each service comes from, in order (scripts/test-services/select.mjs):
  *
  * 1. `TEST_DATABASE_URL` / `TEST_S3_ENDPOINT`, when set (CI sets both and never runs this file);
- * 2. Docker, when `docker info` succeeds: `postgres:17-alpine` and the pinned SeaweedFS image;
+ * 2. Docker, when `docker info` succeeds: `postgres:18-alpine` and the pinned SeaweedFS image;
  * 3. the native fallback, for hosts without Docker such as the self-hosted `dgx` pool:
  *    `embedded-postgres` (the packages/embedded pin) in a throwaway directory, and the pinned,
  *    checksum-verified SeaweedFS release binary, cached under

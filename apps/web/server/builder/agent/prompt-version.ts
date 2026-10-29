@@ -1,11 +1,11 @@
 /**
  * Where the Builder's prompt version is recorded: the shipped version's summary, because an agent
  * definition has no metadata field. Pure, so the `aw-control` door can read a run's prompt version
- * without loading the definition (which reads `prompt.md` from disk).
+ * without loading the definition.
  */
 
-/** Bump on every `prompt.md` change; the CI evals key on it. */
-export const BUILDER_PROMPT_VERSION = '2';
+/** Bump on every `BUILDER_PROMPT` change; the CI evals key on it. */
+export const BUILDER_PROMPT_VERSION = '3';
 
 const SHIPPED_SUMMARY_PREFIX = 'Shipped Builder, prompt v';
 

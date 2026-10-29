@@ -43,6 +43,8 @@ import {
   type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
+import { storageConnectionIdOf } from './contract';
+
 /** One secret's metadata, as this adapter's callers see it. Mirrors `CoreSecretMetadata` exactly. */
 export interface SecretRecord {
   readonly id: string;
@@ -95,13 +97,14 @@ export interface RepositorySecretsStoreDependencies {
   readonly storageConnections: StorageConnectionRepositoryProvider;
 }
 
-const STORAGE_CONNECTION_SECRET =
-  /^STORAGE_CONNECTION_([0-9A-F]{8})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{12})$/u;
-
-/** The connection id a secret name stands for, or `null` for any other name. */
-function storageConnectionIdOf(secretName: string): string | null {
-  const parts = STORAGE_CONNECTION_SECRET.exec(secretName)?.slice(1);
-  return parts === undefined ? null : parts.join('-').toLowerCase();
+function storageConnectionInUse(connectionId: string): {
+  readonly kind: 'in-use';
+  readonly referrers: CoreSecretReferrers;
+} {
+  return {
+    kind: 'in-use',
+    referrers: { connectorIds: [], modelConnectionIds: [], storageConnectionIds: [connectionId] },
+  };
 }
 
 /**
@@ -136,6 +139,20 @@ export function createRepositorySecretsStoreProvider(
         updatedAt: secret.updatedAt,
       });
 
+      /** The id of the existing storage connection whose credential secret `id` is, or `null`. */
+      const liveStorageConnectionOf = async (
+        resolved: CoreWorkspaceScope,
+        id: string,
+      ): Promise<string | null> => {
+        const secret = (await dependencies.service.list(resolved)).find((row) => row.id === id);
+        const connectionId = secret === undefined ? null : storageConnectionIdOf(secret.name);
+        if (connectionId === null) return null;
+        const connection = await dependencies.storageConnections
+          .forScope(resolved)
+          .get(connectionId);
+        return connection === null ? null : connectionId;
+      };
+
       return {
         async list(): Promise<readonly SecretRecord[]> {
           const secrets = await dependencies.service.list(await scope());
@@ -148,27 +165,17 @@ export function createRepositorySecretsStoreProvider(
         },
         async replace(id: string, value: Buffer): Promise<ReplaceSecretOutcome> {
           const resolved = await scope();
-          const secret = (await dependencies.service.list(resolved)).find((row) => row.id === id);
-          const connectionId = secret === undefined ? null : storageConnectionIdOf(secret.name);
-          if (connectionId !== null) {
-            const connection = await dependencies.storageConnections
-              .forScope(resolved)
-              .get(connectionId);
-            if (connection !== null) {
-              return {
-                kind: 'in-use',
-                referrers: {
-                  connectorIds: [],
-                  modelConnectionIds: [],
-                  storageConnectionIds: [connectionId],
-                },
-              };
-            }
-          }
+          const connectionId = await liveStorageConnectionOf(resolved, id);
+          if (connectionId !== null) return storageConnectionInUse(connectionId);
           return dependencies.service.replace(resolved, id, value);
         },
-        remove(id: string): Promise<DeleteSecretOutcome> {
-          return scope().then((resolved) => dependencies.service.delete(resolved, id));
+        async remove(id: string): Promise<DeleteSecretOutcome> {
+          const resolved = await scope();
+          // A connection's credential stays while the connection exists, whatever the service's
+          // own reference check; an orphan whose connection is gone (or never was) may go.
+          const connectionId = await liveStorageConnectionOf(resolved, id);
+          if (connectionId !== null) return storageConnectionInUse(connectionId);
+          return dependencies.service.delete(resolved, id);
         },
       };
     },

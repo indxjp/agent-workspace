@@ -4,6 +4,7 @@ import {
   AUDIT_ACTIONS,
   AUDIT_LIST_DEFAULT_LIMIT,
   AUDIT_LIST_MAX_LIMIT,
+  AgentChangedAuditDetailsSchema,
   AgentCreatedAuditDetailsSchema,
   AuditEventListResponseSchema,
   AuditEventSchema,
@@ -99,7 +100,7 @@ describe('AuditEventSchema', () => {
   it('lists every action once, in the order the column restates them', () => {
     expect(new Set(AUDIT_ACTIONS).size).toBe(AUDIT_ACTIONS.length);
     expect(AUDIT_ACTIONS[0]).toBe('user-created');
-    expect(AUDIT_ACTIONS.at(-1)).toBe('storage-grant-changed');
+    expect(AUDIT_ACTIONS.at(-1)).toBe('workspace-features-changed');
   });
 
   it('records a new agent as agent-created, and AuditEventSchema reads it', () => {
@@ -139,6 +140,18 @@ describe('AgentCreatedAuditDetailsSchema', () => {
       false,
     );
     expect(AgentCreatedAuditDetailsSchema.safeParse({ ...details, version: 0 }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('AgentChangedAuditDetailsSchema', () => {
+  it('reads the archived marker and nothing else', () => {
+    expect(AgentChangedAuditDetailsSchema.parse({ archived: true })).toEqual({ archived: true });
+    expect(AgentChangedAuditDetailsSchema.parse({ archived: false })).toEqual({ archived: false });
+    expect(AgentChangedAuditDetailsSchema.safeParse({ archived: 'no' }).success).toBe(false);
+    expect(AgentChangedAuditDetailsSchema.safeParse({}).success).toBe(false);
+    expect(AgentChangedAuditDetailsSchema.safeParse({ archived: true, extra: 1 }).success).toBe(
       false,
     );
   });

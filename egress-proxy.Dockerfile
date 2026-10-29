@@ -5,7 +5,7 @@ FROM ${NODE_IMAGE} AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 ENV CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
+RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
 
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./

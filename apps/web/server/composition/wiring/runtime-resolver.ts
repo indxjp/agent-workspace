@@ -1,5 +1,6 @@
 import { log } from '../../telemetry/logger';
-import type { DatabaseRoot } from '@agent-workspace/core/db';
+import type { DatabaseRoot, WorkspaceScopeResolver } from '@agent-workspace/core/db';
+import type { SecretsService } from '@agent-workspace/core/secrets';
 import type { RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 import { LOCAL_RUNTIME_CAPABILITIES } from '@agent-workspace/runtime/driver/local';
 import { toolSandboxRunToken } from '@agent-workspace/gateway/tokens';
@@ -14,6 +15,7 @@ import {
 import { buildToolSandboxRequest } from '../../compose/tool-sandbox';
 import { atStep } from '../../runs/failures';
 import type { LaunchContext } from '../../runs/environment';
+import { isStorageConnectionSecretName } from '../../secrets/contract';
 import { readToolBundle } from '../../tool-bundles/handlers';
 import { openToolBundleStore } from '../../tool-bundles/http';
 import { runnerManagerDriverId } from '../config';
@@ -21,6 +23,30 @@ import type { AgentsWiring } from './agents';
 import type { RunResourcesWiring } from './run-resources';
 import type { RunRuntimeWiring } from './run-runtime';
 import type { SubsystemsWiring } from './subsystems';
+
+/**
+ * A run's tool-sandbox secret source: the workspace secret `name`, or `null` when it is not set.
+ * A storage connection's credential is never a tool's: it is `null` without being read, whoever
+ * calls this.
+ */
+export function runToolSecretSource(
+  dependencies: {
+    readonly scopes: Pick<WorkspaceScopeResolver, 'forWorkspaceId'>;
+    readonly secretsService: Pick<SecretsService, 'resolveByName'> | null;
+  },
+  workspaceId: string,
+): (name: string) => Promise<string | null> {
+  return (name) =>
+    atStep('secrets', async () => {
+      if (isStorageConnectionSecretName(name)) return null;
+      const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
+      const resolved =
+        scope === null || dependencies.secretsService === null
+          ? null
+          : await dependencies.secretsService.resolveByName(scope, name);
+      return resolved === null ? null : resolved.value.toString('utf8');
+    });
+}
 
 export function wireRuntimeResolver({
   root,
@@ -136,15 +162,7 @@ export function wireRuntimeResolver({
                             const store = openToolBundleStore(workspaceId);
                             return store === null ? null : readToolBundle(store, digest);
                           },
-                          secret: (name) =>
-                            atStep('secrets', async () => {
-                              const scope = await scopes.forWorkspaceId(workspaceId);
-                              const resolved =
-                                scope === null || secretsService === null
-                                  ? null
-                                  : await secretsService.resolveByName(scope, name);
-                              return resolved === null ? null : resolved.value.toString('utf8');
-                            }),
+                          secret: runToolSecretSource({ scopes, secretsService }, workspaceId),
                           runToken: (runId) => {
                             if (!gatewaySettings.ok) throw new Error(gatewaySettings.reason);
                             return toolSandboxRunToken(

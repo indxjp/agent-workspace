@@ -48,7 +48,8 @@ async search(query: string, options?: SearchFilesOptions): Promise<FileSearchRes
 Write (or overwrite) one file. Up to `MAX_UPLOAD_BYTES` the bytes are sent as-is through the
 control plane, the path travelling as a header. A larger body, or `options.direct`, goes to the
 object store on a signed link and is then completed (the storage design, §03 and §04); the
-file is listed only once that finishes.
+file is listed only once that finishes. A stream is buffered first unless `options.sizeBytes`
+declares its length.
 
 ```ts
 async upload(path: string, body: UploadBody, options?: UploadFileOptions): Promise<FileResource>
@@ -237,6 +238,7 @@ What `FilesClient.upload` accepts as the file's content.
 | --- | --- | --- | --- |
 | `contentType` | `undefined \| string` | No | Stored with the file and reported back as `contentType`. Omit to store `null` (a `Blob` with a `type` of its own still declares it). Downloads never echo it as active content: the server serves only a closed table of inert types, everything else as `application/octet-stream`. |
 | `direct` | `undefined \| false \| true` | No | Always go through a signed link on the object store (mint, `PUT`, complete) instead of the control plane, even for a small body, and fail with `501 direct_transfer_unsupported` where the store cannot sign. Without it a body larger than `MAX_UPLOAD_BYTES` uses a signed link too, and falls back to the relay when the store cannot sign. |
+| `sizeBytes` | `undefined \| number` | No | The body's exact byte length, declared up front. With it a `ReadableStream` larger than `MAX_UPLOAD_BYTES` (or any stream with `direct`) is streamed to the signed link instead of being buffered first; the store refuses the `PUT` when the stream's length differs, and a store that cannot sign links fails it with `501 direct_transfer_unsupported`. A streaming request body needs a runtime that can send one (Node.js, or a browser over HTTP/2). For a `Blob` or `Uint8Array` it must equal the body's own length. |
 | `signal` | `undefined \| AbortSignal` | No |  |
 
 ## UploadUrlInput

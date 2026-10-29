@@ -22,15 +22,16 @@ import type { SkillRowsWriter } from './tree';
 import {
   createInMemoryObjectStore,
   createLocalFilesystemObjectStoreProvider,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
+import { listAll } from '@agent-workspace/core/storage/streams';
 
 import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import { skillRowFolder } from './keys';
 import { createSkillRowsWorld, ROWS_WORKSPACE_ID as WORKSPACE_ID } from './rows-fixture';
 
 let rootDir: string;
-let store: ObjectStoreV2;
+let store: ObjectStore;
 let world: ReturnType<typeof createSkillRowsWorld>;
 let catalog: ReturnType<ReturnType<typeof createInMemoryCatalog>['forWorkspace']>;
 
@@ -209,7 +210,7 @@ describe('importSkill', () => {
     expect(result.status).toBe(400);
     expect((result.body as { error: { code: string } }).error.code).toBe('inadmissible_path');
     // Nothing was written at all: not even the well-formed SKILL.md entry that preceded the bad one.
-    expect(await store.list('')).toEqual([]);
+    expect(await listAll(store, '')).toEqual([]);
     expect(await catalog.listFiles()).toEqual([]);
   });
 

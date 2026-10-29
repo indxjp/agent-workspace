@@ -29,6 +29,16 @@ const ACCEPTED: readonly (readonly [string, unknown])[] = [
       limits: { maxTurns: 3, maxBudgetUsd: 1.5 },
     },
   ],
+  [
+    'claude with approval rules and handoff',
+    {
+      engine: 'claude-agent-sdk',
+      tools: CLAUDE_TOOLS,
+      requireApproval: ['mcp__aw-control__draft_save'],
+      handoff: true,
+      ...COMMON,
+    },
+  ],
   ['openai-agents bare', { engine: 'openai-agents', ...COMMON }],
   [
     'openai-agents with settings',
@@ -55,6 +65,7 @@ const REFUSED: readonly (readonly [string, unknown])[] = [
   ['toolCallConcurrency 17', { engine: 'mastra', toolCallConcurrency: 17, ...COMMON }],
   ['thinkingLevel on openai-agents', { engine: 'openai-agents', thinkingLevel: 'low', ...COMMON }],
   ['tools on pi', { engine: 'pi', tools: CLAUDE_TOOLS, ...COMMON }],
+  ['requireApproval on pi', { engine: 'pi', requireApproval: ['Bash'], ...COMMON }],
   ['an unknown permission', { engine: 'pi', withheldPermissions: ['root'], ...COMMON }],
   ['an engine this build lacks', { engine: 'acp:codex', ...COMMON }],
   ['the pre-ADR-0065 discriminant', { engine: 'provider', ...COMMON }],

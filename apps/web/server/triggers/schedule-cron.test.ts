@@ -6,6 +6,7 @@ import {
   handleTriggerScheduleCron,
   installTriggerScheduleCron,
   resetTriggerScheduleCron,
+  runTriggerCronPass,
   type TriggerScheduleCronPass,
   wireTriggerSchedule,
 } from './schedule-cron';
@@ -156,4 +157,53 @@ describe('wireTriggerSchedule', () => {
       expect(getTriggerScheduleCron()).toBeNull();
     },
   );
+});
+
+describe('runTriggerCronPass', () => {
+  const SWEEP = {
+    leaseHeld: false,
+    throttled: false,
+    workspaces: 2,
+    archived: 3,
+    failed: 0,
+  } as const;
+
+  it('reports the schedule pass and the archive sweep of one delivery', async () => {
+    const result = await runTriggerCronPass({
+      schedule: () => Promise.resolve(RESULT),
+      archive: () => Promise.resolve(SWEEP),
+      log: quietLog(),
+    });
+
+    expect(result).toEqual({ ...RESULT, archive: SWEEP });
+  });
+
+  it('keeps the schedule result and logs when the sweep throws', async () => {
+    const log = quietLog();
+    const failure = new Error('lease unavailable');
+
+    const result = await runTriggerCronPass({
+      schedule: () => Promise.resolve(RESULT),
+      archive: () => Promise.reject(failure),
+      log,
+    });
+
+    expect(result).toEqual({ ...RESULT, archive: null });
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('[agent-archive] sweep failed', {
+      error: failure,
+    });
+  });
+
+  it('does not sweep when the schedule pass throws', async () => {
+    const archive = vi.fn(() => Promise.resolve(SWEEP));
+
+    await expect(
+      runTriggerCronPass({
+        schedule: () => Promise.reject(new Error('the run API is not installed')),
+        archive,
+        log: quietLog(),
+      }),
+    ).rejects.toThrow('the run API is not installed');
+    expect(archive).not.toHaveBeenCalled();
+  });
 });

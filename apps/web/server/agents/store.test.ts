@@ -99,6 +99,8 @@ export interface AgentStoreFixture {
   readonly ownerB: { readonly principalId: string; readonly userId: string | null };
   /** A `model_connections.id` belonging to {@link workspaceA}, or `null` when none was asked for. */
   readonly modelConnection: string | null;
+  /** Marks an agent archived at `at`, as the auto-archive sweep would (issue #1851). */
+  readonly archive: (workspaceId: string, id: string, at: Date) => Promise<void>;
 }
 
 /**
@@ -327,6 +329,32 @@ export function describeAgentStoreConformance(
       });
     });
 
+    describe('restore', () => {
+      const actor = { principalId: 'principal-1', userId: null, label: 'Ada' } as const;
+
+      it('leaves an agent that is not archived as it is, and reports an unknown id as not-found', async () => {
+        const fixture = await plain();
+        const store = fixture.provider.forWorkspace(fixture.workspaceA);
+        const agent = created(await store.create(input(), fixture.ownerA));
+        const outcome = await store.restore(agent.id, actor);
+        expect(outcome.kind).toBe('not-archived');
+        expect((await store.restore(ABSENT, actor)).kind).toBe('not-found');
+      });
+
+      it('clears the archive mark of an archived agent', async () => {
+        const fixture = await plain();
+        const store = fixture.provider.forWorkspace(fixture.workspaceA);
+        const agent = created(await store.create(input(), fixture.ownerA));
+        await fixture.archive(fixture.workspaceA, agent.id, new Date('2026-02-03T04:05:06.007Z'));
+        expect((await store.get(agent.id))?.archivedAt).toBeDefined();
+        const outcome = await store.restore(agent.id, { ...fixture.ownerA, label: 'Ada' });
+        expect(outcome.kind).toBe('restored');
+        if (outcome.kind !== 'restored') return;
+        expect(outcome.agent.archivedAt).toBeUndefined();
+        expect((await store.get(agent.id))?.archivedAt).toBeUndefined();
+      });
+    });
+
     // ── S-13 ────────────────────────────────────────────────────────────────────────────────
     describe('policy', () => {
       const policy = (): AgentPolicy => ({
@@ -485,15 +513,16 @@ export function describeAgentStoreConformance(
 
 describeAgentStoreConformance('the in-memory agent store', ({ withModelConnection }) => {
   const modelConnection = withModelConnection ? crypto.randomUUID() : null;
+  // An explicit set — empty when no connection was asked for — rather than `undefined`. The
+  // in-memory store reads `undefined` as "do not check the foreign key", and a run that skipped
+  // the check would not be the same thing as the PostgreSQL run, which cannot skip it.
+  const provider = createInMemoryAgentStoreProvider({
+    knownModelConnectionIds: new Set(modelConnection === null ? [] : [modelConnection]),
+    // The fixtures seed no files, skills or connectors, as the PostgreSQL run seeds none.
+    knownAssignableIds: new Set(),
+  });
   return Promise.resolve({
-    // An explicit set — empty when no connection was asked for — rather than `undefined`. The
-    // in-memory store reads `undefined` as "do not check the foreign key", and a run that skipped
-    // the check would not be the same thing as the PostgreSQL run, which cannot skip it.
-    provider: createInMemoryAgentStoreProvider({
-      knownModelConnectionIds: new Set(modelConnection === null ? [] : [modelConnection]),
-      // The fixtures seed no files, skills or connectors, as the PostgreSQL run seeds none.
-      knownAssignableIds: new Set(),
-    }),
+    provider,
     workspaceA: crypto.randomUUID(),
     workspaceB: crypto.randomUUID(),
     // The in-memory store enforces no foreign key, so any id documents "some member" as well as
@@ -501,6 +530,10 @@ describeAgentStoreConformance('the in-memory agent store', ({ withModelConnectio
     ownerA: { principalId: crypto.randomUUID(), userId: crypto.randomUUID() },
     ownerB: { principalId: crypto.randomUUID(), userId: crypto.randomUUID() },
     modelConnection,
+    archive: (workspaceId, id, at) => {
+      provider.archive(workspaceId, id, at);
+      return Promise.resolve();
+    },
   });
 });
 
@@ -660,6 +693,16 @@ describe.skipIf(!hasDatabase)('the PostgreSQL agent store', () => {
         ownerA: { principalId: principalA, userId: ownerUserA },
         ownerB: { principalId: principalB, userId: ownerUserB },
         modelConnection,
+        archive: async (workspaceId, id, at) => {
+          const scope = await core
+            .createDatabaseWorkspaceScopeResolver(isolated.db)
+            .forWorkspaceId(workspaceId);
+          if (scope === null) throw new Error('the fixture workspace has no scope');
+          await core
+            .createDatabaseAgentRepositoryProvider(isolated.db)
+            .forScope(scope)
+            .archive([id], at);
+        },
       };
     },
   );

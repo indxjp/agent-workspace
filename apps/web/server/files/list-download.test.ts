@@ -33,7 +33,7 @@ import {
   createInMemoryObjectStoreProvider,
   storageObjectName,
   streamToBytes,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { FileResourceSchema } from '@indx-workspace/contracts/files';
 
@@ -138,12 +138,12 @@ afterEach(() => {
 function defineSuite(name: string, setup: () => Promise<World>) {
   describe(`list and download on the ${name}`, () => {
     let world: World;
-    let objects: ObjectStoreV2;
+    let objects: ObjectStore;
     let storage: StorageService;
     const legacy = createInMemoryObjectStoreProvider();
 
     /** Install the files runtime over the catalog service; `objects` may be wrapped by a test. */
-    function install(root: ObjectStoreV2): void {
+    function install(root: ObjectStore): void {
       objects = root;
       storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),

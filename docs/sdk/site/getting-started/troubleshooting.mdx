@@ -125,6 +125,18 @@ tries to start on the database the first one holds. The first `aw dev` keeps run
 for the ready screen. `aw dev status` and `aw dev stop` arrive in the next release
 ([aw dev in depth](/cli/dev#start-it-in-the-background)).
 
+### aw dev says the data directory was created by another PostgreSQL major version
+
+**Symptom.** After an upgrade, `aw dev` stops with
+`the local data directory was created by another PostgreSQL major version than the PostgreSQL 18
+this local runtime runs`.
+
+**Cause.** The embedded database moved from PostgreSQL 17 to 18, and 18 cannot open a 17 data
+directory. Nothing in it was changed.
+
+**Fix.** Move `.agent-workspace/postgres` aside to start empty, or carry the data over with the
+release that created it: [Upgrade the local database](/cli/dev#upgrade-the-local-database).
+
 ## Running agents
 
 ### The Docker sandbox refuses to start or the run fails

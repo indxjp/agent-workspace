@@ -18,6 +18,7 @@ import type { RuntimeManagerClient } from '../compose/runtime-manager-client';
 import type { ProviderCredentialSpec } from '../compose/runtime-provider-credential';
 import { buildToolSandboxRequest } from '../compose/tool-sandbox';
 import type { GatewayIssuerSettingsResult } from '../gateway/issuer';
+import { isStorageConnectionSecretName } from '../secrets/contract';
 import type { ToolEndpointEnvironment } from './env';
 import type { EndpointAgentVersions, EndpointRuntimeProfiles, WorkspaceScope } from './store';
 
@@ -35,6 +36,22 @@ export interface ToolEndpointSourceDependencies {
   readonly bundle: (workspaceId: string, digest: string) => Promise<Uint8Array | null>;
   readonly runnerManager: Pick<RuntimeManagerClient, 'openToolSandbox' | 'closeToolSandbox'> | null;
   readonly gatewaySettings: GatewayIssuerSettingsResult;
+}
+
+/**
+ * The endpoint sandbox's secret source: the workspace secret `name`, or `null` when it is not set.
+ * A storage connection's credential is never a tool's: it is `null` without being read, whoever
+ * calls this.
+ */
+export function endpointToolSecretSource(
+  secrets: Pick<SecretsService, 'resolveByName'> | null,
+  scope: WorkspaceScope,
+): (name: string) => Promise<string | null> {
+  return async (name) => {
+    if (secrets === null || isStorageConnectionSecretName(name)) return null;
+    const resolved = await secrets.resolveByName(scope, name);
+    return resolved === null ? null : resolved.value.toString('utf8');
+  };
 }
 
 export function createToolEndpointSources(
@@ -84,10 +101,7 @@ export function createToolEndpointSources(
       const { signingSecret, baseUrl } = gatewaySettings.settings;
       const toolSandbox = await buildToolSandboxRequest(endpointSandboxRunId(clientId), bundles, {
         bundle: (digest) => deps.bundle(workspaceId, digest),
-        secret: async (name) => {
-          const resolved = secrets === null ? null : await secrets.resolveByName(scope, name);
-          return resolved === null ? null : resolved.value.toString('utf8');
-        },
+        secret: endpointToolSecretSource(secrets, scope),
         runToken: (id) => toolSandboxRunToken(signingSecret, id),
       });
       const origin = await runnerManager.openToolSandbox(

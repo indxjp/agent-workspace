@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { SecretReferenceSchema } from './secret-reference.js';
+import { isStorageConnectionSecretName, SecretReferenceSchema } from './secret-reference.js';
 
 /**
  * ADR-0142 D1, issue #1278: how a run tells an opted-in connector who is asking.
@@ -33,9 +33,17 @@ export const IDENTITY_SUBJECT_MAX_LENGTH = 256;
 
 /**
  * An opt-in `identity: { secret: NAME }` on a connector (project file and connector resource): a
- * reference to the signing secret by name, never the key itself.
+ * reference to the signing secret by name, never the key itself, and never a storage connection's
+ * credential (a `STORAGE_CONNECTION_` name): that credential is bound to the connection's URL and
+ * is never a signing key.
  */
-export const ConnectorIdentitySchema = SecretReferenceSchema;
+export const ConnectorIdentitySchema = SecretReferenceSchema.refine(
+  (reference) => !isStorageConnectionSecretName(reference.secret),
+  {
+    path: ['secret'],
+    error: 'must not name a storage connection credential (STORAGE_CONNECTION_)',
+  },
+);
 export type ConnectorIdentity = z.infer<typeof ConnectorIdentitySchema>;
 
 /** The signed payload: exactly these six keys; any other is refused. `exp` is epoch seconds. */

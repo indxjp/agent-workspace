@@ -1,20 +1,20 @@
 import { randomUUID } from 'node:crypto';
 
 import { Storage } from '@google-cloud/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import {
-  defineObjectStoreContract,
-  defineObjectStoreV2Contract,
-  type ObjectStoreV2ContractFixture,
-} from './contract.js';
+import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
 import { createGcsObjectStoreProviderFromConfig } from './gcs-store.js';
+import { readWhole } from './streams.js';
+
+// Real GCS round trips take seconds, not the 5 s default; as azure-live.vitest.config.mjs does.
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const bucket = process.env['TEST_GCS_BUCKET']?.trim();
 const projectId = process.env['TEST_GCP_PROJECT']?.trim();
 const hasLiveBucket = bucket !== undefined && bucket !== '';
 
-async function setup(): Promise<ObjectStoreV2ContractFixture> {
+async function setup(): Promise<ObjectStoreContractFixture> {
   if (bucket === undefined || bucket === '') {
     throw new Error('TEST_GCS_BUCKET is required for the live GCS suite.');
   }
@@ -26,6 +26,8 @@ async function setup(): Promise<ObjectStoreV2ContractFixture> {
   });
   return {
     provider,
+    signedUrlsFetchable: true,
+    refusesExpiredSigning: true,
     async teardown(): Promise<void> {
       const storage = new Storage(projectId === undefined || projectId === '' ? {} : { projectId });
       await storage.bucket(bucket).deleteFiles({ prefix: `${keyPrefix}/`, force: true });
@@ -42,7 +44,6 @@ if (!hasLiveBucket) {
 } else {
   describe('GCS live-service proof', () => {
     defineObjectStoreContract('Google Cloud Storage (live service)', setup);
-    defineObjectStoreV2Contract('Google Cloud Storage (live service)', setup);
 
     it('round-trips the files and skills prefixes without crossing them', async () => {
       if (bucket === undefined || bucket === '') throw new Error('TEST_GCS_BUCKET is required');
@@ -62,10 +63,12 @@ if (!hasLiveBucket) {
       ).forWorkspace('11111111-1111-4111-8111-111111111111');
       try {
         const bytes = new TextEncoder().encode('live-prefix-proof');
-        await files.put('proof.txt', { body: bytes });
-        await skills.put('proof.txt', { body: bytes });
-        expect(Buffer.from((await files.get('proof.txt'))?.body ?? [])).toEqual(Buffer.from(bytes));
-        expect(Buffer.from((await skills.get('proof.txt'))?.body ?? [])).toEqual(
+        await files.write('proof.txt', bytes, {});
+        await skills.write('proof.txt', bytes, {});
+        expect(Buffer.from((await readWhole(files, 'proof.txt'))?.body ?? [])).toEqual(
+          Buffer.from(bytes),
+        );
+        expect(Buffer.from((await readWhole(skills, 'proof.txt'))?.body ?? [])).toEqual(
           Buffer.from(bytes),
         );
       } finally {

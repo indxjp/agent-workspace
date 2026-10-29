@@ -7,6 +7,40 @@ what the policy covers are on the developer site's
 [Public surface and stability](../../docs/sdk/site/concepts/public-surface.mdx#versions-and-deprecation)
 page. Released in lock-step with `@indx-workspace/contracts`, with the same version.
 
+## 0.6.12 — unreleased
+
+### Added
+
+- `agents.list({ archived: 'include' })` also lists archived agents, each with its `archivedAt`; without it they are left out.
+- `agents.restore(id)` brings back an archived agent and returns it; `aw agents restore <id>` does
+  the same from the CLI and prints the agent's name.
+- `BuiltinAgentProblemCode` is exported, and `agents.create` and `agents.update` can throw
+  `ApiProblemError` with code `builder_name_reserved` (`403`) when a Member gives an agent a name
+  the deployment's `builder.allow` lists.
+- `ClientOptions.onWarning` receives the SDK's deprecation warnings (today, a `contentBase64`
+  skill import file) instead of `console.warn`; a handler that does nothing silences them. Without
+  it the first such warning in a process is still one console line.
+- `files.upload(path, stream, { sizeBytes })` streams a `ReadableStream` whose length is declared
+  straight to the object store's signed link when it is above `MAX_UPLOAD_BYTES` (or with
+  `direct`), instead of buffering it in memory first. A store that cannot sign links answers
+  `501 direct_transfer_unsupported` and the stream is not read. A declared size that is not a
+  byte count, or that a `Blob` or `Uint8Array` body contradicts, is refused with a `TypeError`
+  before any request. A `Uint8Array` body is no longer copied on its way to the store.
+- `renderProjectFiles` writes a `features:` list to `agent-workspace.yaml` (in `FEATURE_IDS` order) when the `admin.features` answer is not every feature. An absent answer, or every feature, writes no `features` key, so generated projects are unchanged by default.
+- `workspaces.features.list(workspaceId)` returns `{ features }`, one `{ id, installed, enabled }`
+  row per feature, and `workspaces.features.set(workspaceId, { disabled })` replaces the
+  workspace's whole off set and returns the same shape. `me()` now includes the caller's enabled
+  `features`.
+
+### Changed
+
+- New Claude Agent SDK projects pin `@anthropic-ai/sdk` 1.3.0 (was 0.137.0). The agent SDK uses it
+  for types only.
+
+### Fixed
+
+- `files.upload(path, stream, { signal })` stops reading a `ReadableStream` body once `signal` aborts: the stream is cancelled and the call rejects with an aborted `TransportError` without sending a request. A body stream that fails rejects with `TransportError`, keeping the stream's error as its `cause`.
+
 ## 0.6.11 — unreleased
 
 ### Changed

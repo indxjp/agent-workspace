@@ -22,7 +22,7 @@ import {
   createInMemoryObjectStore,
   SignedUrlUnsupportedError,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
   type SignedUrlRequest,
 } from '@agent-workspace/core/storage';
 import type { FileTextRepository } from '@agent-workspace/core/db';
@@ -67,7 +67,7 @@ const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
  * like Azure Blob, whose SAS cannot carry an upload length. Every sign request is appended to
  * `requests`.
  */
-function signingRoot(bindsLength = true, requests: SignedUrlRequest[] = []): ObjectStoreV2 {
+function signingRoot(bindsLength = true, requests: SignedUrlRequest[] = []): ObjectStore {
   const store = createInMemoryObjectStore();
   return {
     ...store,
@@ -82,7 +82,7 @@ function signingRoot(bindsLength = true, requests: SignedUrlRequest[] = []): Obj
 }
 
 let catalog: ReturnType<typeof createInMemoryCatalogStore>;
-let root: ObjectStoreV2;
+let root: ObjectStore;
 let storage: StorageService;
 let cachedTerms: Map<string, string>;
 
@@ -294,7 +294,12 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
     expect((await mint('docs/a.txt')).status).toBe(201);
     const row = await pendingRow();
     expect((await mint('docs/a.txt')).status).toBe(201);
-    expect(await pendingRow()).toEqual(row);
+    // The same row, under a new reservation: a request holding the first link's snapshot is stale.
+    // The re-mint is a write, so the row's write time moves too.
+    const again = await pendingRow();
+    const sameRow = { reservationToken: null, updatedAt: null };
+    expect({ ...again, ...sameRow }).toEqual({ ...row, ...sameRow });
+    expect(again?.reservationToken).not.toBe(row?.reservationToken);
   });
 
   it('[US-STO-02][api][sdk] a viewer cannot mint and no row appears', async () => {
@@ -331,6 +336,35 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain('store.invalid');
     expect(await pendingRow()).toEqual(created);
+  });
+
+  it('[US-STO-02][api][sdk] a Builder gets no link over a reserved target that is renamed and its old path reused', async () => {
+    const repository = catalog.forWorkspaceSync(WORKSPACE);
+    const reserve = repository.reserve.bind(repository);
+    const file = (path: string, ownerPrincipalId: string) => ({
+      path,
+      kind: 'file' as const,
+      storageKey: path,
+      sizeBytes: 1,
+      contentType: 'text/plain',
+      ownerPrincipalId,
+    });
+    // The owner creates the path after the route authorised; once the replacement is reserved, the
+    // owner's file (and the replacement with it) moves away and the Builder writes its own file at
+    // the old path. A decision that reads the path again would see the Builder's file.
+    repository.reserve = async (path, input) => {
+      await repository.putFile(file(path, ME));
+      const outcome = await reserve(path, input);
+      await repository.renameFile(path, { ...file('docs/moved.txt', ME), storageKey: path });
+      await repository.putFile(file(path, SOMEONE_ELSE));
+      return outcome;
+    };
+    const response = await mint('docs/a.txt', 'builder');
+    repository.reserve = reserve;
+
+    expect(response.status).toBe(403);
+    await expect(repository.get('docs/moved.txt')).resolves.toMatchObject({ ownerPrincipalId: ME });
+    await expect(repository.pending('docs/moved.txt')).resolves.toBeNull();
   });
 
   it('[US-STO-02][api][sdk] an Azure-style store signs a new path unbound, and the oversize object is deleted at completion', async () => {
@@ -752,7 +786,9 @@ describe('signed uploads over an existing file', () => {
 
     const row = await storage.get(ctx, 'files', 'docs/a.txt');
     expect(row?.objectId).not.toBe(old.objectId);
-    expect(key).toBe(storageObjectName(WORKSPACE, 'files', row?.objectId ?? ''));
+    // The file is a copy the upload link never named; the uploaded object is gone.
+    expect(key).not.toBe(storageObjectName(WORKSPACE, 'files', row?.objectId ?? ''));
+    expect(await root.head(key)).toBeNull();
     expect(row?.sha256).toBe(createHash('sha256').update('fresh words').digest('hex'));
     expect(await root.head(storageObjectName(WORKSPACE, 'files', old.objectId ?? ''))).toBeNull();
     const found = (await (await search('fresh')).json()) as { hits: Array<{ path: string }> };

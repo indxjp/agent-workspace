@@ -43,6 +43,16 @@ describe('storage-bridge markers', () => {
     expect(bridgeViolations(real, BRIDGES_MAY_REMAIN)).toEqual([]);
   });
 
+  // One kind of bridge has one removal issue (the table in ENGINEERING_GUIDELINES.md), so closing
+  // it leaves no marker of that kind behind.
+  it('gives every marker waiting on the hand-written file-catalog fakes one removal issue', () => {
+    const issues = real.bridges
+      .filter((b) => /file-catalog fakes/u.test(b.text))
+      .map((b) => /storage-bridge\(#(\d+)\)/u.exec(b.text)?.[1]);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(new Set(issues)).toEqual(new Set(['1634']));
+  });
+
   it('allows none once BRIDGES_MAY_REMAIN is false', () => {
     const one = findBridges([{ path: 'a.ts', text: '// storage-bridge(#1698): demo' }]);
     expect(bridgeViolations(one, true)).toEqual([]);

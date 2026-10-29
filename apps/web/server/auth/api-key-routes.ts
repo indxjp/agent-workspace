@@ -47,7 +47,7 @@ const API_KEY_ROUTES: readonly ApiKeyRouteMatcher[] = API_ROUTES.filter(acceptsA
  * The method a route is matched under: `HEAD` is the `GET` it shadows, which Next answers from the
  * `GET` handler, so `curl -I` with a key reaches the same route a `GET` does (PR #418 review).
  */
-function routeMethod(method: string): string {
+export function routeMethod(method: string): string {
   const upper = method.toUpperCase();
   return upper === 'HEAD' ? 'GET' : upper;
 }

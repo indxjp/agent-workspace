@@ -7,7 +7,7 @@ ENV PATH=$PNPM_HOME:$PATH
 # Without CI=1, `pnpm install --prod` below prompts before purging node_modules and a Docker RUN
 # step has no TTY to answer it (the same reason gateway.Dockerfile sets it).
 ENV CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
+RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
 
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./

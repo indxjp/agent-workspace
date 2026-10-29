@@ -8,6 +8,8 @@
  *
  * ## The flow
  *
+ * 0. An archived agent is frozen: this and promote and rollback answer `409 agent_archived` first,
+ *    before any read (issue #1851).
  * 1. Parse with `SetAgentPointerRequestSchema` → `400 invalid_agent_version` (`<path>: <message>`).
  * 2. `find` the version → `404 agent_version_not_found`, `details: [version:<n>]`.
  * 3. Re-validate the stored body against the agent as it is now (`validateAgentVersion`): an
@@ -80,6 +82,7 @@ import { materialise } from './materialise';
 import { definitionReferences, validateAgentVersion } from './pipeline';
 import type { StorageConnectionLookup } from './storage-grants';
 import {
+  agentArchivedRefusal,
   agentNameConflict,
   agentVersionNotFound,
   codeToolNeedsHost,
@@ -288,6 +291,8 @@ export async function setAgentPointer(
   actor: PointerActor,
   dependencies: SetAgentPointerDependencies,
 ): Promise<ApiResult> {
+  const archived = agentArchivedRefusal(agent);
+  if (archived !== null) return archived;
   const parsed = SetAgentPointerRequestSchema.safeParse(raw);
   if (!parsed.success) return invalidBody('pointer request', parsed.error);
   const { environment, version: number, expectedVersion } = parsed.data;
@@ -377,6 +382,8 @@ export async function promoteAgent(
   actor: PointerActor,
   dependencies: SetAgentPointerDependencies,
 ): Promise<ApiResult> {
+  const archived = agentArchivedRefusal(agent);
+  if (archived !== null) return archived;
   const parsed = PromoteAgentRequestSchema.safeParse(raw);
   if (!parsed.success) return invalidBody('promote request', parsed.error);
   const { version: requested, dryRun } = parsed.data;
@@ -440,6 +447,8 @@ export async function rollbackAgent(
   actor: PointerActor,
   dependencies: SetAgentPointerDependencies,
 ): Promise<ApiResult> {
+  const archived = agentArchivedRefusal(agent);
+  if (archived !== null) return archived;
   const parsed = RollbackAgentRequestSchema.safeParse(raw);
   if (!parsed.success) return invalidBody('rollback request', parsed.error);
   const { environment, dryRun } = parsed.data;

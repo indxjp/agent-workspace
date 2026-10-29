@@ -49,7 +49,10 @@ export const NO_ARCHIVE_CAPABILITY: ProjectArchiveCapability = {
 };
 
 /**
- * Ask `decide()` both halves of the ownership split for the archive route.
+ * Ask `decide()` both halves of the ownership split for a write route.
+ *
+ * `path` names the route to ask about. It defaults to the project archive route;
+ * `../agents/restore-capability.ts` also asks `/api/agents/:id/restore` through this function.
  *
  * `restore` is not asked separately: `rbac/declarations/W9-PROJ-183.ts` classifies both segments as
  * writes on the same `projects` resource, so the two questions have one answer by construction. The
@@ -57,7 +60,10 @@ export const NO_ARCHIVE_CAPABILITY: ProjectArchiveCapability = {
  *
  * Exported so the test can drive the role matrix without a session or a database.
  */
-export function archiveGrantsForRole(role: string): {
+export function archiveGrantsForRole(
+  role: string,
+  path = '/api/projects/:id/archive',
+): {
   readonly canArchiveOwn: boolean;
   readonly canArchiveOther: boolean;
 } {
@@ -68,10 +74,11 @@ export function archiveGrantsForRole(role: string): {
       role: parsed,
       method: 'POST',
       // `decide()` reads the specification's path notation, not Next.js's `[id]` folder spelling.
-      path: '/api/projects/:id/archive',
+      path,
       ownership,
       // A page-render capability probe, never a real bearer credential: this page is reached by a
-      // session cookie, and a browser token's scope grammar has no cell over `projects` at all.
+      // session cookie, so no browser token's scope narrows the answer for whichever route `path`
+      // names.
       scope: null,
     }).effect === 'allow';
   return { canArchiveOwn: ask('own'), canArchiveOther: ask('other') };
@@ -98,13 +105,14 @@ export interface CapabilitySession {
 export async function archiveCapabilityFor(
   directory: Pick<DirectoryRoot, 'findUserByEmail' | 'membershipsForUser'>,
   session: CapabilitySession,
+  path?: string,
 ): Promise<ProjectArchiveCapability> {
   const user = await directory.findUserByEmail(session.sub);
   if (user === null) return NO_ARCHIVE_CAPABILITY;
   const memberships = await directory.membershipsForUser(user.id);
   const current = memberships.find((membership) => membership.workspaceSlug === session.ws);
   if (current === undefined) return NO_ARCHIVE_CAPABILITY;
-  return { ...archiveGrantsForRole(current.role), viewerPrincipalId: current.principalId };
+  return { ...archiveGrantsForRole(current.role, path), viewerPrincipalId: current.principalId };
 }
 
 /**

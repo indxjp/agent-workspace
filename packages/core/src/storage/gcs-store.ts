@@ -1,4 +1,6 @@
 import type { Bucket, File, FileMetadata } from '@google-cloud/storage';
+import { createHash, randomUUID } from 'node:crypto';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 import {
@@ -15,19 +17,19 @@ import {
   clampListLimit,
   ObjectConflictError,
   RangeNotSatisfiableError,
+  SignedUrlUnsupportedError,
   validatedWriteKey,
   PRESIGNED_URL_DEFAULT_TTL_SECONDS,
   type ByteRange,
-  type ObjectContent,
+  type EmulatorObjectStore,
   type ObjectListEntry,
   type ObjectMeta,
-  type ObjectStoreV2,
-  type ObjectStoreProviderV2,
-  type PutObjectInput,
+  type ObjectStore,
+  type ObjectStoreProvider,
   type SignedUrl,
   type SignedUrlRequest,
   type WriteOptions,
-  compareEntryKeys,
+  compareListingNames,
 } from './object-store.js';
 import { resolveRange, toNodeReadable, toWebStream } from './streams.js';
 
@@ -43,16 +45,9 @@ export interface GcsStoredObject {
   readonly etag: string;
 }
 
-export interface GcsObjectContent extends GcsStoredObject {
-  readonly body: Uint8Array;
-}
-
 /** The narrow Google Storage protocol used by the backend; tests provide an offline fake. */
 export interface GcsClient {
-  write(name: string, input: PutObjectInput): Promise<void>;
-  read(name: string): Promise<GcsObjectContent | null>;
   delete(name: string): Promise<void>;
-  list(prefix: string): Promise<readonly GcsStoredObject[]>;
   copy(sourceName: string, destinationName: string): Promise<void>;
   head(name: string): Promise<GcsStoredObject | null>;
   /** The whole object's metadata and the bytes of `range` (all of them when omitted). */
@@ -97,7 +92,28 @@ export interface GcsObjectStoreConfig {
   readonly accessToken?: string;
   /** Total retry deadline for each native client operation, in milliseconds. */
   readonly timeoutMs?: number;
+  /**
+   * `false` skips the one-object listing an open otherwise makes. A connection store sets it, so
+   * the bucket's refusal shows, with its status, at the connection's first listing of an allowed
+   * folder, as it does on S3.
+   */
+  readonly checkBucketOnOpen?: boolean;
+  /**
+   * The JSON API origin the client dials, such as `http://127.0.0.1:4443`; absent means Google's.
+   * Tests point a store at a local server with it. Requests keep the config's credentials.
+   */
+  readonly apiEndpoint?: string;
+  /**
+   * `true` refuses the open with {@link GcsEndpointForbiddenError} when the client the SDK builds
+   * would dial anything but `apiEndpoint`, or Google's own API host without one. The SDK reads
+   * `STORAGE_EMULATOR_HOST` by itself, so a connection store sets it: a customer connection must
+   * never reach an unchecked host.
+   */
+  readonly requireApiEndpoint?: boolean;
 }
+
+/** Google's JSON API host in the default universe, which a GCS config dials without `apiEndpoint`. */
+const GOOGLE_API_ENDPOINT = 'https://storage.googleapis.com';
 
 interface GcsServiceAccountCredentials {
   readonly client_email: string;
@@ -113,6 +129,10 @@ export async function gcsStorageOptions(config: GcsObjectStoreConfig) {
   return {
     ...(projectId === undefined || projectId === '' ? {} : { projectId }),
     ...(config.credentials === undefined ? {} : { credentials: config.credentials }),
+    // A custom endpoint drops auth unless asked to keep it.
+    ...(config.apiEndpoint === undefined
+      ? {}
+      : { apiEndpoint: config.apiEndpoint, useAuthWithCustomEndpoint: true }),
     ...(config.accessToken === undefined
       ? {}
       : { authClient: await accessTokenClient(config.accessToken) }),
@@ -138,15 +158,6 @@ function nativeListingPrefix(prefix: string): string {
   return `${toObjectPrefix(prefix.slice(0, -1))}/`;
 }
 
-function toContent(object: GcsObjectContent): ObjectContent {
-  return {
-    body: object.body,
-    contentType: object.contentTypeKnown ? object.contentType : null,
-    sizeBytes: object.sizeBytes,
-    lastModified: object.lastModified,
-  };
-}
-
 function toFileEntry(object: GcsStoredObject, prefixLength: number): ObjectListEntry {
   return {
     kind: 'file',
@@ -158,7 +169,7 @@ function toFileEntry(object: GcsStoredObject, prefixLength: number): ObjectListE
 }
 
 /** Raw native GCS backend. Tenant scoping is added by {@link createGcsObjectStoreProvider}. */
-export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStoreV2 {
+export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStore {
   const prefix = storeKeyPrefix(options.keyPrefix);
   const sign = options.client.signUrl?.bind(options.client);
   const metaOf = (object: GcsStoredObject): ObjectMeta => ({
@@ -227,59 +238,15 @@ export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStor
         if (safeName === null || safeName === requestedPrefix) continue;
         entries.push(toFileEntry({ ...object, name: safeName }, prefix.length));
       }
-      return { entries: entries.sort(compareEntryKeys), cursor: page.cursor };
-    },
-
-    put(key, input): Promise<void> {
-      return options.client.write(prefixedObjectKey(prefix, key), input);
-    },
-
-    async get(key): Promise<ObjectContent | null> {
-      const object = await options.client.read(prefixedObjectKey(prefix, key));
-      return object === null ? null : toContent(object);
+      // GCS pages by native name, so folder `a` (`a/`) comes after file `a.txt`.
+      return { entries: entries.sort(compareListingNames), cursor: page.cursor };
     },
 
     delete(key): Promise<void> {
       return options.client.delete(prefixedObjectKey(prefix, key));
     },
 
-    async list(key): Promise<readonly ObjectListEntry[]> {
-      const requestedPrefix = prefixedListPrefix(prefix, key);
-      const folders = new Set<string>();
-      const files: ObjectListEntry[] = [];
-      for (const object of await options.client.list(requestedPrefix)) {
-        const safeName = addressableObjectName(object.name);
-        if (safeName === null) continue;
-        if (!safeName.startsWith(requestedPrefix) || safeName === requestedPrefix) continue;
-        const remainder = safeName.slice(requestedPrefix.length);
-        const slash = remainder.indexOf('/');
-        if (slash >= 0) {
-          folders.add(`${requestedPrefix}${remainder.slice(0, slash)}`.slice(prefix.length));
-          continue;
-        }
-        files.push(toFileEntry({ ...object, name: safeName }, prefix.length));
-      }
-      return [
-        ...[...folders].map((folder) => ({ kind: 'folder' as const, key: folder })),
-        ...files,
-      ].sort(compareEntryKeys);
-    },
-
-    async listPrefix(key): Promise<readonly ObjectListEntry[]> {
-      const safe = toObjectPrefix(key);
-      const requestedPrefix = safe === '' ? prefix : `${prefix}${safe}`;
-      const entries: ObjectListEntry[] = [];
-      for (const object of await options.client.list(requestedPrefix)) {
-        const safeName = addressableObjectName(object.name);
-        if (safeName === null) continue;
-        const relative = safeName.slice(prefix.length);
-        if (safe !== '' && relative !== safe && !relative.startsWith(`${safe}/`)) continue;
-        entries.push(toFileEntry({ ...object, name: safeName }, prefix.length));
-      }
-      return entries.sort(compareEntryKeys);
-    },
-
-    copyObject(sourceKey, destinationKey): Promise<void> {
+    copy(sourceKey, destinationKey): Promise<void> {
       return options.client.copy(
         prefixedObjectKey(prefix, sourceKey),
         prefixedObjectKey(prefix, destinationKey),
@@ -288,9 +255,7 @@ export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStor
   };
 }
 
-export function createGcsObjectStoreProvider(
-  options: GcsObjectStoreOptions,
-): ObjectStoreProviderV2 {
+export function createGcsObjectStoreProvider(options: GcsObjectStoreOptions): ObjectStoreProvider {
   return scopedObjectStoreProvider(createGcsObjectStore(options));
 }
 
@@ -298,6 +263,22 @@ function isNotFound(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const code: unknown = Reflect.get(error, 'code');
   return code === 404 || code === '404';
+}
+
+/**
+ * `objects.get` answers 404 for a missing bucket too, told apart only by its message. A bucket
+ * deleted under a store is an outage, not an absent object: a caller must never treat it as one.
+ */
+function isMissingBucket(error: unknown): boolean {
+  if (!isNotFound(error)) return false;
+  const message: unknown = Reflect.get(error as object, 'message');
+  return typeof message === 'string' && /^The specified bucket does not exist/iu.test(message);
+}
+
+/** {@link isNotFound} for an object, rethrowing a missing bucket as its own safe error. */
+function objectNotFound(bucket: Bucket, error: unknown): boolean {
+  if (isMissingBucket(error)) throw new GcsBucketUnavailableError(bucket.name, 'missing');
+  return isNotFound(error);
 }
 
 function sizeOf(metadata: FileMetadata): number {
@@ -350,7 +331,10 @@ function safeGcsError(operation: string, error: unknown): unknown {
   if (
     error instanceof ObjectConflictError ||
     error instanceof RangeNotSatisfiableError ||
-    error instanceof UnsafeObjectKeyError
+    error instanceof SignedUrlUnsupportedError ||
+    error instanceof UnsafeObjectKeyError ||
+    error instanceof GcsBucketUnavailableError ||
+    error instanceof GcsIntegrityError
   ) {
     return error;
   }
@@ -361,7 +345,11 @@ function safeGcsError(operation: string, error: unknown): unknown {
       : 'Google Cloud Storage request failed.',
   );
   cause.name = 'GcsServiceError';
-  return new Error(`Google Cloud Storage ${operation} failed.`, { cause });
+  const failure = new Error(`Google Cloud Storage ${operation} failed.`, { cause });
+  // The status alone, on the error itself, so a caller can tell a refusal from an outage.
+  return Number.isInteger(code) && code >= 100 && code <= 599
+    ? Object.assign(failure, { statusCode: code })
+    : failure;
 }
 
 async function gcsProviderCall<T>(operation: string, call: () => Promise<T>): Promise<T> {
@@ -372,18 +360,93 @@ async function gcsProviderCall<T>(operation: string, call: () => Promise<T>): Pr
   }
 }
 
+/**
+ * The body of a download, failing through {@link safeGcsError}: the media request starts on the
+ * first read, after `readStream` resolved, so its refusal never passes `gcsProviderCall`. Read one
+ * chunk per pull, as {@link toWebStream} does.
+ */
+function safeGcsBody(body: ReadableStream<Uint8Array>): ReadableStream<Uint8Array> {
+  const reader = body.getReader();
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        const next = await reader.read().catch((error: unknown) => {
+          reader.releaseLock();
+          throw safeGcsError('read', error);
+        });
+        if (next.done) {
+          reader.releaseLock();
+          controller.close();
+        } else controller.enqueue(next.value);
+      },
+      async cancel(reason) {
+        try {
+          await reader.cancel(reason);
+        } catch (error) {
+          throw safeGcsError('read', error);
+        } finally {
+          reader.releaseLock();
+        }
+      },
+    },
+    { highWaterMark: 0 },
+  );
+}
+
+/** `body`, passed through one chunk per pull, remembering the error the caller's stream failed with. */
+function watchedBody(body: ReadableStream<Uint8Array> | Uint8Array): {
+  readonly body: ReadableStream<Uint8Array> | Uint8Array;
+  readonly failure: () => { readonly error: unknown } | undefined;
+} {
+  if (body instanceof Uint8Array) return { body, failure: () => undefined };
+  let failure: { readonly error: unknown } | undefined;
+  const reader = body.getReader();
+  return {
+    body: new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          let next: Awaited<ReturnType<typeof reader.read>>;
+          try {
+            next = await reader.read();
+          } catch (error) {
+            failure = { error };
+            throw error;
+          }
+          if (next.done) controller.close();
+          else controller.enqueue(next.value);
+        },
+        cancel(reason) {
+          return reader.cancel(reason);
+        },
+      },
+      { highWaterMark: 0 },
+    ),
+    failure: () => failure,
+  };
+}
+
 function safeGcsClient(client: GcsClient): GcsClient {
   const signUrl = client.signUrl?.bind(client);
   return {
-    write: (name, input) => gcsProviderCall('write', () => client.write(name, input)),
-    read: (name) => gcsProviderCall('read', () => client.read(name)),
     delete: (name) => gcsProviderCall('delete', () => client.delete(name)),
-    list: (prefix) => gcsProviderCall('list', () => client.list(prefix)),
     copy: (source, destination) => gcsProviderCall('copy', () => client.copy(source, destination)),
     head: (name) => gcsProviderCall('head', () => client.head(name)),
-    readStream: (name, range) => gcsProviderCall('read', () => client.readStream(name, range)),
-    writeStream: (name, body, options) =>
-      gcsProviderCall('write', () => client.writeStream(name, body, options)),
+    readStream: async (name, range) => {
+      const found = await gcsProviderCall('read', () => client.readStream(name, range));
+      return found === null ? null : { ...found, body: safeGcsBody(found.body) };
+    },
+    writeStream: async (name, body, options) => {
+      const watched = watchedBody(body);
+      try {
+        return await client.writeStream(name, watched.body, options);
+      } catch (error) {
+        // The caller's own body failed: report that, not the provider error it caused. Only a
+        // provider error can carry the request and its bearer token, so only it is sanitised.
+        const failure = watched.failure();
+        if (failure !== undefined) throw failure.error;
+        throw safeGcsError('write', error);
+      }
+    },
     listPage: (prefix, options) =>
       gcsProviderCall('list page', () => client.listPage(prefix, options)),
     ...(signUrl === undefined
@@ -392,43 +455,47 @@ function safeGcsClient(client: GcsClient): GcsClient {
   };
 }
 
+/**
+ * GCS stored other bytes than the ones sent. The message is fixed and a failed cleanup is kept
+ * as a sanitised cause, so the client's safe-error wrapper passes it on unchanged.
+ */
+class GcsIntegrityError extends Error {
+  public constructor(cleanup: unknown) {
+    super(
+      'Google Cloud Storage stored bytes that differ from the ones sent.',
+      cleanup === undefined ? undefined : { cause: safeGcsError('integrity cleanup', cleanup) },
+    );
+    this.name = 'GcsIntegrityError';
+  }
+}
+
+/**
+ * Remove a mismatched upload only while it is still the generation this write made: a concurrent
+ * writer's newer generation fails the precondition (412) and stays. With no generation to pin,
+ * nothing is deleted. Answers the delete's own failure, for the mismatch error to carry as its cause.
+ */
+async function deleteOwnGeneration(file: File, generation: unknown): Promise<unknown> {
+  const pinned = Number(generation);
+  if (!Number.isSafeInteger(pinned) || pinned <= 0) return undefined;
+  try {
+    await file.delete({ ifGenerationMatch: pinned });
+    return undefined;
+  } catch (error) {
+    const code = Number(errorCode(error));
+    return code === 412 || code === 404 ? undefined : error;
+  }
+}
+
 /** Adapt the official client to the small protocol above; authentication stays ADC-owned. */
 export function createNativeGcsClient(bucket: Bucket): GcsClient {
   return safeGcsClient({
-    async write(name, input): Promise<void> {
-      await bucket.file(toObjectKey(name)).save(input.body, {
-        resumable: false,
-        validation: 'crc32c',
-        metadata:
-          input.contentType === undefined || input.contentType === null
-            ? {}
-            : {
-                contentType: input.contentType,
-                metadata: { [CONTENT_TYPE_KNOWN_METADATA_KEY]: 'true' },
-              },
-      });
-    },
-
-    async read(name): Promise<GcsObjectContent | null> {
-      const file = bucket.file(toObjectKey(name));
-      try {
-        // File#download does not populate File.metadata in @google-cloud/storage 8.x. Fetch the
-        // bytes and metadata concurrently so a successful read never fabricates missing headers.
-        const [[body], [metadata]] = await Promise.all([file.download(), file.getMetadata()]);
-        return { ...metadataFor(file, metadata), body };
-      } catch (error) {
-        if (isNotFound(error)) return null;
-        throw error;
-      }
-    },
-
     async head(name): Promise<GcsStoredObject | null> {
       const file = bucket.file(toObjectKey(name));
       try {
         const [metadata] = await file.getMetadata();
         return metadataFor(file, metadata);
       } catch (error) {
-        if (isNotFound(error)) return null;
+        if (objectNotFound(bucket, error)) return null;
         throw error;
       }
     },
@@ -440,7 +507,7 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
         const [metadata] = await bucket.file(objectName).getMetadata();
         object = metadataFor(bucket.file(objectName), metadata);
       } catch (error) {
-        if (isNotFound(error)) return null;
+        if (objectNotFound(bucket, error)) return null;
         throw error;
       }
       const served = resolveRange(range, object.sizeBytes);
@@ -463,16 +530,24 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
               ? undefined
               : generationFromEtag(options.ifMatch);
         const hasContentType = options.contentType !== undefined && options.contentType !== null;
+        // MD5, not CRC32C: the SDK's CRC32C transform grew the process RSS by about 25 MiB more
+        // over a 1 GiB stream to a slow server (61 MiB against 35 MiB without validation; MD5 39),
+        // which broke the 64 MiB flat-memory budget on CI (the storage design, §07 "Load test").
+        // A single-request upload is a non-composite object, so GCS returns its md5Hash to check.
+        // Resumable is no better: 8 MiB chunks measured 178 MiB. The hash is taken here, not by
+        // the SDK's `validation`, because the SDK deletes a mismatch with no precondition.
+        const md5 = createHash('md5');
         await pipeline(
           source,
-          // MD5, not CRC32C: the SDK's CRC32C transform grew the process RSS by about 25 MiB more
-          // over a 1 GiB stream to a slow server (61 MiB against 35 MiB without validation; MD5 39),
-          // which broke the 64 MiB flat-memory budget on CI (the storage design, §07 "Load test").
-          // A single-request upload is a non-composite object, so GCS returns its md5Hash to check.
-          // Resumable is no better: 8 MiB chunks measured 178 MiB.
+          new Transform({
+            transform(chunk: Buffer, _encoding, callback) {
+              md5.update(chunk);
+              callback(null, chunk);
+            },
+          }),
           file.createWriteStream({
             resumable: false,
-            validation: 'md5',
+            validation: false,
             ...(generation === undefined
               ? {}
               : { preconditionOpts: { ifGenerationMatch: generation } }),
@@ -485,8 +560,14 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
           }),
         );
         // The simple upload's response, so the generation is this write's, not a later writer's.
-        return metadataFor(file, file.metadata);
+        const written = file.metadata;
+        if (written.md5Hash !== md5.digest('base64')) {
+          throw new GcsIntegrityError(await deleteOwnGeneration(file, written.generation));
+        }
+        return metadataFor(file, written);
       } catch (error) {
+        // The caller's own body failed: report that, not the upload error it caused.
+        if (source.errored !== null) throw source.errored;
         const code = errorCode(error);
         throw code === 412 || code === '412' ? new ObjectConflictError() : error;
       } finally {
@@ -525,16 +606,6 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
       }
     },
 
-    async list(prefix): Promise<readonly GcsStoredObject[]> {
-      const [files] = await bucket.getFiles({ prefix: nativeListingPrefix(prefix) });
-      const objects: GcsStoredObject[] = [];
-      for (const file of files) {
-        if (addressableObjectName(file.name) === null) continue;
-        objects.push(metadataFor(file, file.metadata));
-      }
-      return objects;
-    },
-
     async signUrl(name, request): Promise<SignedUrl> {
       const writes = request.method === 'PUT';
       const hasContentType =
@@ -546,11 +617,20 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
           : {}),
       };
       const now = request.now ?? new Date();
+      const expires =
+        now.getTime() + (request.expiresInSeconds ?? PRESIGNED_URL_DEFAULT_TTL_SECONDS) * 1_000;
+      // The SDK refuses an expiry before this host's clock, so a window that is already over gets
+      // the typed refusal rather than an SDK error; S3 and Azure sign it and the provider refuses
+      // the fetch instead.
+      if (expires <= Date.now()) {
+        throw new SignedUrlUnsupportedError('The signed link would already have expired.');
+      }
       const [url] = await bucket.file(toObjectKey(name)).getSignedUrl({
         version: 'v4',
         action: writes ? 'write' : 'read',
-        expires:
-          now.getTime() + (request.expiresInSeconds ?? PRESIGNED_URL_DEFAULT_TTL_SECONDS) * 1_000,
+        // The window starts at the requested instant, as on S3 and Azure, not at this host's clock.
+        accessibleAt: now,
+        expires,
         extensionHeaders,
         ...(hasContentType ? { contentType: request.contentType } : {}),
         ...(request.responseContentType === undefined
@@ -591,17 +671,47 @@ export class GcsBucketUnavailableError extends Error {
   }
 }
 
+/** The client the SDK built would dial a host other than Google's; no request was made. */
+export class GcsEndpointForbiddenError extends Error {
+  public constructor() {
+    super('The Google Cloud Storage client is not pointed at its configured API endpoint.');
+    this.name = 'GcsEndpointForbiddenError';
+  }
+}
+
+/**
+ * Tests only, through `@agent-workspace/core/storage/backends` (the storage design, §07 "Load
+ * test"): a new, empty bucket on the fake-gcs-server at `apiEndpoint`, such as
+ * `http://127.0.0.1:4443`, so a caller outside this package needs no Google Cloud dependency of
+ * its own.
+ */
+export async function createFakeGcsObjectStore(apiEndpoint: string): Promise<EmulatorObjectStore> {
+  const { Storage } = await import('@google-cloud/storage');
+  const storage = new Storage({ apiEndpoint, projectId: 'aw-emulator' });
+  const [bucket] = await storage.createBucket(`aw-${randomUUID()}`);
+  return {
+    provider: createGcsObjectStoreProvider({ client: createNativeGcsClient(bucket) }),
+    teardown: async () => {
+      await bucket.deleteFiles({ force: true });
+      await bucket.delete();
+    },
+    plantRaw: async (name, bytes) => {
+      await bucket.file(name).save(Buffer.from(bytes), { resumable: false });
+    },
+  };
+}
+
 /** Construct a scoped native GCS provider and fail readiness when the bucket is unavailable. */
 export async function createGcsObjectStoreProviderFromConfig(
   config: GcsObjectStoreConfig,
-): Promise<ObjectStoreProviderV2> {
+): Promise<ObjectStoreProvider> {
   return scopedObjectStoreProvider(await createGcsObjectStoreFromConfig(config));
 }
 
 /** The same store, unscoped: workspace-agnostic names under `config.keyPrefix`. */
 export async function createGcsObjectStoreFromConfig(
   config: GcsObjectStoreConfig,
-): Promise<ObjectStoreV2> {
+): Promise<ObjectStore> {
   const bucketName = config.bucket.trim();
   if (bucketName === '') throw new Error('A GCS object store requires a non-empty bucket name.');
   if (config.accessToken !== undefined && (config.projectId?.trim() ?? '') === '') {
@@ -612,22 +722,36 @@ export async function createGcsObjectStoreFromConfig(
   }
   const { Storage } = await import('@google-cloud/storage');
   const storage = new Storage(await gcsStorageOptions(config));
+  const endpoint = config.apiEndpoint ?? GOOGLE_API_ENDPOINT;
+  if (
+    config.requireApiEndpoint === true &&
+    (storage.apiEndpoint !== endpoint || storage.baseUrl !== `${endpoint}/storage/v1`)
+  ) {
+    throw new GcsEndpointForbiddenError();
+  }
   const bucket = storage.bucket(bucketName);
-  try {
-    // List one object instead of `bucket.exists()`: that call is `storage.buckets.get`, which the
-    // roles a customer grants (Object Viewer, Object User) and the platform's objectAdmin lack.
-    // `storage.objects.list` is in all of them.
-    const prefix = storeKeyPrefix(config.keyPrefix);
-    await bucket.getFiles({
-      maxResults: 1,
-      autoPaginate: false,
-      ...(prefix === '' ? {} : { prefix }),
-    });
-  } catch (error) {
-    if ((error as { code?: unknown }).code === 404) {
-      throw new GcsBucketUnavailableError(bucketName, 'missing');
+  if (config.checkBucketOnOpen !== false) {
+    try {
+      // List one object instead of `bucket.exists()`: that call is `storage.buckets.get`, which the
+      // roles a customer grants (Object Viewer, Object User) and the platform's objectAdmin lack.
+      // `storage.objects.list` is in all of them.
+      const prefix = storeKeyPrefix(config.keyPrefix);
+      await bucket.getFiles({
+        maxResults: 1,
+        autoPaginate: false,
+        ...(prefix === '' ? {} : { prefix }),
+      });
+    } catch (error) {
+      if ((error as { code?: unknown }).code === 404) {
+        throw new GcsBucketUnavailableError(bucketName, 'missing');
+      }
+      // The SDK error keeps its request and bearer token; only its HTTP status is kept as the cause.
+      throw new GcsBucketUnavailableError(
+        bucketName,
+        'unreachable',
+        safeGcsError('bucket check', error),
+      );
     }
-    throw new GcsBucketUnavailableError(bucketName, 'unreachable', error);
   }
   const client = createNativeGcsClient(bucket);
   // A token is no key to sign with: the SDK would ask the metadata server for the deployment's own

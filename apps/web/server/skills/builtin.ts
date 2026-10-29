@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 import { isBuiltinSkillName, SKILL_MD_FILENAME } from '@indx-workspace/contracts/skills';
 import type { BuiltinSkillName } from '@indx-workspace/contracts/skills';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import type { SkillObjects } from '../storage/store';
 
 import { withSkillMetaColumn } from './meta-column';
@@ -87,7 +88,7 @@ async function installedDigest(
   const recorded = row?.builtinDigest ?? null;
   if (recorded !== null) return recorded;
   // storage-bridge(#1699): read `skill-builtin/<name>.json` until the marker objects are removed (#1676)
-  const marker = await store.get(skillBuiltinMarkerKey(name));
+  const marker = await readWhole(store, skillBuiltinMarkerKey(name));
   if (marker === null) return null;
   let digest: unknown;
   try {
@@ -117,7 +118,9 @@ async function ensureOne(
     })),
   };
 
-  if ((await store.get(skillMetaKey(name))) === null) {
+  // An existence test that reads the record whole: `head` bypasses the meta-column view, so it
+  // would miss a record held only in the column.
+  if ((await readWhole(store, skillMetaKey(name))) === null) {
     if ((await skillSyncContext(store, catalog)).pendingDeletes.has(name)) return;
     let imported = await importSkillWithId(store, catalog, principal, { name, ...body }, rows);
     // 409 with no SKILL.md: a crashed import left its reserved row and no files. That row must not

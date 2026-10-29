@@ -28,14 +28,16 @@
  *   * **There is no metadata JSONB — with one narrow, typed exception.** §36's own first
  *     instruction after the list is "Do not log secrets", and a free-form blob on an audit row is
  *     where a request body ends up. Anything §36 does not name is not recorded. The exception is
- *     `details`: it holds ONLY `AgentCreatedAuditDetails` (issue #1847), is validated by that
- *     strict contracts schema before every write, and a CHECK refuses it on any other action. It
- *     is never a request body or a secret.
+ *     `details`: it holds ONLY `AgentCreatedAuditDetails` (issue #1847) on an `agent-created` row
+ *     or `AgentChangedAuditDetails` (issue #1851) on an `agent-changed` row, is validated by that
+ *     action's strict contracts schema before every write, and a CHECK refuses it on any other
+ *     action. It is never a request body or a secret. The constraint keeps its first name.
  *
  * The row is immutable, so it has `created_at` and no `updated_at`.
  */
 import {
   AUDIT_ACTIONS,
+  type AgentChangedAuditDetails,
   type AgentCreatedAuditDetails,
   type AuditAction,
 } from '@indx-workspace/contracts/observability';
@@ -72,8 +74,8 @@ export const auditEvents = pgTable(
     subjectId: text('subject_id'),
     /** §36's "Customer Support Agent". The subject's name at the time. */
     subjectLabel: text('subject_label').notNull(),
-    /** Only an `agent-created` row has details; see the header and the CHECK below. */
-    details: jsonb('details').$type<AgentCreatedAuditDetails>(),
+    /** Only an `agent-created` or `agent-changed` row has details; see the header and the CHECK below. */
+    details: jsonb('details').$type<AgentCreatedAuditDetails | AgentChangedAuditDetails>(),
     createdAt: createdAt(),
   },
   (table) => [
@@ -92,9 +94,10 @@ export const auditEvents = pgTable(
       name: 'audit_events_actor_principal_workspace_fk',
     }),
     oneOf('audit_events_action_valid', table.action, AUDIT_ACTIONS),
+    // The name is the first one (issue #1847); the body now also admits `agent-changed` (#1851).
     check(
       'audit_events_details_only_agent_created',
-      sql`${table.details} is null or ${table.action} = 'agent-created'`,
+      sql`${table.details} is null or ${table.action} = 'agent-created' or ${table.action} = 'agent-changed'`,
     ),
     check('audit_events_actor_label_not_blank', sql`length(btrim(${table.actorLabel})) > 0`),
     check('audit_events_subject_label_not_blank', sql`length(btrim(${table.subjectLabel})) > 0`),

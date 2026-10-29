@@ -255,6 +255,7 @@
               "reference/contracts/endpoint-clients",
               "reference/contracts/engines",
               "reference/contracts/evaluations",
+              "reference/contracts/features",
               "reference/contracts/feedback",
               "reference/contracts/files",
               "reference/contracts/identity-assertion",

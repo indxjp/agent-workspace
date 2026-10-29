@@ -23,9 +23,11 @@
 import { formatInUseReferrer, type InUseReferrer } from '@indx-workspace/contracts';
 
 import {
+  isStorageConnectionSecretName,
   isUuid,
   parseCreateSecretBody,
   parseReplaceSecretBody,
+  storageConnectionIdOf,
   toSecretResource,
   type SecretResource,
 } from './contract';
@@ -55,6 +57,14 @@ export async function createSecret(
       'invalid_body',
       'The secret could not be created from this body.',
       parsed.errors,
+    );
+  }
+  // A bare credential under a connection's name would never be bound to the connection's URL.
+  if (isStorageConnectionSecretName(parsed.value.name)) {
+    return problem(
+      409,
+      'secret_name_conflict',
+      'Secret names starting with STORAGE_CONNECTION_ are reserved for storage-connection credentials. Create the connection with POST /api/storage-connections.',
     );
   }
   const outcome = await store.create({
@@ -119,6 +129,8 @@ export async function replaceSecret(
       parsed.errors,
     );
   }
+  const reserved = await reservedSecret(store, id.id);
+  if (reserved !== null) return reserved;
   const outcome = await store.replace(id.id, Buffer.from(parsed.value.value, 'utf8'));
   switch (outcome.kind) {
     case 'replaced':
@@ -154,6 +166,8 @@ export async function deleteSecret(
 ): Promise<ApiResult> {
   const id = requireSecretId(rawId);
   if (!id.ok) return id.result;
+  // A storage connection's credential is refused by the store while its connection exists; an
+  // orphan (left by a failed connection delete) can be removed, which sends no credential anywhere.
   const outcome = await store.remove(id.id);
   switch (outcome.kind) {
     case 'deleted':
@@ -176,6 +190,27 @@ export async function deleteSecret(
       );
     }
   }
+}
+
+/**
+ * `409 secret_in_use` for replacing a storage connection's credential, whether or not the
+ * connection still exists: only `/api/storage-connections` writes one, bound to the connection's
+ * URL. `null` for any other secret.
+ */
+async function reservedSecret(store: WorkspaceSecretsStore, id: string): Promise<ApiResult | null> {
+  const secret = (await store.list()).find((row) => row.id === id);
+  if (secret === undefined || !isStorageConnectionSecretName(secret.name)) return null;
+  const connectionId = storageConnectionIdOf(secret.name);
+  return problem(
+    409,
+    'secret_in_use',
+    'This secret is reserved for a storage connection credential. Rotate it with PUT /api/storage-connections/:id/credential.',
+    secretReferrerDetails({
+      connectorIds: [],
+      modelConnectionIds: [],
+      storageConnectionIds: connectionId === null ? [] : [connectionId],
+    }),
+  );
 }
 
 function secretReferrerDetails(referrers: SecretReferrers): readonly string[] {

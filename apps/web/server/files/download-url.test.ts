@@ -28,7 +28,7 @@ import {
   createInMemoryObjectStoreProvider,
   SignedUrlUnsupportedError,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
   type SignedUrlRequest,
 } from '@agent-workspace/core/storage';
 import {
@@ -153,7 +153,7 @@ function defineSuite(name: string, setup: () => Promise<World>) {
     const legacy = createInMemoryObjectStoreProvider();
 
     /** A signer that spells out the key and request it was asked for, with a runtime-built signature. */
-    function signing<T extends ObjectStoreV2>(store: T, origin: string): T {
+    function signing<T extends ObjectStore>(store: T, origin: string): T {
       return {
         ...store,
         createSignedUrl: (key: string, request: SignedUrlRequest) => {

@@ -15,9 +15,13 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
+  storageObjectName,
   streamToBytes,
   type ObjectStream,
 } from '@agent-workspace/core/storage';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
+
+import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
 
 import { createStorageService, type StorageContext } from './service';
 import type { CatalogPort } from './store';
@@ -35,7 +39,7 @@ interface Fixture {
   readonly workspaceId: string;
   readonly principalId: string;
   readonly userId: string | null;
-  readonly catalog: CatalogPort;
+  readonly catalog: ResourceCatalogRepository;
 }
 
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
@@ -89,13 +93,13 @@ async function postgresFixture(): Promise<Fixture> {
 
 function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixture>) {
   (enabled ? describe : describe.skip)(`open and remove across both namings on the ${name}`, () => {
-    async function harness() {
+    async function harness(wrap: (catalog: CatalogPort) => CatalogPort = (catalog) => catalog) {
       const f = await setup();
       const objects = createInMemoryObjectStore();
       const legacy = createInMemoryObjectStoreProvider();
       const log = { info() {}, warn() {}, error() {}, child: () => log };
       const storage = createStorageService({
-        catalog: () => Promise.resolve(f.catalog),
+        catalog: () => Promise.resolve(wrap(f.catalog)),
         objects,
         legacy: { files: legacy },
         log,
@@ -177,9 +181,10 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       await expect(storage.remove(ctx, 'files', 'old.txt', { recursive: false })).resolves.toEqual({
         ok: true,
         removed: 1,
+        files: ['old.txt'],
       });
 
-      await expect(legacy.forWorkspace(ctx.workspaceId).get('old.txt')).resolves.toBeNull();
+      await expect(readWhole(legacy.forWorkspace(ctx.workspaceId), 'old.txt')).resolves.toBeNull();
       await expect(f.catalog.deleting()).resolves.toEqual([]);
       await expect(f.catalog.get('old.txt')).resolves.toBeNull();
     });
@@ -197,7 +202,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       const row = await f.catalog.get('new.txt');
       if (row === null) throw new Error('the renamed row is missing');
       await expect(textOf(await storage.open(ctx, row))).resolves.toBe('old bytes');
-      await expect(legacy.forWorkspace(ctx.workspaceId).get('old.txt')).resolves.toBeNull();
+      await expect(readWhole(legacy.forWorkspace(ctx.workspaceId), 'old.txt')).resolves.toBeNull();
     });
 
     // @story US-STO-03
@@ -221,7 +226,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
         await expect(textOf(await storage.open(ctx, row))).resolves.toBe(text);
       }
       const store = legacy.forWorkspace(ctx.workspaceId);
-      await expect(store.listPrefix('docs')).resolves.toEqual([]);
+      await expect(listAll(store, 'docs', { recursive: true })).resolves.toEqual([]);
       await expect(objects.head(freshKey)).resolves.not.toBeNull();
     });
 
@@ -237,8 +242,8 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       });
 
       const store = legacy.forWorkspace(ctx.workspaceId);
-      await expect(store.listPrefix('moved')).resolves.toEqual([]);
-      await expect(store.get('docs/a.txt')).resolves.not.toBeNull();
+      await expect(listAll(store, 'moved', { recursive: true })).resolves.toEqual([]);
+      await expect(readWhole(store, 'docs/a.txt')).resolves.not.toBeNull();
       const row = await f.catalog.get('docs/a.txt');
       if (row === null) throw new Error('the legacy row moved');
       await expect(textOf(await storage.open(ctx, row))).resolves.toBe('a');
@@ -261,6 +266,68 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       const held = await f.catalog.get('moved/a.txt');
       if (held === null) throw new Error('the destination row is missing');
       await expect(textOf(await storage.open(ctx, held))).resolves.toBe('held');
+    });
+
+    // @story US-STO-03
+    it('[US-STO-03][unit][sdk] a refused legacy rename never deletes a copy the adopt stage gave a row', async () => {
+      const adopting: { run: () => Promise<unknown> } = { run: () => Promise.resolve() };
+      // The operator's adopt stage finds the row-less copy at the destination between the copy and
+      // the catalog rename, which then finds the destination taken.
+      const { f, ctx, storage, legacy, legacyRow } = await harness((catalog) => ({
+        ...catalog,
+        rename: async (from, to) => {
+          await adopting.run();
+          return catalog.rename(from, to);
+        },
+      }));
+      await legacyRow('old.txt', 'old bytes');
+      adopting.run = () =>
+        f.catalog.adoptLegacyFiles(
+          [{ storageKey: 'adopted.txt', sizeBytes: 9, contentType: null }],
+          f.principalId,
+        );
+
+      await expect(storage.rename(ctx, 'files', 'old.txt', 'adopted.txt')).resolves.toEqual({
+        ok: false,
+        code: 'path_taken',
+      });
+
+      const store = legacy.forWorkspace(ctx.workspaceId);
+      await expect(f.catalog.get('adopted.txt')).resolves.toMatchObject({ objectId: null });
+      await expect(textOf(await store.read('adopted.txt'))).resolves.toBe('old bytes');
+      await expect(textOf(await store.read('old.txt'))).resolves.toBe('old bytes');
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][unit][sdk] removing a switched row keeps its old key when a legacy row now holds it', async () => {
+      const { f, ctx, storage, legacy, objects, legacyRow } = await harness();
+      // The copy stage switched `a.txt` to the new naming; its old object is still at `a.txt`.
+      const switched = await legacyRow('a.txt', 'switched');
+      const objectId = crypto.randomUUID();
+      await objects.write(
+        storageObjectName(ctx.workspaceId, 'files', objectId),
+        bytesOf('switched'),
+        {},
+      );
+      const sha256 = '0'.repeat(64);
+      await expect(f.catalog.switchObject(switched.id, 'a.txt', objectId, sha256)).resolves.toBe(
+        true,
+      );
+      // A rename moves the path only, so the switched row keeps `a.txt` as its key; a one-step
+      // legacy write then puts a new file at the old path, whose bytes are at `a.txt` too.
+      await expect(storage.rename(ctx, 'files', 'a.txt', 'b.txt')).resolves.toMatchObject({
+        ok: true,
+      });
+      const newcomer = await legacyRow('a.txt', 'newcomer');
+
+      await expect(
+        storage.remove(ctx, 'files', 'b.txt', { recursive: false }),
+      ).resolves.toMatchObject({ ok: true });
+
+      await expect(textOf(await storage.open(ctx, newcomer))).resolves.toBe('newcomer');
+      await expect(
+        readWhole(legacy.forWorkspace(ctx.workspaceId), 'a.txt'),
+      ).resolves.not.toBeNull();
     });
 
     // @story US-STO-03

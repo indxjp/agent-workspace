@@ -8,7 +8,7 @@ description: "Describe the agent you want and the Builder drafts it with you: wh
 - **Read this when:** you want to create or change an agent by describing it, in the console or on
   the command line, instead of filling in the form.
 - **You will learn:** what the Builder does, what it always asks you first, how to read the approval
-  card, where to go after a save, and what is planned for agents that build agents.
+  card, where to go after a save, and how an admin lets an agent build agents.
 - **You need:** a workspace where an admin has enabled the `builder` feature, and a role that can
   create agents.
 
@@ -87,22 +87,58 @@ terminal on stdin and stdout. A saved agent is written as `agents/<name>.ts` and
 
 ## Let an agent build agents
 
-<Warning>
+An admin can let a named agent use the Builder's tools, so that it creates narrower specialist
+agents for people. The same `builder` feature switch applies, and no agent has this until the
+deployment names it.
 
-Coming soon: this is not available yet (tracked in #1851). Today only a person, through the Builder,
-can use the Builder's tools. What follows is the design intent, not current behaviour.
+**Allow an agent.** List its exact name under `builder.allow` in the deployment's
+`AW_DEPLOYMENT_POLICY`:
 
-</Warning>
+```json title="illustrative" claim="illustrative"
+{ "builder": { "allow": ["hr-onboarding-coordinator"] } }
+```
 
-The plan is for an agent to be able to use the Builder's tools too, within these limits:
+- Only the deployment's policy grants this. A project's `policy:` never does.
+- A missing `builder` key, an empty list, or a name that is not an exact match allows no agent.
+- Only an Owner or Admin can create an agent with a listed name, or rename one onto it. Anyone else
+  gets `403 builder_name_reserved`.
+- An agent that was made by an agent never gets the tools, even if its name is listed. Its calls
+  are refused `not_allowed_to_build`.
 
-- **Allow-list.** Only agents the deployment policy names may build.
-- **Never wider than the creator.** A draft may not give the new agent more than its creator has.
-- **No building by built agents.** An agent that was made by an agent cannot build in turn. The call
-  is refused as `not_allowed_to_build`.
-- **Daily quota.** Each workspace gets a daily quota of agents created this way.
+**Ask a person before each write.** The gateway refuses `draft_save`, `trial_run` and `evals_run`
+(`approval_required`) until a person approves that exact call. To show the person the approval card,
+list `mcp__aw-control__draft_save`, `mcp__aw-control__trial_run` and `mcp__aw-control__evals_run` in
+the creating agent's `requireApproval`; that setting belongs to the Claude engine.
 
-A person would still approve each save, trial and evaluation, exactly as in the chat.
+**What the server checks.** The model cannot talk its way past these, whatever a document it read
+says:
+
+- **Never wider than the creator.** A draft may not give the new agent more than its creator has:
+  more permissions, file access, connectors, skills or subagents, or looser limits. Settings the
+  check cannot compare must equal the creator's. The refusal is `creator_cannot_widen`, `details`
+  lists each path (such as `definition.agent.permissions.runCommands`), and nothing is saved. A
+  trial or an evaluation may only target an agent that is no wider than the creating agent.
+- **Daily quota.** Each workspace may create 20 agents per UTC day, whoever creates them, people
+  included. The 21st is refused `quota_exceeded`.
+
+**See who made an agent.** An agent made by an agent carries `createdByAgent` (the creating agent,
+its version and the run) in the API, the SDK and `aw agents get`. A person-made agent has none. The
+`agent-created` audit row names the creating agent.
+
+**Cap the spend.** `maxCostPerDayUsd` in the same policy caps model spend per UTC day for the whole
+workspace, not only for these agents. A run start over the cap is refused `429
+daily_cost_cap_reached`, and a run in progress ends at its next model call.
+
+**Unused agents are archived.** An agent made by an agent, 30 days old and with no run in the last
+30 days, is archived automatically. A person-made agent never is. An archived agent refuses every
+run start with `409 agent_archived`, and is left out of the agent list unless you ask for it
+(`GET /api/agents?archived=include`, or `agents.list({ archived: 'include' })` in the SDK).
+
+**Restore an archived agent.** Call `POST /api/agents/:id/restore` (no body), `agents.restore(id)` in
+the SDK, or run `aw agents restore <id>`. The Owner, an Admin or the agent's owner may restore it.
+The agent is skipped by the archive sweep for 30 days after a restore. In the console, an archived
+agent's page shows an Archived badge and, to anyone allowed to restore it, a Restore button; the
+agent list hides archived agents unless you tick Show archived.
 
 To drive the Builder from an outside MCP client such as Claude Code, see
 [Use the Builder tools from Claude Code](/guides/builder-tools-from-claude-code).

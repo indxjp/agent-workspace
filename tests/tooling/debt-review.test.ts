@@ -1,4 +1,7 @@
 // scripts/ci/debt-review.mjs (audit W4-3): the quarterly review issue body.
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,6 +12,35 @@ import {
   render,
   reviewDates,
 } from '../../scripts/ci/debt-review.mjs';
+
+/**
+ * The tree's well-formed `storage-bridge` markers, counted by `git grep` rather than the script's
+ * own file walk, outside the files that define the convention and the internal tree.
+ */
+function markersByGitGrep(): number {
+  const result = spawnSync(
+    'git',
+    [
+      'grep',
+      '-I',
+      '-h',
+      '-E',
+      'storage-bridge\\(#[0-9]+\\): [^[:space:]]',
+      '--',
+      '.',
+      ':(exclude)internal',
+      ':(exclude)ENGINEERING_GUIDELINES.md',
+      ':(exclude)scripts/ci/debt-review.mjs',
+      ':(exclude)tests/storage-bridges.test.ts',
+      ':(exclude)tests/tooling/debt-review.test.ts',
+    ],
+    { encoding: 'utf8', maxBuffer: 64 << 20 },
+  );
+  // git grep exits 1 when nothing matches, which is the count once the last bridge goes.
+  if (result.status === 1) return 0;
+  if (result.status !== 0) throw new Error(`git grep failed: ${result.stderr}`);
+  return result.stdout.split('\n').filter((line) => line !== '').length;
+}
 
 describe('debt-review', () => {
   it('maps a date to its quarter', () => {
@@ -67,8 +99,11 @@ describe('debt-review', () => {
 
   it('shows the storage-bridge markers row', () => {
     const m = measure('2027-01-18');
-    expect(m.storageBridges).toBeGreaterThan(0);
+    // The count reaches 0 when the last bridge goes (#1703); the row stays, reading 0. It is still
+    // the count of the tree's markers, so a scan that stops reading files cannot pass as 0.
+    expect(m.storageBridges).toBe(markersByGitGrep());
     expect(render({ ...m, storageBridges: 3 })).toContain('| `storage-bridge` markers | 3 |');
+    expect(render({ ...m, storageBridges: 0 })).toContain('| `storage-bridge` markers | 0 |');
   });
 
   it('shows the storage-limits allowlist row', () => {
@@ -93,5 +128,13 @@ describe('debt-review', () => {
     expect(render({ ...m, routeBoundaryAllowlist: 7 })).toContain(
       '| route-error-boundary allowlist entries | 7 |',
     );
+  });
+
+  it('documents every JSON baseline it measures', () => {
+    const script = readFileSync('scripts/ci/debt-review.mjs', 'utf8');
+    const doc = readFileSync('docs/operations/debt-review.md', 'utf8');
+    const measured = [...script.matchAll(/\bjson\('([^']+)'\)/gu)].map((match) => match[1]);
+    expect(measured).toContain('tests/fitness/storage-limits-allowlist.json');
+    expect(measured.filter((file) => !doc.includes(`\`${file ?? ''}\``))).toEqual([]);
   });
 });

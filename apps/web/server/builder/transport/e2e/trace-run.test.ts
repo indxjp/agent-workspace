@@ -28,7 +28,6 @@ afterAll(async () => {
 describe('[US-BLD-04][api][run] the journalled trace id is minted by the server', () => {
   it('a forged inbound traceparent is not the trace id of the journal row', async () => {
     const door = builderDoor({
-      featureOn: true,
       scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
     });
     const { runId, token } = await door.start({ role: 'builder' }, 'scripted:trace');

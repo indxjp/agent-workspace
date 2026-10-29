@@ -18,7 +18,13 @@ import {
   connectorKindOf,
   isMcpConnectorResource,
 } from './connectors.js';
-import { OPENAPI_DOCUMENT_MAX_BYTES, TOOL_CONNECTOR_PROBLEM_CODES } from './tool-connectors.js';
+import { ConnectorIdentitySchema } from './identity-assertion.js';
+import { ProjectConnectorSchema } from './project-file.js';
+import {
+  CreateOpenApiConnectorRequestSchema,
+  OPENAPI_DOCUMENT_MAX_BYTES,
+  TOOL_CONNECTOR_PROBLEM_CODES,
+} from './tool-connectors.js';
 import { CONTRACTS_VERSION, judgeContractsVersion, parseContractsVersion } from './version.js';
 
 const remote = {
@@ -305,6 +311,45 @@ describe('ConnectorResourceSchema', () => {
     ]) {
       expect(ConnectorResourceSchema.safeParse({ ...remote, identity: bad }).success).toBe(false);
     }
+  });
+});
+
+// @story US-STO-12
+describe('a storage connection credential as the identity secret', () => {
+  const reserved = { secret: 'STORAGE_CONNECTION_77777777777747778777777777777777' };
+
+  it('[US-STO-12][unit][sdk] still reads a legacy connector response that carries one', () => {
+    expect(ConnectorResourceSchema.parse({ ...remote, identity: reserved }).identity).toStrictEqual(
+      reserved,
+    );
+    expect(
+      ConnectorListResponseSchema.parse({ connectors: [{ ...remote, identity: reserved }] })
+        .connectors[0]?.identity,
+    ).toStrictEqual(reserved);
+  });
+
+  it('[US-STO-12][unit][sdk] refuses one in every input: connector create and PATCH, tool connectors and the project file', () => {
+    expect(ConnectorIdentitySchema.safeParse(reserved).success).toBe(false);
+    expect(ConnectorUpdateRequestSchema.safeParse({ identity: reserved }).success).toBe(false);
+    expect(
+      CreateOpenApiConnectorRequestSchema.safeParse({
+        kind: 'openapi',
+        name: 'erp',
+        document: '{"openapi":"3.1.0","info":{"title":"Orders","version":"1"},"paths":{}}',
+        allow: ['GET /**'],
+        identity: reserved,
+      }).success,
+    ).toBe(false);
+    expect(
+      ProjectConnectorSchema.safeParse({ url: 'https://mcp.example.com/mcp', identity: reserved })
+        .success,
+    ).toBe(false);
+    expect(
+      ProjectConnectorSchema.safeParse({
+        url: 'https://mcp.example.com/mcp',
+        identity: { secret: 'IDENTITY_KEY' },
+      }).success,
+    ).toBe(true);
   });
 });
 

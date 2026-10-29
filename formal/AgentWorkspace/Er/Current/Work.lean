@@ -48,7 +48,7 @@ def workTables : List TableName :=
   [.projects, .sessions, .sessionTranscripts, .sessionMessages, .sessionStateStreams,
     .sessionStateEntries, .sessionStateBlobs, .runs, .runEvents, .runFeedback, .runTokens,
     .runUsageRecords, .auditEvents, .surfaceSessionKeys, .triggers, .triggerDeliveries,
-    .storageMigrationRuns, .builderToolCalls]
+    .storageMigrationRuns, .builderToolCalls, .workspaceFeatures]
 
 /-! ## Audit events -/
 
@@ -66,7 +66,7 @@ inductive AuditAction where
   | oauthGrantRevoked | fileUploaded | fileDownloaded | fileLinkCreated | fileMoved | fileDeleted
   | storageConnectionCreated | storageConnectionUpdated | storageConnectionDeleted
   | storageConnectionCredentialChanged | storageConnectionTested | storageConnectionWritten
-  | storageGrantChanged
+  | storageGrantChanged | workspaceFeaturesChanged
   deriving DecidableEq, Repr, Inhabited
 
 namespace AuditAction
@@ -114,6 +114,7 @@ def toWire : AuditAction → String
   | storageConnectionTested => "storage-connection-tested"
   | storageConnectionWritten => "storage-connection-written"
   | storageGrantChanged => "storage-grant-changed"
+  | workspaceFeaturesChanged => "workspace-features-changed"
 
 instance : WireEnum AuditAction where
   all := [userCreated, userDeleted, agentChanged, agentCreated, providerCredentialChanged,
@@ -125,7 +126,7 @@ instance : WireEnum AuditAction where
     oauthGrantRevoked, fileUploaded, fileDownloaded, fileLinkCreated, fileMoved, fileDeleted,
     storageConnectionCreated, storageConnectionUpdated, storageConnectionDeleted,
     storageConnectionCredentialChanged, storageConnectionTested, storageConnectionWritten,
-    storageGrantChanged]
+    storageGrantChanged, workspaceFeaturesChanged]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -387,7 +388,7 @@ def workCheck : String → Option (Row → Bool)
   | "run_usage_records_counters_non_negative" => some countersNonNegative
   | "run_usage_records_currency_usd" => some fun r => (r.get "cost_currency").all (· == "USD")
   | "audit_events_details_only_agent_created" => some fun r =>
-    (r.get "details").isNone || (r.get "action").all (· == "agent-created")
+    (r.get "details").isNone || (r.get "action").all (fun a => a == "agent-created" || a == "agent-changed")
   | "audit_events_actor_label_not_blank" => some fun r => (r.get "actor_label").all hasNonSpace
   | "audit_events_subject_label_not_blank" => some fun r =>
     (r.get "subject_label").all hasNonSpace
@@ -445,7 +446,7 @@ def workCheckSql : List (String × String) :=
       "\"run_usage_records\".\"input_tokens\" >= 0 and \"run_usage_records\".\"output_tokens\" >= 0 and \"run_usage_records\".\"cache_read_input_tokens\" >= 0 and \"run_usage_records\".\"cache_creation_input_tokens\" >= 0 and \"run_usage_records\".\"tool_calls\" >= 0 and \"run_usage_records\".\"cost_usd\" >= 0"),
     ("run_usage_records_currency_usd", "\"run_usage_records\".\"cost_currency\" = 'USD'"),
     ("audit_events_details_only_agent_created",
-      "\"audit_events\".\"details\" is null or \"audit_events\".\"action\" = 'agent-created'"),
+      "\"audit_events\".\"details\" is null or \"audit_events\".\"action\" = 'agent-created' or \"audit_events\".\"action\" = 'agent-changed'"),
     ("audit_events_actor_label_not_blank", "length(btrim(\"audit_events\".\"actor_label\")) > 0"),
     ("audit_events_subject_label_not_blank",
       "length(btrim(\"audit_events\".\"subject_label\")) > 0"),

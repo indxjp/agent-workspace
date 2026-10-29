@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { StorageConnectionBrowseEntry, StorageConnectionResource } from '@indx-workspace/sdk';
 
 import type { AgentResourceAssignments } from '../../contracts/agents';
 import { browserClient } from '../../lib/browser-client';
 
 import {
+  grantFocusedAfterRemoval,
+  grantKey,
   removeStorageGrant,
   saveStorageGrant,
   storageGrantPath,
@@ -17,7 +19,7 @@ import { storageProblemMessage } from './storage-model';
 const CONTROL =
   'rounded-(--radius-sm) border border-border-strong bg-surface px-2 py-1 text-[12.5px] text-text focus:border-accent focus:outline-2 focus:-outline-offset-1 focus:outline-accent';
 const BTN_SM =
-  'rounded-(--radius-sm) border border-border-strong bg-surface px-2 py-1 text-[12px] font-medium text-text disabled:pointer-events-none disabled:opacity-45';
+  'rounded-(--radius-sm) border border-border-strong bg-surface px-2 py-1 text-[12px] font-medium text-text disabled:pointer-events-none disabled:opacity-45 aria-disabled:pointer-events-none aria-disabled:opacity-45';
 const ROW =
   'flex flex-wrap items-center gap-2 border-b border-border py-2 text-[13px] last:border-b-0';
 
@@ -71,30 +73,53 @@ export function StorageGrantList({
   grants,
   connections,
   listRef,
+  focusWhenEmpty,
   onChanged,
 }: Readonly<{
   agentId: string;
   grants: StorageGrants;
   connections: StorageConnectionsState;
   listRef?: RefObject<HTMLUListElement | null>;
-  /** The agent's assignments after a grant was removed; the caller moves focus to a stable control. */
+  /** Takes focus when the removed grant was the last one, so focus never falls to the page. */
+  focusWhenEmpty: RefObject<HTMLElement | null>;
+  /** The agent's assignments after a grant was removed. */
   onChanged: (next: AgentResourceAssignments) => void;
 }>) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  // After a removal: the key of the grant to focus, `null` for "none is left", `undefined` for idle.
+  const [focusAfter, setFocusAfter] = useState<string | null | undefined>(undefined);
+  const ownListRef = useRef<HTMLUListElement>(null);
+  const list = listRef ?? ownListRef;
+
+  // Runs once the list shows the saved grants: the removed row's button is gone by then, and
+  // focus would otherwise fall to the page.
+  useEffect(() => {
+    if (focusAfter === undefined) return;
+    setFocusAfter(undefined);
+    const row = Array.from(list.current?.children ?? []).find(
+      (candidate) =>
+        candidate instanceof HTMLElement && candidate.dataset['grantPath'] === focusAfter,
+    );
+    const target = row?.querySelector('button') ?? row;
+    if (target instanceof HTMLElement) target.focus();
+    else focusWhenEmpty.current?.focus();
+  }, [focusAfter, list, focusWhenEmpty]);
+
   if (grants.length === 0) return null;
 
-  async function remove(connection: StorageConnectionResource, prefix: string) {
-    setRemoving(`${connection.id}/${prefix}`);
+  async function remove(connection: StorageConnectionResource, key: string, prefix: string) {
+    if (removing !== null) return;
+    setRemoving(key);
     setProblem(null);
     try {
-      onChanged(
-        await removeStorageGrant(
-          browserClient(),
-          agentId,
-          storageGrantPath(connection.name, prefix),
-        ),
+      const next = await removeStorageGrant(
+        browserClient(),
+        agentId,
+        storageGrantPath(connection.name, prefix),
       );
+      onChanged(next);
+      setFocusAfter(grantFocusedAfterRemoval(grants, key, next.storageGrants));
     } catch (error) {
       setProblem(storageProblemMessage(error, 'The grant could not be removed.'));
     } finally {
@@ -107,9 +132,9 @@ export function StorageGrantList({
       {connections.kind === 'failed' ? (
         <p className="text-[12.5px] text-danger">{connections.reason}</p>
       ) : null}
-      <ul aria-label="Connected storage grants" ref={listRef}>
+      <ul aria-label="Connected storage grants" ref={list}>
         {grants.map((grant) => {
-          const path = `${grant.connectionId}/${grant.prefix}`;
+          const path = grantKey(grant);
           const label = grantLabel(connections, grant.connectionId, grant.prefix);
           const connection =
             connections.kind === 'ready'
@@ -126,9 +151,11 @@ export function StorageGrantList({
                   type="button"
                   className={BTN_SM}
                   aria-label={`Remove ${label}`}
-                  disabled={removing !== null}
+                  // Not `disabled`: the pressed button keeps focus while the removal is in flight,
+                  // and keeps it if the removal is refused.
+                  aria-disabled={removing !== null}
                   onClick={() => {
-                    void remove(connection, grant.prefix);
+                    void remove(connection, path, grant.prefix);
                   }}
                 >
                   Remove

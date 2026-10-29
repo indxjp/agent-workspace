@@ -230,6 +230,10 @@ npm run dev                  # aw dev
 If the variable is unset, `aw dev` prints a notice and skips that tool; if its value changed since
 the last start, it rotates the credential.
 
+A tool's secrets, and a connector's `identity` secret, can never be a storage connection's
+credential: a name that starts with `STORAGE_CONNECTION_` is refused when the tool is pushed or the
+version is saved, and is never read for a run.
+
 <Accordion title="How secret() is stored and withheld">
 
 A name is `A-Z` first, then `A-Z`, `0-9` or `_`, at most 128 characters. Names the local runtime

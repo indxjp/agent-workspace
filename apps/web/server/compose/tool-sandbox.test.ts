@@ -93,6 +93,24 @@ describe('buildToolSandboxRequest', () => {
     expect(message).toContain('STRIPE_KEY');
   });
 
+  // @story US-STO-12
+  it('[US-STO-12][unit][run] never reads a storage connection credential a stored version declares, and fails as missing', async () => {
+    const name = 'STORAGE_CONNECTION_77777777777747778777777777777777';
+    const reads: string[] = [];
+    const message = await refusal(
+      buildToolSandboxRequest('run-1', [bundle({ secrets: [name] })], {
+        ...sources(),
+        // The secret exists: a version stored before the contracts refused the name reaches here.
+        secret: (secret) => {
+          reads.push(secret);
+          return Promise.resolve('{"target":"x","credential":{}}');
+        },
+      }),
+    );
+    expect(message).toContain('code_tool_secret_missing');
+    expect(reads).toEqual([]);
+  });
+
   it('fails the run naming a tool whose bundle is gone', async () => {
     const message = await refusal(
       buildToolSandboxRequest('run-1', [bundle({ digest: OTHER_DIGEST })], sources()),

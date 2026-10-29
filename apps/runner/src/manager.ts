@@ -17,6 +17,7 @@ import {
   assertSomePolicyDeclared,
   authorized,
   body,
+  ClientAbortedError,
   configFor,
   forward,
   isHandleProbe,
@@ -564,10 +565,19 @@ export function createRunnerManagerListener(
     })().catch((thrown: unknown) => {
       // A cleanup that failed too is logged here; the status is the operation's own failure's.
       const error = thrown instanceof AggregateError ? (thrown.errors[0] as unknown) : thrown;
+      // Nobody is left to read an answer, and the client leaving is not a manager failure.
+      if (error instanceof ClientAbortedError) {
+        res.destroy();
+        return;
+      }
       if (thrown instanceof AggregateError) {
         process.stderr.write(`runner manager request failed: ${messagesOf(thrown)}\n`);
       }
       if (res.headersSent) {
+        // A runtime that died mid-response leaves the client a truncated answer; say why here.
+        if (!(thrown instanceof AggregateError)) {
+          process.stderr.write(`runner manager request failed: ${messagesOf(error)}\n`);
+        }
         res.destroy();
         return;
       }

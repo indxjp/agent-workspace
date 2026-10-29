@@ -30,6 +30,7 @@ import {
   skillRevisionsPrefix,
   skillRowFolder,
 } from './keys';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import type { SkillObjects } from '../storage/store';
 import { withSkillMetaColumn } from './meta-column';
 import { clearLegacyPendingSkillDelete, pendingSkillDelete } from './pending-delete';
@@ -59,7 +60,7 @@ export async function deleteSkill(
   const removedRows = await removeRowFolders(name, revisions, rows);
   // storage-bridge(#1699): a skill stored as a bare object prefix is deleted from the store
   const files = await walkFiles(store, skillFilesPrefix(name));
-  const meta = await store.get(skillMetaKey(name));
+  const meta = await readWhole(store, skillMetaKey(name));
   if (marked.kind === 'not-found' && removedRows === 0 && files.length === 0 && meta === null) {
     await clearLegacyPendingSkillDelete(store, name);
     return problem(404, 'skill_not_found', 'No skill has that name.');

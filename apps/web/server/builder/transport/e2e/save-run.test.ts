@@ -30,7 +30,6 @@ afterEach(() => {
 
 const freshDoor = () =>
   builderDoor({
-    featureOn: true,
     runStore: new InMemoryRunStore(),
     scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
   });

@@ -9,6 +9,9 @@ bootstrap_admin_email   = "owner@example.com"
 # Leave it out to set no AW_PUBLIC_URL.
 # public_url = "https://aw.example.com"
 
+# A sovereign cloud's blob endpoint for the storage account. Leave it out on the public cloud.
+# storage_blob_endpoint = "https://stagentworkspace.blob.core.usgovcloudapi.net"
+
 # Mutable image tags and the all-zero digest are rejected. Build and push these four images first, then
 # copy their ACR digest references from `az acr repository show`.
 images = {

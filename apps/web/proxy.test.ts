@@ -24,7 +24,7 @@
  * admits on a bearer API key. It drives `proxy()` itself rather than a Next internal.
  */
 import { CONTRACTS_VERSION, CONTRACTS_VERSION_HEADER } from '@indx-workspace/contracts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { NextRequest } from 'next/server';
 import { NextURL } from 'next/dist/server/web/next-url';
@@ -866,7 +866,12 @@ describe('the paths apps/web/proxy.ts admits for `aw login` and its user token',
   });
 
   it('passes a user token only to the person-facing routes', async () => {
-    for (const pathname of ['/api/me', '/api/workspaces', '/api/invitations/i-1/resend']) {
+    for (const pathname of [
+      '/api/me',
+      '/api/workspaces',
+      '/api/workspaces/w-1/features',
+      '/api/invitations/i-1/resend',
+    ]) {
       const response = await send('GET', pathname, { authorization: USER_TOKEN_HEADER });
       expect(response.headers.get(PASSED_THROUGH), pathname).toBe('1');
     }
@@ -1132,5 +1137,78 @@ describe('the frame-ancestors policy apps/web/proxy.ts sets on the hosted surfac
       expect(other.headers.get('access-control-allow-origin')).toBeNull();
       expect(other.headers.get('vary')).toBeNull();
     });
+  });
+});
+
+describe('the deployment feature gate of apps/web/proxy.ts (ADR-0160 D7)', () => {
+  const previousFeatures = process.env['AW_DEPLOYMENT_FEATURES'];
+  afterEach(() => {
+    if (previousFeatures === undefined) delete process.env['AW_DEPLOYMENT_FEATURES'];
+    else process.env['AW_DEPLOYMENT_FEATURES'] = previousFeatures;
+  });
+  const send = (method: string, pathname: string) =>
+    proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method }));
+
+  it('answers 404 feature_disabled before authentication for a feature the deployment leaves out', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'chat,runs';
+    const response = await send('GET', '/api/files');
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({
+      error: { code: 'feature_disabled', details: ['files'] },
+    });
+  });
+
+  it('refuses the anonymous discovery documents of a feature that is not installed', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'chat,runs';
+    const response = await send('GET', '/.well-known/oauth-protected-resource/mcp/builder');
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'feature_disabled', details: ['builder'] },
+    });
+  });
+
+  it('lets an installed feature and a core route reach the credential check', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'chat,runs';
+    expect((await send('GET', '/api/runs')).status).toBe(401);
+    expect((await send('GET', '/api/agents')).status).toBe(401);
+  });
+
+  it('leaves the public /p/** pages to their own not-found', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'chat,runs';
+    const response = await send('GET', '/p/s/main');
+    expect(response.status).not.toBe(404);
+  });
+
+  // Measured against `next start` on Next 16.4.3: `/api/triggers/` is answered `308` to
+  // `/api/triggers` before the proxy runs, and `/api/%74riggers` reaches the proxy still encoded
+  // and then matches no route (`404`). Neither reaches the triggers handler unrefused; the proxy
+  // only has to keep its credential check for them.
+  it('keeps the credential check for a trailing-slash form, which Next redirects before the proxy', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'chat,runs';
+    const response = await send('GET', '/api/triggers/');
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: 'unauthenticated' } });
+  });
+
+  it('keeps the credential check for a percent-encoded form, which no route serves', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'chat,runs';
+    const response = await send('GET', '/api/%74riggers');
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: 'unauthenticated' } });
+  });
+
+  it('answers 503 service_unavailable when the variable is invalid', async () => {
+    process.env['AW_DEPLOYMENT_FEATURES'] = 'not-a-feature';
+    const response = await send('GET', '/api/files');
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'service_unavailable', details: ['deployment_features_invalid'] },
+    });
+  });
+
+  it('changes nothing when the variable is unset', async () => {
+    delete process.env['AW_DEPLOYMENT_FEATURES'];
+    expect((await send('GET', '/api/files')).status).toBe(401);
   });
 });

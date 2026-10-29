@@ -9,6 +9,7 @@ import { AddMemberInput } from '@indx-workspace/contracts/team';
 import { AgentDefinition } from '@indx-workspace/contracts/agents';
 import { AgentDefinitionOnMissing } from '@indx-workspace/contracts/agents';
 import { AgentGrants } from '@indx-workspace/contracts/agents';
+import { AgentListArchived } from '@indx-workspace/contracts/agents';
 import { AgentPointerMoveResponse } from '@indx-workspace/contracts/agent-versions';
 import { AgentPolicy } from '@indx-workspace/contracts/agents';
 import { AgentResource } from '@indx-workspace/contracts/agents';
@@ -56,6 +57,7 @@ import { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clien
 import { EngineDescriptor } from '@indx-workspace/contracts/engines';
 import { EvaluationResource } from '@indx-workspace/contracts/evaluations';
 import { EvaluationRunResource } from '@indx-workspace/contracts/evaluations';
+import { FeatureId } from '@indx-workspace/contracts/features';
 import { FileResource } from '@indx-workspace/contracts/files';
 import { FileSearchResponse } from '@indx-workspace/contracts/files';
 import { IDENTITY_ASSERTION_HEADER } from '@indx-workspace/contracts/identity-assertion';
@@ -146,6 +148,7 @@ import { UploadToolBundleRequest } from '@indx-workspace/contracts/agent-version
 import { UploadToolBundleResponse } from '@indx-workspace/contracts/agent-versions';
 import { UserResource } from '@indx-workspace/contracts/team';
 import { verifyIdentity } from '@indx-workspace/contracts/identity-assertion';
+import { WorkspaceFeatures } from '@indx-workspace/contracts/features';
 import { WorkspaceMembershipView } from '@indx-workspace/contracts/workspaces';
 import { WorkspaceResource } from '@indx-workspace/contracts/workspaces';
 import { z } from 'zod';
@@ -184,14 +187,14 @@ export class AgentsClient {
     getPolicy(agentId: string, options?: RequestOptions): Promise<AgentPolicy>;
     getResourceAssignments(agentId: string, options?: RequestOptions): Promise<AgentResourceAssignments>;
     import(definition: unknown, options?: ImportAgentDefinitionOptions): Promise<ImportAgentDefinitionResult>;
-    // (undocumented)
-    list(options?: RequestOptions): Promise<readonly AgentResource[]>;
+    list(options?: ListAgentsOptions): Promise<readonly AgentResource[]>;
     readonly pointers: AgentPointersClient;
     // (undocumented)
     remove(agentId: string, options?: RequestOptions): Promise<void>;
     replaceGrants(agentId: string, principalIds: readonly string[], options?: RequestOptions): Promise<AgentGrants['principalIds']>;
     replacePolicy(agentId: string, policy: AgentPolicy, options?: RequestOptions): Promise<AgentPolicy>;
     replaceResourceAssignments(agentId: string, assignments: AgentResourceAssignmentsInput, options?: RequestOptions): Promise<AgentResourceAssignments>;
+    restore(agentId: string, options?: RequestOptions): Promise<AgentResource>;
     // (undocumented)
     update(agentId: string, patch: UpdateAgentPatch, options?: RequestOptions): Promise<AgentResource>;
     readonly versions: AgentVersionsClient;
@@ -326,6 +329,7 @@ export interface ClientOptions {
     readonly baseUrl: string | URL;
     readonly fetch?: typeof fetch;
     readonly headers?: Readonly<Record<string, string>>;
+    readonly onWarning?: (message: string) => void;
     readonly timeoutMs?: number;
     readonly workspace?: string;
 }
@@ -478,11 +482,12 @@ class HttpClient {
     putSigned(spec: {
         readonly operation: string;
         readonly target: Pick<PresignedUrl, 'url' | 'method' | 'headers'>;
-        readonly body: Blob | Uint8Array<ArrayBuffer>;
+        readonly body: Blob | Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array>;
         readonly signal?: AbortSignal | undefined;
     }): Promise<void>;
     // Warning: (ae-forgotten-export) The symbol "SendSpec" needs to be exported by the entry point index.d.ts
     send(spec: SendSpec): Promise<Response>;
+    warn(message: string): void;
 }
 
 // @public (undocumented)
@@ -539,6 +544,11 @@ export class InvitationsClient {
     list(options?: RequestOptions): Promise<readonly InvitationResource[]>;
     resend(invitationId: string, options?: RequestOptions): Promise<IssuedInvitationResponse>;
     revoke(invitationId: string, options?: RequestOptions): Promise<InvitationResource>;
+}
+
+// @public
+export interface ListAgentsOptions extends RequestOptions {
+    readonly archived?: AgentListArchived;
 }
 
 // @public (undocumented)
@@ -1039,6 +1049,7 @@ export type UploadBody = Uint8Array | Blob | ReadableStream<Uint8Array>;
 export interface UploadFileOptions extends RequestOptions {
     readonly contentType?: string;
     readonly direct?: boolean;
+    readonly sizeBytes?: number;
 }
 
 // @public (undocumented)
@@ -1058,9 +1069,20 @@ export class UsersClient {
 export { verifyIdentity }
 
 // @public
+export class WorkspaceFeaturesClient {
+    constructor(http: HttpClient);
+    list(workspaceId: string, options?: RequestOptions): Promise<WorkspaceFeatures>;
+    set(workspaceId: string, input: {
+        readonly disabled: readonly FeatureId[];
+    }, options?: RequestOptions): Promise<WorkspaceFeatures>;
+}
+
+// @public
 export class WorkspacesClient {
     constructor(http: HttpClient);
     create(input: CreateWorkspaceInput, options?: RequestOptions): Promise<WorkspaceMembershipView>;
+    // (undocumented)
+    readonly features: WorkspaceFeaturesClient;
     // (undocumented)
     get(workspaceId: string, options?: RequestOptions): Promise<WorkspaceMembershipView>;
     list(options?: RequestOptions): Promise<readonly WorkspaceMembershipView[]>;

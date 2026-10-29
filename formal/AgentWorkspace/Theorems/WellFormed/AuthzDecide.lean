@@ -39,15 +39,15 @@ theorem decision_vocabularies_match_typescript :
       (roles.map WireEnum.toWire) = ["owner", "admin", "builder", "viewer"] := by decide +kernel
 
 /-- `composeSubResources` does not throw on the tracked declarations, and `SUB_RESOURCES` is §34's
-three pairs plus the forty-one declared ones: 44 classified `(resource, sub)` pairs. -/
+three pairs plus the forty-three declared ones: 46 classified `(resource, sub)` pairs. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/permissions.ts#SUB_RESOURCES")
   (ts := "apps/web/server/rbac/declared-sub-resources.ts#composeSubResources")
   (doc := "docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision")]
-theorem sub_resource_composition_yields_forty_four_pairs :
+theorem sub_resource_composition_yields_forty_six_pairs :
     (match composeSubResources spec34SubResources declaredSubResources with
       | .ok _ => true | .error _ => false) = true ∧
       pairsOf subResources =
-        [(.agents, "runs"), (.agents, "promote"), (.agents, "rollback"), (.agents, "evaluations"), (.agents, "evaluation-runs"), (.agents, "evaluation-advance"), (.agents, "feedback"), (.agents, "versions"), (.agents, "pointers"), (.agents, "platform-exports"), (.agents, "platform-archives"), (.agents, "policy"), (.agents, "grants"), (.agents, "resources"),
+        [(.agents, "runs"), (.agents, "restore"), (.agents, "promote"), (.agents, "rollback"), (.agents, "evaluations"), (.agents, "evaluation-runs"), (.agents, "evaluation-advance"), (.agents, "feedback"), (.agents, "versions"), (.agents, "pointers"), (.agents, "platform-exports"), (.agents, "platform-archives"), (.agents, "policy"), (.agents, "grants"), (.agents, "resources"),
           (.connectors, "test-connection"), (.endpointClients, "keys"), (.endpointClients, "secret"),
           (.files, "upload-urls"), (.files, "upload-complete"), (.files, "download-urls"), (.invitations, "resend"),
           (.modelConnections, "test"),
@@ -59,8 +59,9 @@ theorem sub_resource_composition_yields_forty_four_pairs :
           (.sessions, "file-search"),
           (.sessions, "transcript"),
           (.sessions, "subkeys"), (.skills, "revisions"), (.storageConnections, "credential"),
-          (.storageConnections, "test"), (.storageConnections, "browse"), (.triggers, "secret")] ∧
-      (pairsOf subResources).length = 44 ∧ (pairsOf subResources).Nodup := by decide +kernel
+          (.storageConnections, "test"), (.storageConnections, "browse"), (.triggers, "secret"),
+          (.workspaces, "features")] ∧
+      (pairsOf subResources).length = 46 ∧ (pairsOf subResources).Nodup := by decide +kernel
 
 /-- Every role's policy names each resource at most once, so no override silently shadows
 another (a duplicate key in a TypeScript object literal would). -/
@@ -143,13 +144,13 @@ private def routeClassified (r : DeclaredRoute) : Bool :=
       | .refused _ => false
     | _ => false
 
-/-- The authorisation matrix is total: its 154 routes (the declared union minus the eighteen
+/-- The authorisation matrix is total: its 157 routes (the declared union minus the eighteen
 pre-authentication routes and the nine identity-only routes) are decided — `allow` or `deny`, never
-`refuse` — for every role and every ownership answer, 3 080 cells. -/
+`refuse` — for every role and every ownership answer, 3 140 cells. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#undecidedCells")
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")]
 theorem every_matrix_route_is_decided :
-    matrixRoutes.length = 154 ∧ ∀ r ∈ matrixRoutes, ∀ role : Role, ∀ o : Ownership,
+    matrixRoutes.length = 157 ∧ ∀ r ∈ matrixRoutes, ∀ role : Role, ∀ o : Ownership,
       (decideOrdinary ⟨WireEnum.toWire role, r.method, r.path, o, none⟩).effect ≠ .refuse := by
   have hall : matrixRoutes.all routeClassified = true := by decide +kernel
   refine ⟨by decide +kernel, fun r hr role o => ?_⟩

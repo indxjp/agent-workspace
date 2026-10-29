@@ -45,7 +45,9 @@ import {
   type RequestProblem,
 } from './model';
 import { loadAgents } from './agent-requests-model';
+import { ArchivedBadge } from './agent-archived';
 import { BuiltinBadge } from './builtin-badge';
+import { versionsStrings, type VersionsLocale } from './versions-messages';
 
 // ── Transcribed class strings ───────────────────────────────────────────────────────────────────
 
@@ -88,14 +90,15 @@ type LoadState =
   | { readonly kind: 'loaded'; readonly agents: readonly AgentResource[] }
   | { readonly kind: 'problem'; readonly problem: RequestProblem };
 
-export function AgentsListScreen() {
+export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }>) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [query, setQuery] = useState('');
+  const [includeArchived, setIncludeArchived] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    void loadAgents(browserClient()).then((result) => {
+    void loadAgents(browserClient(), { includeArchived }).then((result) => {
       if (cancelled) return;
       setState(
         result.ok
@@ -107,7 +110,7 @@ export function AgentsListScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [includeArchived]);
 
   const total = state.kind === 'loaded' ? state.agents.length : null;
   const visible = state.kind === 'loaded' ? filterAgentsByName(state.agents, query) : [];
@@ -124,6 +127,16 @@ export function AgentsListScreen() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[13px]" lang={locale}>
+            <input
+              type="checkbox"
+              checked={includeArchived}
+              onChange={(event) => {
+                setIncludeArchived(event.target.checked);
+              }}
+            />
+            {versionsStrings(locale).showArchived}
+          </label>
           <label className={SEARCH}>
             <SearchIcon />
             <input
@@ -199,6 +212,9 @@ export function AgentsListScreen() {
                             {agent.name}
                           </Link>
                           <BuiltinBadge builtin={agent.builtin} />
+                          {agent.archivedAt === undefined ? null : (
+                            <ArchivedBadge archivedAt={agent.archivedAt} locale={locale} />
+                          )}
                         </div>
                         <div className="mt-2">
                           <ShareDialog

@@ -15,11 +15,11 @@ export interface GeneratorAnswers {
 
 /**
  * The defaults the generator offers, worded as what the generated Compose project runs: PostgreSQL
- * in its own container, and files on the web service's Docker volume (#396). The older wording,
- * "embedded PostgreSQL 17", is still accepted as an answer so scripted answers keep working.
+ * in its own container, and files on the web service's Docker volume (#396). A PostgreSQL 17
+ * answer, including the older "embedded PostgreSQL 17", is refused by name (ADR-0159).
  */
 export const DEFAULT_ANSWERS: GeneratorAnswers = {
-  database: 'PostgreSQL 17 (container)',
+  database: 'PostgreSQL 18 (container)',
   storage: 'local filesystem (Docker volume)',
   runtime: 'docker',
   authentication: 'local administrator',

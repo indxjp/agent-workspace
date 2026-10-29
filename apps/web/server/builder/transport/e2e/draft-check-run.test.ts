@@ -24,7 +24,7 @@ describe('[US-BLD-02][api][run] draft_check in a scripted Builder run', () => {
         { text: 'The draft names a connector this workspace does not have.' },
       ],
     });
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, model);
 
     const transcript = await door.runScripted(token, model);

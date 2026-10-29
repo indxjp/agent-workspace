@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { EngineRefusalError } from '@agent-workspace/engine';
 import type { ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
 
 import {
@@ -133,6 +134,48 @@ describe('the delegation tool name', () => {
     expect(readFileSync(path.join(sdkDir, 'sdk.d.ts'), 'utf8')).toContain(
       `custom subagent that can be invoked via the ${CLAUDE_DELEGATION_TOOL} tool`,
     );
+  });
+});
+
+describe('toSdkOptions translation refusals', () => {
+  const bare: Omit<CompiledSdkOptions, 'tools' | 'skills'> = {
+    cwd: compiled.cwd,
+    env: compiled.env,
+    settingSources: compiled.settingSources,
+    strictMcpConfig: compiled.strictMcpConfig,
+    mcpServers: compiled.mcpServers,
+    permissionMode: compiled.permissionMode,
+    allowedTools: compiled.allowedTools,
+    disallowedTools: compiled.disallowedTools,
+  };
+  it.each<[string, CompiledSdkOptions]>([
+    ['no tools', { ...bare, skills: [] }],
+    ['no skills', { ...bare, tools: [] }],
+    ['an untranslatable skills value', { ...bare, tools: [], skills: 7 as unknown as [] }],
+    [
+      'an untranslatable tools value',
+      { ...bare, skills: [], tools: { type: 'preset', preset: 'other' } as unknown as [] },
+    ],
+  ])('refuses %s as a typed engine_policy_invalid refusal', (_name, options) => {
+    let thrown: unknown = null;
+    try {
+      toSdkOptions(options);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(EngineRefusalError);
+    expect(thrown).toMatchObject({ code: 'engine_policy_invalid' });
+  });
+
+  it('refuses the same way at startRun, before the SDK is reached', () => {
+    expect(() =>
+      startRun({
+        runId: 'run-1',
+        projectKey: 'tenant-a',
+        prompt: 'go',
+        options: { ...bare, skills: [] },
+      }),
+    ).toThrow(EngineRefusalError);
   });
 });
 

@@ -24,6 +24,8 @@ import {
   ConnectionStoreError,
   openConnectionStore,
   resolveFileRoot,
+  storageProviderStatus,
+  storageRefusalClass,
   toObjectKey,
   UnsafeObjectKeyError,
   type ObjectPage,
@@ -36,6 +38,7 @@ import type { Principal } from '../rbac/principal';
 import { isUuid } from '../secrets/contract';
 import { log } from '../telemetry/logger';
 import type { StorageConnections, StorageConnectionsRuntime } from './runtime';
+import { credentialTarget } from './store';
 import type { WorkspaceStorageConnectionsStore } from './store';
 
 function refusal(code: StorageConnectionProblemCode): ApiResult {
@@ -146,9 +149,11 @@ export async function updateStorageConnection(
   ) {
     return refusal('storage_connection_credential_required');
   }
-  const updated = await store.update(current.id, patch, credential);
+  // Judged against `current.url`: a row another writer moved since is refused, never re-bound.
+  const updated = await store.update(current.id, current.url, patch, credential);
   if (updated.kind === 'not-found') return refusal('storage_connection_not_found');
   if (updated.kind === 'name-conflict') return refusal('storage_connection_name_taken');
+  if (updated.kind === 'target-changed') return refusal('storage_connection_credential_required');
   await audit(runtime, principal, 'storage-connection-updated', updated.connection);
   return { status: 200, body: updated.connection };
 }
@@ -173,8 +178,10 @@ export async function rotateStorageConnectionCredential(
   ) {
     return refusal('storage_connection_url_invalid');
   }
-  const rotated = await store.rotate(current.id, parsed.value);
+  const rotated = await store.rotate(current.id, current.url, parsed.value);
   if (rotated.kind === 'not-found') return refusal('storage_connection_not_found');
+  // The connection moved after it was read: this credential was supplied for its old target.
+  if (rotated.kind === 'target-changed') return refusal('storage_connection_credential_required');
   await audit(runtime, principal, 'storage-connection-credential-changed', rotated.connection);
   return { status: 200, body: rotated.connection };
 }
@@ -213,7 +220,7 @@ async function listConnection(
   const credential =
     connection.provider === 'file'
       ? ({ provider: 'file' } as const)
-      : await store.credential(connection.id);
+      : await store.credential(connection.id, connection.url);
   if (credential === null) throw new ConnectionStoreError('storage_connection_credential_required');
   const objects = await openConnectionStore(connection.url, credential, {
     writable: false,
@@ -243,20 +250,6 @@ function withProbeTimeout<T>(work: (signal: AbortSignal) => Promise<T>): Promise
   return Promise.race([work(controller.signal), expired]).finally(() => clearTimeout(timer));
 }
 
-/** The HTTP status a storage SDK error carries (S3 `$metadata`, Azure `statusCode`, GCS `code`). */
-function providerStatus(error: unknown): number | null {
-  if (typeof error !== 'object' || error === null) return null;
-  const metadata: unknown = Reflect.get(error, '$metadata');
-  const candidates: unknown[] = [
-    typeof metadata === 'object' && metadata !== null
-      ? Reflect.get(metadata, 'httpStatusCode')
-      : undefined,
-    Reflect.get(error, 'statusCode'),
-    Reflect.get(error, 'code'),
-  ];
-  return candidates.find((value): value is number => typeof value === 'number') ?? null;
-}
-
 /** Only the code or the status is read: the message and `cause` may echo the provider's reply. */
 function testOutcome(error: unknown): StorageConnectionTestOutcome {
   if (error instanceof ConnectionStoreError) {
@@ -264,11 +257,8 @@ function testOutcome(error: unknown): StorageConnectionTestOutcome {
       ? { ok: false, code: 'forbidden' }
       : { ok: false, code: 'unreachable' };
   }
-  const status = providerStatus(error);
-  if (status === 401 || status === 403) return { ok: false, code: 'forbidden' };
-  if (status === 404) return { ok: false, code: 'not_found' };
-  if (status === null) logUnclassified('test', error);
-  return { ok: false, code: 'unreachable' };
+  if (storageProviderStatus(error) === null) logUnclassified('test', error);
+  return { ok: false, code: storageRefusalClass(error) };
 }
 
 /** An error that is neither the connection store's nor a provider status; the logger redacts it. */
@@ -340,7 +330,7 @@ function browseFailure(error: unknown): ApiResult {
   // A key the store's guard refuses (`%2e%2e` and the like) is a folder this API will not show.
   if (error instanceof UnsafeObjectKeyError)
     return refusal('storage_connection_prefix_not_allowed');
-  if (providerStatus(error) === null) logUnclassified('browse', error);
+  if (storageProviderStatus(error) === null) logUnclassified('browse', error);
   return refusal('storage_connection_unreachable');
 }
 
@@ -487,12 +477,6 @@ function isProjectlessGcsToken(url: string, credential: StorageConnectionCredent
     parsed.location.projectId === undefined &&
     'accessToken' in credential
   );
-}
-
-/** Where a URL's credential is sent: everything the URL names but its prefix. */
-function credentialTarget(url: string): string | null {
-  const parsed = parseStorageUrl(url);
-  return parsed.ok ? JSON.stringify({ ...parsed.location, prefix: '' }) : null;
 }
 
 function audit(

@@ -19,8 +19,6 @@ import {
 } from './session-state.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
 
-const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
-
 /**
  * The engine-scoped session store, against real PostgreSQL (ENG-06, #305).
  *
@@ -28,7 +26,7 @@ const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
  * database rather than against a fake: idempotency by `entry_key`, delete-last, replace-all, the
  * tenant boundary, and the cascade from a deleted session.
  */
-describe.skipIf(!hasDatabase)('SessionStateRepository', () => {
+describe('SessionStateRepository', () => {
   let isolated: IsolatedTestDatabase;
   const workspaceId = crypto.randomUUID();
   const otherWorkspaceId = crypto.randomUUID();

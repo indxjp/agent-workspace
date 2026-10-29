@@ -13,6 +13,32 @@ export function storageGrantPath(connectionName: string, folder: string): string
   return `storage://${connectionName}/${folder.replace(/^\/+|\/+$/gu, '')}`;
 }
 
+/** A storage grant as the agent's list keys its row: the connection id and the folder. */
+export function grantKey(grant: Readonly<{ connectionId: string; prefix: string }>): string {
+  return `${grant.connectionId}/${grant.prefix}`;
+}
+
+/**
+ * The grant that takes focus once the grant keyed `removed` is gone: the one that moves into its
+ * row, else the nearest one above it, else `null` when none is left. Only a grant in `after`, the
+ * list the save returned, is chosen, so a row another tab removed meanwhile never is.
+ */
+export function grantFocusedAfterRemoval(
+  before: readonly Readonly<{ connectionId: string; prefix: string }>[],
+  removed: string,
+  after: readonly Readonly<{ connectionId: string; prefix: string }>[],
+): string | null {
+  const remaining = new Set(after.map(grantKey));
+  const keys = before.map(grantKey);
+  const index = keys.indexOf(removed);
+  const nearest = [...keys.slice(index + 1), ...keys.slice(0, Math.max(index, 0)).reverse()];
+  const first = after[0];
+  return (
+    nearest.find((key) => key !== removed && remaining.has(key)) ??
+    (first === undefined ? null : grantKey(first))
+  );
+}
+
 /** The version body with `path` granted at `access`; an equal path is replaced, not repeated. */
 export function withStorageGrant(
   body: VersionBody,

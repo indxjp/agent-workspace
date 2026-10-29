@@ -6070,7 +6070,8 @@
                     "storage-connection-credential-changed",
                     "storage-connection-tested",
                     "storage-connection-written",
-                    "storage-grant-changed"
+                    "storage-grant-changed",
+                    "workspace-features-changed"
                   ],
                   "type": "string"
                 },
@@ -13426,6 +13427,25 @@
       "MeResponse": {
         "additionalProperties": false,
         "properties": {
+          "features": {
+            "items": {
+              "enum": [
+                "chat",
+                "projects",
+                "files",
+                "skills",
+                "connectors",
+                "runs",
+                "sharing",
+                "surfaces",
+                "triggers",
+                "evaluations",
+                "builder"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
           "kind": {
             "enum": [
               "membership",
@@ -13472,7 +13492,8 @@
           "role",
           "workspaceId",
           "userId",
-          "label"
+          "label",
+          "features"
         ],
         "type": "object"
       },
@@ -19748,6 +19769,34 @@
         "readOnly": true,
         "type": "object"
       },
+      "UpdateWorkspaceFeaturesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "disabled": {
+            "items": {
+              "enum": [
+                "chat",
+                "projects",
+                "files",
+                "skills",
+                "connectors",
+                "runs",
+                "sharing",
+                "surfaces",
+                "triggers",
+                "evaluations",
+                "builder"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "disabled"
+        ],
+        "type": "object"
+      },
       "UploadToolBundleRequest": {
         "additionalProperties": false,
         "properties": {
@@ -19836,6 +19885,51 @@
         },
         "required": [
           "users"
+        ],
+        "type": "object"
+      },
+      "WorkspaceFeatures": {
+        "additionalProperties": false,
+        "properties": {
+          "features": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "enum": [
+                    "chat",
+                    "projects",
+                    "files",
+                    "skills",
+                    "connectors",
+                    "runs",
+                    "sharing",
+                    "surfaces",
+                    "triggers",
+                    "evaluations",
+                    "builder"
+                  ],
+                  "type": "string"
+                },
+                "installed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "installed",
+                "enabled"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "features"
         ],
         "type": "object"
       },
@@ -20186,7 +20280,7 @@
       "name": "Apache-2.0"
     },
     "title": "Agent Workspace API",
-    "version": "0.6.11"
+    "version": "0.6.12"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20253,7 +20347,8 @@
         "summary": "A2A v0.3 JSON-RPC to a published agent (message/send, message/stream, tasks/get, tasks/cancel)",
         "tags": [
           "a2a"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/a2a/agents/{agentName}/.well-known/agent-card.json": {
@@ -20309,7 +20404,8 @@
         "summary": "Read a published agent's A2A v0.3 agent card",
         "tags": [
           "a2a"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents": {
@@ -20352,7 +20448,8 @@
         "summary": "List agents",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "agents.create",
@@ -20431,7 +20528,8 @@
         "summary": "Create an agent, optionally with its resource assignments, or from a first version (dryRun checks it)",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}": {
@@ -20475,7 +20573,8 @@
         "summary": "Delete an agent",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "get": {
         "operationId": "agents.get",
@@ -20524,7 +20623,8 @@
         "summary": "Read one agent",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "agents.update",
@@ -20583,7 +20683,8 @@
         "summary": "Update an agent",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/evaluation-advance": {
@@ -20644,7 +20745,8 @@
         "summary": "Run the next cases of an evaluation run",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "evaluations"
       }
     },
     "/api/agents/{id}/evaluation-runs": {
@@ -20695,7 +20797,8 @@
         "summary": "Read an evaluation run and its results so far",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "evaluations"
       },
       "post": {
         "operationId": "agents.evaluationRuns.create",
@@ -20754,7 +20857,8 @@
         "summary": "Start an asynchronous run of a version's evaluation cases",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "evaluations"
       }
     },
     "/api/agents/{id}/evaluations": {
@@ -20815,7 +20919,8 @@
         "summary": "Run a version's evaluation cases and store the score",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "evaluations"
       }
     },
     "/api/agents/{id}/feedback": {
@@ -20866,7 +20971,8 @@
         "summary": "List the ratings of an agent's runs",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "runs"
       }
     },
     "/api/agents/{id}/grants": {
@@ -20917,7 +21023,8 @@
         "summary": "Read an agent's grants",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "put": {
         "operationId": "agents.replaceGrants",
@@ -20976,7 +21083,8 @@
         "summary": "Replace an agent's grants",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/platform-archives": {
@@ -21038,7 +21146,8 @@
         "summary": "The same export as a POSIX tar archive",
         "tags": [
           "platforms"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/platform-exports": {
@@ -21099,7 +21208,8 @@
         "summary": "Export a saved version of an agent for one platform, with the verdict report",
         "tags": [
           "platforms"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/pointers": {
@@ -21160,7 +21270,8 @@
         "summary": "Point an environment at a saved version",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/policy": {
@@ -21211,7 +21322,8 @@
         "summary": "Read an agent's policy",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "put": {
         "operationId": "agents.replacePolicy",
@@ -21270,7 +21382,8 @@
         "summary": "Replace an agent's policy",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/promote": {
@@ -21331,7 +21444,8 @@
         "summary": "Point production at local's version, or check the move with dryRun",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/resources": {
@@ -21382,7 +21496,8 @@
         "summary": "Read an agent's resource assignments",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "put": {
         "operationId": "agents.replaceResourceAssignments",
@@ -21441,7 +21556,60 @@
         "summary": "Replace an agent's resource assignments",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/agents/{id}/restore": {
+      "post": {
+        "operationId": "agents.restore",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResource"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Restore an archived agent",
+        "tags": [
+          "agents"
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/rollback": {
@@ -21502,7 +21670,8 @@
         "summary": "Point an environment back at its previous version, or check it with dryRun",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/runs": {
@@ -21563,7 +21732,8 @@
         "summary": "Start a run of an agent",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/agents/{id}/versions": {
@@ -21614,7 +21784,8 @@
         "summary": "List an agent's versions and pointers",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "agents.createVersion",
@@ -21691,7 +21862,8 @@
         "summary": "Save a version of an agent, or check one with dryRun",
         "tags": [
           "agents"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/api-keys": {
@@ -21734,7 +21906,8 @@
         "summary": "List API keys",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "team.apiKeys.create",
@@ -21785,7 +21958,8 @@
         "summary": "Mint an API key; the secret is returned once",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/api-keys/{id}": {
@@ -21836,7 +22010,8 @@
         "summary": "Revoke an API key",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/audit-events": {
@@ -21879,7 +22054,8 @@
         "summary": "List audit events",
         "tags": [
           "observability"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/auth/cli-device": {
@@ -21923,7 +22099,8 @@
         "summary": "Start a device authorization for `aw login` (RFC 8628)",
         "tags": [
           "auth"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/auth/cli-token": {
@@ -21964,7 +22141,8 @@
         "summary": "Revoke the presented user token (`aw logout`)",
         "tags": [
           "auth"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "auth.pollToken",
@@ -22016,7 +22194,8 @@
         "summary": "Poll with the device code; the user token once the person approved",
         "tags": [
           "auth"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/auth/cli-workspace": {
@@ -22074,7 +22253,8 @@
         "summary": "Move the CLI's user token to another of the person's workspaces",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/auth/workspace": {
@@ -22132,7 +22312,8 @@
         "summary": "Switch the session's workspace",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/connectors": {
@@ -22175,7 +22356,8 @@
         "summary": "List MCP connectors",
         "tags": [
           "connectors"
-        ]
+        ],
+        "x-agent-workspace-feature": "connectors"
       },
       "post": {
         "operationId": "connectors.create",
@@ -22244,7 +22426,8 @@
         "summary": "Create a connector, or test a draft without saving it",
         "tags": [
           "connectors"
-        ]
+        ],
+        "x-agent-workspace-feature": "connectors"
       }
     },
     "/api/connectors/{id}": {
@@ -22288,7 +22471,8 @@
         "summary": "Delete a connector",
         "tags": [
           "connectors"
-        ]
+        ],
+        "x-agent-workspace-feature": "connectors"
       },
       "get": {
         "operationId": "connectors.get",
@@ -22337,7 +22521,8 @@
         "summary": "Read one connector",
         "tags": [
           "connectors"
-        ]
+        ],
+        "x-agent-workspace-feature": "connectors"
       },
       "patch": {
         "operationId": "connectors.rotateCredential",
@@ -22396,7 +22581,8 @@
         "summary": "Replace a connector's credential",
         "tags": [
           "connectors"
-        ]
+        ],
+        "x-agent-workspace-feature": "connectors"
       }
     },
     "/api/connectors/{id}/test-connection": {
@@ -22447,7 +22633,8 @@
         "summary": "Test a saved connector",
         "tags": [
           "connectors"
-        ]
+        ],
+        "x-agent-workspace-feature": "connectors"
       }
     },
     "/api/endpoint-clients": {
@@ -22490,7 +22677,8 @@
         "summary": "List endpoint clients",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "endpointClients.create",
@@ -22541,7 +22729,8 @@
         "summary": "Create an endpoint client for an MCP project or an A2A agent",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/endpoint-clients/{id}": {
@@ -22592,7 +22781,8 @@
         "summary": "Revoke an endpoint client and every key bound to it",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "get": {
         "operationId": "endpointClients.get",
@@ -22641,7 +22831,8 @@
         "summary": "Read one endpoint client",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "endpointClients.update",
@@ -22700,7 +22891,8 @@
         "summary": "Change an endpoint client's agents or tool allow-list",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/endpoint-clients/{id}/keys": {
@@ -22761,7 +22953,8 @@
         "summary": "Mint an endpoint-scoped API key; the secret is returned once",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/endpoint-clients/{id}/secret": {
@@ -22812,7 +23005,8 @@
         "summary": "Rotate an endpoint client's OAuth client secret; the secret is returned once",
         "tags": [
           "endpointClients"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/engines": {
@@ -22855,7 +23049,8 @@
         "summary": "List the engines this deployment knows",
         "tags": [
           "engines"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/files": {
@@ -22898,7 +23093,8 @@
         "summary": "List files and folders",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       },
       "post": {
         "operationId": "files.upload",
@@ -22968,7 +23164,8 @@
         "summary": "Upload a file (bytes, path in `x-file-path`) or create a folder (`x-folder-path`)",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       }
     },
     "/api/files/search": {
@@ -23011,7 +23208,8 @@
         "summary": "Search the text of workspace files (`q`, `limit`): path, page and snippet per hit; `pending` counts files not yet searchable",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       }
     },
     "/api/files/{id}": {
@@ -23073,7 +23271,8 @@
         "summary": "Delete a file or a folder subtree",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       },
       "get": {
         "operationId": "files.download",
@@ -23123,7 +23322,8 @@
         "summary": "Download a file's bytes (the id is the base64url path)",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       },
       "patch": {
         "operationId": "files.move",
@@ -23182,7 +23382,8 @@
         "summary": "Move or rename a file or folder",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       }
     },
     "/api/files/{id}/download-urls": {
@@ -23243,7 +23444,8 @@
         "summary": "Mint a short-lived GET URL on the object store, so the holder downloads without a relay",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       }
     },
     "/api/files/{id}/upload-complete": {
@@ -23294,7 +23496,8 @@
         "summary": "Verify the object a signed PUT wrote and mark the file ready",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       }
     },
     "/api/files/{id}/upload-urls": {
@@ -23355,7 +23558,8 @@
         "summary": "Mint a short-lived PUT URL on the object store, so the holder uploads without a relay",
         "tags": [
           "files"
-        ]
+        ],
+        "x-agent-workspace-feature": "files"
       }
     },
     "/api/invitations": {
@@ -23398,7 +23602,8 @@
         "summary": "List invitations",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "team.invitations.create",
@@ -23449,7 +23654,8 @@
         "summary": "Invite someone to the workspace",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/invitations/{id}": {
@@ -23500,7 +23706,8 @@
         "summary": "Revoke an invitation",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/invitations/{id}/accept": {
@@ -23566,7 +23773,8 @@
         "summary": "Accept an invitation",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/invitations/{id}/resend": {
@@ -23617,7 +23825,8 @@
         "summary": "Re-issue an invitation",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/me": {
@@ -23660,7 +23869,8 @@
         "summary": "Read the calling principal, its workspace and role",
         "tags": [
           "me"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/memberships": {
@@ -23703,7 +23913,8 @@
         "summary": "List the members of the workspace",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "team.members.add",
@@ -23754,7 +23965,8 @@
         "summary": "Add a user to the workspace",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/memberships/{id}": {
@@ -23798,7 +24010,8 @@
         "summary": "Remove a member",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "team.members.setRole",
@@ -23857,7 +24070,8 @@
         "summary": "Change a member's role",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/metrics": {
@@ -23900,7 +24114,8 @@
         "summary": "Recent run telemetry",
         "tags": [
           "observability"
-        ]
+        ],
+        "x-agent-workspace-feature": "runs"
       }
     },
     "/api/model-connections": {
@@ -23943,7 +24158,8 @@
         "summary": "List model connections",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "models.connections.create",
@@ -23994,7 +24210,8 @@
         "summary": "Create a model connection",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/model-connections/{id}": {
@@ -24045,7 +24262,8 @@
         "summary": "Delete a model connection",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "get": {
         "operationId": "models.connections.get",
@@ -24094,7 +24312,8 @@
         "summary": "Read one model connection",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "models.connections.update",
@@ -24153,7 +24372,8 @@
         "summary": "Update a model connection",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/model-connections/{id}/credential": {
@@ -24207,7 +24427,8 @@
         "summary": "Replace a model connection's credential",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/model-connections/{id}/test": {
@@ -24276,7 +24497,8 @@
         "summary": "Probe a model connection; a failed probe answers 502 with the outcome",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/models": {
@@ -24319,7 +24541,8 @@
         "summary": "Discover the models every connection offers",
         "tags": [
           "models"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/platforms": {
@@ -24362,7 +24585,8 @@
         "summary": "List the agent platforms an agent can be exported to",
         "tags": [
           "platforms"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/projects": {
@@ -24405,7 +24629,8 @@
         "summary": "List projects",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       },
       "post": {
         "operationId": "projects.create",
@@ -24456,7 +24681,8 @@
         "summary": "Create a project",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       }
     },
     "/api/projects/{id}": {
@@ -24507,7 +24733,8 @@
         "summary": "Read one project",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       },
       "patch": {
         "operationId": "projects.update",
@@ -24566,7 +24793,8 @@
         "summary": "Update a project",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       }
     },
     "/api/projects/{id}/archive": {
@@ -24617,7 +24845,8 @@
         "summary": "Archive a project",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       }
     },
     "/api/projects/{id}/restore": {
@@ -24668,7 +24897,8 @@
         "summary": "Restore an archived project",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       }
     },
     "/api/projects/{id}/sessions": {
@@ -24754,7 +24984,8 @@
         "summary": "Start a session in a project, or adopt an existing one",
         "tags": [
           "projects"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       }
     },
     "/api/runs": {
@@ -24797,7 +25028,8 @@
         "summary": "List runs",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "runs"
       }
     },
     "/api/runs/{id}": {
@@ -24848,7 +25080,8 @@
         "summary": "Read one run",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "deprecated": true,
@@ -24908,7 +25141,8 @@
         "summary": "Revoke gateway tokens (deprecated alias of the revoke-tokens route)",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runs/{id}/approval": {
@@ -24969,7 +25203,8 @@
         "summary": "Approve or reject the tool call a paused run is waiting on (starts a continuation run; `409` once decided)",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runs/{id}/events": {
@@ -25038,7 +25273,8 @@
         "summary": "Follow a run's events (resume with `Last-Event-ID`)",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runs/{id}/feedback": {
@@ -25092,7 +25328,8 @@
         "summary": "Rate a run (thumbs up or down)",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "runs"
       }
     },
     "/api/runs/{id}/interrupt": {
@@ -25143,7 +25380,8 @@
         "summary": "Interrupt a run",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runs/{id}/revoke-tokens": {
@@ -25204,7 +25442,8 @@
         "summary": "Revoke a run's gateway tokens",
         "tags": [
           "runs"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runtime-connections": {
@@ -25247,7 +25486,8 @@
         "summary": "List runtime connections",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "runtimes.connections.create",
@@ -25298,7 +25538,8 @@
         "summary": "Create a runtime connection",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runtime-profiles": {
@@ -25341,7 +25582,8 @@
         "summary": "List runtime profiles",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "runtimes.profiles.create",
@@ -25392,7 +25634,8 @@
         "summary": "Create a runtime profile",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runtime-profiles/{id}": {
@@ -25436,7 +25679,8 @@
         "summary": "Delete a runtime profile",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "get": {
         "operationId": "runtimes.profiles.get",
@@ -25485,7 +25729,8 @@
         "summary": "Read one runtime profile",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "runtimes.profiles.update",
@@ -25544,7 +25789,8 @@
         "summary": "Update a runtime profile",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/runtimes/{id}": {
@@ -25605,7 +25851,8 @@
         "summary": "Test a runtime driver (the id is the literal `test`)",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/secrets": {
@@ -25648,7 +25895,8 @@
         "summary": "List secrets (names only)",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "secrets.create",
@@ -25699,7 +25947,8 @@
         "summary": "Store a secret",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/secrets/{id}": {
@@ -25743,7 +25992,8 @@
         "summary": "Delete a secret nothing references (`409 secret_in_use` names the referrers)",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "put": {
         "operationId": "secrets.replace",
@@ -25802,7 +26052,8 @@
         "summary": "Replace a secret's value",
         "tags": [
           "secrets"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/sessions": {
@@ -25845,7 +26096,8 @@
         "summary": "List sessions",
         "tags": [
           "sessions"
-        ]
+        ],
+        "x-agent-workspace-feature": "chat"
       }
     },
     "/api/sessions/{engineSessionId}": {
@@ -25896,7 +26148,8 @@
         "summary": "Read one session",
         "tags": [
           "sessions"
-        ]
+        ],
+        "x-agent-workspace-feature": "chat"
       },
       "patch": {
         "operationId": "sessions.update",
@@ -25955,7 +26208,8 @@
         "summary": "Rename or archive a session",
         "tags": [
           "sessions"
-        ]
+        ],
+        "x-agent-workspace-feature": "chat"
       }
     },
     "/api/sessions/{engineSessionId}/attachments": {
@@ -26017,7 +26271,8 @@
         "summary": "Upload one file (bytes, name in `name`) into a visitor's session, for `runs.start` `attachments`",
         "tags": [
           "sessions"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/sessions/{engineSessionId}/subkeys": {
@@ -26068,7 +26323,8 @@
         "summary": "List a transcript's subkeys",
         "tags": [
           "sessions"
-        ]
+        ],
+        "x-agent-workspace-feature": "chat"
       }
     },
     "/api/sessions/{engineSessionId}/transcript": {
@@ -26119,7 +26375,8 @@
         "summary": "Read a session's transcript",
         "tags": [
           "sessions"
-        ]
+        ],
+        "x-agent-workspace-feature": "chat"
       }
     },
     "/api/setup/runtime-detect": {
@@ -26163,7 +26420,8 @@
         "summary": "Detect which runtime drivers the host can run",
         "tags": [
           "runtimes"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/shares": {
@@ -26206,7 +26464,8 @@
         "summary": "List shares",
         "tags": [
           "shares"
-        ]
+        ],
+        "x-agent-workspace-feature": "sharing"
       },
       "post": {
         "operationId": "shares.publish",
@@ -26257,7 +26516,8 @@
         "summary": "Publish a session as a share",
         "tags": [
           "shares"
-        ]
+        ],
+        "x-agent-workspace-feature": "sharing"
       }
     },
     "/api/shares/{id}": {
@@ -26301,7 +26561,8 @@
         "summary": "Revoke a share",
         "tags": [
           "shares"
-        ]
+        ],
+        "x-agent-workspace-feature": "sharing"
       }
     },
     "/api/sharing-policies": {
@@ -26344,7 +26605,8 @@
         "summary": "Read the workspace's sharing policy",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "sharing"
       },
       "patch": {
         "operationId": "workspaces.sharingPolicy.set",
@@ -26395,7 +26657,8 @@
         "summary": "Change the workspace's sharing policy",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "sharing"
       }
     },
     "/api/skills": {
@@ -26438,7 +26701,8 @@
         "summary": "List skills",
         "tags": [
           "skills"
-        ]
+        ],
+        "x-agent-workspace-feature": "skills"
       },
       "post": {
         "operationId": "skills.import",
@@ -26451,7 +26715,40 @@
           "content": {
             "application/json": {
               "schema": {
+                "deprecated": true,
                 "description": "Not yet described by a contract schema; the route catalogue lists it as `json-undescribed` (packages/contracts/src/routes.ts)."
+              }
+            },
+            "multipart/form-data": {
+              "encoding": {
+                "file": {
+                  "contentType": "application/octet-stream"
+                },
+                "name": {
+                  "contentType": "text/plain"
+                }
+              },
+              "schema": {
+                "properties": {
+                  "file": {
+                    "description": "One part per skill file, `SKILL.md` first; each part's filename is the file's relative path.",
+                    "items": {
+                      "contentMediaType": "application/octet-stream",
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "name": {
+                    "description": "The skill name; the first part.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "file"
+                ],
+                "type": "object"
               }
             }
           },
@@ -26489,7 +26786,8 @@
         "summary": "Import a skill",
         "tags": [
           "skills"
-        ]
+        ],
+        "x-agent-workspace-feature": "skills"
       }
     },
     "/api/skills/{name}": {
@@ -26533,7 +26831,8 @@
         "summary": "Delete a skill no agent is assigned (`409 skill_in_use` names the referrers)",
         "tags": [
           "skills"
-        ]
+        ],
+        "x-agent-workspace-feature": "skills"
       },
       "get": {
         "operationId": "skills.get",
@@ -26589,7 +26888,8 @@
         "summary": "Read one skill, or export it with its files",
         "tags": [
           "skills"
-        ]
+        ],
+        "x-agent-workspace-feature": "skills"
       },
       "patch": {
         "operationId": "skills.update",
@@ -26648,7 +26948,8 @@
         "summary": "Update a skill",
         "tags": [
           "skills"
-        ]
+        ],
+        "x-agent-workspace-feature": "skills"
       }
     },
     "/api/skills/{name}/revisions": {
@@ -26709,7 +27010,8 @@
         "summary": "Publish the skill as the next immutable revision an agent can pin",
         "tags": [
           "skills"
-        ]
+        ],
+        "x-agent-workspace-feature": "skills"
       }
     },
     "/api/storage-connections": {
@@ -26752,7 +27054,8 @@
         "summary": "List the storage connections of the workspace",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "storage.connections.create",
@@ -26803,7 +27106,8 @@
         "summary": "Connect an S3 bucket or an operator folder, read-only by default",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/storage-connections/{id}": {
@@ -26847,7 +27151,8 @@
         "summary": "Delete a storage connection and its credential",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "get": {
         "operationId": "storage.connections.get",
@@ -26896,7 +27201,8 @@
         "summary": "Read one storage connection",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "storage.connections.update",
@@ -26955,7 +27261,8 @@
         "summary": "Rename a storage connection or change its URL, allowed prefixes or write access",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/storage-connections/{id}/browse": {
@@ -27006,7 +27313,8 @@
         "summary": "List a folder of a storage connection inside its allowed prefixes (?prefix=&cursor=)",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/storage-connections/{id}/credential": {
@@ -27067,7 +27375,8 @@
         "summary": "Replace the credential of a storage connection (the old value is never returned)",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/storage-connections/{id}/test": {
@@ -27118,7 +27427,8 @@
         "summary": "Open a storage connection and list one page of an allowed folder",
         "tags": [
           "storage-connections"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/tokens": {
@@ -27171,7 +27481,8 @@
         "summary": "Mint a short-lived browser token",
         "tags": [
           "tokens"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/tool-bundles": {
@@ -27242,7 +27553,8 @@
         "summary": "Store a code-tool bundle by its SHA-256 (`200` when the workspace already held it)",
         "tags": [
           "tool-bundles"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/tool-bundles/{digest}": {
@@ -27293,7 +27605,8 @@
         "summary": "Read the address and size of a stored code-tool bundle",
         "tags": [
           "tool-bundles"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/triggers": {
@@ -27336,7 +27649,8 @@
         "summary": "List triggers",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       },
       "post": {
         "operationId": "triggers.create",
@@ -27387,7 +27701,8 @@
         "summary": "Create a webhook or schedule trigger; a webhook URL secret is returned once",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       }
     },
     "/api/triggers/{id}": {
@@ -27438,7 +27753,8 @@
         "summary": "Delete a trigger and its delivery records",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       },
       "get": {
         "operationId": "triggers.get",
@@ -27487,7 +27803,8 @@
         "summary": "Read one trigger",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       },
       "patch": {
         "operationId": "triggers.update",
@@ -27546,7 +27863,8 @@
         "summary": "Change a trigger's name, prompt template, enabled flag or Zoom secret token",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       }
     },
     "/api/triggers/{id}/fire/{secret}": {
@@ -27635,7 +27953,8 @@
         "summary": "Fire a webhook trigger: the body is the {{body}} of its prompt and a run starts as the trigger owner in a new session (202). The URL secret is the authentication and travels in the path, so it can appear in access logs of a proxy or CDN: rotate it if one may have leaked. Every miss answers one 404 trigger_not_found. A Microsoft Graph validationToken query parameter is echoed as text/plain, and Zoom endpoint.url_validation is answered with the token and its HMAC (200); neither starts a run.",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       }
     },
     "/api/triggers/{id}/secret": {
@@ -27686,7 +28005,8 @@
         "summary": "Rotate a webhook trigger's URL secret; the new secret is returned once",
         "tags": [
           "triggers"
-        ]
+        ],
+        "x-agent-workspace-feature": "triggers"
       }
     },
     "/api/users": {
@@ -27729,7 +28049,8 @@
         "summary": "List users",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "team.users.create",
@@ -27780,7 +28101,8 @@
         "summary": "Create a user",
         "tags": [
           "team"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/workspaces": {
@@ -27823,7 +28145,8 @@
         "summary": "List the workspaces the caller belongs to",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "post": {
         "operationId": "workspaces.create",
@@ -27874,7 +28197,8 @@
         "summary": "Create a workspace",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/api/workspaces/{id}": {
@@ -27925,7 +28249,8 @@
         "summary": "Read one workspace and the caller membership in it",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
       },
       "patch": {
         "operationId": "workspaces.update",
@@ -27984,7 +28309,120 @@
         "summary": "Rename a workspace",
         "tags": [
           "workspaces"
-        ]
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/workspaces/{id}/features": {
+      "get": {
+        "operationId": "workspaces.features.list",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceFeatures"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List the features of a workspace and whether each is on",
+        "tags": [
+          "workspaces"
+        ],
+        "x-agent-workspace-feature": "core"
+      },
+      "put": {
+        "operationId": "workspaces.features.set",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkspaceFeaturesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceFeatures"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Replace the set of features a workspace has switched off (Owner only)",
+        "tags": [
+          "workspaces"
+        ],
+        "x-agent-workspace-feature": "core"
       }
     },
     "/mcp/builder": {
@@ -28042,7 +28480,8 @@
         "summary": "MCP JSON-RPC to the Builder's read tools (initialize, ping, tools/list, tools/call) for an outside client",
         "tags": [
           "mcp"
-        ]
+        ],
+        "x-agent-workspace-feature": "builder"
       }
     },
     "/mcp/projects/{name}": {
@@ -28108,7 +28547,8 @@
         "summary": "MCP JSON-RPC to an endpoint client's production code tools (initialize, ping, tools/list, tools/call)",
         "tags": [
           "mcp"
-        ]
+        ],
+        "x-agent-workspace-feature": "projects"
       }
     }
   },

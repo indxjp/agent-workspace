@@ -98,7 +98,7 @@ describe('createWorkspace', () => {
     await createWorkspace(
       target,
       {
-        database: 'embedded PostgreSQL 17',
+        database: 'PostgreSQL 18',
         storage: 'local filesystem',
         runtime: 'docker',
         authentication: 'local administrator',
@@ -136,7 +136,7 @@ describe('createWorkspace', () => {
     await createWorkspace(
       target,
       {
-        database: 'embedded PostgreSQL 17',
+        database: 'PostgreSQL 18',
         storage: 'local filesystem',
         runtime: 'docker',
         authentication: 'local administrator',
@@ -230,7 +230,7 @@ describe('createWorkspace', () => {
     await createWorkspace(
       target,
       {
-        database: 'PostgreSQL 17',
+        database: 'PostgreSQL 18',
         storage: 'SeaweedFS',
         runtime: 'docker',
         authentication: 'local administrator',
@@ -253,7 +253,7 @@ describe('createWorkspace', () => {
     const parent = await mkdtemp(path.join(os.tmpdir(), 'agent-workspace-generator-'));
     created.push(parent);
     const supported: GeneratorAnswers = {
-      database: 'PostgreSQL 17',
+      database: 'PostgreSQL 18',
       storage: 'local filesystem',
       runtime: 'docker',
       authentication: 'local administrator',
@@ -285,7 +285,7 @@ describe('createWorkspace', () => {
     await createWorkspace(
       target,
       {
-        database: 'embedded PostgreSQL 17',
+        database: 'PostgreSQL 18',
         storage: 'SeaweedFS',
         runtime: 'docker',
         authentication: 'local administrator',
@@ -494,7 +494,7 @@ describe('createWorkspace --cloud', () => {
       createWorkspace(
         target,
         {
-          database: 'PostgreSQL 17',
+          database: 'PostgreSQL 18',
           storage: 'local filesystem',
           runtime: 'docker',
           authentication: 'local administrator',
@@ -699,7 +699,7 @@ describe('parseCreateArguments', () => {
 
 describe('create-agent-workspace --validate', () => {
   const composeAnswers: GeneratorAnswers = {
-    database: 'PostgreSQL 17',
+    database: 'PostgreSQL 18',
     storage: 'SeaweedFS',
     runtime: 'docker',
     authentication: 'local administrator',
@@ -847,7 +847,7 @@ describe('what the command tells the operator to do next', () => {
     await create([target, '--cloud', 'local'], {
       images,
       answers: {
-        database: 'PostgreSQL 17',
+        database: 'PostgreSQL 18',
         storage: 'SeaweedFS',
         runtime: 'docker',
         authentication: 'local administrator',
@@ -869,7 +869,7 @@ describe('what the command tells the operator to do next', () => {
     await create([target, '--cloud', 'local'], {
       images,
       answers: {
-        database: 'PostgreSQL 17',
+        database: 'PostgreSQL 18',
         storage: 'local filesystem',
         runtime: 'docker',
         authentication: 'local administrator',
@@ -1050,17 +1050,30 @@ describe('no person, no prompt (#879)', () => {
 
   it('labels the defaults as what the Compose project runs, and still accepts the old wording', async () => {
     expect(DEFAULT_ANSWERS).toMatchObject({
-      database: 'PostgreSQL 17 (container)',
+      database: 'PostgreSQL 18 (container)',
       storage: 'local filesystem (Docker volume)',
     });
     const legacy = await freshTarget();
     await createWorkspace(
       legacy,
-      { ...DEFAULT_ANSWERS, database: 'embedded PostgreSQL 17', storage: 'local filesystem' },
+      { ...DEFAULT_ANSWERS, database: 'PostgreSQL', storage: 'local filesystem' },
       options,
     );
     await expectDefaultProject(legacy);
   });
+
+  // ADR-0159: a new deployment runs 18, and giving 18 to an operator who asked for 17 would be a
+  // data migration they never agreed to.
+  it.each(['PostgreSQL 17', 'PostgreSQL 17 (container)', 'embedded PostgreSQL 17'])(
+    'refuses the PostgreSQL 17 answer %j by name instead of deploying 18',
+    async (database) => {
+      const target = await freshTarget();
+      await expect(
+        createWorkspace(target, { ...DEFAULT_ANSWERS, database }, options),
+      ).rejects.toThrow(/New Compose deployments run PostgreSQL 18/u);
+      expect(existsSync(path.join(target, 'compose.yaml'))).toBe(false);
+    },
+  );
 
   it('--cloud local --yes finishes with stdin held open and CI set, reading none of it', async () => {
     const target = await freshTarget();
@@ -1788,13 +1801,14 @@ describe('create writes a v2 project by default (S1-16)', () => {
       'blue',
       '#112233',
       '',
+      '',
       'y',
     ]);
 
     await create([target], { terminal });
 
-    // Twelve questions, the refused tools and colour asked twice, then the confirmation.
-    expect(asked).toHaveLength(14);
+    // Thirteen questions, the refused tools and colour asked twice, then the confirmation.
+    expect(asked).toHaveLength(15);
     expect(asked[0]).toBe(
       'Which theme should setup start from? (support | copilot | knowledge | automation | review | blank) [support] ',
     );
@@ -1812,7 +1826,10 @@ describe('create writes a v2 project by default (S1-16)', () => {
     expect(asked[12]).toBe(
       'Which agent platforms should this agent also be published to? (claude-managed-agents | copilot-studio | m365-declarative-agent | microsoft-foundry | gemini-enterprise | aws-agentcore | none; comma-separated) [none] ',
     );
-    expect(asked[13]).toBe(`write these 11 files into ${target}? [y/N] `);
+    expect(asked[13]).toBe(
+      'Which features should this deployment include? (chat | projects | files | skills | connectors | runs | sharing | surfaces | triggers | evaluations | builder; comma-separated) [chat,projects,files,skills,connectors,runs,sharing,surfaces,triggers,evaluations,builder] ',
+    );
+    expect(asked[14]).toBe(`write these 11 files into ${target}? [y/N] `);
     expect(output()).toContain(
       '["none","openapi"] is not accepted: up to 2 of openapi, postgres, none, separated by commas; none must be chosen alone',
     );
@@ -1845,7 +1862,7 @@ describe('create writes a v2 project by default (S1-16)', () => {
   it('writes nothing when the file list is declined', async () => {
     const target = await targetIn('declined');
     const output = captureStdout();
-    const { terminal } = scriptedTerminal([...Array<string>(10).fill(''), 'n']);
+    const { terminal } = scriptedTerminal([...Array<string>(11).fill(''), 'n']);
 
     await create([target], { terminal });
 
@@ -1857,11 +1874,11 @@ describe('create writes a v2 project by default (S1-16)', () => {
   it('skips the OpenAPI question when no tool is chosen', async () => {
     const target = await targetIn('no-tools');
     captureStdout();
-    const { terminal, asked } = scriptedTerminal([...Array<string>(10).fill(''), 'n']);
+    const { terminal, asked } = scriptedTerminal([...Array<string>(11).fill(''), 'n']);
 
     await create([target], { terminal });
 
-    expect(asked).toHaveLength(11);
+    expect(asked).toHaveLength(12);
     expect(asked.some((question) => question.startsWith('Where is the OpenAPI document?'))).toBe(
       false,
     );
@@ -1870,7 +1887,7 @@ describe('create writes a v2 project by default (S1-16)', () => {
   it("recommends the chosen theme's answers", async () => {
     const target = await targetIn('copilot');
     captureStdout();
-    const { terminal, asked } = scriptedTerminal(['copilot', ...Array<string>(9).fill(''), 'y']);
+    const { terminal, asked } = scriptedTerminal(['copilot', ...Array<string>(10).fill(''), 'y']);
 
     await create([target], { terminal });
 

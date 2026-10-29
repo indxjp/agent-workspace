@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   chmod,
   lstat,
@@ -26,6 +27,7 @@ import {
   materializeRunResources,
   readSkillInbox,
   removeSkillInbox,
+  SkillInboxMismatchError,
   withoutSkills,
   type ResolvedRunRequest,
   type SkillPlacingEngine,
@@ -565,7 +567,13 @@ describe('skill references through the inbox', () => {
   const bytes = '# support skill';
   const granted: RunSkillReference = {
     name: 'support',
-    files: [{ path: 'SKILL.md', size: bytes.length, sha256: '0'.repeat(64) }],
+    files: [
+      {
+        path: 'SKILL.md',
+        size: bytes.length,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+      },
+    ],
   };
 
   async function lay(cwd: string): Promise<string> {
@@ -589,6 +597,21 @@ describe('skill references through the inbox', () => {
       await expect(lstat(path.join(parsed.cwd, '.aw-inbox'))).rejects.toMatchObject({
         code: 'ENOENT',
       });
+    } finally {
+      await removeRoot(root);
+    }
+  });
+
+  it('[US-STO-06][contract][run] an inbox file whose bytes differ from its reference is refused', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'agent-skill-inbox-swap-'));
+    try {
+      const parsed = wireRequest(root, [], [granted]);
+      const inbox = await lay(parsed.cwd);
+      // Same size, other bytes.
+      await writeFile(path.join(inbox, 'SKILL.md'), bytes.toUpperCase());
+      await expect(readSkillInbox(parsed, ENGINE.protectedConfigDirectory)).rejects.toBeInstanceOf(
+        SkillInboxMismatchError,
+      );
     } finally {
       await removeRoot(root);
     }

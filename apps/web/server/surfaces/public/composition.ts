@@ -281,9 +281,21 @@ async function publisherOf(
       apiKeyId: record.apiKeyId,
       actsForPrincipalId: record.actsForPrincipalId,
     }),
-    agentRef: { id: agent.id, workspaceId, engine: engineForStoredPolicy(agent.policy) },
+    agentRef: {
+      id: agent.id,
+      workspaceId,
+      engine: engineForStoredPolicy(agent.policy),
+      // Issue #1851: the preflight does not look at this, so `open` and `checkModel` do.
+      ...(agent.archivedAt === undefined ? {} : { archived: true as const }),
+    },
   };
 }
+
+/** What a bootstrap or a model check of an archived agent answers: the run API's own refusal. */
+const AGENT_ARCHIVED = {
+  code: 'agent_archived',
+  message: 'This agent is archived and starts no run; restore it to run it again.',
+} as const;
 
 /**
  * The scope of the workspace this deployment serves (`WORKSPACE_SLUG`), or `null` when the slug is
@@ -376,6 +388,8 @@ export function createSurfaceSessionsRuntime(
       const owner = await publisherOf(dependencies, workspaceId, agent);
       if (owner === null) return GONE;
       const { publisher, agentRef } = owner;
+      // Before the preflight and before any session, key or token exists (issue #1851).
+      if (agentRef.archived === true) return { kind: 'refused', ...AGENT_ARCHIVED };
       // A resumed session's project, if it was filed under one, decides its model as a run's would.
       const refusal = await dependencies.preflight(
         publisher,
@@ -447,6 +461,7 @@ export function createSurfaceSessionsRuntime(
       if (agent === null) return null;
       const owner = await publisherOf(dependencies, workspaceId, agent);
       if (owner === null) return null;
+      if (owner.agentRef.archived === true) return AGENT_ARCHIVED;
       const refusal = await dependencies.preflight(
         owner.publisher,
         owner.agentRef,

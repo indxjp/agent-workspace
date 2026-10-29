@@ -403,7 +403,7 @@ Value: `5 * 1024 ** 3`
 ## SubtreeDeleteOutcomeSchema
 
 The `200` of `DELETE /api/files/:id` when the path names a folder — with contents, or one
-created empty (its `deleted` list then names the store's folder marker). A `partial` outcome
+created empty (its `deleted` list is then empty). A `partial` outcome
 lists what is still there. A plain file and a path with nothing at or under it answer `204`
 with no body instead.
 

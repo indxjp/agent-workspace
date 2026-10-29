@@ -9,7 +9,7 @@ import type {
 import type { ModelDiscovery } from '../models/discovery';
 import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
 import { setupSecretsOf, setupStepFailure } from '../setup/failure';
-import type { SetupInput } from '../setup/runtime';
+import { setupConnectionName, type SetupInput } from '../setup/runtime';
 import type { setupRuntimeNetworkPolicy } from './config';
 import { reconcileSetupDefaults, type SeededSetupProvider } from './setup-reconciliation';
 import {
@@ -56,7 +56,7 @@ export async function setupConnectionCandidate(
   apiKey: string,
   baseUrl: string | undefined,
 ): Promise<SetupConnectionCandidate | SetupFailure> {
-  const name = `${provider} default`;
+  const name = setupConnectionName(provider);
   const existing = (await store.list()).find((entry) => entry.name === name);
   const configOf = (stored: ModelConnectionRecord['config']): ModelConnectionRecord['config'] =>
     baseUrl === undefined ? stored : { ...stored, baseUrl };

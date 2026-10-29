@@ -9,10 +9,15 @@ import { bigint, foreignKey, index, pgTable, primaryKey, text, uuid } from 'driz
 
 import { engineIds } from './agents.js';
 import { createdAt, updatedAt } from './columns.js';
-import { fileStatuses } from './files.js';
 import { oneOf } from './one-of.js';
 import { sessions } from './sessions.js';
 import { workspaces } from './workspaces.js';
+
+/**
+ * A blob's states, kept apart from the files table's list on purpose: a status added for files must
+ * not widen `session_state_blobs_status_valid` as well.
+ */
+export const sessionStateBlobStatuses = ['pending', 'ready', 'deleting'] as const;
 
 /**
  * One opaque blob of engine session state — an ACP agent's state directory, snapshotted.
@@ -37,7 +42,7 @@ export const sessionStateBlobs = pgTable(
     /** The permanent object ID (the storage design, §04); `null` for a blob written before object IDs, whose bytes are at `storage_key`. */
     objectId: uuid('object_id'),
     /** `ready` is the only status a read serves; `pending` and `deleting` are for the save and cleanup steps. */
-    status: text('status', { enum: fileStatuses }).notNull().default('ready'),
+    status: text('status', { enum: sessionStateBlobStatuses }).notNull().default('ready'),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
     /** Lower-case hex SHA-256 of the stored bytes, so a read can verify what it was handed. */
     sha256: text('sha256').notNull(),
@@ -56,7 +61,7 @@ export const sessionStateBlobs = pgTable(
     }).onDelete('cascade'),
     index('session_state_blobs_workspace_updated_idx').on(table.workspaceId, table.updatedAt),
     oneOf('session_state_blobs_engine_valid', table.engine, engineIds),
-    oneOf('session_state_blobs_status_valid', table.status, fileStatuses),
+    oneOf('session_state_blobs_status_valid', table.status, sessionStateBlobStatuses),
   ],
 );
 

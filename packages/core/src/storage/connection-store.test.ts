@@ -35,7 +35,11 @@ import {
   type ConnectionCredential,
   type ConnectionStoreOptions,
 } from './connection-store.js';
-import { defineObjectStoreV2Contract } from './contract.js';
+import {
+  defineObjectStoreContract,
+  defineOwnPagingContract,
+  type ObjectStoreContractFixture,
+} from './contract.js';
 import {
   AzureAccountKeyConnection,
   AzureSasTokenConnection,
@@ -48,8 +52,9 @@ import {
   gcsStorageOptions,
 } from './gcs-store.js';
 import { createInMemoryObjectStore } from './memory-store.js';
-import { scopedObjectStoreProvider, type ObjectStoreV2 } from './object-store.js';
+import { scopedObjectStoreProvider, type ObjectStore } from './object-store.js';
 import { ensureS3Bucket } from './s3-store.js';
+import { streamToBytes } from './streams.js';
 
 // The opener imports `gcs-store.js` itself; a test can make its store construction fail.
 vi.mock('./gcs-store.js', async (importOriginal) => {
@@ -75,7 +80,7 @@ const open = (
   url: string,
   credential: ConnectionCredential,
   options: Partial<ConnectionStoreOptions> = {},
-): Promise<ObjectStoreV2> =>
+): Promise<ObjectStore> =>
   openConnectionStore(url, credential, {
     writable: false,
     fileRoots: [],
@@ -110,7 +115,8 @@ describe('openConnectionStore', () => {
         { kind: 'folder', key: 'reports/2026' },
         { kind: 'file', key: 'reports/a.txt', sizeBytes: 5, contentType: 'text/plain' },
       ]);
-      expect(new TextDecoder().decode((await store.get('reports/2026/b.txt'))?.body)).toBe('bravo');
+      const read = await store.read('reports/2026/b.txt');
+      expect(new TextDecoder().decode(await streamToBytes(read!.body))).toBe('bravo');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -126,14 +132,13 @@ describe('openConnectionStore', () => {
     }
   });
 
-  it('[US-STO-12][unit][sdk] every non-read member of ObjectStoreV2 is refused when read-only', async () => {
+  it('[US-STO-12][unit][sdk] every non-read member of ObjectStore is refused when read-only', async () => {
     type WriteMember = {
       [K in keyof typeof MEMBER_ACCESS]: (typeof MEMBER_ACCESS)[K] extends 'write' ? K : never;
     }[keyof typeof MEMBER_ACCESS];
-    const calls: Record<WriteMember, (store: ObjectStoreV2) => Promise<unknown>> = {
-      put: (store) => store.put('a.txt', { body: bytes }),
+    const calls: Record<WriteMember, (store: ObjectStore) => Promise<unknown>> = {
       delete: (store) => store.delete('a.txt'),
-      copyObject: (store) => store.copyObject('a.txt', 'b.txt'),
+      copy: (store) => store.copy('a.txt', 'b.txt'),
       write: (store) => store.write('a.txt', bytes, {}),
     };
     const store = readOnlyStore(createInMemoryObjectStore());
@@ -143,6 +148,37 @@ describe('openConnectionStore', () => {
       await expect(call(store)).rejects.toBeInstanceOf(ReadOnlyStoreError);
     }
     expect(await store.head('a.txt')).toBeNull();
+  });
+
+  // #1991 A4: a refused streamed write still releases the caller's source.
+  it('[US-STO-12][unit][sdk] refusing a read-only write cancels its unopened source', async () => {
+    const backend = createInMemoryObjectStore();
+    const write = vi.spyOn(backend, 'write');
+    const cancel = vi.fn();
+    const source = new ReadableStream<Uint8Array>({ cancel });
+
+    const refusal: unknown = await readOnlyStore(backend)
+      .write('a.txt', source, {})
+      .catch((e: unknown) => e);
+
+    expect(refusal).toBeInstanceOf(ReadOnlyStoreError);
+    expect(cancel).toHaveBeenCalledWith(refusal);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('[US-STO-12][unit][sdk] a failed cancel keeps both the refusal and the cancel failure', async () => {
+    const cancelFailure = new Error('source cancel failed');
+    const source = new ReadableStream<Uint8Array>({ cancel: () => Promise.reject(cancelFailure) });
+
+    const error: unknown = await readOnlyStore(createInMemoryObjectStore())
+      .write('a.txt', source, {})
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AggregateError);
+    const errors = (error as AggregateError).errors;
+    expect(errors[0]).toBeInstanceOf(ReadOnlyStoreError);
+    expect(errors[1]).toBe(cancelFailure);
+    expect((error as AggregateError).cause).toBe(cancelFailure);
   });
 
   it('[US-STO-12][unit][sdk] a signed PUT URL is refused and a signed GET URL is not', async () => {
@@ -169,7 +205,7 @@ describe('openConnectionStore', () => {
       await writable.write('a.txt', bytes, {});
       const readOnly = await open(`file://${root}`, { provider: 'file' }, { fileRoots: [root] });
       expect((await readOnly.head('a.txt'))?.sizeBytes).toBe(3);
-      expect((await readOnly.list('')).map((entry) => entry.key)).toContain('a.txt');
+      expect((await readOnly.listPage('')).entries.map((entry) => entry.key)).toContain('a.txt');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -281,6 +317,47 @@ describe('connection store endpoint guard', () => {
     );
   });
 
+  // #1835: a signed link names the public endpoint, and whatever fetches it (a browser, a runner)
+  // must not be pointed at a private address through the connection URL.
+  it('[US-STO-12][unit][sdk] a private publicEndpoint is refused like a private endpoint', async () => {
+    const urlWith = (publicEndpoint: string): string =>
+      formatStorageUrl({
+        kind: 's3',
+        bucket: 'acme-data',
+        prefix: '',
+        publicEndpoint,
+        forcePathStyle: false,
+      });
+    const resolve = resolveTo('93.184.216.34');
+    expect(
+      await codeOf(open(urlWith('https://169.254.169.254'), s3Credential(), { resolve })),
+    ).toBe('storage_connection_endpoint_forbidden');
+    expect(
+      await codeOf(open(urlWith('https://cdn.example.com'), s3Credential(), { resolve })),
+    ).toBeUndefined();
+  });
+
+  // #1835: the default Azure host goes through the same check as an `endpoint=` one, so a name the
+  // operator's resolver maps to a private address is refused, and the sockets are pinned.
+  it('[US-STO-12][unit][sdk] the default Azure account host is checked too', async () => {
+    const url = formatStorageUrl({
+      kind: 'azblob',
+      account: 'acme',
+      serviceUrl: 'https://acme.blob.core.windows.net',
+      container: 'files',
+      prefix: '',
+    });
+    const asked: string[] = [];
+    const resolve = (host: string) => {
+      asked.push(host);
+      return resolveTo('10.0.0.7')();
+    };
+    expect(
+      await codeOf(open(url, { provider: 'azblob', sasToken: 'sv=1&sig=x' }, { resolve })),
+    ).toBe('storage_connection_endpoint_forbidden');
+    expect(asked).toEqual(['acme.blob.core.windows.net']);
+  });
+
   it('[US-STO-12][unit][sdk] the pinned lookup answers only with the checked addresses', async () => {
     const lookup = pinnedLookup([{ address: '93.184.216.34', family: 4 }]);
     const single = await new Promise((resolve) => {
@@ -291,6 +368,35 @@ describe('connection store endpoint guard', () => {
       lookup('anything.example', { all: true }, (_error, addresses) => resolve(addresses));
     });
     expect(all).toEqual([{ address: '93.184.216.34', family: 4 }]);
+  });
+
+  it('[US-STO-12][unit][sdk] the pinned lookup answers a family request only from that family', async () => {
+    const lookup = pinnedLookup([
+      { address: '93.184.216.34', family: 4 },
+      { address: '2606:2800:220:1::1', family: 6 },
+    ]);
+    const ask = (options: { family?: number | 'IPv4' | 'IPv6'; all?: boolean }) =>
+      new Promise<unknown>((resolve) => {
+        lookup('anything.example', options, (error, address, family) =>
+          resolve(
+            error === null ? { address, family } : { code: (error as { code?: string }).code },
+          ),
+        );
+      });
+    expect(await ask({ family: 6 })).toEqual({ address: '2606:2800:220:1::1', family: 6 });
+    expect(await ask({ family: 'IPv6' })).toEqual({ address: '2606:2800:220:1::1', family: 6 });
+    expect(await ask({ family: 4 })).toEqual({ address: '93.184.216.34', family: 4 });
+    expect(await ask({ family: 6, all: true })).toEqual({
+      address: [{ address: '2606:2800:220:1::1', family: 6 }],
+      family: undefined,
+    });
+    const v4Only = pinnedLookup([{ address: '93.184.216.34', family: 4 }]);
+    const refused = await new Promise<unknown>((resolve) => {
+      v4Only('anything.example', { family: 6 }, (error) =>
+        resolve((error as { code?: string }).code),
+      );
+    });
+    expect(refused).toBe('ENOTFOUND');
   });
 });
 
@@ -345,6 +451,56 @@ describe('connection store S3 connections', () => {
     expect(new Set(securityTokens)).toEqual(new Set([sessionToken]));
   });
 
+  it('[US-STO-12][unit][sdk] a key limited to one folder, as the guide grants it, opens and lists that folder', async () => {
+    // The guide's policy: `s3:ListBucket` only under the `s3:prefix` condition `reports/*`, so a
+    // `HeadBucket` (no prefix) is denied and so is a listing outside the folder. The connection
+    // URL has no prefix, as in the guide, so an open-time probe of the store's own prefix (an
+    // unprefixed listing) would be denied too.
+    const requests: string[] = [];
+    server = createServer((request, response) => {
+      const url = new URL(request.url ?? '/', 'http://bucket-host.invalid');
+      requests.push(`${request.method ?? ''} ${url.pathname}`);
+      const prefix = url.searchParams.get('prefix') ?? '';
+      if (
+        request.method === 'GET' &&
+        url.pathname.replace(/\/$/u, '') === '/acme-data' &&
+        prefix.startsWith('reports/')
+      ) {
+        response.setHeader('content-type', 'application/xml');
+        response.end(
+          '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>acme-data</Name>' +
+            `<Prefix>${prefix}</Prefix><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys>` +
+            '<IsTruncated>false</IsTruncated><Contents><Key>reports/q3.csv</Key>' +
+            '<Size>3</Size><ETag>"e"</ETag><LastModified>2026-10-27T00:00:00.000Z</LastModified>' +
+            '</Contents></ListBucketResult>',
+        );
+        return;
+      }
+      // `s3:GetObject` on the folder: a listing heads each file it returns.
+      if (request.method === 'HEAD' && url.pathname.startsWith('/acme-data/reports/')) {
+        response.setHeader('content-length', '3');
+        response.setHeader('content-type', 'text/csv');
+        response.end();
+        return;
+      }
+      response.statusCode = 403;
+      response.setHeader('content-type', 'application/xml');
+      response.end('<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>');
+    });
+    await new Promise<void>((resolve) => server?.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as AddressInfo).port;
+
+    const store = await open(urlFor(port), s3Credential(), { egress: local, resolve: toLoopback });
+    const page = await store.listPage('reports', { limit: 1 });
+    expect(page.entries.map((entry) => entry.key)).toEqual(['reports/q3.csv']);
+    expect(requests).not.toContainEqual(expect.stringMatching(/^HEAD \/acme-data\/?$/u));
+    // Outside the folder the provider's refusal surfaces with its status, for the caller to map.
+    const outside: unknown = await store
+      .listPage('', { limit: 1 })
+      .catch((error: unknown) => error);
+    expect(outside).toMatchObject({ $metadata: { httpStatusCode: 403 } });
+  });
+
   it('[US-STO-12][unit][sdk] credentials never appear in a refusal, its cause, or the logs', async () => {
     const credential = { ...s3Credential(), sessionToken: randomBytes(24).toString('base64') };
     const secrets = [credential.accessKeyId, credential.secretAccessKey, credential.sessionToken];
@@ -352,8 +508,17 @@ describe('connection store S3 connections', () => {
       vi.spyOn(console, method).mockImplementation(() => undefined),
     );
     const port = await listen(403);
+    // The open sends nothing; the refused key shows on the first call, as the provider's status.
+    const opened = await open(urlFor(port), credential, { egress: local, resolve: toLoopback });
+    const denied: unknown = await opened
+      .listPage('', { limit: 1 })
+      .catch((error: unknown) => error);
+    expect(denied).toMatchObject({ $metadata: { httpStatusCode: 403 } });
+    for (const secret of secrets) {
+      expect(String(denied)).not.toContain(secret);
+      expect((denied as Error).stack ?? '').not.toContain(secret);
+    }
     const refusals = [
-      open(urlFor(port), credential, { egress: local, resolve: toLoopback }),
       open('s3://acme-data?endpoint=https://127.0.0.1', credential),
       open('s3://acme-data', { provider: 'file' }),
       open(`s3://${credential.accessKeyId}:${credential.secretAccessKey}@acme-data`, credential),
@@ -366,7 +531,9 @@ describe('connection store S3 connections', () => {
         ),
       ),
     );
-    expect(await codeOf(refusals[0] as Promise<unknown>)).toBe('storage_connection_unreachable');
+    expect(await codeOf(refusals[0] as Promise<unknown>)).toBe(
+      'storage_connection_endpoint_forbidden',
+    );
     for (const error of errors) {
       expect(error).toBeInstanceOf(ConnectionStoreError);
       expect((error as Error).cause).toBeUndefined();
@@ -468,6 +635,80 @@ describe('connection store GCS connections', () => {
     expect(JSON.stringify(failure)).not.toContain(accessToken);
   });
 
+  it('[US-STO-12][unit][sdk] a GCS connection opens without reading the bucket, which the object roles cannot', async () => {
+    // Storage Object Viewer and User hold no `storage.buckets.get`: the bucket's metadata is a 403.
+    const requests: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      requests.push(input instanceof Request ? input.url : String(input));
+      return Promise.resolve(new Response('{"error":{"code":403}}', { status: 403 }));
+    });
+    const store = await open('gcs://acme-data?project=acme-prod', {
+      provider: 'gcs',
+      accessToken: `ya29.${randomUUID()}`,
+    });
+    expect(store.capabilities).toBeDefined();
+    expect(requests).toEqual([]);
+    expect(vi.mocked(createGcsObjectStoreFromConfig)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ bucket: 'acme-data', checkBucketOnOpen: false }),
+    );
+    vi.restoreAllMocks();
+  });
+
+  it('[US-STO-12][unit][sdk] a GCS connection is refused while the SDK emulator host is set', async () => {
+    // The SDK would send every request to that host, which no endpoint check has seen.
+    const credential = { provider: 'gcs', accessToken: `ya29.${randomUUID()}` } as const;
+    vi.mocked(createGcsObjectStoreFromConfig).mockClear();
+    for (const egress of [production, local]) {
+      const attempt = open('gcs://acme-data?project=acme-prod', credential, {
+        egress,
+        gcsEmulatorHost: 'http://127.0.0.1:4443',
+      });
+      expect(await codeOf(attempt)).toBe('storage_connection_endpoint_forbidden');
+    }
+    expect(vi.mocked(createGcsObjectStoreFromConfig)).not.toHaveBeenCalled();
+  });
+
+  it('[US-STO-12][unit][sdk] a GCS connection is refused when the SDK picks the emulator host up from the environment itself', async () => {
+    // No caller passes `gcsEmulatorHost` here: the client the SDK builds is checked instead.
+    vi.stubEnv('STORAGE_EMULATOR_HOST', 'http://127.0.0.1:4443');
+    const requests: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      requests.push(input instanceof Request ? input.url : String(input));
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+    try {
+      const attempt = open('gcs://acme-data?project=acme-prod', {
+        provider: 'gcs',
+        accessToken: `ya29.${randomUUID()}`,
+      });
+      expect(await codeOf(attempt)).toBe('storage_connection_endpoint_forbidden');
+      expect(requests).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('[US-STO-12][unit][sdk] a GCS connection dials the test seam endpoint and still requires it', async () => {
+    vi.mocked(createGcsObjectStoreFromConfig).mockClear();
+    await open(
+      'gcs://acme-data?project=acme-prod',
+      { provider: 'gcs', accessToken: `ya29.${randomUUID()}` },
+      { gcsApiEndpoint: 'http://127.0.0.1:4443' },
+    );
+    expect(vi.mocked(createGcsObjectStoreFromConfig)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ apiEndpoint: 'http://127.0.0.1:4443', requireApiEndpoint: true }),
+    );
+    // Without the seam, nothing names an endpoint and Google's is required.
+    await open('gcs://acme-data?project=acme-prod', {
+      provider: 'gcs',
+      accessToken: `ya29.${randomUUID()}`,
+    });
+    expect(vi.mocked(createGcsObjectStoreFromConfig).mock.lastCall?.[0]).not.toHaveProperty(
+      'apiEndpoint',
+    );
+  });
+
   it('[US-STO-12][unit][sdk] a stored key whose type is not service_account is refused even with an email and a key', () => {
     const key = { ...serviceAccount(), project_id: 'acme-prod' };
     expect(parseServiceAccount(JSON.stringify({ type: 'service_account', ...key }))).toStrictEqual(
@@ -476,6 +717,8 @@ describe('connection store GCS connections', () => {
     for (const type of ['external_account', 'authorized_user']) {
       expect(parseServiceAccount(JSON.stringify({ type, ...key }))).toBeNull();
     }
+    // A key with no `type` is refused too (owner decision, #1835).
+    expect(parseServiceAccount(JSON.stringify(key))).toBeNull();
   });
 
   it('[US-STO-12][unit][sdk] an unusable GCS credential is refused without echoing it', async () => {
@@ -701,9 +944,10 @@ const memoryContract = () =>
     provider: scopedObjectStoreProvider(createInMemoryObjectStore()),
     teardown: () => Promise.resolve(),
   });
-defineObjectStoreV2Contract('connection store — memory', memoryContract);
+defineObjectStoreContract('connection store — memory', memoryContract);
+defineOwnPagingContract('connection store — memory', memoryContract);
 
-defineObjectStoreV2Contract('connection store — file', async () => {
+const fileContract = async (): Promise<ObjectStoreContractFixture> => {
   const root = await tempRoot();
   const store = await open(
     `file://${root}`,
@@ -725,9 +969,11 @@ defineObjectStoreV2Contract('connection store — file', async () => {
       await writeFile(target, planted);
     },
   };
-});
+};
+defineObjectStoreContract('connection store — file', fileContract);
+defineOwnPagingContract('connection store — file', fileContract);
 
-defineObjectStoreV2Contract('connection store — S3 (SeaweedFS)', async () => {
+defineObjectStoreContract('connection store — S3 (SeaweedFS)', async () => {
   const endpoint = process.env['TEST_S3_ENDPOINT'];
   if (endpoint === undefined || endpoint.trim() === '') {
     throw new Error('TEST_S3_ENDPOINT is required (the repository test launcher supplies it)');
@@ -771,7 +1017,7 @@ defineObjectStoreV2Contract('connection store — S3 (SeaweedFS)', async () => {
 // endpoint, and fake-gcs-server fails the v2 paging case.
 const azuriteUrl = process.env['TEST_AZURITE_URL']?.trim() ?? '';
 if (azuriteUrl !== '') {
-  defineObjectStoreV2Contract('connection store — Azure Blob (Azurite, SAS token)', async () => {
+  defineObjectStoreContract('connection store — Azure Blob (Azurite, SAS token)', async () => {
     // The development account's key is read from the SDK so no key literal lives here.
     const shared = BlobServiceClient.fromConnectionString('UseDevelopmentStorage=true').credential;
     if (!(shared instanceof StorageSharedKeyCredential)) {

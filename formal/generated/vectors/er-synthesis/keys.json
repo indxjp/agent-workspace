@@ -4405,6 +4405,33 @@
      "columns": ["workspace_id", "acts_for_principal_id"],
      "class": "tenant-paired"},
     "composite": true,
+    "changed": false}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Refinement.ErSynthesis.every_key_has_an_image",
+    "AgentWorkspace.Theorems.Refinement.ErSynthesis.keys_diverge_exactly_at",
+    "AgentWorkspace.Theorems.Refinement.ErSynthesis.tenancy_classes_are_unchanged",
+    "AgentWorkspace.Theorems.Refinement.ErSynthesis.every_tenancy_constraint_is_kept",
+    "AgentWorkspace.Theorems.Invariants.ErSynthesis.no_cross_workspace_reference"],
+   "input": {"table": "workspace_features", "name": "workspace_features_workspace_id_workspaces_id_fk"},
+   "id": "key/workspace_features/workspace_features_workspace_id_workspaces_id_fk",
+   "expected":
+   {"tenantPaired": true,
+    "tenancyConstraint": true,
+    "target":
+    {"refTable": "workspaces",
+     "refColumns": ["id"],
+     "onDelete": "cascade",
+     "name": "workspace_features_workspace_id_workspaces_id_fk",
+     "columns": ["workspace_id"],
+     "class": "root-reference"},
+    "current":
+    {"refTable": "workspaces",
+     "refColumns": ["id"],
+     "onDelete": "cascade",
+     "name": "workspace_features_workspace_id_workspaces_id_fk",
+     "columns": ["workspace_id"],
+     "class": "root-reference"},
+    "composite": false,
     "changed": false}}],
  "family": "er-synthesis",
  "description": "Every foreign key: its shape, tenancy class, pairing, and the target key it becomes."}

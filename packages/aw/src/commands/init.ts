@@ -387,7 +387,7 @@ export const initCommands: readonly LocalCommand[] = [
   command(
     'init',
     // A literal, for the docs generator; `main.test.ts` pins it to the question set.
-    '[--yes] [--theme <theme>] [--sandbox <sandbox>] [--provider <provider>] [--model-base-url <url>] [--agent <agent>] [--engine <engine>] [--tools <tools>] [--openapi <openapi>] [--permissions <permissions>] [--title <title>] [--color <color>] [--platform <platform>] [--answers <file>]',
+    '[--yes] [--theme <theme>] [--sandbox <sandbox>] [--provider <provider>] [--model-base-url <url>] [--agent <agent>] [--engine <engine>] [--tools <tools>] [--openapi <openapi>] [--permissions <permissions>] [--title <title>] [--color <color>] [--platform <platform>] [--features <features>] [--answers <file>]',
     'Write a starter project here: agent-workspace.yaml, an agent and a surface',
     { controlPlane: 'none', run: runInit },
   ),

@@ -35,7 +35,10 @@ interface NavItem {
    * never a fallback for "unknown".
    */
   readonly href: string | null;
-  /** Shown to workspace Owners and Admins only; everyone else does not see the entry. */
+  /**
+   * Shown only to a caller who may manage the workspace's storage, by the same `decide()` question
+   * the page gate asks (the shell layout's `managers`); everyone else does not see the entry.
+   */
   readonly managersOnly?: true;
 }
 
@@ -77,11 +80,6 @@ export const NAVIGATION: readonly NavGroup[] = [
     ],
   },
 ];
-
-/** Whether this directory role sees the entries marked `managersOnly` (Owner and Admin). */
-export function managesWorkspace(role: unknown): boolean {
-  return role === 'owner' || role === 'admin';
-}
 
 /**
  * `usePathname()` is typed `string`, but a component can be rendered outside a router and a

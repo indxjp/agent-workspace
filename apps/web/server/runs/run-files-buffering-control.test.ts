@@ -32,7 +32,7 @@ import {
 } from './run-files-load-fixtures';
 import { createResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
-import { MiB, peakRssGrowth, warmHttpTransport } from '../../../../tests/load/flat-memory';
+import { measureRssGrowth, MiB, warmHttpTransport } from '../../../../tests/load/flat-memory';
 
 let isolated: IsolatedTestDatabase | undefined;
 
@@ -80,7 +80,7 @@ function defineControl(name: string, setup: () => Promise<World>) {
         const { lifecycle, context } = await grantedRun(await setup(), root);
         await warmHttpTransport();
         let held = 0;
-        const growth = await peakRssGrowth(async (sample) => {
+        const { growth, newSpaceGrowth } = await measureRssGrowth(async (sample) => {
           const archive = await lifecycle.inputArchive(context);
           if (archive === null) throw new Error('the run has no archive');
           const buffered = await new Response(archive).arrayBuffer();
@@ -88,7 +88,7 @@ function defineControl(name: string, setup: () => Promise<World>) {
           held = buffered.byteLength;
         });
         console.info(
-          `[load] run files (${name}) negative control: peak RSS growth ${(growth / MiB).toFixed(1)} MiB of ${String(TOTAL_BYTES / MiB)} MiB`,
+          `[load] run files (${name}) negative control: peak RSS growth ${(growth / MiB).toFixed(1)} MiB of ${String(TOTAL_BYTES / MiB)} MiB, new space growth ${(newSpaceGrowth / MiB).toFixed(1)} MiB`,
         );
         expect(held).toBeGreaterThan(TOTAL_BYTES);
         expect(growth).toBeGreaterThan(RSS_BOUND);

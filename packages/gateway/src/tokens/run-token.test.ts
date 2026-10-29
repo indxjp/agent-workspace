@@ -44,6 +44,19 @@ describe('run token codec', () => {
     await expect(codec.verify(forged)).resolves.toEqual({ ok: false, reason: 'invalid' });
   });
 
+  it('carries the daily cost cap claim, and refuses a cap the policy could not set', async () => {
+    const codec = createRunTokenCodec({ secret: SECRET, now: () => 1_000 });
+    const verified = await codec.verify(await codec.issue({ ...SUBJECT, dailyCostCapUsd: 12.5 }));
+    expect(verified).toMatchObject({ ok: true, claims: { dailyCostCapUsd: 12.5 } });
+    const uncapped = await codec.verify(await codec.issue(SUBJECT));
+    expect(uncapped).toMatchObject({ ok: true });
+    expect(uncapped.ok && 'dailyCostCapUsd' in uncapped.claims).toBe(false);
+    for (const dailyCostCapUsd of [0, -1, 100_001]) {
+      const forged = await codec.issue({ ...SUBJECT, dailyCostCapUsd });
+      await expect(codec.verify(forged)).resolves.toEqual({ ok: false, reason: 'invalid' });
+    }
+  });
+
   it('rejects modified and expired claims without exposing their contents', async () => {
     let now = 1_000;
     const codec = createRunTokenCodec({ secret: SECRET, now: () => now });

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { openObjectStore } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolveStorageSettings, storageAreaPlace, type StorageArea } from './config';
@@ -114,9 +115,9 @@ describe('AW_STORAGE_URL and the old storage settings', () => {
       name: 'compose-local',
       url: 'file:///var/lib/agent-workspace',
       places: [
-        'file /var/lib/agent-workspace/files',
-        'file /var/lib/agent-workspace/skills',
-        'file /var/lib/agent-workspace/sessions',
+        `file ${path.resolve('/var/lib/agent-workspace/files')}`,
+        `file ${path.resolve('/var/lib/agent-workspace/skills')}`,
+        `file ${path.resolve('/var/lib/agent-workspace/sessions')}`,
       ],
     },
     {
@@ -160,9 +161,9 @@ describe('AW_STORAGE_URL and the old storage settings', () => {
       name: 'embedded',
       url: pathToFileURL(embeddedRoot).href,
       places: [
-        `file ${embeddedRoot}/files`,
-        `file ${embeddedRoot}/skills`,
-        `file ${embeddedRoot}/sessions`,
+        `file ${path.join(embeddedRoot, 'files')}`,
+        `file ${path.join(embeddedRoot, 'skills')}`,
+        `file ${path.join(embeddedRoot, 'sessions')}`,
       ],
     },
   ])('$name: AW_STORAGE_URL resolves to the area places', (row) => {
@@ -223,18 +224,17 @@ describe('upgrading to AW_STORAGE_URL', () => {
       );
       await written
         .forWorkspace('upgrade-test')
-        .put('kept.txt', { body: new TextEncoder().encode(text) });
+        .write('kept.txt', new TextEncoder().encode(text), {});
 
       const place = storageAreaPlace(
         resolveStorageSettings({ AW_STORAGE_URL: pathToFileURL(root).href }),
         area,
       );
       if (place.kind !== 'at') throw new Error(`no place for ${area}`);
-      const afterUpgrade = await (
-        await openObjectStore(place.location, area)
-      )
-        .forWorkspace('upgrade-test')
-        .get('kept.txt');
+      const afterUpgrade = await readWhole(
+        (await openObjectStore(place.location, area)).forWorkspace('upgrade-test'),
+        'kept.txt',
+      );
 
       expect(new TextDecoder().decode(afterUpgrade?.body)).toBe(text);
     }
@@ -284,6 +284,7 @@ describe("a storage endpoint on the app's own origin", () => {
 
       expect(settings.kind).toBe('refused');
       if (settings.kind !== 'refused') return;
+      expect(settings.code).toBe('storage_endpoint_same_origin');
       expect(settings.reason).toMatch(/^storage_endpoint_same_origin/u);
       expect(settings.reason).toContain(source);
       expect(settings.reason).toContain('AW_PUBLIC_URL');

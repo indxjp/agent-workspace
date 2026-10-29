@@ -57,6 +57,18 @@ export class ProbeRefusedError extends Error {
   }
 }
 
+/** The object store answered, but the operator-owned bucket it names is not there. */
+export class BucketAbsentError extends ProbeRefusedError {
+  constructor() {
+    super(
+      'objects',
+      'the operator-owned bucket does not exist',
+      new Error('object-store probe returned absent'),
+    );
+    this.name = 'BucketAbsentError';
+  }
+}
+
 interface S3ObjectStoreProbeInput {
   readonly backend: 's3';
   readonly bucket: string;
@@ -433,13 +445,7 @@ async function attemptObjects(
     throw new ProbeRefusedError('objects', 'the bucket could not be reached', cause);
   }
   if (presence === 'present') return passed('objects', `bucket ${bucket} answered`);
-  if (!platformOwnsBucket) {
-    throw new ProbeRefusedError(
-      'objects',
-      'the operator-owned bucket does not exist',
-      new Error('object-store probe returned absent'),
-    );
-  }
+  if (!platformOwnsBucket) throw new BucketAbsentError();
   return {
     store: 'objects',
     outcome: 'missing',

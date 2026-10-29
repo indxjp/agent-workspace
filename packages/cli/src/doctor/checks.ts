@@ -21,6 +21,7 @@ import { formatStorageUrl, type StorageLocation } from '@indx-workspace/contract
 
 import { describeSkew, probeServerContracts, type ContractsProbe } from '../contracts-skew.ts';
 import { ProfileDocumentError } from '../profile-document.ts';
+import { composeWebOrigins } from '../render/env.ts';
 import {
   COMPOSE_PROJECT_CREATE_COMMAND,
   PROJECT_KIND_ADVICE,
@@ -30,6 +31,7 @@ import {
   type DeploymentProfile,
 } from '../profile.ts';
 import {
+  BucketAbsentError,
   ProbeRefusedError,
   runProfileProbes,
   type ProbeResult,
@@ -192,6 +194,26 @@ function oldLocationUrl(
 }
 
 /**
+ * Why `oldLocationUrl` gives no line for old variables that once named a place, or `null` when it
+ * does or no explanation helps (an endpoint with userinfo is left out so nothing hints at it).
+ * Names variables and placeholders, never a value.
+ */
+function noOldLocationUrlReason(
+  environment: Readonly<Record<string, string | undefined>>,
+): string | null {
+  const read = (name: string) => configuredPath(name, environment);
+  if (read('OBJECT_STORAGE_BUCKET') !== null) {
+    return read('OBJECT_STORAGE_BACKEND') === 'azure-blob'
+      ? ` The old Azure setting names no storage account, so no line can point at it: set ${STORAGE_URL_ENV}=azblob://<account>/<container>, adding ?endpoint=<service URL> for an emulator.`
+      : null;
+  }
+  const roots = ['AW_FILE_STORAGE_ROOT', 'AW_SKILL_STORAGE_ROOT', 'AW_SESSION_TRANSCRIPT_ROOT'];
+  return roots.some((name) => read(name) !== null)
+    ? ` The old files, skills and sessions roots do not share one folder, so no one URL names them: move them to files/, skills/ and sessions/ under one folder, then set ${STORAGE_URL_ENV}=file://<that folder>.`
+    : null;
+}
+
+/**
  * The storage setting, decided by the function the server starts up with. Every message names
  * variables and prints only `formatStorageUrl` of a parsed URL, never the raw value, because the
  * redactor masks userinfo but not query values.
@@ -224,7 +246,7 @@ export function checkStorage(
           detail: ignoredDetail,
           advice:
             (replacement === null
-              ? `Set ${STORAGE_URL_ENV} in .env.`
+              ? `Set ${STORAGE_URL_ENV} in .env.${noOldLocationUrlReason(environment) ?? ''}`
               : `Set ${STORAGE_URL_ENV} in .env; this line points at the old location: ${STORAGE_URL_ENV}=${replacement.url}`) +
             (replacement?.createsBucket === true
               ? ` The old settings created this bucket; to keep that, set AW_STORAGE_CREATE_BUCKET=true.`
@@ -251,6 +273,37 @@ export function checkStorage(
   }
 }
 
+const ALLOWED_ORIGINS_ENV = 'SEAWEEDFS_ALLOWED_ORIGINS';
+
+/** The host port in `PORT`, which is `port` or `address:port`, or Compose's default of 3000. */
+function composeWebPort(environment: Readonly<Record<string, string | undefined>>): number {
+  const port = environment['PORT']?.trim().split(':').at(-1) ?? '';
+  return /^\d{1,5}$/u.test(port) ? Number(port) : 3000;
+}
+
+/**
+ * The bundled SeaweedFS's browser origins, on a local (Compose) profile only. The template
+ * requires the variable, and Compose interpolates every service whichever profiles run, so a
+ * `.env` an older CLI rendered without it fails `docker compose up` before anything starts.
+ */
+export function checkComposeOrigins(
+  profile: DeploymentProfile,
+  environment: Readonly<Record<string, string | undefined>>,
+): DoctorCheck | null {
+  if (profile.cloud !== 'local') return null;
+  const base = { check: 'storage', subject: ALLOWED_ORIGINS_ENV } as const;
+  const origins = environment[ALLOWED_ORIGINS_ENV]?.trim() ?? '';
+  if (origins !== '') {
+    return { ...base, status: 'pass', detail: `${ALLOWED_ORIGINS_ENV} = ${origins}`, advice: null };
+  }
+  return {
+    ...base,
+    status: 'fail',
+    detail: `${ALLOWED_ORIGINS_ENV} is not set, so docker compose refuses the project before any service starts`,
+    advice: `Add to .env: ${ALLOWED_ORIGINS_ENV}=${composeWebOrigins(composeWebPort(environment))}`,
+  };
+}
+
 const STORES: readonly ProbeStore[] = ['relational', 'objects', 'identity'];
 
 function storeCheck({ store, outcome, detail }: ProbeResult): DoctorCheck {
@@ -268,6 +321,27 @@ function storeCheck({ store, outcome, detail }: ProbeResult): DoctorCheck {
     status: 'warn',
     advice: 'Not probed from this host: supply its credential in .env, or check it as stated.',
   };
+}
+
+/**
+ * An S3-compatible endpoint (the bundled SeaweedFS) with no bucket is the case where the server
+ * can make it: `AW_STORAGE_CREATE_BUCKET=true`, which the old implicit endpoint used to imply.
+ */
+function storeRefusalAdvice(
+  error: ProbeRefusedError,
+  environment: Readonly<Record<string, string | undefined>>,
+): string {
+  if (error instanceof BucketAbsentError) {
+    const settings = resolveStorageSettings(environment);
+    const s3Compatible =
+      settings.kind === 'url' &&
+      settings.location.kind === 's3' &&
+      settings.location.endpoint !== undefined;
+    return s3Compatible
+      ? 'Create the bucket, or set AW_STORAGE_CREATE_BUCKET=true so the server creates it at start-up.'
+      : `Create the bucket, or correct its name in ${STORAGE_URL_ENV}.`;
+  }
+  return 'Check that the store is running, reachable from here, and that its credential is current.';
 }
 
 /**
@@ -296,8 +370,7 @@ export async function checkStores(
             subject: store,
             status: 'fail',
             detail: error.message,
-            advice:
-              'Check that the store is running, reachable from here, and that its credential is current.',
+            advice: storeRefusalAdvice(error, environment),
           }
         : {
             check: 'stores',

@@ -159,7 +159,6 @@
         "@aws-sdk/client-kms",
         "@azure/identity",
         "@azure/keyvault-secrets",
-        "@azure/storage-blob",
         "@earendil-works/pi-agent-core",
         "@earendil-works/pi-ai",
         "@earendil-works/pi-codemode",

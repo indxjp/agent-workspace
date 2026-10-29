@@ -33,6 +33,7 @@ const OWNER = '36377a6a-7a0b-4610-8efc-d31547dcc38a';
 const STRANGER = '9c0b0f43-5a39-4c4f-9a3f-3f8f3e4a1b2c';
 const TOKEN = `awt_live_${'a'.repeat(22)}_${'b'.repeat(43)}`;
 const EXPIRES_AT = new Date('2026-10-03T11:00:00.000Z');
+const ARCHIVED_AT = new Date('2026-10-01T00:00:00.000Z');
 
 interface KeyRow {
   readonly sessionId: string;
@@ -56,6 +57,8 @@ interface Fixture {
   /** The agents with a `production` pointer, as well as `local` (issue #612). */
   readonly promoted: Set<string>;
   readonly writes: string[];
+  /** The agents the store reports archived (issue #1851). */
+  readonly archived: Set<string>;
   refusePreflight: boolean;
   archiveOnPreflight: string | null;
   /** Whether the desk's `production` version carries `main` (no origins listed). */
@@ -93,6 +96,7 @@ async function fixture(): Promise<Fixture> {
   const keys = new Map<string, KeyRow>();
   const preflights: Fixture['preflights'] = [];
   const writes: string[] = [];
+  const archived = new Set<string>();
   // Read while the runtime is built (it checks `WORKSPACE_SLUG` once), before `state` exists.
   let environment: Readonly<Record<string, string>> = {};
 
@@ -117,6 +121,7 @@ async function fixture(): Promise<Fixture> {
     preflights,
     promoted,
     writes,
+    archived,
     refusePreflight: false,
     archiveOnPreflight: null,
     productionSurface: false,
@@ -188,7 +193,21 @@ async function fixture(): Promise<Fixture> {
             }),
         }),
       },
-      agents: agentStore,
+      agents: {
+        forWorkspace: (workspaceId) => {
+          const store = agentStore.forWorkspace(workspaceId);
+          const marked = (record: AgentRecord): AgentRecord =>
+            archived.has(record.id) ? { ...record, archivedAt: ARCHIVED_AT } : record;
+          return {
+            ...store,
+            get: async (id) => {
+              const found = await store.get(id);
+              return found === null ? null : marked(found);
+            },
+            list: async () => (await store.list()).map(marked),
+          };
+        },
+      },
       principalById: (_workspaceId, principalId) =>
         Promise.resolve({
           principalId,
@@ -486,6 +505,46 @@ describe('createSurfaceSessionsRuntime().open (issue #538)', () => {
       },
     );
     expect(state.writes).toEqual([]);
+  });
+});
+
+describe('createSurfaceSessionsRuntime() and an archived agent (issue #1851)', () => {
+  const REFUSED = {
+    kind: 'refused',
+    code: 'agent_archived',
+    message: expect.stringContaining('archived') as unknown,
+  };
+
+  it('refuses a bootstrap of an archived agent before any session exists', async () => {
+    const state = await fixture();
+    state.archived.add(state.agents.desk.id);
+
+    await expect(state.runtime.open(state.resolved, {})).resolves.toEqual(REFUSED);
+    expect(state.writes).toEqual([]);
+    expect(state.sessions.size).toBe(0);
+    expect(state.keys.size).toBe(0);
+  });
+
+  it('refuses an archived agent offered by the switcher, and opens an active one', async () => {
+    const state = await fixture();
+    state.archived.add(state.agents.billing.id);
+
+    await expect(state.runtime.open(state.resolved, { agent: 'Billing' })).resolves.toEqual(
+      REFUSED,
+    );
+    expect(state.writes).toEqual([]);
+    await expect(state.runtime.open(state.resolved, {})).resolves.toMatchObject({
+      kind: 'opened',
+    });
+  });
+
+  it('names the archive in checkModel too', async () => {
+    const state = await fixture();
+    state.archived.add(state.agents.desk.id);
+
+    await expect(state.runtime.checkModel(state.resolved)).resolves.toMatchObject({
+      code: 'agent_archived',
+    });
   });
 });
 

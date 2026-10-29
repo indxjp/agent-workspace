@@ -61,6 +61,7 @@ import {
 } from './keys';
 import { extractSkillInstructions, parseSkillFrontmatter } from './frontmatter';
 import { UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
 import type { SkillObjects } from '../storage/store';
 import type { ApiResult } from '../http/result';
 import { json, problem } from './result';
@@ -114,7 +115,7 @@ function isSkillMetaRecord(value: unknown): value is SkillMetaRecord {
 }
 
 async function readSkillMeta(store: SkillObjects, name: string): Promise<SkillMetaRecord | null> {
-  const object = await store.get(skillMetaKey(name));
+  const object = await readWhole(store, skillMetaKey(name));
   if (object === null) return null;
   let parsed: unknown;
   try {
@@ -127,7 +128,7 @@ async function readSkillMeta(store: SkillObjects, name: string): Promise<SkillMe
 
 async function writeSkillMeta(store: SkillObjects, record: SkillMetaRecord): Promise<void> {
   const body = new TextEncoder().encode(JSON.stringify(record));
-  await store.put(skillMetaKey(record.name), { body, contentType: 'application/json' });
+  await store.write(skillMetaKey(record.name), body, { contentType: 'application/json' });
 }
 
 // ── Base64, validated rather than merely decoded (see this module's own `importSkill`) ───────
@@ -289,7 +290,7 @@ export function writeRefusedProblem(error: unknown): ApiResult {
 // ── GET /api/skills ────────────────────────────────────────────────────────────────────────────
 
 export async function listSkills(store: SkillObjects, rows?: SkillRows): Promise<ApiResult> {
-  const entries = await store.list(SKILL_META_PREFIX);
+  const entries = await listAll(store, SKILL_META_PREFIX);
   const names = entries
     .filter((entry) => entry.kind === 'file')
     .map((entry) => skillNameFromMetaKey(entry.key))

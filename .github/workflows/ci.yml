@@ -97,12 +97,13 @@ permissions:
 env:
   # THE remote-cache plan for this run, computed once and read by every Nx job's
   # nx-remote-cache step: `off` when the kill switch is not 'true' or no server is configured,
-  # `write` for a push to `main`, `read` for everything else (pull requests, merge-queue groups,
+  # `write` for a push to `main` and for the nightly scheduled run of `main` (the server's
+  # `push,schedule` rule, ADR-0110), `read` for everything else (pull requests, merge-queue groups,
   # dispatches). A merge_group run is read-only: its commit is not on main yet and the queue may
   # still drop it, and the server refuses write for its gh-readonly-queue/* ref anyway.
   # The server applies the same rule independently from the job's signed OIDC claims and can
   # only ever grant LESS than this; the action fails the job if it is granted more.
-  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'write' || 'read' }}
+  NX_REMOTE_CACHE_KIND: ${{ (vars.INDX_NX_REMOTE_CACHE_ENABLED != 'true' || vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER == '') && 'off' || ((github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main') && 'write' || 'read' }}
   # The base of every affected (nx affected) and path-scoped (`id: scope`) decision. A pull request
   # compares with origin/main; a merge-queue group with `merge_group.base_sha`, the commit the
   # group was built on (main's tip, or the head of the group ahead of it, which is not on main).
@@ -614,9 +615,13 @@ jobs:
       - name: Make the embedded tests' temp directory
         run: mkdir -p "$RUNNER_TEMP/embedded-test"
 
+      # Node keeps its compile cache under TMPDIR unless told otherwise, and an Nx worker that outlives
+      # the tests could still be writing it while the next step removes the directory. Outside it, only
+      # the tests write there.
       - name: Test embedded
         env:
           TMPDIR: ${{ runner.temp }}/embedded-test
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/node-compile-cache
         run: scripts/ci/nx.sh run @indx-workspace/embedded:test --excludeTaskDependencies --output-style=static
 
       # A cancelled or timed-out run ends the tests before they stop their runtimes, and the
@@ -751,17 +756,18 @@ jobs:
     # runner-minutes than any other job of a pull request or a queue group.
     runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
 
-    # A REAL PostgreSQL 17, for the whole job. Before this existed, `pnpm test` reported
+    # A REAL PostgreSQL 18, for the whole job. Before this existed, `pnpm test` reported
     # `150 passed | 14 skipped` and a green tick: W1-DB-01's migration, its seed, the "exactly
     # one General agent" assertion and every cross-tenant foreign key were exercised only in a
     # container run pasted into a PR body. The suites are gated on TEST_DATABASE_URL and skip
     # loudly when it is absent, which is why the gap was honest rather than hidden — but a
     # skipped acceptance test is not a passed one, and CI had verified none of it.
     #
-    # `postgres:17-alpine` is the image W1-DB-01 produced its evidence against (17.11). The
-    # tag floats within 17.x on purpose: the step "PostgreSQL service is a real PostgreSQL 17"
-    # below asserts the major version it actually got, so a silent bump to 18 fails a gate
-    # instead of being pinned away in a comment nobody re-checks.
+    # W1-DB-01 produced its evidence against `postgres:17-alpine` (17.11); the move to 18 re-ran
+    # the whole database suite against 18 (docs/adr/0159). The tag floats within 18.x on purpose:
+    # the step "PostgreSQL service is a real PostgreSQL 18" below asserts the major version it
+    # actually got, so a silent bump to 19 fails a gate instead of being pinned away in a comment
+    # nobody re-checks.
     #
     # The credentials are the defaults for a throwaway container that lives for one job and is
     # reachable only from that job's runner. They are not a secret and must not be treated as
@@ -769,7 +775,7 @@ jobs:
     # reference here would leave the service unreachable exactly where CI matters most.
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -785,14 +791,14 @@ jobs:
         #
         # WHAT THIS CHECK DOES NOT PROVE, measured rather than assumed. `pg_isready` reports
         # whether the server is accepting connections and nothing else. Against a live
-        # PostgreSQL 17.11 all three of these exit 0:
+        # PostgreSQL 17.11 (and 18) all three of these exit 0:
         #     pg_isready -U postgres -d agent_workspace_test
         #     pg_isready -U postgres -d database_that_does_not_exist
         #     pg_isready -U postgres
         # So `-d agent_workspace_test` here is documentation of which database the job wants,
         # NOT a guarantee that it exists — an earlier draft of this comment claimed it was, and
         # that claim was false. The step that actually asserts the database is
-        # "PostgreSQL service is a real PostgreSQL 17" below: it opens a connection to that
+        # "PostgreSQL service is a real PostgreSQL 18" below: it opens a connection to that
         # database and runs a query, so a missing one fails with
         # `database "…" does not exist` instead of being waved through by a liveness probe.
         # This is ADR-0015 in miniature — a health check is a liveness signal, not a gate.
@@ -883,13 +889,15 @@ jobs:
         if: matrix.shard == 'web-core' || matrix.shard == 'tests'
         run: |
           set -euo pipefail
-          # Named per runner, on free ports (MS-A2 runs several jobs at once). fake-gcs-server
-          # listens on the same port it publishes, because its -external-url must match it.
+          # Named per runner, on free ports (MS-A2 runs several jobs at once). Both emulators listen
+          # on the same port they publish: fake-gcs-server because its -external-url must match it,
+          # Azurite because a copy whose source URL carries a SAS makes it fetch that URL itself,
+          # from inside the container.
           docker rm -f "aw-ci-azurite-${RUNNER_NAME// /-}" "aw-ci-gcs-${RUNNER_NAME// /-}" > /dev/null 2>&1 || true
-          docker run --rm -d --name "aw-ci-azurite-${RUNNER_NAME// /-}" -p 127.0.0.1::10000 \
+          azurite="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+          docker run --rm -d --name "aw-ci-azurite-${RUNNER_NAME// /-}" -p "127.0.0.1:$azurite:$azurite" \
             mcr.microsoft.com/azure-storage/azurite@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5 \
-            azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
-          azurite="$(docker port "aw-ci-azurite-${RUNNER_NAME// /-}" 10000/tcp | head -1 | sed 's/.*://')"
+            azurite-blob --blobHost 0.0.0.0 --blobPort "$azurite" --skipApiVersionCheck
           gcs="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
           docker run --rm -d --name "aw-ci-gcs-${RUNNER_NAME// /-}" -p "127.0.0.1:$gcs:$gcs" \
             fsouza/fake-gcs-server@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef \
@@ -933,7 +941,7 @@ jobs:
       #
       # `pg` is resolved from packages/core, which depends on it (R-15 pinned it at 8.23.0);
       # no dependency is added to make this step work.
-      - name: PostgreSQL service is a real PostgreSQL 17
+      - name: PostgreSQL service is a real PostgreSQL 18
         working-directory: packages/core
         run: |
           set -euo pipefail
@@ -954,13 +962,13 @@ jobs:
                 console.log(`database=${row.db} server_version=${row.server_version}`);
                 await client.end();
                 const major = Number.parseInt(String(row.server_version).split(".")[0], 10);
-                if (major !== 17) {
-                  console.error(`Expected PostgreSQL major version 17, got ${row.server_version}.`);
-                  console.error("W1-DB-01 produced its schema evidence against 17. Either pin the");
-                  console.error("service image back to 17 or re-run that evidence and say so.");
+                if (major !== 18) {
+                  console.error(`Expected PostgreSQL major version 18, got ${row.server_version}.`);
+                  console.error("The database suite last ran its evidence against 18. Either pin");
+                  console.error("the service image back to 18 or re-run that evidence and say so.");
                   process.exit(1);
                 }
-                console.log("PostgreSQL 17 is reachable at TEST_DATABASE_URL.");
+                console.log("PostgreSQL 18 is reachable at TEST_DATABASE_URL.");
               })
               .catch((error) => {
                 console.error("Could not reach TEST_DATABASE_URL:", error.message);
@@ -993,10 +1001,12 @@ jobs:
           ELSEWHERE_PROJECTS: '@indx-workspace/embedded'
         run: |
           set -euo pipefail
+          # --json=false: Nx 24 prints a JSON array when it detects an AI agent (AI_AGENT,
+          # CLAUDECODE, …), and the loop below would then match no project and skip every test.
           if [ -n "$DIFF_BASE" ]; then
-            candidates="$(pnpm exec nx show projects --with-target test --affected --base="$DIFF_BASE" --head=HEAD)"
+            candidates="$(pnpm exec nx show projects --json=false --with-target test --affected --base="$DIFF_BASE" --head=HEAD)"
           else
-            candidates="$(pnpm exec nx show projects --with-target test)"
+            candidates="$(pnpm exec nx show projects --json=false --with-target test)"
           fi
           projects=''
           for project in $candidates; do
@@ -2258,7 +2268,7 @@ jobs:
             }
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -2358,7 +2368,7 @@ jobs:
       actions: read
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

@@ -61,6 +61,10 @@ describeSkillCatalogConformance('the in-memory catalog', () => {
       provider.forWorkspace(workspaceIds[workspace]).assignSkill(skill.name, agentId);
       return Promise.resolve(agentId);
     },
+    unassign: (workspace, skill, agentId) =>
+      Promise.resolve().then(() =>
+        provider.forWorkspace(workspaceIds[workspace]).unassignSkill(skill.name, agentId),
+      ),
     ageRevisions: (name) =>
       Promise.resolve().then(() => provider.forWorkspace(workspaceIds.a).ageSkillRevisions(name)),
   });
@@ -172,6 +176,18 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
           .insert(agentSkills)
           .values({ workspaceId: seeded.scope.workspaceId, agentId, skillId: skill.id });
         return agentId;
+      },
+      unassign: async (workspace, skill, agentId) => {
+        const seeded = workspace === 'a' ? a : b;
+        await isolated.db
+          .delete(agentSkills)
+          .where(
+            and(
+              eq(agentSkills.workspaceId, seeded.scope.workspaceId),
+              eq(agentSkills.agentId, agentId),
+              eq(agentSkills.skillId, skill.id),
+            ),
+          );
       },
       ageRevisions: async (name) => {
         await isolated.db
@@ -351,6 +367,40 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       .where(eq(files.path, 'shadowed-by-pending'));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ kind: 'file', status: 'pending' });
+  });
+
+  // @story US-STO-14
+  it('[US-STO-14][contract][sdk] a re-reserve writes the pending row only when it declares something new', async () => {
+    // Every loser of a reserve burst is such a retry, and each one commits under the path lock in
+    // turn: a write there costs a transaction id and a WAL flush per loser, serialized.
+    const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
+    const input = { ownerPrincipalId: principalA, sizeBytes: 3, contentType: 'text/plain' };
+    const version = async (id: string) => {
+      const result = await isolated.db.execute(
+        sql`select xmin::text as version from ${files} where ${files.id} = ${id}`,
+      );
+      return (result.rows[0] as { version?: unknown } | undefined)?.version;
+    };
+    for (const uploadMode of [undefined, 'relay', 'signed'] as const) {
+      const path = `rewrite-check/${uploadMode ?? 'none'}.bin`;
+      const declared = uploadMode === undefined ? input : { ...input, uploadMode };
+      const reserved = await repo.reserve(path, declared);
+      const before = await version(reserved.row.id);
+
+      const retried = await repo.reserve(path, declared);
+      expect(retried).toMatchObject({ kind: 'taken', row: { id: reserved.row.id } });
+      // A signed re-mint always issues a new reservation; any other unchanged retry is a read.
+      if (uploadMode === 'signed') {
+        expect(retried.row.reservationToken).not.toBe(reserved.row.reservationToken);
+        expect(await version(reserved.row.id)).not.toBe(before);
+      } else {
+        expect(retried.row).toEqual(reserved.row);
+        expect(await version(reserved.row.id)).toBe(before);
+      }
+    }
+    const resized = await repo.reserve('rewrite-check/none.bin', { ...input, sizeBytes: 4 });
+    expect(resized.row).toMatchObject({ sizeBytes: 4 });
+    await expect(repo.pending('rewrite-check/none.bin')).resolves.toMatchObject({ sizeBytes: 4 });
   });
 
   describe('the files checks', () => {
@@ -770,57 +820,6 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       expect(rowsAfterDelete.find((row) => row.id === sibling.id)).toMatchObject({
         path: `${prefix}-sibling.txt`,
       });
-    });
-  });
-  describe('deleteSkill (issue #240)', () => {
-    it('refuses an assigned skill naming the agent, conceals another workspace, then deletes', async () => {
-      const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
-      const skill = await a.putSkill({
-        name: 'assigned-skill',
-        skillMd: '# assigned',
-        enabled: true,
-        ownerPrincipalId: principalA,
-        createdBy: userA,
-      });
-      const agentId = crypto.randomUUID();
-      await isolated.db.insert(agents).values({
-        id: agentId,
-        workspaceId: scopeA.workspaceId,
-        name: 'Skill assignee',
-        instructions: '',
-        modelConnectionId: null,
-        model: null,
-        permissions: {
-          readFiles: false,
-          writeFiles: false,
-          runCommands: false,
-          unrestrictedNetwork: false,
-        },
-        ownerPrincipalId: principalA,
-        createdBy: userA,
-      });
-      await isolated.db
-        .insert(agentSkills)
-        .values({ workspaceId: scopeA.workspaceId, agentId, skillId: skill.id });
-
-      await expect(a.deleteSkill('assigned-skill')).resolves.toEqual({
-        kind: 'in-use',
-        agentIds: [agentId],
-      });
-      expect((await a.listSkills()).map((row) => row.id)).toContain(skill.id);
-
-      // Another workspace names the same skill and finds nothing — and deletes nothing.
-      await expect(b.deleteSkill('assigned-skill')).resolves.toEqual({ kind: 'not-found' });
-      expect((await a.listSkills()).map((row) => row.id)).toContain(skill.id);
-
-      await isolated.db.delete(agentSkills).where(eq(agentSkills.skillId, skill.id));
-      await expect(a.deleteSkill('assigned-skill')).resolves.toMatchObject({
-        kind: 'deleted',
-        skill: { id: skill.id, name: 'assigned-skill' },
-      });
-      expect((await a.listSkills()).map((row) => row.id)).not.toContain(skill.id);
-      await expect(a.deleteSkill('assigned-skill')).resolves.toEqual({ kind: 'not-found' });
     });
   });
   describe('skill revisions (SDK-19, N-1)', () => {

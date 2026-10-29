@@ -10,10 +10,17 @@
  * The shipped body comes from the caller (`deps.shippedBody`); `builderShippedBody()` in
  * `definition.ts` is the shipped one. Every write goes through the ordinary version pipeline and
  * pointer handlers, so the Builder gets versions and audit rows like any agent.
+ *
+ * The row's model connection and runtime profile are resolved when `local` is applied, the
+ * connection as `resolveBuilderDefinition` does: `default`, else the connection first-run setup
+ * made for the Builder's provider. A Builder provisioned before setup made that connection and the
+ * default profile has neither, so an unchanged body still re-applies `local`'s version, writing no
+ * version, whenever those two resolve differently now (slice 1d).
  */
 import { isDeepStrictEqual } from 'node:util';
 
 import { ApiProblemSchema } from '@indx-workspace/contracts';
+import { AW_CONTROL_SERVER } from '@indx-workspace/contracts/builder';
 import {
   AGENT_VERSION_PROBLEM_CODES,
   AgentVersionBodySchema,
@@ -27,14 +34,19 @@ import {
   type CreateFromVersionOwner,
 } from '../../agent-versions/create-from-version';
 import { createAgentVersion } from '../../agent-versions/handlers';
+import { definitionReferences } from '../../agent-versions/pipeline';
 import { setAgentPointer } from '../../agent-versions/pointers';
-import type { AgentVersionStoreProvider } from '../../agent-versions/store';
+import {
+  appliedRuntimeProfileId,
+  type AgentVersionStoreProvider,
+} from '../../agent-versions/store';
 import type { AgentRecord } from '../../agents/contract';
 import { agentNotFound } from '../../agents/handlers';
 import type { AgentStoreProvider } from '../../agents/store';
 import type { ApiResult } from '../../http/result';
 import { BUILDER_SHIPPED_SUMMARY } from './prompt-version';
 import { isBuilderAgent } from './is-builder-agent';
+import { withBuilderConnection } from './model-connection';
 
 export interface EnsureBuilderAgentDependencies extends Omit<
   CreateAgentFromVersionDependencies,
@@ -63,6 +75,21 @@ const NUMBER_TAKEN =
 const MAX_SAVE_ATTEMPTS = 3;
 
 /**
+ * The shipped body as the pipeline stores it: without `aw-control`. The pipeline refuses that
+ * reserved connector name in a stored body (422), and a run of the Builder gets the platform's
+ * server from its `builtin` identity (`awControlServerFor`), so the stored body never needs it.
+ */
+function storableBody(body: AgentVersionBodyInput): AgentVersionBodyInput {
+  const parsed = AgentVersionBodySchema.parse(body);
+  const { resources } = parsed.definition;
+  const connectors = resources.connectors.filter((name) => name !== AW_CONTROL_SERVER);
+  return {
+    ...parsed,
+    definition: { ...parsed.definition, resources: { ...resources, connectors } },
+  };
+}
+
+/**
  * Create the workspace's Builder, move it to a new shipped version, or do nothing. Idempotent:
  * a second call with the same body changes no row. A refusal (for example a user agent already
  * named like the Builder) writes nothing and answers the pipeline's problem. A call that loses the
@@ -73,9 +100,14 @@ export async function ensureBuilderAgent(
   deps: EnsureBuilderAgentDependencies,
   attemptsLeft: number = MAX_SAVE_ATTEMPTS,
 ): Promise<EnsureBuilderAgentOutcome> {
-  const { shippedBody, owner, versions, agents: agentProvider, ...options } = deps;
-  const store = await versions.forWorkspace(workspaceId);
-  if (store === null) throw new Error(`Workspace ${workspaceId} has no agent version store.`);
+  const { shippedBody: configured, owner, versions, agents: agentProvider, ...options } = deps;
+  const shippedBody = storableBody(configured);
+  const workspaceStore = await versions.forWorkspace(workspaceId);
+  if (workspaceStore === null) {
+    throw new Error(`Workspace ${workspaceId} has no agent version store.`);
+  }
+  // Every write below resolves the Builder's connection as its runs do (`model-connection.ts`).
+  const store = withBuilderConnection(workspaceStore);
   const agents = agentProvider.forWorkspace(workspaceId);
   const pipeline = { ...options, store };
   const actor = {
@@ -97,6 +129,29 @@ export async function ensureBuilderAgent(
       if (moved.status !== 200) return moved;
     }
     return null;
+  };
+
+  /**
+   * Re-apply `local`'s version `number` when the row's model connection or runtime profile is not
+   * what it resolves to now; nothing is written when they match or the body does not resolve.
+   */
+  const refreshReferences = async (id: string, number: number): Promise<ApiResult | null> => {
+    const { definition } = AgentVersionBodySchema.parse(shippedBody);
+    const resolved = await store.resolveDefinition(definitionReferences(definition));
+    const agent = await agents.get(id);
+    if (resolved.kind !== 'resolved' || agent === null) return null;
+    const { modelConnectionId, runtimeProfileId } = resolved.references;
+    const profile = appliedRuntimeProfileId(shippedBody, agent.runtimeProfileId, runtimeProfileId);
+    if (agent.modelConnectionId === modelConnectionId && agent.runtimeProfileId === profile) {
+      return null;
+    }
+    const applied = await setAgentPointer(
+      { environment: 'local', version: number },
+      agent,
+      actor,
+      pipeline,
+    );
+    return applied.status === 200 ? null : applied;
   };
 
   let builder = await findBuilder();
@@ -125,7 +180,9 @@ export async function ensureBuilderAgent(
   const shipped: unknown = JSON.parse(JSON.stringify(AgentVersionBodySchema.parse(shippedBody)));
   if (latest !== undefined && isDeepStrictEqual(shipped, latest.body)) {
     // Only a pointer that a concurrent call has not moved yet, or one that drifted, is left.
-    const refused = await pointBoth(builder, latest.number);
+    const refused =
+      (await pointBoth(builder, latest.number)) ??
+      (await refreshReferences(builder.id, latest.number));
     if (refused !== null) return { kind: 'refused', result: refused };
     return {
       kind: created ? 'created' : 'unchanged',

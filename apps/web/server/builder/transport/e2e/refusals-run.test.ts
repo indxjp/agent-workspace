@@ -30,7 +30,7 @@ async function expectRefusedBeforeAnyPort(door: Door, token: string): Promise<vo
 
 describe('[US-BLD-04][api][run] a token that is no longer good is refused', () => {
   it('control: the same call on a live run reaches the ports and is journalled', async () => {
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { token } = await door.start({ role: 'builder' }, MODEL);
 
     await expect(door.call(token, 'catalog_list', { kinds: ['engines'] })).resolves.toMatchObject({
@@ -42,7 +42,7 @@ describe('[US-BLD-04][api][run] a token that is no longer good is refused', () =
   });
 
   it('a run that has ended is refused with not_permitted, journals nothing and reaches no port', async () => {
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, MODEL);
     door.end(runId);
 
@@ -50,7 +50,7 @@ describe('[US-BLD-04][api][run] a token that is no longer good is refused', () =
   });
 
   it('a revoked token is refused with not_permitted, journals nothing and reaches no port', async () => {
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { token } = await door.start({ role: 'builder' }, MODEL);
     await door.revoke(token);
 
@@ -68,7 +68,7 @@ describe('[US-BLD-07][api][run] a run that composition gave no aw-control is ref
   ])(
     '%s: every tool is not_allowed_to_build, with no journal row and no port',
     async (_l, runAgent, ceiling) => {
-      const door = builderDoor({ featureOn: true, scopes: scopes(), runAgent, ceiling });
+      const door = builderDoor({ scopes: scopes(), runAgent, ceiling });
       const { token } = await door.start({ role: 'builder' }, MODEL);
 
       for (const [tool, args] of CALLS) {
@@ -85,7 +85,6 @@ describe('[US-BLD-07][api][run] a run that composition gave no aw-control is ref
 
   it('control: an allowed, person-made agent reaches the shell and is journalled', async () => {
     const door = builderDoor({
-      featureOn: true,
       scopes: scopes(),
       runAgent: { name: 'planner' },
       ceiling: allow,

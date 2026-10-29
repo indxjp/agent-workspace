@@ -18,6 +18,7 @@ import { problem, type ApiResult } from '../http/result';
 import { toAgentVersionListResponse, toAgentVersionResource } from './contract';
 import { bodyToStore } from './materialise';
 import { parseVersionRequest, validateAgentVersion } from './pipeline';
+import { agentArchivedRefusal } from './problems';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import type { StorageConnectionLookup } from './storage-grants';
@@ -78,6 +79,9 @@ export async function createAgentVersion(
   number?: number,
   origin?: VersionOrigin,
 ): Promise<ApiResult> {
+  // Before the body is read: an archived agent takes no version, and the dry run says so too.
+  const archived = agentArchivedRefusal(agent);
+  if (archived !== null) return archived;
   const parsed = parseVersionRequest(
     CreateAgentVersionRequestSchema,
     raw,

@@ -999,3 +999,63 @@ describe('setAgentPointer: expectedVersion, the compare-and-set (#1847)', () => 
     expect(listing?.pointers.map((pointer) => pointer.number)).toEqual([1]);
   });
 });
+
+describe('an archived agent is frozen (issue #1851)', () => {
+  const ARCHIVED: AgentRecord = {
+    id: '11111111-1111-4111-8111-111111111111',
+    workspaceId: WORKSPACE,
+    name: 'frozen',
+    instructions: '',
+    modelConnectionId: null,
+    model: null,
+    runtimeProfileId: null,
+    permissions: FIXTURE_PERMISSIONS,
+    policy: null,
+    createdBy: null,
+    ownerPrincipalId: OWNER,
+    archivedAt: new Date('2026-10-01T00:00:00.000Z'),
+    createdAt: new Date('2026-09-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-09-01T00:00:00.000Z'),
+  };
+  // Any store call, read or write, throws: the refusal has to come before the first one.
+  const untouched = new Proxy(
+    {},
+    {
+      get: (_target, method) => {
+        throw new Error('the store was called: ' + String(method));
+      },
+    },
+  ) as WorkspaceAgentVersionStore;
+  const dependencies = { store: untouched, toolBundles: everyBundleStored };
+
+  const refusals = {
+    'set a pointer': () =>
+      setAgentPointer({ environment: 'local', version: 1 }, ARCHIVED, ACTOR, dependencies),
+    promote: () => promoteAgent({}, ARCHIVED, ACTOR, dependencies),
+    'promote, dry run': () => promoteAgent({ dryRun: true }, ARCHIVED, ACTOR, dependencies),
+    rollback: () => rollbackAgent({}, ARCHIVED, ACTOR, dependencies),
+    'rollback, dry run': () => rollbackAgent({ dryRun: true }, ARCHIVED, ACTOR, dependencies),
+    'save a version': () =>
+      createAgentVersion(versionRequest({ name: 'frozen' }), ARCHIVED, OWNER, dependencies),
+    'save a version, dry run': () =>
+      createAgentVersion(
+        versionRequest({ name: 'frozen', dryRun: true }),
+        ARCHIVED,
+        OWNER,
+        dependencies,
+      ),
+    'save a version from the Builder': () =>
+      createAgentVersion(versionRequest({ name: 'frozen' }), ARCHIVED, OWNER, dependencies, 1, {
+        via: 'builder',
+      }),
+  };
+
+  it.each(Object.entries(refusals))(
+    'refuses to %s with 409 agent_archived before the store is touched',
+    async (_name, attempt) => {
+      const result = await attempt();
+      expect(result.status).toBe(409);
+      expect(result.body).toMatchObject({ error: { code: 'agent_archived' } });
+    },
+  );
+});

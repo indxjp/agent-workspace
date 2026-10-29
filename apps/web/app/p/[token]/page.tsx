@@ -5,6 +5,7 @@ import { PublicMessageForm } from '../../../components/shares/public-message-for
 import { SharedSnapshot } from '../../../components/shares/shared-snapshot';
 import { runnablePublicLinksEnabled } from '../../../server/shares/runnable/feature';
 import { DomainError } from '../../../server/errors';
+import { resolvePublicShare } from '../../../server/shares/core/http';
 export const dynamic = 'force-dynamic';
 export default async function PublicSharePage({
   params,
@@ -15,7 +16,7 @@ export default async function PublicSharePage({
 }) {
   const { token } = await params;
   const runtime = applicationContext()?.shares;
-  const resolved = runtime ? await runtime.resolvePublic(token) : null;
+  const resolved = runtime ? await resolvePublicShare(runtime, token) : null;
   if (!resolved)
     return (
       <main className="mx-auto max-w-[760px] p-8">

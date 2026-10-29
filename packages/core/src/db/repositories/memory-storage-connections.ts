@@ -14,6 +14,8 @@ export function createInMemoryStorageConnectionRepositoryProvider(): StorageConn
       byWorkspace.set(workspaceId, rows);
       return {
         list: () => Promise.resolve([...rows.values()]),
+        listByNames: (names) =>
+          Promise.resolve([...rows.values()].filter((row) => names.includes(row.name))),
         get: (id) => Promise.resolve(rows.get(id) ?? null),
         create(input) {
           if ([...rows.values()].some((row) => row.name === input.name)) {

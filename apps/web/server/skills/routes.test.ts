@@ -26,6 +26,7 @@ import {
   createInMemoryObjectStore,
   createLocalFilesystemObjectStoreProvider,
 } from '@agent-workspace/core/storage';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
 import { SkillResponseSchema, SkillRevisionResponseSchema } from '@indx-workspace/contracts/skills';
 import { skillFileKey, skillMetaKey, skillRevisionRowFolder, skillRowFolder } from './keys';
 import type { WorkspaceResolution } from './runtime';
@@ -230,9 +231,10 @@ describe('skills write route and the rows service', () => {
     );
     expect(listed.rows.map((row) => row.path)).toEqual([`${skillRowFolder('demo')}/SKILL.md`]);
     expect(
-      await createLocalFilesystemObjectStoreProvider(rootDir)
-        .forWorkspace(WORKSPACE_A)
-        .get(skillFileKey('demo', 'SKILL.md')),
+      await readWhole(
+        createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A),
+        skillFileKey('demo', 'SKILL.md'),
+      ),
     ).toBeNull();
   });
 
@@ -260,9 +262,10 @@ describe('skills write route and the rows service', () => {
       error: { code: 'skills_runtime_not_configured' },
     });
     expect(
-      await createLocalFilesystemObjectStoreProvider(rootDir)
-        .forWorkspace(WORKSPACE_A)
-        .get(skillFileKey('demo', 'SKILL.md')),
+      await readWhole(
+        createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A),
+        skillFileKey('demo', 'SKILL.md'),
+      ),
     ).toBeNull();
     expect(await catalogs.forWorkspaceSync(WORKSPACE_A).listSkills()).toEqual([]);
   });
@@ -394,14 +397,14 @@ describe('K-4: a pre-existing unreadable SKILL.md answers 500 store_inconsistent
     // object store, bypassing the route layer's new UTF-8 guard entirely.
     const objectStore = createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A);
     const now = new Date().toISOString();
-    await objectStore.put(skillMetaKey('broken'), {
-      body: new TextEncoder().encode(
+    await objectStore.write(
+      skillMetaKey('broken'),
+      new TextEncoder().encode(
         JSON.stringify({ name: 'broken', enabled: true, createdAt: now, updatedAt: now }),
       ),
-      contentType: 'application/json',
-    });
-    await objectStore.put(skillFileKey('broken', 'SKILL.md'), {
-      body: Uint8Array.from([0x80]),
+      { contentType: 'application/json' },
+    );
+    await objectStore.write(skillFileKey('broken', 'SKILL.md'), Uint8Array.from([0x80]), {
       contentType: null,
     });
 
@@ -421,12 +424,13 @@ describe('K-4: a pre-existing unreadable SKILL.md answers 500 store_inconsistent
     // `patchSkill`'s rollback path when no prior copy of SKILL.md was available to restore.
     const objectStore = createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A);
     const now = new Date().toISOString();
-    await objectStore.put(skillMetaKey('orphan'), {
-      body: new TextEncoder().encode(
+    await objectStore.write(
+      skillMetaKey('orphan'),
+      new TextEncoder().encode(
         JSON.stringify({ name: 'orphan', enabled: true, createdAt: now, updatedAt: now }),
       ),
-      contentType: 'application/json',
-    });
+      { contentType: 'application/json' },
+    );
 
     const getResponse = await detailRoute(
       req('GET', '/api/skills/orphan', { workspace: WORKSPACE_A }),
@@ -457,15 +461,15 @@ describe('K-4: a pre-existing unreadable SKILL.md answers 500 store_inconsistent
   it('answers 500 on GET and PATCH /api/skills/:name for a SKILL.md with invalid UTF-8 bytes', async () => {
     const objectStore = createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A);
     const now = new Date().toISOString();
-    await objectStore.put(skillMetaKey('broken'), {
-      body: new TextEncoder().encode(
+    await objectStore.write(
+      skillMetaKey('broken'),
+      new TextEncoder().encode(
         JSON.stringify({ name: 'broken', enabled: true, createdAt: now, updatedAt: now }),
       ),
-      contentType: 'application/json',
-    });
+      { contentType: 'application/json' },
+    );
     // The same lone continuation byte the list test above writes: never valid UTF-8 on its own.
-    await objectStore.put(skillFileKey('broken', 'SKILL.md'), {
-      body: Uint8Array.from([0x80]),
+    await objectStore.write(skillFileKey('broken', 'SKILL.md'), Uint8Array.from([0x80]), {
       contentType: null,
     });
 
@@ -495,12 +499,13 @@ describe('K-4: a pre-existing unreadable SKILL.md answers 500 store_inconsistent
   it('still exports the same row, because an export carries no id', async () => {
     const objectStore = createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A);
     const now = new Date().toISOString();
-    await objectStore.put(skillMetaKey('orphan'), {
-      body: new TextEncoder().encode(
+    await objectStore.write(
+      skillMetaKey('orphan'),
+      new TextEncoder().encode(
         JSON.stringify({ name: 'orphan', enabled: true, createdAt: now, updatedAt: now }),
       ),
-      contentType: 'application/json',
-    });
+      { contentType: 'application/json' },
+    );
 
     const response = await detailRoute(
       req('GET', '/api/skills/orphan?export=true', { workspace: WORKSPACE_A }),
@@ -578,8 +583,8 @@ describe('POST /api/skills when the catalog write fails', () => {
     expect(list.status).toBe(200);
     expect(await list.json()).toEqual({ skills: [] });
     const objectStore = createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_A);
-    expect(await objectStore.listPrefix('skills/demo')).toEqual([]);
-    expect(await objectStore.get(skillMetaKey('demo'))).toBeNull();
+    expect(await listAll(objectStore, 'skills/demo', { recursive: true })).toEqual([]);
+    expect(await readWhole(objectStore, skillMetaKey('demo'))).toBeNull();
 
     expect((await importRoute(postJson(WORKSPACE_A, importBody))).status).toBe(201);
   });

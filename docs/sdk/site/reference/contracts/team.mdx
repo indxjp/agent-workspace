@@ -149,6 +149,7 @@ One of §21's four roles.
 | `workspaceId` | `string` | Yes |  |
 | `userId` | `null \| string` | Yes |  |
 | `label` | `string` | Yes |  |
+| `features` | `("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes |  |
 
 ## MeResponseSchema
 
@@ -159,6 +160,9 @@ else — no key hash, no key prefix, no session id, no `via`, no `actor`, no `ap
 identity with no `users` row behind it, while a membership principal always names one. `label`
 is display attribution — the member's name or the key's name — and is never an authorization
 input; `principalId` is the `workspace_principals.id` every `ownerPrincipalId` compares against.
+
+`features` is the set switched on for `workspaceId` (ADR-0160 D8): installed in the deployment
+and not switched off by the workspace's Owner, in `FEATURE_IDS` order.
 
 A revoked key or an expired session never reaches this shape: it is `401 unauthenticated` in
 the standard `{ error: { code, message } }` envelope, never a `200` carrying a stale principal.
@@ -171,6 +175,7 @@ the standard `{ error: { code, message } }` envelope, never a `200` carrying a s
 | `workspaceId` | `string` | Yes |  |
 | `userId` | `null \| string` | Yes |  |
 | `label` | `string` | Yes |  |
+| `features` | `("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes |  |
 
 ## PRINCIPAL_KINDS
 

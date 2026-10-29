@@ -48,13 +48,14 @@ import type { ResolvedModelConnection } from '../models/store';
 import { upgradeEventStream } from '../runs/agent-frames';
 import type {
   AgentRef,
+  JudgeReply,
   RunLimitsOverride,
   RunPrincipal,
   RunApiEnvironment,
 } from '../runs/environment';
 import { startRunOnSession } from '../runs/service';
 import { isTerminalRunStatus } from '../runs/store';
-import { judgePrompt, parseJudgeVerdict } from './judge';
+import { JUDGE_SYSTEM, judgePrompt, parseJudgeVerdict } from './judge';
 import { checkCase, finalAnswer, pausedCall, score, toolCalls } from './score';
 
 /**
@@ -262,7 +263,9 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
   const failures = [...checkCase(evalCase.expect, answer, calls, run?.output?.structured ?? null)];
   if (evalCase.expect.judge !== undefined) {
     const prompt = judgePrompt(evalCase.expect.judge, evalCase.input, answer);
-    failures.push(...(await judgeFailures(runs, principal, agent, versionId, prompt, deadline)));
+    failures.push(
+      ...(await judgeFailures(runs, principal, agent, versionId, runId, prompt, deadline)),
+    );
   }
   return failed(evalCase, runId, failures);
 }
@@ -341,6 +344,7 @@ async function judgeFailures(
   principal: RunPrincipal,
   agent: AgentRef,
   versionId: string,
+  runId: string,
   prompt: string,
   deadline: number,
 ): Promise<readonly string[]> {
@@ -348,9 +352,9 @@ async function judgeFailures(
   if (remaining <= 0) return [DEADLINE_EXCEEDED];
   if (runs.judgeEvaluationCase === undefined) return [JUDGE_UNAVAILABLE];
   const signal = AbortSignal.timeout(remaining);
-  let text: string;
+  let reply: JudgeReply;
   try {
-    text = await runs.judgeEvaluationCase(principal, agent, versionId, prompt, signal);
+    reply = await runs.judgeEvaluationCase(principal, agent, versionId, prompt, signal);
   } catch (cause) {
     // Cut off by the request's deadline, not a provider outage.
     if (signal.aborted) return [DEADLINE_EXCEEDED];
@@ -358,18 +362,45 @@ async function judgeFailures(
     log.error(`[evaluations] the judge call for agent ${agent.id} failed`, { error: cause });
     return [JUDGE_UNAVAILABLE];
   }
-  const verdict = parseJudgeVerdict(text);
-  if (verdict.kind === 'invalid') return [JUDGE_UNPARSEABLE];
+  const verdict = parseJudgeVerdict(reply.text);
+  if (verdict.kind === 'invalid') {
+    // The reply is not logged: it can quote the agent's answer, and so an attack or a secret.
+    log.warn('[evaluations] the judge reply was not a verdict', {
+      runId,
+      stopReason: knownStopReason(reply.stopReason),
+    });
+    return [JUDGE_UNPARSEABLE];
+  }
   return verdict.pass ? [] : [`judge: ${verdict.reason}`];
+}
+
+/** The stop reasons a log line may name; anything else a provider sends is logged as `other`. */
+// A log allowlist, not the list of stop reasons a provider contract allows.
+const STOP_REASONS = new Set([
+  'end_turn',
+  'max_tokens',
+  'stop_sequence',
+  'tool_use',
+  'pause_turn',
+  'refusal',
+]);
+
+function knownStopReason(stopReason: string | null): string {
+  if (stopReason === null) return 'none';
+  return STOP_REASONS.has(stopReason) ? stopReason : 'other';
 }
 
 /** The part of a provider's Anthropic-format message the judge reads. */
 const JudgeMessageSchema = z.looseObject({
   content: z.array(z.looseObject({ type: z.string(), text: z.string().optional() })),
+  stop_reason: z.string().nullish(),
 });
 
-/** The largest verdict the judge may write; a verdict is one short JSON object. */
-const JUDGE_MAX_TOKENS = 256;
+/**
+ * The most the judge may write. A verdict is one short JSON object, but a model that reasons in
+ * prose first was cut off at 256 (#1848), and a verdict cut off is not a verdict.
+ */
+const JUDGE_MAX_TOKENS = 1024;
 
 export interface ModelJudgeDependencies {
   /** The run ladder's model for version `agentVersionId` of the agent: `runPreflight.resolveModel`. */
@@ -418,6 +449,7 @@ export function createModelJudge(
       {
         model: resolution.model,
         max_tokens: JUDGE_MAX_TOKENS,
+        system: JUDGE_SYSTEM,
         messages: [{ role: 'user', content: prompt }],
       },
       {
@@ -431,8 +463,11 @@ export function createModelJudge(
     if (!response.ok) throw new Error(`the judge provider answered ${String(response.status)}`);
     const message = JudgeMessageSchema.safeParse(await response.json());
     if (!message.success) throw new Error('the judge provider answer is not a message');
-    return message.data.content
-      .map((block) => (block.type === 'text' ? (block.text ?? '') : ''))
-      .join('');
+    return {
+      text: message.data.content
+        .map((block) => (block.type === 'text' ? (block.text ?? '') : ''))
+        .join(''),
+      stopReason: message.data.stop_reason ?? null,
+    };
   };
 }

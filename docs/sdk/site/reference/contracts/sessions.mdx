@@ -35,7 +35,7 @@ previous page, and is refused as `400 invalid_cursor` by any other list or works
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `status` | `undefined \| "active" \| "archived"` | No | Omit for every session the caller may see, in either state. |
+| `status` | `undefined \| "archived" \| "active"` | No | Omit for every session the caller may see, in either state. |
 | `limit` | `undefined \| number` | No |  |
 | `cursor` | `undefined \| string` | No |  |
 
@@ -72,7 +72,7 @@ under; it is reported so a caller can address the transcript routes consistently
 | `engineSessionId` | `null \| string` | Yes |  |
 | `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | Which engine produced `SessionResource.engineSessionId` — the harness that ran the session, never the model provider. `null` until a run pins it, which is the same moment `engineSessionId` is first reported: an id is reported *by* an engine, so the two are never observed apart. |
 | `title` | `null \| string` | Yes |  |
-| `status` | `"active" \| "archived"` | Yes |  |
+| `status` | `"archived" \| "active"` | Yes |  |
 | `resumable` | `false \| true` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
@@ -101,7 +101,7 @@ whichever engine ran the session.
 | `engineSessionId` | `null \| string` | Yes |  |
 | `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | Which engine produced `SessionResource.engineSessionId` — the harness that ran the session, never the model provider. `null` until a run pins it, which is the same moment `engineSessionId` is first reported: an id is reported *by* an engine, so the two are never observed apart. |
 | `title` | `null \| string` | Yes |  |
-| `status` | `"active" \| "archived"` | Yes |  |
+| `status` | `"archived" \| "active"` | Yes |  |
 | `resumable` | `false \| true` | Yes |  |
 | `createdAt` | `string` | Yes |  |
 | `updatedAt` | `string` | Yes |  |
@@ -116,8 +116,8 @@ The body of `GET /api/sessions/:id` and `PATCH /api/sessions/:id`.
 
 ## SessionStatus
 
-- `"active"`
 - `"archived"`
+- `"active"`
 
 ## TRANSCRIPT_SUBPATH_MAX_LENGTH
 
@@ -201,4 +201,4 @@ The body of `PATCH /api/sessions/:id`. Both fields are optional; an empty patch 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `title` | `undefined \| null \| string` | No |  |
-| `status` | `undefined \| "active" \| "archived"` | No |  |
+| `status` | `undefined \| "archived" \| "active"` | No |  |

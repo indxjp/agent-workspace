@@ -1,6 +1,18 @@
 /** The `sha256` a file reference carries until its bytes have gone through the input archive. */
 export const STREAMED_SHA256 = '0'.repeat(64);
 
+/**
+ * A streamed file reference the input archive never read: the launch had no file-transfer target,
+ * so the archive was cancelled. The run fails as `run_preparation_failed`, named by this type.
+ */
+export class StreamedRunFileUnreadError extends Error {
+  override readonly name = 'StreamedRunFileUnreadError';
+
+  constructor() {
+    super('a streamed run file was never read into the archive');
+  }
+}
+
 interface BodyWithFiles {
   readonly resources?: { readonly files?: unknown };
 }
@@ -18,7 +30,7 @@ export function withStreamedDigests(body: unknown, digests: ReadonlyMap<string, 
     if (file.sha256 !== STREAMED_SHA256) return file;
     const sha256 = file.path === undefined ? undefined : digests.get(file.path);
     if (sha256 === undefined) {
-      throw new Error('a streamed run file was never read into the archive');
+      throw new StreamedRunFileUnreadError();
     }
     return { ...file, sha256 };
   });

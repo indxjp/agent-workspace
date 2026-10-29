@@ -301,13 +301,16 @@ structure DeclaredRoute where
   path : String
   deriving DecidableEq, Repr
 
-/-- The declared route union (184 routes). -/
+/-- The declared route union (187 routes). -/
 @[aw_spec (ts := "tests/inventory-support.ts#readDeclarationFiles")
   (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#declaredRoutes")]
 def declaredRoutes : List DeclaredRoute :=
-  [ ⟨"BLD-3-BUILDER-MCP-1846", "POST", "/api/builder/mcp"⟩,
+  [ ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", "GET", "/api/workspaces/:id/features"⟩,
+    ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", "PUT", "/api/workspaces/:id/features"⟩,
+    ⟨"BLD-3-BUILDER-MCP-1846", "POST", "/api/builder/mcp"⟩,
     ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "POST", "/mcp/builder"⟩,
     ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "GET", "/.well-known/oauth-protected-resource/mcp/builder"⟩,
+    ⟨"BLD-8-AGENT-RESTORE-1851", "POST", "/api/agents/:id/restore"⟩,
     ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", "POST", "/api/agents/:id/promote"⟩,
     ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", "POST", "/api/agents/:id/rollback"⟩,
     ⟨"DJ-80-11-EVALUATIONS-618", "POST", "/api/agents/:id/evaluations"⟩,

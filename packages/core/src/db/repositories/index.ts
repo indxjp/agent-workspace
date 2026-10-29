@@ -130,6 +130,10 @@ export {
   type StaleFile,
 } from './file-texts.js';
 export {
+  type WorkspaceFeatureRepository,
+  type WorkspaceFeatureRepositoryProvider,
+} from './workspace-features.js';
+export {
   CatalogPathPendingError,
   CatalogPathTakenError,
   renamedKey,
@@ -189,7 +193,9 @@ export {
   type CreateAgentOutcome,
   type CreateAgentWithAssignmentsOutcome,
   type DeleteAgentOutcome,
+  type AgentRestoreActor,
   type ReplaceAgentPolicyOutcome,
+  type RestoreAgentOutcome,
   type UpdateAgentOutcome,
   type UpdateAgentPatch,
 } from './agents.js';

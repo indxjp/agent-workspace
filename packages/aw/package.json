@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/aw",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "aw, the command line for the Agent Workspace API: one command per SDK method, with JSON output and stable exit codes.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",

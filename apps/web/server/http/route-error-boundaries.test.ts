@@ -1,7 +1,7 @@
 import { log as webLogger } from '../telemetry/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createInMemoryObjectStore, type ObjectStoreV2 } from '@agent-workspace/core/storage';
+import { createInMemoryObjectStore, type ObjectStore } from '@agent-workspace/core/storage';
 import { bytesToStream } from '@agent-workspace/core/storage/streams';
 import {
   createInMemoryCatalog,
@@ -160,7 +160,7 @@ describe('authenticated route error boundaries', () => {
     let broken = false;
     // The row is written while the byte store works; after that every read, write and signature
     // fails.
-    const objects: ObjectStoreV2 = {
+    const objects: ObjectStore = {
       ...inner,
       capabilities: { ...inner.capabilities, sign: true, boundLengthSign: true },
       read: (key, options) => (broken ? failing() : inner.read(key, options)),

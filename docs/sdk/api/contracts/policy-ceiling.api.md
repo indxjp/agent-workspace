@@ -91,6 +91,9 @@ export function networkPolicyFloor(input: {
 }): NetworkPolicyFloor;
 
 // @public
+export const POLICY_CEILING_MAX_COST_PER_DAY_USD = 100000;
+
+// @public
 export const POLICY_CEILING_MODELS_MAX = 64;
 
 // @public

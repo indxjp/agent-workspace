@@ -294,15 +294,29 @@ describe('the release trivy gate (#373, docs/adr/0087)', () => {
         'rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack',
       );
     }
-    // The stages that launch connectors serve npx through pnpm dlx, with the same patched pnpm,
-    // installed from its registry tarball rather than through npm or corepack (ADR-0087 D1).
+    // The stages that launch connectors serve npx through pnpm dlx, with the same patched pnpm:
+    // its native executable for the build's architecture, from a checksum-verified registry
+    // tarball rather than through npm or corepack (ADR-0087 D1).
     for (const dockerfile of ['Dockerfile', 'runtime.Dockerfile']) {
       const source = read(dockerfile);
       expect(source).toContain(`ARG PNPM_VERSION=${packageManager!}\n`);
-      expect(source).toMatch(/^ARG PNPM_TARBALL_SHA256=[0-9a-f]{64}$/mu);
-      expect(source).toContain('ADD --checksum=sha256:${PNPM_TARBALL_SHA256}');
+      for (const [arch, pkg] of [
+        ['AMD64', 'x64'],
+        ['ARM64', 'arm64'],
+      ] as const) {
+        expect(source).toMatch(new RegExp(`^ARG PNPM_SHA256_${arch}=[0-9a-f]{64}$`, 'mu'));
+        expect(source).toContain(
+          `FROM scratch AS pnpm-${arch.toLowerCase()}\nARG PNPM_VERSION\nARG PNPM_SHA256_${arch}\n` +
+            `ADD --checksum=sha256:\${PNPM_SHA256_${arch}} \\\n` +
+            `    https://registry.npmjs.org/@pnpm/exe.linux-${pkg}/-/exe.linux-${pkg}-\${PNPM_VERSION}.tgz /pnpm.tgz\n`,
+        );
+      }
+      expect(source).toContain('FROM pnpm-${TARGETARCH} AS pnpm\n');
       expect(source).toContain('COPY infra/images/npx.mjs infra/images/npx-run-bin.mjs /opt/npx/');
-      expect(source).toContain('ENV PNPM_CLI=/opt/pnpm/bin/pnpm.cjs');
+      expect(source).toContain(
+        'RUN --mount=type=bind,from=pnpm,source=/pnpm.tgz,target=/tmp/pnpm.tgz \\\n',
+      );
+      expect(source).toContain('ENV PNPM_CLI=/opt/pnpm/pnpm');
     }
     expect(read('gateway.Dockerfile')).not.toContain('npx.mjs');
     const [major, minor] = packageManager!.split('.').map(Number);

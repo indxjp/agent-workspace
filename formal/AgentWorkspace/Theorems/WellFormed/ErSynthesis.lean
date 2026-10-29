@@ -74,12 +74,12 @@ theorem target_checks_all_have_a_meaning :
       | .other n => (Target.targetCheck? n default).isSome || !(Current.refinedBy t n).isEmpty
       | .oneOf .. => true) = true := by decide +kernel
 
-/-- The target ER diagram draws each foreign key at most once, and draws every key except the 53
+/-- The target ER diagram draws each foreign key at most once, and draws every key except the 54
 references to the tenant root and the 10 single-column `SET NULL` siblings. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/concepts.md#the-target-er-model")]
 theorem er_diagram_draws_each_relationship_once :
     ((Target.drawn Target.schema).map (·.2.name)).Nodup ∧
-      (Target.drawn Target.schema).length + 53 + 10 =
+      (Target.drawn Target.schema).length + 54 + 10 =
         (allTables.map fun t => (Target.schema t).foreignKeys.length).sum := by decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.ErSynthesis

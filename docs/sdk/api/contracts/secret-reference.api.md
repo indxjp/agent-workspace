@@ -10,6 +10,9 @@ import { z } from 'zod';
 export function isReservedSecretName(name: string): boolean;
 
 // @public
+export function isStorageConnectionSecretName(name: string): boolean;
+
+// @public
 export const RESERVED_SECRET_NAME_PREFIX = "AW_";
 
 // @public
@@ -28,6 +31,9 @@ export type SecretReference = z.infer<typeof SecretReferenceSchema>;
 export const SecretReferenceSchema: z.ZodReadonly<z.ZodObject<{
     secret: z.ZodString;
 }, z.core.$strict>>;
+
+// @public
+export const STORAGE_CONNECTION_SECRET_PREFIX = "STORAGE_CONNECTION_";
 
 // (No @packageDocumentation comment for this package)
 

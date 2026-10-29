@@ -7,20 +7,21 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  defineObjectStoreContract,
-  defineObjectStoreV2Contract,
-  type ObjectStoreV2ContractFixture,
-} from './contract.js';
+import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
 import { ObjectConflictError, type ObjectStore } from './object-store.js';
 import {
+  createS3ObjectStore,
+  createS3ObjectStoreFromConfig,
   createS3ObjectStoreProvider,
   createS3ObjectStoreProviderFromConfig,
   ensureS3Bucket,
 } from './s3-store.js';
+import { readWhole } from './streams.js';
 
 describe('ensureS3Bucket', () => {
   it('creates a missing bucket once, and a second boot finds it and creates nothing', async () => {
@@ -60,6 +61,162 @@ describe('ensureS3Bucket', () => {
   });
 });
 
+// #1925 item 15: a bucket deleted after delivery must fail a write-back, not count as a conflict.
+describe('an S3 bucket that is gone', () => {
+  it('is an error on a whole or ranged read and on copy, while a missing object is still null or a no-op', async () => {
+    // S3's own error bodies: a GET names NoSuchBucket or NoSuchKey; a HEAD has no body at all.
+    let code = 'NoSuchBucket';
+    const server = createServer((request, response) => {
+      response.writeHead(404, { 'content-type': 'application/xml' });
+      if (request.method === 'HEAD') {
+        response.end();
+        return;
+      }
+      response.end(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>${code}</Code></Error>`);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const store = createS3ObjectStore({
+        client: new S3Client({
+          endpoint: `http://127.0.0.1:${String(port)}`,
+          region: 'us-east-1',
+          forcePathStyle: true,
+          maxAttempts: 1,
+          credentials: { accessKeyId: 'id', secretAccessKey: 'secret' },
+        }),
+        bucket: 'gone-bucket',
+      });
+
+      await expect(store.read('a.txt')).rejects.toMatchObject({ name: 'NoSuchBucket' });
+      // A ranged read sizes the object with a HEAD first, which cannot name the bucket.
+      await expect(store.read('a.txt', { range: { start: 0, end: 1 } })).rejects.toMatchObject({
+        name: 'NoSuchBucket',
+      });
+      await expect(store.copy('a.txt', 'b.txt')).rejects.toMatchObject({ name: 'NoSuchBucket' });
+
+      code = 'NoSuchKey';
+      await expect(store.read('a.txt')).resolves.toBeNull();
+      await expect(store.read('a.txt', { range: { start: 0, end: 1 } })).resolves.toBeNull();
+      await expect(store.copy('a.txt', 'b.txt')).resolves.toBeUndefined();
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  });
+});
+
+describe('an S3 one-level listing page', () => {
+  it('sorts by bare key by default and by native name when the server pages that way', async () => {
+    // One page as AWS sends it: file `o/a.txt` and folder `o/a/` in separate arrays.
+    const server = createServer((request, response) => {
+      if (request.method === 'HEAD') {
+        response.writeHead(200, { 'content-type': 'text/plain', 'content-length': '1' });
+        response.end();
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'application/xml' });
+      response.end(
+        '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><IsTruncated>false</IsTruncated>' +
+          '<Contents><Key>o/a.txt</Key><Size>1</Size></Contents>' +
+          '<CommonPrefixes><Prefix>o/a/</Prefix></CommonPrefixes></ListBucketResult>',
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = new S3Client({
+        endpoint: `http://127.0.0.1:${String(port)}`,
+        region: 'us-east-1',
+        forcePathStyle: true,
+        maxAttempts: 1,
+        credentials: { accessKeyId: 'id', secretAccessKey: 'secret' },
+      });
+      const keysOf = async (store: ReturnType<typeof createS3ObjectStore>) =>
+        (await store.listPage('o')).entries.map((entry) => `${entry.kind}:${entry.key}`);
+
+      await expect(keysOf(createS3ObjectStore({ client, bucket: 'b' }))).resolves.toEqual([
+        'folder:o/a',
+        'file:o/a.txt',
+      ]);
+      await expect(
+        keysOf(createS3ObjectStore({ client, bucket: 'b', listingOrder: 'native' })),
+      ).resolves.toEqual(['file:o/a.txt', 'folder:o/a']);
+
+      // The deployment and connection openers name only the endpoint: no endpoint, or an
+      // amazonaws.com one, is AWS and pages by native name; any other endpoint is SeaweedFS-like.
+      const fromConfig = (endpoint?: string) =>
+        createS3ObjectStoreFromConfig(
+          {
+            bucket: 'b',
+            region: 'us-east-1',
+            ...(endpoint === undefined ? {} : { endpoint }),
+            createBucketIfMissing: false,
+            checkBucketOnOpen: false,
+          },
+          client,
+        );
+      await expect(keysOf(await fromConfig())).resolves.toEqual(['file:o/a.txt', 'folder:o/a']);
+      await expect(keysOf(await fromConfig('https://s3.eu-west-1.amazonaws.com'))).resolves.toEqual(
+        ['file:o/a.txt', 'folder:o/a'],
+      );
+      await expect(keysOf(await fromConfig(`http://127.0.0.1:${String(port)}`))).resolves.toEqual([
+        'folder:o/a',
+        'file:o/a.txt',
+      ]);
+      await expect(keysOf(await fromConfig('https://amazonaws.com.example.test'))).resolves.toEqual(
+        ['folder:o/a', 'file:o/a.txt'],
+      );
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  });
+});
+
+describe('an S3 write', () => {
+  // #1746: the time comes from the write's own response, so a write costs no second request.
+  it("reports the server's time from the write's response, with no read-back HEAD", async () => {
+    const serverTime = new Date('2020-01-01T00:00:00.000Z');
+    const methods: string[] = [];
+    const server = createServer((request, response) => {
+      methods.push(request.method ?? '');
+      request.resume();
+      request.on('end', () => {
+        response.writeHead(200, {
+          etag: '"v1"',
+          date: serverTime.toUTCString(),
+          ...(request.method === 'HEAD'
+            ? { 'last-modified': serverTime.toUTCString(), 'content-length': '3' }
+            : {}),
+        });
+        response.end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = new S3Client({
+        endpoint: `http://127.0.0.1:${String(port)}`,
+        region: 'us-east-1',
+        forcePathStyle: true,
+        maxAttempts: 1,
+        credentials: { accessKeyId: 'id', secretAccessKey: 'secret' },
+      });
+      // Two stores on one client: the response reader is registered once, not once per store.
+      createS3ObjectStore({ client, bucket: 'b' });
+      const store = createS3ObjectStore({ client, bucket: 'b' });
+      const meta = await store.write('a.txt', new Uint8Array([1, 2, 3]), {});
+      expect(meta.etag).toBe('"v1"');
+      expect(meta.lastModified).toEqual(serverTime);
+      expect(methods).toEqual(['PUT']);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  });
+});
+
 const endpoint = process.env['TEST_S3_ENDPOINT'];
 
 if (endpoint === undefined || endpoint.trim() === '') {
@@ -77,7 +234,7 @@ if (endpoint === undefined || endpoint.trim() === '') {
     },
   });
 
-  async function setup(): Promise<ObjectStoreV2ContractFixture & { readonly bucket: string }> {
+  async function setup(): Promise<ObjectStoreContractFixture & { readonly bucket: string }> {
     const bucket = `aw-contract-${randomUUID()}`;
     await ensureS3Bucket(client, bucket);
     return {
@@ -103,7 +260,6 @@ if (endpoint === undefined || endpoint.trim() === '') {
   }
 
   defineObjectStoreContract('S3 (SeaweedFS)', setup);
-  defineObjectStoreV2Contract('S3 (SeaweedFS)', setup);
 
   describe('S3 conditional create (SeaweedFS)', () => {
     const PART = 5 * 1024 * 1024; // UPLOAD_PART_BYTES in s3-store.ts
@@ -173,7 +329,7 @@ if (endpoint === undefined || endpoint.trim() === '') {
         expect(signed).toBeDefined();
         const response = await put(signed?.url ?? '', { headers: signed?.headers ?? {}, body });
         expect(response.status).toBe(200);
-        const stored = await store.get('.attachments/s1/u1/a.txt');
+        const stored = await readWhole(store, '.attachments/s1/u1/a.txt');
         expect(new TextDecoder().decode(stored?.body)).toBe('hello');
         expect(stored?.contentType).toBe('text/plain');
       });
@@ -188,7 +344,7 @@ if (endpoint === undefined || endpoint.trim() === '') {
         });
         const response = await put(signed?.url ?? '', { body: new Uint8Array([1]) });
         expect(response.status).toBe(403);
-        expect(await store.get('a.txt')).toBeNull();
+        expect(await readWhole(store, 'a.txt')).toBeNull();
       });
     });
 
@@ -201,7 +357,7 @@ if (endpoint === undefined || endpoint.trim() === '') {
         const edited = (signed?.url ?? '').replace('.attachments/s1/', '.attachments/s2/');
         const response = await put(edited, { body: new Uint8Array([1]) });
         expect(response.status).toBe(403);
-        expect(await store.get('.attachments/s2/a.txt')).toBeNull();
+        expect(await readWhole(store, '.attachments/s2/a.txt')).toBeNull();
       });
     });
 
@@ -223,10 +379,7 @@ if (endpoint === undefined || endpoint.trim() === '') {
 
     it('serves a signed GET with the forced attachment disposition', async () => {
       await withStore(async (store) => {
-        await store.put('a.txt', {
-          body: new TextEncoder().encode('bytes'),
-          contentType: 'text/html',
-        });
+        await store.write('a.txt', new TextEncoder().encode('bytes'), { contentType: 'text/html' });
         const signed = await store.createSignedUrl?.('a.txt', {
           method: 'GET',
           expiresInSeconds: 60,

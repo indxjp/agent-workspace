@@ -106,10 +106,10 @@
  * junctions: see `!entry.isFile()` below), which is a filter about *kind*, not about naming, and
  * is declared as such on the PR.
  *
- * A streamed `write` adds a third sibling, `<rootDir>/staging/`: bytes land there first, then
- * `rename` (or `link`, for `ifNoneMatch`) moves them into `objects/`. It is a sibling so it shares
- * the object tree's volume (the move stays atomic) and is never listed; a failed `write` removes
- * its staging file.
+ * A streamed `write` and a `copy` add a third sibling, `<rootDir>/staging/`: bytes land there
+ * first, then `rename` (or `link`, for `ifNoneMatch`) moves them into `objects/`. It is a sibling so
+ * it shares the object tree's volume (the move stays atomic) and is never listed; a failed `write`
+ * or `copy` removes its staging file.
  *
  * This module never re-validates the string it builds itself: both paths are derived from an
  * already-validated key, below, not from a string handed back through the guard.
@@ -118,7 +118,6 @@ import type { BigIntStats, Dirent } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import {
-  copyFile,
   link,
   mkdir,
   open,
@@ -144,15 +143,19 @@ import {
   scopedObjectStoreProvider,
   ObjectConflictError,
   validatedWriteKey,
-  type ObjectContent,
   type ObjectListEntry,
   type ObjectMeta,
-  type ObjectStoreV2,
-  type ObjectStoreProviderV2,
-  type PutObjectInput,
-  compareEntryKeys,
+  type ObjectStore,
+  type ObjectStoreProvider,
 } from './object-store.js';
-import { listPageFrom, resolveRange, toNodeReadable, toWebStream } from './streams.js';
+import {
+  inWalkOrder,
+  listPageFrom,
+  resolveRange,
+  toNodeReadable,
+  toWebStream,
+  walkedBefore,
+} from './streams.js';
 
 /**
  * The subdirectory of `rootDir` every object key is resolved under. Callers address paths inside
@@ -219,7 +222,7 @@ async function directoryContainsObject(directory: string): Promise<boolean> {
  * store's caller-relative key with its workspace prefix joined on — never a caller-facing
  * workspace-relative one; see this file's header for why it is validated again anyway.
  */
-export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2 {
+export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
   const resolvedRoot = path.resolve(rootDir);
   const objectRoot = path.join(resolvedRoot, OBJECT_TREE);
   const metadataRoot = path.join(resolvedRoot, METADATA_TREE);
@@ -281,7 +284,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2
     };
   }
 
-  /** Best effort, as `put` explains below: a failed sidecar write costs only the content type. */
+  /** Best effort, as this file's header explains: a failed sidecar write costs only the content type. */
   async function writeSidecar(key: string, contentType: string | null): Promise<void> {
     const metaPath = toMetaPath(key);
     const sidecar: Sidecar = { contentType };
@@ -293,7 +296,123 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2
     }
   }
 
-  const backend: ObjectStoreV2 = {
+  const listing = {
+    async *level(prefix, after): AsyncGenerator<ObjectListEntry> {
+      const dir = toFsDir(prefix);
+      const safePrefix = toObjectPrefix(prefix);
+      let entries: Dirent[];
+      try {
+        entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' });
+      } catch (error) {
+        // No such folder, or the prefix names a file rather than a folder: both read as "nothing
+        // is here", not as an error — the same shape `get` uses for ENOENT/EISDIR.
+        if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) return;
+        throw error;
+      }
+
+      // Nothing a caller can write is filtered out of this listing *by name*. The object tree
+      // contains objects and only objects — sidecars live in a sibling tree — so no name a caller
+      // can write is hidden from its own listing, which is the invisibility half of F3 (rounds
+      // 1-3). A name the key guard refuses (put there by another tool) is skipped: no caller could
+      // address it. The other filter is about *kind*, below: an entry that is neither a file nor a directory is skipped,
+      // so a junction or symlink planted here out of band is reachable through `get`/`list` while
+      // being absent from its parent's listing. Declared on this task's PR, not repaired here.
+      // In name order, which is key order here; nothing before the cursor is looked at again.
+      for (const entry of inWalkOrder(entries, () => false)) {
+        const key = safePrefix === '' ? entry.name : `${safePrefix}/${entry.name}`;
+        if (addressableObjectName(key) === null) continue; // a name another tool wrote
+        if (after !== undefined && key < after) continue;
+        if (entry.isDirectory()) {
+          // S3 folders are prefixes, not durable directory entries. Ignore an empty physical
+          // directory left after its last object (including an explicit-folder marker) is removed.
+          if (await directoryContainsObject(path.join(dir, entry.name))) {
+            yield { kind: 'folder', key };
+          }
+          continue;
+        }
+        if (!entry.isFile()) continue; // symlinks and other special files: not §16's concern
+        const entryPath = path.join(dir, entry.name);
+        // Built from the directory entry rather than re-validated through the guard: these names
+        // came from `readdir` of a directory this module owns, and a name on disk need not be a
+        // string the guard would accept (a file put there by something else).
+        const metaPath =
+          path.join(metadataRoot, ...(safePrefix === '' ? [] : safePrefix.split('/')), entry.name) +
+          META_SUFFIX;
+        const [stats, contentType] = await Promise.all([stat(entryPath), readSidecar(metaPath)]);
+        yield {
+          kind: 'file',
+          key,
+          sizeBytes: stats.size,
+          contentType,
+          lastModified: stats.mtime,
+        };
+      }
+    },
+
+    async *tree(prefix, after): AsyncGenerator<ObjectListEntry> {
+      const safePrefix = toObjectPrefix(prefix);
+      // The object AT `prefix` itself, if there is one — only a plain file key can be one; a
+      // folder never has bytes at its own path (`files.ts`'s schema comment says the same thing
+      // for the catalog row). Checked before the recursive walk so a `prefix` naming a file
+      // behaves the same as one naming a folder that contains descendants: both report every
+      // object at or beneath `prefix`.
+      if (safePrefix !== '') {
+        try {
+          const selfPath = toFsPath(safePrefix);
+          const stats = await stat(selfPath);
+          if (stats.isFile()) {
+            const contentType = await readSidecar(toMetaPath(safePrefix));
+            yield {
+              kind: 'file',
+              key: safePrefix,
+              sizeBytes: stats.size,
+              contentType,
+              lastModified: stats.mtime,
+            };
+          }
+        } catch (error) {
+          if (!hasErrnoCode(error, 'ENOENT') && !hasErrnoCode(error, 'ENOTDIR')) throw error;
+        }
+      }
+
+      // In key order, skipping every folder and file the cursor is already past.
+      async function* walk(dir: string, keyPrefix: string): AsyncGenerator<ObjectListEntry> {
+        let entries: Dirent[];
+        try {
+          entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' });
+        } catch (error) {
+          if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) return;
+          throw error;
+        }
+        for (const entry of inWalkOrder(entries, (dirent) => dirent.isDirectory())) {
+          const key = keyPrefix === '' ? entry.name : `${keyPrefix}/${entry.name}`;
+          if (entry.isDirectory()) {
+            if (!walkedBefore(key, after)) yield* walk(path.join(dir, entry.name), key);
+            continue;
+          }
+          if (!entry.isFile()) continue; // symlinks and other special files: see `list()`'s comment
+          if (addressableObjectName(key) === null) continue; // a name another tool wrote
+          if (after !== undefined && key < after) continue;
+          const entryPath = path.join(dir, entry.name);
+          const metaPath =
+            path.join(metadataRoot, ...(keyPrefix === '' ? [] : keyPrefix.split('/')), entry.name) +
+            META_SUFFIX;
+          const [stats, contentType] = await Promise.all([stat(entryPath), readSidecar(metaPath)]);
+          yield {
+            kind: 'file',
+            key,
+            sizeBytes: stats.size,
+            contentType,
+            lastModified: stats.mtime,
+          };
+        }
+      }
+
+      yield* walk(toFsDir(safePrefix), safePrefix);
+    },
+  } satisfies Parameters<typeof listPageFrom>[0];
+
+  const backend: ObjectStore = {
     // A file system cannot hold a file and a folder at one path.
     capabilities: {
       sign: false,
@@ -379,50 +498,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2
     },
 
     // ponytail: pages an in-memory listing of one directory; fine for local disk
-    listPage: (prefix, options) => listPageFrom(backend, prefix, options),
-
-    async put(key, input: PutObjectInput): Promise<void> {
-      const objectPath = toFsPath(key);
-      await mkdir(path.dirname(objectPath), { recursive: true });
-      await writeFile(objectPath, input.body);
-
-      // The object write is the operation. The sidecar is best effort, and this `catch` is what
-      // makes that a fact rather than a sentence: without it, `put` reported failure for a write
-      // that had already succeeded. Verification round 5 forced exactly that from the public API
-      // with two uploads — `POST note.txt`, then `POST NOTETX~1.JSO/x.txt`, where the second key's
-      // metadata *directory* collides with the first key's sidecar *file* through its NTFS 8.3
-      // alias — and got `EEXIST` out of `mkdir` as an uncaught throw through the route handler,
-      // with the file on disk and readable.
-      //
-      // What a caught failure leaves behind, decided rather than discovered: the object, complete
-      // and readable, with **no** content type — `get` and `list` report `contentType: null`, the
-      // same degradation this module already applies to a sidecar that is missing, unreadable or
-      // unparseable. Any *stale* sidecar left by an earlier object at this key is removed on the
-      // way out, so a caller never sees new bytes described by an old content type; if that
-      // removal fails too, the stale value survives and is the one declared residual of this path.
-      // `put` still resolves, because the bytes are what it promised.
-      await writeSidecar(key, input.contentType ?? null);
-    },
-
-    async get(key): Promise<ObjectContent | null> {
-      const objectPath = toFsPath(key);
-      let body: Buffer;
-      let stats: Awaited<ReturnType<typeof stat>>;
-      try {
-        [body, stats] = await Promise.all([readFile(objectPath), stat(objectPath)]);
-      } catch (error) {
-        if (
-          hasErrnoCode(error, 'ENOENT') ||
-          hasErrnoCode(error, 'EISDIR') ||
-          hasErrnoCode(error, 'ENOTDIR')
-        )
-          return null;
-        throw error;
-      }
-      if (stats.isDirectory()) return null;
-      const contentType = await readSidecar(toMetaPath(key));
-      return { body, contentType, sizeBytes: stats.size, lastModified: stats.mtime };
-    },
+    listPage: (prefix, options) => listPageFrom(listing, prefix, options),
 
     async delete(key): Promise<void> {
       const objectPath = toFsPath(key);
@@ -438,146 +514,40 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2
       await rm(toMetaPath(key), { force: true });
     },
 
-    async list(prefix): Promise<readonly ObjectListEntry[]> {
-      const dir = toFsDir(prefix);
-      const safePrefix = toObjectPrefix(prefix);
-      let entries: Dirent[];
-      try {
-        entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' });
-      } catch (error) {
-        // No such folder, or the prefix names a file rather than a folder: both read as "nothing
-        // is here", not as an error — the same shape `get` uses for ENOENT/EISDIR.
-        if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) return [];
-        throw error;
-      }
-
-      const result: ObjectListEntry[] = [];
-      // Nothing a caller can write is filtered out of this listing *by name*. The object tree
-      // contains objects and only objects — sidecars live in a sibling tree — so no name a caller
-      // can write is hidden from its own listing, which is the invisibility half of F3 (rounds
-      // 1-3). A name the key guard refuses (put there by another tool) is skipped: no caller could
-      // address it. The other filter is about *kind*, below: an entry that is neither a file nor a directory is skipped,
-      // so a junction or symlink planted here out of band is reachable through `get`/`list` while
-      // being absent from its parent's listing. Declared on this task's PR, not repaired here.
-      for (const entry of entries) {
-        const key = safePrefix === '' ? entry.name : `${safePrefix}/${entry.name}`;
-        if (addressableObjectName(key) === null) continue; // a name another tool wrote
-        if (entry.isDirectory()) {
-          // S3 folders are prefixes, not durable directory entries. Ignore an empty physical
-          // directory left after its last object (including an explicit-folder marker) is removed.
-          if (await directoryContainsObject(path.join(dir, entry.name))) {
-            result.push({ kind: 'folder', key });
-          }
-          continue;
-        }
-        if (!entry.isFile()) continue; // symlinks and other special files: not §16's concern
-        const entryPath = path.join(dir, entry.name);
-        // Built from the directory entry rather than re-validated through the guard: these names
-        // came from `readdir` of a directory this module owns, and a name on disk need not be a
-        // string the guard would accept (a file put there by something else).
-        const metaPath =
-          path.join(metadataRoot, ...(safePrefix === '' ? [] : safePrefix.split('/')), entry.name) +
-          META_SUFFIX;
-        const [stats, contentType] = await Promise.all([stat(entryPath), readSidecar(metaPath)]);
-        result.push({
-          kind: 'file',
-          key,
-          sizeBytes: stats.size,
-          contentType,
-          lastModified: stats.mtime,
-        });
-      }
-      return result.sort(compareEntryKeys);
-    },
-
-    async listPrefix(prefix): Promise<readonly ObjectListEntry[]> {
-      const safePrefix = toObjectPrefix(prefix);
-      const result: ObjectListEntry[] = [];
-      // The object AT `prefix` itself, if there is one — only a plain file key can be one; a
-      // folder never has bytes at its own path (`files.ts`'s schema comment says the same thing
-      // for the catalog row). Checked before the recursive walk so a `prefix` naming a file
-      // behaves the same as one naming a folder that contains descendants: both report every
-      // object at or beneath `prefix`.
-      if (safePrefix !== '') {
-        try {
-          const selfPath = toFsPath(safePrefix);
-          const stats = await stat(selfPath);
-          if (stats.isFile()) {
-            const contentType = await readSidecar(toMetaPath(safePrefix));
-            result.push({
-              kind: 'file',
-              key: safePrefix,
-              sizeBytes: stats.size,
-              contentType,
-              lastModified: stats.mtime,
-            });
-          }
-        } catch (error) {
-          if (!hasErrnoCode(error, 'ENOENT') && !hasErrnoCode(error, 'ENOTDIR')) throw error;
-        }
-      }
-
-      async function walk(dir: string, keyPrefix: string): Promise<ObjectListEntry[]> {
-        let entries: Dirent[];
-        try {
-          entries = await readdir(dir, { withFileTypes: true, encoding: 'utf8' });
-        } catch (error) {
-          if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) return [];
-          throw error;
-        }
-        const found: ObjectListEntry[] = [];
-        for (const entry of entries) {
-          const key = keyPrefix === '' ? entry.name : `${keyPrefix}/${entry.name}`;
-          if (entry.isDirectory()) {
-            found.push(...(await walk(path.join(dir, entry.name), key)));
-            continue;
-          }
-          if (!entry.isFile()) continue; // symlinks and other special files: see `list()`'s comment
-          if (addressableObjectName(key) === null) continue; // a name another tool wrote
-          const entryPath = path.join(dir, entry.name);
-          const metaPath =
-            path.join(metadataRoot, ...(keyPrefix === '' ? [] : keyPrefix.split('/')), entry.name) +
-            META_SUFFIX;
-          const [stats, contentType] = await Promise.all([stat(entryPath), readSidecar(metaPath)]);
-          found.push({
-            kind: 'file',
-            key,
-            sizeBytes: stats.size,
-            contentType,
-            lastModified: stats.mtime,
-          });
-        }
-        return found;
-      }
-
-      result.push(...(await walk(toFsDir(safePrefix), safePrefix)));
-      return result.sort(compareEntryKeys);
-    },
-
-    async copyObject(sourceKey, destinationKey): Promise<void> {
-      const sourcePath = toFsPath(sourceKey);
+    async copy(sourceKey, destinationKey): Promise<void> {
       const destinationPath = toFsPath(destinationKey);
+      // The source is opened exactly as `read` opens it, so a copy sees what a read would: the
+      // same missing-key answers and the same symlink policy (this file's header).
+      let handle: FileHandle;
       try {
-        const stats = await stat(sourcePath);
-        if (!stats.isFile()) return; // nothing this API considers an object at that key
+        handle = await open(toFsPath(sourceKey), 'r');
       } catch (error) {
         // A missing source is a no-op — see `object-store.ts`'s header for why this is what makes
         // a retried subtree move idempotent rather than an error the second time.
-        if (hasErrnoCode(error, 'ENOENT') || hasErrnoCode(error, 'ENOTDIR')) return;
+        if (['ENOENT', 'ENOTDIR', 'EISDIR'].some((code) => hasErrnoCode(error, code))) return;
         throw error;
       }
-      await mkdir(path.dirname(destinationPath), { recursive: true });
-      await copyFile(sourcePath, destinationPath);
-
-      // The object copy is the operation; the sidecar copy is best effort, the same contract
-      // `put`'s own sidecar write has above and for the same reason.
-      const sourceMetaPath = toMetaPath(sourceKey);
-      const destinationMetaPath = toMetaPath(destinationKey);
+      // Staged and renamed into place under the key lock, as `write` does: a failed copy leaves
+      // no destination, and a concurrent `read` sees the old file or the new one, never a part.
+      const stagingDir = path.join(resolvedRoot, STAGING_TREE);
+      const staged = path.join(stagingDir, randomUUID());
       try {
-        await mkdir(path.dirname(destinationMetaPath), { recursive: true });
-        await copyFile(sourceMetaPath, destinationMetaPath);
-      } catch {
-        await rm(destinationMetaPath, { force: true }).catch(() => undefined);
+        if (!(await handle.stat()).isFile()) return; // nothing this API considers an object
+        await mkdir(stagingDir, { recursive: true });
+        await mkdir(path.dirname(destinationPath), { recursive: true });
+        await pipeline(handle.createReadStream({ autoClose: false }), createWriteStream(staged));
+        const contentType = await readSidecar(toMetaPath(sourceKey));
+        await withKeyLock(destinationPath, async () => {
+          await rename(staged, destinationPath);
+          // The object copy is the operation; the sidecar is best effort, as for `write`.
+          await writeSidecar(destinationKey, contentType);
+        });
+      } finally {
+        try {
+          await handle.close();
+        } finally {
+          await rm(staged, { force: true });
+        }
       }
     },
   };
@@ -585,10 +555,10 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStoreV2
 }
 
 /**
- * The local-filesystem {@link ObjectStoreProviderV2}: every workspace gets its own subtree of
+ * The local-filesystem {@link ObjectStoreProvider}: every workspace gets its own subtree of
  * `rootDir`, via {@link scopedObjectStoreProvider} — the same wrapper any future backend uses, so
  * "which workspace this key belongs to" is decided in exactly one place regardless of backend.
  */
-export function createLocalFilesystemObjectStoreProvider(rootDir: string): ObjectStoreProviderV2 {
+export function createLocalFilesystemObjectStoreProvider(rootDir: string): ObjectStoreProvider {
   return scopedObjectStoreProvider(createLocalFilesystemObjectStore(rootDir));
 }

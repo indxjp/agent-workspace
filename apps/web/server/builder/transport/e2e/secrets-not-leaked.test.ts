@@ -98,7 +98,6 @@ async function driveRunToken(
   await seed();
   const bait = { text: '' };
   const door = builderDoor({
-    featureOn: true,
     scopes: scopes(),
     connectors,
     ...(scenario === 'adapter_throws' ? { override: poisonedPorts(bait) } : {}),
@@ -143,7 +142,6 @@ async function driveOAuth(scenario: Scenario): Promise<Outcome> {
     text: `Authorization: ${OAUTH_AUTHORIZATION} credential ${CONNECTOR_CREDENTIAL} basic ${SHORT_SECRET}`,
   };
   const door = builderDoor({
-    featureOn: true,
     scopes: scopes(),
     connectors,
     ...(scenario === 'adapter_throws' ? { override: poisonedPorts(bait) } : {}),

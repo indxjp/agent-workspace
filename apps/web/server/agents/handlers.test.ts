@@ -223,17 +223,35 @@ describe('lineage and archivedAt on read (issue #1851)', () => {
     const store = markedStore(made.id);
     const expected = { createdByAgent: LINEAGE, archivedAt: '2026-02-03T04:05:06.007Z' };
     expect(agentOf(await getAgent(store, made.id))).toMatchObject(expected);
-    expect(listBody(await listAgents(store))[0]).toMatchObject(expected);
+    expect(listBody(await listAgents(store, 'include'))[0]).toMatchObject(expected);
   });
 
-  it('shows neither for a person-made agent, and an archived agent is still listed', async () => {
+  it('shows neither for a person-made agent', async () => {
     const person = agentOf(await createAgent(a, body({ name: 'Person' }), OWNER_A));
     const made = agentOf(await createAgent(a, body({ name: 'Made' }), OWNER_A));
-    const store = markedStore(made.id);
-    const read = agentOf(await getAgent(store, person.id));
+    const read = agentOf(await getAgent(markedStore(made.id), person.id));
     expect(read).not.toHaveProperty('createdByAgent');
     expect(read).not.toHaveProperty('archivedAt');
-    expect(listBody(await listAgents(store))).toHaveLength(2);
+  });
+
+  it('hides an archived agent from the list unless asked, and still returns it by id', async () => {
+    await createAgent(a, body({ name: 'Person' }), OWNER_A);
+    const made = agentOf(await createAgent(a, body({ name: 'Made' }), OWNER_A));
+    const store = markedStore(made.id);
+    expect(listBody(await listAgents(store)).map((agent) => agent.name)).toEqual(['Person']);
+    expect(
+      listBody(await listAgents(store, 'include'))
+        .map((agent) => agent.name)
+        .sort(),
+    ).toEqual(['Made', 'Person']);
+    expect(agentOf(await getAgent(store, made.id)).archivedAt).toBe('2026-02-03T04:05:06.007Z');
+  });
+
+  it('answers the same body by default and with include when nothing is archived', async () => {
+    await createAgent(a, body({ name: 'Person' }), OWNER_A);
+    const plain = await listAgents(a);
+    expect(JSON.stringify((await listAgents(a, 'include')).body)).toBe(JSON.stringify(plain.body));
+    expect(listBody(plain)).toHaveLength(1);
   });
 });
 

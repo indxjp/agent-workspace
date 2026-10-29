@@ -1,6 +1,6 @@
 ---
 title: "Configuration"
-description: "Point the client at your control plane, add headers, set a timeout, cancel a call, bring your own fetch, and the environment variable convention this documentation uses."
+description: "Point the client at your control plane, add headers, set a timeout, cancel a call, bring your own fetch, the environment variable convention this documentation uses, and the one URL that tells the server where files live."
 ---
 
 <Info>
@@ -24,6 +24,7 @@ rest have sensible defaults. For the full type signature, see [Client](/referenc
 - [Cancel one call or stream](#cancel-one-call-or-stream).
 - [Bring your own fetch](#bring-your-own-fetch) for tests or another runtime.
 - [Read the URL and key from the environment](#environment-variables).
+- [Tell the server where files live](#tell-the-server-where-files-live), if you run the server.
 
 <Accordion title="The ClientOptions and RequestOptions types">
 
@@ -139,6 +140,35 @@ comes from the project file, `aw` never sends `AGENT_WORKSPACE_API_KEY` or a pro
 it uses a key piped with `--api-key-stdin`, else the local key `aw dev` stored for that URL, else
 the token `aw login` stored for it.
 
+## Tell the server where files live
+
+Your code never names a bucket: `aw.files`, `aw.skills` and the session transcripts are stored
+wherever the server keeps them. The operator sets that once, with one server environment variable,
+`AW_STORAGE_URL`. The control plane reads it; `createClient` does not. The URL never holds a key or
+a password: those come from the environment, or from the cloud's workload identity.
+
+| Scheme      | Store                                                                    | Example                                 | Query parameters                                                                                                               |
+| ----------- | ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `s3://`     | Amazon S3, or an S3-compatible server such as Cloudflare R2 or SeaweedFS | `s3://acme-files/prod?region=eu-west-1` | `endpoint`, `publicEndpoint` (the origin a browser uses for signed links), `region`, `pathStyle` (`true` or `false`)           |
+| `gcs://`    | Google Cloud Storage                                                     | `gcs://acme-files/prod?project=acme-ai` | `project`                                                                                                                      |
+| `azblob://` | Azure Blob Storage: the storage account, then the container              | `azblob://acmefiles/objects/prod`       | `endpoint`, the account's blob endpoint in a sovereign cloud (for example `https://acmefiles.blob.core.usgovcloudapi.net`)      |
+| `file://`   | a folder on the server's own disk, for one machine                       | `file:///var/lib/agent-workspace`       | none                                                                                                                           |
+
+The path after the bucket or container is a prefix, and every object goes under it. The server
+refuses a URL with a user name or password in it, an unknown query parameter, a `#fragment`, or an
+empty, `.` or `..` path segment. Its error message never repeats the value.
+
+The server still starts when `AW_STORAGE_URL` is unset or invalid. It logs why, and the files,
+skills and session-state routes answer `503` (`files_runtime_not_configured`,
+`skills_runtime_not_configured`) until the URL is fixed and the server restarts.
+`agent-workspace doctor` fails its storage check for an invalid URL and warns when none is set.
+A malformed value of a setting beside it, such as `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`,
+`AW_STORAGE_CREATE_BUCKET` or `AW_STORAGE_CLEANUP`, does stop start-up, with a message that names
+the variable and not its value.
+
+Which stores can sign upload and download links, the size limits, and how to move from the old
+storage variables are on [The data plane](/concepts/data-plane#one-storage-url).
+
 ## See also
 
 - [Client](/reference/sdk/client) — the generated reference for `createClient`,
@@ -146,3 +176,5 @@ the token `aw login` stored for it.
 - [Timeouts and cancellation](/guides/timeouts-and-cancellation) — `timeoutMs` and
   `signal` worked through in detail, including how they combine.
 - [Authentication](/getting-started/authentication) — `auth` in depth.
+- [The data plane](/concepts/data-plane) — where the server keeps files, skills, secrets and
+  sandboxes, per cloud.

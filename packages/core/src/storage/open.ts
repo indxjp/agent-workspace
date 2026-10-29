@@ -7,8 +7,8 @@ import type { StorageLocation } from '@indx-workspace/contracts/storage-url';
 
 import {
   scopedObjectStoreProvider,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
+  type ObjectStore,
+  type ObjectStoreProvider,
 } from './object-store.js';
 import type { StorageArea } from './object-name.js';
 
@@ -17,13 +17,13 @@ export interface OpenObjectStoreOptions {
   readonly timeoutMs?: number;
   /** S3 only: provision the bucket when it is missing (development endpoints). */
   readonly createBucketIfMissing?: boolean;
-  /** storage-bridge(#1651): S3 keys come from the legacy environment until `AW_STORAGE_URL` is read. */
+  /** S3 only: an explicit key pair (and STS token), which the deployment reads from its environment. */
   readonly credentials?: {
     readonly accessKeyId?: string;
     readonly secretAccessKey?: string;
     readonly sessionToken?: string;
   };
-  /** storage-bridge(#1651): Azure managed-identity client id from the legacy environment. */
+  /** Azure only: the client id of a user-assigned managed identity. */
   readonly managedIdentityClientId?: string;
 }
 
@@ -43,7 +43,7 @@ export async function openObjectStore(
   location: StorageLocation,
   area: StorageArea,
   options: OpenObjectStoreOptions = {},
-): Promise<ObjectStoreProviderV2> {
+): Promise<ObjectStoreProvider> {
   return scopedObjectStoreProvider(
     await openBackend(location, keyPrefixOf(prefixOf(location), area), options),
   );
@@ -56,7 +56,7 @@ export async function openObjectStore(
 export function openRootObjectStore(
   location: StorageLocation,
   options: OpenObjectStoreOptions = {},
-): Promise<ObjectStoreV2> {
+): Promise<ObjectStore> {
   return openBackend(location, prefixOf(location), options);
 }
 
@@ -64,7 +64,7 @@ async function openBackend(
   location: StorageLocation,
   keyPrefix: string,
   options: OpenObjectStoreOptions,
-): Promise<ObjectStoreV2> {
+): Promise<ObjectStore> {
   switch (location.kind) {
     case 'file': {
       const { createLocalFilesystemObjectStore } = await import('./local-fs-store.js');

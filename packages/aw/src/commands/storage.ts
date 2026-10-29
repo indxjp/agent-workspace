@@ -63,6 +63,15 @@ async function readCredential(
   return parsed.data;
 }
 
+/** `--file -` and `--credential-file -` would both read stdin; the second would see nothing. */
+function assertOneStdinReader(context: CommandContext): void {
+  if (value(context, 'file') === '-' && value(context, 'credential-file') === '-') {
+    throw new UsageError(
+      '--file - and --credential-file - both read stdin; give one of them a file',
+    );
+  }
+}
+
 async function connectionOf(context: CommandContext) {
   const target = positional(context, 0, 'name|id');
   return context.client.storage.connections.get(target, { signal: context.signal });
@@ -117,9 +126,10 @@ export const storageCommands: readonly Command[] = [
   ),
   command(
     'storage connections update',
-    '<name|id> [--file <json>] [--name <name>] [--storage-url <url>] [--allow <prefix> …] [--credential-file <path|->]',
-    'Rename or reconfigure a connection (writeAllowed through --file)',
+    '<name|id> [--file <json>] [--name <name>] [--storage-url <url>] [--allow <prefix> …] [--write-allowed] [--credential-file <path|->]',
+    'Rename or reconfigure a connection (turning writing off goes through --file)',
     async (context) => {
+      assertOneStdinReader(context);
       const credential = await readCredential(context);
       const allowed = values(context, 'allow');
       const { allowedPrefixes, ...patch } = await readBody(
@@ -129,6 +139,7 @@ export const storageCommands: readonly Command[] = [
           name: value(context, 'name'),
           url: value(context, 'storage-url'),
           allowedPrefixes: allowed.length === 0 ? undefined : allowed,
+          writeAllowed: isOn(context, 'write-allowed') ? true : undefined,
           credential,
         },
       );
@@ -159,6 +170,12 @@ export const storageCommands: readonly Command[] = [
     '<name|id> --credential-file <path|->',
     'Replace the stored credential, read from a file or stdin',
     async (context) => {
+      // The stray value is not repeated: it may itself be a pasted credential.
+      if (context.positionals.length > 1) {
+        throw new UsageError(
+          'credential takes one <name|id>; the credential is read from --credential-file, never an argument',
+        );
+      }
       const credential = await readCredential(context);
       if (credential === undefined) {
         throw new UsageError(

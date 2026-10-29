@@ -260,6 +260,10 @@ describe('lintSql', () => {
     'ALTER TABLE "a" ALTER COLUMN "b" SET NOT NULL;',
     'ALTER TABLE "a" ALTER COLUMN "b" SET DATA TYPE integer;',
     'ALTER TABLE "a" ALTER COLUMN "b" TYPE integer;',
+    'ALTER TABLE "a" ADD CONSTRAINT "c" CHECK ("b" > 0);',
+    'ALTER TABLE "a" ADD CHECK ("b" > 0);',
+    'ALTER TABLE "a" ADD CHECK ("b" > 0), ADD CONSTRAINT "c" CHECK ("d" > 0) NOT VALID;',
+    'ALTER TABLE "a" ADD CHECK ("b" > 0);\nALTER TABLE "e" ADD CONSTRAINT "c" CHECK ("d" > 0) NOT VALID;',
   ];
 
   it.each(bad)('rejects %s', (sql) => {
@@ -287,6 +291,10 @@ describe('lintSql', () => {
       'ALTER TABLE "a" ALTER COLUMN "b" DROP NOT NULL;',
       'ALTER TABLE "a" ALTER COLUMN "b" SET DEFAULT 1;',
       'CREATE INDEX "i" ON "a" ("b");',
+      'CREATE TABLE "c" ("b" integer, CONSTRAINT "p" CHECK ("b" > 0));',
+      'ALTER TABLE "a" ADD CONSTRAINT "c" CHECK ("b" > 0) NOT VALID;',
+      'ALTER TABLE "a" ADD CHECK ("b" IN (1, 2)) NOT VALID, ADD CHECK ("d" > 0) NOT VALID;',
+      'ALTER TABLE "a" VALIDATE CONSTRAINT "c";',
     ];
     for (const sql of ok) expect(lintSql(sql)).toEqual([]);
   });

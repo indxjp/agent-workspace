@@ -141,6 +141,8 @@ function storedToolRulesArm<const E extends ToolRulesEngineId>(engine: E) {
       /** The engine discriminant (ADR-0065). Called `provider` before migration 0025 renamed it. */
       engine: z.literal(engine),
       ...settings,
+      requireApproval: z.array(z.string()).readonly().optional(),
+      handoff: z.literal(true).optional(),
       tools: z
         .object({
           base: z.union([z.literal('claude_code_preset'), z.array(z.string()).readonly()]),

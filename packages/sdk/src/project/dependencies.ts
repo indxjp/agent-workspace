@@ -11,7 +11,7 @@ import type { EngineId } from '@indx-workspace/contracts/engines';
 export const ENGINE_PACKAGES: Readonly<Record<EngineId, Readonly<Record<string, string>>>> = {
   'claude-agent-sdk': {
     '@anthropic-ai/claude-agent-sdk': '0.3.310',
-    '@anthropic-ai/sdk': '0.137.0',
+    '@anthropic-ai/sdk': '1.3.0',
   },
   'openai-agents': {
     '@ai-sdk/anthropic': '4.0.85',

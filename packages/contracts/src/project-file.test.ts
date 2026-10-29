@@ -91,6 +91,23 @@ describe('ProjectDocumentSchema', () => {
     ]);
   });
 
+  it('treats features as optional: absent parses and a closed list round-trips', () => {
+    expect(ProjectDocumentSchema.parse(minimal)).not.toHaveProperty('features');
+    const document = { ...minimal, features: ['chat', 'files'] };
+    expect(ProjectDocumentSchema.parse(document)).toEqual(document);
+  });
+
+  it.each([
+    ['an empty list', []],
+    ['a feature without its dependency', ['surfaces']],
+    ['a repeated feature', ['chat', 'chat']],
+    ['an unknown feature', ['nope']],
+  ])('refuses features with %s at features', (_name, features) => {
+    const paths = refusedPaths(ProjectDocumentSchema.safeParse({ ...minimal, features }));
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) expect(path[0]).toBe('features');
+  });
+
   it('refuses a preview environment at environments.preview', () => {
     const document = {
       ...minimal,

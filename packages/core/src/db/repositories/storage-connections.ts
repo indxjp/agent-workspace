@@ -1,5 +1,5 @@
 import type { StorageConnectionProvider } from '@indx-workspace/contracts/storage-connections';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
 import { storageConnections } from '../schema/storage-connections.js';
@@ -47,6 +47,8 @@ export type UpdateStorageConnectionOutcome =
 
 export interface StorageConnectionRepository {
   list(): Promise<readonly StorageConnectionRecord[]>;
+  /** The connections of this workspace whose name is one of `names`; a name it lacks is absent. */
+  listByNames(names: readonly string[]): Promise<readonly StorageConnectionRecord[]>;
   get(id: string): Promise<StorageConnectionRecord | null>;
   create(input: CreateStorageConnectionRecordInput): Promise<CreateStorageConnectionOutcome>;
   /** Change a connection of this workspace. `not-found` for a missing or another workspace's id. */
@@ -92,6 +94,15 @@ export function createDatabaseStorageConnectionRepositoryProvider(
             .select()
             .from(storageConnections)
             .where(tenant)
+            .orderBy(asc(storageConnections.createdAt), asc(storageConnections.id));
+          return rows.map(toRecord);
+        },
+        async listByNames(names) {
+          if (names.length === 0) return [];
+          const rows = await db
+            .select()
+            .from(storageConnections)
+            .where(and(tenant, inArray(storageConnections.name, [...new Set(names)])))
             .orderBy(asc(storageConnections.createdAt), asc(storageConnections.id));
           return rows.map(toRecord);
         },

@@ -127,6 +127,12 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "workspace_features"},
+   "id": "checks/workspace_features",
+   "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "projects_name_not_blank"},
    "id": "check/projects_name_not_blank",
    "expected": {"sql": "length(btrim(\"projects\".\"name\")) > 0"}},
@@ -249,7 +255,9 @@
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "audit_events_details_only_agent_created"},
    "id": "check/audit_events_details_only_agent_created",
-   "expected": {"sql": "\"audit_events\".\"details\" is null or \"audit_events\".\"action\" = 'agent-created'"}},
+   "expected":
+   {"sql":
+    "\"audit_events\".\"details\" is null or \"audit_events\".\"action\" = 'agent-created' or \"audit_events\".\"action\" = 'agent-changed'"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],

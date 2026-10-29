@@ -88,8 +88,9 @@ treats overwriting an object as a delete, so a GCS key that writes back needs it
 
     Temporary credentials: a short-lived access token also works, with the URL's `?project=` set.
     It expires in about an hour, so rotate it with `aw storage connections credential`; for a
-    connection you keep, prefer the service-account key. A key file whose `type` is not
-    `service_account`, such as workload-identity JSON, is refused.
+    connection you keep, prefer the service-account key. A key file's `type` must be
+    `service_account`, as in one downloaded from Google Cloud: one with another `type`,
+    such as workload-identity JSON, or with none, is refused.
 
     ```json title="credential.json, temporary (illustrative placeholders)" claim="illustrative"
     { "provider": "gcs", "accessToken": "<access token>" }
@@ -155,21 +156,28 @@ You can do the same in the console under **Administration → Storage**.
 A run changes your bucket only when **all three** switches are on:
 
 1. the connection allows writes. A new connection is read-only, and a `read-write` grant of it is
-   refused when the agent is saved, so turn writes on first, with an update file:
-
-   ```json title="allow-writes.json (illustrative)" claim="illustrative"
-   { "writeAllowed": true }
-   ```
+   refused when the agent is saved, so turn writes on first:
 
    ```bash title="Allow writes (illustrative)" claim="illustrative"
-   aw storage connections update acme-data --file allow-writes.json
+   aw storage connections update acme-data --write-allowed
    ```
+
+   To turn writes off again, send `{ "writeAllowed": false }` with `--file`.
 
 2. the agent's grant is `read-write` ([next](#give-an-agent-the-folder));
 3. the agent's `writeFiles` permission is on ([next](#give-an-agent-the-folder)).
 
 When a run ends, the files it created or changed under the granted folder are written to the bucket.
-**Deletes are never written back**: a file the agent removed stays in your bucket.
+**Deletes are never written back**: a file the agent removed stays in your bucket. Cancelling the
+run stops the write-back before its next file, within about a second, whichever server it runs on.
+
+A file that changed in the bucket while the run worked on it is not overwritten: before each file
+the write-back reads the bucket's copy and skips the file if it is no longer the one the run was
+given, then writes with `If-Match` on that copy's version (or `If-None-Match: *` for a file the run
+created), so a change in between is refused too. AWS S3, Google Cloud Storage and Azure Blob honour
+both headers. **An S3-compatible server that ignores them is not supported for writes**: the
+platform cannot tell that it ignored them, so a change that lands between that read and the write,
+or a file created there meanwhile, is overwritten. Keep such a connection read-only.
 
 Skip this section if the agent only reads, and grant the folder `read`.
 
@@ -202,11 +210,13 @@ Saving the agent binds the grant to the connection; a folder outside `--allow`, 
 grant of a read-only connection, is refused then, not at run time.
 
 `aw push --yes` saves the version and `aw promote --yes` makes it the one that runs. `AGENT_ID` is
-the id of the agent `aw push` saved: `aw agents list` shows it next to the name `summarizer`.
+the id of the agent `aw push` saved: `aw agents list` shows it next to the name `summarizer`, and
+`aw agents list --json` with `jq` puts it in the variable.
 
 ```bash title="Save, run and read (illustrative)" claim="illustrative"
 aw push --yes
 aw promote --yes
+export AGENT_ID="$(aw agents list --json | jq -r '.[] | select(.name == "summarizer") | .id')"
 aw runs start "$AGENT_ID" --prompt "Summarise the Q3 reports into summary.md"
 aw storage ls acme-data/reports/
 ```

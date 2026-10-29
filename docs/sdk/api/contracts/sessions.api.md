@@ -45,8 +45,8 @@ export const SessionListResponseSchema: z.ZodReadonly<z.ZodObject<{
         }>>;
         title: z.ZodNullable<z.ZodString>;
         status: z.ZodEnum<{
-            active: "active";
             archived: "archived";
+            active: "active";
         }>;
         resumable: z.ZodBoolean;
         createdAt: z.ZodISODateTime;
@@ -76,8 +76,8 @@ export const SessionResourceSchema: z.ZodReadonly<z.ZodObject<{
     }>>;
     title: z.ZodNullable<z.ZodString>;
     status: z.ZodEnum<{
-        active: "active";
         archived: "archived";
+        active: "active";
     }>;
     resumable: z.ZodBoolean;
     createdAt: z.ZodISODateTime;
@@ -102,8 +102,8 @@ export const SessionResponseSchema: z.ZodReadonly<z.ZodObject<{
         }>>;
         title: z.ZodNullable<z.ZodString>;
         status: z.ZodEnum<{
-            active: "active";
             archived: "archived";
+            active: "active";
         }>;
         resumable: z.ZodBoolean;
         createdAt: z.ZodISODateTime;

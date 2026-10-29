@@ -16,6 +16,7 @@ import {
 
 import { applicationContext } from '../../application-context';
 import { endpointCredentialKey } from '../../endpoints/request';
+import { featureRefusalResponse } from '../../features/guard';
 import { BUILDER_RESOURCE_PATH, bearerChallenge, resourceUrl } from '../../oauth/resource';
 import type { Principal } from '../../rbac/principal';
 import { apiError } from '../../runs/http';
@@ -136,6 +137,8 @@ export async function serveExternalBuilderMcp(
       'invalid_token',
     );
   }
+  const disabled = await featureRefusalResponse(request, principal.workspaceId);
+  if (disabled !== null) return disabled;
   if (request.headers.get('Origin') !== null) {
     return apiError(403, 'origin_not_allowed', 'browser origins cannot call this endpoint.');
   }

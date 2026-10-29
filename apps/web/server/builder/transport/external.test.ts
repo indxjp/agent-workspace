@@ -1,8 +1,7 @@
 /**
  * [US-BLD-04][api][run] `POST /mcp/builder` (issue #1846 slice 5b): an outside MCP client holding a
  * `builder` OAuth token reads with the three read tools and is refused every write or spend tool
- * before any port. The door is served over the e2e harness's production ports with only the
- * `builder` feature input replaced, as `mcp.test.ts`'s sibling e2e suites do.
+ * before any port. The door is served over the e2e harness's production ports.
  */
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import {
@@ -10,9 +9,11 @@ import {
   BUILDER_TOOL_NAMES,
   BUILDER_TOOLS,
 } from '@indx-workspace/contracts/builder';
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { draftBody } from '../adapters/checker/checker.contract';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
 import { WORKSPACE, builderDoor, type Door } from './e2e/harness';
 import { serveExternalBuilderMcp, toExternalCallContext, type ExternalPrincipal } from './external';
 
@@ -77,7 +78,6 @@ describe('[US-BLD-04][api][run] POST /mcp/builder', () => {
   beforeEach(() => {
     vi.stubEnv('AW_PUBLIC_URL', ORIGIN);
     door = builderDoor({
-      featureOn: true,
       scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
     });
   });
@@ -146,13 +146,7 @@ describe('[US-BLD-04][api][run] POST /mcp/builder', () => {
     expect(answer.result).toMatchObject({ ok: false, code: 'not_permitted' });
   });
 
-  it('is builder_disabled for a read while the production feature input is off', async () => {
-    door = builderDoor({
-      featureOn: false,
-      scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
-    });
-    const answer = await callTool('catalog_list');
-    expect(answer.result).toMatchObject({ ok: false, code: 'builder_disabled' });
+  it('is builder_disabled for a read when the deployment gave the door no ports', async () => {
     const none = await serve(rpc('tools/call', { name: 'catalog_list' }), builderPrincipal(), null);
     expect(none.result).toMatchObject({ ok: false, code: 'builder_disabled' });
   });
@@ -261,5 +255,70 @@ describe('[US-BLD-04][api][run] POST /mcp/builder', () => {
       const response = await serveExternalBuilderMcp(new Request(`${ORIGIN}/mcp/builder`), null);
       expect(response.status).toBe(405);
     });
+  });
+});
+
+describe('POST /mcp/builder and a workspace with the Builder switched off (ADR-0160 D7)', () => {
+  const builderOff = (): void =>
+    configureFeatureSwitches({
+      enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== 'builder')),
+    });
+  const untouchedPorts = new Proxy({} as NonNullable<Door['ports']>, {
+    get() {
+      throw new Error('a port was read for a workspace with the Builder off');
+    },
+  });
+
+  beforeEach(() => {
+    vi.stubEnv('AW_PUBLIC_URL', ORIGIN);
+  });
+  afterEach(() => {
+    clearFeatureSwitches();
+    vi.unstubAllEnvs();
+  });
+
+  it('answers 404 feature_disabled after the token verifies, before any port', async () => {
+    builderOff();
+    const response = await serveExternalBuilderMcp(rpc('tools/list'), {
+      identify: () => Promise.resolve(builderPrincipal()),
+      ports: untouchedPorts,
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'feature_disabled', details: ['builder'] },
+    });
+  });
+
+  it('keeps its own 401 for no token and for a token with another audience', async () => {
+    builderOff();
+    const anonymous = await serveExternalBuilderMcp(rpc('tools/list'), {
+      identify: () => Promise.resolve(null),
+      ports: untouchedPorts,
+    });
+    expect(anonymous.status).toBe(401);
+    const wrongAudience = await serveExternalBuilderMcp(rpc('tools/list'), {
+      identify: () =>
+        Promise.resolve(
+          builderPrincipal({ oauth: { clientId: 'client-1', audience: `${ORIGIN}/mcp/other` } }),
+        ),
+      ports: untouchedPorts,
+    });
+    expect(wrongAudience.status).toBe(401);
+  });
+
+  it('checks the workspace of the verified token', async () => {
+    const asked: string[] = [];
+    configureFeatureSwitches({
+      enabledFor: (workspaceId) => {
+        asked.push(workspaceId);
+        return Promise.resolve(FEATURE_IDS);
+      },
+    });
+    const response = await serveExternalBuilderMcp(rpc('tools/list'), {
+      identify: () => Promise.resolve(builderPrincipal()),
+      ports: null,
+    });
+    expect(response.status).not.toBe(404);
+    expect(asked).toEqual([WORKSPACE]);
   });
 });

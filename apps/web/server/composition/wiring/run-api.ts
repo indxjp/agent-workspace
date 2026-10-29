@@ -254,6 +254,7 @@ export function wireRunApi(
         // ADR-0065: the agent's own engine, which `startRun` compares against the session's
         // pin. A NULL policy column reads as the compiled policy's arm, not as "unknown".
         engine: version === null ? engineForStoredPolicy(agent.policy) : engineOfVersion(version),
+        ...(agent.archivedAt === undefined ? {} : { archived: true as const }),
       };
     },
     openSession: async (

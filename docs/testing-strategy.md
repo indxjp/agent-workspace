@@ -75,7 +75,7 @@ Gates that keep tests honest:
 ## Running locally
 
 ```sh
-pnpm test                                   # builds, starts PostgreSQL 17 and an S3 server, runs Vitest
+pnpm test                                   # builds, starts PostgreSQL 18 and an S3 server, runs Vitest
 pnpm exec vitest run path/to/file.test.ts   # one file; needs the services pnpm test would start
 pnpm test:coverage                          # a coverage suite (also test:coverage:apps, :ui-cli)
 pnpm test:browser                           # Playwright; build the web app, migrate and seed first
@@ -84,7 +84,7 @@ pnpm check:fast && pnpm test && pnpm build  # the finish line for every change
 ```
 
 `pnpm test` (`scripts/test-with-services.mjs`) uses `TEST_DATABASE_URL` and `TEST_S3_ENDPOINT` when
-set, otherwise Docker (`postgres:17-alpine`, SeaweedFS), otherwise a native fallback (ADR-0066).
+set, otherwise Docker (`postgres:18-alpine`, SeaweedFS), otherwise a native fallback (ADR-0066).
 Without a Docker daemon, the four suites that drive real containers skip locally by design; CI runs
 them, so a local skip is not evidence.
 

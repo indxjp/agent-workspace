@@ -10,7 +10,7 @@ import type {
 } from '@agent-workspace/core/db';
 
 import type { GatewayUsageRecord } from './auth.js';
-import { createDatabaseUsageRecorder } from './database.js';
+import { createDatabaseDailyCostLedger, createDatabaseUsageRecorder } from './database.js';
 import { parsePricingCatalog } from './pricing.js';
 
 /**
@@ -203,5 +203,61 @@ describe('createDatabaseUsageRecorder', () => {
     expect(fake.markAccountingFailedCalls).toEqual([
       { runId: RUN_ID, reason: 'provider response contained no authoritative usage fields' },
     ]);
+  });
+});
+
+describe('createDatabaseDailyCostLedger', () => {
+  const WORKSPACE = 'workspace-cap-1';
+  const ledgerOver = (scope: string | null) => {
+    const calls: unknown[][] = [];
+    const database = {
+      scopes: { forWorkspaceId: () => Promise.resolve(scope) },
+      runs: {
+        forScope: (used: unknown) => ({
+          usageCostUsd: (...args: unknown[]) => {
+            calls.push(['usageCostUsd', used, ...args]);
+            return Promise.resolve({ costUsd: '3', unpricedUsage: false });
+          },
+          finish: (...args: unknown[]) => {
+            calls.push(['finish', used, ...args]);
+            return Promise.resolve({ kind: 'no-op' });
+          },
+        }),
+      },
+    } as unknown as DatabaseRoot;
+    return { ledger: createDatabaseDailyCostLedger(database), calls };
+  };
+
+  it('reads the ledger sum and ends the run as failed with a status event, inside the workspace scope', async () => {
+    const { ledger, calls } = ledgerOver('scope-1');
+    const from = new Date('2026-10-27T00:00:00Z');
+    const to = new Date('2026-10-28T00:00:00Z');
+
+    await expect(ledger.sumCostUsd(WORKSPACE, from, to)).resolves.toEqual({
+      costUsd: '3',
+      unpricedUsage: false,
+    });
+    await ledger.endRun(WORKSPACE, 'run-1', 'daily_cost_cap_reached: stopped');
+
+    expect(calls).toEqual([
+      ['usageCostUsd', 'scope-1', from, to],
+      [
+        'finish',
+        'scope-1',
+        'run-1',
+        'failed',
+        'daily_cost_cap_reached: stopped',
+        Number.MAX_SAFE_INTEGER,
+      ],
+    ]);
+  });
+
+  it('rejects, rather than reading unscoped, when the workspace does not resolve', async () => {
+    const { ledger, calls } = ledgerOver(null);
+    await expect(ledger.sumCostUsd(WORKSPACE, new Date(), new Date())).rejects.toThrow(
+      /did not resolve/u,
+    );
+    await expect(ledger.endRun(WORKSPACE, 'run-1', 'x')).rejects.toThrow(/did not resolve/u);
+    expect(calls).toEqual([]);
   });
 });

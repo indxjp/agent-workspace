@@ -1,0 +1,189 @@
+name: Builder evals
+
+# Issue #1848 (slice 4), design §07 "gates the Builder's own promotion": the live-model eval set
+# apps/web/server/builder/agent/evals/builder.yaml, run with `aw eval builder` against the pinned
+# BUILDER_MODEL on a fresh Compose stack, as the stack's setup Owner signed in (evals/run-evals.mjs):
+# the Builder acts only for a person, so a run started with an API key could not use its tools. It
+# fails below BUILDER_EVAL_PASS_SCORE, and on any failed case tagged `injection` (evals/gate.ts). It
+# runs nightly and on `workflow_dispatch` only, never on a pull request (like install-live.yml): a
+# pull request's code must not run with the live key. To gate a prompt change, dispatch it from the
+# branch. It is NOT a required check and not in ci-success.needs: ordinary pull requests never pay
+# for a live model.
+#
+# It needs the repository secret ANTHROPIC_API_KEY, passed only to the setup step and, redacted, to
+# the failure log step. The key is never echoed. The Owner's session cookie is masked and kept in a
+# mode-600 file outside the uploaded directory. The eval report and each case run's events are
+# scanned for `sk-ant-` before they are uploaded.
+#
+# The web server provisions the built-in Builder at start-up (#1848 slice 1c), after the image's
+# seed creates the first workspace; if it is missing, the setup step fails with a named error rather
+# than skipping or faking a score.
+on:
+  schedule:
+    - cron: '41 2 * * *'
+  workflow_dispatch:
+
+# compose.yaml fixes host port 8333 and the network names agent-egress,
+# agent-workspace-runtime-control and tool-sandbox, and `down -v` removes them, so two runs on one
+# daemon would share them; every run of this workflow queues behind the last (as full-e2e in ci.yml).
+concurrency:
+  group: builder-evals
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  builder-evals:
+    name: Builder evals against the pinned model
+    # The live key and this runner exist only in INDXDev; the public export and forks never start it.
+    if: github.repository_owner == 'INDXDev'
+    runs-on: [self-hosted, ms-a2]
+    # install (8) + build (25) + sandbox images (15) + stack (15) + 24 live cases (45) + upload, inside 120.
+    timeout-minutes: 120
+    env:
+      COMPOSE_PROJECT_NAME: builder-evals-${{ github.run_id }}
+      # The sandbox images compose.yaml expects but does not build, under this run's own tags: the
+      # daemon is shared, so a `:dev` copy may be gone or another checkout's (as full-e2e in ci.yml).
+      RUN_RUNTIME_IMAGE: agent-workspace/runtime-claude-agent-sdk:builder-evals-${{ github.run_id }}-${{ github.run_attempt }}
+      RUN_EGRESS_PROXY_IMAGE: agent-workspace/egress-proxy:builder-evals-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Refuse a missing live-model secret
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${ANTHROPIC_API_KEY//[[:space:]]/}" ]; then
+            echo "::error title=Missing secret ANTHROPIC_API_KEY::builder-evals needs the repository secret ANTHROPIC_API_KEY, a key whose account serves the Builder's pinned model. An Owner must add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Start freeing disk for the Docker builds
+        uses: ./.github/actions/free-disk
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - name: Install
+        timeout-minutes: 8
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the packages the gate and aw use
+        timeout-minutes: 25
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/aw --parallel=4 --output-style=static
+
+      - name: Configure the disposable stack
+        run: |
+          set -euo pipefail
+          password="$(openssl rand -hex 24)"
+          echo "::add-mask::$password"
+          cp .env.example .env
+          sed -i "s/^MASTER_ENCRYPTION_KEY=.*/MASTER_ENCRYPTION_KEY=$(openssl rand -hex 32)/" .env
+          sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$(openssl rand -hex 24)/" .env
+          sed -i "s/^BOOTSTRAP_ADMIN=.*/BOOTSTRAP_ADMIN=builder-evals@example.invalid/" .env
+          sed -i "s/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=$password/" .env
+          sed -i "s/^RUNNER_MANAGER_TOKEN=.*/RUNNER_MANAGER_TOKEN=$(openssl rand -hex 24)/" .env
+          {
+            echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)"
+            echo "RUNTIME_IMAGE=$RUN_RUNTIME_IMAGE"
+            echo "EGRESS_PROXY_IMAGE=$RUN_EGRESS_PROXY_IMAGE"
+          } >> .env
+          echo "ADMIN_PASSWORD=$password" >> "$GITHUB_ENV"
+          node scripts/ci/free-ports.mjs WEB_PORT >> "$GITHUB_ENV"
+
+      - name: Wait for the freed disk
+        uses: ./.github/actions/free-disk
+        with:
+          wait: 'true'
+
+      # As "Runtime image per engine" builds and verifies it, for the one engine compose.yaml wires.
+      - name: Build this run's runtime and egress proxy images
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          read -r engine _ engine_version < <(node scripts/engine-images.mjs | grep '^claude-agent-sdk ')
+          docker build --file runtime.Dockerfile --target runtime \
+            --build-arg "ENGINE=$engine" \
+            --build-arg "ENGINE_VERSION=$engine_version" \
+            --tag "$RUN_RUNTIME_IMAGE" .
+          node scripts/engine-images.mjs --verify-image "$RUN_RUNTIME_IMAGE" "$engine" "$engine_version"
+          docker build --file egress-proxy.Dockerfile --target egress-proxy --tag "$RUN_EGRESS_PROXY_IMAGE" .
+
+      # `migrate` shares web's tag, and one `up --build` exporting a tag twice fails on the containerd
+      # image store ("already exists"), so the services build first and the stack starts without
+      # --build, as full-e2e in ci.yml and tests/e2e/tool-sandbox.e2e.mjs do.
+      - name: Build and start the stack
+        timeout-minutes: 20
+        run: |
+          set -euo pipefail
+          read -ra services < <(node --input-type=module -e 'import { composeBuildServices } from "./tests/e2e/tool-sandbox-images.mjs"; console.log(composeBuildServices().join(" "));')
+          docker compose build "${services[@]}"
+          docker compose up -d --wait
+
+      - name: Set up the stack with the live model and check for the Builder
+        timeout-minutes: 5
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ADMIN_EMAIL: builder-evals@example.invalid
+          OWNER_SESSION_FILE: ${{ runner.temp }}/builder-evals-owner.session
+        run: |
+          set -euo pipefail
+          BASE_URL="http://127.0.0.1:$WEB_PORT" node apps/web/server/builder/agent/evals/live-stack.mjs
+          echo "AGENT_WORKSPACE_URL=http://127.0.0.1:$WEB_PORT" >> "$GITHUB_ENV"
+
+      # `aw eval builder --json --min-score 0 --junit …` in process, as the setup Owner's session;
+      # then each case run's events beside the report, in transcripts/<runId>.json.
+      - name: Run the evals against the pinned model
+        id: evals
+        timeout-minutes: 60
+        env:
+          OWNER_SESSION_FILE: ${{ runner.temp }}/builder-evals-owner.session
+          OUT_DIR: ${{ runner.temp }}/builder-evals
+        run: node apps/web/server/builder/agent/evals/run-evals.mjs
+
+      - name: Apply the gate (score and every injection case)
+        run: |
+          set -euo pipefail
+          node apps/web/server/builder/agent/evals/gate.ts "$RUNNER_TEMP/builder-evals/report.json" 2>&1 | tee "$RUNNER_TEMP/builder-evals/gate.txt"
+
+      # The directory is scanned whole, so the transcripts/ under it are too.
+      - name: Scan the report and transcripts for a leaked key
+        id: scan
+        if: always() && steps.evals.outcome != 'skipped'
+        run: node tests/docs-claims/scan-secrets.mjs "$RUNNER_TEMP/builder-evals"
+
+      - name: Keep the eval report and transcripts
+        if: always() && steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: builder-evals-report
+          path: ${{ runner.temp }}/builder-evals/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Print the service logs
+        if: failure()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          docker compose logs --no-color --tail 200 web runner gateway 2>&1 | node --input-type=module -e 'let t = ""; process.stdin.on("data", (c) => (t += c)).on("end", () => { const k = process.env.ANTHROPIC_API_KEY; process.stdout.write(k ? t.replaceAll(k, "[REDACTED]") : t); });'
+
+      - name: Tear down
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/builder-evals-owner.session"
+          # This run's sandboxes and proxies, found by their run-unique images, then the images.
+          for image in "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE"; do
+            docker ps --all --quiet --filter "ancestor=$image" | xargs --no-run-if-empty docker rm --force
+          done
+          docker compose down -v
+          docker image rm "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE" || true

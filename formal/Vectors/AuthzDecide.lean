@@ -166,7 +166,7 @@ def enumerationVectors : List Vector :=
       witnesses := [nm "scope_grammar_is_the_documented_route_table"] },
     { id := "enum/sub-resources", input := Json.mkObj [("enum", "SUB_RESOURCES")],
       expected := Json.mkObj (Resource.all.map fun r => (Resource.toWire r, strs (subResources r))),
-      witnesses := [wf "sub_resource_composition_yields_forty_four_pairs"] } ]
+      witnesses := [wf "sub_resource_composition_yields_forty_six_pairs"] } ]
 
 def policyVectors : List Vector :=
   roles.flatMap fun role => Resource.all.map fun res =>

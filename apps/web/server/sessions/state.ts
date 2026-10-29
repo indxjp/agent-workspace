@@ -372,16 +372,3 @@ export function parseSessionStateEntries(input: unknown): Parsed<SessionStateEnt
   }
   return { ok: true, value: entries };
 }
-
-/**
- * storage-bridge(#1699): the object-store key a blob's bytes are written at where there is no
- * shared storage root, relative to the workspace. Rows saved through the storage service carry an
- * object ID instead.
- *
- * Derived here and never taken from a request. `blobKey` has already been through
- * {@link parseBlobKey}, and `sessionId` is a UUID the route resolved against `sessions`, so every
- * segment of the result is a value the platform produced.
- */
-export function sessionStateBlobStorageKey(ref: SessionStateBlobRef): string {
-  return `session-state/${ref.sessionId}/${ref.engine}/${ref.blobKey}`;
-}

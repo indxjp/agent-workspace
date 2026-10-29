@@ -10,11 +10,12 @@
  * Reading `new URL(request.url).pathname` removes that whole class of disagreement: the string
  * `decide` classifies is the string the router matched.
  *
- * ## The four answers, and why `refuse` is not a `403`
+ * ## The answers, and why `refuse` is not a `403`
  *
  * ```text
  * runtime unwired     503 rbac_runtime_not_configured   nothing was checked, and nothing pretends to have been
  * identify() → null   401 unauthenticated               no session cookie and no usable API key
+ * feature off         404 (features/guard.ts)           ADR-0160 D7; before the ownership read and decide()
  * decide()  → refuse  500 authorisation_undecidable     the route is not classified; see decide.ts
  * decide()  → deny    403 forbidden                     §21 says no, and the body says which sentence
  * ```
@@ -23,6 +24,10 @@
  * ADR-0015 and ADR-0031 both land on the same line here — a check that cannot run must fail, and
  * it must fail as itself.
  */
+import type { FeatureId } from '@indx-workspace/contracts/features';
+
+import { featureRefusal } from '../features/guard';
+import { enabledFeaturesFor } from '../features/runtime';
 import { problemWithDetail as problem, type ApiResult } from '../http/result';
 import { decide, type Decision, type Ownership } from './decide';
 import type { WorkspaceDirectory } from './directory';
@@ -37,6 +42,8 @@ export interface AuthorisedRequest {
   readonly principal: Principal;
   readonly directory: import('./directory').WorkspaceDirectory;
   readonly decision: Decision;
+  /** The features on for the caller's workspace (ADR-0160), for a handler that reports them. */
+  readonly features: readonly FeatureId[];
   /**
    * The application context `authorise` read the RBAC runtime from: the same snapshot, so a handler
    * reads its own domain from it with no second "is anything installed" check.
@@ -113,15 +120,6 @@ export async function authorise(
 
   const directory = runtime.directory.forWorkspace(principal.workspaceId);
 
-  let resolvedOwnership: Ownership;
-  if (typeof ownership === 'function') {
-    const outcome = await ownership(principal, directory);
-    if (outcome.kind === 'refuse') return outcome.result;
-    resolvedOwnership = outcome.ownership;
-  } else {
-    resolvedOwnership = ownership;
-  }
-
   let pathname: string;
   try {
     pathname = new URL(request.url).pathname;
@@ -136,6 +134,22 @@ export async function authorise(
     );
   }
 
+  // ADR-0160 D7: the caller is a verified member, so the workspace is known. A switched-off
+  // feature's route does not exist for it, whatever its role and whatever row the path names, so
+  // this runs before the ownership resolver reads one.
+  const features = await enabledFeaturesFor(principal.workspaceId);
+  const refused = featureRefusal(request.method, pathname, features);
+  if (refused !== null) return refused;
+
+  let resolvedOwnership: Ownership;
+  if (typeof ownership === 'function') {
+    const outcome = await ownership(principal, directory);
+    if (outcome.kind === 'refuse') return outcome.result;
+    resolvedOwnership = outcome.ownership;
+  } else {
+    resolvedOwnership = ownership;
+  }
+
   const decision = decide({
     role: principal.role,
     method: request.method,
@@ -146,7 +160,7 @@ export async function authorise(
 
   switch (decision.effect) {
     case 'allow':
-      return run({ principal, directory, decision, application });
+      return run({ principal, directory, decision, features, application });
     case 'deny':
       return problem(403, decision.code ?? 'forbidden', decision.because);
     case 'refuse':

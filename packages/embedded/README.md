@@ -1,7 +1,7 @@
 # `@indx-workspace/embedded` — the Agent Workspace local runtime
 
 The control plane (web), the model gateway and the runner in **one Node process**, over an
-embedded PostgreSQL 17 and local files. A generated project runs it as `aw dev`, which resolves
+embedded PostgreSQL 18 and local files. A generated project runs it as `aw dev`, which resolves
 this package's `./launch` export from the project's dependencies and forks it; it never imports
 it (ADR-0109).
 `aw dev` itself is a later unit of the developer journey (S1-13).

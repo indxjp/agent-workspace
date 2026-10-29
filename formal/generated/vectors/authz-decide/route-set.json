@@ -7,9 +7,12 @@
    "id": "route-set",
    "expected":
    {"routes":
-    ["POST /api/builder/mcp",
+    ["GET /api/workspaces/:id/features",
+     "PUT /api/workspaces/:id/features",
+     "POST /api/builder/mcp",
      "POST /mcp/builder",
      "GET /.well-known/oauth-protected-resource/mcp/builder",
+     "POST /api/agents/:id/restore",
      "POST /api/agents/:id/promote",
      "POST /api/agents/:id/rollback",
      "POST /api/agents/:id/evaluations",
@@ -253,8 +256,8 @@
      "POST /oauth/authorize",
      "POST /api/builder/mcp",
      "POST /mcp/builder"],
-    "matrixCount": 154,
-    "count": 184,
+    "matrixCount": 157,
+    "count": 187,
     "classifiedSubsWithoutRoute": ["sessions/messages"]}}],
  "family": "authz-decide",
  "description": "The declared route union and the facts derived from it"}

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 
-import { openRootObjectStore, type ObjectStoreV2 } from '@agent-workspace/core/storage';
+import { openRootObjectStore, type ObjectStore } from '@agent-workspace/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { POST as downloadUrlRoute } from '../../app/api/files/[id]/download-urls/route';
@@ -33,7 +33,7 @@ if (endpoint === undefined || endpoint.trim() === '') {
   /** Every call the control plane's store sees; a presigned transfer must add none. */
   const calls: string[] = [];
 
-  function spied(store: ObjectStoreV2): ObjectStoreV2 {
+  function spied(store: ObjectStore): ObjectStore {
     return {
       ...store,
       write: (key, body, options) => {
@@ -166,6 +166,30 @@ if (endpoint === undefined || endpoint.trim() === '') {
       expect(got.status).toBe(200);
       expect(new Uint8Array(await got.arrayBuffer())).toEqual(bytes);
       expect(got.headers.get('content-disposition')).toContain('attachment');
+    });
+
+    // #1991 UPLOAD-1: the link stays valid after complete, but the file is a copy it cannot reach.
+    it('keeps a completed file intact when its upload URL is used again', async () => {
+      const filePath = 'docs/replayed.txt';
+      const good = new TextEncoder().encode('good');
+      const minted = await mint(uploadUrlRoute, 'upload-urls', filePath, { sizeBytes: 4 });
+      expect(minted.status, await minted.clone().text()).toBe(201);
+      const signed = (await minted.json()) as {
+        url: string;
+        method: string;
+        headers: Record<string, string>;
+      };
+      const send = (body: Uint8Array<ArrayBuffer>) =>
+        fetch(signed.url, { method: signed.method, headers: signed.headers, body });
+      expect((await send(good)).status).toBeLessThan(300);
+      expect((await complete(filePath)).status).toBe(200);
+
+      expect((await send(new TextEncoder().encode('evil'))).status).toBeLessThan(300);
+
+      const download = await mint(downloadUrlRoute, 'download-urls', filePath, {});
+      const readUrl = (await download.json()) as { url: string; method: string };
+      const got = await fetch(readUrl.url, { method: readUrl.method });
+      expect(new Uint8Array(await got.arrayBuffer())).toEqual(good);
     });
 
     it('refuses a session token an upload URL, so nothing is writable through one', async () => {

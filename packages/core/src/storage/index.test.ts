@@ -40,9 +40,14 @@ function codeOf(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
-/** Every `from '…'` specifier actually imported by `source` (comments excluded), in order. */
+/**
+ * Every `from '…'` specifier `source` actually loads at run time (comments excluded), in order. An
+ * `import type` or `export type` statement is erased by the compiler, so it loads nothing.
+ */
 function specifiersOf(source: string): string[] {
-  return [...codeOf(source).matchAll(/\bfrom\s+'([^']+)'/g)].map((match) => match[1] as string);
+  return [...codeOf(source).matchAll(/\b(import|export)(\s+type\b)?[^;]*?\bfrom\s+'([^']+)'/g)]
+    .filter((match) => match[2] === undefined)
+    .map((match) => match[3] as string);
 }
 
 /**
@@ -78,6 +83,17 @@ function packagesUsedFrom(entry: string): Array<{ file: string; specifier: strin
 }
 
 describe('the storage barrel is a runtime surface', () => {
+  it('follows only the imports that load at run time', () => {
+    const source = [
+      "export type { A } from './a.js';",
+      "import type { B } from './b.js';",
+      "import { c, type C } from './c.js';",
+      "export { d } from './d.js';",
+      "export type {\n  E,\n} from './e.js';",
+    ].join('\n');
+    expect(specifiersOf(source)).toEqual(['./c.js', './d.js']);
+  });
+
   it('reaches no test framework, so a server can evaluate everything behind it', () => {
     const offenders = packagesUsedFrom(path.join(here, 'index.ts')).filter(({ specifier }) =>
       /^(vitest|@vitest\/|jest|@jest\/|mocha|node:test)/.test(specifier),
@@ -88,22 +104,16 @@ describe('the storage barrel is a runtime surface', () => {
     ).toEqual([]);
   });
 
-  it('reaches only the reviewed cloud clients in addition to node: builtins', () => {
+  it('loads no cloud client, only the reviewed packages in addition to node: builtins', () => {
+    // Each cloud backend is loaded by `open.ts`'s dynamic import, never by the barrel itself.
     const external = packagesUsedFrom(path.join(here, 'index.ts')).filter(
       ({ specifier }) => !specifier.startsWith('node:'),
     );
     expect(external).toEqual([
       { file: 'object-store.ts', specifier: '@indx-workspace/contracts/files' },
-      { file: 'gcs-store.ts', specifier: '@google-cloud/storage' },
-      { file: 'azure-blob-store.ts', specifier: '@azure/identity' },
-      { file: 'azure-blob-store.ts', specifier: '@azure/storage-blob' },
-      { file: 's3-store.ts', specifier: '@aws-sdk/client-s3' },
-      { file: 's3-store.ts', specifier: '@aws-sdk/lib-storage' },
-      { file: 's3-store.ts', specifier: '@indx-workspace/contracts/storage-url' },
       { file: 'connection-store.ts', specifier: '@indx-workspace/contracts/storage-connections' },
       { file: 'connection-store.ts', specifier: '@indx-workspace/contracts/storage-url' },
       { file: '../posture.ts', specifier: 'zod' },
-      { file: 'open.ts', specifier: '@indx-workspace/contracts/storage-url' },
     ]);
   });
 

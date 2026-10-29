@@ -144,6 +144,7 @@ export { createDatabaseTriggerRepositoryProvider } from './triggers.js';
 // derives every `forScope`-shaped factory `repositories/index.ts` exports and fails unless it is
 // also reachable here, so `createDatabaseRuntimeProfileRepositoryProvider` has nowhere else to go.
 export { createDatabaseRuntimeProfileRepositoryProvider } from './runtime-profiles.js';
+export { createDatabaseWorkspaceFeatureRepositoryProvider } from './workspace-features.js';
 export { createDatabaseWorkspaceScopeResolver } from './scope.js';
 export {
   closeIsolatedTestResources,

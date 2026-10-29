@@ -116,6 +116,10 @@ One narrow exception (ADR-0147): on-demand text extraction from workspace files,
 PostgreSQL full-text search over that extracted text, are in scope. Vector databases, embeddings
 and RAG pipelines remain excluded, and extraction is never an ingestion pipeline.
 
+Subtraction (ADR-0160): a deployment may leave out, and a workspace Owner may switch off, the
+features that ADR names. This only removes surface; it adds none, and switching a feature off
+deletes no data.
+
 ---
 
 # 4. Architectural Principle
@@ -2773,6 +2777,8 @@ pages behind it refuse them.
 Recent chats are listed directly under "New chat" in the sidebar, newest first, capped at about ten with
 a "See all" link into Runs. That list is navigation, not a feature area, and it must not grow filters,
 folders or tags.
+
+Entries whose feature is switched off (ADR-0160) are not shown. Nothing is ever added this way.
 
 Do not add more top-level sections without strong justification.
 

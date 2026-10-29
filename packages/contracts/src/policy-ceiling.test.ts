@@ -15,6 +15,7 @@ import {
   type EffectivePolicyConfiguration,
   meetPolicyCeiling,
   networkPolicyFloor,
+  POLICY_CEILING_MAX_COST_PER_DAY_USD,
   POLICY_CEILING_MODELS_MAX,
   POLICY_CEILING_TOOL_NAME_MAX_LENGTH,
   type PolicyWidening,
@@ -172,6 +173,14 @@ describe('ProjectPolicySchema maxCostPerDayUsd (issue #1851)', () => {
     for (const maxCostPerDayUsd of [0, -1, 100_001, '5', Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(refusedPaths({ maxCostPerDayUsd })).toEqual([['maxCostPerDayUsd']]);
     }
+  });
+
+  it('exports the bound it applies, for the run token that signs the cap', () => {
+    const maxCostPerDayUsd = POLICY_CEILING_MAX_COST_PER_DAY_USD;
+    expect(ProjectPolicySchema.parse({ maxCostPerDayUsd })).toEqual({ maxCostPerDayUsd });
+    expect(refusedPaths({ maxCostPerDayUsd: maxCostPerDayUsd + 1 })).toEqual([
+      ['maxCostPerDayUsd'],
+    ]);
   });
 
   it('is read by neither policyWidenings nor meetPolicyCeiling', () => {

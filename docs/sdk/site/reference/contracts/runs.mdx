@@ -306,9 +306,14 @@ server logs a warning and lets the run proceed. There is therefore no "discovery
   model cost today (UTC), so no run starts until the next UTC midnight; `429`, with the cap, the
   spend and the reset time in `details` (ADR-0102 SD6, issue #1851). Model responses with no
   price are stored at 0, so once any run with usage today is unmeasured the cap refuses the same
-  way with `unpricedUsage: true` in `details`: a cap that cannot be measured is not met.
+  way with `unpricedUsage: true` in `details`: a cap that cannot be measured is not met. A run
+  already running meets it at its next model call: the gateway refuses that call `403`
+  (`permission_error`, which an SDK does not retry) and ends the run `failed` with this code as
+  its `error` prefix (`daily_cost_cap_reached: <message>`). That message carries the cap, the
+  reset time and `unpricedUsage`, never the spend.
 - `daily_cost_unavailable` — the daily cost cap is set but the workspace's spend could not be
   read, so the start is refused rather than let through; `503`, with no details (issue #1851).
+  A running run's next model call is refused the same way, `503`, and the run is not ended.
 - `network_policy_unenforceable` — the agent lacks `unrestrictedNetwork`, so its `open` profile
   was lowered to `restricted` for its remote connectors' hosts, and the profile's driver cannot
   enforce `restricted` (ADR-0117 decisions 7 and 9, issue #785). Grant `unrestrictedNetwork`,
@@ -390,6 +395,7 @@ is fine and would be accepted after the reset; an unreadable spend is `503`.
 | `policy_cannot_widen` | `403` |
 | `daily_cost_cap_reached` | `429` |
 | `daily_cost_unavailable` | `503` |
+| `agent_archived` | `409` |
 | `builder_model_unavailable` | `503` |
 
 ## RUN_STATUSES
@@ -493,7 +499,7 @@ for an error that carries no recognised code (a runtime failure, an older run).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `code` | `null \| "policy_cannot_widen" \| "builder_model_unavailable" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_attachments_unreadable" \| "run_attachments_too_large" \| "run_attachments_unsupported_runtime" \| "run_attachments_untranscribable" \| "run_files_too_large" \| "run_storage_grant_unavailable" \| "run_subject_forbidden" \| "run_file_scope_not_granted" \| "daily_cost_cap_reached" \| "daily_cost_unavailable" \| "output_schema_unsatisfied" \| "run_file_corrupt" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
+| `code` | `null \| "agent_archived" \| "policy_cannot_widen" \| "builder_model_unavailable" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_attachments_unreadable" \| "run_attachments_too_large" \| "run_attachments_unsupported_runtime" \| "run_attachments_untranscribable" \| "run_files_too_large" \| "run_storage_grant_unavailable" \| "run_subject_forbidden" \| "run_file_scope_not_granted" \| "daily_cost_cap_reached" \| "daily_cost_unavailable" \| "output_schema_unsatisfied" \| "run_file_corrupt" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
 | `message` | `string` | Yes |  |
 
 ## RunListQuery
@@ -629,6 +635,7 @@ The body of `GET /api/runs/:id`.
 
 ## RunStartProblemCode
 
+- `"agent_archived"`
 - `"policy_cannot_widen"`
 - `"builder_model_unavailable"`
 - `"agent_runtime_profile_missing"`

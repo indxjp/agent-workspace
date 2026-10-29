@@ -85,6 +85,20 @@ The kinds of reference a definition resolves, as they prefix each `details` entr
 
 Value: `100_000`
 
+## AGENT_LIST_ARCHIVED
+
+The one value of the `?archived=` option of `GET /api/agents`; absent hides archived agents.
+
+- `'include'`
+
+## AGENT_LIST_PROBLEM_CODES
+
+Problem codes of `GET /api/agents`, with their HTTP status: a query option it cannot read.
+
+| Key | Value |
+| --- | --- |
+| `invalid_agent_list_query` | `400` |
+
 ## AGENT_MODEL_MAX_LENGTH
 
 Value: `200`
@@ -302,6 +316,22 @@ The complete set of membership principals permitted to run one agent.
 | --- | --- | --- | --- |
 | `principalIds` | `readonly string[]` | Yes |  |
 
+## AgentListArchived
+
+`"include"`
+
+## AgentListProblemCode
+
+`"invalid_agent_list_query"`
+
+## AgentListQuerySchema
+
+The query string of `GET /api/agents`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `archived` | `undefined \| "include"` | No |  |
+
 ## AgentListResponse
 
 | Name | Type | Required | Description |
@@ -474,7 +504,7 @@ agentRequestIssueMessages(issues: readonly z.core.$ZodIssue[]): string[]
 | `updatedAt` | `string` | Yes |  |
 | `builtin` | `undefined \| "builder"` | No | Present only on a built-in agent: people cannot edit it, only the platform does. |
 | `createdByAgent` | `undefined \| AgentCreatedByAgent` | No | Present only on an agent made by an agent. `createdBy` above stays the person (issue #1851). |
-| `archivedAt` | `undefined \| string` | No | When the agent was archived; absent while active. Lists still include archived agents. |
+| `archivedAt` | `undefined \| string` | No | When the agent was archived; absent while active. Lists hide it unless `?archived=include`. |
 
 ## AgentResourceAssignments
 
@@ -538,7 +568,7 @@ ISO-8601 strings.
 | `updatedAt` | `string` | Yes |  |
 | `builtin` | `undefined \| "builder"` | No | Present only on a built-in agent: people cannot edit it, only the platform does. |
 | `createdByAgent` | `undefined \| AgentCreatedByAgent` | No | Present only on an agent made by an agent. `createdBy` above stays the person (issue #1851). |
-| `archivedAt` | `undefined \| string` | No | When the agent was archived; absent while active. Lists still include archived agents. |
+| `archivedAt` | `undefined \| string` | No | When the agent was archived; absent while active. Lists hide it unless `?archived=include`. |
 
 ## AgentSkillPolicy
 

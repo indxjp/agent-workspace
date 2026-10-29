@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://unpkg.com/@indx-workspace/cli@0.6.11/schema/agent-workspace.schema.json
+# yaml-language-server: $schema=https://unpkg.com/@indx-workspace/cli@0.6.12/schema/agent-workspace.schema.json
 # The deployment profile: where this deployment keeps state, bytes, secrets, sandboxes and
 # identity. `agent-workspace validate` checks it; the installer renders .env, the Compose
 # file, Helm values and Terraform variables from it. No secret belongs in this file.

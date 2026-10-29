@@ -4,6 +4,7 @@ import { isStoppedRunStatus } from '@indx-workspace/contracts/runs';
 import type { RunTokenCodec } from '@agent-workspace/gateway/tokens';
 
 import type { AgentRecord } from '../../agents/contract';
+import { featureRefusalResponse } from '../../features/guard';
 import type { AllowedAgent } from './allowed-owner-warning';
 import { isBuilderAgent } from '../agent/is-builder-agent';
 import { awControlAllowed } from '../agent/aw-control-allowed';
@@ -48,6 +49,13 @@ export type RunCallerRefusal =
       readonly run: RunIdentity;
     };
 
+/** The run token verified, but the run's workspace has the Builder switched off (ADR-0160 D7). */
+export interface RunCallerFeatureRefusal {
+  readonly ok: false;
+  readonly reads: false;
+  readonly refused: Response;
+}
+
 export interface RunCallerDeps<Scope> {
   readonly tokens: RunTokenCodec;
   readonly database: RunTokenDatabase<Scope>;
@@ -82,13 +90,21 @@ const refuse = (code: RunCallerRefusal['code']): RunCallerRefusal => ({
 export async function verifyRunCaller<Scope>(
   authorization: string | null,
   deps: RunCallerDeps<Scope>,
-): Promise<{ readonly ok: true; readonly caller: RunCallerPrincipal } | RunCallerRefusal> {
+  request: Request,
+): Promise<
+  | { readonly ok: true; readonly caller: RunCallerPrincipal }
+  | RunCallerRefusal
+  | RunCallerFeatureRefusal
+> {
   try {
     const active = await verifyActiveRunToken(authorization, deps.tokens, deps.database);
     if (active === null || isStoppedRunStatus(active.run.status)) {
       return refuse('not_permitted');
     }
     const { claims } = active;
+    // ADR-0160 D7: the token's own workspace, before the agent and membership rows are read.
+    const disabled = await featureRefusalResponse(request, claims.workspaceId);
+    if (disabled !== null) return { ok: false, reads: false, refused: disabled };
     const run: RunIdentity = {
       kind: 'run',
       workspaceId: claims.workspaceId,

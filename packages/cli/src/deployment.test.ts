@@ -110,7 +110,7 @@ describe('deployment image contract', () => {
     expect(assertDigestReferences(cloudImages)).toBe(cloudImages);
     // Whatever is in the set still clears the gate.
     expect(() =>
-      assertDigestReferences({ ...cloudImages, postgres: 'docker.io/library/postgres:17-alpine' }),
+      assertDigestReferences({ ...cloudImages, postgres: 'docker.io/library/postgres:18-alpine' }),
     ).toThrow(/sha256/u);
   });
 

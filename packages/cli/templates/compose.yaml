@@ -21,6 +21,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_INITDB_ARGS: '--locale-provider=icu --icu-locale=en-US --encoding=UTF8'
+      # Where the volume below is mounted. The 18 image defaults to /var/lib/postgresql/18/docker;
+      # naming it keeps a deployment on its 17 pin and a new one on 18 in the same directory.
+      PGDATA: /var/lib/postgresql/data
     healthcheck:
       test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
@@ -52,6 +55,8 @@ services:
       - -s3.ip.bind=0.0.0.0
       - -s3.port.iceberg=0
       - -s3.port.lance=0
+      # The bucket CORS for a browser's signed upload: the web origins in .env, never `*`.
+      - -s3.allowedOrigins=${SEAWEEDFS_ALLOWED_ORIGINS:?set SEAWEEDFS_ALLOWED_ORIGINS in .env}
       - -master.telemetry=false
     read_only: true
     cap_drop: [ALL]

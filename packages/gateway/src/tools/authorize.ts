@@ -13,6 +13,7 @@ import {
   IDENTITY_ASSERTION_TTL_SECONDS,
   signIdentity,
 } from '@indx-workspace/contracts/identity-assertion';
+import { isStorageConnectionSecretName } from '@indx-workspace/contracts/secret-reference';
 import {
   AW_CONTROL_CONNECTOR,
   OpenApiToolConfigSchema,
@@ -280,6 +281,9 @@ export function createDatabaseToolResolver(
           : {
               identity: async (): Promise<string | null> => {
                 if (claims.caller === undefined) return null;
+                // A storage connection's credential is never a signing key, even on a row stored
+                // before the contracts refused one: it reads as missing.
+                if (isStorageConnectionSecretName(identitySecretName)) return null;
                 const key = await secrets.resolveByName(scope, identitySecretName);
                 if (key === null) return null;
                 return signIdentity(

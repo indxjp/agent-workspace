@@ -150,7 +150,7 @@ then the guides, then the resource-by-resource detail.
 
 ## Docs site: SDK client in depth
 
-- [Configuration](docs/sdk/site/getting-started/configuration.mdx): Point the client at your control plane, add headers, set a timeout, cancel a call, bring your own fetch, and the environment variable convention this documentation uses.
+- [Configuration](docs/sdk/site/getting-started/configuration.mdx): Point the client at your control plane, add headers, set a timeout, cancel a call, bring your own fetch, the environment variable convention this documentation uses, and the one URL that tells the server where files live.
 - [Errors](docs/sdk/site/guides/errors.mdx): Every SDK call fails in one of four typed ways. Branch on the class and a stable code, and know at a glance which failures are worth retrying.
 - [Timeouts and cancellation](docs/sdk/site/guides/timeouts-and-cancellation.mdx): timeoutMs covers response headers only; a caller's own AbortSignal is the only way to end a call or a stream at any later point.
 - [Pagination](docs/sdk/site/guides/pagination.mdx): Walk every run, session or audit event with one cursor loop or a built-in listAll. Every other list method returns the whole collection in one call.
@@ -242,6 +242,7 @@ then the guides, then the resource-by-resource detail.
 - [endpoint-clients](docs/sdk/site/reference/contracts/endpoint-clients.mdx): The @indx-workspace/contracts/endpoint-clients exports, sorted alphabetically.
 - [engines](docs/sdk/site/reference/contracts/engines.mdx): The @indx-workspace/contracts/engines exports, sorted alphabetically.
 - [evaluations](docs/sdk/site/reference/contracts/evaluations.mdx): The @indx-workspace/contracts/evaluations exports, sorted alphabetically.
+- [features](docs/sdk/site/reference/contracts/features.mdx): The @indx-workspace/contracts/features exports, sorted alphabetically.
 - [feedback](docs/sdk/site/reference/contracts/feedback.mdx): The @indx-workspace/contracts/feedback exports, sorted alphabetically.
 - [files](docs/sdk/site/reference/contracts/files.mdx): The @indx-workspace/contracts/files exports, sorted alphabetically.
 - [identity-assertion](docs/sdk/site/reference/contracts/identity-assertion.mdx): The @indx-workspace/contracts/identity-assertion exports, sorted alphabetically.

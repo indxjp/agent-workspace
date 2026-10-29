@@ -36,7 +36,7 @@ import {
   createInMemoryObjectStore,
   openConnectionStore,
   streamToBytes,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { encodeUstar } from '@agent-workspace/runtime/transfer';
 import { main } from '@indx-workspace/aw';
@@ -75,16 +75,15 @@ const GUIDE_URL = new URL(
 );
 
 /**
- * The guide's steps, in the order a reader runs them. `$STORAGE_URL`, `$AGENT_ID` and the two
- * `.json` names are the lane's values.
+ * The guide's steps, in the order a reader runs them. `$STORAGE_URL`, `$AGENT_ID` and the
+ * `.json` name are the lane's values.
  */
 const TUTORIAL = {
   create:
     'aw storage connections create --name acme-data --storage-url "$STORAGE_URL" --allow reports --credential-file credential.json',
   test: 'aw storage connections test acme-data',
   ls: 'aw storage ls acme-data/reports/',
-  allowWritesBody: '{ "writeAllowed": true }',
-  allowWrites: 'aw storage connections update acme-data --file allow-writes.json',
+  allowWrites: 'aw storage connections update acme-data --write-allowed',
   grant: "files('storage://acme-data/reports', 'read-write')",
   permissions: 'permissions: { readFiles: true, writeFiles: true },',
   push: 'aw push --yes',
@@ -104,7 +103,7 @@ interface LaneSetup {
   /** The connection's credential: least privilege, never delete. */
   readonly credential: StorageConnectionCredential;
   /** Seeds the folder and cleans it up, with a credential that may delete. */
-  readonly admin: ObjectStoreV2;
+  readonly admin: ObjectStore;
   readonly fileRoots: readonly string[];
 }
 
@@ -125,7 +124,7 @@ const openStore = (
   url: string,
   credential: StorageConnectionCredential,
   fileRoots: readonly string[],
-): Promise<ObjectStoreV2> =>
+): Promise<ObjectStore> =>
   openConnectionStore(url, credential, { writable: true, fileRoots, egress });
 
 /** The ambient AWS settings a lane removes, so the connection can only use its own credential. */
@@ -142,6 +141,60 @@ const AMBIENT_AWS = [
 ] as const;
 const savedEnv = new Map<string, string | undefined>();
 
+/** The S3 lane's role: STS sessions as the role itself, or as the role cut down to a policy. */
+const s3Role = () => {
+  const bucket = requireEnv('TEST_AWS_S3_BUCKET');
+  const region = requireEnv('TEST_AWS_REGION');
+  const roleArn = requireEnv('AWS_ROLE_ARN');
+  const webIdentityTokenFile = requireEnv('AWS_WEB_IDENTITY_TOKEN_FILE');
+  const session = async (sessionPolicy?: string): Promise<StorageConnectionCredential> => {
+    const identity = await fromTokenFile({
+      roleArn,
+      webIdentityTokenFile,
+      ...(sessionPolicy === undefined ? {} : { policy: sessionPolicy }),
+      clientConfig: { region },
+    })();
+    if (identity.sessionToken === undefined) throw new Error('STS returned no session token');
+    return {
+      provider: 's3',
+      accessKeyId: identity.accessKeyId,
+      secretAccessKey: identity.secretAccessKey,
+      sessionToken: identity.sessionToken,
+    };
+  };
+  return { bucket, region, session };
+};
+
+/** The guide's S3 policy for one folder: `s3:ListBucket` under the `s3:prefix` condition, get and put in it. */
+const folderPolicy = (bucket: string, folder: string): string =>
+  JSON.stringify({
+    Version: '2012-10-17',
+    Statement: [
+      {
+        Effect: 'Allow',
+        Action: 's3:ListBucket',
+        Resource: `arn:aws:s3:::${bucket}`,
+        Condition: { StringLike: { 's3:prefix': `${folder}/*` } },
+      },
+      {
+        Effect: 'Allow',
+        Action: ['s3:GetObject', 's3:PutObject'],
+        Resource: `arn:aws:s3:::${bucket}/${folder}/*`,
+      },
+    ],
+  });
+
+/** From here on nothing ambient can authenticate: the stores hold the explicit credentials. */
+const isolateFromAmbientAws = (work: string): void => {
+  for (const name of AMBIENT_AWS) {
+    savedEnv.set(name, process.env[name]);
+    delete process.env[name];
+  }
+  process.env['AWS_EC2_METADATA_DISABLED'] = 'true';
+  process.env['AWS_SHARED_CREDENTIALS_FILE'] = path.join(work, 'no-aws-credentials');
+  process.env['AWS_CONFIG_FILE'] = path.join(work, 'no-aws-config');
+};
+
 const fileLane: Lane = async (work) => {
   const root = path.join(work, 'roots');
   const folder = path.join(root, 'acme-data');
@@ -153,54 +206,13 @@ const fileLane: Lane = async (work) => {
 
 const cloudLanes: Readonly<Record<string, Lane>> = {
   s3: async (work) => {
-    const bucket = requireEnv('TEST_AWS_S3_BUCKET');
-    const region = requireEnv('TEST_AWS_REGION');
-    const roleArn = requireEnv('AWS_ROLE_ARN');
-    const webIdentityTokenFile = requireEnv('AWS_WEB_IDENTITY_TOKEN_FILE');
+    const { bucket, region, session } = s3Role();
     const prefix = livePrefix();
     // The connection's session is the role cut down to the guide's policy: list, get and put on
     // the prefix, never delete. The admin session is the role itself.
-    const policy = JSON.stringify({
-      Version: '2012-10-17',
-      Statement: [
-        {
-          Effect: 'Allow',
-          Action: 's3:ListBucket',
-          Resource: `arn:aws:s3:::${bucket}`,
-          Condition: { StringLike: { 's3:prefix': `${prefix}/*` } },
-        },
-        {
-          Effect: 'Allow',
-          Action: ['s3:GetObject', 's3:PutObject'],
-          Resource: `arn:aws:s3:::${bucket}/${prefix}/*`,
-        },
-      ],
-    });
-    const session = async (sessionPolicy?: string) => {
-      const identity = await fromTokenFile({
-        roleArn,
-        webIdentityTokenFile,
-        ...(sessionPolicy === undefined ? {} : { policy: sessionPolicy }),
-        clientConfig: { region },
-      })();
-      if (identity.sessionToken === undefined) throw new Error('STS returned no session token');
-      return {
-        provider: 's3' as const,
-        accessKeyId: identity.accessKeyId,
-        secretAccessKey: identity.secretAccessKey,
-        sessionToken: identity.sessionToken,
-      };
-    };
-    const credential = await session(policy);
+    const credential = await session(folderPolicy(bucket, prefix));
     const adminCredential = await session();
-    // From here on nothing ambient can authenticate: the stores hold the explicit credentials.
-    for (const name of AMBIENT_AWS) {
-      savedEnv.set(name, process.env[name]);
-      delete process.env[name];
-    }
-    process.env['AWS_EC2_METADATA_DISABLED'] = 'true';
-    process.env['AWS_SHARED_CREDENTIALS_FILE'] = path.join(work, 'no-aws-credentials');
-    process.env['AWS_CONFIG_FILE'] = path.join(work, 'no-aws-config');
+    isolateFromAmbientAws(work);
     const url = formatStorageUrl({ kind: 's3', bucket, prefix, region, forcePathStyle: false });
     return { url, credential, admin: await openStore(url, adminCredential, []), fileRoots: [] };
   },
@@ -246,7 +258,7 @@ if (liveLane !== undefined && !Object.hasOwn(cloudLanes, liveLane)) {
   throw new Error(`STORAGE_LIVE_LANE must be one of ${Object.keys(cloudLanes).join(', ')}`);
 }
 
-const text = async (store: ObjectStoreV2, key: string): Promise<string | null> => {
+const text = async (store: ObjectStore, key: string): Promise<string | null> => {
   const object = await store.read(key);
   return object === null ? null : Buffer.from(await streamToBytes(object.body)).toString('utf8');
 };
@@ -323,6 +335,49 @@ async function tutorial(prepare: Lane): Promise<void> {
   if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, 'the cleanup failed');
 }
 
+/**
+ * The guide's own S3 shape (#1925 item 17): a prefix-less `s3://bucket?region=…` URL whose key may
+ * list only one folder, `s3:ListBucket` conditioned on that folder's `s3:prefix`. Opening the store
+ * must not probe the bucket root, the folder lists and reads, and a listing of the root is refused
+ * with the provider's 403. The folder is the run's own prefix, so the role's grant is unchanged.
+ */
+async function prefixlessFolder(): Promise<void> {
+  const work = realpathSync(
+    mkdtempSync(path.join(process.env['RUNNER_TEMP'] ?? tmpdir(), 'aw-byo-')),
+  );
+  tempDirs.push(work);
+  const { bucket, region, session } = s3Role();
+  const folder = livePrefix();
+  const credential = await session(folderPolicy(bucket, folder));
+  const adminCredential = await session();
+  isolateFromAmbientAws(work);
+  const url = formatStorageUrl({ kind: 's3', bucket, prefix: '', region, forcePathStyle: false });
+  expect(url).toBe(`s3://${bucket}?region=${region}`);
+  const admin = await openStore(url, adminCredential, []);
+  const seeded = `${folder}/q3.csv`;
+  const written = `${folder}/summary.md`;
+  try {
+    await admin.write(seeded, new Blob([CSV]).stream(), {});
+    const store = await openStore(url, credential, []);
+    const page = await store.listPage(folder, { limit: 10 });
+    expect(page.entries.map((entry) => entry.key)).toEqual([seeded]);
+    expect(await text(store, seeded)).toBe(CSV);
+    await store.write(written, new Blob([SUMMARY]).stream(), {});
+    expect(await text(admin, written)).toBe(SUMMARY);
+    const outside: unknown = await store.listPage('', { limit: 1 }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(outside).toMatchObject({ $metadata: { httpStatusCode: 403 } });
+    // The key has no delete, as the guide grants it.
+    await expect(store.delete(written)).rejects.toMatchObject({
+      $metadata: { httpStatusCode: 403 },
+    });
+  } finally {
+    await Promise.allSettled([admin.delete(seeded), admin.delete(written)]);
+  }
+}
+
 async function steps(work: string, lane: LaneSetup): Promise<void> {
   const { admin } = lane;
   await admin.write('reports/q3.csv', new Blob([CSV]).stream(), {});
@@ -330,8 +385,6 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
 
   const credentialFile = path.join(work, 'credential.json');
   writeFileSync(credentialFile, JSON.stringify(lane.credential), { mode: 0o600 });
-  const allowWritesFile = path.join(work, 'allow-writes.json');
-  writeFileSync(allowWritesFile, TUTORIAL.allowWritesBody);
   // The project `aw push` reads: the guide's agent, its grant and permissions the tested lines.
   const project = path.join(work, 'project');
   mkdirSync(path.join(project, 'agents'), { recursive: true });
@@ -424,6 +477,11 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
     if (handler === undefined) return new Response(null, { status: 405 });
     return handler(request, { params: Promise.resolve({ id: match[1] }) });
   };
+  /**
+   * `aw <line>`, run in-process. A failing step's stdout is the assertion message: it is the API's
+   * typed answer (a test outcome such as `{ "ok": false, "code": "forbidden" }`, or a connection
+   * without its credential), never a credential.
+   */
   const aw = async (line: string, values: Readonly<Record<string, string>> = {}) => {
     let stdout = '';
     let stderr = '';
@@ -447,7 +505,6 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
   const values = {
     $STORAGE_URL: lane.url,
     'credential.json': credentialFile,
-    'allow-writes.json': allowWritesFile,
   };
 
   if (lane.fileRoots.length > 0) {
@@ -461,9 +518,15 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
 
   // Connect, test and list: the connection is read-only until the owner allows writes.
   const created = await aw(TUTORIAL.create, values);
-  expect({ stderr: created.stderr, code: created.code }).toEqual({ stderr: '', code: 0 });
+  expect({ stderr: created.stderr, code: created.code }, created.stdout).toEqual({
+    stderr: '',
+    code: 0,
+  });
   const tested = await aw(TUTORIAL.test);
-  expect({ stderr: tested.stderr, code: tested.code }).toEqual({ stderr: '', code: 0 });
+  expect({ stderr: tested.stderr, code: tested.code }, tested.stdout).toEqual({
+    stderr: '',
+    code: 0,
+  });
   const before = await aw(TUTORIAL.ls);
   expect(before.code).toBe(0);
   expect(before.stdout).toContain('reports/q3.csv');
@@ -474,11 +537,17 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
   expect(early.code).toBe(1);
   expect(early.stderr + early.stdout).toContain('storage_connection_write_not_allowed');
   const allowed = await aw(TUTORIAL.allowWrites, values);
-  expect({ stderr: allowed.stderr, code: allowed.code }).toEqual({ stderr: '', code: 0 });
+  expect({ stderr: allowed.stderr, code: allowed.code }, allowed.stdout).toEqual({
+    stderr: '',
+    code: 0,
+  });
 
   // Save and promote: the push binds the grant to the connection.
   const pushed = await aw(TUTORIAL.push);
-  expect({ stderr: pushed.stderr, code: pushed.code }).toEqual({ stderr: '', code: 0 });
+  expect({ stderr: pushed.stderr, code: pushed.code }, pushed.stdout).toEqual({
+    stderr: '',
+    code: 0,
+  });
   const promoted = await aw(TUTORIAL.promote);
   expect(promoted.code, promoted.stderr).toBe(0);
   const [agent] = await agents.forWorkspace(WORKSPACE).list();
@@ -497,7 +566,6 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
   const connections = createRunStorageConnections({
     storage: { store, fileRoots: lane.fileRoots },
     scopes,
-    secretsService: secrets,
   });
   const userId = randomUUID();
   const principal: RunPrincipal = {
@@ -547,13 +615,17 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
           }),
         connections,
         audit: () => Promise.resolve(),
+        stillRunning: () => Promise.resolve(true),
       }),
   });
   delivery.runs = runs;
 
   // Run it, wait for the write-back, and read the result through the CLI and from the bucket.
   const started = await aw(TUTORIAL.run, { ...values, $AGENT_ID: agent.id });
-  expect({ stderr: started.stderr, code: started.code }).toEqual({ stderr: '', code: 0 });
+  expect({ stderr: started.stderr, code: started.code }, started.stdout).toEqual({
+    stderr: '',
+    code: 0,
+  });
   const [runId] = startedRuns;
   if (runId === undefined) throw new Error('the run was not started');
   const delivered = await runs.delivered(runId);
@@ -569,7 +641,7 @@ async function steps(work: string, lane: LaneSetup): Promise<void> {
 }
 
 /** `admin` that cannot delete, and reads no `summary.md`, so both the tutorial and its cleanup fail. */
-function sabotaged(admin: ObjectStoreV2): ObjectStoreV2 {
+function sabotaged(admin: ObjectStore): ObjectStore {
   return new Proxy(admin, {
     get(target, name) {
       if (name === 'delete') return () => Promise.reject(new Error('cleanup refused'));
@@ -641,6 +713,12 @@ describe('the own-bucket tutorial', () => {
   if (liveLane === 's3' && cloud !== undefined) {
     // @story US-STO-12
     it('[US-STO-12][api][cli] the tutorial works on S3', () => tutorial(cloud), 120_000);
+    // @story US-STO-12
+    it(
+      '[US-STO-12][api][cli] a key limited to one folder opens a prefix-less S3 URL, as the guide gives it',
+      prefixlessFolder,
+      120_000,
+    );
   }
   if (liveLane === 'gcs' && cloud !== undefined) {
     // @story US-STO-12

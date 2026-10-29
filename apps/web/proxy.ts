@@ -1,5 +1,6 @@
 /** Next.js request gate for authenticated APIs and the public `/p/**` surface. */
 import { CONTRACTS_VERSION_HEADER } from '@indx-workspace/contracts';
+import { FEATURE_PROBLEM_CODES, type FeatureProblemCode } from '@indx-workspace/contracts/features';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { isAgentEndpointRoute } from './server/auth/agent-endpoint-routes';
@@ -9,6 +10,8 @@ import { checkRequestOrigin } from './server/auth/origin';
 import { classifyPath, enforcementFor } from './server/auth/paths';
 import { sessionCookieName, readSessionSecret, verifySessionToken } from './server/auth/session';
 import { isCliTokenRoutePath } from './server/cli-auth/token-routes';
+import { readDeploymentFeatures } from './server/features/deployment';
+import { routeFeatureOf } from './server/features/route-feature';
 import {
   preflightSurfaceSession,
   preflightVisitorRun,
@@ -285,7 +288,41 @@ async function signInRedirect(request: NextRequest): Promise<NextResponse | null
   return null;
 }
 
+const FEATURE_DISABLED = 'feature_disabled' satisfies FeatureProblemCode;
+
+/**
+ * ADR-0160 D7: a route whose feature this deployment does not install answers `404 feature_disabled`
+ * before any credential is checked, because it reveals nothing beyond what the deployment serves.
+ * The public `/p/**` pages are left to their own not-found, so a visitor learns nothing from them.
+ */
+function gateFeature(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  if (pathname.startsWith('/p/')) return null;
+  const feature = routeFeatureOf(request.method, pathname);
+  if (feature === null || feature === 'core') return null;
+  let installed: readonly string[];
+  try {
+    installed = readDeploymentFeatures(process.env);
+  } catch {
+    return deny(
+      503,
+      'service_unavailable',
+      'This deployment is misconfigured.',
+      'deployment_features_invalid',
+    );
+  }
+  if (installed.includes(feature)) return null;
+  return deny(
+    FEATURE_PROBLEM_CODES[FEATURE_DISABLED],
+    FEATURE_DISABLED,
+    `${feature} is not installed in this deployment.`,
+    feature,
+  );
+}
+
 async function gateRequest(request: NextRequest): Promise<NextResponse> {
+  const featureAnswer = gateFeature(request);
+  if (featureAnswer !== null) return featureAnswer;
   if (isPreAuthenticationRoute(request)) return NextResponse.next();
   const authorization = request.headers.get('authorization');
   if (isRunnerSessionRoute(request, authorization)) {

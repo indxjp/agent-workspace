@@ -23,7 +23,7 @@ import path from 'node:path';
 import { createJsonLogger, type Logger } from '@agent-workspace/core/telemetry';
 import { SpanKind, startTracing } from '@agent-workspace/core/tracing';
 import { toAgentFrames, type ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
-import type { EngineFrame } from '@agent-workspace/engine';
+import { EngineRefusalError, type EngineFrame } from '@agent-workspace/engine';
 import {
   decodeUstar,
   encodeUstar,
@@ -1061,6 +1061,84 @@ describe('run admission log (F-04)', () => {
   });
 });
 
+describe('a start that throws', () => {
+  it('[US-STO-06][contract][run] answers 422 run_rejected without the host path and logs the cause', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const hostPath = path.join(tmpdir(), `aw-host-${randomUUID()}`, '.claude');
+    const server = createRunnerServer({
+      startAgent: () => Promise.reject(new Error(`EACCES: permission denied, mkdir '${hostPath}'`)),
+      logger: createJsonLogger({
+        service: 'runner',
+        write: (_level, line) => lines.push(JSON.parse(line) as Record<string, unknown>),
+      }),
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          runRequestBody(
+            '77777777-7777-4777-8777-777777777777',
+            '88888888-8888-4888-8888-888888888888',
+          ),
+        ),
+      });
+      const text = await response.text();
+      expect(response.status).toBe(422);
+      expect(JSON.parse(text)).toEqual({
+        error: 'run_rejected',
+        message: 'the runtime could not start this run',
+      });
+      expect(text).not.toContain(hostPath);
+      expect(lines).toContainEqual(
+        expect.objectContaining({ level: 'error', msg: 'run start failed' }),
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
+describe('a start the engine refuses', () => {
+  it('[US-STO-06][contract][run] answers the refusal code and message before any frame, not run_rejected', async () => {
+    const message = 'the compiled options carry a `tools` value this boundary cannot translate.';
+    const server = createRunnerServer({
+      startAgent: () => Promise.reject(new EngineRefusalError('engine_policy_invalid', message)),
+      logger: createJsonLogger({ service: 'runner', write: () => undefined }),
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no address');
+    try {
+      const response = await fetch(`http://127.0.0.1:${String(address.port)}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          runRequestBody(
+            '77777777-7777-4777-8777-777777777777',
+            '88888888-8888-4888-8888-888888888888',
+          ),
+        ),
+      });
+      const text = await response.text();
+      expect(response.status).toBe(200);
+      expect(text).not.toContain('run_rejected');
+      const data = text.split('event: run-error')[1] ?? '';
+      const payload = JSON.parse(data.slice(data.indexOf('{'), data.lastIndexOf('}') + 1)) as {
+        code: string;
+        message: string;
+        events: number;
+      };
+      expect(payload).toMatchObject({ code: 'engine_policy_invalid', message, events: 0 });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
 describe('trace forwarding to the model gateway (F-04)', () => {
   const TRACEPARENT = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
 
@@ -1407,6 +1485,27 @@ describe('granted file references at /run', () => {
         message: 'a granted skill file did not arrive intact',
       });
       expect(answer.text).not.toContain(answer.cwd);
+      expect(answer.started).toEqual([]);
+      expect(answer.inboxLeft).toBe(false);
+    } finally {
+      verifyGate.after = () => Promise.resolve();
+    }
+  });
+
+  it('[US-STO-06][contract][run] a skill file changed after verification answers 422 run_file_checksum_mismatch and never starts the engine', async () => {
+    // Same size, other bytes: only the bytes the runner reads are hashed again.
+    verifyGate.after = (cwd) =>
+      writeFile(path.join(cwd, '.aw-inbox', 'skills', 'support', 'SKILL.md'), '# swapped');
+    try {
+      const answer = await runWithSkillReference('# support', {
+        size: '# support'.length,
+        sha256: sha256('# support'),
+      });
+      expect(answer.status).toBe(422);
+      expect(JSON.parse(answer.text)).toEqual({
+        error: 'run_file_checksum_mismatch',
+        message: 'a granted skill file did not arrive intact',
+      });
       expect(answer.started).toEqual([]);
       expect(answer.inboxLeft).toBe(false);
     } finally {

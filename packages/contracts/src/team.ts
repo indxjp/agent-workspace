@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { FeatureIdSchema } from './features.js';
 import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 
 /**
@@ -44,6 +45,9 @@ export type PrincipalKindName = (typeof PRINCIPAL_KINDS)[number];
  * is display attribution — the member's name or the key's name — and is never an authorization
  * input; `principalId` is the `workspace_principals.id` every `ownerPrincipalId` compares against.
  *
+ * `features` is the set switched on for `workspaceId` (ADR-0160 D8): installed in the deployment
+ * and not switched off by the workspace's Owner, in `FEATURE_IDS` order.
+ *
  * A revoked key or an expired session never reaches this shape: it is `401 unauthenticated` in
  * the standard `{ error: { code, message } }` envelope, never a `200` carrying a stale principal.
  */
@@ -55,6 +59,7 @@ export const MeResponseSchema = z
     workspaceId: z.string().min(1),
     userId: z.string().min(1).nullable(),
     label: z.string().min(1),
+    features: z.array(FeatureIdSchema),
   })
   .strict();
 

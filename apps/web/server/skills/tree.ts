@@ -1,7 +1,7 @@
 /**
  * Walk an {@link ObjectStore} prefix down to every file beneath it, recursively.
  *
- * `ObjectStore.list(prefix)` is deliberately one level, not recursive — `object-store.ts`'s header
+ * A one-level `listPage(prefix)` is deliberately not recursive — `object-store.ts`'s header
  * says so, "matching `ListObjectsV2`'s `Delimiter: '/'` behaviour", and "a caller that wants a whole
  * tree calls this once per folder it discovers, the same way the S3 API itself is walked." A skill
  * directory can nest supporting files arbitrarily deep (spec §7's own tree shows only one level,
@@ -9,7 +9,12 @@
  * that caller.
  */
 import { toObjectKey } from '@agent-workspace/core/storage/keys';
-import { bytesToStream, readBytes } from '@agent-workspace/core/storage/streams';
+import {
+  bytesToStream,
+  listAll,
+  readBytes,
+  readWhole,
+} from '@agent-workspace/core/storage/streams';
 import type { SkillObjects } from '../storage/store';
 import { MAX_SKILL_REQUEST_BODY_BYTES } from '@indx-workspace/contracts/skills';
 
@@ -28,7 +33,7 @@ export interface WalkedFile {
   /** The same file's path relative to the walked prefix, e.g. `scripts/run.sh`. */
   readonly relativePath: string;
   /**
-   * The file's size, as `ObjectStore.list` already reported it. Carried here so a caller that
+   * The file's size, as the listing already reported it. Carried here so a caller that
    * only needs sizes — `describeSkill`, listing a whole workspace's skills — does not have to
    * `get` every file's bytes back just to measure them.
    */
@@ -45,7 +50,7 @@ export async function walkFiles(store: SkillObjects, prefix: string): Promise<Wa
   const out: WalkedFile[] = [];
 
   async function recurse(at: string): Promise<void> {
-    const entries = await store.list(at);
+    const entries = await listAll(store, at);
     for (const entry of entries) {
       if (entry.kind === 'folder') {
         await recurse(entry.key);
@@ -142,10 +147,10 @@ export async function skillFiles(
   return (await walkFiles(store, legacyPrefix)).map((file) => ({
     relativePath: file.relativePath,
     sizeBytes: file.sizeBytes,
-    read: async () => (await store.get(file.key))?.body ?? null,
+    read: async () => (await readWhole(store, file.key))?.body ?? null,
     sha256: null,
     open: async () => {
-      const found = await store.get(file.key);
+      const found = await readWhole(store, file.key);
       return found === null ? null : bytesToStream(found.body);
     },
   }));

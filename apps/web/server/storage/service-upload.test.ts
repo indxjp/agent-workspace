@@ -16,12 +16,13 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
   type SignedUrlRequest,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { MAX_PENDING_UPLOADS_PER_WORKSPACE } from '@indx-workspace/contracts/files';
 
+import { CLEANUP_MIN_AGE_MS } from './cleanup';
 import { createStorageService, type StorageContext } from './service';
 
 interface Fixture {
@@ -89,7 +90,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const ws = await f.workspace();
       const requests: SignedUrlRequest[] = [];
       const inner = createInMemoryObjectStore();
-      const objects: ObjectStoreV2 = {
+      const objects: ObjectStore = {
         ...inner,
         capabilities: { ...inner.capabilities, sign: true, boundLengthSign: bindsLength },
         createSignedUrl: (key, request) => {
@@ -144,8 +145,13 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const done = await h.complete('a.txt');
       expect(done).toMatchObject({
         ok: true,
-        row: { objectId: fresh.objectId, sizeBytes: 3, sha256: await sha256Of('new') },
+        row: { id: fresh.id, sizeBytes: 3, sha256: await sha256Of('new') },
       });
+      // Published on a copy no link names; the uploaded object goes with the replaced one.
+      const published = done.ok ? done.row.objectId : null;
+      expect([fresh.objectId, old.objectId]).not.toContain(published);
+      await expect(h.objects.head(h.nameOf(published))).resolves.not.toBeNull();
+      await expect(h.objects.head(h.nameOf(fresh.objectId))).resolves.toBeNull();
       await expect(h.objects.head(h.nameOf(old.objectId))).resolves.toBeNull();
       await expect(h.catalog.pending('a.txt')).resolves.toBeNull();
       await expect(h.catalog.countPending()).resolves.toBe(0);
@@ -228,6 +234,103 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await expect(h.catalog.countPending()).resolves.toBe(MAX_PENDING_UPLOADS_PER_WORKSPACE);
       await expect(h.mint('c.txt', 1)).resolves.toEqual({ ok: false, code: 'too_many_pending' });
       await expect(h.catalog.countPending()).resolves.toBe(MAX_PENDING_UPLOADS_PER_WORKSPACE);
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][unit][sdk] concurrent mints one below the pending cap never leave more than the cap pending', async () => {
+      const h = await harness();
+      for (let index = 0; index < MAX_PENDING_UPLOADS_PER_WORKSPACE - 1; index += 1) {
+        await h.catalog.reserve(`seed/${index}.bin`, {
+          ownerPrincipalId: h.ws.principalId,
+          sizeBytes: 1,
+          contentType: null,
+        });
+      }
+
+      const minted = await Promise.all(
+        Array.from({ length: 10 }, (_, index) => h.mint(`burst/${index}.bin`, 1)),
+      );
+
+      // Each mint counts after its own reservation, so the last admitted one counts every admitted
+      // row: the cap is never exceeded, though a mint near it may be refused for a sibling.
+      const admitted = minted.filter((outcome) => outcome.ok).length;
+      expect(admitted).toBeLessThanOrEqual(1);
+      for (const outcome of minted) {
+        if (!outcome.ok) expect(outcome).toEqual({ ok: false, code: 'too_many_pending' });
+      }
+      await expect(h.catalog.countPending()).resolves.toBe(
+        MAX_PENDING_UPLOADS_PER_WORKSPACE - 1 + admitted,
+      );
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][unit][sdk] abandoned uploads older than the maximum link lifetime plus an hour do not block new links', async () => {
+      const h = await harness();
+      for (let index = 0; index < MAX_PENDING_UPLOADS_PER_WORKSPACE; index += 1) {
+        await h.catalog.reserve(`abandoned/${index}.bin`, {
+          ownerPrincipalId: h.ws.principalId,
+          sizeBytes: 1,
+          contentType: null,
+        });
+      }
+      await expect(h.mint('fresh.txt', 1)).resolves.toEqual({
+        ok: false,
+        code: 'too_many_pending',
+      });
+
+      // Later than every link those reservations could hold, and still unconfirmed: report-only
+      // cleanup never removes them, so only the age keeps them out of the cap.
+      const later = new Date(Date.now() + CLEANUP_MIN_AGE_MS + 60_000);
+      await expect(
+        h.storage.reserveUpload(h.ctx, {
+          path: 'fresh.txt',
+          sizeBytes: 1,
+          now: later,
+          mayReplace: () => Promise.resolve(true),
+        }),
+      ).resolves.toMatchObject({ ok: true });
+      await expect(h.catalog.countPending()).resolves.toBe(MAX_PENDING_UPLOADS_PER_WORKSPACE + 1);
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][unit][sdk] a failed signed replacement authorization releases only its reservation', async () => {
+      const h = await harness();
+      const old = await h.save('a.txt', 'old');
+      const failing = () => Promise.reject(new Error('directory unavailable'));
+
+      await expect(
+        h.storage.reserveUpload(h.ctx, { path: 'a.txt', sizeBytes: 3, mayReplace: failing }),
+      ).rejects.toThrow('directory unavailable');
+
+      await expect(h.catalog.pending('a.txt')).resolves.toBeNull();
+      await expect(h.catalog.get('a.txt')).resolves.toMatchObject({ id: old.id });
+      await expect(h.objects.head(h.nameOf(old.objectId))).resolves.not.toBeNull();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][unit][sdk] an old mint whose authorization fails leaves the newer reservation in place', async () => {
+      const h = await harness();
+      await h.save('a.txt', 'old');
+      let fail = (): void => undefined;
+      let asked = (): void => undefined;
+      const decided = new Promise<void>((resolve) => (asked = resolve));
+      const first = h.storage.reserveUpload(h.ctx, {
+        path: 'a.txt',
+        sizeBytes: 3,
+        mayReplace: () =>
+          new Promise<boolean>((_, reject) => {
+            fail = () => reject(new Error('directory unavailable'));
+            asked();
+          }),
+      });
+      await decided;
+      // The owner mints again while the first request is still being decided.
+      await expect(h.mint('a.txt', 3)).resolves.toMatchObject({ ok: true });
+      const newer = await h.catalog.pending('a.txt');
+      fail();
+
+      await expect(first).rejects.toThrow('directory unavailable');
+      await expect(h.catalog.pending('a.txt')).resolves.toEqual(newer);
     });
 
     // @story US-STO-02

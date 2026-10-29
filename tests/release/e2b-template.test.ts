@@ -660,17 +660,24 @@ describe('the runtime template built from the checkout (#827)', () => {
     );
     for (const target of removed ?? []) expect(RUNTIME_STRIP_COMMAND).toContain(target);
     expect(RUNTIME_STRIP_COMMAND).toContain('/usr/local/bin/pnpm');
-    const [version, sha256] = [arg('PNPM_VERSION'), arg('PNPM_TARBALL_SHA256')];
-    expect(sha256).toMatch(/^[0-9a-f]{64}$/u);
-    expect(dockerfile).toMatch(/registry\.npmjs\.org\/pnpm\/-\/pnpm-\$\{PNPM_VERSION\}\.tgz/u);
+    const version = arg('PNPM_VERSION');
+    const sha256 = { x64: arg('PNPM_SHA256_AMD64'), arm64: arg('PNPM_SHA256_ARM64') };
+    expect(sha256.x64).toMatch(/^[0-9a-f]{64}$/u);
+    expect(sha256.arm64).toMatch(/^[0-9a-f]{64}$/u);
+    for (const arch of ['x64', 'arm64']) {
+      expect(dockerfile).toContain(
+        `https://registry.npmjs.org/@pnpm/exe.linux-${arch}/-/exe.linux-${arch}-\${PNPM_VERSION}.tgz`,
+      );
+    }
     const fetchStep = pnpmFetchCommand(version, sha256);
     expect(commands).toContain(fetchStep);
-    expect(fetchStep).toContain(`pnpm-${version}.tgz`);
-    expect(fetchStep).toContain(`!=='${sha256}')throw`);
+    expect(fetchStep).toContain(`-${version}.tgz`);
+    expect(fetchStep).toContain(`{x64:'${sha256.x64}',arm64:'${sha256.arm64}'}[process.arch]`);
+    expect(fetchStep).toContain('!==s)throw');
     expect(commands).toContain(pnpmInstallCommand);
     for (const line of [
       'tar -xzf /tmp/pnpm.tgz -C /opt/pnpm --strip-components=1 --no-same-owner',
-      'exec /usr/local/bin/node /opt/pnpm/bin/pnpm.cjs',
+      'ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm',
       'exec /usr/local/bin/node /opt/npx/npx.mjs',
       'ln -s /usr/local/bin/npx /usr/bin/npx',
     ]) {

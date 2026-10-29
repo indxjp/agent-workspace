@@ -69,7 +69,7 @@ sixth service.
 | `web`      | The UI, `/api/**`, authentication, the setup wizard                                                                                     | Port `3000`, the only public one  |
 | `gateway`  | The model gateway. Swaps a per-run token for the stored provider credential. Serves an Anthropic-compatible `/v1/messages`              | Private; reachable from sandboxes |
 | `runner`   | Allocates a sandbox through the chosen runtime driver and relays the agent's events. The Docker socket is mounted here and nowhere else | Private                           |
-| `postgres` | PostgreSQL 17. Every durable row: workspaces, principals, agents, runs, events                                                          | Private                           |
+| `postgres` | PostgreSQL 18. Every durable row: workspaces, principals, agents, runs, events                                                          | Private                           |
 | `storage`  | SeaweedFS, S3 or native GCS. Workspace files, skills, transcripts                                                                       | Private                           |
 
 **Why it matters:** a security review starts with "what is exposed, and where does data rest".

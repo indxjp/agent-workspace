@@ -369,6 +369,23 @@ describe.skipIf(!hasDatabase)(
       await expect(store.resolveIdentityKey(optedIn.server.id)).resolves.toBe('identity-key-value');
       await expect(store.resolveIdentityKey(dangling.server.id)).resolves.toBeNull();
       await expect(store.resolveIdentityKey(plain.server.id)).resolves.toBeUndefined();
+
+      // @story US-STO-12: a row stored before the contracts refused the name never reads it.
+      const reserved = await secretsService.create(scope, {
+        name: 'STORAGE_CONNECTION_77777777777747778777777777777777',
+        value: Buffer.from('storage-credential-envelope', 'utf8'),
+      });
+      expect(reserved.kind).toBe('created');
+      const storageNamed = await store.create(
+        {
+          ...input,
+          name: 'identity-storage',
+          identity: { secret: 'STORAGE_CONNECTION_77777777777747778777777777777777' },
+        },
+        owner,
+      );
+      if (storageNamed.kind !== 'created') throw new Error('fixture connector was not created');
+      await expect(store.resolveIdentityKey(storageNamed.server.id)).resolves.toBeNull();
       await expect(store.get(optedIn.server.id)).resolves.toMatchObject({
         identity: { secret: 'IDENTITY_SIGNING_KEY' },
       });

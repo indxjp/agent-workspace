@@ -25,6 +25,7 @@
  * through the *same* resolver is asserted to reach `200`, so the `401` is evidence about the
  * expiry rather than about a resolver that never worked.
  */
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -34,6 +35,7 @@ import {
   SESSION_TTL_SECONDS,
   verifySessionToken,
 } from '../../../server/auth/session';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../../server/features/runtime';
 import { sessionCookieValue } from '../../../server/composition/identity';
 import { conferredBy } from '../../../server/rbac/conferral';
 import {
@@ -63,6 +65,7 @@ afterEach(() => {
   live?.teardown();
   live = null;
   clearApplicationContext();
+  clearFeatureSwitches();
 });
 
 function harness(): RbacHarness {
@@ -98,12 +101,26 @@ describe('GET /api/me answers for both principal kinds', () => {
       workspaceId: TEST_WORKSPACE_ID,
       userId: expect.any(String) as unknown,
       label: 'Aya Ito',
+      features: [...FEATURE_IDS],
     });
     // `authorise` is the only caller of `forWorkspace` in the program and it calls it on the
     // `allow` branch alone, so this is a positive record that the gate ran rather than two
     // absences a handler that skipped it would also satisfy.
     expect(built.scopedWorkspaces).toEqual([TEST_WORKSPACE_ID]);
     expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('lists the features the caller’s workspace has on, in FEATURE_IDS order', async () => {
+    const built = harness();
+    configureFeatureSwitches({
+      enabledFor: (workspaceId) =>
+        Promise.resolve(workspaceId === TEST_WORKSPACE_ID ? ['runs', 'chat'] : []),
+    });
+
+    const response = await built.call(GET, { method: 'GET', path: '/api/me', as: MEMBER });
+
+    expect(response.status).toBe(200);
+    expect((response.body as { features: string[] }).features).toEqual(['runs', 'chat']);
   });
 
   it('names the workspace and role of an API-key caller, whose userId is null', async () => {
@@ -125,6 +142,7 @@ describe('GET /api/me answers for both principal kinds', () => {
       workspaceId: TEST_WORKSPACE_ID,
       userId: null,
       label: 'ci',
+      features: [...FEATURE_IDS],
     });
   });
 
@@ -153,6 +171,7 @@ describe('GET /api/me answers for both principal kinds', () => {
         'workspaceId',
         'userId',
         'label',
+        'features',
       ]);
     }
   });

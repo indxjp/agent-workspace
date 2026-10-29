@@ -1,5 +1,7 @@
 import { requireResourceAccess, type ResourceAccess } from '../../resources/authorise';
-import { problemBody } from '../../http/result';
+import { refuseIfFeatureDisabled } from '../../features/guard';
+import { enabledFeaturesFor } from '../../features/runtime';
+import { noStoreResultResponse, problemBody } from '../../http/result';
 import { ownerPrincipalIdOf } from '../../rbac/owner-principal';
 import { DomainError } from '../../errors';
 import { ShareService } from './service';
@@ -49,6 +51,9 @@ export async function withShares(
   const actor = await runtime.resolveActor(request);
   if (actor.kind === 'unauthenticated') return shareProblem(401, 'unauthenticated', actor.reason);
   if (actor.kind === 'forbidden') return shareProblem(403, 'forbidden', actor.reason);
+  // ADR-0160 D7: before the workspace's rows are read, so a switched-off feature confirms no row.
+  const refused = await refuseIfFeatureDisabled(request, actor.workspaceId);
+  if (refused !== null) return noStoreResultResponse(refused);
   const sharing = await runtime.forWorkspace(actor.workspaceId);
   return fn({
     actor,
@@ -88,6 +93,15 @@ export async function requireShareAccess(
     ),
   };
 }
+/** `runtime.resolvePublic`, concealed (ADR-0160 D7) as an unknown link when the workspace has sharing off. */
+export async function resolvePublicShare(
+  runtime: SharesRuntime,
+  token: string,
+): Promise<Awaited<ReturnType<SharesRuntime['resolvePublic']>>> {
+  const resolved = await runtime.resolvePublic(token);
+  if (resolved === null) return null;
+  return (await enabledFeaturesFor(resolved.workspaceId)).includes('sharing') ? resolved : null;
+}
 export async function withPublicShare(
   token: string,
   fn: (context: {
@@ -100,7 +114,7 @@ export async function withPublicShare(
   const runtime = applicationContext()?.shares;
   if (!runtime)
     return shareProblem(503, 'shares_runtime_not_configured', 'The sharing API is not configured.');
-  const resolved = await runtime.resolvePublic(token);
+  const resolved = await resolvePublicShare(runtime, token);
   if (!resolved) return shareProblem(404, 'share_not_found', 'Public link not found.');
   return fn({
     ...resolved,

@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 import { ENGINE_IDS } from '@indx-workspace/contracts/engines';
 import { EvalCaseFileSchema } from '@indx-workspace/contracts/evaluations';
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import {
+  CompleteSetupAnswersSchema,
   SETUP_THEMES,
   THEME_RECOMMENDATIONS,
   withRecommendedAnswers,
@@ -281,6 +283,34 @@ export default defineSurface({
     it.each(SETUP_THEMES)('writes no .agent.md for theme %s', (theme) => {
       const files = rendered({ 'setup.theme': theme, 'admin.platforms': TWO });
       expect(files.some((file) => file.path.endsWith('.agent.md'))).toBe(false);
+    });
+  });
+
+  describe('features (ADR-0160 D5)', () => {
+    it('writes the chosen features in FEATURE_IDS order, and a project file that reads back', () => {
+      const text = contentsOf(
+        rendered({ 'admin.features': ['runs', 'files', 'chat'] }),
+        'agent-workspace.yaml',
+      );
+      expect(text).toContain('features:\n  - chat\n  - files\n  - runs\n');
+      expect(parseProjectFile(text).project).toMatchObject({ features: ['chat', 'files', 'runs'] });
+    });
+
+    it('writes no features key for the default answer or for every feature', () => {
+      for (const answers of [{}, { 'admin.features': FEATURE_IDS }] as const) {
+        const text = contentsOf(rendered(answers), 'agent-workspace.yaml');
+        expect(text).not.toContain('features');
+      }
+    });
+
+    it('writes no features key when the answer is absent', () => {
+      const absent = renderProjectFiles(
+        CompleteSetupAnswersSchema.parse(
+          Object.fromEntries(Object.entries(recommended).filter(([id]) => id !== 'admin.features')),
+        ),
+        { name: 'my-project' },
+      );
+      expect(contentsOf(absent, 'agent-workspace.yaml')).not.toContain('features');
     });
   });
 
@@ -645,7 +675,7 @@ describe('renderProjectShell', () => {
     "@indx-workspace/embedded": "0.3.0",
     "@indx-workspace/sdk": "0.3.0",
     "@anthropic-ai/claude-agent-sdk": "0.3.310",
-    "@anthropic-ai/sdk": "0.137.0"
+    "@anthropic-ai/sdk": "1.3.0"
   },
   "devDependencies": {
     "@indx-workspace/cli": "0.3.0"
@@ -670,7 +700,9 @@ describe('renderProjectShell', () => {
     "@azure/msal-node@>=5.0.0-beta.0 <7.1.0": "^7.1.0",
     "@modelcontextprotocol/server@>=2.0.0 <2.3.0": "^2.3.0",
     "@modelcontextprotocol/client@>=2.0.0 <2.3.0": "^2.3.0",
-    "@modelcontextprotocol/core@>=2.0.0 <2.3.0": "^2.3.0"
+    "@modelcontextprotocol/core@>=2.0.0 <2.3.0": "^2.3.0",
+    "@modelcontextprotocol/node@>=2.0.0 <2.1.0": "2.1.1",
+    "@hono/node-server@>=1.19.10 <2.1.3": "^2.1.3"
   }
 }
 `,
@@ -700,6 +732,8 @@ overrides:
   '@modelcontextprotocol/server@>=2.0.0 <2.3.0': '^2.3.0'
   '@modelcontextprotocol/client@>=2.0.0 <2.3.0': '^2.3.0'
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': '^2.3.0'
+  '@modelcontextprotocol/node@>=2.0.0 <2.1.0': '2.1.1'
+  '@hono/node-server@>=1.19.10 <2.1.3': '^2.1.3'
 `,
     );
     expect(contentsOf(files, '.gitignore')).toBe('node_modules/\n.agent-workspace/\n.aw/\n.env\n');

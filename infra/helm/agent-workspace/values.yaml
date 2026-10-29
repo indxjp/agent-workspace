@@ -58,6 +58,11 @@ storageClassName: ''
 external:
   databaseUrlSecret: agent-workspace-database
   objectStoreSecret: agent-workspace-object-store
+# Where files, skills and session transcripts live, as an `AW_STORAGE_URL` (`s3://`, `gcs://`,
+# `azblob://` or `file://`). Empty leaves it to the object-store Secret, as before; set, it replaces
+# the Secret's value. The credential stays in the Secret.
+storage:
+  url: ''
 secrets:
   applicationSecret: agent-workspace-secrets
 runtimeClassName: ''

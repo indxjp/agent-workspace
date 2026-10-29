@@ -13,7 +13,7 @@ import { createGcsObjectStore, createNativeGcsClient } from './gcs-store.js';
 import { UnsafeObjectKeyError } from './key-safety.js';
 import { createLocalFilesystemObjectStore } from './local-fs-store.js';
 import { createInMemoryObjectStore } from './memory-store.js';
-import type { ObjectStoreV2 } from './object-store.js';
+import type { ObjectStore } from './object-store.js';
 import { createS3ObjectStore } from './s3-store.js';
 
 const MIB = 1024 * 1024;
@@ -51,7 +51,7 @@ describe('a failed write cancels its source', () => {
   });
 
   // No network: each store refuses the key before it would contact its service.
-  const rawStores: readonly (readonly [string, () => ObjectStoreV2])[] = [
+  const rawStores: readonly (readonly [string, () => ObjectStore])[] = [
     ['in-memory', () => createInMemoryObjectStore()],
     ['local filesystem', () => createLocalFilesystemObjectStore(path.join(tmpdir(), 'aw-unused'))],
     [

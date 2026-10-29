@@ -1,9 +1,20 @@
 /** Self-test: the flat-memory harness reports a streaming pipe as flat and can fail on a buffer. */
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 import { describe, expect, it } from 'vitest';
 
-import { generatedBody, LOAD_BYTES, MiB, peakRssGrowth, warmHttpTransport } from './flat-memory.js';
+import {
+  generatedBody,
+  LOAD_BYTES,
+  measureRssGrowth,
+  MiB,
+  NEW_SPACE_CREDIT_BOUND,
+  newSpaceCredit,
+  peakRssGrowth,
+  warmHttpTransport,
+} from './flat-memory.js';
 
 describe('flat-memory harness', () => {
   it('reports a streaming pipe as flat', { timeout: 60_000 }, async () => {
@@ -19,7 +30,7 @@ describe('flat-memory harness', () => {
             bytes += chunk.byteLength;
             if (bytes >= next) {
               sample();
-              next += 32 * MiB;
+              next += 4 * MiB;
             }
           },
         }),
@@ -43,5 +54,66 @@ describe('flat-memory harness', () => {
     });
     expect(held).toBe(total);
     expect(growth).toBeGreaterThan(200 * MiB);
+  });
+  it(
+    'catches a server that buffers a body it receives over HTTP',
+    { timeout: 60_000 },
+    async () => {
+      // measureRssGrowth subtracts up to NEW_SPACE_CREDIT_BOUND of empty new space, so the server
+      // holds more than 200 MiB plus that credit: 256 MiB alone measured 192-197 MiB on CI.
+      const total = 200 * MiB + NEW_SPACE_CREDIT_BOUND + 64 * MiB;
+      let held = 0;
+      const chunks: Buffer[] = [];
+      const server = createServer((req, res) => {
+        req.on('data', (chunk: Buffer) => chunks.push(chunk));
+        req.on('end', () => {
+          held = Buffer.concat(chunks).byteLength;
+          res.writeHead(204).end();
+        });
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      try {
+        await warmHttpTransport();
+        const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/`;
+        const { growth } = await measureRssGrowth(async (sample) => {
+          // A variable, not a literal: the DOM `RequestInit` has no `duplex`.
+          const init = { method: 'POST', body: generatedBody(total).body, duplex: 'half' as const };
+          await (await fetch(url, init)).arrayBuffer();
+          sample();
+        });
+        expect(held).toBe(total);
+        expect(growth).toBeGreaterThan(200 * MiB);
+      } finally {
+        chunks.length = 0;
+        server.closeAllConnections();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
+
+  it('credits empty new-space growth up to its bound and fails a reading past it', () => {
+    const space = (committed: number, used = 0) => ({ committed, used });
+    expect(newSpaceCredit(space(8 * MiB), space(4 * MiB))).toBe(0);
+    // V8 grows new space past one 64 MiB step; empty pages up to the whole new space are credited.
+    expect(newSpaceCredit(space(0), space(116 * MiB))).toBe(116 * MiB);
+    expect(newSpaceCredit(space(0), space(NEW_SPACE_CREDIT_BOUND))).toBe(128 * MiB);
+    expect(() => newSpaceCredit(space(0), space(NEW_SPACE_CREDIT_BOUND + 1))).toThrow(
+      /new space grew/u,
+    );
+  });
+
+  it('never credits new space that live objects still use', () => {
+    const space = (committed: number, used = 0) => ({ committed, used });
+    expect(newSpaceCredit(space(MiB), space(100 * MiB, 60 * MiB))).toBe(39 * MiB);
+    expect(newSpaceCredit(space(MiB), space(100 * MiB, 100 * MiB))).toBe(0);
+  });
+
+  it('reports the new-space growth a reading subtracted', async () => {
+    const reading = await measureRssGrowth(async (sample) => {
+      sample();
+      await Promise.resolve();
+    });
+    expect(reading.newSpaceGrowth).toBeGreaterThanOrEqual(0);
+    expect(reading.newSpaceGrowth).toBeLessThanOrEqual(NEW_SPACE_CREDIT_BOUND);
   });
 });

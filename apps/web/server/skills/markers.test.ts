@@ -26,8 +26,9 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 
 import { createStorageService } from '../storage/service';
@@ -162,8 +163,8 @@ async function postgresFixture(): Promise<Fixture> {
 }
 
 /** `inner` plus the key of every object put through it. */
-function recording(inner: ObjectStoreV2): {
-  readonly store: ObjectStoreV2;
+function recording(inner: ObjectStore): {
+  readonly store: ObjectStore;
   readonly puts: string[];
 } {
   const puts: string[] = [];
@@ -171,9 +172,9 @@ function recording(inner: ObjectStoreV2): {
     puts,
     store: {
       ...inner,
-      put: (key, input) => {
+      write: (key, body, options) => {
         puts.push(key);
-        return inner.put(key, input);
+        return inner.write(key, body, options);
       },
     },
   };
@@ -225,8 +226,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
           .map((row) => row.path)
           .sort();
       const putLegacy = (key: string, json: unknown) =>
-        shared.put(key, {
-          body: new TextEncoder().encode(JSON.stringify(json)),
+        shared.write(key, new TextEncoder().encode(JSON.stringify(json)), {
           contentType: 'application/json',
         });
       return {
@@ -279,7 +279,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
         name: 'dup',
         pendingDelete: { ownerPrincipalId: principal.ownerPrincipalId, revisions: [1] },
       });
-      expect(await shared.list('skill-deletes')).toEqual([]);
+      expect(await listAll(shared, 'skill-deletes')).toEqual([]);
       expect(await skillRowPaths()).toContain('.skills/dup@1/SKILL.md');
 
       failRemove = false;
@@ -338,7 +338,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       expect(await deleteSkill(shared, catalog, 'dup', rows)).toEqual({ status: 204, body: null });
 
       expect(await skillRowPaths()).toEqual([]);
-      expect(await shared.get(skillDeleteMarkerKey('dup'))).toBeNull();
+      expect(await readWhole(shared, skillDeleteMarkerKey('dup'))).toBeNull();
     });
 
     // @story US-STO-08
@@ -351,7 +351,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       expect(await pendingSkillDelete(shared, catalog, 'dup')).toEqual(pending);
 
       expect((await catalog.listSkills())[0]?.pendingDelete).toEqual(pending);
-      expect(await shared.get(skillDeleteMarkerKey('dup'))).not.toBeNull();
+      expect(await readWhole(shared, skillDeleteMarkerKey('dup'))).not.toBeNull();
     });
 
     // @story US-STO-08
@@ -381,7 +381,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       await ensureBuiltinSkills(shared, catalog, principal, [BUILTIN], rows);
 
       expect((await catalog.listSkills())[0]?.builtinDigest).toBe(digest);
-      expect(await shared.get(skillBuiltinMarkerKey(BUILTIN))).not.toBeNull();
+      expect(await readWhole(shared, skillBuiltinMarkerKey(BUILTIN))).not.toBeNull();
       expect(puts).toEqual([]);
     });
 
@@ -478,7 +478,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
 
       expect(imported.status).toBe(201);
       expect((await catalog.listSkills())[0]?.meta).toMatchObject({ name: 'dup', enabled: true });
-      expect(await shared.list('skill-meta')).toEqual([]);
+      expect(await listAll(shared, 'skill-meta')).toEqual([]);
       expect(legacyPuts(puts)).toEqual([]);
     });
 
@@ -501,7 +501,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       expect(read.status).toBe(200);
       expect((read.body as { skill: { enabled: boolean } }).skill.enabled).toBe(false);
       expect((await catalog.listSkills())[0]?.meta).toEqual(legacy);
-      expect(await shared.get(skillMetaKey('dup'))).not.toBeNull();
+      expect(await readWhole(shared, skillMetaKey('dup'))).not.toBeNull();
       expect(puts).toEqual([]);
     });
   });

@@ -23,10 +23,10 @@ import {
 } from '@agent-workspace/core/db';
 import * as schema from '@agent-workspace/core/db/unscoped';
 import {
+  createInMemoryObjectStore,
   createScopedObjectStore,
   InvalidWorkspaceIdError,
   UnsafeObjectKeyError,
-  type ObjectListEntry,
   type ObjectStore,
 } from '@agent-workspace/core/storage';
 import * as drizzleModule from 'drizzle-orm';
@@ -140,31 +140,41 @@ describe('requireWorkspaceScope', () => {
 // ---------------------------------------------------------------------------------------------
 // The scoped object store.
 
-/** A backend that stores nothing and records every key it is handed, in call order. */
+/**
+ * A backend over an in-memory store whose every member records the key, prefix or cursor it is
+ * handed, in call order, and answers as if nothing were stored.
+ */
 function recordingBackend(): { readonly store: ObjectStore; readonly keys: string[] } {
   const keys: string[] = [];
   const store: ObjectStore = {
-    put: (key) => {
-      keys.push(key);
-      return Promise.resolve();
-    },
-    get: (key) => {
+    ...createInMemoryObjectStore(),
+    head: (key) => {
       keys.push(key);
       return Promise.resolve(null);
+    },
+    read: (key) => {
+      keys.push(key);
+      return Promise.resolve(null);
+    },
+    write: (key) => {
+      keys.push(key);
+      return Promise.resolve({
+        sizeBytes: 0,
+        contentType: null,
+        etag: 'recorded',
+        lastModified: new Date(0),
+      });
+    },
+    listPage: (prefix, options) => {
+      keys.push(prefix);
+      if (options?.cursor !== undefined) keys.push(options.cursor);
+      return Promise.resolve({ entries: [], cursor: null });
     },
     delete: (key) => {
       keys.push(key);
       return Promise.resolve();
     },
-    list: (prefix): Promise<readonly ObjectListEntry[]> => {
-      keys.push(prefix);
-      return Promise.resolve([]);
-    },
-    listPrefix: (prefix): Promise<readonly ObjectListEntry[]> => {
-      keys.push(prefix);
-      return Promise.resolve([]);
-    },
-    copyObject: (source, destination) => {
+    copy: (source, destination) => {
       keys.push(source, destination);
       return Promise.resolve();
     },
@@ -188,25 +198,26 @@ async function runObjectCall(workspaceId: string, callInput: unknown): Promise<O
   }
   const c = asRecord(callInput, 'call');
   const text = (key: string): string => asString(c[key], key);
+  // The vectors name the model's abstract operations; each runs as the port member that does it.
   try {
     switch (c['op']) {
       case 'put':
-        await scoped.put(text('key'), { body: new Uint8Array() });
+        await scoped.write(text('key'), new Uint8Array(), {});
         break;
       case 'get':
-        await scoped.get(text('key'));
+        await scoped.read(text('key'));
         break;
       case 'delete':
         await scoped.delete(text('key'));
         break;
       case 'list':
-        await scoped.list(text('prefix'));
+        await scoped.listPage(text('prefix'));
         break;
       case 'listPrefix':
-        await scoped.listPrefix(text('prefix'));
+        await scoped.listPage(text('prefix'), { recursive: true });
         break;
       case 'copy':
-        await scoped.copyObject(text('src'), text('dst'));
+        await scoped.copy(text('src'), text('dst'));
         break;
       default:
         throw new Error(`unknown object call ${JSON.stringify(c)}`);
@@ -242,6 +253,25 @@ describe('createScopedObjectStore', () => {
     const second = await runObjectCall('a/b', { op: 'put', key: 'c' });
     expect(first).toEqual({ kind: 'backend', keys: ['workspaces/a/b/c'] });
     expect(second).toEqual(first);
+  });
+
+  it('scopes head, read, write and listPage, cursor included, under the workspace prefix', async () => {
+    const backend = recordingBackend();
+    const scoped = createScopedObjectStore(backend.store, 'ws-1');
+    await scoped.head('a/b.txt');
+    await scoped.read('a/b.txt');
+    await scoped.write('a/b.txt', new Uint8Array(), {});
+    await scoped.listPage('a', { cursor: 'file:a/b.txt' });
+    await scoped.listPage('', { cursor: 'file:c.txt' });
+    expect(backend.keys).toEqual([
+      'workspaces/ws-1/a/b.txt',
+      'workspaces/ws-1/a/b.txt',
+      'workspaces/ws-1/a/b.txt',
+      'workspaces/ws-1/a',
+      'file:workspaces/ws-1/a/b.txt',
+      'workspaces/ws-1',
+      'file:workspaces/ws-1/c.txt',
+    ]);
   });
 });
 

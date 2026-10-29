@@ -26,9 +26,10 @@
  * ledger records their `when` and hash.
  *
  * `lint [--base REF]` (pnpm migrations:lint, REF = origin/main) reads the migrations ADDED since the
- * merge base with REF and rejects DDL that is not expand-only: `DROP`, `RENAME`, `SET NOT NULL`
- * and `ALTER COLUMN ... TYPE`. A statement (Drizzle separates them with `--> statement-breakpoint`)
- * passes when it carries a `-- safe: <reason>` comment. Migrations already on REF are never linted.
+ * merge base with REF and rejects DDL that is not expand-only: `DROP`, `RENAME`, `SET NOT NULL`,
+ * `ALTER COLUMN ... TYPE`, and a CHECK added to an existing table without `NOT VALID`. A
+ * statement (Drizzle separates them with `--> statement-breakpoint`) passes when it carries a
+ * `-- safe: <reason>` comment. Migrations already on REF are never linted.
  *
  * `check` validates the working tree: dense `idx`, tag prefixes, strictly increasing `when`, one
  * SQL file and one snapshot per entry, no stray SQL file, and an unbroken snapshot chain.
@@ -121,12 +122,29 @@ export function checkMigrations(dir) {
   return problems;
 }
 
-/** Expand-only rules: [name, pattern over a statement with comments removed]. */
+/**
+ * Whether one `ADD ... CHECK` clause of the statement lacks `NOT VALID`. Each `;`-terminated
+ * statement and each `, ADD` clause is tested on its own, so a later clause's `NOT VALID` does not
+ * cover an earlier one.
+ * @param {string} code
+ */
+function addsValidatedCheck(code) {
+  return code
+    .split(/;|,\s*(?=ADD\b)/i)
+    .some((clause) =>
+      /\bADD\s+(?:CONSTRAINT\s+\S+\s+)?CHECK\b(?![\s\S]*\bNOT\s+VALID\b)/i.test(clause),
+    );
+}
+
+/** Expand-only rules: [name, test over a statement with comments removed]. */
 const LINT_RULES = /** @type {const} */ ([
   ['DROP', /\bDROP\s+(?!DEFAULT\b|NOT\s+NULL\b)/i],
   ['RENAME', /\bRENAME\b/i],
   ['SET NOT NULL', /\bSET\s+NOT\s+NULL\b/i],
   ['ALTER COLUMN TYPE', /\bALTER\s+COLUMN\s+\S+\s+(?:SET\s+DATA\s+)?TYPE\b/i],
+  // Adding a CHECK to an existing table scans it under ACCESS EXCLUSIVE. `NOT VALID` skips the scan,
+  // and a later `VALIDATE CONSTRAINT` checks old rows under a weaker lock.
+  ['CHECK without NOT VALID', { test: addsValidatedCheck }],
 ]);
 
 /**

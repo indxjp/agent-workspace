@@ -3,14 +3,15 @@
  * old layout left without a catalog row gets a `ready` legacy row at its own path, so the catalog
  * lists it. Nothing is written to the object store, and a path that has a row in any status is left
  * alone, so a removed file never comes back. Safe to repeat and to run on two instances at once.
- * Each pass is recorded as an `adopt` run with what it skipped, by reason.
+ * Every pass is recorded as an `adopt` run with what it skipped, by reason, a pass that throws
+ * included, so the latest row is always the latest pass.
  */
 import {
   newObjectId,
   ObjectConflictError,
   storageObjectName,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
+  type ObjectStoreProvider,
+  type ObjectStore,
   type StorageArea,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
@@ -21,9 +22,11 @@ import type { LegacyAdopter, LegacyBlobCopier, LegacyCopier, MigrationRuns } fro
 
 const PAGE_SIZE = 1000;
 const BATCH_SIZE = 50;
+/** Marks a run written by a pass that records every outcome (the column's doc comment says why). */
+const ADOPT_PROOF_VERSION = 2;
 
 export interface AdoptDependencies {
-  readonly objects: ObjectStoreV2;
+  readonly objects: ObjectStore;
   /** The legacy area prefix to list, with no trailing slash (`legacyAreaPrefixes`). */
   readonly prefix: string;
   /** Rejects for a workspace that no longer exists. */
@@ -102,49 +105,88 @@ export async function runAdoptStage(deps: AdoptDependencies): Promise<AdoptRepor
 
   let cursor: string | undefined;
   let pages = 0;
-  do {
-    const before = { ...report };
-    const page = await objects.listPage(prefix, {
-      recursive: true,
-      limit: deps.pageSize ?? PAGE_SIZE,
-      ...(cursor === undefined ? {} : { cursor }),
-    });
-    const byWorkspace = new Map<string, LegacyFile[]>();
-    for (const entry of page.entries) {
-      if (entry.kind !== 'file') continue;
-      const parsed = parseLegacyKey(prefix, entry.key);
-      if (parsed === null) continue;
-      const found = byWorkspace.get(parsed.workspaceId) ?? [];
-      found.push({
-        storageKey: parsed.path,
-        sizeBytes: entry.sizeBytes,
-        contentType: entry.contentType,
+  try {
+    do {
+      const before = { ...report };
+      const page = await objects.listPage(prefix, {
+        recursive: true,
+        limit: deps.pageSize ?? PAGE_SIZE,
+        ...(cursor === undefined ? {} : { cursor }),
       });
-      byWorkspace.set(parsed.workspaceId, found);
-    }
-    for (const [workspaceId, found] of byWorkspace) await adopt(workspaceId, found);
-    pages += 1;
-    log.info('[storage] adopting legacy files', {
-      stage: 'adopt',
-      page: pages,
-      adopted: report.adopted - before.adopted,
-      hadRow: report.hadRow - before.hadRow,
-      skipped: report.skipped - before.skipped,
-    });
-    cursor = page.cursor ?? undefined;
-  } while (cursor !== undefined);
+      const byWorkspace = new Map<string, LegacyFile[]>();
+      for (const entry of page.entries) {
+        if (entry.kind !== 'file') continue;
+        const parsed = parseLegacyKey(prefix, entry.key);
+        if (parsed === null) continue;
+        const found = byWorkspace.get(parsed.workspaceId) ?? [];
+        found.push({
+          storageKey: parsed.path,
+          sizeBytes: entry.sizeBytes,
+          contentType: entry.contentType,
+        });
+        byWorkspace.set(parsed.workspaceId, found);
+      }
+      for (const [workspaceId, found] of byWorkspace) await adopt(workspaceId, found);
+      pages += 1;
+      log.info('[storage] adopting legacy files', {
+        stage: 'adopt',
+        page: pages,
+        adopted: report.adopted - before.adopted,
+        hadRow: report.hadRow - before.hadRow,
+        skipped: report.skipped - before.skipped,
+      });
+      cursor = page.cursor ?? undefined;
+    } while (cursor !== undefined);
+  } catch (error) {
+    // The listing failed part-way: record the pass as unclean, so an older clean row is never
+    // mistaken for its result.
+    await recordFailedAdoptRun(deps.runs, log, report);
+    throw error;
+  }
   await recordAdoptRun(deps.runs, report);
   log.info('[storage] adopted legacy files', { stage: 'adopt', pages, ...report });
   return report;
 }
 
 /**
+ * Record an adopt pass that failed before it finished (the legacy root did not open, or the listing
+ * failed part-way) as unclean, with what it did so far. Never throws: a recording failure is logged
+ * by error name only, so the caller can rethrow the pass's own error.
+ */
+// storage-bridge(#1699): old object naming
+export async function recordFailedAdoptRun(
+  runs: MigrationRuns,
+  log: Logger,
+  report: AdoptReport = {
+    adopted: 0,
+    hadRow: 0,
+    skipped: 0,
+    ownerless: 0,
+    pathTaken: 0,
+    failed: 0,
+    failedWorkspaces: 0,
+  },
+): Promise<void> {
+  try {
+    await recordAdoptRun(runs, {
+      ...report,
+      failedWorkspaces: Math.max(report.failedWorkspaces, 1),
+    });
+  } catch (recordError) {
+    log.warn('[storage] could not record a failed adopt pass', {
+      stage: 'adopt',
+      name: recordError instanceof Error ? recordError.name : 'unknown',
+    });
+  }
+}
+
+/**
  * Record the pass as an `adopt` run: `rowsChecked` = objects adopted, `legacyRows` = objects
- * skipped, `mismatches` = failed workspaces. A pass that adopted nothing and found what the last
- * one found is not recorded again, so a start-up with nothing to do writes nothing.
+ * skipped, `mismatches` = failed workspaces.
  */
 async function recordAdoptRun(runs: MigrationRuns, report: AdoptReport): Promise<void> {
-  const run = {
+  await runs.record({
+    stage: 'adopt',
     rowsChecked: report.adopted,
     legacyRows: report.skipped,
     mismatches: report.failedWorkspaces,
@@ -152,12 +194,8 @@ async function recordAdoptRun(runs: MigrationRuns, report: AdoptReport): Promise
     skippedPathTaken: report.pathTaken,
     skippedFailed: report.failed,
     clean: report.failedWorkspaces === 0,
-  };
-  const last = await runs.latest('adopt');
-  const unchanged =
-    last !== null &&
-    (Object.keys(run) as (keyof typeof run)[]).every((field) => last[field] === run[field]);
-  if (report.adopted > 0 || !unchanged) await runs.record({ stage: 'adopt', ...run });
+    proofVersion: ADOPT_PROOF_VERSION,
+  });
 }
 
 const PROGRESS_EVERY = 100;
@@ -186,9 +224,9 @@ export interface CopyReport {
 
 export interface CopyDependencies {
   /** The shared root, new naming. */
-  readonly objects: ObjectStoreV2;
+  readonly objects: ObjectStore;
   /** The old store of each area; an area without one cannot be copied. */
-  readonly legacy: Partial<Readonly<Record<StorageArea, ObjectStoreProviderV2>>>;
+  readonly legacy: Partial<Readonly<Record<StorageArea, ObjectStoreProvider>>>;
   /** Rejects for a workspace that no longer exists. */
   readonly catalog: (workspaceId: string) => Promise<LegacyCopier>;
   /** The session-state blob rows of a workspace; absent when this deployment has none. */
@@ -201,7 +239,7 @@ export interface CopyDependencies {
 type Outcome = 'switched' | 'raced' | 'missing' | 'mismatched';
 
 interface Source {
-  readonly store: ObjectStoreV2;
+  readonly store: ObjectStore;
   readonly key: string;
   readonly contentType: string | null;
   /** The checksum the row already holds, or `null` when it has none. */

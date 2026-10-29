@@ -35,7 +35,21 @@
  * is falsy, and therefore a permission that would be *granted* by any check written the obvious
  * way round.
  */
-import { and, asc, eq, type SQL } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  notExists,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 
 import type { AgentCreatedByAgent, BuiltinAgentKey } from '@indx-workspace/contracts/agents';
 
@@ -46,6 +60,10 @@ import {
   type ReplaceAgentResourcesOutcome,
 } from './agent-resources.js';
 import { lockAgentCreations, type Executor } from './agent-versions-shared.js';
+import { checkedAuditEvent } from './audit-events.js';
+import { auditEvents } from '../schema/audit-events.js';
+import { runs } from '../schema/runs.js';
+import { sessions } from '../schema/sessions.js';
 import {
   agents,
   parseAgentPermissions,
@@ -147,12 +165,68 @@ export type UpdateAgentOutcome =
   | { readonly kind: 'unknown-model-connection'; readonly modelConnectionId: string }
   | { readonly kind: 'unknown-runtime-profile'; readonly runtimeProfileId: string };
 
+/** How long a restore keeps the auto-archive sweep away from an agent (the sweep's own 30 days). */
+const RESTORE_WINDOW_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * True for an agent with no restore (`agent-changed`, `archived: false`) at or after `since`.
+ *
+ * ponytail: scans the workspace's recent audit rows; add an index on
+ * (workspace_id, action, subject_id) if audit volume makes the hourly sweep slow.
+ */
+function notRestoredSince(workspaceId: string, since: Date): SQL {
+  return notExists(
+    sql`(select 1 from ${auditEvents} where ${and(
+      eq(auditEvents.workspaceId, workspaceId),
+      eq(auditEvents.action, 'agent-changed'),
+      eq(auditEvents.subjectId, sql`${agents.id}::text`),
+      sql`${auditEvents.details}->>'archived' = 'false'`,
+      gte(auditEvents.createdAt, since),
+    )})`,
+  );
+}
+
+/** What restoring an agent can produce. `not-archived` is the no-op: the agent is active already. */
+export type RestoreAgentOutcome =
+  | { readonly kind: 'restored'; readonly agent: AgentRecord }
+  | { readonly kind: 'not-archived'; readonly agent: AgentRecord }
+  | { readonly kind: 'not-found' };
+
+/** Who restores an agent, as the `agent-changed` audit row names them. */
+export interface AgentRestoreActor {
+  readonly principalId: string;
+  readonly userId: string | null;
+  readonly label: string;
+}
+
 /** What deleting an agent can produce. Deletion is not idempotent: a second call is `not-found`. */
 export type DeleteAgentOutcome = { readonly kind: 'deleted' } | { readonly kind: 'not-found' };
 
 /** What replacing an agent's policy can produce. `not-found` covers "another workspace's id". */
 export type ReplaceAgentPolicyOutcome =
   { readonly kind: 'updated'; readonly agent: AgentRecord } | { readonly kind: 'not-found' };
+
+/** An agent the auto-archive sweep may archive, with what its rule reads (issue #1851). */
+interface AgentArchiveCandidate {
+  readonly id: string;
+  readonly createdAt: Date;
+  /** The newest run of any session of the agent, or `null` when it never ran. */
+  readonly lastRunAt: Date | null;
+  /** The lineage; present on every candidate, because only an agent-made agent is a candidate. */
+  readonly createdByAgent: AgentCreatedByAgent;
+}
+
+/** Narrowing for {@link AgentRepository.listArchiveCandidates}; the caller's rule decides. */
+interface AgentArchiveCandidateQuery {
+  /** Only agents created before this instant. */
+  readonly createdBefore: Date;
+  /** Never an agent restored at or after this instant: a restore gives it a fresh window. */
+  readonly notRestoredSince: Date;
+  /** Keyset: only ids after this one, in id order. */
+  readonly afterId: string | null;
+  readonly limit: number;
+}
 
 /**
  * Agent persistence for exactly one workspace.
@@ -176,6 +250,25 @@ export interface AgentRepository {
   delete(id: string): Promise<DeleteAgentOutcome>;
   /** `null` writes back to "compiled" — a `PUT` may not partially replace a stored policy. */
   replacePolicy(id: string, policy: AgentStoredPolicy | null): Promise<ReplaceAgentPolicyOutcome>;
+  /**
+   * Not-yet-archived, agent-made agents created before `createdBefore`, by id after `afterId`. A
+   * prefilter only: the sweep's rule (the last run included) is applied by the caller.
+   */
+  listArchiveCandidates(
+    query: AgentArchiveCandidateQuery,
+  ): Promise<readonly AgentArchiveCandidate[]>;
+  /**
+   * Archives these agents at `at`, one `agent-changed` audit row each, in one transaction, and
+   * returns the ids it archived. An id already archived, or not in this workspace, is skipped, so a
+   * repeat or a concurrent sweep archives nothing twice and writes no second audit row.
+   */
+  archive(ids: readonly string[], at: Date): Promise<readonly string[]>;
+  /**
+   * Clears `archived_at` and writes one `agent-changed` audit row `{ archived: false }` in one
+   * transaction. An agent that is not archived is left as it is with no audit row, so a repeat or a
+   * concurrent restore writes nothing twice.
+   */
+  restore(id: string, actor: AgentRestoreActor): Promise<RestoreAgentOutcome>;
 }
 
 /**
@@ -537,6 +630,136 @@ export function createDatabaseAgentRepositoryProvider(db: Executor): AgentReposi
           return row === undefined
             ? { kind: 'not-found' }
             : { kind: 'updated', agent: toRecord(row) };
+        },
+
+        async listArchiveCandidates(query) {
+          const rows = await db
+            .select({
+              id: agents.id,
+              createdAt: agents.createdAt,
+              createdByAgentId: agents.createdByAgentId,
+              createdByAgentVersion: agents.createdByAgentVersion,
+              createdByRunId: agents.createdByRunId,
+            })
+            .from(agents)
+            .where(
+              // `within` first: the workspace predicate is the left-most term of the conjunction.
+              and(
+                within(isNull(agents.archivedAt)),
+                isNotNull(agents.createdByAgentVersion),
+                lt(agents.createdAt, query.createdBefore),
+                notRestoredSince(checked.workspaceId, query.notRestoredSince),
+                query.afterId === null ? undefined : gt(agents.id, query.afterId),
+              ),
+            )
+            .orderBy(asc(agents.id))
+            .limit(query.limit);
+          const ran =
+            rows.length === 0
+              ? []
+              : await db
+                  .select({ agentId: sessions.agentId, lastRunAt: max(runs.createdAt) })
+                  .from(runs)
+                  .innerJoin(sessions, eq(sessions.id, runs.sessionId))
+                  .where(
+                    and(
+                      eq(sessions.workspaceId, checked.workspaceId),
+                      inArray(
+                        sessions.agentId,
+                        rows.map((row) => row.id),
+                      ),
+                    ),
+                  )
+                  .groupBy(sessions.agentId);
+          const lastRunAt = new Map(ran.map((row) => [row.agentId, row.lastRunAt]));
+          return rows.flatMap((row) =>
+            // The lineage CHECK makes the version and the run both present or both absent.
+            row.createdByAgentVersion === null || row.createdByRunId === null
+              ? []
+              : [
+                  {
+                    id: row.id,
+                    createdAt: row.createdAt,
+                    lastRunAt: lastRunAt.get(row.id) ?? null,
+                    createdByAgent: {
+                      agentId: row.createdByAgentId,
+                      version: row.createdByAgentVersion,
+                      runId: row.createdByRunId,
+                    },
+                  },
+                ],
+          );
+        },
+
+        async archive(ids, at) {
+          if (ids.length === 0) return [];
+          return db.transaction(async (tx) => {
+            const archived = await tx
+              .update(agents)
+              .set({ archivedAt: at })
+              .where(
+                and(
+                  within(inArray(agents.id, [...ids])),
+                  isNull(agents.archivedAt),
+                  // A restore committed after the sweep listed the agent keeps it active.
+                  notRestoredSince(
+                    checked.workspaceId,
+                    new Date(at.getTime() - RESTORE_WINDOW_DAYS * DAY_MS),
+                  ),
+                ),
+              )
+              .returning({ id: agents.id, name: agents.name });
+            if (archived.length > 0) {
+              await tx.insert(auditEvents).values(
+                archived.map((agent) =>
+                  checkedAuditEvent({
+                    workspaceId: checked.workspaceId,
+                    actorPrincipalId: null,
+                    actorUserId: null,
+                    actorLabel: 'Auto-archive',
+                    action: 'agent-changed' as const,
+                    subjectId: agent.id,
+                    subjectLabel: agent.name,
+                    details: { archived: true as const },
+                  }),
+                ),
+              );
+            }
+            return archived.map((agent) => agent.id);
+          });
+        },
+
+        async restore(id, actor) {
+          return db.transaction(async (tx) => {
+            const restored = await tx
+              .update(agents)
+              .set({ archivedAt: null })
+              .where(and(within(eq(agents.id, id)), isNotNull(agents.archivedAt)))
+              .returning(AGENT_COLUMNS);
+            const row = restored[0];
+            if (row !== undefined) {
+              await tx.insert(auditEvents).values(
+                checkedAuditEvent({
+                  workspaceId: checked.workspaceId,
+                  actorPrincipalId: actor.principalId,
+                  actorUserId: actor.userId,
+                  actorLabel: actor.label,
+                  action: 'agent-changed' as const,
+                  subjectId: row.id,
+                  subjectLabel: row.name,
+                  details: { archived: false },
+                }),
+              );
+              return { kind: 'restored', agent: toRecord(row) };
+            }
+            const [current] = await tx
+              .select(AGENT_COLUMNS)
+              .from(agents)
+              .where(within(eq(agents.id, id)));
+            return current === undefined
+              ? { kind: 'not-found' }
+              : { kind: 'not-archived', agent: toRecord(current) };
+          });
         },
       };
     },

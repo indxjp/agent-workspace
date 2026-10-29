@@ -117,7 +117,7 @@ What `resolveStorageSettings` returns: `StorageSettings` with its warnings alway
 - `{ kind: "url"; location: StorageLocation; warnings: readonly string[]; }`
 - `{ kind: "legacy"; location: StorageLocation | LegacyLocalRoots; warnings: readonly string[]; }`
 - `{ kind: "none"; warnings: readonly string[]; }`
-- `{ kind: "refused"; reason: string; warnings: readonly string[]; }`
+- `{ kind: "refused"; code: NonNullable<Extract<StorageSettings, { kind: "refused"; }>["code"]>; reason: string; warnings: readonly string[]; }`
 
 ## ResolvePath
 
@@ -179,7 +179,7 @@ until the next major release so that a `case 'legacy'` still compiles.
 - `{ kind: "url"; location: StorageLocation; warnings: readonly string[]; }`
 - `{ kind: "legacy"; location: StorageLocation | LegacyLocalRoots; warnings: readonly string[]; }`
 - `{ kind: "none"; warnings?: readonly string[]; }`
-- `{ kind: "refused"; reason: string; warnings?: readonly string[]; }`
+- `{ kind: "refused"; code?: "storage_url_invalid" | "storage_endpoint_same_origin"; reason: string; warnings?: readonly string[]; }`
 
 ## storageUrlReplacing
 

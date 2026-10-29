@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { openAsBlob } from 'node:fs';
+import { stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import type { MoveFileResponse, RemoveFileResponse } from '@indx-workspace/contracts/files';
@@ -19,12 +20,14 @@ import { notice } from '../output.js';
 
 const FILE_COLUMNS = ['path', 'kind', 'sizeBytes', 'contentType', 'lastModified'];
 
-async function localBytes(localPath: string): Promise<Uint8Array> {
+/** A file-backed `Blob`: its bytes are read from disk as the request sends them, never all at once. */
+async function localFile(localPath: string): Promise<Blob> {
   try {
-    return new Uint8Array(await readFile(localPath));
+    if ((await stat(localPath)).isFile()) return await openAsBlob(localPath);
   } catch {
-    throw new UsageError(`could not read ${localPath}`);
+    // Reported below, the same as a path that is not a regular file.
   }
+  throw new UsageError(`could not read ${localPath}`);
 }
 
 /**
@@ -105,9 +108,9 @@ export const fileCommands: readonly Command[] = [
     'Write (or overwrite) one file from a local file; a signed link is used above 64 MiB, or always with --direct',
     async (context) => {
       const remotePath = positional(context, 0, 'path');
-      const bytes = await localBytes(positional(context, 1, 'local-file'));
+      const file = await localFile(positional(context, 1, 'local-file'));
       return {
-        value: await context.client.files.upload(remotePath, bytes, {
+        value: await context.client.files.upload(remotePath, file, {
           ...(isOn(context, 'direct') ? { direct: true } : {}),
           signal: context.signal,
         }),

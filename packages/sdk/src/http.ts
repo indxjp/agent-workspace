@@ -62,7 +62,17 @@ export interface ClientOptions {
    * first caller awaits that same attempt rather than each triggering their own.
    */
   readonly workspace?: string;
+  /**
+   * Receives each deprecation warning instead of the console: a deprecated call in this client
+   * (today, a `contentBase64` skill import file) passes it a fixed message that never carries a
+   * value. Without it the first such warning in a process is one `console.warn` line; a handler
+   * that does nothing silences them.
+   */
+  readonly onWarning?: (message: string) => void;
 }
+
+/** Messages already written to the console by a client with no `onWarning`, once per process. */
+const consoleWarnings = new Set<string>();
 
 /** Per-call options every operation accepts. */
 export interface RequestOptions {
@@ -412,7 +422,7 @@ export class HttpClient {
   public async putSigned(spec: {
     readonly operation: string;
     readonly target: Pick<PresignedUrl, 'url' | 'method' | 'headers'>;
-    readonly body: Blob | Uint8Array<ArrayBuffer>;
+    readonly body: Blob | Uint8Array<ArrayBuffer> | ReadableStream<Uint8Array>;
     readonly signal?: AbortSignal | undefined;
   }): Promise<void> {
     const deadline =
@@ -424,6 +434,8 @@ export class HttpClient {
         method: spec.target.method,
         headers: new Headers(spec.target.headers),
         body: spec.body,
+        // A streamed body must say it is sent half-duplex.
+        ...(spec.body instanceof ReadableStream ? { duplex: 'half' } : {}),
         credentials: 'omit',
         ...(signal === undefined ? {} : { signal }),
       });
@@ -448,6 +460,17 @@ export class HttpClient {
         retryAfterSeconds: retryAfterSeconds(response),
       });
     }
+  }
+
+  /** Hand a deprecation warning to `onWarning`, or write it to the console once per process. */
+  public warn(message: string): void {
+    if (this.#options.onWarning !== undefined) {
+      this.#options.onWarning(message);
+      return;
+    }
+    if (consoleWarnings.has(message)) return;
+    consoleWarnings.add(message);
+    console.warn(message);
   }
 
   /** {@link send}, then parse the JSON body through `schema`. A `204` yields `null`. */

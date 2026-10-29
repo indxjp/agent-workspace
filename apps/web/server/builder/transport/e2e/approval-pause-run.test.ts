@@ -32,7 +32,7 @@ afterEach(() => {
 /** A Builder run that has called `tool` and stopped at the gate, over a workspace with one saved agent. */
 async function pausedOn(tool: GatedTool) {
   const runStore = new InMemoryRunStore();
-  const door = builderDoor({ featureOn: true, scopes: scopes(), runStore });
+  const door = builderDoor({ scopes: scopes(), runStore });
   const saved = await door.ports.store.save(PERSON, SAVE);
   if (!saved.ok) throw new Error('the fixture agent was not saved');
   const input = gatedInputs(saved)[tool];

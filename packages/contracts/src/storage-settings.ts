@@ -123,7 +123,14 @@ export type StorageSettings =
   | { kind: 'legacy'; location: StorageLocation | LegacyLocalRoots; warnings: readonly string[] }
   // `warnings` is optional on these two arms, as in 0.6.10, so a hand-built value still compiles.
   | { kind: 'none'; warnings?: readonly string[] }
-  | { kind: 'refused'; reason: string; warnings?: readonly string[] };
+  // `code` says why, as a stable code; `reason` is the message and names variables only. `code` is
+  // optional here so a hand-built 0.6.10 value still compiles; the resolver always sets it.
+  | {
+      kind: 'refused';
+      code?: 'storage_url_invalid' | 'storage_endpoint_same_origin';
+      reason: string;
+      warnings?: readonly string[];
+    };
 
 /**
  * What `resolveStorageSettings` returns: `StorageSettings` with its warnings always set. The
@@ -132,7 +139,12 @@ export type StorageSettings =
 export type ResolvedStorageSettings =
   | Extract<StorageSettings, { kind: 'url' | 'legacy' }>
   | { kind: 'none'; warnings: readonly string[] }
-  | { kind: 'refused'; reason: string; warnings: readonly string[] };
+  | {
+      kind: 'refused';
+      code: NonNullable<Extract<StorageSettings, { kind: 'refused' }>['code']>;
+      reason: string;
+      warnings: readonly string[];
+    };
 
 // storage-bridge(#1699): legacy per-area layout (incl. sessions/) until the naming migration
 const FILE_AREA_DIRECTORY: Readonly<Record<StorageArea, string>> = {
@@ -243,6 +255,7 @@ function guardStorageEndpoint(
   if (!origins.includes(publicOrigin)) return settings;
   return {
     kind: 'refused',
+    code: 'storage_endpoint_same_origin',
     warnings: settings.warnings,
     reason: `storage_endpoint_same_origin: the endpoint in ${STORAGE_URL_ENV} has the same origin as ${PUBLIC_URL_ENV}; signed downloads must not come from the app's domain (the storage design, §05).`,
   };
@@ -275,6 +288,7 @@ export function resolveStorageSettings(
   if (!parsed.ok) {
     return {
       kind: 'refused',
+      code: 'storage_url_invalid',
       reason: `${STORAGE_URL_ENV} is invalid: ${parsed.reason}.`,
       warnings,
     };

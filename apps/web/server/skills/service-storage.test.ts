@@ -26,8 +26,8 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   readBytes,
+  streamToBytes,
   type ObjectStore,
-  type ObjectStoreV2,
 } from '@agent-workspace/core/storage';
 
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
@@ -79,7 +79,7 @@ function gatedFirstWrite() {
   let enter!: () => void;
   const entered = new Promise<void>((resolve) => (enter = resolve));
   let gated = false;
-  const wrap = (inner: ObjectStoreV2): ObjectStoreV2 => ({
+  const wrap = (inner: ObjectStore): ObjectStore => ({
     ...inner,
     write: async (name, body, options) => {
       if (!gated) {
@@ -97,7 +97,7 @@ function gatedFirstWrite() {
 function serverRows(
   principal: Fixture['principal'],
   catalog: ResourceCatalogRepository,
-  objects: ObjectStoreV2,
+  objects: ObjectStore,
 ) {
   return createSkillRowsWorld(objects, principal.workspaceId, catalog, {
     principalId: principal.ownerPrincipalId,
@@ -106,8 +106,8 @@ function serverRows(
 }
 
 async function textAt(store: ObjectStore, key: string): Promise<string | null> {
-  const object = await store.get(key);
-  return object === null ? null : new TextDecoder().decode(object.body);
+  const object = await store.read(key);
+  return object === null ? null : new TextDecoder().decode(await streamToBytes(object.body));
 }
 
 function memoryFixture(): Promise<Fixture> {
@@ -203,14 +203,14 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
 
     /** The catalog service the rows are saved through, plus helpers to read what it holds. */
     async function rowsWorld(
-      wrap: (objects: ObjectStoreV2) => ObjectStoreV2 = (o) => o,
+      wrap: (objects: ObjectStore) => ObjectStore = (o) => o,
       server: 0 | 1 = 0,
     ) {
       const { principal, catalogs, assign } = await setup();
       const shared = createInMemoryObjectStoreProvider().forWorkspace(principal.workspaceId);
       const objects = createInMemoryObjectStore();
       /** The rows of one server (its catalog handle) over `over` objects, shared by default. */
-      const onServer = (which: 0 | 1, over: ObjectStoreV2 = objects) =>
+      const onServer = (which: 0 | 1, over: ObjectStore = objects) =>
         serverRows(principal, catalogs[which], over);
       const { storage, rows } = createSkillRowsWorld(
         wrap(objects),
@@ -601,7 +601,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       const left = (await catalogs[0].listFiles()).filter((row) => row.kind === 'file');
       expect(left.map((row) => row.path)).toEqual(['.skills/dup-two/SKILL.md']);
       expect(await walkFiles(shared, 'skills')).toEqual([]);
-      expect(await objects.listPrefix('')).toHaveLength(1);
+      expect((await objects.listPage('', { recursive: true })).entries).toHaveLength(1);
     });
 
     // @story US-STO-08
@@ -669,7 +669,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
         '.skills/dup/SKILL.md': skillMd('B'),
         '.skills/dup/references/new.md': 'new',
       });
-      expect(await objects.listPrefix('')).toHaveLength(2);
+      expect((await objects.listPage('', { recursive: true })).entries).toHaveLength(2);
       expect(await walkFiles(shared, 'skills')).toEqual([]);
       expect((await catalogs[0].listSkills()).map((row) => row.skillMd)).toEqual([skillMd('B')]);
     });

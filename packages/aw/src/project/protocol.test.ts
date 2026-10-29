@@ -188,4 +188,35 @@ describe('the loader protocol', () => {
       );
     }
   });
+  // @story US-STO-12
+  it('[US-STO-12][unit][cli] refuses to push a code tool that declares a storage connection credential', () => {
+    const [agent] = loaded.files;
+    const code = (secrets: readonly string[]): unknown => ({
+      type: 'loaded',
+      files: [
+        {
+          ...agent,
+          tools: [
+            {
+              file: 'tools/lookup.ts',
+              kind: 'code',
+              tool: {
+                name: 'lookup',
+                run: 'run',
+                description: 'Look an order up.',
+                inputSchema: { type: 'object' },
+                limits: { timeoutMs: 5000 },
+                secrets,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(LoadedMessageSchema.safeParse(code(['LOOKUP_TOKEN'])).success).toBe(true);
+    expect(
+      LoadedMessageSchema.safeParse(code(['STORAGE_CONNECTION_77777777777747778777777777777777']))
+        .success,
+    ).toBe(false);
+  });
 });

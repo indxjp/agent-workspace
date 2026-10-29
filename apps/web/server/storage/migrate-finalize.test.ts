@@ -21,7 +21,7 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   storageObjectName,
-  type ObjectStoreProviderV2,
+  type ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
@@ -113,7 +113,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
           error: (message) => lines.push(message),
           child: () => log,
         };
-        const keysOf = async (provider: ObjectStoreProviderV2) =>
+        const keysOf = async (provider: ObjectStoreProvider) =>
           (await provider.forWorkspace(f.workspaceId).listPage('', { recursive: true })).entries
             .map((entry) => entry.key)
             .sort();
@@ -320,7 +320,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
         // A rename that raced the copy stage: the row moved and the old object moved with it.
         await f.catalog.rename('a.txt', 'moved.txt');
         const old = legacy.forWorkspace(f.workspaceId);
-        await old.copyObject('a.txt', 'moved.txt');
+        await old.copy('a.txt', 'moved.txt');
         await old.delete('a.txt');
         expect(await keysOf(legacy)).toEqual(['moved.txt']);
 
@@ -349,7 +349,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
 
       describe('skill marker objects', () => {
         const put = (
-          skills: ObjectStoreProviderV2,
+          skills: ObjectStoreProvider,
           workspaceId: string,
           key: string,
           value: unknown,
@@ -420,6 +420,57 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
         });
 
         // @story US-STO-13
+        it('[US-STO-13][unit][cli] a marker of a skill with no row is kept while more than a page of its revisions remain', async () => {
+          const { f, skills, finalize } = await harness();
+          const old = skills.forWorkspace(f.workspaceId);
+          for (let n = 0; n <= 1000; n += 1) {
+            await old.write(`skill-revisions/live/${n}/SKILL.md`, bytesOf('# live'), {
+              contentType: null,
+            });
+          }
+          await put(skills, f.workspaceId, 'skill-meta/live.json', { name: 'live' });
+          await put(skills, f.workspaceId, 'skill-meta/gone.json', { name: 'gone' });
+
+          const report = await finalize();
+
+          // Every page is swept: 1,001 revision files and the live marker are kept.
+          expect(report.delete).toMatchObject({ deleted: 1, unaccounted: 1002 });
+          await expect(old.head('skill-meta/live.json')).resolves.not.toBeNull();
+          await expect(old.head('skill-meta/gone.json')).resolves.toBeNull();
+        });
+
+        // @story US-STO-13
+        it('[US-STO-13][unit][cli] a marker of a skill with no row is kept when its files follow an empty page', async () => {
+          const { f, skills, deps } = await harness();
+          await put(skills, f.workspaceId, 'skill-meta/foo.json', { name: 'foo' });
+          await skills
+            .forWorkspace(f.workspaceId)
+            .write('skills/foo/SKILL.md', bytesOf('# foo'), { contentType: null });
+          // A backend that filtered out everything it fetched, such as a console folder object.
+          const filtering: ObjectStoreProvider = {
+            forWorkspace: (workspaceId) => {
+              const inner = skills.forWorkspace(workspaceId);
+              return {
+                ...inner,
+                listPage: (prefix, options) => {
+                  if (prefix !== 'skills/foo') return inner.listPage(prefix, options);
+                  if (options?.cursor === undefined) {
+                    return Promise.resolve({ entries: [], cursor: 'x' });
+                  }
+                  return inner.listPage(prefix, { recursive: options.recursive === true });
+                },
+              };
+            },
+          };
+
+          await runFinalizeStage(deps({ legacy: { skills: filtering } }));
+
+          await expect(
+            skills.forWorkspace(f.workspaceId).head('skill-meta/foo.json'),
+          ).resolves.not.toBeNull();
+        });
+
+        // @story US-STO-13
         it('[US-STO-13][unit][cli] the marker of a skill with no row survives a rerun once its files have moved', async () => {
           const { f, skills, objects, keysOf, finalize } = await harness();
           await put(skills, f.workspaceId, 'skill-meta/hidden.json', { name: 'hidden' });
@@ -474,7 +525,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
           for (const file of ['a.txt', 'b.txt', 'c.txt']) await legacyFile(file, file);
           await copy();
           let deletes = 0;
-          const dying: ObjectStoreProviderV2 = {
+          const dying: ObjectStoreProvider = {
             forWorkspace: (id) => ({
               ...legacy.forWorkspace(id),
               delete: async (key) => {
@@ -515,7 +566,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
           const { f, legacy, keysOf, legacyFile, copy, finalize } = await harness();
           await legacyFile('a.txt', 'alpha');
           await copy();
-          const dying: ObjectStoreProviderV2 = {
+          const dying: ObjectStoreProvider = {
             forWorkspace: (id) => ({
               ...legacy.forWorkspace(id),
               listPage: () => Promise.reject(stopped()),

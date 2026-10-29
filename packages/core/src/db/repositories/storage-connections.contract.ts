@@ -66,6 +66,20 @@ export function describeStorageConnectionsConformance(
     });
 
     // @story US-STO-12
+    it('[US-STO-12][contract][sdk] listByNames answers only the named connections of this workspace', async () => {
+      const { repository } = await makeFixture();
+      const a = repository('a');
+      const wanted = await a.create(input('acme-data'));
+      const other = await a.create(input('acme-other'));
+      if (wanted.kind !== 'created' || other.kind !== 'created') {
+        throw new Error('a fixture connection was refused');
+      }
+      expect((await repository('b').create(input('acme-data'))).kind).toBe('created');
+      await expect(a.listByNames(['acme-data', 'missing'])).resolves.toEqual([wanted.connection]);
+      await expect(a.listByNames([])).resolves.toEqual([]);
+    });
+
+    // @story US-STO-12
     it('[US-STO-12][contract][sdk] an update changes only the fields it names', async () => {
       const a = (await makeFixture()).repository('a');
       const created = await a.create(input('acme-data'));

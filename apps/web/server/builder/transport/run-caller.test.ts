@@ -5,10 +5,12 @@ import {
   type WorkspaceScope,
 } from '@agent-workspace/core/db';
 import { createRunTokenCodec, type RunTokenSubject } from '@agent-workspace/gateway/tokens';
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { RunStatus } from '@indx-workspace/contracts/runs';
 
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
 import { conferredBy } from '../../rbac/conferral';
 import { createMemoryDirectory } from '../../rbac/memory-directory';
 import type { RunTokenDatabase } from '../../gateway/run-token-verifier';
@@ -160,6 +162,7 @@ function setup(): {
 }
 
 const bearer = (token: string): string => `Bearer ${token}`;
+const mcpPost = (): Request => new Request('http://localhost/api/builder/mcp', { method: 'POST' });
 
 const ALLOWED = { builder: { allow: ['planner'] } } as const;
 const createdByAgent = { agentId: null, version: 1, runId: 'run-0' } as const;
@@ -186,20 +189,21 @@ const RUN_IDENTITY = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  clearFeatureSwitches();
 });
 
 describe('verifyRunCaller', () => {
   it('a run token with no caller cannot use a write tool', async () => {
     const s = setup();
     const token = await s.issue();
-    const result = await verifyRunCaller(bearer(token), s.deps);
+    const result = await verifyRunCaller(bearer(token), s.deps, mcpPost());
     expect(result).toEqual({ ok: false, code: 'no_caller', reads: true, run: RUN_IDENTITY });
   });
 
   it('resolves a member to their current role, read from the directory on every call', async () => {
     const s = setup();
     const token = await s.issue({ caller: { sub: MEMBER, principalKind: 'membership' } });
-    expect(await verifyRunCaller(bearer(token), s.deps)).toEqual({
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual({
       ok: true,
       caller: {
         kind: 'run-caller',
@@ -217,7 +221,7 @@ describe('verifyRunCaller', () => {
     await s.directory
       .forWorkspace(WORKSPACE)
       .changeMembershipRole(membership.id, conferredBy('owner', 'viewer', 'run-caller.test'));
-    const after = await verifyRunCaller(bearer(token), s.deps);
+    const after = await verifyRunCaller(bearer(token), s.deps, mcpPost());
     expect(after.ok && after.caller.role).toBe('viewer');
   });
 
@@ -227,7 +231,7 @@ describe('verifyRunCaller', () => {
     const [membership] = await s.directory.forWorkspace(WORKSPACE).listMemberships();
     if (membership === undefined) throw new Error('fixture membership missing');
     await s.directory.forWorkspace(WORKSPACE).deleteMembership(membership.id);
-    expect(await verifyRunCaller(bearer(token), s.deps)).toEqual({
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual({
       ok: false,
       code: 'no_caller',
       reads: false,
@@ -237,7 +241,7 @@ describe('verifyRunCaller', () => {
   it('gives an api-key caller with a subject no write role, reads allowed', async () => {
     const s = setup();
     const token = await s.issue({ caller: { sub: 'customer-7', principalKind: 'api-key' } });
-    expect(await verifyRunCaller(bearer(token), s.deps)).toEqual({
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual({
       ok: false,
       code: 'no_caller',
       reads: true,
@@ -249,7 +253,7 @@ describe('verifyRunCaller', () => {
     // runCallerOf (apps/web/server/runs/caller.ts) emits no caller for a key without a subject.
     const s = setup();
     const token = await s.issue({ caller: undefined });
-    expect(await verifyRunCaller(bearer(token), s.deps)).toEqual({
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual({
       ok: false,
       code: 'no_caller',
       reads: true,
@@ -269,7 +273,7 @@ describe('verifyRunCaller', () => {
       workspaceId: OTHER_WORKSPACE,
       caller: { sub: MEMBER, principalKind: 'membership' },
     });
-    expect(await verifyRunCaller(bearer(token), s.deps)).toEqual({
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual({
       ok: false,
       code: 'no_caller',
       reads: false,
@@ -279,7 +283,7 @@ describe('verifyRunCaller', () => {
   it('never lets a visitor reach the control plane, reads included', async () => {
     const s = setup();
     const token = await s.issue({ caller: { sub: 'visitor-1', principalKind: 'visitor' } });
-    expect(await verifyRunCaller(bearer(token), s.deps)).toEqual({
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual({
       ok: false,
       code: 'no_caller',
       reads: false,
@@ -294,16 +298,16 @@ describe('verifyRunCaller', () => {
       const s = setup();
       const token = await s.issue(member);
       s.now.value = START + 299;
-      expect((await verifyRunCaller(bearer(token), s.deps)).ok).toBe(true);
+      expect((await verifyRunCaller(bearer(token), s.deps, mcpPost())).ok).toBe(true);
       s.now.value = START + 300;
-      expect(await verifyRunCaller(bearer(token), s.deps)).toEqual(refused);
+      expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual(refused);
     });
 
     it('a revoked token', async () => {
       const s = setup();
       const token = await s.issue(member);
       for (const row of s.registered.values()) row.revoked = true;
-      expect(await verifyRunCaller(bearer(token), s.deps)).toEqual(refused);
+      expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual(refused);
     });
 
     it.each(['completed', 'awaiting_approval'] as const)(
@@ -314,7 +318,7 @@ describe('verifyRunCaller', () => {
         const run = s.runs.get(RUN);
         if (run === undefined) throw new Error('fixture run missing');
         run.status = status;
-        expect(await verifyRunCaller(bearer(token), s.deps)).toEqual(refused);
+        expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual(refused);
       },
     );
 
@@ -327,26 +331,26 @@ describe('verifyRunCaller', () => {
         status: 'running',
       });
       const token = await s.issue(member);
-      expect(await verifyRunCaller(bearer(token), s.deps)).toEqual(refused);
+      expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual(refused);
     });
 
     it('a token registered for a different run id', async () => {
       const s = setup();
       const token = await s.issue(member, { runId: 'run-2' });
-      expect(await verifyRunCaller(bearer(token), s.deps)).toEqual(refused);
+      expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual(refused);
     });
 
     it('a token whose session or agent does not match the run row', async () => {
       const s = setup();
       const token = await s.issue({ ...member, agentId: 'agent-2' });
-      expect(await verifyRunCaller(bearer(token), s.deps)).toEqual(refused);
+      expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toEqual(refused);
     });
 
     it.each([null, '', 'Bearer', 'Bearer not-a-token', 'Basic abc'])(
       'a missing or malformed bearer (%s)',
       async (authorization) => {
         const s = setup();
-        expect(await verifyRunCaller(authorization, s.deps)).toEqual(refused);
+        expect(await verifyRunCaller(authorization, s.deps, mcpPost())).toEqual(refused);
       },
     );
 
@@ -354,14 +358,18 @@ describe('verifyRunCaller', () => {
       const s = setup();
       const token = await s.issue(member);
       expect(
-        await verifyRunCaller(bearer(token), {
-          ...s.deps,
-          directory: {
-            forWorkspace: () => {
-              throw new Error('directory exploded');
+        await verifyRunCaller(
+          bearer(token),
+          {
+            ...s.deps,
+            directory: {
+              forWorkspace: () => {
+                throw new Error('directory exploded');
+              },
             },
           },
-        }),
+          mcpPost(),
+        ),
       ).toEqual(refused);
     });
 
@@ -369,13 +377,17 @@ describe('verifyRunCaller', () => {
       const s = setup();
       const token = await s.issue(member);
       expect(
-        await verifyRunCaller(bearer(token), {
-          ...s.deps,
-          database: {
-            ...s.database,
-            scopes: { forWorkspaceId: () => Promise.reject(new Error('database exploded')) },
+        await verifyRunCaller(
+          bearer(token),
+          {
+            ...s.deps,
+            database: {
+              ...s.database,
+              scopes: { forWorkspaceId: () => Promise.reject(new Error('database exploded')) },
+            },
           },
-        }),
+          mcpPost(),
+        ),
       ).toEqual(refused);
     });
   });
@@ -386,18 +398,26 @@ describe('verifyRunCaller', () => {
     const err = vi.spyOn(process.stderr, 'write');
     const token = await s.issue({ caller: { sub: MEMBER, principalKind: 'membership' } });
     const results = [
-      await verifyRunCaller(bearer(token), {
-        ...s.deps,
-        directory: {
-          forWorkspace: () => {
-            throw new Error(`leaky ${token}`);
+      await verifyRunCaller(
+        bearer(token),
+        {
+          ...s.deps,
+          directory: {
+            forWorkspace: () => {
+              throw new Error(`leaky ${token}`);
+            },
           },
         },
-      }),
-      await verifyRunCaller(bearer(token), {
-        ...s.deps,
-        directory: createMemoryDirectory(),
-      }),
+        mcpPost(),
+      ),
+      await verifyRunCaller(
+        bearer(token),
+        {
+          ...s.deps,
+          directory: createMemoryDirectory(),
+        },
+        mcpPost(),
+      ),
     ];
     const seen = JSON.stringify(results) + JSON.stringify([...out.mock.calls, ...err.mock.calls]);
     expect(seen).not.toContain(token);
@@ -443,7 +463,7 @@ describe('the Builder-only door (#1846)', () => {
     const s = setup();
     s.agentRows.set(AGENT, { name: 'planner' });
     const token = await s.issue(member);
-    const verified = await verifyRunCaller(bearer(token), allowed(s.deps));
+    const verified = await verifyRunCaller(bearer(token), allowed(s.deps), mcpPost());
     expect(verified).toMatchObject({ ok: true, caller: { agentId: AGENT, principalId: MEMBER } });
     if (!verified.ok) throw new Error('the run was not admitted');
 
@@ -475,7 +495,7 @@ describe('the Builder-only door (#1846)', () => {
     const s = setup();
     s.agentRows.set(AGENT, { name: 'planner' });
     const token = await s.issue();
-    expect(await verifyRunCaller(bearer(token), allowed(s.deps))).toMatchObject({
+    expect(await verifyRunCaller(bearer(token), allowed(s.deps), mcpPost())).toMatchObject({
       ok: false,
       code: 'no_caller',
       reads: true,
@@ -497,7 +517,7 @@ describe('the Builder-only door (#1846)', () => {
       const s = setup();
       s.agentRows.set(AGENT, row);
       const token = await s.issue(member);
-      const verified = await verifyRunCaller(bearer(token), { ...s.deps, ceiling });
+      const verified = await verifyRunCaller(bearer(token), { ...s.deps, ceiling }, mcpPost());
       expect(verified).toEqual({ ok: false, code: 'not_allowed_to_build', reads: false });
       const response = await serveBuilderMcp(
         rpc(token, 'tools/list'),
@@ -519,13 +539,13 @@ describe('the Builder-only door (#1846)', () => {
     };
     const token = await s.issue(member);
 
-    await verifyRunCaller(bearer(token), deps);
+    await verifyRunCaller(bearer(token), deps, mcpPost());
     s.agentRows.set(AGENT, { name: 'planner', createdByAgent });
-    await verifyRunCaller(bearer(token), deps);
+    await verifyRunCaller(bearer(token), deps, mcpPost());
     expect(told).toEqual([]);
 
     s.agentRows.set(AGENT, { name: 'planner' });
-    await verifyRunCaller(bearer(token), deps);
+    await verifyRunCaller(bearer(token), deps, mcpPost());
     expect(told).toEqual([[WORKSPACE, { id: AGENT, name: 'planner', ownerPrincipalId: MEMBER }]]);
   });
 
@@ -537,5 +557,61 @@ describe('the Builder-only door (#1846)', () => {
       const response = await serveBuilderMcp(rpc(token, method), doorOf(verifyCaller));
       expect(response.status).toBe(200);
     }
+  });
+});
+
+describe('POST /api/builder/mcp and a workspace with the Builder switched off (ADR-0160 D7)', () => {
+  const rpcOf = (token: string): Request =>
+    new Request('http://localhost/api/builder/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: bearer(token) },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    });
+  const builderOff = (): void =>
+    configureFeatureSwitches({
+      enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== 'builder')),
+    });
+
+  it('answers 404 feature_disabled once the token verifies, before the agent or the members are read', async () => {
+    const s = setup();
+    const token = await s.issue({ caller: { sub: MEMBER, principalKind: 'membership' } });
+    const agents = vi.spyOn(s.deps.agents, 'forWorkspace');
+    const members = vi.spyOn(s.directory, 'forWorkspace');
+    builderOff();
+    const response = await serveBuilderMcp(
+      rpcOf(token),
+      doorOf(createBuilderCallerVerifier(s.deps)),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: 'feature_disabled', details: ['builder'] },
+    });
+    expect(agents).not.toHaveBeenCalled();
+    expect(members).not.toHaveBeenCalled();
+  });
+
+  it('keeps the door’s own refusal for a token that does not verify', async () => {
+    const s = setup();
+    builderOff();
+    const response = await serveBuilderMcp(
+      rpcOf('not-a-run-token'),
+      doorOf(createBuilderCallerVerifier(s.deps)),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: { code: 'not_permitted' } });
+  });
+
+  it('checks the workspace the token names, not another one', async () => {
+    const s = setup();
+    const token = await s.issue({ caller: { sub: MEMBER, principalKind: 'membership' } });
+    const asked: string[] = [];
+    configureFeatureSwitches({
+      enabledFor: (workspaceId) => {
+        asked.push(workspaceId);
+        return Promise.resolve(FEATURE_IDS);
+      },
+    });
+    await serveBuilderMcp(rpcOf(token), doorOf(createBuilderCallerVerifier(s.deps)));
+    expect(asked).toEqual([WORKSPACE]);
   });
 });

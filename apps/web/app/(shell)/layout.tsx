@@ -38,7 +38,6 @@ import {
   SESSION_RECOVERY_PATH,
   shouldRecoverSession,
 } from '../../components/shell/session-recovery';
-import { managesWorkspace } from '../../components/shell/navigation';
 import { Sidebar, type SidebarUser, type WorkspaceBrand } from '../../components/shell/sidebar';
 import { Topbar, type RuntimeChip } from '../../components/shell/topbar';
 import {
@@ -47,6 +46,8 @@ import {
 } from '../../components/shell/driver-banner';
 import { getSession, type VerifiedSessionClaims } from '../../server/auth';
 import { applicationContext } from '../../server/application-context';
+
+import { roleManagesStorage } from './admin/storage/manages-storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -146,7 +147,7 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar workspace={workspace} user={user} managers={managesWorkspace(resolved?.role)} />
+      <Sidebar workspace={workspace} user={user} managers={roleManagesStorage(resolved?.role)} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar runtime={runtimeChip()} />
         <DeploymentDriverBanner />

@@ -87,7 +87,8 @@ spec:
             {{- end }}
             # The object-store Secret is built from the generated `.env`. Through `envFrom` below
             # it delivers `AW_STORAGE_URL` (where files, skills and session transcripts live) and
-            # `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`, so neither is a chart value. The credential is
+            # `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`. `storage.url`, when set, states the location
+            # here instead, and `env` wins over the Secret's copy. The credential is
             # named `OBJECT_STORAGE_*` there, but `apps/web/server/composition/storage.ts` builds
             # its S3 client from the `AWS_*` names, so only the two keys are translated here — an
             # `envFrom` alone would deliver a key nothing reads, and an operator who filled it in
@@ -107,6 +108,9 @@ spec:
                   name: {{ $.Values.external.objectStoreSecret | quote }}
                   key: OBJECT_STORAGE_SECRET_ACCESS_KEY
                   optional: true
+            {{- with $.Values.storage.url }}
+            - { name: AW_STORAGE_URL, value: {{ . | quote }} }
+            {{- end }}
           envFrom:
             - secretRef: { name: {{ $.Values.external.databaseUrlSecret | quote }} }
             - secretRef: { name: {{ $.Values.external.objectStoreSecret | quote }} }

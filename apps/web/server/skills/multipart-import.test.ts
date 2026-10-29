@@ -25,7 +25,7 @@ import {
 import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { MAX_SKILL_REQUEST_BODY_BYTES } from '@indx-workspace/contracts/skills';
 import { createClient } from '@indx-workspace/sdk';
@@ -188,10 +188,10 @@ afterEach(() => {
 function defineSuite(name: string, setup: () => Promise<World>, phase: 'memory' | 'behaviour') {
   describe(`multipart skill import on the ${name} (${phase})`, () => {
     let world: World;
-    let objects: ObjectStoreV2;
+    let objects: ObjectStore;
     let storage: ReturnType<typeof createStorageService>;
 
-    function install(root: ObjectStoreV2): void {
+    function install(root: ObjectStore): void {
       objects = root;
       storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
@@ -273,7 +273,9 @@ function defineSuite(name: string, setup: () => Promise<World>, phase: 'memory' 
       expect(
         (await storage.list({ workspaceId: world.workspaceId }, 'skills', '.skills')).rows,
       ).toEqual([]);
-      expect(await objects.listPrefix(`workspaces/${world.workspaceId}`)).toEqual([]);
+      expect(
+        (await objects.listPage(`workspaces/${world.workspaceId}`, { recursive: true })).entries,
+      ).toEqual([]);
     };
 
     // @story US-STO-08

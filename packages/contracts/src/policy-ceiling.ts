@@ -35,7 +35,7 @@ export const POLICY_CEILING_MODELS_MAX = 64;
 export const POLICY_CEILING_TOOL_NAME_MAX_LENGTH = 200;
 
 /** The largest `maxCostPerDayUsd` a ceiling may set: a sanity bound, not a recommendation. */
-const POLICY_CEILING_MAX_COST_PER_DAY_USD = 100_000;
+export const POLICY_CEILING_MAX_COST_PER_DAY_USD = 100_000;
 
 /** No C0 control, DEL or C1 control: `\p{Cc}` is exactly that set. */
 const NO_CONTROL_CHARACTER_PATTERN = /^\P{Cc}*$/u;

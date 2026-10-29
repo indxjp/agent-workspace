@@ -74,6 +74,7 @@ import {
   type DirectoryMembershipRecord,
 } from '@agent-workspace/core/db';
 
+import { systemClock, type Clock } from '../clock.ts';
 import { mintApiKey, randomToken } from '../rbac/api-key.ts';
 
 /**
@@ -145,7 +146,8 @@ export class LocalCredentialError extends Error {
 interface IssueLocalApiKeyDeps {
   /** The database directory (`DatabaseRoot['directory']`). */
   readonly directory: DatabaseDirectoryRoot;
-  readonly now?: () => Date;
+  /** Defaults to {@link systemClock}. */
+  readonly clock?: Clock;
 }
 
 /** Revoke every unrevoked key a previous local run left behind. */
@@ -186,9 +188,9 @@ export async function issueLocalApiKey(
   if (!parsed.success) throw new LocalCredentialError('invalid_input');
   const { workspaceId, userId } = parsed.data;
 
-  const now = deps.now ?? (() => new Date());
+  const clock = deps.clock ?? systemClock;
   const directory = deps.directory.forWorkspace(workspaceId);
-  const expiresAt = new Date(now().getTime() + CLI_TOKEN_TTL_SECONDS * 1000);
+  const expiresAt = new Date(clock.now().getTime() + CLI_TOKEN_TTL_SECONDS * 1000);
 
   let minted: { readonly id: string; readonly presented: string } | undefined;
   let issuer: DirectoryMembershipRecord | null;
@@ -203,7 +205,7 @@ export async function issueLocalApiKey(
     // The repair runs before the sweep (S1-24): it reassigns what earlier local runtime keys own,
     // revoked or not, so nothing is stranded by the revocations that follow.
     await directory.reassignLocalRuntimeKeyOwnership({ toPrincipalId });
-    await sweepStaleKeys(directory, now());
+    await sweepStaleKeys(directory, clock.now());
     for (let attempt = 0; attempt < NAME_ATTEMPTS && minted === undefined; attempt += 1) {
       const key = await mintApiKey();
       const outcome = await directory.createApiKey({
@@ -227,7 +229,7 @@ export async function issueLocalApiKey(
     expiresAt,
     workspaceId,
     revoke: async () => {
-      const outcome = await directory.revokeApiKey(keyId, now());
+      const outcome = await directory.revokeApiKey(keyId, clock.now());
       switch (outcome.kind) {
         case 'revoked':
           return 'revoked';

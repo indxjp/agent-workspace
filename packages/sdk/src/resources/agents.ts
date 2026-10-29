@@ -10,6 +10,7 @@ import {
   type AgentDefinition,
   type AgentPolicy,
   type AgentGrants,
+  type AgentListArchived,
   type AgentResource,
   type AgentResourceAssignments,
   type AgentResourceAssignmentsInput,
@@ -42,6 +43,12 @@ export { FeedbackClient } from './feedback.js';
 
 const NoContentSchema = z.null();
 
+/** Options of `agents.list`. */
+export interface ListAgentsOptions extends RequestOptions {
+  /** `'include'` also lists archived agents, each with its `archivedAt`. Default: left out. */
+  readonly archived?: AgentListArchived;
+}
+
 /** `/api/agents/**` — spec §17 and §34. */
 export class AgentsClient {
   /** S1-09 (issue #447): the agent's versions, `/api/agents/:id/versions` (ADR-0101). */
@@ -64,11 +71,15 @@ export class AgentsClient {
     this.feedback = new FeedbackClient(http);
   }
 
-  public async list(options: RequestOptions = {}): Promise<readonly AgentResource[]> {
+  /** The workspace's agents; archived ones are left out unless `archived: 'include'` (#1851). */
+  public async list(options: ListAgentsOptions = {}): Promise<readonly AgentResource[]> {
     const response = await this.#http.json({
       operation: 'agents.list',
       method: 'GET',
       path: '/api/agents',
+      ...(options.archived === undefined
+        ? {}
+        : { query: new URLSearchParams({ archived: options.archived }) }),
       expect: [200],
       schema: AgentListResponseSchema,
       signal: options.signal,
@@ -216,6 +227,21 @@ export class AgentsClient {
       method: 'PATCH',
       path: `/api/agents/${segment(agentId)}`,
       body: patch,
+      expect: [200],
+      schema: AgentResourceSchema,
+      signal: options.signal,
+    });
+  }
+
+  /**
+   * Bring back an archived agent (`POST /api/agents/:id/restore`). An agent that is not archived is
+   * returned unchanged, so a repeat is safe. Only an Owner, an Admin or the agent's owner may.
+   */
+  public async restore(agentId: string, options: RequestOptions = {}): Promise<AgentResource> {
+    return this.#http.json({
+      operation: 'agents.restore',
+      method: 'POST',
+      path: `/api/agents/${segment(agentId)}/restore`,
       expect: [200],
       schema: AgentResourceSchema,
       signal: options.signal,

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as searchRoute } from '../../app/api/files/search/route';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { FilesRuntime } from './runtime';
+import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { createCatalogFilesWorld } from './catalog-runtime-fixtures';
 import type { FileTextStore } from './store';
 import { installTestDomains } from '../application-context-fixtures';
@@ -22,10 +22,16 @@ const SCOPE_HEADER = 'x-test-session-scope';
 
 const ATTACHMENT = '.attachments/cccccccc-cccc-4ccc-8ccc-cccccccccccc/u1/scan.txt';
 
-function textsFor(workspaceId: string, fail = false): FileTextStore {
+/** The ids the catalog gave a workspace's two seeded files. */
+interface Seeded {
+  readonly pump: string;
+  readonly attachment: string;
+}
+
+function textsFor(workspaceId: string, ids: Seeded, fail = false): FileTextStore {
   const passages: Record<string, { fileId: string; path: string; text: string }> = {
-    "'pump'": { fileId: 'f', path: `${workspaceId}/pump.pdf`, text: 'the pump' },
-    "'zebracorn'": { fileId: 'att', path: ATTACHMENT, text: 'a zebracorn invoice' },
+    "'pump'": { fileId: ids.pump, path: `${workspaceId}/pump.pdf`, text: 'the pump' },
+    "'zebracorn'": { fileId: ids.attachment, path: ATTACHMENT, text: 'a zebracorn invoice' },
   };
   return {
     listStale: () => Promise.resolve([]),
@@ -43,23 +49,40 @@ function textsFor(workspaceId: string, fail = false): FileTextStore {
   };
 }
 
-function catalogFor(workspaceId: string) {
-  const listFiles = () =>
-    Promise.resolve([
-      { id: 'f', path: `${workspaceId}/pump.pdf`, kind: 'file' },
-      { id: 'att', path: ATTACHMENT, kind: 'file' },
-    ]);
-  return { listFiles } as unknown as Awaited<
-    ReturnType<NonNullable<FilesRuntime['catalog']>['forWorkspace']>
-  >;
+/** A fresh catalog holding, in each workspace, one searchable file and one chat attachment. */
+async function seedCatalogs() {
+  const catalogs = createInMemoryCatalogStore();
+  const ids = new Map<string, Seeded>();
+  for (const workspaceId of [WORKSPACE_A, WORKSPACE_B]) {
+    const catalog = catalogs.forWorkspaceSync(workspaceId);
+    const put = (path: string) =>
+      catalog.putFile({
+        path,
+        kind: 'file',
+        storageKey: path,
+        sizeBytes: 1,
+        contentType: 'text/plain',
+        ownerPrincipalId: crypto.randomUUID(),
+      });
+    const pump = await put(`${workspaceId}/pump.pdf`);
+    const attachment = await put(ATTACHMENT);
+    ids.set(workspaceId, { pump: pump.id, attachment: attachment.id });
+  }
+  const idsOf = (workspaceId: string): Seeded => {
+    const seeded = ids.get(workspaceId);
+    if (seeded === undefined) throw new Error(`no seeded files for ${workspaceId}`);
+    return seeded;
+  };
+  return { catalogs, idsOf };
 }
 
-function wire(options: { texts?: boolean; fail?: boolean } = {}): void {
+async function wire(options: { texts?: boolean; fail?: boolean } = {}): Promise<void> {
+  const { catalogs, idsOf } = await seedCatalogs();
   const world = createCatalogFilesWorld({
     scopes: createInMemoryWorkspaceScopeResolver(
       [WORKSPACE_A, WORKSPACE_B].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
     ),
-    catalogs: { forWorkspace: (id: string) => Promise.resolve(catalogFor(id)) },
+    catalogs,
     resolveWorkspace: (request) => {
       const workspaceId = request.headers.get(WORKSPACE_HEADER);
       return Promise.resolve(
@@ -77,15 +100,18 @@ function wire(options: { texts?: boolean; fail?: boolean } = {}): void {
         ...(options.texts === false
           ? {}
           : {
-              texts: { forWorkspace: (id: string) => Promise.resolve(textsFor(id, options.fail)) },
+              texts: {
+                forWorkspace: (id: string) =>
+                  Promise.resolve(textsFor(id, idsOf(id), options.fail)),
+              },
             }),
       },
     },
   });
 }
 
-beforeEach(() => {
-  wire();
+beforeEach(async () => {
+  await wire();
   installTestDomains({
     rbac: {
       directory: createMemoryDirectory({
@@ -160,7 +186,7 @@ describe('GET /api/files/search', () => {
   });
 
   it('is 503 when no text cache is wired', async () => {
-    wire({ texts: false });
+    await wire({ texts: false });
     const response = await get('/api/files/search?q=pump');
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
@@ -169,7 +195,7 @@ describe('GET /api/files/search', () => {
   });
 
   it('answers a typed 500 that carries no SQL or provider text', async () => {
-    wire({ fail: true });
+    await wire({ fail: true });
     const response = await get('/api/files/search?q=pump');
     expect(response.status).toBe(500);
     const text = await response.text();

@@ -39,6 +39,9 @@ async function project(profile: string | null, env?: string): Promise<string> {
 
 const found = (stdout: string): CommandResult => ({ status: 0, stdout, stderr: '' });
 
+/** The browser origins a current CLI renders into a local project's `.env`, which Compose needs. */
+const LOCAL_ORIGINS = { SEAWEEDFS_ALLOWED_ORIGINS: 'http://localhost:3000,http://127.0.0.1:3000' };
+
 /** Every tool but the one this command line runs. */
 function without(
   tools: Readonly<Record<string, CommandResult>>,
@@ -261,6 +264,7 @@ describe('agent-workspace doctor: stores', () => {
   it('warns about a store it cannot probe, and a bucket the platform will create', async () => {
     const { checks, code } = await doctor(await project(await fixtureProfile('local')), {
       environment: {
+        ...LOCAL_ORIGINS,
         OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
         OBJECT_STORAGE_SECRET_ACCESS_KEY: 'object-store-secret',
         AW_STORAGE_URL: 's3://agent-workspace?endpoint=http://objects.example:8333&pathStyle=true',
@@ -273,6 +277,34 @@ describe('agent-workspace doctor: stores', () => {
     expect(find(checks, 'stores', 'objects')).toMatchObject({ status: 'warn' });
     expect(find(checks, 'stores', 'objects')?.detail).toContain('does not exist yet');
     expect(code).toBe(0);
+  });
+
+  it('advises AW_STORAGE_CREATE_BUCKET when an S3-compatible endpoint has no bucket', async () => {
+    const { checks, code } = await doctor(await project(await fixtureProfile('local')), {
+      environment: {
+        OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
+        OBJECT_STORAGE_SECRET_ACCESS_KEY: randomBytes(12).toString('hex'),
+        AW_STORAGE_URL: 's3://agent-workspace?endpoint=http://objects.example:8333&pathStyle=true',
+      },
+      probes: { ...answeringProbes, objects: () => Promise.resolve('absent') },
+    });
+
+    expect(find(checks, 'stores', 'objects')).toMatchObject({ status: 'fail' });
+    expect(find(checks, 'stores', 'objects')?.advice).toContain('AW_STORAGE_CREATE_BUCKET=true');
+    expect(code).toBe(1);
+  });
+
+  it('does not advise AW_STORAGE_CREATE_BUCKET for a store that did not answer', async () => {
+    const { checks } = await doctor(await project(await fixtureProfile('local')), {
+      environment: {
+        OBJECT_STORAGE_ACCESS_KEY_ID: 'agent_workspace',
+        OBJECT_STORAGE_SECRET_ACCESS_KEY: randomBytes(12).toString('hex'),
+        AW_STORAGE_URL: 's3://agent-workspace?endpoint=http://objects.example:8333&pathStyle=true',
+      },
+      probes: { ...answeringProbes, objects: () => Promise.reject(new Error('unreachable')) },
+    });
+
+    expect(find(checks, 'stores', 'objects')?.advice).not.toContain('AW_STORAGE_CREATE_BUCKET');
   });
 
   it('fails the store that does not answer, without its driver text, and reports the rest unchecked', async () => {
@@ -545,6 +577,27 @@ describe('agent-workspace doctor: storage', () => {
     );
   });
 
+  it('[US-STO-10][api][cli] doctor says why old file roots in different folders get no URL line', async () => {
+    const advice = await oldSettingAdvice({
+      AW_FILE_STORAGE_ROOT: '/srv/one/files',
+      AW_SKILL_STORAGE_ROOT: '/srv/two/skills',
+    });
+    expect(advice).toContain('do not share one folder');
+    expect(advice).toContain('AW_STORAGE_URL=file://');
+    expect(advice).not.toContain('/srv/');
+  });
+
+  it('[US-STO-10][api][cli] doctor says why an old Azure setting with no account gets no URL line', async () => {
+    const advice = await oldSettingAdvice({
+      OBJECT_STORAGE_BACKEND: 'azure-blob',
+      OBJECT_STORAGE_BUCKET: 'old-container',
+      OBJECT_STORAGE_ENDPOINT: 'http://azurite.internal:10000/devstoreaccount1',
+    });
+    expect(advice).toContain('names no storage account');
+    expect(advice).toContain('AW_STORAGE_URL=azblob://');
+    expect(advice).not.toContain('azurite.internal');
+  });
+
   it('[US-STO-10][api][cli] doctor never prints a credential from an old storage setting', async () => {
     const secret = ['AK', 'IA'].join('') + randomBytes(12).toString('hex');
     const { checks, code, stdout, stderr } = await doctor(
@@ -587,6 +640,7 @@ describe('agent-workspace doctor: storage', () => {
   it('[US-STO-10][api][cli] doctor warns, and does not fail, when an old variable sits beside AW_STORAGE_URL', async () => {
     const { checks, code, stdout } = await doctor(await project(await fixtureProfile('local')), {
       environment: {
+        ...LOCAL_ORIGINS,
         AGENT_WORKSPACE_URL: 'https://aw.example',
         AW_STORAGE_URL: 'file:///var/lib/agent-workspace',
         AW_FILE_STORAGE_ROOT: '/srv/elsewhere/files',
@@ -642,6 +696,48 @@ describe('agent-workspace doctor: storage', () => {
       expect(code).toBe(1);
     }
   });
+
+  // Compose refuses to interpolate the whole file, whichever profiles run, when a `:?` variable
+  // is blank, so an older local .env fails `docker compose up` before any service starts.
+  it('fails a local project whose .env has no SEAWEEDFS_ALLOWED_ORIGINS, naming the line to add', async () => {
+    const directory = await project(await fixtureProfile('local'));
+    for (const [port, origins] of [
+      ['127.0.0.1:3100', 'http://localhost:3100,http://127.0.0.1:3100'],
+      ['4000', 'http://localhost:4000,http://127.0.0.1:4000'],
+      [undefined, 'http://localhost:3000,http://127.0.0.1:3000'],
+    ] as const) {
+      const { checks, code } = await doctor(directory, {
+        environment: {
+          AGENT_WORKSPACE_URL: 'https://aw.example',
+          // An older CLI rendered no line at all; a blank one fails Compose the same way.
+          ...(port === undefined ? { SEAWEEDFS_ALLOWED_ORIGINS: ' ' } : { PORT: port }),
+        },
+      });
+
+      expect(find(checks, 'storage', 'SEAWEEDFS_ALLOWED_ORIGINS')).toMatchObject({
+        status: 'fail',
+        detail: expect.stringContaining('docker compose') as unknown,
+        advice: `Add to .env: SEAWEEDFS_ALLOWED_ORIGINS=${origins}`,
+      });
+      expect(code).toBe(1);
+    }
+  });
+
+  it('passes a local SEAWEEDFS_ALLOWED_ORIGINS, and checks it on no cloud profile', async () => {
+    const local = await doctor(await project(await fixtureProfile('local')), {
+      environment: {
+        AGENT_WORKSPACE_URL: 'https://aw.example',
+        ...LOCAL_ORIGINS,
+      },
+    });
+    expect(find(local.checks, 'storage', 'SEAWEEDFS_ALLOWED_ORIGINS')).toMatchObject({
+      status: 'pass',
+      advice: null,
+    });
+
+    const cloud = await doctor(await project(await fixtureProfile('aws')));
+    expect(find(cloud.checks, 'storage', 'SEAWEEDFS_ALLOWED_ORIGINS')).toBeUndefined();
+  });
 });
 
 // @story US-STO-13
@@ -658,7 +754,11 @@ describe('agent-workspace doctor: storage layout', () => {
   }
 
   const fileSetting = (root: string) => ({
-    environment: { AGENT_WORKSPACE_URL: 'https://aw.example', AW_STORAGE_URL: `file://${root}` },
+    environment: {
+      ...LOCAL_ORIGINS,
+      AGENT_WORKSPACE_URL: 'https://aw.example',
+      AW_STORAGE_URL: `file://${root}`,
+    },
   });
 
   const bucketSetting = (storageUrl: string, secret: string) => ({

@@ -15,10 +15,12 @@
  */
 import {
   storageObjectName,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
+  type ObjectPage,
+  type ObjectStoreProvider,
+  type ObjectStore,
   type StorageArea,
 } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
 import { SKILL_ROWS_ROOT, skillRowFolder } from '../skills/keys';
@@ -33,9 +35,9 @@ const LEGACY_AREAS = ['files', 'skills', 'session-state'] as const;
 
 export interface FinalizeDependencies {
   /** The shared root, new naming. */
-  readonly objects: ObjectStoreV2;
+  readonly objects: ObjectStore;
   /** The old store of each area; an area without one has nothing to delete. */
-  readonly legacy: Partial<Readonly<Record<StorageArea, ObjectStoreProviderV2>>>;
+  readonly legacy: Partial<Readonly<Record<StorageArea, ObjectStoreProvider>>>;
   readonly catalog: (workspaceId: string) => Promise<FinalizeCatalog>;
   /** The session-state blob rows of a workspace; absent when this deployment has none. */
   readonly blobs?: (workspaceId: string) => Promise<FinalizeBlobCatalog>;
@@ -74,7 +76,7 @@ export interface FinalizeReport {
 
 /** Does the object at `name` have the size and the streamed SHA-256 its row records? */
 async function intact(
-  objects: ObjectStoreV2,
+  objects: ObjectStore,
   name: string,
   row: { readonly sizeBytes: number; readonly sha256: string | null },
 ): Promise<boolean> {
@@ -186,7 +188,7 @@ async function hasRevisionRows(catalog: FinalizeCatalog, name: string): Promise<
   return page.rows.some((row) => row.path.startsWith(`${skillRowFolder(name)}@`));
 }
 
-type OldStore = ReturnType<ObjectStoreProviderV2['forWorkspace']>;
+type OldStore = ReturnType<ObjectStoreProvider['forWorkspace']>;
 type SkillMarker = NonNullable<ReturnType<typeof skillMarkerOf>>;
 
 /**
@@ -206,21 +208,21 @@ async function markerIsRedundant(
     // The legacy files may be gone already (their twins are deleted once switched), so the
     // catalog's rows of the skill, current files and every revision, count as well.
     return (
-      (await store.listPrefix(`skills/${marker.name}`)).length === 0 &&
-      (await store.listPrefix(`skill-revisions/${marker.name}`)).length === 0 &&
+      (await holdsNothing(store, `skills/${marker.name}`)) &&
+      (await holdsNothing(store, `skill-revisions/${marker.name}`)) &&
       (await catalog.list(skillRowFolder(marker.name), { limit: 1 })).rows.length === 0 &&
       !(await hasRevisionRows(catalog, marker.name))
     );
   }
   if (marker.kind === 'meta') {
     if (row.meta !== null) return true;
-    const body = await store.get(key);
+    const body = await readWhole(store, key);
     const record = body === null ? null : parseJson(body.body);
     return record !== null && (await catalog.setSkillMeta(marker.name, record, true));
   }
   if (marker.kind === 'builtin') {
     if (row.builtinDigest !== null) return true;
-    const body = await store.get(key);
+    const body = await readWhole(store, key);
     const digest =
       body === null ? null : (parseJson(body.body) as { digest?: unknown } | null)?.digest;
     if (typeof digest !== 'string') return false;
@@ -229,6 +231,26 @@ async function markerIsRedundant(
   }
   // The backfill follows the in-use rule: a skill an agent has assigned ignores its marker.
   if (row.pendingDelete === null) await pendingSkillDelete(store, catalog, marker.name);
+  return true;
+}
+
+/**
+ * No object at `prefix` or beneath it: an emptiness check, so the first entry answers it. A page
+ * can be empty and still have a cursor (a backend drops what it fetched but cannot list, such as a
+ * console folder object), so the pages are read until one holds an entry or there are no more.
+ */
+async function holdsNothing(store: OldStore, prefix: string): Promise<boolean> {
+  if ((await store.head(prefix)) !== null) return false;
+  let cursor: string | null = null;
+  do {
+    const page: ObjectPage = await store.listPage(prefix, {
+      recursive: true,
+      limit: 1,
+      ...(cursor === null ? {} : { cursor }),
+    });
+    if (page.entries.length > 0) return false;
+    cursor = page.cursor;
+  } while (cursor !== null);
   return true;
 }
 

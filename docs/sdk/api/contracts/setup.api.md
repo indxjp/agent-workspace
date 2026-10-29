@@ -62,6 +62,19 @@ export const CompleteSetupAnswersSchema: z.ZodReadonly<z.ZodObject<{
         "gemini-enterprise": "gemini-enterprise";
         "aws-agentcore": "aws-agentcore";
     }>>>;
+    "admin.features": z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+        skills: "skills";
+        files: "files";
+        builder: "builder";
+        runs: "runs";
+        connectors: "connectors";
+        chat: "chat";
+        projects: "projects";
+        sharing: "sharing";
+        surfaces: "surfaces";
+        triggers: "triggers";
+        evaluations: "evaluations";
+    }>>>>;
 }, z.core.$strict>>;
 
 // @public
@@ -119,6 +132,18 @@ export const SETUP_QUESTIONS: readonly [SetupQuestion<"setup.theme", z.ZodEnum<{
     "microsoft-foundry": "microsoft-foundry";
     "gemini-enterprise": "gemini-enterprise";
     "aws-agentcore": "aws-agentcore";
+}>>>>, SetupQuestion<"admin.features", z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+    skills: "skills";
+    files: "files";
+    builder: "builder";
+    runs: "runs";
+    connectors: "connectors";
+    chat: "chat";
+    projects: "projects";
+    sharing: "sharing";
+    surfaces: "surfaces";
+    triggers: "triggers";
+    evaluations: "evaluations";
 }>>>>];
 
 // @public
@@ -201,6 +226,19 @@ export const SetupAnswersSchema: z.ZodReadonly<z.ZodObject<{
         "gemini-enterprise": "gemini-enterprise";
         "aws-agentcore": "aws-agentcore";
     }>>>>;
+    "admin.features": z.ZodOptional<z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+        skills: "skills";
+        files: "files";
+        builder: "builder";
+        runs: "runs";
+        connectors: "connectors";
+        chat: "chat";
+        projects: "projects";
+        sharing: "sharing";
+        surfaces: "surfaces";
+        triggers: "triggers";
+        evaluations: "evaluations";
+    }>>>>>;
 }, z.core.$strict>>;
 
 // @public (undocumented)

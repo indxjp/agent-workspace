@@ -32,9 +32,15 @@ jobs:
     runs-on: [self-hosted, ms-a2]
     environment: live-provider-acceptance
     timeout-minutes: 45
+    # compose.yaml fixes the project name, its network names, port 8333 and the image tags, so this
+    # job shares ci.yml's full-e2e group: on the one MS-A2 daemon the two queue instead of
+    # overlapping.
+    concurrency:
+      group: full-e2e-${{ github.repository }}
+      cancel-in-progress: false
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -58,6 +64,10 @@ jobs:
       BOOTSTRAP_ADMIN: e2e-admin@example.invalid
       BOOTSTRAP_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
       E2E_RUNTIME: docker
+      # The sandbox images compose.yaml expects but does not build, under this run's own tags: the
+      # daemon is shared, so a `:dev` copy may be gone or another checkout's.
+      RUN_RUNTIME_IMAGE: agent-workspace/runtime-claude-agent-sdk:live-${{ github.run_id }}-${{ github.run_attempt }}
+      RUN_EGRESS_PROXY_IMAGE: agent-workspace/egress-proxy:live-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       # MS-A2 runs several jobs at once, so the service gets a random host port, not 5432.
       - name: Point the job at its PostgreSQL port
@@ -81,10 +91,47 @@ jobs:
           test -n "$E2E_ADMIN_PASSWORD"
           test -n "$MASTER_ENCRYPTION_KEY"
           test -n "$SESSION_SECRET"
-      - run: pnpm db:migrate
-      - run: pnpm db:seed
+      # No host-side db:migrate or db:seed: DATABASE_URL names the compose network's `postgres`, which
+      # the runner host cannot resolve. compose.yaml's `migrate` service migrates the stack's own
+      # database and BOOTSTRAP_ADMIN creates the administrator, as ci.yml's full-e2e relies on.
+      # compose.yaml requires more than this job's env: the bundled store, the gateway's price catalog
+      # and the runner-manager token come from .env.example and a fresh token per run. The job env
+      # above still overrides the secrets, since compose prefers the environment to .env.
+      - name: Configure the stack's .env
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          sed -i "s/^RUNNER_MANAGER_TOKEN=.*/RUNNER_MANAGER_TOKEN=$(openssl rand -hex 24)/" .env
+          {
+            # The runner drives the host Docker daemon, so it joins the socket's group.
+            echo "DOCKER_GID=$(stat -c %g /var/run/docker.sock)"
+            echo "RUNTIME_IMAGE=$RUN_RUNTIME_IMAGE"
+            echo "EGRESS_PROXY_IMAGE=$RUN_EGRESS_PROXY_IMAGE"
+          } >> .env
+      # As ci.yml's full-e2e builds them, for the one engine compose.yaml wires.
+      - name: Build this run's runtime and egress proxy images
+        run: |
+          set -euo pipefail
+          read -r engine _ engine_version < <(node scripts/engine-images.mjs | grep '^claude-agent-sdk ')
+          docker build --file runtime.Dockerfile --target runtime \
+            --build-arg "ENGINE=$engine" \
+            --build-arg "ENGINE_VERSION=$engine_version" \
+            --tag "$RUN_RUNTIME_IMAGE" .
+          node scripts/engine-images.mjs --verify-image "$RUN_RUNTIME_IMAGE" "$engine" "$engine_version"
+          docker build --file egress-proxy.Dockerfile --target egress-proxy --tag "$RUN_EGRESS_PROXY_IMAGE" .
+      # `migrate` shares web's tag, and one `up --build` exporting a tag twice fails on the containerd
+      # image store ("already exists"), so the services build first and the stack starts without
+      # --build, as full-e2e does.
       - name: Build and start the production-shaped stack
-        run: docker compose up --detach --build --wait
+        run: |
+          set -euo pipefail
+          read -ra services < <(node --input-type=module -e 'import { composeBuildServices } from "./tests/e2e/tool-sandbox-images.mjs"; console.log(composeBuildServices().join(" "));')
+          docker compose build "${services[@]}"
+          docker compose up --detach --wait
+      # The bundled store allows every origin unless compose.yaml's -s3.allowedOrigins is set, so the
+      # upload a browser makes from the app's origin cannot show that; a foreign origin must be refused.
+      - name: Check the object store refuses a foreign origin
+        run: node scripts/ci/check-object-store-cors.mjs http://localhost:8333 "http://localhost:${WEB_PORT:-3000}"
       - name: Start deterministic MCP fixture on the private application network
         run: |
           set -euo pipefail
@@ -93,7 +140,7 @@ jobs:
           docker run --detach --rm --name aw-e2e-mcp --network "$network" \
             --volume "$PWD:/workspace:ro" --workdir /workspace \
             --env E2E_MCP_HOST=0.0.0.0 node:24-alpine node tests/e2e/mcp-fixture.mjs
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             docker exec aw-e2e-mcp wget -qO- http://127.0.0.1:4319/healthz && exit 0
             sleep 1
           done
@@ -107,7 +154,16 @@ jobs:
             import { readFileSync } from "node:fs";
             const p = "tests/e2e/results/flow.json";
             const d = JSON.parse(readFileSync(p, "utf8"));
-            if (!Array.isArray(d.steps) || d.steps.length !== 11 || d.steps.some((s) => s.ok !== true)) process.exit(1);
+            // tests/e2e/flow.mjs FlowResult: each step carries `status`, and a live run must pass all eleven.
+            if (!Array.isArray(d.steps) || d.steps.length !== 11) {
+              console.error(`Expected exactly 11 flow entries, got ${d.steps?.length ?? "none"}`);
+              process.exit(1);
+            }
+            const notPassed = d.steps.filter((s) => s.status !== "passed");
+            if (notPassed.length > 0) {
+              console.error(`Steps not passed: ${notPassed.map((s) => `${s.id}=${s.status}`).join(", ")}`);
+              process.exit(1);
+            }
             const text = JSON.stringify(d);
             for (const secret of [process.env.E2E_PROVIDER_API_KEY, process.env.E2E_ADMIN_PASSWORD, process.env.MASTER_ENCRYPTION_KEY, process.env.SESSION_SECRET]) {
               if (secret && text.includes(secret)) throw new Error("acceptance evidence contains a configured secret");
@@ -136,10 +192,17 @@ jobs:
             e2e-services.log
           if-no-files-found: error
           retention-days: 30
-      - if: always()
+      - name: Tear down
+        if: always()
         run: |
           docker rm --force aw-e2e-mcp || true
-          docker compose down --volumes
+          # This run's sandboxes and proxies, found by their run-unique images, then the images.
+          for image in "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE"; do
+            docker ps --all --quiet --filter "ancestor=$image" | xargs --no-run-if-empty docker rm --force
+          done
+          # Without .env (a failure before it was written) compose cannot even parse the stack.
+          if [ -f .env ]; then docker compose down --volumes; fi
+          docker image rm "$RUN_RUNTIME_IMAGE" "$RUN_EGRESS_PROXY_IMAGE" || true
 
   # The own-bucket tutorial (apps/web/server/storage-connections/byo-bucket.live.test.ts) against a real bucket, one
   # lane per cloud, with the Owner's OIDC federation in `providers-live` (it allows only main). No static

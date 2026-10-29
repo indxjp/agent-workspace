@@ -37,6 +37,8 @@ export {
 } from './engine-catalogue.js';
 export {
   AGENT_INSTRUCTIONS_MAX_LENGTH,
+  AGENT_LIST_ARCHIVED,
+  AGENT_LIST_PROBLEM_CODES,
   AGENT_MODEL_MAX_LENGTH,
   AGENT_MUTABLE_FIELDS,
   AGENT_NAME_MAX_LENGTH,
@@ -45,6 +47,7 @@ export {
   BUILTIN_AGENT_PROBLEM_CODES,
   AgentCreatedByAgentSchema,
   AgentGrantsSchema,
+  AgentListQuerySchema,
   AgentListResponseSchema,
   AgentResourceAssignmentsResponseSchema,
   AgentResourceAssignmentsSchema,
@@ -56,6 +59,8 @@ export {
   agentRequestIssueMessages,
   type AgentCreatedByAgent,
   type AgentGrants,
+  type AgentListArchived,
+  type AgentListProblemCode,
   type AgentListResponse,
   type AgentResource,
   type AgentResourceAssignments,

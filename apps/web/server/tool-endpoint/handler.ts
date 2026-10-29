@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { applicationContext } from '../application-context';
 import { endpointCredentialKey, readCappedBody } from '../endpoints/request';
 import { DomainError } from '../errors';
+import { featureRefusalResponse } from '../features/guard';
 import { bearerChallenge, mcpResourcePath, resourceUrl } from '../oauth/resource';
 import { requireRunPermission } from '../runs/api';
 import { apiError } from '../runs/http';
@@ -180,6 +181,8 @@ export async function serveToolEndpoint(request: Request, name: string): Promise
   if (identity.oauth !== null && identity.oauth.audience !== resourceUrl(mcpResourcePath(name))) {
     return wrongAudience(name);
   }
+  const disabled = await featureRefusalResponse(request, principal.workspaceId);
+  if (disabled !== null) return disabled;
   if (request.headers.get('Origin') !== null) {
     return apiError(403, 'origin_not_allowed', 'browser origins cannot call this endpoint.');
   }

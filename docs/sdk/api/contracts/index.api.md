@@ -54,7 +54,7 @@ export type CommonProblemCode = keyof typeof COMMON_PROBLEM_CODES;
 export const CONTRACTS_MINIMUM_VERSION_HEADER = "x-agent-workspace-contracts-minimum";
 
 // @public
-export const CONTRACTS_VERSION = "0.6.11";
+export const CONTRACTS_VERSION = "0.6.12";
 
 // @public
 export const CONTRACTS_VERSION_HEADER = "x-agent-workspace-contracts";

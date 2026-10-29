@@ -29,13 +29,15 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import { FileResourceSchema, MAX_UPLOAD_BYTES } from '@indx-workspace/contracts/files';
 
 import {
   generatedBody,
   MiB,
+  NEW_SPACE_CREDIT_BOUND,
   peakRssGrowth,
   warmHttpTransport,
 } from '../../../../tests/load/flat-memory';
@@ -147,11 +149,11 @@ afterEach(() => {
 function defineSuite(name: string, setup: () => Promise<World>) {
   describe(`upload on the ${name}`, () => {
     let world: World;
-    let objects: ObjectStoreV2;
+    let objects: ObjectStore;
     const legacy = createInMemoryObjectStoreProvider();
 
     /** Install the files runtime over the catalog service. */
-    function install(root: ObjectStoreV2): void {
+    function install(root: ObjectStore): void {
       objects = root;
       const storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
@@ -241,9 +243,9 @@ function defineSuite(name: string, setup: () => Promise<World>) {
 
     const catalogA = () => world.catalogs.forWorkspace(world.a.workspaceId);
     const filesObjects = async () =>
-      (await objects.listPrefix(`workspaces/${world.a.workspaceId}/files`)).map(
-        (entry) => entry.key,
-      );
+      (
+        await objects.listPage(`workspaces/${world.a.workspaceId}/files`, { recursive: true })
+      ).entries.map((entry) => entry.key);
 
     // @story US-STO-01
     it('[US-STO-01][api][sdk] an uploaded file has a ready row with its SHA-256 and lives under workspaces/<ws>/files/<objectId>', async () => {
@@ -264,7 +266,9 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       if (objectId === null) throw new Error('the row has no object id');
       const stored = storageObjectName(world.a.workspaceId, 'files', objectId);
       expect(await objects.head(stored)).not.toBeNull();
-      expect(await legacy.forWorkspace(world.a.workspaceId).get('reports/q3.pdf')).toBeNull();
+      expect(
+        await readWhole(legacy.forWorkspace(world.a.workspaceId), 'reports/q3.pdf'),
+      ).toBeNull();
 
       const refused = await post('reports/other.pdf', bytes, 'v');
       expect(refused.status).toBe(403);
@@ -272,6 +276,27 @@ function defineSuite(name: string, setup: () => Promise<World>) {
         await (await catalogA()).get('reports/other.pdf', { includePending: true }),
       ).toBeNull();
       expect(await filesObjects()).toEqual([stored]);
+    });
+
+    // @story US-STO-01
+    it('[US-STO-01][api][sdk] an uploaded file keeps the request Content-Type, or its name gives one', async () => {
+      const typed = await post('data/export.bin', bytesOf('a,b\n'), 'a', {
+        'content-type': 'text/csv; charset=utf-8',
+      });
+      expect(typed.status, await typed.clone().text()).toBe(201);
+      expect(await typed.json()).toMatchObject({
+        file: { contentType: 'text/csv; charset=utf-8' },
+      });
+      const catalog = await catalogA();
+      expect(await catalog.get('data/export.bin')).toMatchObject({
+        contentType: 'text/csv; charset=utf-8',
+      });
+
+      const named = await post('data/notes.md', bytesOf('# notes'), 'a', {
+        'content-type': '   ',
+      });
+      expect(named.status).toBe(201);
+      expect(await catalog.get('data/notes.md')).toMatchObject({ contentType: 'text/markdown' });
     });
 
     // @story US-STO-01
@@ -448,13 +473,16 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       });
       expect((await post('big/viewer.bin', generatedBody(MiB).body, 'v')).status).toBe(403);
 
-      // Negative control: buffering the same body whole, as the legacy route did, must read high.
-      source = generatedBody(size);
+      // Negative control: buffering a body whole, as the legacy route did, must read high. It is
+      // larger than the upload by NEW_SPACE_CREDIT_BOUND: RSS the reading credits or that the
+      // streamed phase freed can absorb a 60 MiB buffer (it read 11 MiB in a merge-queue run).
+      const controlSize = size + NEW_SPACE_CREDIT_BOUND;
+      source = generatedBody(controlSize);
       const buffered = await peakRssGrowth(async (sampled) => {
         const init = { method: 'POST', body: source.body, duplex: 'half' as const };
         const read = await new Request('https://example.invalid/api/files', init).arrayBuffer();
         sampled();
-        expect(read.byteLength).toBe(size);
+        expect(read.byteLength).toBe(controlSize);
       });
       expect(buffered).toBeGreaterThanOrEqual(16 * MiB);
     }, 120_000);

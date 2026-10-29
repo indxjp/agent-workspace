@@ -3,6 +3,34 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts`,
 `sdk`, `aw` and `create`, with the same version (ADR-0082).
 
+## 0.6.12 — unreleased
+
+### Added
+
+- `create` asks which features the deployment should include and accepts `--features chat,files`. Accepting the default writes no `features:` line, so the generated project is unchanged.
+
+### Changed
+
+- `agent-workspace doctor` says why it prints no `AW_STORAGE_URL` line for old file roots that do
+  not share one folder, or for an old Azure setting that names no storage account, and shows the
+  URL shape to write instead. When an S3-compatible endpoint answers but its bucket is not there,
+  it advises creating the bucket or setting `AW_STORAGE_CREATE_BUCKET=true`.
+- New Compose deployments run PostgreSQL 18 (`postgres:18-alpine`), and the generated `compose.yaml`
+  sets `PGDATA` to the mounted volume so a deployment on its 17 pin and one on 18 keep their data in
+  the same directory. `render --upgrade` still never moves `POSTGRES_IMAGE`; the deploy guide
+  describes the 17 to 18 move. A PostgreSQL 17 answer to the database question is refused by name.
+
+### Fixed
+
+- `agent-workspace doctor` fails a local Compose project whose `.env` has no
+  `SEAWEEDFS_ALLOWED_ORIGINS`, which an older CLI did not write, and prints the line to add with
+  the web service's port. Before, `docker compose up` refused the project with an interpolation
+  error and doctor reported nothing.
+
+### Security
+
+- A generated Compose project's bundled SeaweedFS now allows a browser's signed upload only from the web service's own origins, set by the new `SEAWEEDFS_ALLOWED_ORIGINS` in `.env` (`http://localhost:<port>,http://127.0.0.1:<port>`). Before, it echoed any origin back on a CORS preflight. Change the value with `PORT`, or when the web service is served on a public hostname.
+
 ## 0.6.11 — unreleased
 
 No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.

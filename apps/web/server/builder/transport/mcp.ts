@@ -32,6 +32,7 @@ type BuilderCallerVerification = Awaited<ReturnType<typeof verifyRunCaller>>;
 /** Turns the `Authorization` header into a run-caller; the composition root builds it once. */
 export type BuilderCallerVerifier = (
   authorization: string | null,
+  request: Request,
 ) => Promise<BuilderCallerVerification>;
 
 /** What the door is composed of; the composition root builds it once (`composition/wiring/builder.ts`). */
@@ -56,7 +57,8 @@ const REFUSED: RunCallerRefusal = { ok: false, code: 'not_permitted', reads: fal
 export function createBuilderCallerVerifier<Scope>(
   deps: RunCallerDeps<Scope> | null,
 ): BuilderCallerVerifier {
-  return async (authorization) => (deps === null ? REFUSED : verifyRunCaller(authorization, deps));
+  return async (authorization, request) =>
+    deps === null ? REFUSED : verifyRunCaller(authorization, deps, request);
 }
 
 // One schema per tool, rendered once: the input side is what a client sends.
@@ -75,7 +77,8 @@ export async function serveBuilderMcp(request: Request, deps: BuilderDoor): Prom
     response.headers.set('Allow', 'POST');
     return response;
   }
-  const verified = await deps.verifyCaller(request.headers.get('authorization'));
+  const verified = await deps.verifyCaller(request.headers.get('authorization'), request);
+  if ('refused' in verified) return verified.refused;
   if (!verified.ok && !verified.reads) {
     const refusal = BUILDER_REFUSAL_CODES[verified.code];
     return apiError(refusal.status, verified.code, refusal.fix);

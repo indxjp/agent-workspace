@@ -1,7 +1,7 @@
 /**
  * [US-BLD-04][api][run] A Builder run never does more than the person who started it: a Viewer's
  * run reads but cannot write, a run an API key started with no person behind it gets `no_caller` on
- * every write, and the production feature input keeps every tool dark (issue #1846 slice 4).
+ * every write (issue #1846 slice 4).
  */
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -42,7 +42,7 @@ describe('[US-BLD-04][api][run] a Builder run never does more than the person wh
         { text: 'You may look, but saving needs a Builder.' },
       ],
     });
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'viewer' }, model);
 
     const [listed, saved] = toolResults(await door.runScripted(token, model));
@@ -65,7 +65,7 @@ describe('[US-BLD-04][api][run] a Builder run never does more than the person wh
   });
 
   it("a Builder-role member's draft_save passes every rule and stops at the ask for approval", async () => {
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ role: 'builder' }, MODEL);
 
     await expect(door.call(token, 'draft_save', SAVE)).resolves.toMatchObject({
@@ -77,7 +77,7 @@ describe('[US-BLD-04][api][run] a Builder run never does more than the person wh
   });
 
   it('a run an API key started with no subject gets no_caller on writes and reads nothing', async () => {
-    const door = builderDoor({ featureOn: true, scopes: scopes() });
+    const door = builderDoor({ scopes: scopes() });
     const { runId, token } = await door.start({ apiKey: true }, MODEL);
 
     for (const [tool, args] of [
@@ -100,29 +100,5 @@ describe('[US-BLD-04][api][run] a Builder run never does more than the person wh
       expect.objectContaining({ tool: 'catalog_list', outcome: 'refused', code: 'not_permitted' }),
     ]);
     expectNoTokenIn(door, token);
-  });
-
-  it('the production feature input keeps every tool dark until #1846 slice 3', async () => {
-    const door = builderDoor({ featureOn: false, scopes: scopes() });
-    const member = await door.start({ role: 'builder' }, MODEL);
-    const apiKey = await door.start({ apiKey: true }, MODEL);
-
-    for (const [tool, args] of [
-      ['catalog_list', { kinds: ['connectors'] }],
-      ['draft_save', SAVE],
-    ] as const) {
-      await expect(door.call(member.token, tool, args)).resolves.toMatchObject({
-        isError: true,
-        result: { ok: false, code: 'builder_disabled' },
-      });
-    }
-    expect(rowsOf(door, member.runId)).toHaveLength(2);
-    // A write with no person behind the run is refused by the pre-check, which runs first.
-    await expect(door.call(apiKey.token, 'draft_save', SAVE)).resolves.toMatchObject({
-      result: { ok: false, code: 'no_caller' },
-    });
-    expect(rowsOf(door, apiKey.runId)).toHaveLength(0);
-    expectNoTokenIn(door, member.token);
-    expectNoTokenIn(door, apiKey.token);
   });
 });

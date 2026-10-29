@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { EngineIdSchema } from './engines.js';
+import { FeatureListSchema } from './features.js';
 import { ConnectorIdentitySchema } from './identity-assertion.js';
 import { MODEL_CONNECTION_CONFIG_FIELDS, MODEL_PROVIDER_CONFIG_RULES } from './models.js';
 import { ProjectPolicySchema } from './policy-ceiling.js';
@@ -452,6 +453,8 @@ export const ProjectDocumentSchema = z
     connectors: projectResourceMap(ProjectConnectorSchema).optional(),
     policy: ProjectPolicySchema.optional(),
     platforms: ProjectPlatformsSchema.optional(),
+    /** The features this deployment installs; absent means every feature (ADR-0160 D5). */
+    features: FeatureListSchema.optional(),
     environments: z
       .strictObject({
         local: LocalEnvironmentSchema,

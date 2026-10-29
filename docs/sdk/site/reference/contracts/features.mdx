@@ -1,0 +1,197 @@
+---
+title: "features"
+description: "The @indx-workspace/contracts/features exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/features.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## dependentsOf
+
+The enabled features that need `id`, sorted: what switching `id` off would strand.
+
+```ts
+dependentsOf(id: FeatureId, enabled: readonly FeatureId[]): readonly FeatureId[]
+```
+
+## FEATURE_DEPENDENCIES
+
+ADR-0160 D3: what each feature needs switched on. Acyclic; checked by a test.
+
+| Key | Value |
+| --- | --- |
+| `surfaces` | `['chat']` |
+| `triggers` | `['runs']` |
+| `evaluations` | `['runs']` |
+
+## FEATURE_IDS
+
+ADR-0160 D1: the switchable features, closed. `core` is always on and is not one.
+
+- `'chat'`
+- `'projects'`
+- `'files'`
+- `'skills'`
+- `'connectors'`
+- `'runs'`
+- `'sharing'`
+- `'surfaces'`
+- `'triggers'`
+- `'evaluations'`
+- `'builder'`
+
+## FEATURE_PROBLEM_CODES
+
+ADR-0160 D7: the refusals a feature switch adds, with their HTTP statuses.
+
+| Key | Value |
+| --- | --- |
+| `feature_disabled` | `404` |
+| `feature_in_use` | `409` |
+| `feature_not_installed` | `409` |
+
+## FeatureId
+
+- `"skills"`
+- `"files"`
+- `"connectors"`
+- `"surfaces"`
+- `"builder"`
+- `"evaluations"`
+- `"chat"`
+- `"projects"`
+- `"runs"`
+- `"sharing"`
+- `"triggers"`
+
+## FeatureIdSchema
+
+- `"skills"`
+- `"files"`
+- `"connectors"`
+- `"surfaces"`
+- `"builder"`
+- `"evaluations"`
+- `"chat"`
+- `"projects"`
+- `"runs"`
+- `"sharing"`
+- `"triggers"`
+
+## FeatureListSchema
+
+ADR-0160 D5: a non-empty, duplicate-free list that holds every listed feature's dependencies.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `length` | `number` | Yes | Gets the length of the array. This is a number one higher than the highest element defined in an array. |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">[]): ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]; (...items: ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers" \| ConcatArray<"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">)[]): ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => value is S, thisArg?: any): S[]; (predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any): ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentIndex: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"): "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"; (callbackfn: (previousValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentIndex: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", initialValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"): "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"; <U>(callbackfn: (previousValue: U, currentValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentIndex: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentIndex: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"): "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"; (callbackfn: (previousValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentIndex: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", initialValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"): "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"; <U>(callbackfn: (previousValue: U, currentValue: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", currentIndex: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, obj: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, obj: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any): "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers" \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, obj: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers" \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any): "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers" \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", index: number, array: readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers", b: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers") => number) \| undefined) => ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]): ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]; (start: number, deleteCount?: number): ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: "skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers") => ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers">` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## FeatureProblemCode
+
+- `"feature_disabled"`
+- `"feature_in_use"`
+- `"feature_not_installed"`
+
+## featuresMissingDependencies
+
+Every listed feature whose D3 dependency is not also listed.
+
+```ts
+featuresMissingDependencies(ids: readonly FeatureId[]): readonly { feature: FeatureId; needs: FeatureId }[]
+```
+
+## ROUTE_FEATURES
+
+What a route or navigation entry belongs to: a feature, or `core`.
+
+- `'core'`
+- `...FEATURE_IDS`
+
+## RouteFeature
+
+- `"skills"`
+- `"files"`
+- `"connectors"`
+- `"surfaces"`
+- `"builder"`
+- `"evaluations"`
+- `"chat"`
+- `"projects"`
+- `"runs"`
+- `"sharing"`
+- `"triggers"`
+- `"core"`
+
+## UpdateWorkspaceFeaturesRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `disabled` | `("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes |  |
+
+## UpdateWorkspaceFeaturesRequestSchema
+
+ADR-0160 D6: the whole "off" set for the workspace, not a patch.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `disabled` | `("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | Yes |  |
+
+## WorkspaceFeature
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"` | Yes |  |
+| `installed` | `false \| true` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+
+## WorkspaceFeatures
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `features` | `WorkspaceFeature[]` | Yes |  |
+
+## WorkspaceFeatureSchema
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers"` | Yes |  |
+| `installed` | `false \| true` | Yes |  |
+| `enabled` | `false \| true` | Yes |  |
+
+## WorkspaceFeaturesSchema
+
+ADR-0160 D8: `GET`/`PUT /workspaces/:id/features`; one row per `FEATURE_IDS` entry, in that order.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `features` | `WorkspaceFeature[]` | Yes |  |
