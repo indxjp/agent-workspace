@@ -219,7 +219,7 @@ describe('the exhaustive shape vectors cover the whole classified grammar', () =
   it('every role × every accepted path shape × every method and TRACE', () => {
     const subPairs = RESOURCES.flatMap((r) => SUB_RESOURCES[r].map((s) => `${r}/${s}`));
     const shapes = RESOURCES.length * 2 + subPairs.length;
-    expect(subPairs.length).toBe(44);
+    expect(subPairs.length).toBe(46);
     expect(vectors.length).toBe(ROLES.length * shapes * (METHODS.length + 1));
     for (const resource of RESOURCES) {
       for (const sub of SUB_RESOURCES[resource]) {

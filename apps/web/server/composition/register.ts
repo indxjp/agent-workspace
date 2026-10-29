@@ -68,12 +68,21 @@
 import { log } from '../telemetry/logger';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
+import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
 import { installApplicationContext } from '../application-context';
 import { readSessionSecret } from '../auth/session';
+import { readDeploymentFeatures } from '../features/deployment';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
 import { isWorkspaceUsableForRuns } from '../workspaces/run-gate';
+import {
+  builderProvisioner,
+  provisioningAfterConnectionWrites,
+  provisioningAfterSetup,
+} from './builder-provisioning';
 import { configuredPath, readDeploymentPolicy } from './config';
+import { workspaceFeaturesRuntime, workspaceFeatureSwitches } from './feature-switches';
 import { wireAgents } from './wiring/agents';
 import { wireBuilder } from './wiring/builder';
 import { wireProjects, wireShares } from './wiring/projects';
@@ -161,6 +170,12 @@ export async function register(): Promise<RegisteredComposition | undefined> {
     `[compose] policy ceiling: ${policyCeiling === null ? 'none' : Object.keys(policyCeiling).join(', ')}`,
   );
 
+  // ADR-0160 D5: read once, like the policy ceiling; an invalid value throws and stops start-up.
+  const deploymentFeatures = readDeploymentFeatures(process.env);
+  log.info(
+    `[compose] features: ${deploymentFeatures.length === FEATURE_IDS.length ? 'all' : deploymentFeatures.join(', ')}`,
+  );
+
   const secret = readSessionSecret(process.env);
   if (!secret.ok) {
     log.error(
@@ -240,6 +255,7 @@ export async function register(): Promise<RegisteredComposition | undefined> {
       root,
       secret.secret,
       policyCeiling,
+      deploymentFeatures,
       registeredComposition,
       (service) => {
         secretsService = service;
@@ -264,6 +280,7 @@ async function registerOpenedDatabase(
   root: DatabaseRoot,
   sessionSecret: string,
   policyCeiling: ProjectPolicy | null,
+  deploymentFeatures: readonly FeatureId[],
   registeredComposition: RegisteredComposition,
   captureSecretsService: (service: SecretsService | null) => void,
   stopOnClose: (stop: () => void) => void,
@@ -285,6 +302,13 @@ async function registerOpenedDatabase(
     stopOnClose,
   };
   const { principalIdentity } = wired;
+  const featureSwitches = workspaceFeatureSwitches(root, deploymentFeatures);
+  const builders = builderProvisioner({
+    root,
+    agents: wired.agents,
+    agentVersions: wired.agentVersions,
+    switches: featureSwitches,
+  });
   const context = {
     agents: { ...wired.agentsRuntime, runtimeSwitchAudit: wired.runtimeSwitchAudit },
     agentVersions: wired.agentVersions,
@@ -299,16 +323,19 @@ async function registerOpenedDatabase(
     endpointClients: wired.endpointClients,
     files: wired.files,
     invitations: principalIdentity.invitations,
-    models: wired.models,
+    models: provisioningAfterConnectionWrites(wired.models, builders),
     oauth: wired.oauth,
     projects: wireProjects(wired),
     rbac: principalIdentity.rbac,
     runtimes: wired.runtimes,
     secrets: wired.secrets,
     sessions: wired.sessions,
-    setup: wired.setup,
+    setup: provisioningAfterSetup(wired.setup, builders),
     skills: wired.skills,
     storageConnections: wired.storageConnections,
+    workspaceFeatures: workspaceFeaturesRuntime(root, deploymentFeatures, (id) =>
+      builders.provision(id),
+    ),
     workspaces: principalIdentity.workspaces,
     shares: wireShares(wired),
   };
@@ -316,10 +343,14 @@ async function registerOpenedDatabase(
   // surfaces need the run runtime; with none they are disabled (503). One install, after
   // everything is built, so no route ever reads a half-composed context.
   const runRuntime = await wireRunRuntime(wired);
+  configureFeatureSwitches(featureSwitches);
+  stopOnClose(clearFeatureSwitches);
   installApplicationContext({
     ...context,
     ...(runRuntime === null ? RUN_DOMAINS_DISABLED : wireRunDomains({ ...wired, ...runRuntime })),
   });
   log.info('[compose] project, session and sharing APIs installed');
+  // After the install, so the Builder's writes see the composed context; a failure only warns.
+  await builders.provisionAll();
   return registeredComposition;
 }

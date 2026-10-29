@@ -5,6 +5,7 @@
  * only changes how the files travel.
  */
 import { PLATFORM_EXPORT_REQUEST_MAX_BYTES } from '@indx-workspace/contracts/platforms';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import { encodeUstar } from '@agent-workspace/runtime/transfer';
 
 import { authoriseAgentVersionRoute } from '../agent-versions/http';
@@ -71,7 +72,7 @@ export async function servePlatformExport(
   const sources: PortableProjectSources = {
     versions: store,
     connectors: connectors.connectors.forWorkspace(principal.workspaceId),
-    workspaceFile: async (path) => (await fileStore.get(path))?.body ?? null,
+    workspaceFile: async (path) => (await readWhole(fileStore, path))?.body ?? null,
     endpointClients: async () => (await endpointClients?.list(principal.workspaceId)) ?? [],
     publicOrigin: publicUrl.ok ? publicUrl.origin : null,
     skillFiles: async (name) =>
@@ -79,7 +80,7 @@ export async function servePlatformExport(
         path: file.relativePath,
         sizeBytes: file.sizeBytes,
         read: async () => {
-          const object = await skillStore.get(file.key);
+          const object = await readWhole(skillStore, file.key);
           if (object === null) {
             // Listed a moment ago, gone now: a concurrent delete raced this export. Failing (a 500)
             // rather than exporting a partial skill, as `exportSkill` does (ADR-0015).

@@ -72,6 +72,12 @@ What `networkPolicyFloor` resolves a sandbox's network policy to.
 | `allowedDomains` | `undefined \| readonly string[]` | No | Present only for `restricted`: the profile's own list, or the connector hosts it was lowered to. |
 | `lowered` | `false \| true` | Yes | Whether `open` was lowered because the permission is off. |
 
+## POLICY_CEILING_MAX_COST_PER_DAY_USD
+
+The largest `maxCostPerDayUsd` a ceiling may set: a sanity bound, not a recommendation.
+
+Value: `100_000`
+
 ## POLICY_CEILING_MODELS_MAX
 
 The most model ids a ceiling's `models` allowlist may name (issue #524).

@@ -32,6 +32,8 @@ const VALUE_FLAGS = [
   'path',
   'status',
   'archived',
+  // `aw workspaces features list|disable|enable --workspace <id>`
+  'workspace',
   'project',
   'after',
   'project-key',
@@ -72,6 +74,8 @@ const VALUE_FLAGS = [
   'permissions',
   'title',
   'color',
+  // ADR-0160 D5: `aw init --features chat,files` names the features the deployment installs
+  'features',
   // #879: `aw init --answers <file>` reads the setup answers from a YAML or JSON file
   'answers',
   // issue #697: `aw chat --agent-version <n> | --env local|production` (`--version` is aw's own)

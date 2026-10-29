@@ -32,7 +32,7 @@ inductive IdKind where
   | file | fileText
   | connector | modelConnection | runtimeProfile | runtimeVerification | secret | project | session | run | runToken
   | runUsageRecord | runFeedback | share | shareView | auditEvent | trigger | triggerDelivery
-  | storageConnection | storageMigrationRun | builderToolCall
+  | storageConnection | storageMigrationRun | builderToolCall | workspaceFeature
   deriving DecidableEq, Repr, Inhabited, Hashable, Ord
 
 namespace IdKind
@@ -43,7 +43,7 @@ def all : List IdKind :=
     cliSession, agent, agentFile, agentGrant, agentConnector, agentSkill, agentStorageGrant, agentVersion, agentVersionStorageGrant, agentVersionEvaluation, agentPointerMove, endpointClient, oauthToken, skill, skillRevision, file, fileText,
     connector, modelConnection, runtimeProfile, runtimeVerification, secret, project, session, run, runToken,
     runUsageRecord, runFeedback, share, shareView, auditEvent, trigger, triggerDelivery,
-    storageConnection, storageMigrationRun, builderToolCall]
+    storageConnection, storageMigrationRun, builderToolCall, workspaceFeature]
 
 theorem mem_all (k : IdKind) : k ∈ all := by cases k <;> decide
 
@@ -93,6 +93,7 @@ def toWire : IdKind → String
   | storageConnection => "storage-connection"
   | storageMigrationRun => "storage-migration-run"
   | builderToolCall => "builder-tool-call"
+  | workspaceFeature => "workspace-feature"
 
 /-- The kind a wire spelling denotes, if any. -/
 def ofWire? : String → Option IdKind
@@ -140,6 +141,7 @@ def ofWire? : String → Option IdKind
   | "storage-connection" => some storageConnection
   | "storage-migration-run" => some storageMigrationRun
   | "builder-tool-call" => some builderToolCall
+  | "workspace-feature" => some workspaceFeature
   | _ => none
 
 private theorem ofWire?_toWire (k : IdKind) : ofWire? (toWire k) = some k := by
@@ -235,6 +237,8 @@ abbrev StorageMigrationRunId := Id .storageMigrationRun
 abbrev StorageConnectionId := Id .storageConnection
 /-- One tool call of a Builder run, as the journal keeps it (`builder_tool_calls`, issue #1845). -/
 abbrev BuilderToolCallId := Id .builderToolCall
+/-- One feature a workspace has switched off (`workspace_features`, ADR-0160 D6). -/
+abbrev WorkspaceFeatureId := Id .workspaceFeature
 
 /-- `run_events` is keyed by `(run_id, sequence)` (`run_events_pkey`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]

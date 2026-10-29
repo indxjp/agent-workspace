@@ -1,0 +1,3 @@
+-- safe: the CHECK is re-added in the next statement with a wider body, so no row is ever unchecked; every existing row that satisfied the old body satisfies the new one
+ALTER TABLE "audit_events" DROP CONSTRAINT "audit_events_details_only_agent_created";--> statement-breakpoint
+ALTER TABLE "audit_events" ADD CONSTRAINT "audit_events_details_only_agent_created" CHECK ("audit_events"."details" is null or "audit_events"."action" = 'agent-created' or "audit_events"."action" = 'agent-changed');

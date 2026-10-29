@@ -8,7 +8,9 @@
  * would drag `pg` and `node:crypto`'s heavier surface into the edge bundle Next.js also compiles
  * this file for. See `apps/web/server/agents/store.ts`'s header for the measured failure that
  * caused (`docs/adr/W1-CP-05-agents-api-has-no-core-dependency.md` records the original reasoning).
- * This module imports nothing from `@agent-workspace/core/secrets` at all, type or value.
+ * This module imports nothing from `@agent-workspace/core/secrets` at all, type or value. Its one
+ * value import is the browser-safe `@indx-workspace/contracts/secret-reference`, for the storage
+ * connection secret prefix every check shares.
  *
  * That is narrower than a claim about the whole directory, on purpose — verification round 2 (F5)
  * found an earlier version of this paragraph asserting the wider one, and it was false:
@@ -26,6 +28,11 @@
  * caller cannot interpret.
  */
 
+import {
+  isStorageConnectionSecretName,
+  STORAGE_CONNECTION_SECRET_PREFIX,
+} from '@indx-workspace/contracts/secret-reference';
+
 /** A parse either produced a value, or the reasons it could not. Never both, never neither. */
 export type ParseResult<T> =
   | { readonly ok: true; readonly value: T }
@@ -33,6 +40,25 @@ export type ParseResult<T> =
 
 /** Transcribed from `secrets_name_shape` in `packages/core/src/db/schema/secrets.ts`. */
 export const SECRET_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
+
+/**
+ * Every storage connection's credential is named with this prefix and written only through
+ * `/api/storage-connections`, which binds it to the connection's URL. The generic secrets routes
+ * refuse to create or replace any name that carries it, and delete one only when no connection
+ * owns it. The contracts define the prefix once, for every check that reads it.
+ */
+export { isStorageConnectionSecretName, STORAGE_CONNECTION_SECRET_PREFIX };
+
+const STORAGE_CONNECTION_SECRET = new RegExp(
+  `^${STORAGE_CONNECTION_SECRET_PREFIX}([0-9A-F]{8})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{12})$`,
+  'u',
+);
+
+/** The connection id a secret name stands for, or `null` for any other name. */
+export function storageConnectionIdOf(secretName: string): string | null {
+  const parts = STORAGE_CONNECTION_SECRET.exec(secretName)?.slice(1);
+  return parts === undefined ? null : parts.join('-').toLowerCase();
+}
 
 /**
  * The largest plaintext value this route accepts, in UTF-16 code units.

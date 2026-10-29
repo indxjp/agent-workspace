@@ -1,5 +1,5 @@
 import type { ModelConnectionConfig } from '@indx-workspace/contracts/models';
-import type { ModelProvider } from '@indx-workspace/contracts/runs';
+import type { ModelProvider, RunStartProblemCode } from '@indx-workspace/contracts/runs';
 import type { RegisteredProviderId } from './providers/registry.js';
 import type { GatewayRouter, RequestContext, WireProtocol } from './types.js';
 import type { RunTokenClaims, RunTokenCodec } from './tokens/run-token.js';
@@ -63,6 +63,17 @@ export type GatewayUsageRecord = Readonly<{
   metered: boolean;
 }>;
 
+/** Why a model call is refused after its token authenticated; `admit` answers `null` to let it through. */
+export interface GatewayAdmission {
+  admit(claims: RunTokenClaims): Promise<AdmissionRefusal | null>;
+}
+
+export type AdmissionRefusal = {
+  readonly status: 403 | 503;
+  readonly code: Extract<RunStartProblemCode, 'daily_cost_cap_reached' | 'daily_cost_unavailable'>;
+  readonly message: string;
+};
+
 /** The gateway's own refusals. Every run-token code starts `token_` and a provider's `401` is
  * relayed unchanged, never under that prefix: the Claude engine adapter relies on it to tell a
  * refused run token from a rejected provider key (issue #661). */
@@ -70,13 +81,11 @@ function problem(
   status: number,
   code: string,
   message: string,
+  type = 'authentication_error',
 ): { readonly ok: false; readonly response: Response } {
   return {
     ok: false,
-    response: Response.json(
-      { type: 'error', error: { type: 'authentication_error', code, message } },
-      { status },
-    ),
+    response: Response.json({ type: 'error', error: { type, code, message } }, { status }),
   };
 }
 
@@ -294,12 +303,26 @@ export function createAuthenticatedGateway(
   usage?: UsageRecorder,
   onUsageError: (error: unknown, request: Request) => void = () => undefined,
   settlementTimeoutMs = DEFAULT_SETTLEMENT_TIMEOUT_MS,
+  admission?: GatewayAdmission,
 ): Pick<GatewayRouter, 'fetch'> {
   return {
     async fetch(request) {
       const authentication = await authenticateGatewayRequest(request, tokens, resolver);
       if (!authentication.ok) return authentication.response;
       const wireProtocol = meteredProtocol(new URL(request.url).pathname);
+      // Only a model turn spends: `/v1/models` and `count_tokens` stay open, so an engine's
+      // credential probe still tells a refused token from a refused call.
+      if (admission !== undefined && wireProtocol !== null) {
+        const refusal = await admission.admit(authentication.claims);
+        if (refusal !== null) {
+          return problem(
+            refusal.status,
+            refusal.code,
+            refusal.message,
+            refusal.status === 403 ? 'permission_error' : 'api_error',
+          ).response;
+        }
+      }
       let requestedModel: string | null = null;
       try {
         const body: unknown = await request.clone().json();

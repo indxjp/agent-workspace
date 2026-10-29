@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
   AGENT_ENVIRONMENTS,
@@ -16,6 +16,7 @@ import {
   AgentVersionResourceSchema,
   AgentVersionSummarySchema,
   AgentVersionToolBundleSchema,
+  ToolSecretNamesSchema,
   CreateAgentFromVersionRequestSchema,
   CreateAgentFromVersionResponseSchema,
   CreateAgentVersionRequestSchema,
@@ -30,6 +31,7 @@ import {
   ToolBundleDigestSchema,
   UploadToolBundleRequestSchema,
   UploadToolBundleResponseSchema,
+  type AgentVersionProblemCode,
   type AgentVersionResource,
 } from './agent-versions.js';
 import {
@@ -40,6 +42,7 @@ import {
   type AgentDefinition,
   type AgentResource,
 } from './agents.js';
+import { RUN_START_PROBLEM_CODES } from './runs.js';
 import type { SurfaceDefinition } from './surfaces.js';
 
 const DIGEST = 'a'.repeat(64);
@@ -304,6 +307,27 @@ describe('tool bundles (#790)', () => {
     expect(
       AgentVersionToolBundleSchema.safeParse({ tool: 'lookup', digest: DIGEST, ...change }).success,
     ).toBe(false);
+  });
+
+  // @story US-STO-12
+  it("[US-STO-12][unit][sdk] refuses a storage connection credential among a code tool's secrets", () => {
+    for (const name of [
+      'STORAGE_CONNECTION_77777777777747778777777777777777',
+      'STORAGE_CONNECTION_ANYTHING',
+    ]) {
+      const refused = ToolSecretNamesSchema.safeParse([name]);
+      expect(refused.success, name).toBe(false);
+      expect(
+        refused.error?.issues.map((issue) => issue.message),
+        name,
+      ).toContain('must not name a storage connection credential (STORAGE_CONNECTION_)');
+      expect(
+        AgentVersionToolBundleSchema.safeParse({ tool: 'lookup', digest: DIGEST, secrets: [name] })
+          .success,
+        name,
+      ).toBe(false);
+    }
+    expect(ToolSecretNamesSchema.safeParse(['STORAGE_KEY', 'CONNECTION_TOKEN']).success).toBe(true);
   });
 
   it('accepts exactly a 64-character lower-case hex digest', () => {
@@ -731,6 +755,7 @@ describe('AGENT_VERSION_PROBLEM_CODES', () => {
       dangerous_permission_mode_refused: 400,
       agent_not_found: 404,
       agent_policy_not_configured: 503,
+      agent_archived: 409,
       agent_version_not_found: 404,
       agent_version_number_taken: 409,
       no_pointer: 409,
@@ -788,6 +813,8 @@ describe('AGENT_VERSION_PROBLEM_CODES', () => {
     expect(AGENT_VERSION_PROBLEM_CODES.agent_definition_reference_ambiguous).toBe(
       AGENT_DEFINITION_PROBLEM_CODES.agent_definition_reference_ambiguous,
     );
+    expect(AGENT_VERSION_PROBLEM_CODES.agent_archived).toBe(RUN_START_PROBLEM_CODES.agent_archived);
+    expectTypeOf<'agent_archived'>().toExtend<AgentVersionProblemCode>();
   });
 });
 

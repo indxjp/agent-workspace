@@ -387,11 +387,6 @@ export const AGENT_MODES = ['form', 'chat'] as const;
 export type AgentMode = (typeof AGENT_MODES)[number];
 const AGENT_MODE_LABELS: Readonly<Record<AgentMode, string>> = { form: 'Form', chat: 'Chat' };
 
-/** Whether this user may build an agent in chat. Slice 2 of #1849 replaces it with the `/api/me` `builder` feature. */
-export function builderChatEnabled(): boolean {
-  return false;
-}
-
 /** `?mode=chat` selects Chat only when the feature is on; anything else is the form. */
 export function parseAgentMode(param: string | null, chatEnabled: boolean): AgentMode {
   return chatEnabled && param === 'chat' ? 'chat' : 'form';
@@ -453,13 +448,14 @@ export function AgentModeSwitch({
 }
 
 export function NewAgentScreen({
-  chatEnabled = builderChatEnabled(),
+  chatEnabled,
   chat,
 }: Readonly<{
-  chatEnabled?: boolean;
+  /** Whether the caller's `/api/me` features include `builder`; the route reads it. */
+  chatEnabled: boolean;
   /** The chat screen, given the mode switch to place; the route supplies it so imports stay acyclic. */
   chat?: (modeSwitch: ReactNode) => ReactNode;
-}> = {}) {
+}>) {
   const router = useRouter();
   const mode = parseAgentMode(useSearchParams().get('mode'), chatEnabled);
   const [name, setName] = useState('');

@@ -38,6 +38,7 @@
  */
 import crypto from 'node:crypto';
 
+import { STORAGE_CONNECTION_SECRET_PREFIX } from '@indx-workspace/contracts/secret-reference';
 import { and, asc, eq, sql, type SQL } from 'drizzle-orm';
 
 import type { Database } from '../db/client.js';
@@ -279,7 +280,7 @@ export function createDatabaseSecretsRepositoryProvider(db: Database): SecretsRe
                 .where(
                   and(
                     eq(storageConnections.workspaceId, checked.workspaceId),
-                    sql`'STORAGE_CONNECTION_' || upper(replace(${storageConnections.id}::text, '-', '')) = ${row.name}`,
+                    sql`${STORAGE_CONNECTION_SECRET_PREFIX}::text || upper(replace(${storageConnections.id}::text, '-', '')) = ${row.name}`,
                   ),
                 )
                 .orderBy(asc(storageConnections.id));

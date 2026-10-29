@@ -51,11 +51,11 @@
    "input": {"enum": "TOKEN_SCOPE_KINDS"},
    "id": "enum/token-scope-kinds",
    "expected": {"members": ["run", "session"]}},
-  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.sub_resource_composition_yields_forty_four_pairs"],
+  {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.sub_resource_composition_yields_forty_six_pairs"],
    "input": {"enum": "SUB_RESOURCES"},
    "id": "enum/sub-resources",
    "expected":
-   {"workspaces": [],
+   {"workspaces": ["features"],
     "users": [],
     "triggers": ["secret"],
     "tool-bundles": [],
@@ -95,6 +95,7 @@
     "api-keys": [],
     "agents":
     ["runs",
+     "restore",
      "promote",
      "rollback",
      "evaluations",

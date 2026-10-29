@@ -1,4 +1,4 @@
-/* global Buffer, document, fetch, localStorage, process, TextEncoder */
+/* global document, fetch, localStorage, TextEncoder */
 
 /**
  * Storage connections in the console (the storage design, §07 "Browser tests", US-STO-12): an
@@ -10,7 +10,7 @@
  * A missing prerequisite fails the test rather than skipping it. Names are unique per project and
  * run because both Playwright projects share one server and one workspace.
  */
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -20,6 +20,7 @@ import { expect, test } from '@playwright/test';
 import {
   bootstrapAdminCredentials,
   expectBasicAccessibility,
+  newMemberContext,
   signInAsBootstrapAdmin,
 } from './harness.mjs';
 import { storageConnectionFileRoot } from './storage-file-root.mjs';
@@ -54,7 +55,7 @@ async function seedConnection(folder, files) {
     },
   );
   for (const [key, text] of Object.entries(files)) {
-    await store.put(key, { body: new TextEncoder().encode(text) });
+    await store.write(key, new TextEncoder().encode(text), {});
   }
 }
 
@@ -206,7 +207,8 @@ test('[US-STO-12][browser][web] credentials are never rendered back', async ({
   const suffix = uniqueSuffix(testInfo);
   const secret = randomBytes(24).toString('base64url');
   const rotatedSecret = randomBytes(24).toString('base64url');
-  const slices = [secret, rotatedSecret].flatMap((value) =>
+  const savedSecret = randomBytes(24).toString('base64url');
+  const slices = [secret, rotatedSecret, savedSecret].flatMap((value) =>
     Array.from({ length: value.length - 5 }, (_, index) => value.slice(index, index + 6)),
   );
   const consoleText = [];
@@ -269,6 +271,19 @@ test('[US-STO-12][browser][web] credentials are never rendered back', async ({
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Edit storage connection' })).toBeVisible();
     await expect(page.getByLabel('URL')).toHaveValue(/reports-bucket/u);
+    await expectNoSecret();
+  });
+
+  await test.step('after a successful Save changes that carries a credential', async () => {
+    // A moved bucket needs a new credential, so the save sends one in the update.
+    await page.getByLabel('URL').fill('s3://moved-bucket?endpoint=https://s3.example.com');
+    await page.getByLabel('Access key ID').fill(`id-${suffix}`);
+    await page.getByLabel('Secret access key').fill(savedSecret);
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByRole('status')).toContainText('Changes saved.');
+    await expectNoSecret();
+    await page.reload();
+    await expect(page.getByLabel('URL')).toHaveValue(/moved-bucket/u);
     await expectNoSecret();
   });
 
@@ -382,8 +397,20 @@ test('[US-STO-12][browser][web] delete: asks first, refuses a granted connection
   const dialog = page.getByRole('dialog', { name: `Delete ${name}?` });
   await expect(dialog).toBeVisible();
 
+  /** True when `locator`'s element sits in an inert subtree: no pointer, focus or screen reader. */
+  const inert = (locator) => locator.evaluate((element) => element.closest('[inert]') !== null);
+  const navLink = page.locator('nav a[href="/admin/storage"]');
+
+  await test.step('the page behind the dialog is inert while it is open', async () => {
+    expect(await inert(navLink)).toBe(true);
+    expect(await inert(page.locator('main form'))).toBe(true);
+    expect(await inert(dialog)).toBe(false);
+  });
+
   await test.step('cancelling keeps the connection and returns focus to the button', async () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click();
+    expect(await inert(navLink)).toBe(false);
+    expect(await inert(page.locator('main form'))).toBe(false);
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('button', { name: 'Delete this connection' })).toBeFocused();
     expect((await api(page, 'GET', `/api/storage-connections/${connection.id}`)).status).toBe(200);
@@ -413,34 +440,6 @@ test('[US-STO-12][browser][web] delete: asks first, refuses a granted connection
   });
 });
 
-/**
- * The session cookie of `email` in the Owner's workspace. This build signs in only the bootstrap
- * Owner (see `harness.mjs`), but the role of a session is read from the directory on every request,
- * so a member provisioned through `POST /api/users` is signed in by minting the cookie the server
- * would have issued, with the deployment's own `SESSION_SECRET`.
- */
-async function sessionCookieFor(ownerPage, email) {
-  const secret = process.env['SESSION_SECRET'];
-  expect(secret, 'SESSION_SECRET must be set so a member session can be minted.').toBeTruthy();
-  const owner = (await ownerPage.context().cookies()).find((cookie) =>
-    cookie.name.startsWith('__Host-aw_session'),
-  );
-  const claims = JSON.parse(Buffer.from(owner.value.split('.')[1], 'base64url').toString());
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const payload = Buffer.from(
-    JSON.stringify({
-      sub: email,
-      ws: claims.ws,
-      role: 'owner',
-      iat: issuedAt,
-      exp: issuedAt + 3600,
-    }),
-  ).toString('base64url');
-  const signed = `aw1.${payload}`;
-  const signature = createHmac('sha256', secret).update(signed).digest('base64url');
-  return { ...owner, value: `${signed}.${signature}` };
-}
-
 const NOT_ALLOWED = 'Only workspace Owners and Admins can manage storage connections.';
 
 test('[US-STO-12][browser][web] only Owners and Admins manage storage', async ({
@@ -464,9 +463,8 @@ test('[US-STO-12][browser][web] only Owners and Admins manage storage', async ({
     const email = `sto-${role}-${suffix}@example.test`;
     const created = await api(page, 'POST', '/api/users', { email, name: `Sto ${role}`, role });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
-    const context = await browser.newContext({ baseURL });
+    const context = await newMemberContext(browser, page, email, { baseURL });
     try {
-      await context.addCookies([await sessionCookieFor(page, email)]);
       await check(await context.newPage());
     } finally {
       await context.close();

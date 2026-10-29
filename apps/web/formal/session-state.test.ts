@@ -38,8 +38,7 @@
 import { clearApplicationContext } from '../server/application-context';
 import { installTestDomains } from '../server/application-context-fixtures';
 import crypto from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,7 +68,11 @@ import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors.js';
-import { createLocalFilesystemObjectStoreProvider } from '@agent-workspace/core/storage';
+import {
+  createInMemoryObjectStore,
+  createInMemoryObjectStoreProvider,
+} from '@agent-workspace/core/storage';
+import type { Logger } from '@agent-workspace/core/telemetry';
 import { loadTranscript } from '../server/sessions/api';
 import type { SessionApiPrincipal } from '../server/sessions/environment';
 import { InMemoryTranscriptStore } from '../server/sessions/memory-store';
@@ -88,6 +91,14 @@ import {
   replaceSessionState,
 } from '../server/sessions/state-api';
 import type { TranscriptStore } from '../server/sessions/transcript';
+import { createStorageService } from '../server/storage/service';
+
+const silentLog: Logger = {
+  info() {},
+  warn() {},
+  error() {},
+  child: () => silentLog,
+};
 
 const FAMILY = 'session-state';
 const WORKSPACE = 'c8b1f0de-6a2e-4a1f-9d3b-000000000001';
@@ -203,7 +214,6 @@ function postgresBackend(): Backend & {
   close(): Promise<void>;
 } {
   let isolated: IsolatedTestDatabase | undefined;
-  const blobRoot = mkdtempSync(path.join(tmpdir(), 'aw-formal-session-state-'));
   const database = (): IsolatedTestDatabase => {
     if (isolated === undefined) throw new Error('the PostgreSQL backend was used before open()');
     return isolated;
@@ -259,7 +269,6 @@ function postgresBackend(): Backend & {
     },
     async close() {
       await isolated?.close();
-      rmSync(blobRoot, { recursive: true, force: true });
     },
     async fresh() {
       const found = database();
@@ -268,12 +277,20 @@ function postgresBackend(): Backend & {
       await found.db.delete(sessionStateBlobs);
       await found.db.delete(sessionTranscripts);
       const scopes = createDatabaseWorkspaceScopeResolver(found.db);
+      const repositories = createDatabaseSessionStateRepositoryProvider(found.db);
+      const storage = createStorageService({
+        catalog: () => Promise.reject(new Error('the files catalog is not used here')),
+        objects: createInMemoryObjectStore(),
+        legacy: { 'session-state': createInMemoryObjectStoreProvider() },
+        sessionState: async (workspaceId) => {
+          const scope = await scopes.forWorkspaceId(workspaceId);
+          if (scope === null) throw new Error('the workspace did not resolve');
+          return repositories.forScope(scope);
+        },
+        log: silentLog,
+      });
       return {
-        stateStore: new DatabaseSessionStateStore({
-          repositories: createDatabaseSessionStateRepositoryProvider(found.db),
-          scopes,
-          blobs: createLocalFilesystemObjectStoreProvider(blobRoot),
-        }),
+        stateStore: new DatabaseSessionStateStore({ repositories, scopes, storage }),
         legacy: new DatabaseTranscriptStore(
           createDatabaseSessionTranscriptRepositoryProvider(found.db),
           scopes,

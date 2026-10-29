@@ -1,7 +1,8 @@
 /**
  * A built-in agent (#1848) is read-only through every write route, for every role: the refusal is
  * the resolvers', before RBAC's `decide()`, so an Owner is answered the same `403` as a Viewer.
- * Reads, evaluations and platform exports are not refused, so people may inspect and evaluate it;
+ * Reads, evaluations (advancing a run included) and platform exports are not refused, so people may
+ * inspect and evaluate it;
  * running the agent is another route.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -155,7 +156,6 @@ const WRITES = [
   ],
   ['POST /api/agents/:id/promote', postPromote, 'POST', {}, null],
   ['POST /api/agents/:id/rollback', postRollback, 'POST', { environment: 'local' }, null],
-  ['POST /api/agents/:id/evaluation-advance', postEvaluationAdvance, 'POST', {}, null],
   ['PUT /api/agents/:id/grants', putGrants, 'PUT', { principalIds: [] }, null],
 ] as const;
 
@@ -163,6 +163,12 @@ const WRITES = [
 const ALLOWED = [
   ['POST /api/agents/:id/evaluations', postEvaluation, { version: 1 }],
   ['POST /api/agents/:id/evaluation-runs', postEvaluationRun, { version: 1 }],
+  // Advancing runs and scores cases; it moves no pointer and writes no version (slice 1d).
+  [
+    'POST /api/agents/:id/evaluation-advance',
+    postEvaluationAdvance,
+    { evaluationId: '55555555-5555-4555-8555-555555555555' },
+  ],
   ['POST /api/agents/:id/platform-exports', postPlatformExport, { platform: 'claude-code' }],
   ['POST /api/agents/:id/platform-archives', postPlatformArchive, { platform: 'claude-code' }],
 ] as const;

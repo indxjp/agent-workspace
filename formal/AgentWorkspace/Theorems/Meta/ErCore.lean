@@ -70,7 +70,8 @@ theorem timestamps_are_not_on_every_table :
           .auditEvents,
           .browserTokens, .builderToolCalls, .cliSessions, .endpointClientAgents, .endpointClientApiKeys, .fileTexts, .oauthTokens, .projectFiles, .projectMcpServers, .runEvents,
           .runFeedback, .runUsageRecords, .runTokens, .runtimeVerifications, .sessionMessages, .sessionStateEntries, .storageMigrationRuns, .shareViews,
-          .shares, .skillRevisions, .surfaceSessionKeys, .triggerDeliveries, .workspacePrincipals] := by
+          .shares, .skillRevisions, .surfaceSessionKeys, .triggerDeliveries, .workspacePrincipals,
+          .workspaceFeatures] := by
   decide +kernel
 
 /-- The structure map says "every cross-table foreign key is composite on `(id, workspace_id)`";

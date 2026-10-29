@@ -94,7 +94,7 @@ export const AgentResourceSchema = z
      * Present only on an agent made by an agent. `createdBy` above stays the person (issue #1851).
      */
     createdByAgent: AgentCreatedByAgentSchema.optional(),
-    /** When the agent was archived; absent while active. Lists still include archived agents. */
+    /** When the agent was archived; absent while active. Lists hide it unless `?archived=include`. */
     archivedAt: IsoDateTimeSchema.optional(),
     createdAt: IsoDateTimeSchema,
     updatedAt: IsoDateTimeSchema,
@@ -372,6 +372,20 @@ export const AgentGrantsSchema = z
   .readonly();
 
 export type AgentGrants = z.infer<typeof AgentGrantsSchema>;
+
+/** The one value of the `?archived=` option of `GET /api/agents`; absent hides archived agents. */
+export const AGENT_LIST_ARCHIVED = ['include'] as const;
+export type AgentListArchived = (typeof AGENT_LIST_ARCHIVED)[number];
+
+/** Problem codes of `GET /api/agents`, with their HTTP status: a query option it cannot read. */
+export const AGENT_LIST_PROBLEM_CODES = { invalid_agent_list_query: 400 } as const;
+export type AgentListProblemCode = keyof typeof AGENT_LIST_PROBLEM_CODES;
+
+/** The query string of `GET /api/agents`. */
+export const AgentListQuerySchema = z
+  .object({ archived: z.enum(AGENT_LIST_ARCHIVED).optional() })
+  .strict()
+  .readonly();
 
 /** The body of `GET /api/agents`. */
 export const AgentListResponseSchema = z

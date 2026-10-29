@@ -339,7 +339,7 @@ export async function listCatalogFolder(
           kind: 'file',
           sizeBytes: row.sizeBytes,
           contentType: row.contentType,
-          lastModified: null,
+          lastModified: lastModifiedOf(row),
         });
       } else {
         const directory = `${base}${rest.slice(0, slash)}`;
@@ -510,16 +510,6 @@ export async function removeCatalogPath(
   if (targetsPublishedSkillRevisions(path)) return revisionsImmutable();
   if (recursive && (await holdsSkillRows(catalog, path))) return skillRowsReserved();
   const row = await catalog.get(path);
-  // ponytail: a file added under the folder between this listing and `remove` goes too, unlisted.
-  const deleted: string[] = [];
-  if (row?.kind === 'folder' && recursive) {
-    let cursor: string | undefined;
-    do {
-      const page = await catalog.list(path, cursor === undefined ? undefined : { cursor });
-      for (const found of page.rows) if (found.kind === 'file') deleted.push(found.path);
-      cursor = page.cursor ?? undefined;
-    } while (cursor !== undefined);
-  }
   const removed = await storage.remove(ctx, 'files', path, { recursive });
   if (!removed.ok) {
     switch (removed.code) {
@@ -537,7 +527,7 @@ export async function removeCatalogPath(
     }
   }
   return row?.kind === 'folder'
-    ? json(200, { status: 'ok', deleted })
+    ? json(200, { status: 'ok', deleted: removed.files })
     : { status: 204, kind: 'empty' };
 }
 
@@ -548,8 +538,13 @@ function catalogResource(row: CatalogFile): FileResource {
     kind: row.kind,
     sizeBytes: row.kind === 'file' ? row.sizeBytes : null,
     contentType: row.kind === 'file' ? row.contentType : null,
-    lastModified: null,
+    lastModified: row.kind === 'file' ? lastModifiedOf(row) : null,
   };
+}
+
+/** A file's `lastModified`: when its catalog row was last written. A folder answers none. */
+export function lastModifiedOf(row: Pick<CatalogFile, 'updatedAt'>): string | null {
+  return row.updatedAt?.toISOString() ?? null;
 }
 
 /**

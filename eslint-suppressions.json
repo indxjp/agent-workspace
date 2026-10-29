@@ -236,7 +236,7 @@
   },
   "packages/core/src/storage/local-fs-store.ts": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "packages/embedded/src/postmaster.ts": {

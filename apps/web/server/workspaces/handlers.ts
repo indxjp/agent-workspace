@@ -13,6 +13,7 @@ import { problemWithDetail as problem } from '../http/result';
 // this file and that one — both are this task's `Owns`, so the fix is one shared export, not a
 // second copy.
 import { asObject, readString } from '../rbac/handlers';
+import { log } from '../telemetry/logger';
 import type { WorkspaceRepositoryPort } from './runtime';
 
 /**
@@ -54,11 +55,16 @@ export async function listWorkspaces(
   return { status: 200, body: { workspaces: rows.map(serialiseMembershipView) } };
 }
 
-/** `POST /api/workspaces` — create a workspace and its creator's Owner membership, atomically. */
+/**
+ * `POST /api/workspaces` — create a workspace and its creator's Owner membership, atomically.
+ * `onCreated` runs after the commit (the route ensures the new workspace's Builder, #1848); its
+ * failure is logged and never fails the create.
+ */
 export async function createWorkspace(
   repository: WorkspaceRepositoryPort,
   ownerUserId: string,
   body: unknown,
+  onCreated?: (workspaceId: string) => Promise<void>,
 ): Promise<ApiResult> {
   const object = asObject(body);
   if (!object.ok) return object.result;
@@ -74,6 +80,16 @@ export async function createWorkspace(
   });
   switch (outcome.kind) {
     case 'created':
+      if (onCreated !== undefined) {
+        try {
+          await onCreated(outcome.workspace.id);
+        } catch {
+          // The error may carry SQL or provider text, so the warning names only the workspace.
+          log.warn('[workspaces] the after-create step failed', {
+            workspaceId: outcome.workspace.id,
+          });
+        }
+      }
       return {
         status: 201,
         body: { workspace: serialiseMembershipView({ ...outcome.workspace, role: 'owner' }) },

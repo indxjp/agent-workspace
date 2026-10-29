@@ -1,7 +1,7 @@
 {
   // The type-checking view of the emit build's adapter declarations (`engine-modules.d.ts`). A
-  // project of its own, because the application's `tsconfig.json` must not include them: there the
-  // real adapter packages resolve, and these `unknown`-typed declarations would shadow them.
+  // project of its own, because the application's `tsconfig.json` type-checks the real adapter
+  // packages, and only `tsconfig.build.json` maps their specifiers to this module.
   "extends": "../tsconfig.json",
   "include": ["engine-modules.d.ts"]
 }

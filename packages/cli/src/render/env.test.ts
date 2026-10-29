@@ -125,6 +125,7 @@ describe('the rendered environment against the documented inventory', () => {
       'RUNNER_URL',
       'RUNTIME_DRIVER',
       'SEAWEEDFS_ACCESS_KEY_ID',
+      'SEAWEEDFS_ALLOWED_ORIGINS',
       'SEAWEEDFS_IMAGE',
       'SEAWEEDFS_PORT',
       'SEAWEEDFS_SECRET_ACCESS_KEY',

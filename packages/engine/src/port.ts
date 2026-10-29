@@ -469,8 +469,10 @@ export type AgentEngine<TCompiled = unknown> = {
   /** Pure. See the header for why this is separate from {@link start}. */
   compile(request: EngineRunRequest): EngineCompileResult<TCompiled>;
   /**
-   * Start one run. Throws only for a programming fault; a request this engine will not run is a
-   * {@link EngineRefusal} from {@link compile}, and the runner calls `compile` first.
+   * Start one run. A request this engine will not run is a {@link EngineRefusal} from
+   * {@link compile}, and the runner calls `compile` first. The one refusal `start` may throw is an
+   * `EngineRefusalError`, for a compiled value the adapter cannot translate into its engine's own
+   * options, and only before any frame; any other throw is a programming fault.
    */
   start(request: EngineRunRequest, context?: EngineStartContext): EngineConnection;
 };

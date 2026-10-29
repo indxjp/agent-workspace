@@ -13,9 +13,10 @@ import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import {
   bytesToStream,
   createInMemoryObjectStore,
+  createInMemoryObjectStoreProvider,
   createLocalFilesystemObjectStoreProvider,
   UnsafeObjectKeyError,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { MAX_SKILL_REQUEST_BODY_BYTES } from '@indx-workspace/contracts/skills';
 
@@ -34,7 +35,7 @@ import {
 const WORKSPACE_ID = '55555555-5555-4555-8555-555555555555';
 
 let rootDir: string;
-let store: ObjectStoreV2;
+let store: ObjectStore;
 
 beforeEach(async () => {
   rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-04-tree-'));
@@ -48,12 +49,40 @@ afterEach(async () => {
 const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 describe('walkFiles', () => {
+  it('walks a folder with more than one listing page of files', async () => {
+    const memory = createInMemoryObjectStoreProvider().forWorkspace(WORKSPACE_ID);
+    for (let n = 0; n <= 1000; n += 1) {
+      const name = String(n).padStart(4, '0');
+      await memory.write(`skills/demo/many/${name}.txt`, utf8('x'), { contentType: null });
+    }
+    const found = await walkFiles(memory, 'skills/demo');
+    expect(found).toHaveLength(1001);
+    expect(found.at(-1)).toEqual({
+      key: 'skills/demo/many/1000.txt',
+      relativePath: 'many/1000.txt',
+      sizeBytes: 1,
+    });
+  });
+
+  it('orders files code unit by code unit, a nested file after its same-named sibling', async () => {
+    for (const name of ['a/b.txt', 'a.txt', 'a-b.txt', 'B.txt']) {
+      await store.write(`skills/demo/${name}`, utf8(name), { contentType: null });
+    }
+    const found = await walkFiles(store, 'skills/demo');
+    expect(found.map((file) => file.relativePath)).toEqual([
+      'B.txt',
+      'a-b.txt',
+      'a.txt',
+      'a/b.txt',
+    ]);
+  });
+
   it('returns nothing for a prefix with nothing under it', async () => {
     expect(await walkFiles(store, 'skills/nope')).toEqual([]);
   });
 
   it('finds a single file directly under the prefix', async () => {
-    await store.put('skills/demo/SKILL.md', { body: utf8('# demo\n'), contentType: null });
+    await store.write('skills/demo/SKILL.md', utf8('# demo\n'), { contentType: null });
     const found = await walkFiles(store, 'skills/demo');
     expect(found).toEqual([
       { key: 'skills/demo/SKILL.md', relativePath: 'SKILL.md', sizeBytes: 7 },
@@ -61,10 +90,10 @@ describe('walkFiles', () => {
   });
 
   it('recurses into nested folders, arbitrarily deep', async () => {
-    await store.put('skills/demo/SKILL.md', { body: utf8('a'), contentType: null });
-    await store.put('skills/demo/scripts/run.sh', { body: utf8('b'), contentType: null });
-    await store.put('skills/demo/scripts/lib/helper.sh', { body: utf8('c'), contentType: null });
-    await store.put('skills/demo/notes/todo.txt', { body: utf8('d'), contentType: null });
+    await store.write('skills/demo/SKILL.md', utf8('a'), { contentType: null });
+    await store.write('skills/demo/scripts/run.sh', utf8('b'), { contentType: null });
+    await store.write('skills/demo/scripts/lib/helper.sh', utf8('c'), { contentType: null });
+    await store.write('skills/demo/notes/todo.txt', utf8('d'), { contentType: null });
 
     const found = await walkFiles(store, 'skills/demo');
     expect(found.map((f) => f.relativePath)).toEqual([
@@ -82,8 +111,8 @@ describe('walkFiles', () => {
   });
 
   it('reports the size of each file straight from the listing', async () => {
-    await store.put('skills/demo/SKILL.md', { body: utf8('# demo'), contentType: null });
-    await store.put('skills/demo/scripts/run.sh', { body: utf8('echo hi'), contentType: null });
+    await store.write('skills/demo/SKILL.md', utf8('# demo'), { contentType: null });
+    await store.write('skills/demo/scripts/run.sh', utf8('echo hi'), { contentType: null });
     const found = await walkFiles(store, 'skills/demo');
     expect(found.map((f) => [f.relativePath, f.sizeBytes])).toEqual([
       ['SKILL.md', 6],
@@ -92,16 +121,16 @@ describe('walkFiles', () => {
   });
 
   it("does not cross into a sibling skill's directory", async () => {
-    await store.put('skills/demo-a/SKILL.md', { body: utf8('a'), contentType: null });
-    await store.put('skills/demo-ab/SKILL.md', { body: utf8('b'), contentType: null });
+    await store.write('skills/demo-a/SKILL.md', utf8('a'), { contentType: null });
+    await store.write('skills/demo-ab/SKILL.md', utf8('b'), { contentType: null });
     const found = await walkFiles(store, 'skills/demo-a');
     expect(found.map((f) => f.relativePath)).toEqual(['SKILL.md']);
   });
 
   it('returns a stable, sorted order regardless of write order', async () => {
-    await store.put('skills/demo/z.txt', { body: utf8('z'), contentType: null });
-    await store.put('skills/demo/a.txt', { body: utf8('a'), contentType: null });
-    await store.put('skills/demo/m.txt', { body: utf8('m'), contentType: null });
+    await store.write('skills/demo/z.txt', utf8('z'), { contentType: null });
+    await store.write('skills/demo/a.txt', utf8('a'), { contentType: null });
+    await store.write('skills/demo/m.txt', utf8('m'), { contentType: null });
     const found = await walkFiles(store, 'skills/demo');
     expect(found.map((f) => f.relativePath)).toEqual(['a.txt', 'm.txt', 'z.txt']);
   });
@@ -147,8 +176,8 @@ describe('skillFiles', () => {
   // @story US-STO-08
   it('[US-STO-08][api][sdk] rows win over a leftover prefix and are never merged with it', async () => {
     const { rows, save } = rowsWorld();
-    await store.put('skills/demo/SKILL.md', { body: utf8('old'), contentType: null });
-    await store.put('skills/demo/old-only.md', { body: utf8('old'), contentType: null });
+    await store.write('skills/demo/SKILL.md', utf8('old'), { contentType: null });
+    await store.write('skills/demo/old-only.md', utf8('old'), { contentType: null });
     await save('.skills/demo/SKILL.md', utf8('new'));
     await save('.skills/demo/b/c.md', utf8('c'));
 
@@ -164,7 +193,7 @@ describe('skillFiles', () => {
   // @story US-STO-08
   it('[US-STO-08][api][sdk] a skill with no rows is read from its prefix, with or without a service', async () => {
     const { rows } = rowsWorld();
-    await store.put('skills/demo/SKILL.md', { body: utf8('old'), contentType: null });
+    await store.write('skills/demo/SKILL.md', utf8('old'), { contentType: null });
 
     expect(await read(await skillFiles(store, rows, '.skills/demo', 'skills/demo'))).toEqual([
       ['SKILL.md', 'old'],
@@ -241,8 +270,8 @@ describe('skillWriter', () => {
   it('[US-STO-08][unit][sdk] ensureSkillRows moves a prefix into rows and never replaces a row', async () => {
     const { rows } = writerWorld();
     const writer = skillWriter(store, rows, 'demo');
-    await store.put('skills/demo/SKILL.md', { body: utf8('old'), contentType: null });
-    await store.put('skills/demo/s/run.sh', { body: utf8('run'), contentType: null });
+    await store.write('skills/demo/SKILL.md', utf8('old'), { contentType: null });
+    await store.write('skills/demo/s/run.sh', utf8('run'), { contentType: null });
     // A row an earlier, interrupted move or another writer already saved.
     await writer.put('SKILL.md', utf8('new'));
 

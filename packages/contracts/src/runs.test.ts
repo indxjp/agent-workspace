@@ -331,6 +331,7 @@ describe('RUN_START_PROBLEM_CODES (issue #393)', () => {
       policy_cannot_widen: 403,
       daily_cost_cap_reached: 429,
       daily_cost_unavailable: 503,
+      agent_archived: 409,
       builder_model_unavailable: 503,
     });
     // Issue #1539: a widening fileScope fails the run at launch with a coded refusal.

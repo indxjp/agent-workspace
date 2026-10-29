@@ -21,7 +21,7 @@ import {
   type SaveResult,
   type StorageContext,
 } from './service';
-import type { CatalogPort } from './store';
+import type { CatalogFile, CatalogPort } from './store';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -231,6 +231,46 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
     });
 
     // @story US-STO-01
+    it('[US-STO-01][unit][sdk] a committed save renamed before a lost confirm reply keeps its object', async () => {
+      const renamedThenLost = (catalog: CatalogPort): CatalogPort => ({
+        ...catalog,
+        confirm: async (row, input) => {
+          await catalog.confirm(row, input);
+          await catalog.rename('a.txt', 'renamed.txt');
+          throw new Error('reply lost');
+        },
+      });
+      const { f, save, objects, nameOf } = await harness(renamedThenLost);
+
+      await expect(save({ path: 'a.txt', body: bodyOf(bytesOf('kept')) })).rejects.toThrow(
+        'reply lost',
+      );
+
+      const row = await f.catalog.get('renamed.txt');
+      expect(row).toMatchObject({ status: 'ready', sizeBytes: 4 });
+      await expect(objects.head(nameOf(row?.objectId))).resolves.not.toBeNull();
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][unit][sdk] a save that loses confirmation to another confirmer preserves the ready object', async () => {
+      // Someone else (the cleanup pass, a retried request) confirms the row first.
+      const confirmedFirst = (catalog: CatalogPort): CatalogPort => ({
+        ...catalog,
+        confirm: async (row, input) => {
+          await catalog.confirm(row, input);
+          return catalog.confirm(row, input);
+        },
+      });
+      const { f, save, objects, nameOf } = await harness(confirmedFirst);
+
+      await save({ path: 'a.txt', body: bodyOf(bytesOf('kept')) });
+
+      const row = await f.catalog.get('a.txt');
+      expect(row).toMatchObject({ status: 'ready', sizeBytes: 4 });
+      await expect(objects.head(nameOf(row?.objectId))).resolves.not.toBeNull();
+    });
+
+    // @story US-STO-01
     it('[US-STO-01][unit][sdk] a confirm that finds the row removed leaves no object', async () => {
       const { f, save, objectKeys } = await harness();
       const held = heldBody(bytesOf('a'));
@@ -272,6 +312,117 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       const result = await save({ path: 'a.txt', replace: false, body: bodyOf(bytesOf('new')) });
 
       expect(result).toEqual({ ok: false, code: 'path_taken' });
+      await expect(f.catalog.get('a.txt')).resolves.toMatchObject({ id: first.id });
+      await expect(f.catalog.countPending()).resolves.toBe(0);
+      await expect(objectKeys()).resolves.toEqual([nameOf(first.objectId)]);
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][unit][sdk] a replacement policy decides on the file another member wrote just before the reservation', async () => {
+      const seen: string[] = [];
+      let theirs: string | null = null;
+      // The path was free when the caller was authorised; another member writes it first.
+      const raced = (catalog: CatalogPort): CatalogPort => ({
+        ...catalog,
+        reserve: async (path, input) => {
+          if (theirs === null) {
+            const other = await catalog.reserve(path, {
+              ...input,
+              ownerPrincipalId: f.otherPrincipalId,
+              createdBy: null,
+              objectId: crypto.randomUUID(),
+            });
+            theirs = other.row.id;
+            await catalog.confirm(other.row, { sizeBytes: 6, contentType: null });
+          }
+          return catalog.reserve(path, input);
+        },
+      });
+      const { f, ctx, save } = await harness(raced);
+
+      const result = await save({
+        path: 'a.txt',
+        body: bodyOf(bytesOf('mine')),
+        replace: (target) => {
+          seen.push(target.id);
+          return Promise.resolve(target.ownerPrincipalId === ctx.principalId);
+        },
+      });
+
+      expect(result).toEqual({ ok: false, code: 'path_taken' });
+      expect(seen).toEqual([theirs]);
+      await expect(f.catalog.get('a.txt')).resolves.toMatchObject({
+        id: theirs,
+        ownerPrincipalId: f.otherPrincipalId,
+      });
+      await expect(f.catalog.pending('a.txt')).resolves.toBeNull();
+    });
+
+    // @story US-STO-14
+    it('[US-STO-14][unit][sdk] a replacement without the reserved target is refused, never decided by path', async () => {
+      const blind = (catalog: CatalogPort): CatalogPort => ({
+        ...catalog,
+        reserve: async (path, input) => {
+          const outcome = await catalog.reserve(path, input);
+          return { kind: outcome.kind, row: outcome.row };
+        },
+      });
+      const { f, save } = await harness(blind);
+      const first = saved(await save({ path: 'a.txt', body: bodyOf(bytesOf('old')) }));
+      const policy = vi.fn(() => Promise.resolve(true));
+
+      const result = await save({ path: 'a.txt', body: bodyOf(bytesOf('new')), replace: policy });
+
+      expect(result).toEqual({ ok: false, code: 'path_taken' });
+      expect(policy).not.toHaveBeenCalled();
+      await expect(f.catalog.get('a.txt')).resolves.toMatchObject({ id: first.id });
+    });
+
+    // @story US-STO-01
+    it('[US-STO-01][unit][sdk] a failed replacement authorization releases the reservation and cancels the relay body', async () => {
+      const { f, save, objectKeys, nameOf } = await harness();
+      const first = saved(await save({ path: 'a.txt', body: bodyOf(bytesOf('old')) }));
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({ cancel });
+
+      await expect(
+        save({
+          path: 'a.txt',
+          body,
+          replace: () => Promise.reject(new Error('directory unavailable')),
+        }),
+      ).rejects.toThrow('directory unavailable');
+
+      expect(cancel).toHaveBeenCalledOnce();
+      await expect(f.catalog.pending('a.txt')).resolves.toBeNull();
+      await expect(f.catalog.get('a.txt')).resolves.toMatchObject({ id: first.id });
+      await expect(objectKeys()).resolves.toEqual([nameOf(first.objectId)]);
+    });
+
+    // @story US-STO-01
+    it('[US-STO-01][unit][sdk] a replace policy decides on the locked ready row; a refusal or a failure leaves nothing pending', async () => {
+      const { f, save, objectKeys, nameOf } = await harness();
+      const first = saved(await save({ path: 'a.txt', body: bodyOf(bytesOf('old')) }));
+      const asked: CatalogFile[] = [];
+
+      const refused = await save({
+        path: 'a.txt',
+        body: bodyOf(bytesOf('new')),
+        replace: (target) => {
+          asked.push(target);
+          return Promise.resolve(false);
+        },
+      });
+      await expect(
+        save({
+          path: 'a.txt',
+          body: bodyOf(bytesOf('new')),
+          replace: () => Promise.reject(new Error('the directory is unavailable')),
+        }),
+      ).rejects.toThrow('the directory is unavailable');
+
+      expect(refused).toEqual({ ok: false, code: 'path_taken' });
+      expect(asked).toMatchObject([{ id: first.id, ownerPrincipalId: f.principalId }]);
       await expect(f.catalog.get('a.txt')).resolves.toMatchObject({ id: first.id });
       await expect(f.catalog.countPending()).resolves.toBe(0);
       await expect(objectKeys()).resolves.toEqual([nameOf(first.objectId)]);

@@ -29,8 +29,8 @@ export const runtime = 'nodejs';
 
 /** `GET /api/me` — who this credential is, for both principal kinds spec §21 distinguishes. */
 export async function GET(request: Request): Promise<Response> {
-  const result = await authorise(request, 'not-applicable', ({ principal }) =>
-    Promise.resolve(readMe(principal)),
+  const result = await authorise(request, 'not-applicable', ({ principal, features }) =>
+    Promise.resolve(readMe(principal, features)),
   );
   return toResponse(result);
 }

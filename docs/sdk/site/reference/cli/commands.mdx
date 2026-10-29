@@ -45,7 +45,7 @@ contracts version also names both versions and the fix), 2 usage,
 Write a starter project here: agent-workspace.yaml, an agent and a surface
 
 ```
-aw init [--yes] [--theme <theme>] [--sandbox <sandbox>] [--provider <provider>] [--model-base-url <url>] [--agent <agent>] [--engine <engine>] [--tools <tools>] [--openapi <openapi>] [--permissions <permissions>] [--title <title>] [--color <color>] [--platform <platform>] [--answers <file>]
+aw init [--yes] [--theme <theme>] [--sandbox <sandbox>] [--provider <provider>] [--model-base-url <url>] [--agent <agent>] [--engine <engine>] [--tools <tools>] [--openapi <openapi>] [--permissions <permissions>] [--title <title>] [--color <color>] [--platform <platform>] [--features <features>] [--answers <file>]
 ```
 
 ## aw dev
@@ -286,6 +286,30 @@ Act in another of your workspaces from now on (after `aw login`)
 
 ```
 aw workspaces select <id|slug>
+```
+
+## aw workspaces features list
+
+Which features are on for a workspace (default: the one you act in)
+
+```
+aw workspaces features list [--workspace <id>]
+```
+
+## aw workspaces features disable
+
+Switch a feature off for a workspace (Owner only)
+
+```
+aw workspaces features disable <id> [--workspace <id>]
+```
+
+## aw workspaces features enable
+
+Switch a feature back on for a workspace (Owner only)
+
+```
+aw workspaces features enable <id> [--workspace <id>]
 ```
 
 ## aw workspaces sharing-policy get
@@ -738,10 +762,10 @@ aw storage connections create --name <name> --storage-url <url> --allow <prefix>
 
 ## aw storage connections update
 
-Rename or reconfigure a connection (writeAllowed through --file)
+Rename or reconfigure a connection (turning writing off goes through --file)
 
 ```
-aw storage connections update <name|id> [--file <json>] [--name <name>] [--storage-url <url>] [--allow <prefix> …] [--credential-file <path|->]
+aw storage connections update <name|id> [--file <json>] [--name <name>] [--storage-url <url>] [--allow <prefix> …] [--write-allowed] [--credential-file <path|->]
 ```
 
 ## aw storage connections remove
@@ -950,6 +974,14 @@ Change an agent (a runtime switch is `{ "runtimeProfileId": … }`)
 
 ```
 aw agents update <id> [--file <json>] [--name <name>] [--engine <id>]
+```
+
+## aw agents restore
+
+Bring back an archived agent and print its name
+
+```
+aw agents restore <id>
 ```
 
 ## aw agents remove

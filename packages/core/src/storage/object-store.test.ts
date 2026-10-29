@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { UnsafeObjectKeyError } from './key-safety.js';
 import { createInMemoryObjectStore } from './memory-store.js';
@@ -9,9 +9,9 @@ import {
   createScopedObjectStore,
   type ListPageOptions,
   type ObjectStore,
-  type ObjectStoreV2,
   type SignedUrlRequest,
   SignedUrlUnsupportedError,
+  scopedObjectStoreProvider,
 } from './object-store.js';
 import { streamToBytes, toNodeReadable, toWebStream } from './streams.js';
 
@@ -33,7 +33,7 @@ describe('scoped listPage', () => {
   it('clamps the limit and strips the workspace prefix', async () => {
     const raw = createInMemoryObjectStore();
     const seen: (ListPageOptions | undefined)[] = [];
-    const spy: ObjectStoreV2 = {
+    const spy: ObjectStore = {
       ...raw,
       listPage: (prefix, options) => {
         seen.push(options);
@@ -41,7 +41,7 @@ describe('scoped listPage', () => {
       },
     };
     const store = createScopedObjectStore(spy, WORKSPACE_ID);
-    await store.put('p/a.txt', { body: new Uint8Array([1]) });
+    await store.write('p/a.txt', new Uint8Array([1]), {});
 
     const page = await store.listPage('p', { limit: 5000 });
 
@@ -52,7 +52,7 @@ describe('scoped listPage', () => {
   it('continues a scoped listing from its own cursor until the last page', async () => {
     const store = createScopedObjectStore(createInMemoryObjectStore(), WORKSPACE_ID);
     for (const name of ['a', 'b', 'c']) {
-      await store.put(`p/${name}.txt`, { body: new Uint8Array([1]) });
+      await store.write(`p/${name}.txt`, new Uint8Array([1]), {});
     }
 
     const keys: string[] = [];
@@ -121,33 +121,16 @@ describe('createScopedObjectStore', () => {
     await expect(store.write('../x', body, {})).rejects.toThrow(UnsafeObjectKeyError);
     expect(cancelled).toBe(true);
   });
-
-  it('scopes a v1-only backend without v2 members', async () => {
-    const raw = createInMemoryObjectStore();
-    const v1: ObjectStore = {
-      put: (key, input) => raw.put(key, input),
-      get: (key) => raw.get(key),
-      delete: (key) => raw.delete(key),
-      list: (prefix) => raw.list(prefix),
-      listPrefix: (prefix) => raw.listPrefix(prefix),
-      copyObject: (source, destination) => raw.copyObject(source, destination),
-    };
-    const store = createScopedObjectStore(v1, WORKSPACE_ID);
-
-    expect('head' in store).toBe(false);
-    await store.put('a.txt', { body: new Uint8Array([1, 2]) });
-    expect((await store.get('a.txt'))?.body).toEqual(new Uint8Array([1, 2]));
-  });
 });
 
 describe('scoped createSignedUrl', () => {
   function signingBackend(boundLengthSign: boolean): {
-    readonly backend: ObjectStoreV2;
+    readonly backend: ObjectStore;
     readonly seen: { key: string; request: SignedUrlRequest }[];
   } {
     const raw = createInMemoryObjectStore();
     const seen: { key: string; request: SignedUrlRequest }[] = [];
-    const backend: ObjectStoreV2 = {
+    const backend: ObjectStore = {
       ...raw,
       capabilities: { ...raw.capabilities, sign: true, boundLengthSign },
       createSignedUrl(key, request) {
@@ -203,5 +186,102 @@ describe('scoped createSignedUrl', () => {
     ).rejects.toThrow(SignedUrlUnsupportedError);
     await store.createSignedUrl?.('up.bin', request);
     expect(able.seen).toHaveLength(1);
+  });
+
+  // #1746: a far-future signing instant would mint a link that only becomes valid later, outliving
+  // the 900 s bound. A past one only shortens the link, and the expired-link tests rely on it.
+  // @story US-STO-05
+  it('[US-STO-05][unit][sdk] a signing instant in the future is refused before any I/O', async () => {
+    const { backend, seen } = signingBackend(true);
+    const store = createScopedObjectStore(backend, WORKSPACE_ID);
+    const inDays = new Date(Date.now() + 86_400_000);
+
+    await expect(
+      store.createSignedUrl?.('a.txt', { method: 'GET', now: inDays }),
+    ).rejects.toThrowError(new SignedUrlUnsupportedError('The signing instant is in the future.'));
+    await expect(
+      store.createSignedUrl?.('a.txt', { method: 'GET', now: new Date(Number.NaN) }),
+    ).rejects.toThrowError(
+      new SignedUrlUnsupportedError('The signing instant is not a valid time.'),
+    );
+    expect(seen).toEqual([]);
+
+    const past = new Date(Date.now() - 120_000);
+    await store.createSignedUrl?.('a.txt', { method: 'GET', now: past });
+    await store.createSignedUrl?.('a.txt', { method: 'GET', now: new Date() });
+    expect(seen.map((call) => call.request.now)).toEqual([past, expect.any(Date)]);
+  });
+});
+
+describe('the scoped store reaches its backend', () => {
+  const utf8 = (text: string): Uint8Array => new TextEncoder().encode(text);
+
+  it('only under the workspace prefix, and never for an unsafe key', async () => {
+    const raw = createInMemoryObjectStore();
+    const reached: string[] = [];
+    const recording: ObjectStore = {
+      ...raw,
+      head(key) {
+        reached.push(key);
+        return raw.head(key);
+      },
+      read(key, options) {
+        reached.push(key);
+        return raw.read(key, options);
+      },
+      write(key, body, options) {
+        reached.push(key);
+        return raw.write(key, body, options);
+      },
+      listPage(prefix, options) {
+        reached.push(prefix);
+        return raw.listPage(prefix, options);
+      },
+    };
+    const mine = createScopedObjectStore(recording, WORKSPACE_ID);
+    const theirs = createScopedObjectStore(recording, '44444444-4444-4444-8444-444444444444');
+    await theirs.write('d/secret.txt', utf8('theirs'), {});
+    reached.length = 0;
+
+    await mine.write('d/a.txt', utf8('mine'), {});
+    expect(await mine.read('d/secret.txt')).toBeNull();
+    expect(await mine.head('d/secret.txt')).toBeNull();
+    expect((await mine.listPage('d')).entries.map((entry) => entry.key)).toEqual(['d/a.txt']);
+    const everything = await mine.listPage('', { recursive: true });
+    expect(everything.entries.map((entry) => entry.key)).toEqual(['d/a.txt']);
+    expect(reached.length).toBeGreaterThan(0);
+    for (const key of reached) expect(key.startsWith(`workspaces/${WORKSPACE_ID}`)).toBe(true);
+
+    reached.length = 0;
+    await expect(mine.write('../x', utf8('x'), {})).rejects.toThrow(UnsafeObjectKeyError);
+    await expect(mine.read('../x')).rejects.toThrow(UnsafeObjectKeyError);
+    await expect(mine.head('../x')).rejects.toThrow(UnsafeObjectKeyError);
+    await expect(mine.listPage('../x')).rejects.toThrow(UnsafeObjectKeyError);
+    expect(reached).toEqual([]);
+  });
+});
+
+describe('ObjectStore port', () => {
+  it('ObjectStore has no buffered members', () => {
+    expectTypeOf<ObjectStore>().not.toHaveProperty('get');
+    expectTypeOf<ObjectStore>().not.toHaveProperty('put');
+    expectTypeOf<ObjectStore>().not.toHaveProperty('list');
+    expectTypeOf<ObjectStore>().not.toHaveProperty('listPrefix');
+    expectTypeOf<ObjectStore>().not.toHaveProperty('copyObject');
+  });
+
+  it('a scoped store and its provider hand out no buffered members', () => {
+    const provider = scopedObjectStoreProvider(createInMemoryObjectStore());
+    const store = createScopedObjectStore(createInMemoryObjectStore(), WORKSPACE_ID);
+    expectTypeOf(store).toEqualTypeOf<ObjectStore>();
+    expectTypeOf(provider.forWorkspace(WORKSPACE_ID)).toEqualTypeOf<ObjectStore>();
+    for (const member of ['get', 'put', 'list', 'listPrefix']) {
+      expect(member in store).toBe(false);
+      expect(member in provider.forWorkspace(WORKSPACE_ID)).toBe(false);
+    }
+  });
+
+  it('ObjectStore has a server-side copy', () => {
+    expectTypeOf<ObjectStore>().toHaveProperty('copy');
   });
 });

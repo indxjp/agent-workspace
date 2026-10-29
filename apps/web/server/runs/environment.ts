@@ -113,6 +113,12 @@ export interface AgentRef {
    * recorded.
    */
   readonly engine: string;
+  /**
+   * Set only when the agent is archived (issue #1851). Optional because a fixture that predates
+   * archiving builds an `AgentRef` without it, and absent means active; production `findAgent` sets
+   * it from the row, so every door that starts a run through `startRunOnSession` is refused alike.
+   */
+  readonly archived?: true;
 }
 
 /** The session a run belongs to (spec §20). `runs.session_id` is NOT NULL, so a run needs one. */
@@ -231,6 +237,12 @@ export interface LaunchContext {
   readonly fileScope?: readonly string[];
   /** Lowers this run's limits; like `fileScope` it lives only in this context, and an approval continuation does not inherit it. */
   readonly limits?: RunLimitsOverride;
+}
+
+/** The judge model's reply: its text, and why it stopped (`max_tokens`, …) when the provider said. */
+export interface JudgeReply {
+  readonly text: string;
+  readonly stopReason: string | null;
 }
 
 export interface RunApiEnvironment {
@@ -387,7 +399,7 @@ export interface RunApiEnvironment {
     agentVersionId: string,
     prompt: string,
     signal: AbortSignal,
-  ) => Promise<string>;
+  ) => Promise<JudgeReply>;
   /**
    * Store one scored evaluation of an agent version (issue #618). The handler has already
    * authorised the call and run every case; this only stores it.

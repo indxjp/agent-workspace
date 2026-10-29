@@ -65,16 +65,14 @@ beforeEach(async () => {
   const inner = createLocalFilesystemObjectStoreProvider(rootDir).forWorkspace(WORKSPACE_ID);
   readKeys = [];
   store = {
-    put: (key, input) => inner.put(key, input),
-    get: (key) => {
-      readKeys.push(key);
-      return inner.get(key);
-    },
     delete: (key) => inner.delete(key),
-    list: (prefix) => inner.list(prefix),
-    listPrefix: (prefix) => inner.listPrefix(prefix),
-    copyObject: (source, destination) => inner.copyObject(source, destination),
-    read: (key, options) => inner.read(key, options),
+    copy: (source, destination) => inner.copy(source, destination),
+    head: (key) => inner.head(key),
+    read: (key, options) => {
+      readKeys.push(key);
+      return inner.read(key, options);
+    },
+    write: (key, body, options) => inner.write(key, body, options),
     listPage: (prefix, options) => inner.listPage(prefix, options),
   };
 });

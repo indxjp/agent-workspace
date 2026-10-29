@@ -453,7 +453,8 @@ export interface CodeToolInput<I extends z.ZodObject = z.ZodObject> {
   readonly limits?: { readonly timeoutMs?: number | undefined } | undefined;
   /**
    * The workspace secrets the tool reads, as `secret('NAME')`. The tool sandbox's environment holds
-   * exactly these, under their names; the tool reads them from `process.env` (ADR-0118 TS4).
+   * exactly these, under their names; the tool reads them from `process.env` (ADR-0118 TS4). A
+   * storage connection's credential (a `STORAGE_CONNECTION_` name) is refused.
    */
   readonly secrets?: readonly SecretReference[] | undefined;
   /**

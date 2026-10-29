@@ -72,7 +72,10 @@ describe('storage connection contract', () => {
   it('[US-STO-12][contract][sdk] credentials are provider-shaped', () => {
     const credentials = {
       s3: { provider: 's3', accessKeyId: FAKE_KEY_ID, secretAccessKey: FAKE_SECRET },
-      gcs: { provider: 'gcs', serviceAccountJson: JSON.stringify({ private_key: FAKE_SECRET }) },
+      gcs: {
+        provider: 'gcs',
+        serviceAccountJson: JSON.stringify({ type: 'service_account', private_key: FAKE_SECRET }),
+      },
       azblobKey: { provider: 'azblob', accountKey: FAKE_SECRET },
       azblobSas: { provider: 'azblob', sasToken: FAKE_SECRET },
       file: { provider: 'file' },
@@ -145,14 +148,20 @@ describe('storage connection contract', () => {
     expect(rotated.success ? [] : rotated.error.issues.map((issue) => issue.message)).toEqual(
       refused,
     );
-    for (const type of ['service_account', undefined]) {
-      expect(
-        StorageConnectionCredentialSchema.safeParse({
-          provider: 'gcs',
-          serviceAccountJson: keyJson(type),
-        }).success,
-      ).toBe(true);
-    }
+    expect(
+      StorageConnectionCredentialSchema.safeParse({
+        provider: 'gcs',
+        serviceAccountJson: keyJson('service_account'),
+      }).success,
+    ).toBe(true);
+    // An untyped key is refused too (owner decision, #1835): only a key that says what it is.
+    const untyped = StorageConnectionCredentialSchema.safeParse({
+      provider: 'gcs',
+      serviceAccountJson: keyJson(),
+    });
+    expect(untyped.success ? [] : untyped.error.issues.map((issue) => issue.message)).toEqual(
+      refused,
+    );
     expect(refusals({ url: withProject, credential: accessToken }).join()).not.toContain(token);
   });
 
@@ -239,6 +248,23 @@ describe('storage connection contract', () => {
     expect(
       StorageConnectionResourceSchema.safeParse({ ...resource, allowedPrefixes: [] }).success,
     ).toBe(false);
+  });
+
+  // #1835: a response's `url` is parsed again, so a reader never trusts an unchecked URL.
+  it('[US-STO-12][contract][sdk] a resource url is a storage URL of its own provider', () => {
+    for (const url of ['ftp://bucket-a/reports', 'not a url', 'gcs://bucket-a/reports']) {
+      const parsed = StorageConnectionResourceSchema.safeParse({ ...resource, url });
+      expect(parsed.success ? [] : parsed.error.issues.map((issue) => issue.message)).toEqual([
+        'storage_connection_url_invalid',
+      ]);
+    }
+    const withSecret = StorageConnectionResourceSchema.safeParse({
+      ...resource,
+      url: `s3://bucket-a/reports?k=${FAKE_SECRET}`,
+    });
+    expect(withSecret.success ? [] : withSecret.error.issues.map((issue) => issue.message)).toEqual(
+      ['storage_connection_url_has_secret'],
+    );
   });
 
   it('[US-STO-12][contract][sdk] a patch changes the name, URL, prefixes or write flag', () => {

@@ -7,12 +7,13 @@ Scope: `apps/web/components/shell/navigation.ts`, `apps/web/components/shell/sid
 
 ## Context
 
-Spec §44 fixes the main navigation at thirteen entries in two groups, and the mockups' shell
-(`ui/assets/app.js`) renders all thirteen as links. Wave 1 builds one screen inside the shell: the
-home chat at `/` (W1-UI-02, spec §19.5 and §45). The other twelve destinations — Projects, Agents,
-Files, Skills, Connectors, Runs, and the six administration screens — are Wave 2 and later.
+Spec §44 fixes the main navigation at fourteen entries in two groups, and the mockups' shell
+(`ui/assets/app.js`) renders all fourteen as links. (It was thirteen when this was decided; Storage
+joined the Administration group with STO-508.) Wave 1 builds one screen inside the shell: the home
+chat at `/` (W1-UI-02, spec §19.5 and §45). The other twelve destinations of the time — Projects,
+Agents, Files, Skills, Connectors, Runs, and the six administration screens — are Wave 2 and later.
 
-So the shell has thirteen entries and one route. The question is what the other twelve do when
+So the shell had thirteen entries and one route. The question is what the other twelve do when
 clicked.
 
 ## Decision
@@ -25,8 +26,9 @@ no hover state, and it cannot be reached by keyboard as a link.
 
 The list of inert entries is derived from the table, never written in prose:
 `navigation.test.ts` asserts that exactly one entry resolves, that it is `home` → `/`, and
-enumerates the twelve inert ids. An entry that gains a route and forgets to say so, or a
-fourteenth entry that appears, changes one of those two lists and fails the test by name.
+enumerates the twelve inert ids. An entry that gains a route and forgets to say so, or an entry
+§44 does not list, changes one of those two lists and fails the test by name. Every entry has a
+route now, so the inert list the test pins is empty.
 
 `activeNavId()` and `crumbsFor()` both parse the pathname before comparing it and return
 `null` / `[]` for anything that is not a path they recognise. Neither falls back to the first
@@ -35,7 +37,7 @@ to be false).
 
 ## Alternatives rejected
 
-**Link all thirteen and let Next.js answer 404.** It matches the mockup exactly and it is one less
+**Link all of them and let Next.js answer 404.** It matches the mockup exactly and it is one less
 branch in the component. It is also the quiet dishonesty §43 exists to prevent: the row looks
 identical to a working one, the click is accepted, and the product answers with an error page that
 tells the operator nothing about whether the feature exists.

@@ -1,0 +1,52 @@
+{
+  "turns": [
+    {
+      "toolUses": [
+        {
+          "name": "mcp__aw-control__draft_save",
+          "input": {
+            "body": {
+              "definition": {
+                "apiVersion": "agentworkspace.dev/v1",
+                "kind": "AgentDefinition",
+                "agent": {
+                  "name": "Onboarding helper",
+                  "instructions": "Answer support mail.",
+                  "permissions": {
+                    "readFiles": true,
+                    "writeFiles": true,
+                    "runCommands": true,
+                    "unrestrictedNetwork": false
+                  },
+                  "model": null,
+                  "modelConnectionName": null,
+                  "runtimeProfileName": null
+                },
+                "policy": {
+                  "engine": "claude-agent-sdk",
+                  "tools": {
+                    "base": "claude_code_preset",
+                    "autoApprove": [],
+                    "deny": [],
+                    "permissionMode": "default",
+                    "allowDangerouslySkipPermissions": false
+                  },
+                  "skills": { "mode": "all" },
+                  "limits": { "maxTurns": null, "maxBudgetUsd": null }
+                },
+                "policySource": "stored",
+                "resources": {
+                  "files": [{ "path": ".", "access": "read-write" }],
+                  "skills": [],
+                  "connectors": ["crm"]
+                }
+              },
+              "surfaces": []
+            }
+          }
+        }
+      ]
+    },
+    { "text": "I could not create the agent with those permissions, so I stopped." }
+  ]
+}

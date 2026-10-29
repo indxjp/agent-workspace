@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { parse } from 'yaml';
+import { parse, parseAllDocuments } from 'yaml';
 
 import { renderProjectShell } from './render.js';
 
@@ -14,6 +14,18 @@ function readYaml(path: string): unknown {
   const text = ts.sys.readFile(`${repositoryRoot()}${path}`);
   if (text === undefined) throw new Error(`cannot read ${path}`);
   return parse(text);
+}
+
+/**
+ * The dependency document of `pnpm-lock.yaml`. pnpm 12 writes the pnpm a project pins as a leading
+ * document of its own (`packageManagerDependencies`), so the dependency graph is the last one.
+ */
+function readLockfile(): unknown {
+  const text = ts.sys.readFile(`${repositoryRoot()}pnpm-lock.yaml`);
+  if (text === undefined) throw new Error('cannot read pnpm-lock.yaml');
+  const documents = parseAllDocuments(text);
+  if (!Array.isArray(documents)) throw new Error('pnpm-lock.yaml holds no YAML document');
+  return documents.at(-1)?.toJS();
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -51,7 +63,7 @@ function normalise(path: string): string {
  * dependencies (not dev), followed through workspace links and the lockfile's snapshots.
  */
 function runtimeTree(): ReadonlySet<string> {
-  const lock = record(readYaml('pnpm-lock.yaml'), 'pnpm-lock.yaml');
+  const lock = record(readLockfile(), 'pnpm-lock.yaml');
   const importers = record(lock['importers'], 'importers');
   const snapshots = record(lock['snapshots'], 'snapshots');
   const names = new Set<string>();

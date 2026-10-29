@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import type { LookupFunction } from 'node:net';
@@ -25,22 +26,20 @@ import {
   prefixedListPrefix,
   prefixedObjectKey,
   storeKeyPrefix,
-  toObjectPrefix,
 } from './key-safety.js';
 import {
   scopedObjectStoreProvider,
   type ByteRange,
-  type ObjectContent,
+  type EmulatorObjectStore,
   type ObjectListEntry,
   type ObjectMeta,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
-  type PutObjectInput,
+  type ObjectStore,
+  type ObjectStoreProvider,
   type SignedUrl,
   type SignedUrlRequest,
   type WriteOptions,
   clampListLimit,
-  compareEntryKeys,
+  compareListingNames,
   ObjectConflictError,
   validatedWriteKey,
   PRESIGNED_URL_DEFAULT_TTL_SECONDS,
@@ -69,13 +68,9 @@ export type AzureBlobEntry = AzureBlobFileEntry | AzureBlobFolderEntry;
 /** Narrow external-service port so ordinary CI can exercise the backend without Azure. */
 export interface AzureBlobContainer {
   assertReady(): Promise<void>;
-  put(name: string, input: PutObjectInput): Promise<void>;
-  get(name: string): Promise<ObjectContent | null>;
   /** A server-side copy, bytes, content type and metadata; a missing source is a no-op. */
   copy(sourceName: string, destinationName: string): Promise<void>;
   delete(name: string): Promise<void>;
-  listHierarchy(prefix: string): Promise<readonly AzureBlobEntry[]>;
-  listFlat(prefix: string): Promise<readonly AzureBlobFileEntry[]>;
   head(name: string): Promise<ObjectMeta | null>;
   /**
    * The whole blob's meta, the bytes of `range` (all of them when omitted) and the range actually
@@ -203,24 +198,33 @@ function fileEntry(item: BlobItem): AzureBlobFileEntry {
   };
 }
 
-function readDownloadBody(stream: NodeJS.ReadableStream | undefined): Promise<Buffer> {
-  if (stream === undefined) return Promise.resolve(Buffer.alloc(0));
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    stream.on('data', (chunk: unknown) => {
-      if (typeof chunk === 'string' || chunk instanceof Uint8Array) {
-        chunks.push(Buffer.from(chunk));
-        return;
-      }
-      reject(new Error('Azure Blob returned an unsupported response-body chunk.'));
-    });
-    stream.on('error', reject);
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-  });
-}
-
 /** Clock skew allowance for a user-delegation key that starts "now". */
 const DELEGATION_KEY_BACKDATE_MS = 5 * 60 * 1_000;
+/** How long past this host's clock a delegation key stays valid at the least. */
+const DELEGATION_KEY_MARGIN_MS = 5 * 60 * 1_000;
+/** Azure refuses a user-delegation key that expires more than seven days from now. */
+const DELEGATION_KEY_MAX_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
+
+/**
+ * The window the user-delegation key is asked for. Azure refuses a key whose expiry has already
+ * passed (400), so it is anchored on this host's clock and only widened to cover the SAS window,
+ * which may start in the past (a caller's `now`). The SAS keeps its own start and expiry, so a link
+ * that has expired is still refused.
+ */
+function delegationKeyWindow(
+  sasStartsOn: Date,
+  sasExpiresOn: Date,
+  realNow: number,
+): { startsOn: Date; expiresOn: Date } {
+  const expiresOn = Math.min(
+    Math.max(sasExpiresOn.getTime(), realNow + DELEGATION_KEY_MARGIN_MS),
+    realNow + DELEGATION_KEY_MAX_LIFETIME_MS,
+  );
+  return {
+    startsOn: new Date(Math.min(sasStartsOn.getTime(), realNow - DELEGATION_KEY_BACKDATE_MS)),
+    expiresOn: new Date(expiresOn),
+  };
+}
 
 const RANGE_REFUSED = Symbol('range refused');
 const UPLOAD_BUFFER_BYTES = 8 * 1024 * 1024;
@@ -248,14 +252,16 @@ export function createAzureSdkBlobContainer(
       ? (values) => Promise.resolve(generateBlobSASQueryParameters(values, sharedKey))
       : service === undefined
         ? undefined
-        : async (values, startsOn, expiresOn) =>
-            generateBlobSASQueryParameters(
+        : async (values, startsOn, expiresOn) => {
+            const key = delegationKeyWindow(startsOn, expiresOn, Date.now());
+            return generateBlobSASQueryParameters(
               values,
               await azureProviderCall('blob', 'user delegation key', () =>
-                service.getUserDelegationKey(startsOn, expiresOn),
+                service.getUserDelegationKey(key.startsOn, key.expiresOn),
               ),
               service.accountName,
             );
+          };
   const headBlob = (name: string): Promise<ObjectMeta | null> =>
     azureProviderCall('blob', 'head', async () => {
       try {
@@ -318,33 +324,6 @@ export function createAzureSdkBlobContainer(
         }),
     async assertReady() {
       await azureProviderCall('blob', 'container-readiness check', () => client.getProperties());
-    },
-    async put(name, input) {
-      const hasContentType = input.contentType !== undefined && input.contentType !== null;
-      await azureProviderCall('blob', 'put', () =>
-        client.getBlockBlobClient(name).uploadData(input.body, {
-          ...(hasContentType ? { blobHTTPHeaders: { blobContentType: input.contentType } } : {}),
-          ...(hasContentType ? { metadata: { [CONTENT_TYPE_KNOWN_METADATA]: 'true' } } : {}),
-        }),
-      );
-    },
-    async get(name) {
-      return azureProviderCall('blob', 'get', async () => {
-        const blob = client.getBlockBlobClient(name);
-        try {
-          const response = await blob.download();
-          const body = await readDownloadBody(response.readableStreamBody);
-          return {
-            body,
-            contentType: contentType(response.metadata, response.contentType),
-            sizeBytes: response.contentLength ?? body.byteLength,
-            lastModified: response.lastModified ?? new Date(0),
-          };
-        } catch (error) {
-          if (azureStatusCode(error) === 404) return null;
-          throw error;
-        }
-      });
     },
     async copy(sourceName, destinationName) {
       await azureProviderCall('blob', 'copy', async () => {
@@ -484,59 +463,14 @@ export function createAzureSdkBlobContainer(
         return { entries, cursor: next === undefined || next === '' ? null : next };
       });
     },
-    async listHierarchy(requestedPrefix) {
-      return azureProviderCall('blob', 'hierarchical list', async () => {
-        const entries: AzureBlobEntry[] = [];
-        for await (const entry of client.listBlobsByHierarchy('/', {
-          prefix: requestedPrefix,
-          includeMetadata: true,
-        })) {
-          if (entry.kind === 'prefix') {
-            entries.push({ kind: 'folder', name: entry.name.replace(/\/$/u, '') });
-            continue;
-          }
-          if (entry.name === requestedPrefix) continue;
-          entries.push({
-            kind: 'file',
-            name: entry.name,
-            sizeBytes: entry.properties.contentLength ?? 0,
-            contentType: contentType(entry.metadata, entry.properties.contentType),
-            lastModified: entry.properties.lastModified ?? new Date(0),
-          });
-        }
-        return entries;
-      });
-    },
-    async listFlat(requestedPrefix) {
-      return azureProviderCall('blob', 'flat list', async () => {
-        const entries: AzureBlobFileEntry[] = [];
-        for await (const entry of client.listBlobsFlat({
-          prefix: requestedPrefix,
-          includeMetadata: true,
-        })) {
-          entries.push({
-            kind: 'file',
-            name: entry.name,
-            sizeBytes: entry.properties.contentLength ?? 0,
-            contentType: contentType(entry.metadata, entry.properties.contentType),
-            lastModified: entry.properties.lastModified ?? new Date(0),
-          });
-        }
-        return entries;
-      });
-    },
   };
-}
-
-function byListingName(entry: ObjectListEntry): ObjectListEntry {
-  return entry.kind === 'folder' ? { ...entry, key: `${entry.key}/` } : entry;
 }
 
 /** Raw Azure Blob backend. Tenant scoping is added by the provider factory below. */
 export function createAzureBlobObjectStore(
   client: AzureBlobContainer,
   keyPrefix?: string,
-): ObjectStoreV2 {
+): ObjectStore {
   const prefix = storeKeyPrefix(keyPrefix);
   const sign = client.signUrl?.bind(client);
   return {
@@ -590,7 +524,7 @@ export function createAzureBlobObjectStore(
           )
           // Azure lists by blob name, so folder `a` (`a/`) comes after file `a.txt`. A page sorted
           // by bare key would put it first and the pages would not concatenate into one order.
-          .sort((left, right) => compareEntryKeys(byListingName(left), byListingName(right))),
+          .sort(compareListingNames),
       };
     },
     ...(sign === undefined
@@ -606,40 +540,10 @@ export function createAzureBlobObjectStore(
             return sign(prefixedObjectKey(prefix, key), request);
           },
         }),
-    put(key, input): Promise<void> {
-      return client.put(prefixedObjectKey(prefix, key), input);
-    },
-    get(key): Promise<ObjectContent | null> {
-      return client.get(prefixedObjectKey(prefix, key));
-    },
     delete(key): Promise<void> {
       return client.delete(prefixedObjectKey(prefix, key));
     },
-    async list(key): Promise<readonly ObjectListEntry[]> {
-      const entries = await client.listHierarchy(prefixedListPrefix(prefix, key));
-      return entries
-        .filter((entry) => addressableObjectName(entry.name.slice(prefix.length)) !== null)
-        .map((entry): ObjectListEntry =>
-          entry.kind === 'folder'
-            ? { kind: 'folder', key: entry.name.slice(prefix.length) }
-            : { ...entry, key: entry.name.slice(prefix.length) },
-        )
-        .sort(compareEntryKeys);
-    },
-    async listPrefix(key): Promise<readonly ObjectListEntry[]> {
-      const safe = toObjectPrefix(key);
-      const requestedPrefix = safe === '' ? prefix : `${prefix}${safe}`;
-      const entries = await client.listFlat(requestedPrefix);
-      return entries
-        .filter((entry) => {
-          const relative = entry.name.slice(prefix.length);
-          if (addressableObjectName(relative) === null) return false;
-          return safe === '' || relative === safe || relative.startsWith(`${safe}/`);
-        })
-        .map((entry) => ({ ...entry, key: entry.name.slice(prefix.length) }))
-        .sort(compareEntryKeys);
-    },
-    copyObject(sourceKey, destinationKey): Promise<void> {
+    copy(sourceKey, destinationKey): Promise<void> {
       return client.copy(
         prefixedObjectKey(prefix, sourceKey),
         prefixedObjectKey(prefix, destinationKey),
@@ -651,8 +555,33 @@ export function createAzureBlobObjectStore(
 export function createAzureBlobObjectStoreProvider(
   client: AzureBlobContainer,
   keyPrefix?: string,
-): ObjectStoreProviderV2 {
+): ObjectStoreProvider {
   return scopedObjectStoreProvider(createAzureBlobObjectStore(client, keyPrefix));
+}
+
+/**
+ * Tests only, through `@agent-workspace/core/storage/backends` (the storage design, §07 "Load
+ * test"): a new, empty container on the Azurite at `serviceUrl`, such as
+ * `http://127.0.0.1:10000/devstoreaccount1`, so a caller outside this package needs no Azure
+ * dependency of its own. Azurite's well-known development account is read from the SDK, so no key
+ * literal lives here.
+ */
+export async function createAzuriteObjectStore(serviceUrl: string): Promise<EmulatorObjectStore> {
+  const service = new BlobServiceClient(
+    serviceUrl,
+    BlobServiceClient.fromConnectionString('UseDevelopmentStorage=true').credential,
+  );
+  const container = service.getContainerClient(`aw-${randomUUID()}`);
+  await container.create();
+  return {
+    provider: createAzureBlobObjectStoreProvider(createAzureSdkBlobContainer(container, service)),
+    teardown: async () => {
+      await container.delete();
+    },
+    plantRaw: async (name, bytes) => {
+      await container.getBlockBlobClient(name).uploadData(bytes);
+    },
+  };
 }
 
 /**
@@ -716,14 +645,14 @@ function pinnedAgentFactory(lookup: LookupFunction): RequestPolicyFactory {
 
 export async function createAzureBlobObjectStoreProviderFromConfig(
   config: AzureBlobObjectStoreConfig,
-): Promise<ObjectStoreProviderV2> {
+): Promise<ObjectStoreProvider> {
   return scopedObjectStoreProvider(await createAzureBlobObjectStoreFromConfig(config));
 }
 
 /** The same store, unscoped: workspace-agnostic names under `config.keyPrefix`. */
 export async function createAzureBlobObjectStoreFromConfig(
   config: AzureBlobObjectStoreConfig,
-): Promise<ObjectStoreV2> {
+): Promise<ObjectStore> {
   const container = config.container.trim();
   if (!/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/u.test(container) || container.includes('--')) {
     throw new Error(

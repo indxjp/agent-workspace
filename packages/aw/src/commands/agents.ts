@@ -259,7 +259,8 @@ async function readDefinition(context: CommandContext): Promise<AgentDefinition>
 }
 
 /**
- * §5.9 — `aw agents`. Archive/restore (RF-201) has no command until its route exists. `remove` cascades through the agent's sessions and runs today.
+ * §5.9 — `aw agents`. `restore` brings back an agent the auto-archive sweep archived (#1851); there is no
+ * `archive` command, because only the sweep archives. `remove` cascades through the agent's sessions and runs today.
  */
 export const agentCommands: readonly Command[] = [
   command('agents list', '', 'Every agent', async ({ client, signal, mode }) => {
@@ -332,6 +333,24 @@ export const agentCommands: readonly Command[] = [
           : await context.client.agents.update(id, patch, { signal: context.signal });
       if (engine !== null) await applyEngine(context, id, engine);
       return { value: agent };
+    },
+  ),
+  command(
+    'agents restore',
+    '<id>',
+    'Bring back an archived agent and print its name',
+    async (context) => {
+      const agent = await context.client.agents.restore(positional(context, 0, 'id'), {
+        signal: context.signal,
+      });
+      // The name is user-authored: a control or format character in it (an escape sequence, a
+      // bidi override, a zero-width space) must not reach the terminal.
+      return {
+        value:
+          context.mode.json || context.mode.jsonl
+            ? agent
+            : agent.name.replace(/[\p{Cc}\p{Cf}]/gu, ''),
+      };
     },
   ),
   command(

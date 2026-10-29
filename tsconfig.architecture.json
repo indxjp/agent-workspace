@@ -57,6 +57,7 @@
       ],
       "@indx-workspace/contracts/engines": ["./packages/contracts/src/engines.ts"],
       "@indx-workspace/contracts/evaluations": ["./packages/contracts/src/evaluations.ts"],
+      "@indx-workspace/contracts/features": ["./packages/contracts/src/features.ts"],
       "@indx-workspace/contracts/feedback": ["./packages/contracts/src/feedback.ts"],
       "@indx-workspace/contracts/files": ["./packages/contracts/src/files.ts"],
       "@indx-workspace/contracts/identity-assertion": [
@@ -98,6 +99,7 @@
       "@indx-workspace/contracts/workspaces": ["./packages/contracts/src/workspaces.ts"],
       "@agent-workspace/core": ["./packages/core/src/index.ts"],
       "@agent-workspace/core/auth": ["./packages/core/src/auth/index.ts"],
+      "@agent-workspace/core/daily-cost": ["./packages/core/src/daily-cost.ts"],
       "@agent-workspace/core/db": ["./packages/core/src/db/index.ts"],
       "@agent-workspace/core/db/unscoped": ["./packages/core/src/db/repositories/unscoped.ts"],
       "@agent-workspace/core/posture": ["./packages/core/src/posture.ts"],

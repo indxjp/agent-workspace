@@ -32,9 +32,7 @@
  *      written down (ADR-0016), so `500 authorisation_undecidable` and a stray `403` both fail by
  *      inequality rather than by a list of things that must not happen.
  */
-import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
@@ -51,11 +49,8 @@ import {
 import { GET as LIST_USERS, POST as CREATE_USER } from '../../app/api/users/route';
 import { MembershipListResponseSchema } from '../../contracts/team';
 
-import {
-  readDeclarationFiles,
-  requireString,
-  REPO_ROOT,
-} from '../../../../tests/inventory-support';
+import { readDeclarationFiles, requireString } from '../../../../tests/inventory-support';
+import { trackedFilesMatching } from '../../../../tests/tracked-grep';
 
 import { decide, OWNERSHIPS } from './decide';
 import type { WorkspaceDirectory } from './directory';
@@ -679,30 +674,25 @@ describe('the gate is reached before anything else the handler does', () => {
   });
 });
 
+/** Tracked files under apps, packages and tests that contain `literal`. */
+function filesMentioning(literal: string): string[] {
+  return trackedFilesMatching(['-lF', literal, '--', 'apps', 'packages', 'tests']);
+}
+
 describe('the test-only identity header is not readable by anything that ships', () => {
   it('appears in tests/testing code and in no other tracked file', () => {
     // A string search, not an import-graph question, so ADR-0030 does not apply: what is being
-    // asserted is that the literal `x-test-caller` occurs nowhere a request could reach it.
-    const tracked = execFileSync('git', ['ls-files', '-z', '--', 'apps', 'packages', 'tests'], {
-      cwd: REPO_ROOT,
-      encoding: 'utf8',
-    })
-      .split('\0')
-      .filter((file) => file !== '');
-    expect(
-      tracked.length,
-      'git listed no tracked files, so this scan proved nothing',
-    ).toBeGreaterThan(0);
-    const mentions = tracked.filter((file) => {
-      try {
-        return readFileSync(`${REPO_ROOT}/${file}`, 'utf8').includes('x-test-caller');
-      } catch {
-        // A tracked file that cannot be read is reported rather than skipped.
-        return true;
-      }
-    });
-    expect(mentions.sort()).toEqual(
+    // asserted is that the literal `x-test-caller` occurs nowhere a request could reach it. One
+    // `git grep` over the tracked files, rather than reading each of them here, keeps the scan
+    // bounded under coverage on a loaded runner. This file names the literal itself, so an empty
+    // answer would mean the search proved nothing, and the list below fails it with a diff.
+    expect(filesMentioning('x-test-caller').sort()).toEqual(
       ['apps/web/server/rbac/routes.test.ts', 'apps/web/server/rbac/testing.ts'].sort(),
     );
+  });
+
+  it('reads a search that matches nothing as no files, not a git failure', () => {
+    // Built at runtime so no tracked file can contain it.
+    expect(filesMentioning(`absent-${crypto.randomUUID()}`)).toEqual([]);
   });
 });

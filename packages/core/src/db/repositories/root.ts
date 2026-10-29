@@ -198,6 +198,10 @@ import {
   type RuntimeProfileRepositoryProvider,
 } from './runtime-profiles.js';
 import { createDatabaseWorkspaceScopeResolver, type WorkspaceScopeResolver } from './scope.js';
+import {
+  createDatabaseWorkspaceFeatureRepositoryProvider,
+  type WorkspaceFeatureRepositoryProvider,
+} from './workspace-features.js';
 import { createDatabaseWorkspaceRepository, type WorkspaceRepository } from './workspaces.js';
 
 type RootAuditEvent = Omit<NewAuditEvent, 'actorPrincipalId' | 'actorUserId'> & {
@@ -302,6 +306,8 @@ export interface DatabaseRoot {
    * workspace row itself has no `workspace_id` to scope by (`../schema/workspaces.ts`'s header).
    */
   readonly workspaces: WorkspaceRepository;
+  /** `workspace_features` — the features a workspace has switched off (ADR-0160 D6). */
+  readonly workspaceFeatures: WorkspaceFeatureRepositoryProvider;
   /** Enumerate tenant ids for bounded maintenance jobs without exposing workspace row content. */
   listWorkspaceIds(): Promise<readonly string[]>;
   /** Acquire a connection-scoped PostgreSQL advisory lease, or null when another replica owns it. */
@@ -516,6 +522,7 @@ export async function openDatabaseRoot(
     auditEventRepository: createDatabaseAuditEventRepositoryProvider(db),
     directory: createDatabaseDirectoryRoot(db),
     workspaces: createDatabaseWorkspaceRepository(db),
+    workspaceFeatures: createDatabaseWorkspaceFeatureRepositoryProvider(db),
     listWorkspaceIds: async (): Promise<readonly string[]> =>
       (await db.query.workspaces.findMany({ columns: { id: true } })).map(({ id }) => id),
     tryAcquireMaintenanceLease: async (

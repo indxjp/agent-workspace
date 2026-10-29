@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ConnectorIdentitySchema,
   IDENTITY_ASSERTION_SKEW_SECONDS,
   type IdentityAssertionPayload,
   signIdentity,
@@ -48,6 +49,26 @@ function tamper(part: string): string {
 }
 
 const INVALID = { ok: false, code: 'identity_assertion_invalid' };
+
+// @story US-STO-12
+describe('ConnectorIdentitySchema', () => {
+  it('[US-STO-12][unit][sdk] refuses a storage connection credential as the signing secret', () => {
+    for (const secret of [
+      'STORAGE_CONNECTION_77777777777747778777777777777777',
+      'STORAGE_CONNECTION_ANYTHING',
+    ]) {
+      const refused = ConnectorIdentitySchema.safeParse({ secret });
+      expect(refused.success, secret).toBe(false);
+      expect(
+        refused.error?.issues.map((issue) => issue.path),
+        secret,
+      ).toEqual([['secret']]);
+    }
+    expect(ConnectorIdentitySchema.safeParse({ secret: 'IDENTITY_SIGNING_KEY' }).success).toBe(
+      true,
+    );
+  });
+});
 
 describe('signIdentity / verifyIdentity', () => {
   it('round-trips a signed payload', async () => {

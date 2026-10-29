@@ -1,7 +1,9 @@
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
-import { describe, expect, it } from 'vitest';
+import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
+import { afterEach, describe, expect, it } from 'vitest';
 
+import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
 import { versionRequest } from '../../agent-versions/fixtures';
 import { createInMemoryAgentVersionStoreProvider } from '../../agent-versions/memory-store';
 import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
@@ -66,9 +68,23 @@ function portsOver(directory: BuilderCompositionRoot['directory']) {
 }
 
 describe('productionBuilderPorts', () => {
-  it('keeps the builder feature off', async () => {
+  afterEach(clearFeatureSwitches);
+
+  it('reads the builder feature from the workspace switch, and asks for the call’s own workspace', async () => {
     const { ports } = portsOver(createMemoryDirectory({ users: [] }));
-    await expect(ports.feature.enabled(callContextOf(WORKSPACE, 'owner'))).resolves.toBe(false);
+    const asked: string[] = [];
+    let enabled: readonly FeatureId[] = FEATURE_IDS;
+    configureFeatureSwitches({
+      enabledFor: (workspaceId) => {
+        asked.push(workspaceId);
+        return Promise.resolve(enabled);
+      },
+    });
+    const ctx = callContextOf(WORKSPACE, 'owner');
+    await expect(ports.feature.enabled(ctx)).resolves.toBe(true);
+    enabled = FEATURE_IDS.filter((id) => id !== 'builder');
+    await expect(ports.feature.enabled(ctx)).resolves.toBe(false);
+    expect(asked).toEqual([WORKSPACE, WORKSPACE]);
   });
 
   it('builds the approval and runner ports; a run with no record is granted nothing', async () => {

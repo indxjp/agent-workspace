@@ -1,5 +1,5 @@
 /**
- * The folder `ObjectStoreV2` behind a `file://` storage connection (the storage design, §05
+ * The folder `ObjectStore` behind a `file://` storage connection (the storage design, §05
  * Security). Key `a/b/c.txt` is the file `<root>/a/b/c.txt`: no `objects/` tree, no sidecar, and the
  * content type comes from the file name. Only connections use it; the platform's own store keeps
  * `createLocalFilesystemObjectStore`.
@@ -48,20 +48,25 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import type { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 
 import { inferContentType } from './content-type.js';
 import { addressableObjectName, toObjectKey, toObjectPrefix } from './key-safety.js';
 import { withKeyLock } from './key-lock.js';
 import {
-  compareEntryKeys,
   ObjectConflictError,
   validatedWriteKey,
   type ObjectListEntry,
   type ObjectMeta,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from './object-store.js';
-import { listPageFrom, resolveRange, toNodeReadable, toWebStream } from './streams.js';
+import {
+  inWalkOrder,
+  listPageFrom,
+  resolveRange,
+  toNodeReadable,
+  toWebStream,
+  walkedBefore,
+} from './streams.js';
 
 /** A key resolved to a path outside the folder. The message is the code, never a path. */
 export class FolderPathError extends Error {
@@ -138,6 +143,22 @@ const STAGE_FLAGS =
 
 const ABSENT = ['ENOENT', 'ENOTDIR', 'ELOOP', 'EISDIR', 'ENAMETOOLONG', 'EACCES', 'EPERM'];
 
+/**
+ * A read body's stream closes its file when it is read to the end, fails or is cancelled. One that
+ * is dropped unread would hold the file until the collector closed the handle itself, which Node
+ * deprecates (DEP0137). This closes it once the body is unreachable; the registry holds the handle,
+ * so the handle outlives its body.
+ */
+const unreadBodies = new FinalizationRegistry<FileHandle>((handle) => {
+  if (handle.fd === -1) return;
+  handle.close().catch((error: unknown) => {
+    process.emitWarning('A folder-store read body could not close its file.', {
+      code: 'AW_FOLDER_STORE_CLOSE',
+      detail: error instanceof Error ? error.name : 'unknown',
+    });
+  });
+});
+
 function hasErrnoCode(error: unknown, codes: readonly string[]): boolean {
   return (
     typeof error === 'object' &&
@@ -191,7 +212,7 @@ type Counts = { links: number; unreadable: number };
 export function createFolderObjectStore(
   root: string,
   options: FolderStoreOptions = {},
-): ObjectStoreV2 {
+): ObjectStore {
   const segmentsOf = (key: string): string[] => toObjectKey(key).split('/');
   const procFd = options.procFd ?? HAS_PROC_FD;
 
@@ -221,16 +242,13 @@ export function createFolderObjectStore(
 
   /** `candidate` opened with `flags`, or `null` when what was opened is outside the root. */
   async function openVerified(candidate: string, flags: number): Promise<Opened | null> {
-    let target = candidate;
-    if (!procFd) {
-      const real = await realpath(candidate);
-      if (!isInside(root, real)) return null;
-      target = real;
-    }
-    const handle = await open(target, flags);
+    if (!procFd && !isInside(root, await realpath(candidate))) return null;
+    // The name asked for, so `O_NOFOLLOW` refuses a final link and `located` refuses a linked
+    // parent; opening the resolved target would silently follow an alias inside the root.
+    const handle = await open(candidate, flags);
     let keep = false;
     try {
-      const real = await located(handle, target);
+      const real = await located(handle, candidate);
       if (real === null) return null;
       keep = true;
       return { handle, real };
@@ -342,32 +360,40 @@ export function createFolderObjectStore(
     }
   }
 
-  /** Every listable file under `dir`, however deep; `firstOnly` stops at the first. */
-  async function filesUnder(
+  /** Every listable file under `dir`, however deep, in key order from the first past `after`. */
+  async function* filesUnder(
     dir: Opened,
     keyPrefix: string,
     counts: Counts,
-    firstOnly: boolean,
-  ): Promise<ObjectListEntry[]> {
-    const found: ObjectListEntry[] = [];
-    for (const child of await children(dir, counts)) {
+    after: string | undefined,
+  ): AsyncGenerator<ObjectListEntry> {
+    const found = await children(dir, counts);
+    for (const child of inWalkOrder(found, (entry) => entry.kind === 'dir')) {
       const key = keyPrefix === '' ? child.name : `${keyPrefix}/${child.name}`;
       if (addressableObjectName(key) === null) continue;
       if (child.kind === 'file') {
+        if (after !== undefined && key < after) continue;
         const entry = await fileEntry(dir, child.name, key, counts);
-        if (entry !== null) found.push(entry);
-      } else {
-        const sub = await subfolder(dir, child.name, counts);
-        if (sub === null) continue;
-        try {
-          found.push(...(await filesUnder(sub, key, counts, firstOnly)));
-        } finally {
-          await sub.handle.close();
-        }
+        if (entry !== null) yield entry;
+        continue;
       }
-      if (firstOnly && found.length > 0) break;
+      if (walkedBefore(key, after)) continue;
+      const sub = await subfolder(dir, child.name, counts);
+      if (sub === null) continue;
+      try {
+        yield* filesUnder(sub, key, counts, after);
+      } finally {
+        await sub.handle.close();
+      }
     }
-    return found;
+  }
+
+  /** Whether `dir` holds any listable file, however deep. */
+  async function holdsAFile(dir: Opened, keyPrefix: string): Promise<boolean> {
+    const files = filesUnder(dir, keyPrefix, { links: 0, unreadable: 0 }, undefined);
+    const first = await files.next();
+    await files.return(undefined);
+    return first.done !== true;
   }
 
   function report(counts: Counts): void {
@@ -439,7 +465,14 @@ export function createFolderObjectStore(
       if (!verified) await handle.close();
     }
     if (!verified) throw new FolderPathError();
-    await pipeline(source, handle.createWriteStream());
+    try {
+      // Chunk by chunk, as the stream arrives; the handle stays open for the flush below.
+      await handle.writeFile(source);
+      // The bytes reach the disk before a rename or link can name them.
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
   }
 
   async function commit(
@@ -476,6 +509,8 @@ export function createFolderObjectStore(
           await assertStillInside(dir);
           await rename(temp, target);
         }
+        // The folder entry that names the new file is durable before the write is reported.
+        await dir.handle.sync();
         return metaOf(key, await lstat(target, { bigint: true }));
       });
     } finally {
@@ -484,7 +519,73 @@ export function createFolderObjectStore(
     }
   }
 
-  const backend: ObjectStoreV2 = {
+  const listing = {
+    async *level(prefix, after): AsyncGenerator<ObjectListEntry> {
+      const safe = toObjectPrefix(prefix);
+      const dir = await openFolder(safe === '' ? [] : safe.split('/'));
+      if (dir === null) return;
+      const counts = { links: 0, unreadable: 0 };
+      let failed = false;
+      try {
+        for (const child of inWalkOrder(await children(dir, counts), () => false)) {
+          const key = safe === '' ? child.name : `${safe}/${child.name}`;
+          if (addressableObjectName(key) === null) continue;
+          if (after !== undefined && key < after) continue;
+          if (child.kind === 'file') {
+            const entry = await fileEntry(dir, child.name, key, counts);
+            if (entry !== null) yield entry;
+            continue;
+          }
+          const sub = await subfolder(dir, child.name, counts);
+          if (sub === null) continue;
+          try {
+            if (await holdsAFile(sub, key)) yield { kind: 'folder', key };
+          } finally {
+            await sub.handle.close();
+          }
+        }
+      } catch (error) {
+        failed = true;
+        throw error;
+      } finally {
+        await dir.handle.close();
+        if (!failed) report(counts);
+      }
+    },
+
+    async *tree(prefix, after): AsyncGenerator<ObjectListEntry> {
+      const safe = toObjectPrefix(prefix);
+      const counts = { links: 0, unreadable: 0 };
+      if (safe !== '') {
+        const self = await openObject(safe);
+        if (self !== null) {
+          await self.handle.close();
+          const meta = metaOf(safe, self.stats);
+          yield {
+            kind: 'file',
+            key: safe,
+            sizeBytes: meta.sizeBytes,
+            contentType: meta.contentType,
+            lastModified: meta.lastModified,
+          };
+        }
+      }
+      const dir = await openFolder(safe === '' ? [] : safe.split('/'));
+      if (dir === null) return;
+      let failed = false;
+      try {
+        yield* filesUnder(dir, safe, counts, after);
+      } catch (error) {
+        failed = true;
+        throw error;
+      } finally {
+        await dir.handle.close();
+        if (!failed) report(counts);
+      }
+    },
+  } satisfies Parameters<typeof listPageFrom>[0];
+
+  const backend: ObjectStore = {
     capabilities: {
       sign: false,
       boundLengthSign: false,
@@ -511,27 +612,12 @@ export function createFolderObjectStore(
           const source = opened.handle.createReadStream(
             range === null ? {} : { start: range.start, end: range.end },
           );
-          return { meta, range, body: toWebStream(source) };
+          const body = toWebStream(source);
+          unreadBodies.register(body, opened.handle);
+          return { meta, range, body };
         } catch (error) {
           await opened.handle.close();
           throw error;
-        }
-      }),
-
-    get: (key) =>
-      guarded(key, async () => {
-        const opened = await openObject(key);
-        if (opened === null) return null;
-        try {
-          const body = await opened.handle.readFile();
-          return {
-            body,
-            contentType: inferContentType(key),
-            sizeBytes: body.byteLength,
-            lastModified: opened.stats.mtime,
-          };
-        } finally {
-          await opened.handle.close();
         }
       }),
 
@@ -545,10 +631,6 @@ export function createFolderObjectStore(
       } finally {
         source.destroy();
       }
-    },
-
-    async put(key, input) {
-      await backend.write(key, input.body, {});
     },
 
     delete: (key) =>
@@ -568,78 +650,16 @@ export function createFolderObjectStore(
         }
       }),
 
-    async copyObject(sourceKey, destinationKey) {
+    // Streamed through this store's own read and write, never `fs.copyFile` on a path: the
+    // containment guards in the header above hold for both ends of the copy.
+    async copy(sourceKey, destinationKey) {
       const source = await backend.read(sourceKey);
       if (source !== null) await backend.write(destinationKey, source.body, {});
     },
 
-    list: (prefix) =>
-      guarded(prefix, async () => {
-        const safe = toObjectPrefix(prefix);
-        const dir = await openFolder(safe === '' ? [] : safe.split('/'));
-        if (dir === null) return [];
-        const counts = { links: 0, unreadable: 0 };
-        const result: ObjectListEntry[] = [];
-        try {
-          for (const child of await children(dir, counts)) {
-            const key = safe === '' ? child.name : `${safe}/${child.name}`;
-            if (addressableObjectName(key) === null) continue;
-            if (child.kind === 'file') {
-              const entry = await fileEntry(dir, child.name, key, counts);
-              if (entry !== null) result.push(entry);
-              continue;
-            }
-            const sub = await subfolder(dir, child.name, counts);
-            if (sub === null) continue;
-            try {
-              const quiet = { links: 0, unreadable: 0 };
-              if ((await filesUnder(sub, key, quiet, true)).length > 0) {
-                result.push({ kind: 'folder', key });
-              }
-            } finally {
-              await sub.handle.close();
-            }
-          }
-        } finally {
-          await dir.handle.close();
-        }
-        report(counts);
-        return result.sort(compareEntryKeys);
-      }),
-
-    listPrefix: (prefix) =>
-      guarded(prefix, async () => {
-        const safe = toObjectPrefix(prefix);
-        const counts = { links: 0, unreadable: 0 };
-        const result: ObjectListEntry[] = [];
-        if (safe !== '') {
-          const self = await openObject(safe);
-          if (self !== null) {
-            await self.handle.close();
-            const meta = metaOf(safe, self.stats);
-            result.push({
-              kind: 'file',
-              key: safe,
-              sizeBytes: meta.sizeBytes,
-              contentType: meta.contentType,
-              lastModified: meta.lastModified,
-            });
-          }
-        }
-        const dir = await openFolder(safe === '' ? [] : safe.split('/'));
-        if (dir !== null) {
-          try {
-            result.push(...(await filesUnder(dir, safe, counts, false)));
-          } finally {
-            await dir.handle.close();
-          }
-        }
-        report(counts);
-        return result.sort(compareEntryKeys);
-      }),
-
-    // ponytail: pages an in-memory walk of the prefix; streaming paging if folders get huge
-    listPage: (prefix, pageOptions) => listPageFrom(backend, prefix, pageOptions),
+    // ponytail: a page walks from its cursor and stops once full; one huge folder is read whole
+    listPage: (prefix, pageOptions) =>
+      guarded(prefix, () => listPageFrom(listing, prefix, pageOptions)),
   };
   return backend;
 }

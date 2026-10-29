@@ -8,12 +8,8 @@ import { randomUUID } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  defineObjectStoreContract,
-  defineObjectStoreV2Contract,
-  type ObjectStoreV2ContractFixture,
-} from './contract.js';
-import { createS3ObjectStoreProvider } from './s3-store.js';
+import { defineObjectStoreContract, type ObjectStoreContractFixture } from './contract.js';
+import { createS3ObjectStoreProviderFromConfig } from './s3-store.js';
 
 const bucket = process.env['TEST_AWS_S3_BUCKET'];
 
@@ -29,14 +25,21 @@ if (bucket === undefined || bucket.trim() === '') {
   });
 } else {
   const liveBucket = bucket.trim();
-  const client = new S3Client({ region: process.env['TEST_AWS_REGION'] ?? 'us-east-1' });
+  const region = process.env['TEST_AWS_REGION'] ?? 'us-east-1';
+  const client = new S3Client({ region });
 
   function fixture(topLevelPrefix: 'files' | 'skills') {
-    return async (): Promise<ObjectStoreV2ContractFixture> => {
+    return async (): Promise<ObjectStoreContractFixture> => {
       const keyPrefix = `${topLevelPrefix}/unit16-proof/${randomUUID()}`;
       await client.send(new HeadBucketCommand({ Bucket: liveBucket }));
       return {
-        provider: createS3ObjectStoreProvider({ client, bucket: liveBucket, keyPrefix }),
+        // Opened as a deployment opens it, naming no listing order: with no endpoint the store
+        // must pick AWS's native-name paging (folder `a/` after file `a.txt`) by itself.
+        provider: await createS3ObjectStoreProviderFromConfig(
+          { bucket: liveBucket, region, keyPrefix, createBucketIfMissing: false },
+          client,
+        ),
+        signedUrlsFetchable: true,
         teardown: async () => {
           let continuationToken: string | undefined;
           do {
@@ -67,6 +70,4 @@ if (bucket === undefined || bucket.trim() === '') {
 
   defineObjectStoreContract('native AWS S3 — files/ prefix', fixture('files'));
   defineObjectStoreContract('native AWS S3 — skills/ prefix', fixture('skills'));
-  defineObjectStoreV2Contract('native AWS S3 — files/ prefix', fixture('files'));
-  defineObjectStoreV2Contract('native AWS S3 — skills/ prefix', fixture('skills'));
 }

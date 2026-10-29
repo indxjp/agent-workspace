@@ -8,9 +8,36 @@
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { defineSlot } from '../runtime-slot';
 import { bearerMatches, problem } from '../sessions/retention-cron';
+import type { AgentArchiveSweepResult } from '../agents/archive/sweep';
 import type { SchedulePassResult } from './schedule-pass';
 
-export type TriggerScheduleCronPass = () => Promise<SchedulePassResult>;
+/**
+ * What one delivery of the cron did: the schedule pass, and the agent auto-archive sweep (issue
+ * #1851) that rides the same delivery. `archive` is `null` when the sweep threw; it never fails the
+ * delivery, because the schedule pass has already started its runs.
+ */
+export type TriggerScheduleCronResult = SchedulePassResult & {
+  readonly archive?: AgentArchiveSweepResult | null;
+};
+
+export type TriggerScheduleCronPass = () => Promise<TriggerScheduleCronResult>;
+
+/** The schedule pass first, then the archive sweep; a sweep failure is logged, not thrown. */
+export async function runTriggerCronPass(
+  deps: Readonly<{
+    schedule: () => Promise<SchedulePassResult>;
+    archive: () => Promise<AgentArchiveSweepResult>;
+    log: Pick<Logger, 'error'>;
+  }>,
+): Promise<TriggerScheduleCronResult> {
+  const schedule = await deps.schedule();
+  try {
+    return { ...schedule, archive: await deps.archive() };
+  } catch (error) {
+    deps.log.error('[agent-archive] sweep failed', { error });
+    return { ...schedule, archive: null };
+  }
+}
 
 /** What the cron route needs, read and built by the composition root: the route reads no env. */
 export interface TriggerScheduleCron {
@@ -71,7 +98,7 @@ export async function handleTriggerScheduleCron(
   if (!bearerMatches(request.headers.get('authorization'), cron.secret)) {
     return problem(401, 'unauthenticated', 'A valid cron bearer is required.');
   }
-  let result: SchedulePassResult;
+  let result: TriggerScheduleCronResult;
   try {
     result = await cron.pass();
   } catch (error) {

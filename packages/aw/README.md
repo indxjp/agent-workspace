@@ -436,8 +436,8 @@ families.
 
 Deliberately absent until their server change lands (spec §7.2, §8): `me` (S-8),
 `runtimes detect|test` (S-9, S-4), `secrets remove` (S-10), `skills remove` (S-12),
-`connectors update` (S-20), `agents policy|export|import` (S-13), `agents archive|restore`
-(RF-201), `shares publish` (RF-103).
+`connectors update` (S-20), `agents policy|export|import` (S-13), `agents archive` (RF-201),
+`shares publish` (RF-103).
 
 Absent because the only credential `aw` can hold is refused: `workspaces list|get|create|update`
 and `team invitations list|create|resend|revoke`. Every `/api/workspaces` and `/api/invitations`

@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 
 import { createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
 import { TOOL_BUNDLE_MAX_BYTES } from '@indx-workspace/contracts/agent-versions';
 import { describe, expect, it, vi } from 'vitest';
 
-import { getToolBundle, toolBundleLookup, uploadToolBundle } from './handlers';
+import { getToolBundle, readToolBundle, toolBundleLookup, uploadToolBundle } from './handlers';
 
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';
 const OTHER = '77777777-7777-4777-8777-777777777777';
@@ -26,20 +27,20 @@ describe('uploadToolBundle', () => {
       status: 201,
       body: { bundle: { digest: DIGEST, sizeBytes: SOURCE.length }, created: true },
     });
-    const stored = await mine.get(`tool-bundles/${DIGEST}.mjs`);
+    const stored = await readWhole(mine, `tool-bundles/${DIGEST}.mjs`);
     expect(Buffer.from(stored?.body ?? []).toString()).toBe(SOURCE);
   });
 
   it('is idempotent: a second upload answers 200 created:false and writes nothing', async () => {
     const { mine } = stores();
     await uploadToolBundle(mine, upload(SOURCE));
-    const put = vi.spyOn(mine, 'put');
+    const write = vi.spyOn(mine, 'write');
     const again = await uploadToolBundle(mine, upload(SOURCE));
     expect(again).toEqual({
       status: 200,
       body: { bundle: { digest: DIGEST, sizeBytes: SOURCE.length }, created: false },
     });
-    expect(put).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
   it('gives different bytes a different digest', async () => {
@@ -68,7 +69,7 @@ describe('uploadToolBundle', () => {
     const result = await uploadToolBundle(mine, body);
     expect(result.status).toBe(400);
     expect(result.body).toMatchObject({ error: { code: 'invalid_tool_bundle' } });
-    expect(await mine.list('tool-bundles')).toEqual([]);
+    expect(await listAll(mine, 'tool-bundles')).toEqual([]);
   });
 
   it('refuses a bundle over the cap with 413 tool_bundle_too_large', async () => {
@@ -107,5 +108,47 @@ describe('toolBundleLookup', () => {
     await uploadToolBundle(mine, upload(SOURCE));
     const absent = 'c'.repeat(64);
     expect(await toolBundleLookup(mine)([absent, DIGEST])).toEqual([absent]);
+  });
+
+  it('asks the store for one head per digest', async () => {
+    const { mine } = stores();
+    const head = vi.fn(() => Promise.resolve(null));
+    expect(await toolBundleLookup({ ...mine, head })([DIGEST])).toEqual([DIGEST]);
+    expect(head).toHaveBeenCalledWith(`tool-bundles/${DIGEST}.mjs`);
+  });
+});
+
+describe('readToolBundle', () => {
+  it('reads back the bytes of a stored bundle', async () => {
+    const { mine } = stores();
+    await uploadToolBundle(mine, upload(SOURCE));
+    expect(Buffer.from((await readToolBundle(mine, DIGEST)) ?? []).toString()).toBe(SOURCE);
+  });
+
+  it('does not read a stored object past the bundle cap whole', async () => {
+    const { mine } = stores();
+    const oversized = new Uint8Array(TOOL_BUNDLE_MAX_BYTES + 2);
+    const digest = createHash('sha256').update(oversized).digest('hex');
+    await mine.write(`tool-bundles/${digest}.mjs`, oversized, {});
+    let cancelled = false;
+    const read: typeof mine.read = async (key, options) => {
+      const found = await mine.read(key, options);
+      if (found === null) return null;
+      // Finite, so a missing cap fails on the assertion; the second chunk is still queued when
+      // the cap is crossed, so the cancel reaches the source.
+      const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          controller.enqueue(oversized.subarray(0, TOOL_BUNDLE_MAX_BYTES + 1));
+          controller.enqueue(oversized.subarray(TOOL_BUNDLE_MAX_BYTES + 1));
+          controller.close();
+        },
+        cancel: () => {
+          cancelled = true;
+        },
+      });
+      return { ...found, body };
+    };
+    expect(await readToolBundle({ ...mine, read }, digest)).toBeNull();
+    expect(cancelled).toBe(true);
   });
 });

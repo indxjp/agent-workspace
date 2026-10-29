@@ -16,7 +16,7 @@ import type {
   ConnectionStoreOptions,
   ListPageOptions,
   ObjectPage,
-  ObjectStoreV2,
+  ObjectStore,
 } from '@agent-workspace/core/storage';
 
 import { PROBE_TIMEOUT_MS } from '../models/probe';
@@ -82,7 +82,7 @@ afterEach(() => {
 
 /** A store whose only member is `listPage`; the handlers never call another. */
 function stubStore(listPage: (prefix: string, options?: ListPageOptions) => Promise<ObjectPage>) {
-  const store: Pick<ObjectStoreV2, 'listPage'> = { listPage };
+  const store: Pick<ObjectStore, 'listPage'> = { listPage };
   injected.open.mockResolvedValue(store);
 }
 
@@ -128,7 +128,7 @@ describe('browse and test over a stub store', () => {
   it('[US-STO-12][api][sdk] a listing that left entries out is logged as counts and the connection id', async () => {
     const warn = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
     injected.open.mockImplementation((_url, _credential, options) => {
-      const store: Pick<ObjectStoreV2, 'listPage'> = {
+      const store: Pick<ObjectStore, 'listPage'> = {
         listPage: () => {
           options.onSkipped?.({ links: 2, unreadable: 1 });
           return Promise.resolve({ entries: [], cursor: null });

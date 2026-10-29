@@ -8,7 +8,7 @@
 import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
@@ -22,7 +22,7 @@ export interface CatalogFilesWorld {
   readonly runtime: FilesRuntime;
   readonly storage: StorageService;
   readonly catalogs: ResourceCatalogStoreProvider;
-  readonly objects: ObjectStoreV2;
+  readonly objects: ObjectStore;
   readonly legacy: ReturnType<typeof createInMemoryObjectStoreProvider>;
 }
 
@@ -34,7 +34,7 @@ export function createCatalogFilesWorld(options: {
   readonly scopes: Parameters<typeof createRepositoryObjectStoreProvider>[0]['scopes'];
   readonly resolveWorkspace: FilesRuntime['resolveWorkspace'];
   readonly catalogs: ResourceCatalogStoreProvider;
-  readonly objects?: ObjectStoreV2;
+  readonly objects?: ObjectStore;
   /** `false` leaves the catalog service out, as a deployment without `AW_STORAGE_URL` does. */
   readonly withStorage?: boolean;
   /** What the service logs to; silent unless a test reads the log. */

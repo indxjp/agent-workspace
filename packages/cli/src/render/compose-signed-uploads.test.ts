@@ -12,6 +12,7 @@ interface ComposeFile {
   readonly services: Record<
     string,
     {
+      readonly command?: readonly string[];
       readonly ports?: readonly string[];
       readonly networks?: readonly string[];
       readonly environment?: Record<string, string>;
@@ -104,6 +105,25 @@ describe('compose signed uploads', () => {
       signs ? `http://localhost:${env['SEAWEEDFS_PORT'] ?? ''}` : undefined,
     );
   });
+
+  it('[US-STO-02][unit][cli] the template limits SeaweedFS CORS to the origins its .env names', async () => {
+    const template = await readCompose(new URL('../../templates/compose.yaml', import.meta.url));
+    const origins = (template.services['seaweedfs']?.command ?? []).filter((flag) =>
+      flag.startsWith('-s3.allowedOrigins='),
+    );
+    // Without the flag the bundled store echoes any origin back on a preflight.
+    expect(origins).toEqual([
+      '-s3.allowedOrigins=${SEAWEEDFS_ALLOWED_ORIGINS:?set SEAWEEDFS_ALLOWED_ORIGINS in .env}',
+    ]);
+  });
+
+  it.each(['seaweedfs', 'local-filesystem'] as const)(
+    '[US-STO-02][unit][cli] a %s project allows browser uploads from its web origin only',
+    (store) => {
+      const env = renderedEnv(store);
+      expect(env['SEAWEEDFS_ALLOWED_ORIGINS']).toBe('http://localhost:3000,http://127.0.0.1:3000');
+    },
+  );
 
   it('[US-STO-02][unit][cli] the template gives the published SeaweedFS port a non-internal network', async () => {
     const { services, networks } = await readCompose(

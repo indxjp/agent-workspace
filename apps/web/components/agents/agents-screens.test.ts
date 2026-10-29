@@ -25,8 +25,9 @@ import type { ModelCatalogState } from '../models/model-selector';
 
 describe('AgentsListScreen', () => {
   it('renders the page head before the fetch effect has run (server / initial render)', () => {
-    const html = renderToStaticMarkup(createElement(AgentsListScreen));
+    const html = renderToStaticMarkup(createElement(AgentsListScreen, { locale: 'en' }));
     expect(html).toContain('Agents');
+    expect(html).toContain('Show archived');
     expect(html).toContain('New Agent');
     expect(html).toContain('Search agents');
     // The initial state is "loading", never an invented count or an empty-list sentence that

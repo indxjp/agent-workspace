@@ -179,13 +179,14 @@ function refuseDriverConfigCredentials(
 }
 
 /**
- * A runtime path as the runner's workspace-relative form: `/workspace/` is stripped, and an empty,
- * absolute, `.` or `..` path is refused. The launcher maps `persistPaths` through this after a run,
- * so a profile write checks every entry with it first.
+ * A runtime path as the runner's workspace-relative form: a leading `/workspace` segment is
+ * stripped (`/workspaces/…` is not that segment), and an empty, absolute, `.` or `..` path is
+ * refused. The launcher maps `persistPaths` through this after a run, so a profile write checks
+ * every entry with it first.
  */
 export function relativeRuntimePath(value: string): string {
   try {
-    return toObjectKey(value.replaceAll('\\', '/').replace(/^\/workspace\/?/u, ''));
+    return toObjectKey(value.replaceAll('\\', '/').replace(/^\/workspace(?:\/|$)/u, ''));
   } catch (cause) {
     if (!(cause instanceof UnsafeObjectKeyError)) throw cause;
     throw new Error(`persist path ${JSON.stringify(value)} is not workspace-relative`, { cause });

@@ -259,6 +259,7 @@ erDiagram
   workspaces ||--o{ api_keys : "workspace_id"
   workspaces ||--o{ invitations : "workspace_id"
   workspaces ||--o{ workspace_principals : "workspace_id"
+  workspaces ||--o{ workspace_features : "workspace_id"
   workspaces }o--o| model_connections : "default_model_connection_id"
   users ||--o{ memberships : "user_id"
   users ||--o{ invitations : "invited_by"
@@ -585,6 +586,7 @@ SDK client is `packages/sdk/src/resources/<family>.ts`; the commands are
 | Runs               | `runs`, `run-events`              | `POST /agents/:id/runs`, `GET /runs`, `GET /runs/:id`, `GET /runs/:id/events` (SSE), `POST /runs/:id/interrupt`, `POST /runs/:id/revoke-tokens`                                                                                  | `runs.start/get/list/events/follow/waitForOutcome/interrupt/revokeTokens`                                                                                                                | `aw runs start\|get\|list\|events\|follow\|wait\|interrupt`                                                                                               | `runs`, `run_events`, `run_usage_records`, `run_tokens`                                                      |
 | Shares             | `shares`                          | `GET/POST /shares`, `DELETE /shares/:id`                                                                                                                                                                                         | `shares.list/publish/revoke`                                                                                                                                                             | `aw shares list\|revoke` [^publish]                                                                                                                       | `shares`                                                                                                     |
 | Observability      | `observability`                   | `GET /metrics`, `GET /audit-events`                                                                                                                                                                                              | `observability.metrics.recentRuns`, `observability.audit.list/listAll`                                                                                                                   | `aw metrics recent-runs`, `aw audit list`                                                                                                                 | `runs` (projection), `audit_events`                                                                          |
+| Features           | `features`                        | `GET/PUT /workspaces/:id/features` [^features]                                                                                                                                                                                   | `workspaces.features.list/set`                                                                                                                                                           | `aw workspaces features list\|disable\|enable`                                                                                                            | `workspace_features`                                                                                         |
 
 Routes not in the table are outside the SDK's scope by 04 §1 (`/api/setup`, `/api/setup/runtime-detect`,
 `/api/auth/*`) or wait for a unit: `POST /api/runtimes/:id` (`id` must be `test`; S-4 → unit 9, #241).
@@ -611,6 +613,14 @@ Routes not in the table are outside the SDK's scope by 04 §1 (`/api/setup`, `/a
     (Microsoft Graph, Zoom, a mail rule) that holds no API key; the URL secret that `triggers.create`
     and `triggers.rotateSecret` return once is its only authentication. `trigger_deliveries` holds
     the dedupe and rate records of firings and is never on the wire.
+
+[^features]:
+    `GET` answers one row per feature (`installed`, `enabled`) to any member; `PUT` replaces the
+    workspace's whole off set and is Owner-only. `workspace_features` (a row means the feature is
+    off, ADR-0160 D6) is written only through `WorkspaceFeatureRepository`, and each changed set
+    records one `workspace-features-changed` audit row (ADR-0160 D8). `GET /me` also carries the
+    caller's workspace's enabled `features`. The family is part of `workspaces` in the SDK and the
+    CLI (`workspaces.features`, `aw workspaces features`), with its own contract module.
 
 [^engines]:
     The only family in this table with no row of its own. An engine is not tenant data: it is what

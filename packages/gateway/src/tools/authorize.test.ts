@@ -451,6 +451,16 @@ describe('createDatabaseToolResolver', () => {
       });
     });
 
+    // @story US-STO-12
+    it('[US-STO-12][unit][run] never reads a storage connection credential as the signing key', async () => {
+      const { connector, calls } = await resolve(
+        { ...CLAIMS, caller: CALLER },
+        'STORAGE_CONNECTION_77777777777747778777777777777777',
+      );
+      await expect(connector.identity?.()).resolves.toBeNull();
+      expect(calls.some((call) => call.startsWith('secrets.resolveByName'))).toBe(false);
+    });
+
     it('cannot sign without a caller or without the secret', async () => {
       const noCaller = await resolve(CLAIMS, 'IDENTITY_KEY');
       await expect(noCaller.connector.identity?.()).resolves.toBeNull();

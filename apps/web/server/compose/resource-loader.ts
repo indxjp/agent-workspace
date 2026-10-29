@@ -21,7 +21,11 @@ import {
   type ToolOperationMethod,
 } from '@indx-workspace/contracts/tool-connectors';
 
-import { isUnderAllowedPrefix, storageGrantUnavailable } from '../agent-versions/storage-grants';
+import {
+  isUnderAllowedPrefix,
+  storageGrantListingUnavailable,
+  storageGrantUnavailable,
+} from '../agent-versions/storage-grants';
 import { CONNECTOR_IDENTITY_UNSUPPORTED } from '../connectors/identity';
 import type { ConnectorsStoreProvider } from '../connectors/store';
 import { narrowFileGrants } from '../files/search-terms';
@@ -471,6 +475,21 @@ function isArchivableKey(key: string): boolean {
   }
 }
 
+/** One page of a granted folder; a provider failure is the run's typed refusal. */
+async function listGrantedFolder(
+  store: RunConnectionStore,
+  prefix: string,
+  options: { readonly recursive: true; readonly cursor?: string },
+  connectionName: string,
+): ReturnType<RunConnectionStore['listPage']> {
+  try {
+    return await store.listPage(prefix, options);
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
+    throw storageGrantListingUnavailable(connectionName, error);
+  }
+}
+
 /**
  * Each granted connection folder as references under `storage/<name>/` (the storage design, §05).
  * The grant is judged against the connection as it is now, not as it was deployed: a connection that
@@ -526,9 +545,11 @@ async function loadStorageGrants(
     let skipped = 0;
     let cursor: string | undefined;
     do {
-      const page = await store.listPage(
+      const page = await listGrantedFolder(
+        store,
         grant.prefix,
         cursor === undefined ? { recursive: true } : { recursive: true, cursor },
+        connection.name,
       );
       for (const entry of page.entries) {
         if (entry.kind !== 'file') continue;

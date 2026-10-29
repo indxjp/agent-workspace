@@ -13,6 +13,7 @@ import {
 } from '@indx-workspace/contracts/project-file';
 import { AGENT_PERMISSION_KEYS } from '@indx-workspace/contracts/agents';
 import { ENGINE_IDS, type EngineId } from '@indx-workspace/contracts/engines';
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import {
   MODEL_PROVIDER_CONFIG_RULES,
   type ModelConnectionConfigField,
@@ -129,6 +130,8 @@ const RUNTIME_OVERRIDES: readonly (readonly [string, string])[] = [
   ['@modelcontextprotocol/server@>=2.0.0 <2.3.0', '^2.3.0'],
   ['@modelcontextprotocol/client@>=2.0.0 <2.3.0', '^2.3.0'],
   ['@modelcontextprotocol/core@>=2.0.0 <2.3.0', '^2.3.0'],
+  ['@modelcontextprotocol/node@>=2.0.0 <2.1.0', '2.1.1'],
+  ['@hono/node-server@>=1.19.10 <2.1.3', '^2.1.3'],
 ];
 
 const ProjectNameSchema = z
@@ -622,6 +625,8 @@ function frozenFiles(files: readonly ProjectFile[]): readonly ProjectFile[] {
  * - A platform answer other than `none` adds a `platforms:` block to `agent-workspace.yaml` (in
  *   `PLATFORM_IDS` order) and the `aw platforms` commands to `README.md` and `AGENTS.md`; `none`
  *   changes no file.
+ * - A features answer that is not every feature adds a `features:` list (in `FEATURE_IDS` order);
+ *   an absent answer or every feature writes no key, which means all installed (ADR-0160 D5).
  * - An OpenAPI tool is named after its document's file name up to the first `.`, reads its token
  *   from `<NAME>_TOKEN` and allows only `GET` and `HEAD`; the PostgreSQL tool reads its URL from
  *   `POSTGRES_URL` and names one placeholder table.
@@ -648,6 +653,11 @@ export function renderProjectFiles(
     valid['content.permissions'].includes(key),
   );
   const platforms = HOSTED_PLATFORM_IDS.filter((id) => valid['admin.platforms'].includes(id));
+  const featureAnswer = valid['admin.features'];
+  const features =
+    featureAnswer === undefined
+      ? FEATURE_IDS
+      : FEATURE_IDS.filter((id) => featureAnswer.includes(id));
   const tools = setupTools(valid);
   const themed: Partial<
     Record<(typeof valid)['setup.theme'], (typeof THEME_SKILLS)[keyof typeof THEME_SKILLS]>
@@ -750,6 +760,7 @@ export function renderProjectFiles(
       ...(platforms.length === 0
         ? {}
         : { platforms: Object.fromEntries(platforms.map((id) => [id, { enabled: true }])) }),
+      ...(features.length === FEATURE_IDS.length ? {} : { features }),
     },
     projectFileHeader(keyVariable, placeholders.length > 0),
   );

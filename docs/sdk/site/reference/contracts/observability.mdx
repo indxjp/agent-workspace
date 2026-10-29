@@ -5,6 +5,22 @@ description: "The @indx-workspace/contracts/observability exports, sorted alphab
 
 <Note>This page is generated from `packages/contracts/src/observability.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## AgentChangedAuditDetails
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `archived` | `false \| true` | Yes |  |
+
+## AgentChangedAuditDetailsSchema
+
+What an `agent-changed` row may carry in `audit_events.details`: the auto-archive sweep marks the
+row that archived an agent with `archived: true`, and a restore marks its row `archived: false`
+(issue #1851). A pointer move or a runtime switch writes the same action with no details.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `archived` | `false \| true` | Yes |  |
+
 ## AgentCreatedAuditDetails
 
 | Name | Type | Required | Description |
@@ -17,8 +33,9 @@ description: "The @indx-workspace/contracts/observability exports, sorted alphab
 
 ## AgentCreatedAuditDetailsSchema
 
-What an `agent-created` row names (issue #1847), stored in `audit_events.details`, which no other
-action may carry. `createdByAgentId` is for issue #1851 and is unused here.
+What an `agent-created` row names (issue #1847), stored in `audit_events.details`, which only an
+`agent-created` or `agent-changed` row may carry. `createdByAgentId` is for issue #1851 and is
+unused here.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -83,6 +100,7 @@ or a restore, so neither folds into `project-deleted`. The column is a `CHECK`, 
 - `'storage-connection-tested'`
 - `'storage-connection-written'`
 - `'storage-grant-changed'`
+- `'workspace-features-changed'`
 
 ## AUDIT_LIST_DEFAULT_LIMIT
 
@@ -138,6 +156,7 @@ Value: `500`
 - `"storage-connection-tested"`
 - `"storage-connection-written"`
 - `"storage-grant-changed"`
+- `"workspace-features-changed"`
 
 ## AuditEvent
 
@@ -148,7 +167,7 @@ Value: `500`
 | `actorUserId` | `null \| string` | Yes |  |
 | `actorPrincipalId` | `null \| string` | Yes |  |
 | `actorLabel` | `string` | Yes |  |
-| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed"` | Yes |  |
+| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed" \| "workspace-features-changed"` | Yes |  |
 | `subjectId` | `null \| string` | Yes |  |
 | `subjectLabel` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
@@ -192,7 +211,7 @@ user is deleted. `subjectId` is `null` for an action with no one subject.
 | `actorUserId` | `null \| string` | Yes |  |
 | `actorPrincipalId` | `null \| string` | Yes |  |
 | `actorLabel` | `string` | Yes |  |
-| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed"` | Yes |  |
+| `action` | `"user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed" \| "workspace-features-changed"` | Yes |  |
 | `subjectId` | `null \| string` | Yes |  |
 | `subjectLabel` | `string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
@@ -207,7 +226,7 @@ page, and is refused as `400 invalid_cursor` by any other list or workspace.
 | --- | --- | --- | --- |
 | `limit` | `undefined \| number` | No |  |
 | `cursor` | `undefined \| string` | No |  |
-| `action` | `undefined \| "user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed"` | No | Only rows of this one action (single value; a value outside `AUDIT_ACTIONS` is refused as `400 invalid_action`). Paging keeps the same order and cursor with the filter on. |
+| `action` | `undefined \| "user-created" \| "user-deleted" \| "agent-changed" \| "agent-created" \| "provider-credential-changed" \| "api-key-created" \| "api-key-revoked" \| "connector-changed" \| "permission-changed" \| "runtime-profile-changed" \| "project-created" \| "project-deleted" \| "project-archived" \| "project-restored" \| "session-published" \| "public-link-revoked" \| "runnable-link-stopped" \| "public-sharing-policy-changed" \| "invitation-created" \| "invitation-resent" \| "invitation-revoked" \| "invitation-accepted" \| "endpoint-client-created" \| "endpoint-client-changed" \| "endpoint-client-revoked" \| "endpoint-tool-called" \| "oauth-client-secret-rotated" \| "oauth-grant-issued" \| "oauth-grant-revoked" \| "file-uploaded" \| "file-downloaded" \| "file-link-created" \| "file-moved" \| "file-deleted" \| "storage-connection-created" \| "storage-connection-updated" \| "storage-connection-deleted" \| "storage-connection-credential-changed" \| "storage-connection-tested" \| "storage-connection-written" \| "storage-grant-changed" \| "workspace-features-changed"` | No | Only rows of this one action (single value; a value outside `AUDIT_ACTIONS` is refused as `400 invalid_action`). Paging keeps the same order and cursor with the filter on. |
 
 ## RunTelemetry
 

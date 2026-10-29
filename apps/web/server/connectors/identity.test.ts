@@ -95,6 +95,33 @@ describe('connector identity opt-in (ADR-0142 D1)', () => {
     expect(refused.body).toMatchObject({ error: { code: 'connector_identity_unsupported' } });
   });
 
+  // @story US-STO-12
+  it('[US-STO-12][api][run] refuses a storage connection credential as the identity secret on create and update, and saves nothing', async () => {
+    const reserved = { secret: 'STORAGE_CONNECTION_77777777777747778777777777777777' };
+    const store = createInMemoryConnectorsStoreProvider().forWorkspace(WORKSPACE);
+    for (const body of [
+      { ...HTTP, identity: reserved },
+      { ...OPENAPI, identity: reserved },
+    ]) {
+      const refused = await createConnector(store, body, OWNER);
+      expect(refused.status, body.name).toBe(400);
+      expect(refused.body, body.name).toMatchObject({ error: { code: 'invalid_body' } });
+    }
+    expect(await store.list()).toEqual([]);
+
+    const http = idOf(await createConnector(store, HTTP, OWNER));
+    const patched = await updateConnector(store, http, { identity: reserved });
+    expect(patched.status).toBe(400);
+    expect(patched.body).toMatchObject({ error: { code: 'invalid_body' } });
+    expect(await store.get(http)).not.toHaveProperty('identity');
+
+    const openapi = idOf(await createConnector(store, { ...OPENAPI, identity: IDENTITY }, OWNER));
+    const replaced = await updateConnector(store, openapi, { ...OPENAPI, identity: reserved });
+    expect(replaced.status).toBe(400);
+    expect(replaced.body).toMatchObject({ error: { code: 'invalid_body' } });
+    expect(await store.get(openapi)).toMatchObject({ identity: IDENTITY });
+  });
+
   it('clears the opt-in when an openapi connector is replaced without it', async () => {
     const store = createInMemoryConnectorsStoreProvider().forWorkspace(WORKSPACE);
     const id = idOf(await createConnector(store, { ...OPENAPI, identity: IDENTITY }, OWNER));

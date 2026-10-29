@@ -86,7 +86,7 @@ describe('aw runs start --attach', () => {
     expect(run.calls.some((call) => call.method === 'POST')).toBe(false);
   });
 
-  it.each(['./reports/q3.txt', '/reports/q3.txt'])(
+  it.each(['./reports/q3.txt', '/reports/q3.txt', '././reports/q3.txt', '//reports/./q3.txt'])(
     'reads %s as the workspace path reports/q3.txt',
     async (given) => {
       const run = await runCli(['runs', 'start', IDS.agent, '--prompt', 'x', '--attach', given], {

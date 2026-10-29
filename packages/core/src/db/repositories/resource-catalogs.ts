@@ -5,6 +5,7 @@ import {
   desc,
   eq,
   gt,
+  gte,
   inArray,
   isNull,
   lt,
@@ -47,10 +48,25 @@ export interface CatalogFile {
   readonly targetPath?: string | null;
   // storage-bridge(#1634): optional for the same reason as `status`. How a pending upload is written.
   readonly uploadMode?: UploadMode | null;
+  // storage-bridge(#1634): optional for the same reason as `status`. Both catalogs set it on every
+  // row they return, and a row without one is checked by id and key only.
+  /**
+   * Opaque: which reservation of a pending row this snapshot saw. A signed re-mint, or a retry that
+   * changes the declared size or type, issues a new one, so `confirm`, `forget` and a claiming
+   * `remove` of an older snapshot do nothing. `null` on a ready or `deleting` row.
+   */
+  readonly reservationToken?: string | null;
   /** Compatibility attribution for a membership principal. */
   readonly createdBy: string | null;
   /** Exact owner; an upsert at an existing path never transfers it. */
   readonly ownerPrincipalId: string;
+  // storage-bridge(#1634): optional for the same reason as `status`, until the hand-written
+  // file-catalog fakes are replaced; both catalogs set it on every row they return.
+  /**
+   * When the row was last written: reserved, confirmed, renamed or replaced. A file answers it as
+   * its `lastModified`.
+   */
+  readonly updatedAt?: Date;
 }
 
 export interface CatalogSkill {
@@ -158,11 +174,14 @@ export class CatalogPathPendingError extends Error {
 
 /**
  * `reserved`: a pending row now holds the path, new or the caller's own refreshed one. `taken`: a
- * ready row already did; nothing changed.
+ * ready row already did; nothing changed. `replaces` is set when `row` is a pending replacement
+ * (`targetPath` set): the ready file it will take the path from, read under the reservation's
+ * lock. It is the file a replacement policy decides on; a path read before or after the reserve
+ * may name another one.
  */
 export type ReserveOutcome =
-  | { readonly kind: 'reserved'; readonly row: CatalogFile }
-  | { readonly kind: 'taken'; readonly row: CatalogFile };
+  | { readonly kind: 'reserved'; readonly row: CatalogFile; readonly replaces?: CatalogFile }
+  | { readonly kind: 'taken'; readonly row: CatalogFile; readonly replaces?: CatalogFile };
 
 /** The confirm result: `replaced` is the ready row the confirmed one took the path from, now `deleting`. */
 export interface ConfirmOutcome {
@@ -212,7 +231,8 @@ export interface CatalogPort {
    * the new row then waits at a side path until `confirm` swaps it in; without one, the ready row
    * holds the path and comes back as `taken` with nothing changed. A pending row for the path (at
    * it, or waiting to replace it) of the same owner is an upload retried: its size and content type
-   * are refreshed and it comes back as `taken` (one `reserved` per row). A pending row of another
+   * are refreshed and it comes back as `taken` (one `reserved` per row). A pending replacement, new
+   * or retried, comes back with the ready file it replaces as `replaces`. A pending row of another
    * owner throws {@link CatalogPathPendingError}. `storageKey` is `<area>/<objectId>` for a row with
    * an object id and the path otherwise.
    */
@@ -240,7 +260,10 @@ export interface CatalogPort {
    * never revived) or already ready. Re-confirming a ready row (new bytes written under the same
    * key) needs `expect: 'any'`. A replacement takes the path in one transaction: the ready row it
    * replaces is marked `deleting` and moved aside (`replaced`), and its grants follow the path to
-   * the new row. A replacement whose file is renamed meanwhile takes the new path.
+   * the new row. A replacement whose file is renamed meanwhile takes the new path. With `objectId`,
+   * the confirmed row names that object instead (its storage key becomes `<area>/<objectId>`) in
+   * the same update and keeps its row id: a signed upload publishes a copy of its verified bytes
+   * that no link was ever signed for.
    */
   confirm(
     row: CatalogFile,
@@ -249,6 +272,7 @@ export interface CatalogPort {
       readonly contentType: string | null;
       readonly sha256?: string | null;
       readonly expect?: 'pending' | 'any';
+      readonly objectId?: string;
     },
   ): Promise<ConfirmOutcome | null>;
   /**
@@ -275,22 +299,24 @@ export interface CatalogPort {
   ): Promise<{ readonly kind: 'created' | 'taken'; readonly row: CatalogFile }>;
   /**
    * Pending rows in this workspace outside area `staging`: the number the pending-upload cap compares
-   * (the storage design, §05). A staged archive is not an upload, so it never uses the cap.
+   * (the storage design, §05). A staged archive is not an upload, so it never uses the cap. With
+   * `newerThan`, only rows reserved (or re-reserved) at or after it: the inverse of `stalePending`.
    */
-  countPending(): Promise<number>;
+  countPending(newerThan?: Date): Promise<number>;
   /**
    * The pending upload for `path`: the pending row at the path, or the pending replacement waiting
    * at a side path to take it over. `get` never returns the latter. Null when none is pending.
    */
   pending(path: string): Promise<CatalogFile | null>;
   /**
-   * Move the row at `from`, or the whole subtree under it, keeping ids; returns the rows moved. A
-   * row with an object id keeps its `storageKey` and `objectId`: only the path changes. Throws
-   * {@link CatalogPathPendingError}, moving nothing, while a row in the subtree is pending (a
-   * pending replacement included), and {@link CatalogPathTakenError}, moving nothing, when a
-   * destination is held by a row outside the moved set.
+   * Move the row at `from`, or the whole subtree under it, keeping ids; answers how many rows it
+   * moved, folder rows included, and how many of them are files. A row with an object id keeps its
+   * `storageKey` and `objectId`: only the path changes. Throws {@link CatalogPathPendingError},
+   * moving nothing, while a row in the subtree is pending (a pending replacement included), and
+   * {@link CatalogPathTakenError}, moving nothing, when a destination is held by a row outside the
+   * moved set.
    */
-  rename(from: string, to: string): Promise<number>;
+  rename(from: string, to: string): Promise<{ readonly rows: number; readonly files: number }>;
   /**
    * Mark the file at `path`, or every file under it, `deleting`, and return the rows it marked, in
    * no particular order (a second call returns none). A pending replacement of a removed file goes
@@ -298,7 +324,10 @@ export interface CatalogPort {
    * Folder rows are dropped: they hold no object. The object is removed after, and `forget` then
    * drops the row.
    */
-  remove(path: string): Promise<readonly CatalogFile[]>;
+  remove(
+    path: string,
+    options?: { readonly pending?: CatalogFile },
+  ): Promise<readonly CatalogFile[]>;
   /**
    * Pending rows last reserved (or re-reserved) before `olderThan`: uploads that never completed.
    * For the cleanup job.
@@ -336,7 +365,7 @@ export interface ResourceCatalogRepository extends CatalogPort {
   putFile(
     input: Omit<
       CatalogFile,
-      'id' | 'createdBy' | 'status' | 'objectId' | 'area' | 'sha256' | 'targetPath'
+      'id' | 'createdBy' | 'status' | 'objectId' | 'area' | 'sha256' | 'targetPath' | 'updatedAt'
     > & {
       readonly createdBy?: string | null;
     },
@@ -360,6 +389,7 @@ export interface ResourceCatalogRepository extends CatalogPort {
       | 'area'
       | 'sha256'
       | 'targetPath'
+      | 'updatedAt'
     > & {
       path: string;
     },
@@ -537,6 +567,76 @@ const logicalPath = sql<string>`coalesce(${files.targetPath}, ${files.path})`;
 /** The side path a row moves to when it is removed or replaced; the same shape as `sidePath`. */
 const sidePathOf = sql`${`${SIDE_PATH_ROOT}/`} || ${files.id}::text`;
 
+/**
+ * A pending row's reservation token: the exact time of its last reservation, as text. Every write
+ * that reserves again moves `updated_at` forward ({@link reservedAgainAt}); a ready or `deleting`
+ * row has none.
+ */
+const reservationToken = sql<
+  string | null
+>`case when ${files.status} = 'pending' then extract(epoch from ${files.updatedAt})::text end`;
+
+/**
+ * The row is pending under this reservation. `null`, a snapshot of a row that was not pending,
+ * matches none; `undefined`, a row a caller built without a token, matches any pending row.
+ */
+const reservedAs = (token: string | null | undefined): SQL =>
+  token === undefined
+    ? sql`${files.status} = 'pending'`
+    : token === null
+      ? sql`false`
+      : sql`(${files.status} = 'pending' and extract(epoch from ${files.updatedAt})::text = ${token})`;
+
+/**
+ * Whether `current`, a row read under its path lock, is still the reservation `snapshot` saw. Both
+ * catalogs apply it; the database also compares the token in SQL ({@link reservedAs}).
+ */
+/** How many rows a rename moved, and how many of them are files. */
+export const renameCount = (
+  moved: readonly Pick<CatalogFile, 'kind'>[],
+): { readonly rows: number; readonly files: number } => ({
+  rows: moved.length,
+  files: moved.filter((row) => row.kind === 'file').length,
+});
+
+export const sameReservation = (current: CatalogFile, snapshot: CatalogFile): boolean =>
+  current.status !== 'pending' ||
+  snapshot.reservationToken === undefined ||
+  current.reservationToken === snapshot.reservationToken;
+
+/**
+ * Whether a same-owner re-reserve of `holder` writes anything: the case {@link reservedAgainAt}
+ * leaves `updated_at` alone and the declared size and type match is a no-op, so the reserve
+ * returns the row it read instead of writing it again. A burst of retries then commits under the
+ * path lock without a transaction id or a WAL flush each.
+ */
+const reservesAgain = (
+  holder: CatalogFile,
+  input: {
+    readonly sizeBytes: number;
+    readonly contentType: string | null;
+    readonly uploadMode?: UploadMode;
+  },
+): boolean =>
+  input.uploadMode === 'signed' ||
+  holder.sizeBytes !== input.sizeBytes ||
+  holder.contentType !== input.contentType;
+
+/**
+ * `updated_at` for a same-owner re-reserve of a pending row. A signed re-mint always moves it,
+ * strictly forward even within one clock tick, so a snapshot taken before is stale; a retry
+ * without an upload mode moves it only when it changes what was declared.
+ */
+const reservedAgainAt = (input: {
+  readonly sizeBytes: number;
+  readonly contentType: string | null;
+  readonly uploadMode?: UploadMode;
+}): SQL => {
+  const advanced = sql`greatest(now(), ${files.updatedAt} + interval '1 microsecond')`;
+  if (input.uploadMode === 'signed') return advanced;
+  return sql`case when ${files.sizeBytes} = ${input.sizeBytes} and ${files.contentType} is not distinct from ${input.contentType}::text then ${files.updatedAt} else ${advanced} end`;
+};
+
 const fileColumns = {
   id: files.id,
   path: files.path,
@@ -550,8 +650,10 @@ const fileColumns = {
   sha256: files.sha256,
   targetPath: files.targetPath,
   uploadMode: files.uploadMode,
+  reservationToken,
   createdBy: files.createdBy,
   ownerPrincipalId: files.ownerPrincipalId,
+  updatedAt: files.updatedAt,
 };
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -619,8 +721,10 @@ async function lockForWrite(
     mode === 'exclusive'
       ? sql`pg_advisory_xact_lock(hashtextextended(${workspaceId}::text, 0))`
       : sql`pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`;
-  // One round-trip: PostgreSQL evaluates a select list left to right, so the locks are still taken
-  // in this order, and every writer waiting on a path lock queues behind one statement, not several.
+  // One round-trip, so every writer waiting on a path lock queues behind one statement, not several.
+  // The order relies on the executor evaluating a select list left to right, which PostgreSQL does
+  // not document. If that ever changed, two writers could take the locks in opposite orders, and
+  // PostgreSQL would detect the deadlock (40P01) and fail one write: an error, not a hang or loss.
   const pathLocks = [...new Set(paths)].sort().map((path) => pathLockCall(workspaceId, path));
   await tx.execute(sql`select ${sql.join([workspaceLock, ...pathLocks], sql`, `)}`);
 }
@@ -735,9 +839,20 @@ export function createDatabaseResourceCatalogRepositoryProvider(
           if (isSidePath(path)) throw new Error(`${path} is a reserved catalog path.`);
           return db.transaction(async (tx): Promise<ReserveOutcome> => {
             await lockForWrite(tx, workspaceId, 'shared', [path, ...parentPaths(path)]);
+            // The new size and type of a refreshed row. The write moves `updated_at`, the time
+            // `stalePending` compares, so a link minted again is not cleaned up as abandoned.
+            const refresh = {
+              sizeBytes: input.sizeBytes,
+              contentType: input.contentType,
+              updatedAt: reservedAgainAt(input),
+            };
             // A ready or `deleting` row holds the path. A pending one is refreshed for its owner and
-            // refused for anyone else (FX-7).
-            const takenOrRefreshed = async (holder: CatalogFile): Promise<ReserveOutcome> => {
+            // refused for anyone else (FX-7). A relay save is never refreshed: a second save of the
+            // path is refused and must not disturb the one writing.
+            const takenOrRefreshed = async (
+              holder: CatalogFile,
+              replaces: CatalogFile | undefined,
+            ): Promise<ReserveOutcome> => {
               if (holder.status !== 'pending') return { kind: 'taken', row: holder };
               if (
                 holder.ownerPrincipalId !== input.ownerPrincipalId ||
@@ -745,34 +860,37 @@ export function createDatabaseResourceCatalogRepositoryProvider(
               ) {
                 throw new CatalogPathPendingError(path);
               }
-              // The write happens even when nothing changed: it moves `updated_at`, the time
-              // `stalePending` compares, so a link minted again is not cleaned up as abandoned.
+              const withTarget = replaces === undefined ? {} : { replaces };
+              if (input.uploadMode === 'relay' || !reservesAgain(holder, input))
+                return { kind: 'taken', row: holder, ...withTarget };
               const [refreshed] = await tx
                 .update(files)
-                .set({ sizeBytes: input.sizeBytes, contentType: input.contentType })
+                .set(refresh)
                 .where(and(eq(files.workspaceId, workspaceId), eq(files.id, holder.id)))
                 .returning(fileColumns);
               if (refreshed === undefined) throw new Error('catalog reserve lost its locked row');
-              return { kind: 'taken', row: refreshed };
+              return { kind: 'taken', row: refreshed, ...withTarget };
             };
-            // A pending row at the path itself is always the live holder, so its owner's re-reserve,
-            // every loser of a burst, is this one statement under the path lock instead of a read
-            // and a write. Nothing matched: read the holders as below.
-            const [refreshedAtPath] = await tx
-              .update(files)
-              .set({ sizeBytes: input.sizeBytes, contentType: input.contentType })
-              .where(
-                and(
-                  eq(files.workspaceId, workspaceId),
-                  eq(files.path, path),
-                  eq(files.status, 'pending'),
-                  eq(files.ownerPrincipalId, input.ownerPrincipalId),
-                  input.uploadMode === undefined
-                    ? isNull(files.uploadMode)
-                    : eq(files.uploadMode, input.uploadMode),
-                ),
-              )
-              .returning(fileColumns);
+            // A pending row at the path itself is always the live holder, so its owner's signed
+            // re-mint, which always writes, is this one statement under the path lock instead of a
+            // read and a write. Any other re-reserve, every loser of a burst, reads the holders
+            // below and writes only when it declares something new. Nothing matched: read them.
+            const [refreshedAtPath] =
+              input.uploadMode !== 'signed'
+                ? []
+                : await tx
+                    .update(files)
+                    .set(refresh)
+                    .where(
+                      and(
+                        eq(files.workspaceId, workspaceId),
+                        eq(files.path, path),
+                        eq(files.status, 'pending'),
+                        eq(files.ownerPrincipalId, input.ownerPrincipalId),
+                        eq(files.uploadMode, 'signed'),
+                      ),
+                    )
+                    .returning(fileColumns);
             if (refreshedAtPath !== undefined) return { kind: 'taken', row: refreshedAtPath };
             // The live row at the path and a pending replacement waiting for it, in one read.
             const holders = await tx
@@ -791,10 +909,11 @@ export function createDatabaseResourceCatalogRepositoryProvider(
             const waiting = holders.find(
               (row) => row.status === 'pending' && row.targetPath === path,
             );
-            const replacing =
-              input.objectId !== undefined && live?.status === 'ready' && live.kind === 'file';
-            if (live !== undefined && !replacing) return takenOrRefreshed(live);
-            if (waiting !== undefined) return takenOrRefreshed(waiting);
+            // The ready file a pending replacement takes the path from, read under the path lock.
+            const target = live?.status === 'ready' && live.kind === 'file' ? live : undefined;
+            const replacing = input.objectId !== undefined && target !== undefined;
+            if (live !== undefined && !replacing) return takenOrRefreshed(live, undefined);
+            if (waiting !== undefined) return takenOrRefreshed(waiting, target);
             // The untargeted `onConflictDoNothing` below would swallow this key too and report the
             // path; refuse it here, as the memory catalog does.
             if (input.objectId !== undefined) {
@@ -839,7 +958,9 @@ export function createDatabaseResourceCatalogRepositoryProvider(
             if (row !== undefined) {
               // The ready file being replaced already implies the parent folders.
               if (!replacing) await insertParentFolders(tx, workspaceId, [row]);
-              return { kind: 'reserved', row };
+              return target === undefined || !replacing
+                ? { kind: 'reserved', row }
+                : { kind: 'reserved', row, replaces: target };
             }
             const [holder] = await tx
               .select(fileColumns)
@@ -847,7 +968,7 @@ export function createDatabaseResourceCatalogRepositoryProvider(
               .where(and(eq(files.workspaceId, workspaceId), eq(files.path, path)))
               .for('update');
             if (holder === undefined) throw new Error('catalog reserve conflicted with no row');
-            return takenOrRefreshed(holder);
+            return takenOrRefreshed(holder, undefined);
           });
         },
         // @story US-STO-01
@@ -898,12 +1019,14 @@ export function createDatabaseResourceCatalogRepositoryProvider(
                 .from(files)
                 .where(and(eq(files.workspaceId, workspaceId), eq(files.id, row.id)));
               // A `deleting` row is never revived; a ready row is confirmed again only with
-              // `expect: 'any'`; a row whose key changed holds other bytes.
+              // `expect: 'any'`; a row whose key changed holds other bytes; a pending row reserved
+              // again since `row` was read belongs to that newer reservation.
               if (
                 again === undefined ||
                 again.kind !== 'file' ||
                 again.storageKey !== storageKey ||
-                !statuses.includes(again.status)
+                !statuses.includes(again.status) ||
+                !sameReservation(again, row)
               ) {
                 return null;
               }
@@ -921,6 +1044,9 @@ export function createDatabaseResourceCatalogRepositoryProvider(
                   sizeBytes: input.sizeBytes,
                   contentType: input.contentType,
                   sha256: input.sha256 ?? null,
+                  ...(input.objectId === undefined
+                    ? {}
+                    : { objectId: input.objectId, storageKey: `${again.area}/${input.objectId}` }),
                   updatedAt: sql`now()`,
                 })
                 .where(and(eq(files.workspaceId, workspaceId), eq(files.id, again.id)))
@@ -972,7 +1098,7 @@ export function createDatabaseResourceCatalogRepositoryProvider(
           const rows = found.slice(0, limit);
           return { rows, cursor: found.length > limit ? (rows.at(-1)?.path ?? null) : null };
         },
-        async countPending() {
+        async countPending(newerThan) {
           const rows = await db
             .select({ value: count() })
             .from(files)
@@ -981,6 +1107,7 @@ export function createDatabaseResourceCatalogRepositoryProvider(
                 eq(files.workspaceId, workspaceId),
                 eq(files.status, 'pending'),
                 ne(files.area, 'staging'),
+                newerThan === undefined ? undefined : gte(files.updatedAt, newerThan),
               ),
             );
           return rows[0]?.value ?? 0;
@@ -1000,11 +1127,36 @@ export function createDatabaseResourceCatalogRepositoryProvider(
           return rows[0] ?? null;
         },
         async rename(from, to) {
-          return (await repository.renameFilesByPrefix(from, to)).length;
+          return renameCount(await repository.renameFilesByPrefix(from, to));
         },
         // @story US-STO-04
-        async remove(path) {
+        async remove(path, options) {
           if (isSidePath(path)) return [];
+          const snapshot = options?.pending;
+          if (snapshot !== undefined) {
+            // Claim one reservation for deletion before its bytes go: only while it is still the
+            // pending row `snapshot` saw, at `path` (a pending replacement stands for it).
+            return db.transaction(async (tx) => {
+              await lockForWrite(tx, workspaceId, 'shared', [path]);
+              return tx
+                .update(files)
+                .set({
+                  status: 'deleting',
+                  path: sidePathOf,
+                  targetPath: logicalPath,
+                  updatedAt: sql`now()`,
+                })
+                .where(
+                  and(
+                    eq(files.workspaceId, workspaceId),
+                    eq(files.id, snapshot.id),
+                    eq(logicalPath, path),
+                    reservedAs(snapshot.reservationToken),
+                  ),
+                )
+                .returning(fileColumns);
+            });
+          }
           // One file takes the shared workspace lock and its path lock. A folder, or a file with
           // something under it, needs the exclusive lock, which cannot be upgraded to: it gets a
           // second transaction instead. A writer placing anything under `path` locks `path` too.
@@ -1064,7 +1216,8 @@ export function createDatabaseResourceCatalogRepositoryProvider(
         async forget(row) {
           await db.transaction(async (tx) => {
             // The workspace lock, then the lock of the path the row stands for. A rename may still
-            // move the row meanwhile; the delete goes by id and spares a row that became ready.
+            // move the row meanwhile; the delete goes by id, spares a row that became ready and a
+            // pending row reserved again since `row` was read.
             await lockForWrite(tx, workspaceId, 'shared', []);
             const [current] = await tx
               .select({ path: logicalPath })
@@ -1078,7 +1231,7 @@ export function createDatabaseResourceCatalogRepositoryProvider(
                 and(
                   eq(files.workspaceId, workspaceId),
                   eq(files.id, row.id),
-                  ne(files.status, 'ready'),
+                  or(eq(files.status, 'deleting'), reservedAs(row.reservationToken)),
                 ),
               );
           });
@@ -1194,10 +1347,11 @@ export function createDatabaseResourceCatalogRepositoryProvider(
               .where(and(eq(files.workspaceId, workspaceId), eq(files.id, source.id)))
               .returning(fileColumns);
             if (input.path !== path) {
-              // The upload that was going to replace this file follows it.
+              // The upload that was going to replace this file follows it, keeping its
+              // reservation: the uploader's snapshot still completes it.
               await tx
                 .update(files)
-                .set({ targetPath: input.path })
+                .set({ targetPath: input.path, updatedAt: sql`${files.updatedAt}` })
                 .where(
                   and(
                     eq(files.workspaceId, workspaceId),
@@ -1430,7 +1584,8 @@ export function createDatabaseResourceCatalogRepositoryProvider(
             .select(skillColumns)
             .from(skills)
             .where(eq(skills.workspaceId, workspaceId))
-            .orderBy(asc(skills.name));
+            // Code point order, as the memory catalog sorts, whatever the database's collation.
+            .orderBy(sql`${skills.name} collate "C"`);
           return rows.map(toCatalogSkill);
         },
         async getSkill(name) {

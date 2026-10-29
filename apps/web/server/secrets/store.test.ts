@@ -373,6 +373,36 @@ describe.skipIf(!hasDatabase)('the PostgreSQL secrets store', () => {
     await expect(store.replace(orphan.id, value())).resolves.toMatchObject({ kind: 'replaced' });
   });
 
+  // @story US-STO-12
+  it('[US-STO-12][api][sdk] refuses to delete the credential of a connection that exists, and deletes an orphan', async () => {
+    const workspaceId = crypto.randomUUID();
+    await isolated.db
+      .insert(workspaces)
+      .values({ id: workspaceId, slug: workspaceId, name: 'Storage credential delete' });
+    const store = provider.forWorkspace(workspaceId);
+    const connectionId = crypto.randomUUID();
+    const orphanId = crypto.randomUUID();
+    const named = (id: string): string =>
+      `STORAGE_CONNECTION_${id.replace(/-/g, '').toUpperCase()}`;
+    const credential = created(await store.create({ name: named(connectionId), value: value() }));
+    const orphan = created(await store.create({ name: named(orphanId), value: value() }));
+    await isolated.db.insert(storageConnections).values({
+      id: connectionId,
+      workspaceId,
+      name: 'Storage connection',
+      provider: 's3',
+      url: 's3://bucket/exports',
+      allowedPrefixes: [],
+    });
+
+    await expect(store.remove(credential.id)).resolves.toEqual({
+      kind: 'in-use',
+      referrers: { connectorIds: [], modelConnectionIds: [], storageConnectionIds: [connectionId] },
+    });
+    await expect(store.remove(orphan.id)).resolves.toMatchObject({ kind: 'deleted' });
+    expect((await store.list()).map((secret) => secret.id)).toEqual([credential.id]);
+  });
+
   it('refuses by name when the workspace it was scoped to does not exist', async () => {
     // Not an empty list: "no secrets" and "no such workspace" are different facts (ADR-0015).
     await expect(provider.forWorkspace(ABSENT).list()).rejects.toThrow(UnknownWorkspaceError);

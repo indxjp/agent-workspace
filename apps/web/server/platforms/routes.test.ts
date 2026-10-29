@@ -36,7 +36,7 @@ import { skillFileKey } from '../skills/keys';
 import type { WorkspaceSkillsStoreProvider } from '../storage/store';
 import {
   createLocalFilesystemObjectStoreProvider,
-  type ObjectContent,
+  type ObjectStream,
 } from '@agent-workspace/core/storage';
 
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';
@@ -100,25 +100,23 @@ function resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
   );
 }
 
-/** The skills store under `skillsRoot`, with every `get` answered by `get` instead. */
-function skillStoreWithGet(
-  get: (
+/** The skills store under `skillsRoot`, with every `read` answered by `read` instead. */
+function skillStoreWithRead(
+  read: (
     key: string,
-    read: (key: string) => Promise<ObjectContent | null>,
-  ) => Promise<ObjectContent | null>,
+    inner: (key: string) => Promise<ObjectStream | null>,
+  ) => Promise<ObjectStream | null>,
 ): WorkspaceSkillsStoreProvider {
   const provider = createLocalFilesystemObjectStoreProvider(skillsRoot);
   return {
     forWorkspace: (workspaceId) => {
       const inner = provider.forWorkspace(workspaceId);
       return {
-        put: (key, input) => inner.put(key, input),
-        get: (key) => get(key, (k) => inner.get(k)),
         delete: (key) => inner.delete(key),
-        list: (prefix) => inner.list(prefix),
-        listPrefix: (prefix) => inner.listPrefix(prefix),
-        copyObject: (source, destination) => inner.copyObject(source, destination),
-        read: (key, options) => inner.read(key, options),
+        copy: (source, destination) => inner.copy(source, destination),
+        head: (key) => inner.head(key),
+        read: (key, options) => read(key, (k) => inner.read(k, options)),
+        write: (key, body, options) => inner.write(key, body, options),
         listPage: (prefix, options) => inner.listPage(prefix, options),
       };
     },
@@ -143,14 +141,10 @@ beforeEach(async () => {
 
   const skillStore = createLocalFilesystemObjectStoreProvider(skillsRoot);
   const files = skillStore.forWorkspace(WORKSPACE);
-  await files.put(skillFileKey('triage-guide', 'SKILL.md'), {
-    body: new TextEncoder().encode(SKILL_MD),
+  await files.write(skillFileKey('triage-guide', 'SKILL.md'), new TextEncoder().encode(SKILL_MD), {
     contentType: null,
   });
-  await files.put(skillFileKey('triage-guide', 'assets/blob.bin'), {
-    body: BINARY,
-    contentType: null,
-  });
+  await files.write(skillFileKey('triage-guide', 'assets/blob.bin'), BINARY, { contentType: null });
 
   installTestDomains({ agents: { agents, resolveWorkspace } });
   installTestDomains({
@@ -320,12 +314,13 @@ describe('POST /api/agents/:id/platform-exports', () => {
   it('refuses an over-size skill tree with 422 from its listed sizes, before reading its bytes', async () => {
     await createLocalFilesystemObjectStoreProvider(skillsRoot)
       .forWorkspace(WORKSPACE)
-      .put(skillFileKey('triage-guide', 'assets/huge.bin'), {
-        body: new Uint8Array(PLATFORM_EXPORT_MAX_BYTES),
-        contentType: null,
-      });
+      .write(
+        skillFileKey('triage-guide', 'assets/huge.bin'),
+        new Uint8Array(PLATFORM_EXPORT_MAX_BYTES),
+        { contentType: null },
+      );
     const reads: string[] = [];
-    const store = skillStoreWithGet((key, read) => {
+    const store = skillStoreWithRead((key, read) => {
       reads.push(key);
       return read(key);
     });
@@ -340,7 +335,7 @@ describe('POST /api/agents/:id/platform-exports', () => {
 
   it('fails with 500 rather than exporting a partial skill when a listed file is gone', async () => {
     const blobKey = skillFileKey('triage-guide', 'assets/blob.bin');
-    const store = skillStoreWithGet((key, read) =>
+    const store = skillStoreWithRead((key, read) =>
       key === blobKey ? Promise.resolve(null) : read(key),
     );
     installTestDomains({ skills: { kind: 'serving', runtime: { resolveWorkspace, store } } });

@@ -2,7 +2,6 @@ import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { describe, expect, it } from 'vitest';
 
 import { ORDER_STATUS_FRAMES } from './fixtures';
-import { parseJudgeVerdict } from './judge';
 import { checkCase, finalAnswer, pausedCall, score, toolCalls } from './score';
 
 const answer = finalAnswer(ORDER_STATUS_FRAMES);
@@ -139,30 +138,5 @@ describe('score (issue #618)', () => {
   it('rounds to 4 decimals, as the row stores it', () => {
     const results = [{ passed: true }, { passed: false }, { passed: false }];
     expect(score(results)).toEqual({ score: 0.3333, passed: 1, total: 3 });
-  });
-});
-
-describe('parseJudgeVerdict (issue #618)', () => {
-  it.each([
-    ['{"pass": true, "reason": "Polite."}', { kind: 'verdict', pass: true, reason: 'Polite.' }],
-    [
-      '{"pass": false, "reason": "Promised a refund."}',
-      { kind: 'verdict', pass: false, reason: 'Promised a refund.' },
-    ],
-    [
-      'Here is my verdict:\n```json\n{"pass": true, "reason": "Uses {braces} fine.", "score": 1}\n```',
-      { kind: 'verdict', pass: true, reason: 'Uses {braces} fine.' },
-    ],
-    ['I think it passes.', { kind: 'invalid' }],
-    ['{"pass": "yes", "reason": "x"}', { kind: 'invalid' }],
-    ['{"pass": true', { kind: 'invalid' }],
-    ['{"note": 1} {"pass": true, "reason": "ok"}', { kind: 'invalid' }],
-  ])('%j', (text, verdict) => {
-    expect(parseJudgeVerdict(text)).toEqual(verdict);
-  });
-
-  it('cuts a long reason', () => {
-    const verdict = parseJudgeVerdict(JSON.stringify({ pass: true, reason: 'x'.repeat(900) }));
-    expect(verdict.kind === 'verdict' && verdict.reason.length).toBe(500);
   });
 });

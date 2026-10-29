@@ -26,6 +26,12 @@ import { findPackageJSON } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/**
+ * The PostgreSQL major version of the pinned `embedded-postgres` (`PG_VERSION` of a data directory
+ * it initialised). A data directory of another major cannot be opened by this server.
+ */
+export const EMBEDDED_POSTGRES_MAJOR = '18';
+
 export type EmbeddedDatabaseErrorCode =
   | 'unsupported_platform'
   | 'binary_not_found'
@@ -33,6 +39,7 @@ export type EmbeddedDatabaseErrorCode =
   | 'windows_administrator'
   | 'postmaster_exited'
   | 'data_directory_in_use'
+  | 'data_directory_version'
   | 'stop_timeout';
 
 const EMBEDDED_DATABASE_MESSAGES: Readonly<Record<EmbeddedDatabaseErrorCode, string>> = {
@@ -49,6 +56,12 @@ const EMBEDDED_DATABASE_MESSAGES: Readonly<Record<EmbeddedDatabaseErrorCode, str
     'the local data directory is still used by a PostgreSQL that an earlier, killed run left ' +
     'behind (its process id is the first line of postmaster.pid in that directory): stop that ' +
     'process, then start again. Do not empty the directory: it holds your local data',
+  data_directory_version:
+    'the local data directory was created by another PostgreSQL major version than the ' +
+    `PostgreSQL ${EMBEDDED_POSTGRES_MAJOR} this local runtime runs, which cannot open it, and ` +
+    'nothing in it was changed. To keep its data, export it with the release that created it ' +
+    '("Upgrade the local database" in the aw dev docs); to start with an empty database, move the ' +
+    'directory (AW_DATA_DIR, or .agent-workspace/postgres) aside',
   stop_timeout: 'the embedded PostgreSQL server did not stop in time',
 };
 

@@ -26,7 +26,10 @@ import { openConnectionStore } from '@agent-workspace/core/storage';
 import type { StorageConnectionResource } from '@indx-workspace/contracts/storage-connections';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { createRepositoryStorageConnectionsStoreProvider } from '../../storage-connections/store';
+import {
+  boundCredential,
+  createRepositoryStorageConnectionsStoreProvider,
+} from '../../storage-connections/store';
 import { log } from '../../telemetry/logger';
 import { createRunStorageConnections } from './run-resources';
 
@@ -73,14 +76,18 @@ function connections(
   };
   return createRunStorageConnections({
     storage: {
-      store: { forWorkspace: () => ({ get: () => Promise.resolve(row) }) },
+      store: {
+        forWorkspace: () => ({
+          get: () => Promise.resolve(row),
+          credential: (_id: string, url: string) =>
+            Promise.resolve(
+              boundCredential(secret === null ? undefined : Buffer.from(secret), url),
+            ),
+        }),
+      },
       fileRoots,
     },
     scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
-    secretsService: {
-      resolveByName: (_scope, name) =>
-        Promise.resolve(secret === null ? null : { name, value: Buffer.from(secret) }),
-    },
   });
 }
 
@@ -222,7 +229,6 @@ async function storedConnection(world: StoreWorld) {
   const runs = createRunStorageConnections({
     storage: { store, fileRoots: [root] },
     scopes: world.scopes,
-    secretsService: secrets,
   });
   return { store, runs, id: created.connection.id, first };
 }
@@ -238,7 +244,9 @@ function defineStoreSuite(name: string, setup: () => Promise<StoreWorld>) {
 
       await runs.open(world.workspaceA, id);
       const second = s3Credential();
-      expect((await store.forWorkspace(world.workspaceA).rotate(id, second)).kind).toBe('changed');
+      expect(
+        (await store.forWorkspace(world.workspaceA).rotate(id, 's3://acme-bucket', second)).kind,
+      ).toBe('changed');
       await runs.open(world.workspaceA, id);
 
       expect(opened.mock.calls.map((call) => call[1])).toEqual([first, second]);

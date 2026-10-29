@@ -14,7 +14,7 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import {
   createInMemoryObjectStore,
-  type ObjectStoreV2,
+  type ObjectStore,
   type StorageArea,
 } from '@agent-workspace/core/storage';
 
@@ -50,9 +50,9 @@ const bodyOf = (bytes: Uint8Array): ReadableStream<Uint8Array> =>
   });
 
 /** An object store that counts every call that writes, copies or deletes an object. */
-function countingStore(): { readonly store: ObjectStoreV2; readonly mutations: () => number } {
+function countingStore(): { readonly store: ObjectStore; readonly mutations: () => number } {
   const inner = createInMemoryObjectStore();
-  const mutating = new Set<string | symbol>(['write', 'put', 'delete', 'copyObject']);
+  const mutating = new Set<string | symbol>(['write', 'put', 'delete', 'copy']);
   let count = 0;
   const store = new Proxy(inner, {
     get(target, property) {
@@ -307,6 +307,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       await expect(storage.remove(ctx, 'files', 'a.txt', { recursive: false })).resolves.toEqual({
         ok: true,
         removed: 1,
+        files: ['a.txt'],
       });
 
       await expect(f.catalog.get('a.txt')).resolves.toBeNull();
@@ -339,6 +340,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
       await expect(storage.remove(ctx, 'files', 'dir', { recursive: true })).resolves.toEqual({
         ok: true,
         removed: 2,
+        files: ['dir/a.txt', 'dir/sub/b.txt'],
       });
 
       await expect(f.catalog.list('dir')).resolves.toMatchObject({ rows: [] });
@@ -367,7 +369,7 @@ describe('remove on the in-memory catalog with a failing object delete', () => {
     const workspaceId = crypto.randomUUID();
     const catalog = createInMemoryCatalog().forWorkspace(workspaceId);
     const inner = createInMemoryObjectStore();
-    const objects: ObjectStoreV2 = {
+    const objects: ObjectStore = {
       ...inner,
       delete: () => Promise.reject(new Error('object store down')),
     };
@@ -385,6 +387,7 @@ describe('remove on the in-memory catalog with a failing object delete', () => {
     await expect(storage.remove(ctx, 'files', 'a.txt', { recursive: false })).resolves.toEqual({
       ok: true,
       removed: 1,
+      files: ['a.txt'],
     });
 
     await expect(catalog.get('a.txt')).resolves.toBeNull();

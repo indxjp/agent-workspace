@@ -4,6 +4,8 @@
  * is refused unless the connection exists in this workspace, the folder sits under one of its
  * `allowedPrefixes`, and a `read-write` grant finds the connection `writeAllowed`.
  */
+import { storageRefusalClass } from '@agent-workspace/core/storage';
+
 import type { StorageGrantRef } from './store';
 import {
   parseStorageGrantPath,
@@ -30,15 +32,14 @@ export type StorageConnectionLookup = (
  * `StorageConnectionRepository`, or the web store's workspace store): that scope is what keeps
  * another workspace's connection of the same name out of reach.
  */
-// ponytail: lists every connection of the workspace (and, through the web store, its secret names for `hasCredential`); add a by-name repository query if that grows or the secrets call matters.
 export function storageConnectionLookup(source: {
-  list(): Promise<readonly (StorageGrantTarget & { readonly name: string })[]>;
+  listByNames(
+    names: readonly string[],
+  ): Promise<readonly (StorageGrantTarget & { readonly name: string })[]>;
 }): StorageConnectionLookup {
   return async (names) => {
-    const wanted = new Set(names);
     const found = new Map<string, StorageGrantTarget>();
-    for (const connection of await source.list()) {
-      if (!wanted.has(connection.name)) continue;
+    for (const connection of await source.listByNames(names)) {
       const { id, allowedPrefixes, writeAllowed } = connection;
       found.set(connection.name, { id, allowedPrefixes, writeAllowed });
     }
@@ -62,6 +63,20 @@ export function storageGrantUnavailable(reason: string): DomainError {
     code: 'run_storage_grant_unavailable',
     publicMessage: `run_storage_grant_unavailable: ${reason}; fix the storage connection or redeploy the agent.`,
   });
+}
+
+/**
+ * The run-start refusal of a granted folder its bucket would not list. Opening a connection sends
+ * no request, so the listing is where a bucket first refuses the key or turns out to be gone. The
+ * reason names the connection and the provider's status class only, never its words.
+ */
+export function storageGrantListingUnavailable(
+  connectionName: string,
+  error: unknown,
+): DomainError {
+  return storageGrantUnavailable(
+    `the connection ${JSON.stringify(connectionName)} cannot list its folder (${storageRefusalClass(error)})`,
+  );
 }
 
 const WRITE_NOT_ALLOWED = 'storage_connection_write_not_allowed';

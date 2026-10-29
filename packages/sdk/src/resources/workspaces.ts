@@ -1,4 +1,10 @@
 import {
+  WorkspaceFeaturesSchema,
+  type FeatureId,
+  type UpdateWorkspaceFeaturesRequest,
+  type WorkspaceFeatures,
+} from '@indx-workspace/contracts/features';
+import {
   SharingPolicySchema,
   WorkspaceListResponseSchema,
   WorkspaceMembershipResponseSchema,
@@ -56,6 +62,54 @@ export class SharingPolicyClient {
 }
 
 /**
+ * `/api/workspaces/:id/features` — ADR-0160 D6–D8. Rows come back one per feature, in the
+ * contract's order, each saying whether this deployment installs it and whether the workspace
+ * has it on.
+ */
+export class WorkspaceFeaturesClient {
+  readonly #http: HttpClient;
+
+  public constructor(http: HttpClient) {
+    this.#http = http;
+  }
+
+  /** Which features exist, and which the workspace has on. A person who is a member may read it. */
+  public list(workspaceId: string, options: RequestOptions = {}): Promise<WorkspaceFeatures> {
+    return this.#http.json({
+      operation: 'workspaces.features.list',
+      method: 'GET',
+      path: `/api/workspaces/${segment(workspaceId)}/features`,
+      expect: [200],
+      schema: WorkspaceFeaturesSchema,
+      signal: options.signal,
+    });
+  }
+
+  /**
+   * Replace the whole set of features that are off. Owner only (`403 forbidden` for any other
+   * role). A set that leaves a feature on without one it needs is `409 feature_in_use`, with the
+   * dependents in `details`; one that would switch on a feature this deployment does not install is
+   * `409 feature_not_installed`.
+   */
+  public set(
+    workspaceId: string,
+    input: { readonly disabled: readonly FeatureId[] },
+    options: RequestOptions = {},
+  ): Promise<WorkspaceFeatures> {
+    const body: UpdateWorkspaceFeaturesRequest = { disabled: [...input.disabled] };
+    return this.#http.json({
+      operation: 'workspaces.features.set',
+      method: 'PUT',
+      path: `/api/workspaces/${segment(workspaceId)}/features`,
+      body,
+      expect: [200],
+      schema: WorkspaceFeaturesSchema,
+      signal: options.signal,
+    });
+  }
+}
+
+/**
  * `/api/workspaces/**` — spec §25's tenant boundary as a resource.
  *
  * **A person only.** Every route behind `list`, `get`, `create` and `update` refuses an
@@ -64,15 +118,18 @@ export class SharingPolicyClient {
  * Build the client with
  * `auth: { kind: 'session' }` in a browser, or `{ kind: 'user-token' }` with the token `aw login`
  * holds (issue #242), to use any of them. `sharingPolicy` is the exception: its routes belong to
- * the caller's current workspace and serve every principal.
+ * the caller's current workspace and serve every principal. `features` refuses an API key the
+ * same way `list` does.
  */
 export class WorkspacesClient {
   readonly #http: HttpClient;
   public readonly sharingPolicy: SharingPolicyClient;
+  public readonly features: WorkspaceFeaturesClient;
 
   public constructor(http: HttpClient) {
     this.#http = http;
     this.sharingPolicy = new SharingPolicyClient(http);
+    this.features = new WorkspaceFeaturesClient(http);
   }
 
   /** Every workspace the caller belongs to, with the role held in each. */

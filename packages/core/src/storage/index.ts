@@ -32,9 +32,6 @@ export {
   type ObjectStream,
   type ObjectStore,
   type ObjectStoreProvider,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
-  type PutObjectInput,
   type SignedUrl,
   type SignedUrlRequest,
   SignedUrlUnsupportedError,
@@ -78,7 +75,10 @@ export {
   openConnectionStore,
   resolveFileRoot,
   ReadOnlyStoreError,
+  storageProviderStatus,
+  storageRefusalClass,
   type ConnectionCredential,
+  type StorageRefusalClass,
   type ConnectionStoreOptions,
 } from './connection-store.js';
 export {
@@ -100,7 +100,6 @@ export type {
 } from './azure-blob-store.js';
 export type {
   GcsClient,
-  GcsObjectContent,
   GcsObjectStoreConfig,
   GcsObjectStoreOptions,
   GcsStoredObject,

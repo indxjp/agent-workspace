@@ -7,6 +7,7 @@ import {
   encodeUstarStream,
   RUN_FILES_MAX_ARCHIVE_BYTES,
   RUN_FILES_MAX_BYTES,
+  RUN_FILES_MAX_MEMBERS,
   type StreamTarEntry,
   type TarEntry,
 } from '@agent-workspace/runtime/transfer';
@@ -289,7 +290,10 @@ export function createRuntimeWorkspaceLifecycle(
     ) {
       // Decode and map every key first: checksum, member type, traversal and prefix failures must
       // leave durable state untouched.
-      const entries = decodeUstar(archive);
+      const entries = decodeUstar(archive, {
+        maxBytes: RUN_FILES_MAX_BYTES,
+        maxMembers: RUN_FILES_MAX_MEMBERS,
+      });
       const runId = context.run.id;
       const files = entries.flatMap((entry, index) =>
         entry.type === 'file'

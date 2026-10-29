@@ -6,10 +6,17 @@
     "noEmit": false,
     "rootDir": "src",
     "outDir": "dist",
-    "sourceMap": true
+    "sourceMap": true,
+    // Every adapter specifier `src/engines.ts` loads is type-checked against one declaration
+    // module, because an image copies only one adapter (see `types/engine-modules.d.ts`). `paths`
+    // changes what the compiler reads, not the emitted specifiers, which Node resolves at run time.
+    "paths": {
+      "@agent-workspace/engine-claude-agent-sdk": ["./types/engine-modules.d.ts"],
+      "@agent-workspace/engine-openai-agents": ["./types/engine-modules.d.ts"],
+      "@agent-workspace/engine-pi": ["./types/engine-modules.d.ts"],
+      "@agent-workspace/engine-mastra": ["./types/engine-modules.d.ts"]
+    }
   },
-  // `types` holds the adapter module declarations this build type-checks the registry's imports
-  // against, because an image copies only one adapter (see `types/engine-modules.d.ts`).
   "include": ["src", "types"],
   "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
 }

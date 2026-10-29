@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openObjectStore, openRootObjectStore } from './open.js';
+import { readWhole } from './streams.js';
 
 const backends = vi.hoisted(() => ({
   s3: vi.fn(() => Promise.resolve({ kind: 's3' })),
@@ -92,8 +93,8 @@ describe('openObjectStore', () => {
     roots.push(root);
     const provider = await openObjectStore({ kind: 'file', root }, 'files');
     const store = provider.forWorkspace('w1');
-    await store.put('a.txt', { body: new TextEncoder().encode('hello') });
-    const read = await store.get('a.txt');
+    await store.write('a.txt', new TextEncoder().encode('hello'), {});
+    const read = await readWhole(store, 'a.txt');
     expect(new TextDecoder().decode(read?.body)).toBe('hello');
     for (const backend of Object.values(backends)) expect(backend).not.toHaveBeenCalled();
   });
@@ -224,8 +225,8 @@ describe('openRootObjectStore', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'open-root-object-store-'));
     roots.push(root);
     const store = await openRootObjectStore({ kind: 'file', root });
-    await store.put('workspaces/w/files/x', { body: new TextEncoder().encode('hi') });
+    await store.write('workspaces/w/files/x', new TextEncoder().encode('hi'), {});
     const scoped = (await openObjectStore({ kind: 'file', root }, 'files')).forWorkspace('w');
-    expect(new TextDecoder().decode((await scoped.get('files/x'))?.body)).toBe('hi');
+    expect(new TextDecoder().decode((await readWhole(scoped, 'files/x'))?.body)).toBe('hi');
   });
 });

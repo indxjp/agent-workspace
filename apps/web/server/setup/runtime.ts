@@ -2,6 +2,11 @@ import type { SetupProvider } from '@indx-workspace/contracts/setup';
 
 import type { SessionCookie } from '../auth/session';
 
+/** The name of the model connection first-run setup makes for `provider`. */
+export function setupConnectionName(provider: SetupProvider): string {
+  return `${provider} default`;
+}
+
 export interface SetupInput {
   provider: SetupProvider;
   providerApiKey: string;

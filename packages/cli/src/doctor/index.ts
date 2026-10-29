@@ -17,6 +17,7 @@ import {
   type ProfileProbes,
 } from '../validate.ts';
 import {
+  checkComposeOrigins,
   checkProfile,
   checkStorage,
   checkStores,
@@ -108,6 +109,9 @@ async function runChecks(
       ? notChecked('storage', 'AW_STORAGE_URL', '.env could not be read')
       : checkStorage(environment),
   );
+  const origins =
+    environment === null || profile === null ? null : checkComposeOrigins(profile, environment);
+  if (origins !== null) checks.push(origins);
 
   if ('failure' in reading) {
     checks.push(reading.failure);

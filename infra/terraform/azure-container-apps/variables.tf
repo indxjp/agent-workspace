@@ -77,8 +77,19 @@ variable "storage_signed_upload_max_bytes" {
   type        = number
   default     = null
   validation {
-    condition     = var.storage_signed_upload_max_bytes == null || (var.storage_signed_upload_max_bytes >= 1 && floor(var.storage_signed_upload_max_bytes) == var.storage_signed_upload_max_bytes)
+    # A conditional, not ||: Terraform before 1.12 evaluates both sides of ||, and floor(null) fails.
+    condition     = var.storage_signed_upload_max_bytes == null ? true : (var.storage_signed_upload_max_bytes >= 1 && floor(var.storage_signed_upload_max_bytes) == var.storage_signed_upload_max_bytes)
     error_message = "storage_signed_upload_max_bytes must be null or a whole number of bytes of at least 1."
+  }
+}
+
+variable "storage_blob_endpoint" {
+  description = "The storage account's blob endpoint, for a sovereign cloud (https://<account>.blob.core.usgovcloudapi.net, https://<account>.blob.core.chinacloudapi.cn). Null uses the public cloud's https://<account>.blob.core.windows.net."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.storage_blob_endpoint == null || can(regex("^https://[^/?#@]+$", var.storage_blob_endpoint))
+    error_message = "storage_blob_endpoint must be null or an https origin with no path, query or credentials."
   }
 }
 

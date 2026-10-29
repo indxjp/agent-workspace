@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AGENT_INSTRUCTIONS_MAX_LENGTH, AGENT_PERMISSION_KEYS } from './agents.js';
 import { ENGINE_IDS } from './engines.js';
+import { FEATURE_IDS, featuresMissingDependencies } from './features.js';
 import { HOSTED_PLATFORM_IDS } from './platform-ids.js';
 import { MODEL_PROVIDERS } from './runs.js';
 import {
@@ -29,7 +30,7 @@ function questionFor(id: string) {
 }
 
 describe('SETUP_QUESTIONS', () => {
-  it('asks exactly twelve questions, in order', () => {
+  it('asks exactly thirteen questions, in order', () => {
     expect(SETUP_QUESTIONS.map((question) => question.id)).toEqual([
       'setup.theme',
       'admin.sandbox',
@@ -43,6 +44,7 @@ describe('SETUP_QUESTIONS', () => {
       'embedder.surfaceTitle',
       'embedder.brandColour',
       'admin.platforms',
+      'admin.features',
     ]);
   });
 
@@ -60,7 +62,23 @@ describe('SETUP_QUESTIONS', () => {
       'title',
       'color',
       'platform',
+      'features',
     ]);
+  });
+
+  it('offers every feature and recommends all of them', () => {
+    const question = questionFor('admin.features');
+    expect(question.answer).toEqual({
+      kind: 'multi',
+      choices: FEATURE_IDS,
+      max: FEATURE_IDS.length,
+    });
+    expect(question.recommended).toEqual(FEATURE_IDS);
+    expect(question.writes).toEqual(['agent-workspace.yaml']);
+    for (const choice of FEATURE_IDS) {
+      const listed = [choice, ...featuresMissingDependencies([choice]).map(({ needs }) => needs)];
+      expect(question.schema.safeParse(listed).success).toBe(true);
+    }
   });
 
   it('offers every hosted platform and none, and recommends none', () => {
@@ -139,10 +157,14 @@ describe('SETUP_QUESTIONS', () => {
           expect(question.schema.safeParse(choice).success).toBe(true);
         }
       } else if (answer.kind === 'multi') {
-        for (const choice of answer.choices) {
-          expect(question.schema.safeParse([choice]).success).toBe(true);
-        }
         expect(Array.isArray(recommended)).toBe(true);
+        // Every choice is reachable: alone, or (when it needs others listed with it, as a
+        // feature needs its dependencies) inside the recommended answer, which itself parses.
+        expect(question.schema.safeParse(recommended).success).toBe(true);
+        for (const choice of answer.choices) {
+          const alone = question.schema.safeParse([choice]).success;
+          expect(alone || (Array.isArray(recommended) && recommended.includes(choice))).toBe(true);
+        }
         expect(recommended.length).toBeLessThanOrEqual(answer.max);
       } else {
         expect(typeof recommended).toBe('string');
@@ -296,6 +318,7 @@ describe('SetupAnswersSchema', () => {
       'embedder.surfaceTitle': 'Assistant',
       'embedder.brandColour': '#2f5fd0',
       'admin.platforms': ['none'],
+      'admin.features': FEATURE_IDS,
     });
     expect(answers).not.toHaveProperty('content.openapiDocument');
   });
@@ -371,6 +394,28 @@ describe('SetupAnswersSchema', () => {
   it('refuses none with another platform with its own message', () => {
     const result = SetupAnswersSchema.safeParse({ 'admin.platforms': ['none', 'copilot-studio'] });
     expect(result.error?.issues[0]?.message).toBe('none is chosen alone');
+  });
+
+  it.each(SETUP_THEMES)('recommends every feature for %s', (theme) => {
+    expect(withRecommendedAnswers({ 'setup.theme': theme })['admin.features']).toEqual(FEATURE_IDS);
+  });
+
+  it('leaves features unanswered in the complete form as optional', () => {
+    const withoutFeatures = Object.fromEntries(
+      Object.entries(withRecommendedAnswers({})).filter(([id]) => id !== 'admin.features'),
+    );
+    expect(CompleteSetupAnswersSchema.safeParse(withoutFeatures).success).toBe(true);
+  });
+
+  it.each([
+    ['no feature', []],
+    ['a repeated feature', ['chat', 'chat']],
+    ['an unknown feature', ['nope']],
+    ['surfaces without chat', ['surfaces']],
+  ])('refuses features with %s', (_name, features) => {
+    const result = SetupAnswersSchema.safeParse({ 'admin.features': features });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path[0]).toBe('admin.features');
   });
 
   it.each([[['readFiles', 'readFiles']], [['sudo']]])(

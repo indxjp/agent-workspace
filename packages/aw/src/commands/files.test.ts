@@ -105,6 +105,27 @@ describe('aw files', () => {
       expect(FileResourceSchema.parse(stdoutJson(run))).toEqual(FIXTURES.file);
     });
 
+    // @story US-STO-02
+    it('[US-STO-02][api][cli] aw files upload --direct streams the local file instead of reading it into memory', async () => {
+      const local = await tempFile(directory, 'd.bin', 'hello');
+      const run = await runCli(['files', 'upload', 'd.bin', local, '--direct', '--json'], {
+        route: (request) => {
+          if (request.url.host === 'store.example.com') return new Response(null, { status: 200 });
+          return request.url.pathname.endsWith('/upload-complete')
+            ? json(200, { file: FIXTURES.file })
+            : json(201, PRESIGNED);
+        },
+      });
+      expect(run.code).toBe(EXIT_CODE.ok);
+      const put = run.calls[1];
+      // A file-backed Blob: fetch reads it from disk as it sends.
+      expect(put?.body).toBeInstanceOf(Blob);
+      expect(await (put?.body as Blob).text()).toBe('hello');
+      const folder = await runCli(['files', 'upload', 'd.bin', directory, '--direct']);
+      expect(folder.code).toBe(EXIT_CODE.usage);
+      expect(folder.calls).toHaveLength(0);
+    });
+
     it('fails when the object store refuses the bytes', async () => {
       const local = await tempFile(directory, 'b.bin', 'hello');
       const run = await runCli(['files', 'upload', 'b.bin', local, '--direct'], {

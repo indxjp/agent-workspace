@@ -238,6 +238,32 @@ export function agentVersionWrites(
   };
 
   /**
+   * The grants whose connection is still one of this workspace's, share-locking those connections
+   * so none is deleted before the transaction ends. A connection deleted since validation is
+   * exactly one deleted just after the deploy: its grant is dropped, and a run of the version fails
+   * closed (`run_storage_grant_unavailable`), instead of the write failing on the foreign key.
+   */
+  const liveStorageGrants = async (
+    tx: Transaction,
+    grants: readonly StorageGrantRef[],
+  ): Promise<readonly StorageGrantRef[]> => {
+    if (grants.length === 0) return [];
+    const present = await tx
+      .select({ id: storageConnections.id })
+      .from(storageConnections)
+      .where(
+        and(
+          eq(storageConnections.workspaceId, workspaceId),
+          inArray(storageConnections.id, [...new Set(grants.map((grant) => grant.connectionId))]),
+        ),
+      )
+      .orderBy(asc(storageConnections.id))
+      .for('key share');
+    const alive = new Set(present.map((row) => row.id));
+    return grants.filter((grant) => alive.has(grant.connectionId));
+  };
+
+  /**
    * Replace the agent's four assignment tables, applying the #133 ceiling to files and storage
    * grants. When the storage grants differ from the ones they replace, one `storage-grant-changed`
    * row (connection id, prefix and access of each grant, no credential) is audited in the same
@@ -289,7 +315,10 @@ export function agentVersionWrites(
       .from(agentStorageGrants)
       .where(ownGrants);
     await tx.delete(agentStorageGrants).where(ownGrants);
-    const storage = narrowStorageGrants(references.storageGrants ?? [], permissions);
+    const storage = await liveStorageGrants(
+      tx,
+      narrowStorageGrants(references.storageGrants ?? [], permissions),
+    );
     if (storage.length > 0) {
       await tx
         .insert(agentStorageGrants)
@@ -333,30 +362,15 @@ export function agentVersionWrites(
   };
 
   /**
-   * Record the folders `version` was deployed with. Share-locks the connections first and keeps
-   * the rows of those still present: a connection deleted since validation is exactly one deleted
-   * just after the deploy, so the version fails closed at run time rather than the write failing
-   * on the foreign key. Rows are never rewritten.
+   * Record the folders `version` was deployed with, keeping only {@link liveStorageGrants}. Rows
+   * are never rewritten.
    */
   const writeVersionStorageGrants = async (
     tx: Transaction,
     versionId: string,
     grants: readonly StorageGrantRef[],
   ): Promise<void> => {
-    if (grants.length === 0) return;
-    const present = await tx
-      .select({ id: storageConnections.id })
-      .from(storageConnections)
-      .where(
-        and(
-          eq(storageConnections.workspaceId, workspaceId),
-          inArray(storageConnections.id, [...new Set(grants.map((grant) => grant.connectionId))]),
-        ),
-      )
-      .orderBy(asc(storageConnections.id))
-      .for('key share');
-    const alive = new Set(present.map((row) => row.id));
-    const rows = grants.filter((grant) => alive.has(grant.connectionId));
+    const rows = await liveStorageGrants(tx, grants);
     if (rows.length > 0) {
       await tx
         .insert(agentVersionStorageGrants)

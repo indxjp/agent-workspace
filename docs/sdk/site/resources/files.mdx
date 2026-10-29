@@ -13,7 +13,7 @@ description: "Upload, list, move and delete the files and folders a workspace's 
 
 What you can do with files:
 
-- [List](#list) one folder level, [upload](#upload) or overwrite a file (up to 64 MiB), and [create a folder](#createfolder).
+- [List](#list) one folder level, [upload](#upload) or overwrite a file (up to 64 MiB through the control plane, larger on a [signed link](#createuploadurl)), and [create a folder](#createfolder).
 - [Download](#download) a file, or read a folder's metadata.
 - [Move](#move) a file or a whole folder subtree, and [remove](#remove) a file or folder.
 - Give an agent `read` or `read-write` access to a file through its [resource assignments](/resources/agents#replaceresourceassignments).
@@ -45,11 +45,15 @@ interface FileResource {
 
 ## Where the bytes live and who may read them
 
-A file's bytes live in the object store, under `storage_key` inside the `files/` prefix; a file's
-row — path, size, content type, owner — lives in the platform's relational store. Renaming never
-rewrites the object, only the row. Which cloud service actually backs each store, and how a
-credential reaches it, is the deployment's own choice — see
-[The data plane](/concepts/data-plane) for the contract per cloud.
+A file's bytes live in the object store under an id the platform chooses, never under its path; a
+file's row — path, size, content type, checksum, owner — lives in the platform's relational store,
+the catalog. Every save takes the same steps, whichever route it came by: the catalog reserves a
+`pending` row, the bytes are written under a new id, and the row becomes `ready` with the size and
+checksum measured on the way. Only a `ready` file is listed, searched or granted to a run, and
+a path stays `409 upload_in_progress` while its save is pending. Renaming or moving a file changes
+its row and never copies the bytes. Which cloud service backs the store, and how a credential
+reaches it, is the deployment's own choice, set by one URL — see
+[The data plane](/concepts/data-plane#one-storage-url) for the contract per cloud.
 
 Every file row carries an `owner_principal_id`, the principal that uploaded or created it. A
 Builder reads any file in the workspace but writes or deletes only its own; an Admin reads,
@@ -188,15 +192,22 @@ See [`files.list`](/reference/sdk/files#list).
 ## `upload`
 
 Write, or overwrite, one file. Accepts a `Uint8Array`, a `Blob`, or a `ReadableStream<Uint8Array>`
-as `UploadBody` — a stream is buffered into a `Blob` before it is sent, because a streaming
-request body is not something every browser (or HTTP/1.1) can send, and the server buffers the
-whole body up to `MAX_UPLOAD_BYTES` (64 MiB) before it acts anyway. `contentType` is stored with
-the file and reported back as `contentType`; omit it and the file is stored with `contentType:
-null`. A download never echoes an uploader's `contentType` as active content — the server serves
-only a closed table of inert types, everything else as `application/octet-stream`.
+as `UploadBody`. `contentType` is stored with the file and reported back as `contentType`; omit it
+and the file is stored with `contentType: null`. A download never echoes an uploader's
+`contentType` as active content — the server serves only a closed table of inert types, everything
+else as `application/octet-stream`.
 
-This route relays the bytes through the control plane. To move them straight to the object store
-from a browser, see [`createUploadUrl`](#createuploadurl).
+Which way the bytes go depends on their size:
+
+- Up to `MAX_UPLOAD_BYTES` (64 MiB), `upload` relays them through the control plane in one request.
+- Above it, or with `direct: true`, `upload` takes the [signed link](#createuploadurl) path: it asks
+  for a link, `PUT`s the bytes straight to the object store, then calls
+  [`completeUpload`](#completeupload). The file is listed only once that last call returns. Where the
+  store cannot sign links (a `file://` deployment), a large body falls back to the relay, and
+  `direct: true` fails with `501 direct_transfer_unsupported` instead.
+- A `ReadableStream` is read into memory first, unless you declare its length as `sizeBytes`: then a
+  stream on the signed-link path goes straight to the store, unbuffered. Streaming a request body
+  needs Node.js, or a browser over HTTP/2.
 
 **Route:** `POST /api/files` (raw body, path in the `x-file-path` header)
 
@@ -269,6 +280,11 @@ Read a path back. `FileDownload` is a union: a path that names bytes answers the
 a path that names a **folder** answers the folder's own metadata instead, because there is
 nothing to stream. Branch on `kind`.
 
+The bytes are always served as a download, never rendered: every file response carries `Content-Disposition: attachment` with the file's name,
+`X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, and its `Content-Type` comes from
+a closed table of inert types, everything else being `application/octet-stream`. So this route
+cannot be the `src` of an inline preview.
+
 There is no lighter read: getting a single file's metadata means calling `download` and
 discarding the bytes, because `files.stat` does not exist yet — see
 [S-11](/concepts/roadmap#s-11-file-metadata).
@@ -328,8 +344,11 @@ name in the agent's `tools.autoApprove` to let a headless run call it without as
 ## `createUploadUrl`
 
 Mint a short-lived `PUT` URL on the object store, so the bytes never pass through the control
-plane. On S3 and GCS `sizeBytes` is signed into the URL — the store refuses a body of any other
-length; an Azure Blob SAS cannot carry a length, so Azure does not enforce it.
+plane, then finish with [`completeUpload`](#completeupload): until then the file is `pending` and
+not listed. On S3 and GCS `sizeBytes` is signed into the URL — the store refuses a body of any other
+length; an Azure Blob SAS cannot carry a length, so there `completeUpload` deletes an object larger
+than declared. A signed upload is at most 5 GiB, or less where the deployment sets
+`AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`.
 `contentType` is signed when you give one; send the returned `headers` with the `PUT`, unchanged.
 `ttlSeconds` is 60 to 900 (default 300) and is independent of the browser token's own lifetime. The
 route does no object-store I/O: the file appears when the `PUT` succeeds, and a URL used after
@@ -360,6 +379,9 @@ await fetch(target.url, { method: target.method, headers: target.headers, body: 
 | `reserved_path`                | 400    | `.claude/**`, `skill-revisions/**` or the internal empty-folder marker name.                            |
 | `file_not_found`               | 404    | An unminted id.                                                                                         |
 | `token_out_of_scope`           | 403    | A browser token (`run` or `session` scope).                                                             |
+| `upload_in_progress`           | 409    | Another member's upload holds the path. Asking again for your own pending upload mints a fresh link.   |
+| `too_many_pending_uploads`     | 429    | The workspace already holds `MAX_PENDING_UPLOADS_PER_WORKSPACE` (100) unfinished uploads.               |
+| `link_rate_limited`            | 429    | More than `LINK_REQUESTS_PER_MINUTE_PER_WORKSPACE` (60) link requests this minute; see `Retry-After`.   |
 | `direct_transfer_unsupported`  | 501    | This deployment's store cannot sign (local filesystem or in-memory): use [`upload`](#upload).           |
 | `files_runtime_not_configured` | 503    | This deployment has no files backend configured.                                                        |
 
@@ -373,11 +395,43 @@ aw files upload .attachments/<sessionId>/report.pdf ./report.pdf --direct
 
 See [`files.createUploadUrl`](/reference/sdk/files#createuploadurl).
 
+## `completeUpload`
+
+Finish a signed-link upload. The server checks the object the `PUT` wrote: its real size and type,
+not what the link was asked for. Then it marks the file `ready`, so it appears in listings, search
+and grants, and a replaced file's old bytes are deleted. Until this call the path stays
+`409 upload_in_progress` for everyone else. `upload` calls it for you; call it yourself only after
+your own `PUT` to a [`createUploadUrl`](#createuploadurl) link.
+
+**Route:** `POST /api/files/:id/upload-complete` (no body)
+
+```ts title="illustrative" claim="illustrative"
+const target = await aw.files.createUploadUrl('reports/q3.pdf', {
+  sizeBytes: blob.size,
+  contentType: 'application/pdf',
+});
+await fetch(target.url, { method: target.method, headers: target.headers, body: blob });
+const file = await aw.files.completeUpload('reports/q3.pdf');
+```
+
+| Code                  | Status | Meaning                                                                                                                                                 |
+| --------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_path`        | 400    | Same rule as `upload`.                                                                                                                                  |
+| `file_not_found`      | 404    | Nothing is reserved or stored at that path.                                                                                                             |
+| `upload_in_progress`  | 409    | Another member's upload holds the path.                                                                                                                 |
+| `upload_not_verified` | 409    | No object is there yet, or a smaller one: upload it, then complete. An object larger than declared, or over the deployment's limit, is deleted. |
+
+An upload that is never completed stops counting toward the 100 unfinished uploads once it is
+older than the longest link lifetime plus an hour.
+
+See [`files.completeUpload`](/reference/sdk/files#completeupload).
+
 ## `createDownloadUrl`
 
 Mint a short-lived `GET` URL that serves a file as the same inert attachment `download` returns
-(`application/octet-stream` unless the stored type is on the closed inert table). Same scope, TTL
-and CORS rules as `createUploadUrl`. A missing path, or a path that names a folder, is a
+(`application/octet-stream` unless the stored type is on the closed inert table). The type and the
+`attachment` disposition are signed into the URL, so the store itself sends those headers. Same
+scope, TTL, rate limit and CORS rules as `createUploadUrl`. A missing path, or a path that names a folder, is a
 `404 file_not_found`.
 
 **Route:** `POST /api/files/:id/download-urls`
@@ -396,7 +450,8 @@ See [`files.createDownloadUrl`](/reference/sdk/files#createdownloadurl).
 
 ## `move`
 
-Rename or move a file or a whole folder subtree. A file answers `{ file }`; a folder answers a
+Rename or move a file or a whole folder subtree. Moving a file changes its catalog row: the bytes
+stay where they are, under the same id. A file answers `{ file }`; a folder answers a
 `SubtreeMoveOutcome` — `{ status: 'ok', moved }` or, if the walk stopped partway,
 `{ status: 'partial', moved, total, remaining? }`. A `partial` outcome is a **declared state to
 retry**, not an error: every object already copied stays copied, so retrying the same move

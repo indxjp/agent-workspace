@@ -12,13 +12,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defineObjectStoreContract,
-  defineObjectStoreV2Contract,
-  type ObjectStoreV2ContractFixture,
+  defineOwnPagingContract,
+  type ObjectStoreContractFixture,
 } from './contract.js';
 import { OBJECT_METADATA_SUFFIX, toObjectKey, UnsafeObjectKeyError } from './key-safety.js';
 import { createLocalFilesystemObjectStoreProvider } from './local-fs-store.js';
+import { listAll, readWhole } from './streams.js';
 
-async function setup(): Promise<ObjectStoreV2ContractFixture> {
+async function setup(): Promise<ObjectStoreContractFixture> {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-'));
   return {
     provider: createLocalFilesystemObjectStoreProvider(rootDir),
@@ -36,7 +37,7 @@ async function setup(): Promise<ObjectStoreV2ContractFixture> {
 }
 
 defineObjectStoreContract('local filesystem', setup);
-defineObjectStoreV2Contract('local filesystem', setup);
+defineOwnPagingContract('local filesystem', setup);
 
 /**
  * The 8.3 short names NTFS has minted for the files in `dir`, read from the filesystem itself with
@@ -85,7 +86,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       const store = scopedStore(rootDir);
       const attacks = [`../${nonce}`, `/${nonce}`, `..%2f${encodeURIComponent(nonce)}`];
       for (const key of attacks) {
-        await expect(store.put(key, { body: new Uint8Array([1, 2, 3]) })).rejects.toThrow();
+        await expect(store.write(key, new Uint8Array([1, 2, 3]), {})).rejects.toThrow();
       }
       // Positive proof, not just "it threw": nothing appeared anywhere in the isolated parent
       // (which "../<nonce>" from inside rootDir would land in) or inside rootDir itself.
@@ -102,10 +103,8 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-dup-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('dup/x', { body: new TextEncoder().encode('file') });
-      await expect(
-        store.put('dup/x/y', { body: new TextEncoder().encode('deep') }),
-      ).rejects.toThrow();
+      await store.write('dup/x', new TextEncoder().encode('file'), {});
+      await expect(store.write('dup/x/y', new TextEncoder().encode('deep'), {})).rejects.toThrow();
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
@@ -121,13 +120,12 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-sidecar-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('note.txt', {
-        body: new TextEncoder().encode('hello'),
+      await store.write('note.txt', new TextEncoder().encode('hello'), {
         contentType: 'text/plain',
       });
 
-      // Two trees, and the object tree contains exactly the object.
-      expect((await readdir(rootDir)).sort()).toEqual(['metadata', 'objects']);
+      // Sibling trees (a write stages its bytes in the third), and the object tree holds the object.
+      expect((await readdir(rootDir)).sort()).toEqual(['metadata', 'objects', 'staging']);
       const objectDir = path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID);
       const metadataDir = path.join(rootDir, 'metadata', 'workspaces', WORKSPACE_ID);
       expect(await readdir(objectDir)).toEqual(['note.txt']);
@@ -136,7 +134,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       // `list()` therefore filters nothing by name: there is nothing of this module's in the tree
       // it reads. (It still skips entries that are neither file nor directory — see the PR's
       // declared gap about junctions.)
-      expect((await store.list('')).map((e) => e.key)).toEqual(['note.txt']);
+      expect((await listAll(store, '')).map((e) => e.key)).toEqual(['note.txt']);
 
       // Every file the backend wrote outside the object tree is unreachable by construction —
       // asserted over what is actually on disk, and over the alias spellings that broke rounds 2
@@ -175,8 +173,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-shortname-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('note.txt', {
-        body: new TextEncoder().encode('hello'),
+      await store.write('note.txt', new TextEncoder().encode('hello'), {
         contentType: 'text/plain',
       });
       const metadataDir = path.join(rootDir, 'metadata', 'workspaces', WORKSPACE_ID);
@@ -186,23 +183,23 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
 
       for (const alias of aliases) {
         // It is a legal key — that is the point. It must simply land somewhere harmless.
-        await store.put(alias, {
-          body: new TextEncoder().encode('{"contentType":"text/html"}'),
-        });
+        await store.write(alias, new TextEncoder().encode('{"contentType":"text/html"}'), {});
       }
 
       // The victim keeps its content type, and its listing entry says so.
-      expect((await store.get('note.txt'))?.contentType).toBe('text/plain');
+      expect((await readWhole(store, 'note.txt'))?.contentType).toBe('text/plain');
       expect(
-        (await store.list('')).map((e) => `${e.key}:${e.kind === 'file' ? e.contentType : 'dir'}`),
+        (await listAll(store, '')).map(
+          (e) => `${e.key}:${e.kind === 'file' ? e.contentType : 'dir'}`,
+        ),
       ).toEqual(expect.arrayContaining(['note.txt:text/plain']));
       // The bytes aimed at the sidecar landed in the object tree, as an ordinary object of their
       // own — visible in its own listing, not hidden behind a filter.
       expect((await readdir(objectDir)).sort()).toEqual(['note.txt', ...aliases].sort());
-      expect((await store.list('')).map((e) => e.key).sort()).toEqual(
+      expect((await listAll(store, '')).map((e) => e.key).sort()).toEqual(
         ['note.txt', ...aliases].sort(),
       );
-      // The victim's sidecar is byte-for-byte what `put` wrote. Each alias object got a sidecar of
+      // The victim's sidecar is byte-for-byte what `write` wrote. Each alias object got a sidecar of
       // its own beside it, and could not have reached the victim's: a sidecar's name ends in a
       // 26-character suffix, so it is never itself an 8.3 short name (which is at most 12).
       expect(
@@ -225,8 +222,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-sidecar-case-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('note.txt', {
-        body: new TextEncoder().encode('hello'),
+      await store.write('note.txt', new TextEncoder().encode('hello'), {
         contentType: 'text/plain',
       });
       const objectDir = path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID);
@@ -246,12 +242,12 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       ];
       for (const variant of variants) {
         await expect(
-          store.put(variant, { body: new TextEncoder().encode('{"contentType":"text/html"}') }),
+          store.write(variant, new TextEncoder().encode('{"contentType":"text/html"}'), {}),
         ).rejects.toThrow(UnsafeObjectKeyError);
       }
 
-      expect((await store.get('note.txt'))?.contentType).toBe('text/plain');
-      expect((await store.list('')).map((e) => e.key)).toEqual(['note.txt']);
+      expect((await readWhole(store, 'note.txt'))?.contentType).toBe('text/plain');
+      expect((await listAll(store, '')).map((e) => e.key)).toEqual(['note.txt']);
       expect({
         objects: (await readdir(objectDir)).sort(),
         metadata: (await readdir(metadataDir)).sort(),
@@ -261,12 +257,12 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     }
   });
 
-  it('a failed sidecar write costs the content type and nothing else — the object is written and put resolves', async () => {
-    // Verification round 5, B1. `put` wrote the object and then did `mkdir` + `writeFile` on the
+  it('a failed sidecar write costs the content type and nothing else — the object is written and write resolves', async () => {
+    // Verification round 5, B1. `write` wrote the object and then did `mkdir` + `writeFile` on the
     // metadata path with no `catch`, so a metadata-tree failure threw *after* the bytes had
     // landed: `POST NOTETX~1.JSO/x.txt` came out of the route handler as an uncaught EEXIST — a
     // framework 500 for a write that had succeeded — while three places said a half-completed
-    // `put` cost "a content type and nothing else".
+    // `write` cost "a content type and nothing else".
     //
     // The collision is forced here with an ordinary file rather than an 8.3 alias, so the case
     // runs on every platform: a file at the metadata path a later key needs as a *directory* is
@@ -279,18 +275,17 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       await writeFile(path.join(metadataDir, 'blocked'), 'not a directory', 'utf8');
 
       await expect(
-        store.put('blocked/x.txt', {
-          body: new TextEncoder().encode('PAYLOAD'),
+        store.write('blocked/x.txt', new TextEncoder().encode('PAYLOAD'), {
           contentType: 'text/html',
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({ sizeBytes: 7, contentType: null });
 
       // The object: written, complete, readable, listed — and with no content type, which is the
       // declared cost and the whole of it.
-      const stored = await store.get('blocked/x.txt');
+      const stored = await readWhole(store, 'blocked/x.txt');
       expect(new TextDecoder().decode(stored?.body)).toBe('PAYLOAD');
       expect(stored?.contentType).toBeNull();
-      expect((await store.list('blocked')).map((e) => `${e.key}`)).toEqual(['blocked/x.txt']);
+      expect((await listAll(store, 'blocked')).map((e) => `${e.key}`)).toEqual(['blocked/x.txt']);
       expect(
         await readdir(path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID, 'blocked')),
       ).toEqual(['x.txt']);
@@ -307,8 +302,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-metastale-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('note.txt', {
-        body: new TextEncoder().encode('first'),
+      await store.write('note.txt', new TextEncoder().encode('first'), {
         contentType: 'text/plain',
       });
       const metaPath = path.join(
@@ -322,16 +316,15 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       await mkdir(metaPath, { recursive: true }); // a directory where the sidecar file belongs
 
       await expect(
-        store.put('note.txt', {
-          body: new TextEncoder().encode('second'),
+        store.write('note.txt', new TextEncoder().encode('second'), {
           contentType: 'text/markdown',
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toMatchObject({ sizeBytes: 6, contentType: null });
 
-      const stored = await store.get('note.txt');
+      const stored = await readWhole(store, 'note.txt');
       expect(new TextDecoder().decode(stored?.body)).toBe('second');
       expect(stored?.contentType).toBeNull();
-      expect((await store.list(''))[0]).toMatchObject({ key: 'note.txt', contentType: null });
+      expect((await listAll(store, ''))[0]).toMatchObject({ key: 'note.txt', contentType: null });
     } finally {
       await rm(rootDir, { recursive: true, force: true });
     }
@@ -341,9 +334,9 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-sidecar-del-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('note.txt', { body: new Uint8Array([1]), contentType: 'text/plain' });
+      await store.write('note.txt', new Uint8Array([1]), { contentType: 'text/plain' });
       await store.delete('note.txt');
-      // Both trees, because the two writes `put` makes are two deletions here — the cost of the
+      // Both trees, because the two writes `write` makes are two deletions here — the cost of the
       // split named in `local-fs-store.ts`'s header, asserted rather than assumed.
       expect(await readdir(path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID))).toEqual([]);
       expect(await readdir(path.join(rootDir, 'metadata', 'workspaces', WORKSPACE_ID))).toEqual([]);
@@ -356,7 +349,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
     const rootDir = await mkdtemp(path.join(os.tmpdir(), 'w2-cp-03-objectstore-onDisk-'));
     try {
       const store = scopedStore(rootDir);
-      await store.put('a/b.txt', { body: new TextEncoder().encode('hi') });
+      await store.write('a/b.txt', new TextEncoder().encode('hi'), {});
       const objectDir = path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID);
       const entries = await readdir(objectDir, { recursive: true } as never);
       expect(entries).toContain(path.join('a', 'b.txt'));
@@ -412,7 +405,7 @@ describe('local-filesystem ObjectStore — backend-specific proof', () => {
       expect(await readdir(path.join(rootDir, 'objects', 'workspaces', WORKSPACE_ID))).toEqual([
         'k.txt',
       ]);
-      const kept = await store.get('k.txt');
+      const kept = await readWhole(store, 'k.txt');
       expect(new TextDecoder().decode(kept?.body)).toBe('original');
       expect(await store.head('fresh.txt')).toBeNull();
     } finally {

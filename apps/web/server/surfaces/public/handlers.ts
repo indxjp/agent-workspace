@@ -56,6 +56,7 @@ import {
 } from '@indx-workspace/contracts/surfaces';
 
 import { applicationContext } from '../../application-context';
+import { enabledFeaturesFor } from '../../features/runtime';
 import { formatIssues, type ApiResult } from '../../http/result';
 import {
   frameAncestorsFor,
@@ -230,7 +231,7 @@ export async function createSurfaceSession(
     );
   }
   const mode = surfaceModeOf(options.request);
-  const resolved = await runtime.resolve(name, mode);
+  const resolved = await resolveServedSurface(runtime, name, mode);
   const verdict = mayOpenSession(
     resolved?.surface ?? null,
     request.headers,
@@ -327,12 +328,23 @@ function servesMode(mode: SurfaceMode, branch: 'loopback' | 'allowed-origin'): b
   return mode === 'public' || branch === 'loopback';
 }
 
+/** `runtime.resolve`, concealed (ADR-0160 D7) as an unknown name when the surface's workspace has the feature off. */
+async function resolveServedSurface(
+  runtime: SurfaceSessionsRuntime,
+  name: string,
+  mode: SurfaceMode,
+): Promise<ResolvedSurface | null> {
+  const resolved = await runtime.resolve(name, mode);
+  if (resolved === null) return null;
+  return (await enabledFeaturesFor(resolved.workspaceId)).includes('surfaces') ? resolved : null;
+}
+
 /** The surface served under `name`, or `null`; a lookup that fails is logged and is `null`. */
 async function resolvedSurface(name: string): Promise<ResolvedSurface | null> {
   const runtime = surfaceSessions();
   if (!isSurfaceName(name) || runtime === null) return null;
   try {
-    return await runtime.resolve(name, 'public');
+    return await resolveServedSurface(runtime, name, 'public');
   } catch (error: unknown) {
     log.error(`[surfaces] the surface "${name}" could not be resolved at the edge.`, { error });
     return null;
@@ -380,7 +392,7 @@ async function promotionPendingOrigin(
   if (headers.get('origin') === null || !isSurfaceName(name) || runtime === null) return null;
   let draft: ResolvedSurface | null;
   try {
-    draft = await runtime.resolve(name, 'try');
+    draft = await resolveServedSurface(runtime, name, 'try');
   } catch (error: unknown) {
     log.error(`[surfaces] the draft of surface "${name}" could not be resolved.`, { error });
     return null;
@@ -534,7 +546,7 @@ async function servedSurface(
   if (!isSurfaceName(name)) return null;
   const runtime = surfaceSessions();
   if (runtime === null) return null;
-  const resolved = await runtime.resolve(name, mode);
+  const resolved = await resolveServedSurface(runtime, name, mode);
   if (resolved === null) return null;
   const verdict = mayOpenSession(resolved.surface, headers, env, 'page');
   if (!verdict.ok || !servesMode(mode, verdict.branch)) return null;

@@ -5,9 +5,7 @@ import type {
   WorkspaceScope,
   WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
-import type { SecretsService } from '@agent-workspace/core/secrets';
 import { ConnectionStoreError, openConnectionStore } from '@agent-workspace/core/storage';
-import { StorageConnectionCredentialSchema } from '@indx-workspace/contracts/storage-connections';
 
 import {
   createRunAgentReader,
@@ -27,35 +25,33 @@ import type {
   StorageConnections,
   StorageConnectionsRuntime,
 } from '../../storage-connections/runtime';
-import { storageConnectionSecretName } from '../../storage-connections/store';
 import { log } from '../../telemetry/logger';
 import { sessionForLaunch } from '../session-launch';
 import type { AgentsWiring } from './agents';
 
 /**
  * The run's view of its granted connections: the row, and a read-only store opened with the
- * credential resolved from the secret store for this run, so a rotation reaches the next run. Every
+ * credential the connection store holds for that row's URL, so a rotation reaches the next run. Every
  * expected failure is `run_storage_grant_unavailable`, and no message carries credential text.
  */
 // @story US-STO-12
 export function createRunStorageConnections({
   storage,
   scopes,
-  secretsService,
 }: {
   readonly storage: {
     readonly store: {
       forWorkspace(
         workspaceId: string,
-      ): Pick<ReturnType<StorageConnectionsRuntime['store']['forWorkspace']>, 'get'>;
+      ): Pick<ReturnType<StorageConnectionsRuntime['store']['forWorkspace']>, 'get' | 'credential'>;
     };
     readonly fileRoots: readonly string[];
   };
   readonly scopes: Pick<WorkspaceScopeResolver, 'forWorkspaceId'>;
-  readonly secretsService: Pick<SecretsService, 'resolveByName'>;
 }): RunStorageConnections {
   const openStore = async (workspaceId: string, connectionId: string, writable: boolean) => {
-    const connection = await storage.store.forWorkspace(workspaceId).get(connectionId);
+    const store = storage.store.forWorkspace(workspaceId);
+    const connection = await store.get(connectionId);
     const scope = await scopes.forWorkspaceId(workspaceId);
     if (connection === null || scope === null) {
       throw storageGrantUnavailable('a granted storage connection no longer exists');
@@ -66,20 +62,18 @@ export function createRunStorageConnections({
         `the connection ${JSON.stringify(connection.name)} no longer allows writes`,
       );
     }
-    const secret =
+    // Only for the URL of the row read here: the store refuses a secret bound to another target.
+    const credential =
       connection.provider === 'file'
-        ? null
-        : await secretsService.resolveByName(scope, storageConnectionSecretName(connectionId));
-    const credential = StorageConnectionCredentialSchema.safeParse(
-      connection.provider === 'file' ? { provider: 'file' } : parsedSecret(secret?.value),
-    );
-    if (!credential.success) {
+        ? ({ provider: 'file' } as const)
+        : await store.credential(connectionId, connection.url);
+    if (credential === null) {
       throw storageGrantUnavailable(
         `the credential of the connection ${JSON.stringify(connection.name)} is missing`,
       );
     }
     try {
-      return await openConnectionStore(connection.url, credential.data, {
+      return await openConnectionStore(connection.url, credential, {
         writable,
         fileRoots: storage.fileRoots,
         egress: loadEgressPolicyFromEnv(),
@@ -104,16 +98,6 @@ export function createRunStorageConnections({
   };
 }
 
-/** The stored secret as JSON, or `null`: a parser's message quotes its input, so it is never kept. */
-function parsedSecret(value: Buffer | undefined): unknown {
-  if (value === undefined) return null;
-  try {
-    return JSON.parse(value.toString('utf8'));
-  } catch {
-    return null;
-  }
-}
-
 export function wireRunResources({
   root,
   scopes,
@@ -125,7 +109,6 @@ export function wireRunResources({
   files,
   skills,
   storageConnections,
-  secretsService,
 }: Pick<
   AgentsWiring,
   'scopes' | 'agents' | 'agentResources' | 'resourceCatalog' | 'principalIdentity'
@@ -135,7 +118,6 @@ export function wireRunResources({
   readonly files: Files;
   readonly skills: Skills;
   readonly storageConnections: StorageConnections;
-  readonly secretsService: SecretsService | null;
 }) {
   const filesRuntime = files.kind === 'serving' ? files.runtime : null;
   // issue #125: a project's `project_files`/`project_mcp_servers` associations, read the same way
@@ -154,12 +136,10 @@ export function wireRunResources({
     },
   };
   // A granted connection folder is read through the connection as it is at run time: the row, and a
-  // credential resolved from the secret store for this run, so a rotation reaches the next run.
+  // credential the connection store holds for that row's URL, so a rotation reaches the next run.
   const storage = storageConnections.kind === 'serving' ? storageConnections.runtime : null;
   const runStorageConnections =
-    storage === null || secretsService === null
-      ? null
-      : createRunStorageConnections({ storage, scopes, secretsService });
+    storage === null ? null : createRunStorageConnections({ storage, scopes });
   const loaderDependencies = {
     catalog: resourceCatalog,
     ...(filesRuntime?.storage === undefined ? {} : { storage: filesRuntime.storage }),

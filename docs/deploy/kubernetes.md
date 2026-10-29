@@ -33,7 +33,7 @@ Split that file across them as follows, and put each variable in exactly one:
 | Secret                       | Variables from the rendered `.env`                                                                                                                                                                                                                                                                                                                                                                 |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `external.databaseUrlSecret` | `DATABASE_URL`                                                                                                                                                                                                                                                                                                                                                                                     |
-| `external.objectStoreSecret` | `AW_STORAGE_URL`, `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `AWS_REGION`. An older `.env`'s storage location variables are ignored: leave them out                                                                                                                                                                                 |
+| `external.objectStoreSecret` | `AW_STORAGE_URL` (unless you set the chart value `storage.url`, below), `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `AWS_REGION`. An older `.env`'s storage location variables are ignored: leave them out                                                                                                                           |
 | `secrets.applicationSecret`  | everything else the file sets — `MASTER_KEY_PROVIDER`, `GCP_MASTER_KEY_SECRET`, `MASTER_ENCRYPTION_KEY`, `SESSION_SECRET`, `GATEWAY_TOKEN_SECRET`, `RUNNER_MANAGER_TOKEN`, `BOOTSTRAP_ADMIN`, `BOOTSTRAP_ADMIN_PASSWORD`, `GATEWAY_PRICING_JSON`, the other `AW_*` values and the `WORKSPACE_*` values, the three service addresses, and the four `OIDC_*` values when the profile names an issuer |
 
 Do not put a key in two of them. Each Deployment lists all three under `envFrom`, and `envFrom`
@@ -69,8 +69,19 @@ explains.
 
 ## Object storage
 
-Put `AW_STORAGE_URL` in the Secret named by `external.objectStoreSecret`; it reaches the pods
-through `envFrom`. The chart has no `AW_STORAGE_URL` value of its own. It still reads the legacy
+Put `AW_STORAGE_URL` in the Secret named by `external.objectStoreSecret`, which reaches the pods
+through `envFrom`, or set it as the chart value `storage.url`:
+
+```yaml
+storage:
+  url: s3://acme-ai-files?region=eu-west-1
+```
+
+`storage.url` takes any form the server accepts (`s3://`, `gcs://`, `azblob://` or `file://`; see
+[Configuration](../sdk/site/getting-started/configuration.mdx#tell-the-server-where-files-live)).
+When it is set, web, the gateway and the runner manager read it in place of the Secret's copy; left
+empty, the default, the Secret still supplies the URL, so an existing install keeps working. The
+URL never holds a key, so it can live in a values file. The chart still reads the legacy
 Secret keys `OBJECT_STORAGE_ACCESS_KEY_ID` and `OBJECT_STORAGE_SECRET_ACCESS_KEY` and maps them onto
 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, so keep those keys there when the S3 endpoint needs
 an explicit credential. The old location keys are ignored: each one still set logs one

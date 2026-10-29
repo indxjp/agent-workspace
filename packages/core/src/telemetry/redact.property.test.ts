@@ -43,6 +43,22 @@ describe('redacted (cloud signed URLs)', () => {
     const out = redacted(`upload failed for ${url} after 3 tries`, []);
     expect(out).toBe('upload failed for [url] after 3 tries');
   });
+
+  // A signature pair copied out of its URL (a query string in an error, a header dump) is too short
+  // or too escaped to be caught as a long token, so its value is masked by name.
+  it.each([
+    ['S3', 'X-Amz-Signature', '0123abcd'],
+    ['GCS', 'x-goog-signature', '89fe7654'],
+    ['Azure', 'sig', 'Zx%2BQ%2Fk%3D'],
+  ])('masks a bare %s signature pair outside a URL', (_cloud, name, value) => {
+    const out = redacted(`refused: ${name}=${value}&sv=2024-11-04 (403)`, []);
+    expect(out).toBe(`refused: ${name}=[redacted]&sv=2024-11-04 (403)`);
+    expect(redacted(out, [])).toBe(out);
+  });
+
+  it('leaves a word that only ends in sig alone', () => {
+    expect(redacted('config=a; rsig=b', [])).toBe('config=a; rsig=b');
+  });
 });
 
 describe('redacted (property)', () => {

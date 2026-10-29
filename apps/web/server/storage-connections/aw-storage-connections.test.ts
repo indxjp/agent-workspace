@@ -110,7 +110,7 @@ async function folder(name: string, keys: readonly string[]): Promise<string> {
     { provider: 'file' },
     { writable: true, fileRoots: [fileRoot], egress: { production: false, allowHosts: [] } },
   );
-  await Promise.all(keys.map((key) => objects.put(key, { body: new TextEncoder().encode(key) })));
+  await Promise.all(keys.map((key) => objects.write(key, new TextEncoder().encode(key), {})));
   return `file://${dir}`;
 }
 

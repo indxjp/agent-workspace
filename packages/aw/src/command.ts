@@ -193,7 +193,7 @@ export function positional(context: CommandContext, index: number, name: string)
 }
 
 /** The value flags that name a resource by id: an empty one would build a malformed path. */
-const ID_VALUE_FLAGS: ReadonlySet<ValueFlag> = new Set(['id', 'project', 'session']);
+const ID_VALUE_FLAGS: ReadonlySet<ValueFlag> = new Set(['id', 'project', 'session', 'workspace']);
 
 export function value(context: CommandContext, flag: ValueFlag): string | undefined {
   const given = context.args.values.get(flag);

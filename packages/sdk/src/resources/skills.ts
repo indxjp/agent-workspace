@@ -34,7 +34,7 @@ export type SkillImportFile =
        * @deprecated Pass the bytes as `body`; the import is `multipart/form-data` and needs no
        * base64. A `contentBase64` file is removed in the next major release (#1700; removals
        * deferred to the next major release: #1944), and the first one a process sends logs a
-       * warning.
+       * warning (`ClientOptions.onWarning` takes it instead).
        */
       readonly contentBase64: string;
     };
@@ -45,21 +45,14 @@ export interface SkillImportInput {
   readonly files: readonly SkillImportFile[];
 }
 
-let warnedContentBase64 = false;
-
 // @story US-STO-08
 // The message is a constant: it never carries a path, a name or a byte of the file.
-function warnContentBase64Once(): void {
-  if (warnedContentBase64) return;
-  warnedContentBase64 = true;
-  console.warn(
-    'agent-workspace: skills.import with `contentBase64` files is deprecated and is removed in the next major release; pass each file as `body` (Blob, Uint8Array or string) instead.',
-  );
-}
+const CONTENT_BASE64_DEPRECATED =
+  'agent-workspace: skills.import with `contentBase64` files is deprecated and is removed in the next major release; pass each file as `body` (Blob, Uint8Array or string) instead.';
 
-function fileBlob(file: SkillImportFile): Blob {
+function fileBlob(file: SkillImportFile, http: HttpClient): Blob {
   if ('body' in file) return file.body instanceof Blob ? file.body : new Blob([file.body]);
-  warnContentBase64Once();
+  http.warn(CONTENT_BASE64_DEPRECATED);
   const binary = atob(file.contentBase64);
   const bytes = new Uint8Array(binary.length);
   for (let at = 0; at < binary.length; at += 1) bytes[at] = binary.charCodeAt(at);
@@ -68,7 +61,7 @@ function fileBlob(file: SkillImportFile): Blob {
 
 // @story US-STO-08
 /** The multipart body the server streams: `name`, then `SKILL.md`, then every other file. */
-function importForm(input: SkillImportInput): FormData {
+function importForm(input: SkillImportInput, http: HttpClient): FormData {
   const form = new FormData();
   form.append(SKILL_IMPORT_MULTIPART.nameField, input.name);
   const ordered = [
@@ -76,7 +69,7 @@ function importForm(input: SkillImportInput): FormData {
     ...input.files.filter((file) => file.path !== SKILL_MD_FILENAME),
   ];
   for (const file of ordered) {
-    form.append(SKILL_IMPORT_MULTIPART.fileField, fileBlob(file), file.path);
+    form.append(SKILL_IMPORT_MULTIPART.fileField, fileBlob(file, http), file.path);
   }
   return form;
 }
@@ -117,8 +110,8 @@ export class SkillsClient {
    * base64-encoded and the import may use the whole 16 MiB request ceiling. The JSON body with
    * `contentBase64` is deprecated: the server still takes it, and answers with a `Deprecation`
    * header. A file given as `contentBase64` here is deprecated too: it is decoded and sent as
-   * multipart all the same, logs one warning per process, and is removed in the next major
-   * release. `400 invalid_name` for a name
+   * multipart all the same, logs one warning per process (or hands it to
+   * `ClientOptions.onWarning`), and is removed in the next major release. `400 invalid_name` for a name
    * outside the slug grammar, `400 missing_skill_md` when no entry is `SKILL.md`,
    * `400 inadmissible_path` for a path outside the server's grammar, `409 skill_already_exists`
    * when the name is taken, `409 colliding_paths` for two paths that differ only by letter case.
@@ -128,7 +121,7 @@ export class SkillsClient {
       operation: 'skills.import',
       method: 'POST',
       path: '/api/skills',
-      rawBody: importForm(input),
+      rawBody: importForm(input, this.#http),
       expect: [201],
       schema: SkillResponseSchema,
       signal: options.signal,

@@ -11,6 +11,7 @@ const PRINCIPAL = {
   workspaceId: '44444444-4444-4444-8444-444444444444',
   userId: null,
   label: 'ci',
+  features: ['chat', 'runs'],
 };
 
 describe('aw me', () => {
@@ -29,6 +30,7 @@ describe('aw me', () => {
       'workspaceId',
       'userId',
       'label',
+      'features',
       '',
     ]);
     expect(run.stdout).toContain('ci');

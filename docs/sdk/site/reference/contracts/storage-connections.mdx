@@ -116,8 +116,9 @@ One page of a connection's folder listing, inside its allowed prefixes.
 The write-only credential of a connection, shaped by the provider it is for. It is stored by
 connection id, never as a `secret:<name>` string, and never returned. A `file` connection has
 nothing to authenticate with. A GCS connection holds a service-account key or a short-lived
-OAuth `accessToken` (it expires, so the connection then needs rotating); a key whose JSON names
-a `type` other than `service_account` is refused as `storage_connection_url_invalid`.
+OAuth `accessToken` (it expires, so the connection then needs rotating); a key whose JSON does
+give `service_account` as its `type`, including one with no `type`, is refused as
+`storage_connection_url_invalid`.
 
 - `{ provider: "s3"; accessKeyId: string; secretAccessKey: string; sessionToken?: string | undefined; }`
 - `{ provider: "gcs"; serviceAccountJson: string; }`

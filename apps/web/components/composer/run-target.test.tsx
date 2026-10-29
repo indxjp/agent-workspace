@@ -364,3 +364,26 @@ describe('the model picker offers only models the engine can drive', () => {
     expect(offered.map((entry) => entry.providerModelId)).toEqual(['claude-sonnet-4-5']);
   });
 });
+
+describe('preferredAgent and a built-in agent (#2012)', () => {
+  const BUILDER: ComposerAgent = {
+    ...agent('builder', 'builder', {
+      kind: 'runnable',
+      source: 'agent',
+      connectionName: 'anthropic default',
+      model: 'claude-sonnet-4-5',
+    }),
+    builtin: 'builder',
+  };
+
+  it('never picks the Builder by default, wherever it is listed', () => {
+    expect(preferredAgent([BUILDER, GENERAL_INHERITING], null)?.id).toBe('general');
+    expect(preferredAgent([BUILDER, GENERAL_UNRUNNABLE], null)?.id).toBe('general');
+    expect(initialSession([BUILDER, WIZARD])?.agentId).toBe('wizard');
+  });
+
+  it('keeps the remembered Builder, and opens on it only when it is the one agent listed', () => {
+    expect(preferredAgent([GENERAL_INHERITING, BUILDER], 'builder')?.id).toBe('builder');
+    expect(preferredAgent([BUILDER], null)?.id).toBe('builder');
+  });
+});

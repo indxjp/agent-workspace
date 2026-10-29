@@ -70,6 +70,13 @@ export const StorageConnectionResourceSchema = z
     updatedAt: IsoDateTimeSchema,
   })
   .strict()
+  // Parsed again, not trusted as the string the server stored: a reader acts on what it names.
+  .superRefine((resource, context) => {
+    const location = refuseUnusableUrl(resource.url, context);
+    if (location !== null && location.kind !== resource.provider) {
+      refuseUrl(context, 'storage_connection_url_invalid');
+    }
+  })
   .readonly();
 export type StorageConnectionResource = z.infer<typeof StorageConnectionResourceSchema>;
 
@@ -100,8 +107,9 @@ function googleCredentialType(json: string): unknown {
  * The write-only credential of a connection, shaped by the provider it is for. It is stored by
  * connection id, never as a `secret:<name>` string, and never returned. A `file` connection has
  * nothing to authenticate with. A GCS connection holds a service-account key or a short-lived
- * OAuth `accessToken` (it expires, so the connection then needs rotating); a key whose JSON names
- * a `type` other than `service_account` is refused as `storage_connection_url_invalid`.
+ * OAuth `accessToken` (it expires, so the connection then needs rotating); a key whose JSON does
+ * give `service_account` as its `type`, including one with no `type`, is refused as
+ * `storage_connection_url_invalid`.
  */
 // @story US-STO-12
 export const StorageConnectionCredentialSchema = z
@@ -128,8 +136,7 @@ export const StorageConnectionCredentialSchema = z
   ])
   .superRefine((credential, context) => {
     if (!('serviceAccountJson' in credential)) return;
-    const type = googleCredentialType(credential.serviceAccountJson);
-    if (type !== undefined && type !== 'service_account') {
+    if (googleCredentialType(credential.serviceAccountJson) !== 'service_account') {
       context.addIssue({
         code: 'custom',
         path: ['serviceAccountJson'],

@@ -234,6 +234,39 @@ stop; without a terminal, 0.6.9 prints `interrupted`. The next release says
 `stopping the local runtime…` at once. `npm run dev` starts it again with everything you made: the
 data stays under `.agent-workspace/`, which `.gitignore` lists.
 
+## Upgrade the local database
+
+The embedded database is PostgreSQL 18. A project an earlier release ran has a PostgreSQL 17 data
+directory (`.agent-workspace/postgres`, or `AW_DATA_DIR`), which PostgreSQL 18 cannot open.
+`aw dev` then stops before anything else starts, changes nothing in the directory, and says the
+data directory was created by another PostgreSQL major version.
+
+To start with an empty database, move the directory aside and run `aw dev` again:
+
+```sh title="illustrative" claim="illustrative"
+mv .agent-workspace/postgres .agent-workspace/postgres-17
+```
+
+To keep the data, export it while the release that created it still runs, before you upgrade
+`@indx-workspace/aw` and `@indx-workspace/embedded`. Any `pg_dump` of version 17 or later can read
+it; this one comes from the PostgreSQL image, so nothing is installed on the host:
+
+```sh title="illustrative" claim="illustrative"
+docker run --rm --network host postgres:18-alpine \
+  pg_dump -Fc "postgresql://agent_workspace:agent_workspace_local@127.0.0.1:25432/postgres" > local.dump
+```
+
+Then stop `aw dev`, upgrade the packages, move the directory aside as above, and start `aw dev`
+once so it creates the new database. With it running, load the export over what it created:
+
+```sh title="illustrative" claim="illustrative"
+docker run --rm --network host -i postgres:18-alpine \
+  pg_restore --clean --if-exists --no-owner \
+  -d "postgresql://agent_workspace:agent_workspace_local@127.0.0.1:25432/postgres" < local.dump
+```
+
+Restart `aw dev` afterwards. Use the database port the ready screen names if it is not 25432.
+
 ## Start it in the background
 
 `npm run dev` never exits, so a script or a coding agent starts it in the background and waits for

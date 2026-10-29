@@ -512,8 +512,10 @@ describe('concept-identity: authenticated principals', () => {
     const wellFormed = asBoolean(field(expected['principal'], 'wellFormed', vector.id), vector.id);
     expect(Principal.isPrincipal(principal)).toBe(wellFormed);
     if (expected['me'] !== null) {
-      const body = readMe(principal).body;
-      expect(body).toEqual(asRecord(expected['me'], vector.id));
+      // The Lean model of `GET /api/me` is the principal's projection; `features` (ADR-0160 D8) is
+      // a workspace fact the model does not carry, so it is added to the expectation here.
+      const body = readMe(principal, []).body;
+      expect(body).toEqual({ ...asRecord(expected['me'], vector.id), features: [] });
       expect(MeResponseSchema.safeParse(body).success).toBe(true);
     }
   });
@@ -522,7 +524,8 @@ describe('concept-identity: authenticated principals', () => {
   it.each(meVectors.map((v) => [v.id, v] as const))('%s', (_id, vector) => {
     const current = asBoolean(field(vector.expected, 'acceptedCurrent', vector.id), vector.id);
     const target = asBoolean(field(vector.expected, 'acceptedTarget', vector.id), vector.id);
-    expect(MeResponseSchema.safeParse(vector.input).success).toBe(current);
+    const withFeatures = { ...asRecord(vector.input, vector.id), features: [] };
+    expect(MeResponseSchema.safeParse(withFeatures).success).toBe(current);
     if (target) expect(current).toBe(true);
   });
 });

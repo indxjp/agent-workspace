@@ -32,7 +32,7 @@ import fc from 'fast-check';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AgentFrameSchema } from '@indx-workspace/contracts/run-events';
-import { RUN_STATUSES } from '@indx-workspace/contracts/runs';
+import { parseRunFailure, RUN_STATUSES } from '@indx-workspace/contracts/runs';
 import { RUN_STATUS_EVENT_NAME, RUN_STATUS_NAMES } from '@indx-workspace/react/run-model';
 import { classifySdkEvent, toAgentFrames } from '@agent-workspace/run-protocol';
 
@@ -450,6 +450,28 @@ export function describeRunStoreConformance(label: string, make: MakeRunStoreFix
         // ever started still gets one rather than a NULL that renders as "NaN s".
         expect(record?.startedAt).toBeInstanceOf(Date);
         expect(record?.error).toBe('the runtime never answered');
+      });
+
+      it('keeps the daily cost cap reason the gateway ended a run with, over the engine’s later text (issue #1851)', async () => {
+        const { store, run } = await started();
+        const reason =
+          'daily_cost_cap_reached: The workspace has reached its daily model cost cap; capUsd: 5, resetsAt: 2026-10-28T00:00:00.000Z';
+        await store.finish(run.id, 'failed', reason, true);
+        // The engine fails on the refused call and the launcher concludes with its own text.
+        await store.finish(run.id, 'failed', '429 Too Many Requests', true);
+
+        const record = await store.get(run.id);
+        expect(record?.status).toBe('failed');
+        expect(record?.error).toBe(reason);
+        expect(parseRunFailure(record?.error ?? null)?.code).toBe('daily_cost_cap_reached');
+        // The stream, too, ends with the gateway's reason and only once.
+        const handle = await store.openStream(run.id, null);
+        if (handle === null) throw new Error('run had no event stream');
+        const terminal = [];
+        for await (const event of handle.events) {
+          if (event.type === 'run.status') terminal.push(event.data);
+        }
+        expect(terminal).toEqual([{ status: 'failed', error: reason }]);
       });
 
       it('keeps a completed run’s output, and refuses an output on any other ending (ADR-0143)', async () => {

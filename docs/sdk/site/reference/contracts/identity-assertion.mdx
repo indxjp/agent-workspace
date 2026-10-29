@@ -14,7 +14,9 @@ description: "The @indx-workspace/contracts/identity-assertion exports, sorted a
 ## ConnectorIdentitySchema
 
 An opt-in `identity: { secret: NAME }` on a connector (project file and connector resource): a
-reference to the signing secret by name, never the key itself.
+reference to the signing secret by name, never the key itself, and never a storage connection's
+credential (a `STORAGE_CONNECTION_` name): that credential is bound to the connection's URL and
+is never a signing key.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |

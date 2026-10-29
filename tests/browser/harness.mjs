@@ -9,6 +9,12 @@
  */
 import { expect } from '@playwright/test';
 
+import {
+  mintSessionToken,
+  newSessionClaims,
+  verifySessionToken,
+} from '../../apps/web/server/auth/session.ts';
+
 /**
  * The structural accessibility floor every screen of this application is held to: one `h1`, no
  * unlabelled image, no duplicate `id`, and no interactive control without an accessible name.
@@ -93,4 +99,29 @@ export async function signInAsBootstrapAdmin(page, credentials) {
   await page.getByLabel('Password').fill(credentials.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).not.toHaveURL(/\/signin/u);
+}
+
+/**
+ * A browser context signed in as `email`, a member of the signed-in Owner's workspace.
+ *
+ * Only the bootstrap Owner can sign in through the form (see {@link bootstrapAdminCredentials}),
+ * but a session's role is read from the directory on every request, so a member provisioned through
+ * `POST /api/users` is signed in with the session the server would have issued: the Owner's cookie
+ * (name, attributes and workspace) with a token minted for `email` by the server's own
+ * `mintSessionToken`, under the deployment's `SESSION_SECRET`. A missing secret fails the caller's
+ * test rather than skipping it. The caller closes the context.
+ */
+export async function newMemberContext(browser, ownerPage, email, options = {}) {
+  const secret = process.env['SESSION_SECRET'];
+  expect(secret, 'SESSION_SECRET must be set so a member session can be minted.').toBeTruthy();
+  const owner = (await ownerPage.context().cookies()).find((cookie) =>
+    cookie.name.startsWith('__Host-aw_session'),
+  );
+  expect(owner, 'the Owner page must be signed in').toBeDefined();
+  const verified = await verifySessionToken(owner.value, secret);
+  expect(verified.ok, 'the Owner session must verify under SESSION_SECRET').toBe(true);
+  const token = await mintSessionToken(newSessionClaims(email, verified.claims.ws), secret);
+  const context = await browser.newContext(options);
+  await context.addCookies([{ ...owner, value: token }]);
+  return context;
 }

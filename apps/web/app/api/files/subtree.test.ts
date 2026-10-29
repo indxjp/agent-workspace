@@ -272,7 +272,7 @@ describe('PATCH /api/files/:id on a folder (issue #131, verifier attack 2)', () 
       idContext(id),
     );
     expect(renamed.status, await renamed.clone().text()).toBe(200);
-    expect(await renamed.json()).toMatchObject({ status: 'ok', moved: 3 }); // the rows renamed: a, a/b and a/b/c.txt
+    expect(await renamed.json()).toMatchObject({ status: 'ok', moved: 1 }); // the files moved: a/b/c.txt
 
     const newFileId = encodeFileId('z/b/c.txt');
     const download = await downloadRoute(

@@ -175,6 +175,11 @@ function composeOnly(profile: DeploymentProfile, value: string): string {
   return profile.cloud === 'local' ? value : '';
 }
 
+/** The browser origins of the web service a Compose project publishes on loopback `port`. */
+export function composeWebOrigins(port: number): string {
+  return `http://localhost:${String(port)},http://127.0.0.1:${String(port)}`;
+}
+
 /**
  * What supplies the two object-store keys on a cloud target, named above the blanks it leaves.
  *
@@ -492,6 +497,9 @@ export function renderEnv(input: EnvRenderInput): string {
     '# The loopback host port SeaweedFS is published on. Change it to run beside another project',
     '# that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.',
     `SEAWEEDFS_PORT=${composeOnly(profile, String(COMPOSE_OBJECT_STORE_HOST_PORT))}`,
+    '# The origins a browser may upload to SeaweedFS from through a signed link: the web service',
+    '# in both loopback spellings, never `*`. Change it with PORT or when serving a public hostname.',
+    `SEAWEEDFS_ALLOWED_ORIGINS=${composeOnly(profile, composeWebOrigins(input.webPort ?? 3000))}`,
     `COMPOSE_PROFILES=${objects.endpoint === COMPOSE_OBJECT_STORE_ENDPOINT ? 'object-storage' : ''}`,
     ...storageUrlLines(profile, url, objects),
     `AWS_REGION=${profile.cloud === 'cloudflare' ? 'auto' : 'us-east-1'}`,

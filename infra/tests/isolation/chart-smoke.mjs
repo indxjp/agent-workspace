@@ -54,7 +54,7 @@ async function startDatabase() {
       containers: [
         {
           name: 'postgres',
-          image: 'postgres:17-alpine',
+          image: 'postgres:18-alpine',
           env: [
             { name: 'POSTGRES_USER', value: 'aw' },
             { name: 'POSTGRES_DB', value: 'aw' },

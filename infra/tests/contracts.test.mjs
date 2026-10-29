@@ -34,6 +34,8 @@ test('GCP Compose publishes only the proxy and scopes component secrets', async 
   assert.match(compose, /runner\.env/u);
   assert.match(compose, /postgres\.env/u);
   assert.match(compose, /AW_STORAGE_URL: file:\/\/\/var\/lib\/agent-workspace\n/u);
+  // The old storage settings: the server ignores them with a warning, so setting one here
+  // would only print that warning on every start.
   assert.doesNotMatch(
     compose,
     /AW_FILE_STORAGE_ROOT|AW_SKILL_STORAGE_ROOT|AW_SESSION_TRANSCRIPT_ROOT/u,
@@ -62,6 +64,8 @@ test('GCP Cloud Run uses native GCS identity and a CMEK-wrapped Secret Manager m
 
   assert.match(terraform, /name\s*=\s*"AW_STORAGE_URL"[\s\S]{0,100}value\s*=\s*"gcs:\/\//u);
   assert.match(terraform, /name\s*=\s*"AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES"/u);
+  // The old storage settings: the server ignores them with a warning, so setting one here
+  // would only print that warning on every start.
   assert.doesNotMatch(
     terraform,
     /"(OBJECT_STORAGE_BACKEND|OBJECT_STORAGE_BUCKET|AW_FILE_STORAGE_ROOT|AW_SKILL_STORAGE_ROOT|AW_SESSION_TRANSCRIPT_ROOT)"/u,
@@ -76,6 +80,15 @@ test('GCP Cloud Run uses native GCS identity and a CMEK-wrapped Secret Manager m
   );
   assert.doesNotMatch(terraform, /google_storage_hmac_key/u);
   assert.doesNotMatch(terraform, /AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY/u);
+  // The project rides in the gcs:// URL's `?project=`, so web gets no GCP_PROJECT; the runner
+  // manager's Cloud Run driver still reads it.
+  const service = (name) =>
+    terraform
+      .split(`resource "google_cloud_run_v2_service" "${name}" {`)[1]
+      ?.split(/\nresource /u)[0] ?? '';
+  assert.match(terraform, /value\s*=\s*"gcs:\/\/[^"]*\?project=\$\{var\.project_id\}"/u);
+  assert.doesNotMatch(service('web'), /"GCP_PROJECT"/u);
+  assert.match(service('runner_manager'), /name\s*=\s*"GCP_PROJECT"/u);
   assert.doesNotMatch(variables, /objects_hmac_secret/u);
 
   assert.match(terraform, /resource "google_kms_crypto_key" "secret_manager"/u);
@@ -182,6 +195,7 @@ test('Azure preview keeps control-plane scale-to-zero and sandboxes separately i
   const sessions = await read('infra/terraform/azure-container-apps/sessions.tf');
   const secrets = await read('infra/terraform/azure-container-apps/identities-secrets.tf');
   const storage = await read('infra/terraform/azure-container-apps/storage-database.tf');
+  const variables = await read('infra/terraform/azure-container-apps/variables.tf');
   const workflow = await read('.github/workflows/azure-preview.yml');
 
   assert.equal((apps.match(/min_replicas\s*=\s*0/gu) ?? []).length, 3);
@@ -199,7 +213,15 @@ test('Azure preview keeps control-plane scale-to-zero and sandboxes separately i
   assert.match(secrets, /role_definition_name\s*=\s*"Key Vault Secrets User"/u);
   assert.match(storage, /public_network_access_enabled\s*=\s*false/u);
   assert.match(apps, /name\s*=\s*"AW_STORAGE_URL"[\s\S]{0,200}value\s*=\s*"azblob:\/\//u);
+  // A sovereign cloud's blob host is not *.blob.core.windows.net, so the URL can name it.
+  assert.match(
+    apps,
+    /"AW_STORAGE_URL"[\s\S]{0,300}var\.storage_blob_endpoint == null \? "" : "\?endpoint=\$\{var\.storage_blob_endpoint\}"/u,
+  );
+  assert.match(variables, /variable "storage_blob_endpoint" \{[\s\S]*?default\s*=\s*null/u);
   assert.match(apps, /name\s*=\s*"AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES"/u);
+  // The old storage settings: the server ignores them with a warning, so setting one here
+  // would only print that warning on every start.
   assert.doesNotMatch(
     apps,
     /"(OBJECT_STORAGE_BACKEND|OBJECT_STORAGE_BUCKET|OBJECT_STORAGE_ENDPOINT|AW_SESSION_TRANSCRIPT_ROOT)"/u,
@@ -459,15 +481,37 @@ test('every control-plane Deployment translates the object-store credential to t
     assert.match(await golden(cloud, 'env'), /^OBJECT_STORAGE_SECRET_ACCESS_KEY=/mu);
   }
 
-  // The location and the upload limit ride in the same Secret through `envFrom`, so the chart
-  // carries no value of its own for either and cannot disagree with the Secret.
+  // The location and the upload limit ride in the same Secret through `envFrom`. The location may
+  // also be the chart value `storage.url`, rendered only when set: `env` wins over `envFrom`, so a
+  // set value replaces the Secret's and an unset one leaves an existing Secret in charge.
   assert.match(
     deployments,
     /envFrom:[\s\S]*?secretRef: \{ name: \{\{ \$\.Values\.external\.objectStoreSecret \| quote \}\} \}/u,
   );
+  assert.match(
+    deployments,
+    /\{\{- with \$\.Values\.storage\.url \}\}\n\s+- \{ name: AW_STORAGE_URL, value: \{\{ \. \| quote \}\} \}\n\s+\{\{- end \}\}/u,
+  );
+  assert.equal((deployments.match(/AW_STORAGE_URL\s*[,:]/gu) ?? []).length, 1);
+  assert.match(base, /^storage:\n {2}url: ''$/mu);
+  const schema = JSON.parse(await read('infra/helm/agent-workspace/values.schema.json'));
+  assert.equal(schema.properties.storage?.additionalProperties, false);
+  const url = new RegExp(schema.properties.storage?.properties?.url?.pattern ?? '^$', 'u');
+  for (const value of [
+    '',
+    's3://bucket?region=eu-west-1',
+    'gcs://bucket',
+    'azblob://acct/c',
+    'file:///srv/aw',
+  ]) {
+    assert.ok(url.test(value), `storage.url refuses ${value}`);
+  }
+  for (const value of ['bucket', 'http://minio:9000/bucket']) {
+    assert.ok(!url.test(value), `storage.url accepts ${value}`);
+  }
   assert.doesNotMatch(
     deployments,
-    /AW_STORAGE_URL\s*[,:]|name: AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES|OBJECT_STORAGE_(BACKEND|BUCKET|ENDPOINT)/u,
+    /name: AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES|OBJECT_STORAGE_(BACKEND|BUCKET|ENDPOINT)/u,
   );
   for (const cloud of ['aws', 'gcp']) {
     assert.match(await golden(cloud, 'env'), /^AW_STORAGE_URL=\S+$/mu);

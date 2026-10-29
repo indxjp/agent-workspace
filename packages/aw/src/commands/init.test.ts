@@ -167,6 +167,18 @@ describe('aw init (issue #451)', () => {
     expect(bad.stderr).toContain('--platform:');
   });
 
+  it('--features writes the features list, and refuses a feature without its dependency (ADR-0160)', async () => {
+    const cwd = await emptyProject();
+    const run = await init(cwd, ['--yes', '--features', 'files,chat']);
+    expect(run.code, run.stderr).toBe(EXIT_CODE.ok);
+    const read = parseProjectFile(await readFile(path.join(cwd, 'agent-workspace.yaml'), 'utf8'));
+    expect(read.project).toMatchObject({ features: ['chat', 'files'] });
+
+    const bad = await init(await emptyProject(), ['--yes', '--features', 'surfaces']);
+    expect(bad.code).toBe(EXIT_CODE.usage);
+    expect(bad.stderr).toContain('--features:');
+  });
+
   it('--platform keeps an existing README.md byte for byte (#977)', async () => {
     const cwd = await emptyProject();
     await writeFile(path.join(cwd, 'README.md'), '# mine\n');

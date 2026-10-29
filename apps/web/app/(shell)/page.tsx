@@ -159,6 +159,8 @@ function composerAgentFromRecord(agent: AgentRecord, targets: ComposerRunTargets
     drivableProviders: providersReachableBy(
       registeredEngine(engine)?.capabilities.wireProtocols ?? [],
     ),
+    // #2012: listed like any agent, but never the composer's default.
+    ...(agent.builtin === undefined ? {} : { builtin: agent.builtin }),
   };
 }
 

@@ -372,7 +372,7 @@ today](/concepts/data-plane#per-cloud-today).
 | `web`      | control plane                | the UI, `/api/**`, authentication, the setup wizard                                                                    | port 3000, the only public one    |
 | `gateway`  | control plane                | the model gateway: substitutes a per-run token for the stored provider credential; Anthropic-compatible `/v1/messages` | private; reachable from sandboxes |
 | `runner`   | control plane                | the execution plane: allocates a sandbox through the chosen runtime driver and relays the agent's events               | private                           |
-| `postgres` | PostgreSQL 17                | every durable row: workspaces, principals, agents, runs, events                                                        | private                           |
+| `postgres` | PostgreSQL 18                | every durable row: workspaces, principals, agents, runs, events                                                        | private                           |
 | `storage`  | SeaweedFS, S3, or native GCS | workspace files, skills, transcripts                                                                                   | private                           |
 
 `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES` sets the largest file a signed upload link may carry, in
@@ -401,6 +401,17 @@ bucket; until that run finishes after an upgrade, such a file may be missing fro
 safe to repeat and to run on two instances. `AW_STORAGE_MIGRATE=off` turns it off; unset is the
 default, which runs it, and `adopt` says so explicitly.
 
+Every pass of that run, and of the one that gives old skills their rows, leaves a record in the
+`storage_migration_runs` table: every pass that finishes, or fails in-process, writes a record. A
+pass killed mid-way, or a stage that never starts, leaves the previous record the latest. That is
+safe because no code in this release creates old-naming data, so the legacy data a clean record
+counted can only have shrunk since. Files of a skill revision that has no committed revision record
+(a publish that crashed in 0.6.x leaves a pending one) are never moved; the skills record
+counts them in `orphans` so you can review them, and they do not count as unfinished work. A later
+release will refuse to upgrade until a clean adopt record and a clean skills record exist. Run this
+release once, with `AW_STORAGE_MIGRATE` unset or `adopt`, and wait for both before you upgrade
+further; an upgrade that skips this release has no such records. See the storage design, §06.
+
 Once an hour a long-lived server runs the storage cleanup, one server at a time. `AW_STORAGE_CLEANUP`
 is `report` (the default: it counts what it would remove and removes nothing) or `delete`, which
 removes objects no file row points at; set `delete` only after reading one report. Files in the old
@@ -408,6 +419,20 @@ naming are counted and never deleted in this release. Where `CRON_SECRET` is set
 starts: the platform cron calls `GET /api/cron/storage-cleanup` with that secret instead. The generated
 Vercel config schedules it daily, because Vercel Hobby rejects crons that run more often; a Vercel Pro
 project may change the schedule to hourly.
+
+A storage connection's credential is bound to the endpoint, account and bucket it was supplied for,
+and is never sent to another. Revisions up to 0.6.11 cannot read a credential stored this way: they
+refuse the connection (browse and test answer it as having no credential, a run is refused with
+`422 run_storage_grant_unavailable`) and never fall back to another identity. Drain older revisions
+before you create, edit or rotate a storage connection, because an older revision's edit can still
+pair a new endpoint with the old credential. Rolling back after that leaves those connections
+refused, never misused; rotate each affected connection on the older revision to restore it.
+
+This release also refuses a code tool or a connector `identity` that names a storage connection's
+credential (a `STORAGE_CONNECTION_` secret). A tool sandbox opened before you deployed it, for a
+tool that declared such a secret, may still hold that credential in its environment. After the
+deploy, restart running tool sandboxes, and rotate the credential of any storage connection whose
+secret a code tool could have named.
 
 Sandboxes — the containers or processes an agent actually runs in — are created on demand by the
 runtime driver a profile names; they are not a sixth service. The specification's rule is that a

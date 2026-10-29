@@ -10,6 +10,7 @@ import type { z } from 'zod';
 export const API_ROUTE_EXCLUSIONS: readonly {
     readonly method: ApiRouteMethod;
     readonly path: string;
+    readonly feature: RouteFeature;
     readonly because: string;
 }[];
 
@@ -1150,6 +1151,7 @@ export const API_SCHEMAS: {
                 "storage-connection-tested": "storage-connection-tested";
                 "storage-connection-written": "storage-connection-written";
                 "storage-grant-changed": "storage-grant-changed";
+                "workspace-features-changed": "workspace-features-changed";
             }>;
             subjectId: z.ZodNullable<z.ZodString>;
             subjectLabel: z.ZodString;
@@ -2462,6 +2464,19 @@ export const API_SCHEMAS: {
         workspaceId: z.ZodString;
         userId: z.ZodNullable<z.ZodString>;
         label: z.ZodString;
+        features: z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>;
     }, z.core.$strict>;
     readonly MembershipListResponseSchema: z.ZodObject<{
         memberships: z.ZodArray<z.ZodObject<{
@@ -3205,8 +3220,8 @@ export const API_SCHEMAS: {
             }>>;
             title: z.ZodNullable<z.ZodString>;
             status: z.ZodEnum<{
-                active: "active";
                 archived: "archived";
+                active: "active";
             }>;
             resumable: z.ZodBoolean;
             createdAt: z.ZodISODateTime;
@@ -3309,8 +3324,8 @@ export const API_SCHEMAS: {
             }>>;
             title: z.ZodNullable<z.ZodString>;
             status: z.ZodEnum<{
-                active: "active";
                 archived: "archived";
+                active: "active";
             }>;
             resumable: z.ZodBoolean;
             createdAt: z.ZodISODateTime;
@@ -3722,6 +3737,21 @@ export const API_SCHEMAS: {
         outputSchema: z.ZodOptional<z.ZodNullable<z.ZodRecord<z.ZodString, z.ZodUnknown>>>;
         subject: z.ZodOptional<z.ZodNullable<z.ZodString>>;
     }, z.core.$strict>>;
+    readonly UpdateWorkspaceFeaturesRequestSchema: z.ZodObject<{
+        disabled: z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>;
+    }, z.core.$strict>;
     readonly UploadToolBundleRequestSchema: z.ZodReadonly<z.ZodObject<{
         contentBase64: z.ZodString;
     }, z.core.$strict>>;
@@ -3738,6 +3768,25 @@ export const API_SCHEMAS: {
             email: z.ZodString;
             name: z.ZodString;
             createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>;
+    }, z.core.$strict>;
+    readonly WorkspaceFeaturesSchema: z.ZodObject<{
+        features: z.ZodArray<z.ZodObject<{
+            id: z.ZodEnum<{
+                skills: "skills";
+                files: "files";
+                builder: "builder";
+                runs: "runs";
+                connectors: "connectors";
+                chat: "chat";
+                projects: "projects";
+                sharing: "sharing";
+                surfaces: "surfaces";
+                triggers: "triggers";
+                evaluations: "evaluations";
+            }>;
+            installed: z.ZodBoolean;
+            enabled: z.ZodBoolean;
         }, z.core.$strict>>;
     }, z.core.$strict>;
     readonly WorkspaceListResponseSchema: z.ZodReadonly<z.ZodObject<{
@@ -3823,12 +3872,29 @@ export type ApiBody = {
     readonly kind: 'event-stream';
     readonly frames: readonly ApiSchemaName[];
 } | {
+    readonly kind: 'multipart';
+    readonly parts: readonly [ApiMultipartPart, ...ApiMultipartPart[]];
+} | {
     readonly kind: 'none';
 };
 
 // @public
+export interface ApiMultipartPart {
+    // (undocumented)
+    readonly description: string;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly repeated?: true;
+    // (undocumented)
+    readonly type: 'text' | 'file';
+}
+
+// @public
 export interface ApiRoute {
     readonly deprecated?: true;
+    readonly deprecatedRequests?: readonly ApiBody[];
+    readonly feature: RouteFeature;
     // (undocumented)
     readonly method: ApiRouteMethod;
     readonly operationId: string;
@@ -3858,6 +3924,18 @@ export interface ApiSuccess {
     // (undocumented)
     readonly status: number;
 }
+
+// @public
+const ROUTE_FEATURES: readonly ["core", "chat", "projects", "files", "skills", "connectors", "runs", "sharing", "surfaces", "triggers", "evaluations", "builder"];
+
+// Warning: (ae-forgotten-export) The symbol "ROUTE_FEATURES" needs to be exported by the entry point routes.d.ts
+//
+// @public (undocumented)
+type RouteFeature = (typeof ROUTE_FEATURES)[number];
+
+// Warnings were encountered during analysis:
+//
+// dist/routes.d.ts - (ae-forgotten-export) The symbol "RouteFeature" needs to be exported by the entry point routes.d.ts
 
 // (No @packageDocumentation comment for this package)
 

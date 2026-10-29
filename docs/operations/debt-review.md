@@ -14,6 +14,8 @@ current size of each list. The review is done when that issue is closed.
 | complexity ceiling                  | `complexity.max` in `eslint.config.mjs`             | equals the measured maximum; lower it when a hotspot shrinks                |
 | store-conformance allowlist         | `tests/fitness/store-conformance-allowlist.json`    | a store gains a suite, its entry goes                                       |
 | route-error-boundary allowlist      | `tests/fitness/route-error-boundary-allowlist.json` | a route file wraps its methods in `route()`, its entry goes                 |
+| storage-limits allowlist            | `tests/fitness/storage-limits-allowlist.json`       | a copy of a storage size limit imports it from its owner, its entry goes    |
+| catalog-fakes allowlist             | `tests/fitness/catalog-fakes-allowlist.json`        | a test uses the shared in-memory catalog, its site count drops              |
 | osv findings                        | `.osv-baseline.json`                                | entries with a `review by` date are re-decided by that date                 |
 | coverage floors                     | `vitest*.coverage.config.ts`                        | raise to the measured value; never lower                                    |
 | `ponytail:` shortcuts               | source comments                                     | pay, or restate why the ceiling still holds                                 |

@@ -52,6 +52,18 @@ export type ReservedSecretName = (typeof RESERVED_SECRET_NAMES)[number];
 /** Every name starting with this prefix, in any case, is reserved for the local runtime. */
 export const RESERVED_SECRET_NAME_PREFIX = 'AW_';
 
+/**
+ * Every storage connection's credential is a secret named with this prefix and the connection's
+ * id. Only the storage connection routes write one, bound to the connection's URL; a tool, a
+ * connector identity or the generic secrets routes may never name one.
+ */
+export const STORAGE_CONNECTION_SECRET_PREFIX = 'STORAGE_CONNECTION_';
+
+/** True when `name` is reserved for a storage connection's credential ({@link STORAGE_CONNECTION_SECRET_PREFIX}). */
+export function isStorageConnectionSecretName(name: string): boolean {
+  return name.startsWith(STORAGE_CONNECTION_SECRET_PREFIX);
+}
+
 const RESERVED_SECRET_NAME_SET: ReadonlySet<string> = new Set<string>(RESERVED_SECRET_NAMES);
 
 /** An ASCII identifier: the only shape a reserved name can take, in any case. */

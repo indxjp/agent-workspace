@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/react",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "The hosted surface chat as React: <Chat/> with replaceable parts, and the headless useConversation() hook.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",

@@ -18,7 +18,7 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { AUDIT_ACTIONS } from '@indx-workspace/contracts/observability';
 import type { Logger } from '@agent-workspace/core/telemetry';
@@ -91,7 +91,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const signature = sentinel();
       const events: StorageAuditEvent[] = [];
       const inner = createInMemoryObjectStore();
-      const objects: ObjectStoreV2 = {
+      const objects: ObjectStore = {
         ...inner,
         capabilities: { ...inner.capabilities, sign: true, boundLengthSign: true },
         createSignedUrl: (key) =>
@@ -329,7 +329,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       });
       await expect(
         racing.remove(h.ctx, 'files', 'docs/a.txt', { recursive: false }),
-      ).resolves.toEqual({ ok: true, removed: 0 });
+      ).resolves.toEqual({ ok: true, removed: 0, files: [] });
       expect(h.events).toEqual([]);
     });
   });

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
 import {
@@ -10,12 +10,22 @@ import {
 import { ENGINE_CATALOGUE, mcpToolName } from '@indx-workspace/contracts/engines';
 import { describe, expect, it } from 'vitest';
 
-import { BUILDER_APPROVAL_RULES, builderAgent, builderShippedBody } from './definition';
+import {
+  BUILDER_APPROVAL_RULES,
+  BUILDER_PROMPT,
+  builderAgent,
+  builderShippedBody,
+} from './definition';
 import {
   BUILDER_PROMPT_VERSION,
   BUILDER_SHIPPED_SUMMARY,
   builderPromptVersionOf,
 } from './prompt-version';
+
+/** The sha256 of `BUILDER_PROMPT` at {@link BUILDER_PROMPT_VERSION} `'3'`. */
+const PINNED_PROMPT_SHA256 = 'b40d8a3f0404b4857d85c68559a6d5c0710fc89f09020a1796acc481af3a3e94';
+
+const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 const WIRE = (tool: BuilderToolName): string =>
   mcpToolName(ENGINE_CATALOGUE['claude-agent-sdk'].mcpToolName, AW_CONTROL_SERVER, tool);
@@ -46,8 +56,7 @@ describe('the Builder definition', () => {
   });
 
   it('has the seven prompt sections, in order', () => {
-    const prompt = readFileSync(new URL('./prompt.md', import.meta.url), 'utf8');
-    expect([...prompt.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual([
+    expect([...BUILDER_PROMPT.matchAll(/^## (.+)$/gm)].map((m) => m[1])).toEqual([
       'Who you are and what you can do',
       'The loop',
       'Never claim success',
@@ -56,11 +65,20 @@ describe('the Builder definition', () => {
       'Narrow by default',
       "Answer in the person's language",
     ]);
-    expect(builderAgent.instructions).toBe(prompt);
+    expect(builderAgent.instructions).toBe(BUILDER_PROMPT);
+  });
+
+  it('pins the prompt text to its version', () => {
+    // A prompt change must bump BUILDER_PROMPT_VERSION and this hash together.
+    expect(
+      { version: BUILDER_PROMPT_VERSION, sha256: sha256(BUILDER_PROMPT) },
+      'BUILDER_PROMPT changed: bump BUILDER_PROMPT_VERSION, update this hash, and run the ' +
+        'Builder evals (.github/workflows/builder-evals.yml) before merging.',
+    ).toEqual({ version: '3', sha256: PINNED_PROMPT_SHA256 });
   });
 
   it('keeps the prompt version in the version summary', () => {
-    expect(BUILDER_PROMPT_VERSION).toBe('2');
+    expect(BUILDER_PROMPT_VERSION).toBe('3');
     expect(BUILDER_SHIPPED_SUMMARY).toContain(BUILDER_PROMPT_VERSION);
   });
 });

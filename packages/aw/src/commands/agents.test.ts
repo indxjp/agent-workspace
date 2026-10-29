@@ -97,6 +97,17 @@ describe('aw agents', () => {
     expect(remove.code).toBe(EXIT_CODE.ok);
   });
 
+  it('restore posts to the restore path, prints the name without control or format characters (bidi, zero-width), and keeps the agent for --json (#1851)', async () => {
+    const route = () => json(200, { ...FIXTURES.agent, name: 'Tri\u001b[2Jage\u0007\u202e\u200b' });
+    const human = await runCli(['agents', 'restore', IDS.agent], { route });
+    expect(human.code).toBe(EXIT_CODE.ok);
+    expect(human.calls[0]?.method).toBe('POST');
+    expect(human.calls[0]?.url.pathname).toBe(`/api/agents/${IDS.agent}/restore`);
+    expect(human.stdout).toBe('Tri[2Jage\n');
+    const machine = await runCli(['agents', 'restore', IDS.agent, '--json'], { route });
+    expect(AgentResourceSchema.parse(stdoutJson(machine)).id).toBe(FIXTURES.agent.id);
+  });
+
   it('assignments get and set', async () => {
     const get = await runCli(['agents', 'assignments', 'get', IDS.agent, '--json'], {
       route: () => json(200, { assignments: FIXTURES.assignments }),

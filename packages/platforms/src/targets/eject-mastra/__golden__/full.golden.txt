@@ -51,7 +51,7 @@ The platform report that came with this project gives every field a verdict and 
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@indx-workspace/sdk": "0.6.11",
+    "@indx-workspace/sdk": "0.6.12",
     "@mastra/core": "1.79.0",
     "@mastra/mcp": "2.5.0",
     "zod": "4.6.7"

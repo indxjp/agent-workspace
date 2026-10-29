@@ -8,6 +8,7 @@ import { z } from 'zod';
 // `.ts` rather than `.js`: a test imports this file under Node's own type stripping, which does not
 // map one to the other (`rewriteRelativeImportExtensions` does, for the contributor build).
 import {
+  EMBEDDED_POSTGRES_MAJOR,
   EmbeddedDatabaseError,
   locatePostgresBinary,
   type Postmaster,
@@ -402,10 +403,15 @@ export async function startEmbeddedDatabase(
     if (error instanceof EmbeddedDatabaseError && error.code !== 'postmaster_exited') throw error;
     // initdb writes PG_VERSION. An initialised cluster that will not start is never handed to
     // initdb: it refuses a non-empty directory with advice to empty it, which deletes every local
-    // row (BH061-006). The usual cause is a postmaster a killed run left behind.
-    if ((await readOptional(path.join(root, 'PG_VERSION'))) !== undefined) {
+    // row (BH061-006). The usual cause is a postmaster a killed run left behind; the other one this
+    // names is a directory an earlier release initialised with another PostgreSQL major.
+    const version = await readOptional(path.join(root, 'PG_VERSION'));
+    if (version !== undefined) {
       if (isLiveProcess(await readOptional(path.join(root, 'postmaster.pid')))) {
         throw new EmbeddedDatabaseError('data_directory_in_use', { cause: error });
+      }
+      if (version.trim() !== EMBEDDED_POSTGRES_MAJOR) {
+        throw new EmbeddedDatabaseError('data_directory_version', { cause: error });
       }
       return failStart(error);
     }

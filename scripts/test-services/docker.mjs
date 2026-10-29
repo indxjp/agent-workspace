@@ -49,7 +49,7 @@ function hostPort(name, containerPort) {
 }
 
 /**
- * PostgreSQL 17 in a container on a random loopback port.
+ * PostgreSQL 18 in a container on a random loopback port.
  *
  * @param {Cleanup} cleanup
  * @param {string} suffix
@@ -78,7 +78,7 @@ export async function startDockerPostgres(cleanup, suffix) {
     '-c',
     'full_page_writes=off',
   ]);
-  await waitUntil('PostgreSQL 17', () => {
+  await waitUntil('PostgreSQL 18', () => {
     const result = spawnSync('docker', ['exec', name, 'pg_isready', '-U', 'postgres'], {
       stdio: 'ignore',
     });
@@ -163,6 +163,9 @@ export async function startDockerStorageEmulators(cleanup, suffix) {
   const gcs = `aw-test-gcs-${suffix}`;
   removeOnCleanup(cleanup, azurite);
   removeOnCleanup(cleanup, gcs);
+  // Azurite listens on the port it publishes: a copy whose source URL carries a SAS makes it fetch
+  // that URL itself, from inside the container, so the client's address must reach it there too.
+  const azuritePort = String(await freePort());
   docker([
     'run',
     '--rm',
@@ -170,11 +173,13 @@ export async function startDockerStorageEmulators(cleanup, suffix) {
     '--name',
     azurite,
     '-p',
-    '127.0.0.1::10000',
+    `127.0.0.1:${azuritePort}:${azuritePort}`,
     AZURITE_IMAGE,
     'azurite-blob',
     '--blobHost',
     '0.0.0.0',
+    '--blobPort',
+    azuritePort,
     '--skipApiVersionCheck',
   ]);
   // fake-gcs-server writes its own address into upload URLs, so it must know the host port.
@@ -198,7 +203,7 @@ export async function startDockerStorageEmulators(cleanup, suffix) {
     '-external-url',
     gcsEndpoint,
   ]);
-  const azuriteOrigin = `http://127.0.0.1:${hostPort(azurite, '10000')}`;
+  const azuriteOrigin = `http://127.0.0.1:${azuritePort}`;
   // Azurite answers an unauthenticated request with an HTTP status, so any answer means ready.
   await waitUntil('Azurite', () => answers(azuriteOrigin));
   await waitUntil('fake-gcs-server', async () => {

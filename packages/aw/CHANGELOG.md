@@ -7,6 +7,33 @@ what the policy covers are on the developer site's
 [Public surface and stability](../../docs/sdk/site/concepts/public-surface.mdx#versions-and-deprecation)
 page. Released in lock-step with `@indx-workspace/sdk`, with the same version.
 
+## 0.6.12 — unreleased
+
+### Added
+
+- `aw storage connections update <name|id> --write-allowed` turns writing on for a connection
+  without a `--file` body. Turning writing off still goes through `--file`.
+- `aw init --features chat,files` names the features the project's deployment installs, and writes them as `features:` in `agent-workspace.yaml`. Accepting the default writes no `features:` line.
+- `aw workspaces features list` shows which features are on, with what each needs;
+  `aw workspaces features disable <id>` and `enable <id>` switch one off or on (Owner only). All
+  three take `--workspace <id>` and default to the workspace you act in.
+
+### Changed
+
+- `aw files upload` streams the local file from disk instead of reading it into memory first, so
+  a large file no longer needs its size in free memory. A path that is not a regular file is
+  refused as a usage error before any request.
+- `aw storage connections update` refuses `--file -` together with `--credential-file -` as a
+  usage error, since both would read stdin, and `aw storage connections credential` refuses an
+  extra positional argument before it looks the connection up, without repeating it, since it may
+  be a pasted credential.
+
+### Fixed
+
+- `aw runs start --attach` drops every empty and `.` segment of a workspace path, so
+  `././reports/./q3.txt` names `reports/q3.txt` like `./reports/q3.txt` does. A `..` segment is
+  still refused.
+
 ## 0.6.11 — unreleased
 
 ### Added

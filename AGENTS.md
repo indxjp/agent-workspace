@@ -39,6 +39,36 @@ gated (`pnpm docs:check`); regenerate it when you add or rename a document it li
 | Run execution                      | `apps/runner`, `packages/runtime`, `packages/engine*` | `packages/contracts/src/run-events.ts`            |
 | UI                                 | `apps/web/components` (through the SDK)               | `apps/web/contracts`                              |
 
+## Hexagonal rules
+
+The components, their ports and how they talk are in
+[docs/architecture.md, "Ports and adapters"](docs/architecture.md#ports-and-adapters).
+
+1. **Lay out a new domain the way the Builder does.** A new domain with decision rules of its own,
+   or an existing domain that a refactoring change restructures, gets `core/` (the rules),
+   `ports.ts`, `adapters/<port>/` (a production adapter, a memory adapter and one contract test run
+   against both) and `transport/composition.ts`, as in `apps/web/server/builder/`. Do not convert
+   an existing domain to this layout as a side effect of another change.
+2. **A core does no I/O.** Code under a domain's `core/` folder imports only that `core/`,
+   `packages/contracts` and `zod`. It reads no clock, random value, environment variable, file,
+   network or database; those come in as arguments. `builder-core-is-pure` checks this for
+   `apps/web/server/builder/core/`. `apps/web/server/shares/core/` does not follow this rule yet;
+   do not copy it.
+3. **Only a store names persistence.** Only a domain's `store.ts` (and the test-only
+   `resources/catalog-store.memory.ts`) imports `packages/core/src/db`
+   (`domain-does-not-import-persistence`). The imports that already exist elsewhere, the composition
+   root's included, are a baseline that may only shrink; a new one fails the check.
+4. **The environment is read once,** in the composition root or a process's entry point, and passed
+   in as typed values (ESLint `no-restricted-properties` on `process.env`).
+5. **A limit is a named constant, defined once,** with a test that pins its value, like
+   `BUILDER_DEFAULT_LIMITS` in `packages/contracts/src/builder.ts`.
+6. **Memory adapters back tests only.** Production wires the real adapters
+   (`builder-memory-adapters-are-for-tests`, `memory-catalog-store-is-for-tests`).
+7. **Reach another domain through what it offers to others,** never through its `core/` or
+   `adapters/` folders.
+8. **Keep the map current.** A change that adds a component, a port, an adapter or a line of
+   communication updates "Ports and adapters" in `docs/architecture.md` in the same pull request.
+
 ## Protocol
 
 1. Restate the requested behaviour and the acceptance criteria you will prove.
@@ -55,7 +85,7 @@ gated (`pnpm docs:check`); regenerate it when you add or rename a document it li
 8. Run the narrow checks: the named test files, the owning package's `typecheck`, and
    `pnpm architecture:check`.
 9. Review your diff for unrelated changes, a new copy of a `packages/contracts` vocabulary, new
-   `core/db` imports outside a store or composition root, new `fetch('/api` in components, and
+   `core/db` imports outside a `store.ts`, new `fetch('/api` in components, and
    swallowed errors.
 10. Report what changed, which checks ran with counts, and which did not run and why.
 

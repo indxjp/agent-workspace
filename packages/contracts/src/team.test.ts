@@ -38,6 +38,7 @@ const sessionPrincipal = {
   workspaceId: '44444444-4444-4444-8444-444444444444',
   userId: membership.userId,
   label: membership.name,
+  features: ['chat', 'files'],
 };
 
 const apiKeyPrincipal = {
@@ -47,6 +48,7 @@ const apiKeyPrincipal = {
   workspaceId: sessionPrincipal.workspaceId,
   userId: null,
   label: 'ci',
+  features: [],
 };
 
 /** A copy of `source` with one key absent — the "missing field" case. */
@@ -153,6 +155,15 @@ describe('MeResponseSchema', () => {
         `${field} absent was accepted`,
       ).toBe(false);
     }
+  });
+
+  it('rejects a features entry that is not a feature id', () => {
+    expect(
+      MeResponseSchema.safeParse({ ...sessionPrincipal, features: ['chat', 'core'] }).success,
+    ).toBe(false);
+    expect(MeResponseSchema.safeParse({ ...sessionPrincipal, features: 'chat' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects a kind or a role outside its set, and any blank string', () => {

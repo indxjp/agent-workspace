@@ -15,6 +15,7 @@ import {
   loadEngines,
   loadNewAgentCatalogs,
   loadResourceCatalogs,
+  restoreAgent,
   saveAgentAssignments,
   saveAgentDefinition,
 } from './agent-requests-model';
@@ -43,6 +44,19 @@ describe('loadAgents', () => {
     await expect(loadAgents(client)).resolves.toEqual({ ok: true, value: [agent] });
     expect(shape(calls)).toEqual(['GET /api/agents']);
     expect(calls[0]?.init.credentials).toBe('include');
+  });
+
+  it('asks for archived agents only when told to', async () => {
+    const { client, calls } = api(() => jsonResponse(200, { agents: [agent] }));
+    await loadAgents(client, { includeArchived: true });
+    expect(shape(calls)).toEqual(['GET /api/agents?archived=include']);
+  });
+
+  it('restores an agent with a bodyless POST', async () => {
+    const { client, calls } = api(() => jsonResponse(200, agent));
+    await expect(restoreAgent(client, agent.id)).resolves.toEqual({ ok: true, value: agent });
+    expect(shape(calls)).toEqual([`POST /api/agents/${agent.id}/restore`]);
+    expect(calls[0]?.init.body).toBeUndefined();
   });
 
   it('words a refusal as the server did', async () => {

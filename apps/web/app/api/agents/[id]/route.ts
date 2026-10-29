@@ -7,17 +7,12 @@
  * The imports are relative, not `@/…`, so that a Vitest test can import this file — see the note
  * in `../route.ts` and `apps/web/server/agents/routes.test.ts`.
  */
-import {
-  UpdateAgentPatchSchema,
-  type BuiltinAgentOperation,
-  type UpdateAgentPatch,
-} from '../../../../contracts/agents';
+import { UpdateAgentPatchSchema, type UpdateAgentPatch } from '../../../../contracts/agents';
 import {
   agentNotFound,
   deleteAgent,
   getAgent,
   updateAgent,
-  refuseBuiltinWrite,
 } from '../../../../server/agents/handlers';
 import { type ApiResult } from '../../../../server/http/result';
 import { saveConsoleEdit } from '../../../../server/agent-versions/http';
@@ -25,33 +20,12 @@ import { judgeAgent } from '../../../../server/policy-ceiling/ceiling';
 import { builderNameRefusal } from '../../../../server/agents/builder-name';
 import { isUuid } from '../../../../server/agents/contract';
 import {
+  agentOwnership,
   readAgentIdParam,
   readJsonBody,
   withAuthorisedWorkspaceStore,
 } from '../../../../server/agents/http';
 import { route } from '../../../../server/http/route';
-import { resolverForRow } from '../../../../server/resources/item-ownership';
-import type { WorkspaceAgentStore } from '../../../../server/agents/store';
-import type { OwnershipResolver } from '../../../../server/rbac/http';
-
-/**
- * Issue #117: load the agent within the caller's workspace, answer an indistinguishable 404 when
- * it is absent, and only then let `decide()` compare `created_by` against the caller.
- */
-function ownershipOf(
-  id: unknown,
-  operation: BuiltinAgentOperation,
-): (store: WorkspaceAgentStore) => OwnershipResolver {
-  return (store) =>
-    resolverForRow(
-      // `isUuid`, not merely `typeof id === 'string'`: `agents.id` is a `uuid` column, and a
-      // non-UUID string handed to `store.get` would reach PostgreSQL as an invalid literal and
-      // throw, rather than answering "not found" the way this resolver promises to.
-      () => (isUuid(id) ? store.get(id) : Promise.resolve(null)),
-      agentNotFound,
-      (row) => refuseBuiltinWrite(row, operation),
-    );
-}
 
 // The repository-wide route invariant (`tests/route-inventory.test.ts`, "runs every route on the
 // Node runtime and never prerenders one"). Added by W1-INT-02, for the reason given at the same
@@ -65,7 +39,7 @@ type AgentRouteContext = { params: Promise<{ id: string }> };
 /** `GET /api/agents/:id` — 404 for an id this workspace does not have, never 403 (§25). */
 async function serveGet(request: Request, context: AgentRouteContext): Promise<ApiResult> {
   const id = await readAgentIdParam(context);
-  return withAuthorisedWorkspaceStore(request, ownershipOf(id, 'read'), (store) =>
+  return withAuthorisedWorkspaceStore(request, agentOwnership(id, 'read'), (store) =>
     getAgent(store, id),
   );
 }
@@ -84,7 +58,7 @@ async function servePatch(request: Request, context: AgentRouteContext): Promise
   const id = await readAgentIdParam(context);
   return withAuthorisedWorkspaceStore(
     request,
-    ownershipOf(id, 'update'),
+    agentOwnership(id, 'update'),
     async (store, runtime, workspaceId, principal) => {
       const body = await readJsonBody(request);
       if (!body.ok) return body.result;
@@ -167,7 +141,7 @@ export const PATCH = route({ component: 'agents', operation: 'update' }, servePa
 /** `DELETE /api/agents/:id` — 204 on success, 404 if the workspace has no such agent. */
 async function serveDelete(request: Request, context: AgentRouteContext): Promise<ApiResult> {
   const id = await readAgentIdParam(context);
-  return withAuthorisedWorkspaceStore(request, ownershipOf(id, 'delete'), (store) =>
+  return withAuthorisedWorkspaceStore(request, agentOwnership(id, 'delete'), (store) =>
     deleteAgent(store, id),
   );
 }

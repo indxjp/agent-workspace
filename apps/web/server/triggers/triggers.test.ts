@@ -8,6 +8,7 @@ import { createHash, createHmac, randomUUID } from 'node:crypto';
 
 import type { TriggerRecord, TriggerRepository } from '@agent-workspace/core/db';
 import { TRIGGER_MAX_BODY_BYTES, type TriggerResource } from '@indx-workspace/contracts/triggers';
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DELETE, GET as GET_ONE, PATCH } from '../../app/api/triggers/[id]/route';
@@ -24,6 +25,7 @@ import {
   installTestRunApi,
   resetTestRunApi,
 } from '../application-context-fixtures';
+import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
 import { conferredBy } from '../rbac/conferral';
 import { Principal } from '../rbac/principal';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
@@ -259,6 +261,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  clearFeatureSwitches();
   clearEngineImagesConfiguredForTests();
   resetTestRunApi();
   clearApplicationContext();
@@ -1002,5 +1005,65 @@ describe('fire', () => {
     const retry = await fireRaw(created.trigger.id, created.secret, { headers });
     expect(retry.status).toBe(409);
     expect(state.launches).toHaveLength(1);
+  });
+});
+
+describe('the fire route and a workspace with triggers switched off (ADR-0160 D7)', () => {
+  const triggersOff = (): void =>
+    configureFeatureSwitches({
+      enabledFor: () => Promise.resolve(FEATURE_IDS.filter((id) => id !== 'triggers')),
+    });
+
+  it('answers 404 feature_disabled once the secret matches, and starts nothing', async () => {
+    const created = await seed(builderCaller);
+    triggersOff();
+    const fired = await fireRaw(created.trigger.id, created.secret, {
+      body: 'hello',
+      headers: { 'idempotency-key': 'off-1' },
+    });
+    expect(fired.status).toBe(404);
+    expect(jsonOf(fired.text)).toMatchObject({
+      error: { code: 'feature_disabled', details: ['triggers'] },
+    });
+    expect(state.deliveries.size).toBe(0);
+    expect(state.launches).toHaveLength(0);
+  });
+
+  it('keeps the uniform trigger_not_found for a wrong secret, an unknown id and a disabled trigger', async () => {
+    const created = await seed(builderCaller);
+    await harness.call(PATCH, {
+      method: 'PATCH',
+      path: `/api/triggers/${created.trigger.id}`,
+      as: builderCaller,
+      id: created.trigger.id,
+      body: { enabled: false },
+    });
+    triggersOff();
+    const answers = [
+      await fireRaw(created.trigger.id, 'awcs_live_wrong'),
+      await fireRaw(randomUUID(), created.secret),
+      await fireRaw(created.trigger.id, created.secret),
+    ];
+    for (const miss of answers) {
+      expect(miss.status).toBe(404);
+      expect(jsonOf(miss.text)).toMatchObject({ error: { code: 'trigger_not_found' } });
+    }
+  });
+
+  it('keeps trigger_not_found for a schedule trigger, which has no fire route', async () => {
+    const created = await createAs(builderCaller, {
+      kind: 'schedule',
+      name: 'nightly',
+      agentId: agentOf(builderCaller),
+      prompt: 'Run the nightly report',
+      cron: '0 3 * * *',
+      timezone: 'UTC',
+    });
+    expect(created.status).toBe(201);
+    const { trigger } = created.body as { trigger: TriggerResource };
+    triggersOff();
+    const fired = await fireRaw(trigger.id, 'awcs_live_whatever');
+    expect(fired.status).toBe(404);
+    expect(jsonOf(fired.text)).toMatchObject({ error: { code: 'trigger_not_found' } });
   });
 });

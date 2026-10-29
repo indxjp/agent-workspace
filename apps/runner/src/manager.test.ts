@@ -1,4 +1,5 @@
-import { createServer } from 'node:http';
+import { createServer, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -246,6 +247,103 @@ describe('runner manager Docker lifecycle', () => {
       });
     },
   );
+
+  it('[US-STO-06][unit][run] a client that disconnects mid-body is dropped without a failure log', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    // Only the manager's catch destroys this response, once it has decided whether to log.
+    const drop = vi.spyOn(ServerResponse.prototype, 'destroy');
+    try {
+      await withManager(async (base, _fixture, proxy) => {
+        const socket = new Socket();
+        let settled: () => void = () => undefined;
+        const proxied = new Promise<void>((resolve) => {
+          settled = resolve;
+        });
+        proxy.mockImplementation(async (_input, init) => {
+          const upstreamBody = init?.body;
+          if (!(upstreamBody instanceof ReadableStream)) return Response.json({ status: 'ok' });
+          try {
+            const reader = (upstreamBody as ReadableStream<Uint8Array>).getReader();
+            await reader.read();
+            // The first chunk has reached the runtime; the client then goes away mid-body.
+            socket.destroy();
+            for (;;) if ((await reader.read()).done) break;
+            return new Response(null, { status: 204 });
+          } finally {
+            settled();
+          }
+        });
+        const created = await fetch(`${base}/runtimes`, {
+          method: 'POST',
+          headers: authenticated,
+          body: JSON.stringify(allocationBody),
+        });
+        const files = new URL(
+          `${((await created.json()) as { runnerUrl: string }).runnerUrl}/files`,
+        );
+        socket.connect(Number(files.port), files.hostname);
+        socket.write(
+          `POST ${files.pathname} HTTP/1.1\r\nHost: ${files.host}\r\nAuthorization: Bearer ${TOKEN}\r\n` +
+            'Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n',
+        );
+        await proxied;
+        // The manager's catch drops the response once `forward` has rejected; the log is read after.
+        await vi.waitFor(() => {
+          expect(drop).toHaveBeenCalled();
+        });
+      });
+      const logged = stderr.mock.calls.map(([line]) => String(line)).join('');
+      expect(logged).not.toContain('runner manager request failed');
+    } finally {
+      drop.mockRestore();
+      stderr.mockRestore();
+    }
+  });
+
+  it('[US-STO-06][unit][run] a runtime that fails mid-response is logged as a manager failure', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await withManager(async (base, _fixture, proxy) => {
+        let statusReceived: () => void = () => undefined;
+        const answered = new Promise<void>((resolve) => {
+          statusReceived = resolve;
+        });
+        proxy.mockImplementation((input) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          if (url.pathname !== '/files') return Promise.resolve(Response.json({ status: 'ok' }));
+          // The runtime answers 200 and sends part of the download; it dies once the client has
+          // the status line, so the failure comes after the manager's headers are sent.
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(64 * 1024));
+              void answered.then(() => {
+                controller.error(new Error('the runtime went away'));
+              });
+            },
+          });
+          return Promise.resolve(new Response(body, { status: 200 }));
+        });
+        const created = await fetch(`${base}/runtimes`, {
+          method: 'POST',
+          headers: authenticated,
+          body: JSON.stringify(allocationBody),
+        });
+        const { runnerUrl } = (await created.json()) as { runnerUrl: string };
+        const answer = await fetch(`${runnerUrl}/files`, {
+          headers: { authorization: `Bearer ${TOKEN}` },
+        });
+        expect(answer.status).toBe(200);
+        statusReceived();
+        await expect(answer.arrayBuffer()).rejects.toThrow();
+        await vi.waitFor(() => {
+          const logged = stderr.mock.calls.map(([line]) => String(line)).join('');
+          expect(logged).toContain('runner manager request failed: the runtime went away');
+        });
+      });
+    } finally {
+      stderr.mockRestore();
+    }
+  });
 
   it('refuses caller-controlled path segments and non-Docker profiles', async () => {
     await withManager(async (base) => {

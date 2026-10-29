@@ -77,4 +77,5 @@ export * from './triggers.js';
 export * from './user-identities.js';
 export * from './users.js';
 export * from './workspaces.js';
+export * from './workspace-features.js';
 export * from './workspace-principals.js';

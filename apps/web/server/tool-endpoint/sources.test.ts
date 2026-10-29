@@ -12,7 +12,11 @@ import type { ToolSandboxRequest } from '@indx-workspace/contracts/agent-version
 import { describe, expect, it } from 'vitest';
 
 import { versionRequest } from '../agent-versions/fixtures';
-import { createToolEndpointSources, type ToolEndpointSourceDependencies } from './sources';
+import {
+  createToolEndpointSources,
+  endpointToolSecretSource,
+  type ToolEndpointSourceDependencies,
+} from './sources';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const OTHER_WORKSPACE = '55555555-5555-4555-8555-555555555555';
@@ -185,6 +189,34 @@ describe('createToolEndpointSources', () => {
       clientId: CLIENT,
       origin: ORIGIN,
     });
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][unit][run] the endpoint secret source answers a storage connection credential as missing without reading it', async () => {
+    const { deps, secretReads } = harness();
+    const scope = await deps.scopes.forWorkspaceId(WORKSPACE);
+    if (scope === null) throw new Error('the workspace resolves');
+    // The harness answers every name, as though the connection's secret were set.
+    const secret = endpointToolSecretSource(deps.secrets, scope);
+    await expect(secret('STORAGE_CONNECTION_77777777777747778777777777777777')).resolves.toBeNull();
+    expect(secretReads).toEqual([]);
+    await expect(secret('TICKETS_TOKEN')).resolves.toBe('token-value');
+  });
+
+  // @story US-STO-12
+  it('[US-STO-12][unit][run] never resolves a storage connection credential a stored version declares', async () => {
+    const { sources, secretReads, opened } = harness();
+    const [stored] = await sources.productionToolBundles(WORKSPACE, [AGENT]);
+    if (stored === undefined) throw new Error('the production bundle is listed');
+    // The harness answers every name, as though the connection's secret were set.
+    const bundles = [
+      { ...stored, secrets: ['STORAGE_CONNECTION_77777777777747778777777777777777'] },
+    ];
+    await expect(
+      sources.route({ workspaceId: WORKSPACE, clientId: CLIENT, bundles }),
+    ).rejects.toThrow('code_tool_secret_missing');
+    expect(secretReads).toEqual([]);
+    expect(opened).toEqual([]);
   });
 
   it("opens the sandbox with the default runtime profile's provider credential", async () => {

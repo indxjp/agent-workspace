@@ -19,7 +19,10 @@ import {
   toResponse,
   withCatalogService,
 } from '../../../../../server/files/http';
-import { ownershipOfWriteTarget } from '../../../../../server/files/ownership';
+import {
+  ownershipOfFileOwner,
+  ownershipOfWriteTarget,
+} from '../../../../../server/files/ownership';
 import {
   recheckResourceAccess,
   requireResourceAccess,
@@ -47,11 +50,12 @@ async function mintUploadUrl(
   const result = await withCatalogService(
     request,
     (storage) => {
-      const recheck = async () => {
+      // The file the link would replace, as the reservation read it under its lock (#1991 C1).
+      const recheck = async (replaced: { readonly ownerPrincipalId: string }) => {
         const denied = await recheckResourceAccess(
           request,
           access.principal,
-          ownershipOfWriteTarget(parsed.path),
+          ownershipOfFileOwner(replaced),
         );
         return denied === null ? null : ({ ...denied, kind: 'json' } as const);
       };

@@ -344,6 +344,16 @@ export function createInMemoryAgentVersionStoreProvider(
     const agents = options.agents.forWorkspace(workspaceId);
     const agentExists = async (agentId: string): Promise<boolean> =>
       (await agents.get(agentId)) !== null;
+    /**
+     * Hand a materialised agent's assignments, storage grants included, to the resource store the
+     * resources GET reads: in PostgreSQL both read the same tables.
+     */
+    const shareAssignments = async (
+      agentId: string,
+      written: MaterialisedAssignments,
+    ): Promise<void> => {
+      await options.resources?.forWorkspace(workspaceId).replace(agentId, written);
+    };
     /** Core's `storage-grant-changed` audit: one row when the grants differ, none otherwise. */
     const recordGrantChange = (
       agentId: string,
@@ -627,12 +637,7 @@ export function createInMemoryAgentVersionStoreProvider(
           input.audit,
         );
         assignments.set(agentId, written);
-        await options.resources?.forWorkspace(workspaceId).replace(agentId, {
-          files: written.files,
-          skillIds: written.skillIds,
-          skillRevisions: written.skillRevisions,
-          connectorIds: written.connectorIds,
-        });
+        await shareAssignments(agentId, written);
         const pointer = movePointer(pointed, input.reason, input.audit.actorPrincipalId);
         writtenFrom.set(agentId, {
           versionId: version.id,
@@ -692,6 +697,7 @@ export function createInMemoryAgentVersionStoreProvider(
         }
         const first = toAssignments(materialised);
         assignments.set(agentId, first);
+        await shareAssignments(agentId, first);
         recordGrantChange(agentId, [], first.storageGrants, input.audit);
         const version: AgentVersionRecord = {
           id: newId(),

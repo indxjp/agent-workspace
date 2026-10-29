@@ -13,11 +13,18 @@ import {
   GET as downloadRoute,
   PATCH as renameRoute,
 } from '../../app/api/files/[id]/route';
+import { POST as uploadUrlRoute } from '../../app/api/files/[id]/upload-urls/route';
 import { encodeFileId } from './file-id';
+import { EMPTY_FOLDER_MARKER } from './handlers';
+import { ownershipOfPath } from './ownership';
 import { createCatalogFilesWorld, type CatalogFilesWorld } from './catalog-runtime-fixtures';
 import { bytesToStream, createInMemoryObjectStore } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import type { WorkspaceResolution } from './runtime';
-import { createResourceCatalogStoreProvider } from '../resources/catalog-store';
+import {
+  createResourceCatalogStoreProvider,
+  type ResourceCatalogStoreProvider,
+} from '../resources/catalog-store';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import {
   openDatabaseRoot,
@@ -26,6 +33,8 @@ import {
 } from '@agent-workspace/core/db';
 import {
   apiKeys,
+  createDatabaseResourceCatalogRepositoryProvider,
+  createDatabaseWorkspaceScopeResolver,
   createIsolatedTestDatabase,
   memberships,
   users,
@@ -628,8 +637,7 @@ describe('verification round 1 counter-examples, driven through the real route h
 
   it('F4: an uploaded script is not served back as active content from this origin', async () => {
     const payload = '<script>alert(document.domain)</script>';
-    // The catalog service types a file by its name, not by the uploader's header, so the name
-    // is what makes this an HTML file.
+    // The uploader declares HTML; the download still answers with a type from the closed table.
     expect((await post('pwn.html', payload, 'text/html')).status).toBe(201);
 
     const id = encodeFileId('pwn.html');
@@ -1010,10 +1018,12 @@ describe('Builder own/other on the relay upload and on row-less objects (FX-1)',
     [builderA, crypto.randomUUID()],
     ['builder-b@example.test', crypto.randomUUID()],
   ]);
+  let catalogs: ReturnType<typeof createInMemoryCatalogStore>;
 
   beforeEach(() => {
+    catalogs = createInMemoryCatalogStore();
     world = createCatalogFilesWorld({
-      catalogs: createInMemoryCatalogStore(),
+      catalogs,
       scopes: createInMemoryWorkspaceScopeResolver(
         [WORKSPACE_A].map((id, index) => ({ id, slug: `workspace-${String(index)}` })),
       ),
@@ -1081,7 +1091,7 @@ describe('Builder own/other on the relay upload and on row-less objects (FX-1)',
     if (files?.kind !== 'serving') throw new Error('files runtime not installed');
     await files.runtime.store
       .forWorkspace(WORKSPACE_A)
-      .put(filePath, { body: new TextEncoder().encode(text), contentType: 'text/plain' });
+      .write(filePath, new TextEncoder().encode(text), { contentType: 'text/plain' });
   }
 
   it("a Builder cannot overwrite another Builder's file through POST /api/files", async () => {
@@ -1095,11 +1105,74 @@ describe('Builder own/other on the relay upload and on row-less objects (FX-1)',
     expect((await upload(builderA, 'shared.txt', 'A again')).status).toBe(201);
   });
 
+  /** Save `text` at `path` as `actor` through the service, as a concurrent request would. */
+  async function saveAs(actor: string, path: string, text: string): Promise<void> {
+    const principalId = principalIds.get(actor) ?? '';
+    const saved = await world.storage.save(
+      { workspaceId: WORKSPACE_A, principalId, userId: null },
+      {
+        area: 'files',
+        path,
+        body: bytesToStream(new TextEncoder().encode(text)),
+        maxBytes: 1024,
+        replace: true,
+      },
+    );
+    if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
+  }
+
+  /** Run `around` around the next reserve of `path`, the step after the route's ownership check. */
+  function aroundReserve(path: string, around: (reserve: () => Promise<unknown>) => Promise<void>) {
+    const repository = catalogs.forWorkspaceSync(WORKSPACE_A);
+    const reserve = repository.reserve.bind(repository);
+    repository.reserve = async (reserved, input) => {
+      if (reserved !== path) return reserve(reserved, input);
+      repository.reserve = reserve;
+      let outcome: Awaited<ReturnType<typeof reserve>> | undefined;
+      await around(async () => (outcome = await reserve(reserved, input)));
+      if (outcome === undefined) throw new Error('the reserve did not run');
+      return outcome;
+    };
+    return repository;
+  }
+
+  it('a Builder cannot replace a file another Builder creates after the ownership check', async () => {
+    aroundReserve('race.txt', async (reserve) => {
+      await saveAs('builder-b@example.test', 'race.txt', 'B bytes');
+      await reserve();
+    });
+
+    const overwrite = await upload(builderA, 'race.txt', 'A bytes');
+
+    expect(overwrite.status).toBe(403);
+    expect(await download('race.txt')).toBe('B bytes');
+  });
+
+  it('replacement authorization follows the reserved target when it is renamed and its old path reused', async () => {
+    const repository = aroundReserve('race.txt', async (reserve) => {
+      await saveAs('builder-b@example.test', 'race.txt', 'B bytes');
+      await reserve();
+      // B's file moves, its pending replacement with it, and A writes its own file at the old path:
+      // a decision that read the path again would find A's file there.
+      const moved = await repository.get('race.txt');
+      if (moved === null) throw new Error('B saved nothing');
+      await repository.renameFile('race.txt', { ...moved, path: 'moved.txt' });
+      await saveAs(builderA, 'race.txt', 'A own');
+    });
+
+    const overwrite = await upload(builderA, 'race.txt', 'A bytes');
+
+    expect(overwrite.status).toBe(403);
+    expect(await download('moved.txt')).toBe('B bytes');
+    expect(await download('race.txt')).toBe('A own');
+    await expect(repository.pending('moved.txt')).resolves.toBeNull();
+  });
+
   const readerCtx = { workspaceId: WORKSPACE_A, principalId: crypto.randomUUID(), userId: null };
 
   /** What the old per-area store holds at `filePath`, which no catalog row accounts for. */
   async function readRowless(filePath: string): Promise<string | null> {
-    const stored = await world.runtime.store.forWorkspace(WORKSPACE_A).get(filePath);
+    const stored = await readWhole(world.runtime.store.forWorkspace(WORKSPACE_A), filePath);
     return stored === null ? null : new TextDecoder().decode(stored.body);
   }
 
@@ -1112,6 +1185,66 @@ describe('Builder own/other on the relay upload and on row-less objects (FX-1)',
     expect(await readRowless('signed.txt')).toBe('signed bytes');
     // No row was written either: the refused upload reserved nothing.
     expect(await world.storage.get(readerCtx, 'files', 'signed.txt')).toBeNull();
+  });
+
+  /** Builder A's own folder `team`, and more than one listing page of folder markers in it. */
+  async function teamOfMarkers(): Promise<Principal> {
+    expect((await upload(builderA, 'team/a.txt', 'A bytes')).status).toBe(201);
+    const store = world.runtime.store.forWorkspace(WORKSPACE_A);
+    for (let n = 0; n <= 1000; n += 1) {
+      const key = `team/d${String(n).padStart(4, '0')}/${EMPTY_FOLDER_MARKER}`;
+      await store.write(key, new Uint8Array(), { contentType: null });
+    }
+    const principalId = principalIds.get(builderA) ?? '';
+    return Principal.fromApiKey({
+      principalId,
+      apiKeyId: principalId,
+      workspaceId: WORKSPACE_A,
+      role: 'builder',
+      label: builderA,
+    });
+  }
+  const noDirectory = createMemoryDirectory({ users: [] }).forWorkspace(WORKSPACE_A);
+
+  it('a row-less object past the first listing page leaves a folder unknown, not own', async () => {
+    const builder = await teamOfMarkers();
+    const own = { kind: 'ownership', ownership: 'own' };
+    expect(await ownershipOfPath('team')(builder, noDirectory)).toEqual(own);
+
+    await putRowless('team/zz.txt', 'signed bytes');
+
+    const unknown = { kind: 'ownership', ownership: 'unknown' };
+    expect(await ownershipOfPath('team')(builder, noDirectory)).toEqual(unknown);
+  });
+
+  it('ownership heads the path, then pages beneath it in key order', async () => {
+    const builder = await teamOfMarkers();
+    const calls: string[] = [];
+    const inner = world.runtime.store;
+    const store: typeof inner = {
+      forWorkspace: (workspaceId) => {
+        const scoped = inner.forWorkspace(workspaceId);
+        return {
+          ...scoped,
+          head: (key) => {
+            calls.push(`head ${key}`);
+            return scoped.head(key);
+          },
+          listPage: (prefix, options) => {
+            calls.push(`list ${prefix} ${options?.cursor ?? '-'}`);
+            return scoped.listPage(prefix, options);
+          },
+        };
+      },
+    };
+    installTestDomains({ files: { kind: 'serving', runtime: { ...world.runtime, store } } });
+
+    expect(await ownershipOfPath('team')(builder, noDirectory)).toMatchObject({ ownership: 'own' });
+    expect(calls).toEqual([
+      'head team',
+      'list team -',
+      `list team file:team/d0999/${EMPTY_FOLDER_MARKER}`,
+    ]);
   });
 
   it("a Builder cannot recursively delete a folder holding another member's row-less upload", async () => {
@@ -1362,4 +1495,324 @@ describe('an upload in flight answers 409 upload_in_progress (FX-7)', () => {
     const rows = await catalogs.forWorkspaceSync(WORKSPACE_A).listFiles();
     expect(rows.map((row) => row.path)).toEqual(['docs', 'docs/ready.txt']);
   });
+});
+
+/**
+ * #1991 C1: a write that replaces a file is authorized against the ready file its reserve locked,
+ * not against the path the route checked earlier. Between the route's ownership read and the
+ * reserve, another Builder can create the path; between the reserve and the decision, that file can
+ * be renamed away (its pending replacement follows it) and the path reused. The gates below hold
+ * one Builder's request at those two points, on the in-memory catalog and on PostgreSQL.
+ */
+interface ReplacementMember {
+  readonly email: string;
+  readonly principalId: string;
+  readonly userId: string;
+}
+
+interface ReplacementWorld {
+  readonly workspaceId: string;
+  readonly catalogs: ResourceCatalogStoreProvider;
+  readonly scopes: Parameters<typeof createCatalogFilesWorld>[0]['scopes'];
+  readonly builderA: ReplacementMember;
+  readonly builderB: ReplacementMember;
+  readonly admin: ReplacementMember;
+}
+
+type ReplacementRole = 'builderA' | 'builderB' | 'admin';
+
+const memberOf = (label: string): ReplacementMember => ({
+  email: `${label}@example.test`,
+  principalId: crypto.randomUUID(),
+  userId: crypto.randomUUID(),
+});
+
+/** Holds a member's next `reserve` just before or just after it runs, until `release()`. */
+function gatedReserves(inner: ResourceCatalogStoreProvider) {
+  interface Gate {
+    readonly stage: 'before' | 'after';
+    readonly ownerPrincipalId: string;
+    readonly entered: () => void;
+    readonly released: Promise<void>;
+  }
+  const gates: Gate[] = [];
+  const hold = async (stage: Gate['stage'], ownerPrincipalId: string): Promise<void> => {
+    const index = gates.findIndex(
+      (gate) => gate.stage === stage && gate.ownerPrincipalId === ownerPrincipalId,
+    );
+    const [gate] = index === -1 ? [] : gates.splice(index, 1);
+    if (gate === undefined) return;
+    gate.entered();
+    await gate.released;
+  };
+  const catalogs: ResourceCatalogStoreProvider = {
+    async forWorkspace(workspaceId) {
+      const catalog = await inner.forWorkspace(workspaceId);
+      return {
+        ...catalog,
+        async reserve(path, input) {
+          await hold('before', input.ownerPrincipalId);
+          const reserved = await catalog.reserve(path, input);
+          await hold('after', input.ownerPrincipalId);
+          return reserved;
+        },
+      };
+    },
+  };
+  const arm = (stage: Gate['stage'], member: ReplacementMember) => {
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const reached = new Promise<void>((resolve) => (entered = resolve));
+    gates.push({ stage, ownerPrincipalId: member.principalId, entered, released });
+    return { reached, release };
+  };
+  return { catalogs, arm };
+}
+
+/** An in-memory object store that signs, so the signed-upload route reaches its reserve. */
+function signingStore() {
+  const inner = createInMemoryObjectStore();
+  return {
+    ...inner,
+    capabilities: { ...inner.capabilities, sign: true, boundLengthSign: true },
+    createSignedUrl: (key: string) =>
+      Promise.resolve({ url: `https://store.invalid/${key}`, headers: {} }),
+  };
+}
+
+function memoryReplacementWorld(): Promise<ReplacementWorld> {
+  const workspaceId = crypto.randomUUID();
+  return Promise.resolve({
+    workspaceId,
+    catalogs: createInMemoryCatalogStore(),
+    scopes: createInMemoryWorkspaceScopeResolver([{ id: workspaceId, slug: 'replace-memory' }]),
+    builderA: memberOf('replace-builder-a'),
+    builderB: memberOf('replace-builder-b'),
+    admin: memberOf('replace-admin'),
+  });
+}
+
+let replacementDatabase: IsolatedTestDatabase | undefined;
+
+async function postgresReplacementWorld(): Promise<ReplacementWorld> {
+  if (replacementDatabase === undefined) throw new Error('the test database did not start');
+  const db = replacementDatabase.db;
+  const workspaceId = crypto.randomUUID();
+  await db
+    .insert(workspaces)
+    .values({ id: workspaceId, slug: `replace-${workspaceId}`, name: 'Replace' });
+  const member = async (label: string, role: 'builder' | 'admin') => {
+    const seeded = memberOf(label);
+    const membershipId = crypto.randomUUID();
+    await db.insert(users).values({ id: seeded.userId, email: seeded.email, name: label });
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(memberships)
+        .values({ id: membershipId, workspaceId, userId: seeded.userId, role });
+      await tx
+        .insert(workspacePrincipals)
+        .values({ id: seeded.principalId, workspaceId, kind: 'membership', membershipId });
+    });
+    return seeded;
+  };
+  const scopes = createDatabaseWorkspaceScopeResolver(db);
+  return {
+    workspaceId,
+    catalogs: createResourceCatalogStoreProvider({
+      repositories: createDatabaseResourceCatalogRepositoryProvider(db),
+      scopes,
+    }),
+    scopes,
+    builderA: await member(`replace-a-${workspaceId}`, 'builder'),
+    builderB: await member(`replace-b-${workspaceId}`, 'builder'),
+    admin: await member(`replace-admin-${workspaceId}`, 'admin'),
+  };
+}
+
+function defineReplacementSuite(name: string, setup: () => Promise<ReplacementWorld>) {
+  describe(`a replacement is authorized against the file its reserve locked, on the ${name} (#1991 C1)`, () => {
+    let replacement: ReplacementWorld;
+    let gates: ReturnType<typeof gatedReserves>;
+
+    beforeEach(async () => {
+      replacement = await setup();
+      gates = gatedReserves(replacement.catalogs);
+      const roles = new Map<string, { member: ReplacementMember; role: 'builder' | 'admin' }>([
+        [replacement.builderA.email, { member: replacement.builderA, role: 'builder' }],
+        [replacement.builderB.email, { member: replacement.builderB, role: 'builder' }],
+        [replacement.admin.email, { member: replacement.admin, role: 'admin' }],
+      ]);
+      const { workspaceId } = replacement;
+      const files = createCatalogFilesWorld({
+        catalogs: gates.catalogs,
+        scopes: replacement.scopes,
+        objects: signingStore(),
+        resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId }),
+      });
+      installTestDomains({ files: { kind: 'serving', runtime: files.runtime } });
+      installTestDomains({
+        rbac: {
+          directory: createMemoryDirectory({ users: [] }),
+          identify(request: Request) {
+            const known = roles.get(request.headers.get(ACTOR_HEADER) ?? '');
+            return Promise.resolve(
+              known === undefined
+                ? null
+                : Principal.fromUserToken(workspaceId, known.member.email, known.role, {
+                    principalId: known.member.principalId,
+                    userId: known.member.userId,
+                    label: known.member.email,
+                  }),
+            );
+          },
+        },
+      });
+    });
+
+    const actor = (role: ReplacementRole): ReplacementMember => replacement[role];
+
+    function upload(role: ReplacementRole, filePath: string, text: string): Promise<Response> {
+      return uploadRoute(
+        req('POST', '/api/files', {
+          body: new TextEncoder().encode(text),
+          contentType: 'text/plain',
+          headers: { 'x-file-path': filePath, [ACTOR_HEADER]: actor(role).email },
+        }),
+      );
+    }
+
+    function mintUpload(role: ReplacementRole, filePath: string): Promise<Response> {
+      const id = encodeFileId(filePath);
+      return uploadUrlRoute(
+        req('POST', `/api/files/${id}/upload-urls`, {
+          body: JSON.stringify({ sizeBytes: 4 }),
+          contentType: 'application/json',
+          headers: { [ACTOR_HEADER]: actor(role).email },
+        }),
+        idContext(id),
+      );
+    }
+
+    async function contentOf(filePath: string): Promise<string> {
+      const id = encodeFileId(filePath);
+      const response = await downloadRoute(
+        req('GET', `/api/files/${id}`, { headers: { [ACTOR_HEADER]: actor('admin').email } }),
+        idContext(id),
+      );
+      expect(response.status, filePath).toBe(200);
+      return response.text();
+    }
+
+    const catalog = () => replacement.catalogs.forWorkspace(replacement.workspaceId);
+
+    /**
+     * Rename a ready file while a replacement of it is pending. `PATCH` refuses that for now, but
+     * the catalog's one-step rename carries the replacement along (the conformance case "renaming
+     * a file carries its pending replacement along"), so the guard has to hold through it.
+     */
+    async function moveWithItsReplacement(from: string, to: string): Promise<void> {
+      const file = await (await catalog()).get(from);
+      if (file === null) throw new Error(`${from} is missing`);
+      await (
+        await catalog()
+      ).renameFile(from, {
+        path: to,
+        kind: 'file',
+        storageKey: file.storageKey,
+        sizeBytes: file.sizeBytes,
+        contentType: file.contentType,
+      });
+    }
+
+    async function expectForbidden(response: Response): Promise<void> {
+      expect(response.status, await response.clone().text()).toBe(403);
+      expect(await response.json()).toMatchObject({ error: { code: 'forbidden' } });
+    }
+
+    it('a Builder cannot replace a file another Builder creates after the ownership check', async () => {
+      const beforeReserve = gates.arm('before', actor('builderA'));
+      const late = upload('builderA', 'race.txt', 'A bytes');
+      await beforeReserve.reached;
+
+      expect((await upload('builderB', 'race.txt', 'B bytes')).status).toBe(201);
+      beforeReserve.release();
+
+      await expectForbidden(await late);
+      expect(await contentOf('race.txt')).toBe('B bytes');
+      await expect((await catalog()).get('race.txt')).resolves.toMatchObject({
+        ownerPrincipalId: actor('builderB').principalId,
+        status: 'ready',
+      });
+      await expect((await catalog()).countPending()).resolves.toBe(0);
+    });
+
+    it('replacement authorization follows the reserved target when it is renamed and its old path reused', async () => {
+      const beforeReserve = gates.arm('before', actor('builderA'));
+      const afterReserve = gates.arm('after', actor('builderA'));
+      const late = upload('builderA', 'race.txt', 'A replacement');
+      await beforeReserve.reached;
+      expect((await upload('builderB', 'race.txt', 'B bytes')).status).toBe(201);
+      beforeReserve.release();
+      await afterReserve.reached;
+
+      // A's reservation now waits to replace B's file. The file moves, the replacement with it,
+      // and A puts a file of its own at the path the replacement was reserved at.
+      await moveWithItsReplacement('race.txt', 'moved.txt');
+      expect((await upload('builderA', 'race.txt', 'A own bytes')).status).toBe(201);
+      afterReserve.release();
+
+      await expectForbidden(await late);
+      expect(await contentOf('moved.txt')).toBe('B bytes');
+      expect(await contentOf('race.txt')).toBe('A own bytes');
+      await expect((await catalog()).get('moved.txt')).resolves.toMatchObject({
+        ownerPrincipalId: actor('builderB').principalId,
+      });
+      await expect((await catalog()).countPending()).resolves.toBe(0);
+    });
+
+    it('a signed replacement is authorized against the reserved target when it is renamed and its old path reused', async () => {
+      const beforeReserve = gates.arm('before', actor('builderA'));
+      const afterReserve = gates.arm('after', actor('builderA'));
+      const late = mintUpload('builderA', 'signed.txt');
+      await beforeReserve.reached;
+      expect((await upload('builderB', 'signed.txt', 'B bytes')).status).toBe(201);
+      beforeReserve.release();
+      await afterReserve.reached;
+
+      await moveWithItsReplacement('signed.txt', 'moved.txt');
+      expect((await upload('builderA', 'signed.txt', 'A own bytes')).status).toBe(201);
+      afterReserve.release();
+
+      await expectForbidden(await late);
+      expect(await contentOf('moved.txt')).toBe('B bytes');
+      await expect((await catalog()).countPending()).resolves.toBe(0);
+    });
+
+    it('an owner still replaces its own file, by relay and by a signed link', async () => {
+      expect((await upload('builderA', 'own.txt', 'first')).status).toBe(201);
+      expect((await upload('builderA', 'own.txt', 'second')).status).toBe(201);
+      expect(await contentOf('own.txt')).toBe('second');
+      expect((await mintUpload('builderA', 'own.txt')).status).toBe(201);
+    });
+
+    it("an Admin still replaces any member's file", async () => {
+      expect((await upload('builderB', 'theirs.txt', 'B bytes')).status).toBe(201);
+      expect((await upload('admin', 'theirs.txt', 'Admin bytes')).status).toBe(201);
+      expect(await contentOf('theirs.txt')).toBe('Admin bytes');
+      expect((await mintUpload('admin', 'theirs.txt')).status).toBe(201);
+    });
+  });
+}
+
+defineReplacementSuite('in-memory catalog', memoryReplacementWorld);
+
+describe('on PostgreSQL', () => {
+  beforeAll(async () => {
+    replacementDatabase = await createIsolatedTestDatabase('aw_files_replace');
+  }, 180_000);
+
+  afterAll(async () => replacementDatabase?.close());
+
+  defineReplacementSuite('PostgreSQL catalog', postgresReplacementWorld);
 });

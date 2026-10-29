@@ -722,6 +722,10 @@ export async function buildRunRequestFor(
       agentId: agent.id,
       modelConnectionId,
       ...(caller === null ? {} : { caller }),
+      // The gateway ends the run at its next model call once the workspace's spend reaches this.
+      ...(ceiling?.maxCostPerDayUsd === undefined
+        ? {}
+        : { dailyCostCapUsd: ceiling.maxCostPerDayUsd }),
     }),
   );
   const { cwd, projectKey } = sandboxFor(workspaceId, context.session.id, settings);

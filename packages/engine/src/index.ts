@@ -20,6 +20,8 @@
  *                        the answer before it writes a byte (ENG-04b).
  *   * `skill-script.ts` — `run_skill_script`: a skill's Node script, run with no shell under Node's
  *                        permission model, over an injected host (ADR-0137).
+ *   * `refusal.ts`    — `EngineRefusalError`, the typed refusal an adapter can only reach in
+ *                        `start()`, which the runner answers like a `compile` refusal.
  *   * `prices.ts`     — the provisional price table an adapter-level budget cap is measured with
  *                        (ADR-0074 D7), shared by every adapter that enforces one (ADR-0081).
  *
@@ -38,6 +40,7 @@ export * from './skills.js';
 export * from './skill-script.js';
 export * from './prices.js';
 export * from './credential-rejection.js';
+export * from './refusal.js';
 export * from './compile-checks.js';
 export * from './tool-plan.js';
 export * from './resolved-path.js';

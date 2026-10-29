@@ -4,7 +4,7 @@
  * checked every object; old copies are deleted only while the latest row shows no legacy rows and no
  * mismatches. The table is deployment-wide, not tenant-scoped: a pass covers every workspace.
  */
-import { bigint, boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, pgTable, smallint, text, timestamp } from 'drizzle-orm/pg-core';
 
 import { primaryKeyId } from './columns.js';
 import { oneOf } from './one-of.js';
@@ -37,8 +37,20 @@ export const storageMigrationRuns = pgTable(
     skippedPathTaken: bigint('skipped_path_taken', { mode: 'number' }).notNull().default(0),
     /** `adopt`: objects skipped because their workspace failed (gone, or a store call failed). */
     skippedFailed: bigint('skipped_failed', { mode: 'number' }).notNull().default(0),
-    /** `adopt`: no workspace failed. `null` for the stages that do not record it. */
+    /** `adopt` and `skills`: no workspace failed and the pass finished. `null` for `finalize`. */
     clean: boolean('clean'),
+    /**
+     * `skills`: files of revision prefixes that have no committed revision record (a pending one
+     * counts as none). They are counted here and
+     * not in `legacyRows`, so they can be reviewed and never block completion. `null` for older rows.
+     */
+    orphans: bigint('orphans', { mode: 'number' }),
+    /**
+     * `2` for a row written by a pass that records every outcome, a pass that threw included. `null`
+     * for a row written by 0.6.11 or earlier, which recorded neither failed nor unchanged passes and
+     * so cannot prove that the latest pass was the latest row.
+     */
+    proofVersion: smallint('proof_version'),
   },
   (table) => [
     index('storage_migration_runs_finished_idx').on(table.finishedAt),

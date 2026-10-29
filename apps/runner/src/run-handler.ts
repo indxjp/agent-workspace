@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { Logger } from '@agent-workspace/core/telemetry';
+import { EngineRefusalError } from '@agent-workspace/engine';
 import { RunRequest, type RunFileReference } from '@agent-workspace/run-protocol';
 
 import { loadEngine } from './engines.js';
@@ -15,6 +16,7 @@ import {
 import {
   readSkillInbox,
   removeSkillInbox,
+  SkillInboxMismatchError,
   skillInboxReferences,
   withoutSkills,
   type ResolvedRunRequest,
@@ -404,7 +406,14 @@ export async function handleRun(
         } catch (error) {
           // The message can name an absolute host path; it is logged, never answered.
           log.error('skill inbox read failed after verification', { error: String(error) });
-          sendError(res, 422, 'run_file_missing', 'a granted skill file did not arrive intact');
+          sendError(
+            res,
+            422,
+            error instanceof SkillInboxMismatchError
+              ? 'run_file_checksum_mismatch'
+              : 'run_file_missing',
+            'a granted skill file did not arrive intact',
+          );
           return;
         }
       } finally {
@@ -436,11 +445,18 @@ export async function handleRun(
     try {
       outcome = await startAgent(withTraceHeaders(request, forwardedTrace));
     } catch (error) {
-      // A throw out of `startAgent` is a programming fault, not a request this engine will not
-      // run: every refusal the port can express arrives as `outcome.ok === false` below.
-      // Answering 422 keeps the pre-ENG-04 behaviour for the one caller that still throws — the
-      // Claude boundary's own translation refusals, which reach here through `start`.
-      sendError(res, 422, 'run_rejected', error instanceof Error ? error.message : String(error));
+      // An adapter that can only refuse while translating its compiled options in `start` (the
+      // Claude boundary) throws a typed refusal before any frame: it is answered like a compile
+      // refusal, with its own code and message.
+      if (error instanceof EngineRefusalError) {
+        await streamEngineRefusal(res, parsed.data.runId, error.code, error.message);
+        return;
+      }
+      // Anything else is a fault, not a request this engine will not run. Materializing the run's
+      // resources throws here too, and its messages name absolute host paths, so the message is
+      // logged, never answered.
+      log.error('run start failed', { runId: admission.runId, error: String(error) });
+      sendError(res, 422, 'run_rejected', 'the runtime could not start this run');
       return;
     }
     if (!outcome.ok) {

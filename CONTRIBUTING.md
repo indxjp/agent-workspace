@@ -9,7 +9,7 @@ you write code. Small fixes (typos, obvious bugs) can go straight to a pull requ
 
 ## Development setup
 
-- Node.js 24 and pnpm 11 (`corepack enable` provides the pinned pnpm).
+- Node.js 24 and pnpm 12 (`corepack enable` provides the pinned pnpm).
 - Docker, which `pnpm test` uses to provision its databases.
 
 ```sh
@@ -27,7 +27,18 @@ pnpm test
 pnpm build
 ```
 
-Tests that exercise the complete repository require `TEST_DATABASE_URL` pointing to PostgreSQL 17.
+Tests that exercise the complete repository require `TEST_DATABASE_URL` pointing to PostgreSQL 18.
+
+The repository's `compose.yaml` runs PostgreSQL 18 (ADR-0159). A `postgres-data` volume that
+PostgreSQL 17 initialised does not start under 18. Remove it to start empty
+(`docker compose down --volumes`), or keep its rows by dumping them with the 17 image before you
+pull, and restoring the dump into the new volume:
+
+```sh
+docker compose exec -T postgres pg_dump -Fc -U agent_workspace agent_workspace > dev.dump   # still on 17
+docker compose down --volumes && docker compose up -d postgres
+docker compose exec -T postgres pg_restore --clean --if-exists --no-owner -U agent_workspace -d agent_workspace < dev.dump
+```
 
 ## Coding standard
 

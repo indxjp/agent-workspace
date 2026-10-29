@@ -18,7 +18,7 @@ import {
   type RemoveFileResponse,
 } from '@indx-workspace/contracts/files';
 
-import { ApiProblemError, ContractViolationError } from '../errors.js';
+import { ApiProblemError, ContractViolationError, TransportError } from '../errors.js';
 import { segment, type HttpClient, type RequestOptions } from '../http.js';
 
 export interface ListFilesQuery {
@@ -43,6 +43,15 @@ export interface UploadFileOptions extends RequestOptions {
    * falls back to the relay when the store cannot sign.
    */
   readonly direct?: boolean;
+  /**
+   * The body's exact byte length, declared up front. With it a `ReadableStream` larger than
+   * `MAX_UPLOAD_BYTES` (or any stream with `direct`) is streamed to the signed link instead of
+   * being buffered first; the store refuses the `PUT` when the stream's length differs, and a store
+   * that cannot sign links fails it with `501 direct_transfer_unsupported`. A streaming
+   * request body needs a runtime that can send one (Node.js, or a browser over HTTP/2). For a `Blob`
+   * or `Uint8Array` it must equal the body's own length.
+   */
+  readonly sizeBytes?: number;
 }
 
 export interface UploadUrlInput {
@@ -110,16 +119,67 @@ function basename(path: string): string {
   return slash === -1 ? path : path.slice(slash + 1);
 }
 
+/** The bytes themselves when they sit on an `ArrayBuffer`, a copy only off a shared buffer. */
+function arrayBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  return isArrayBufferBacked(bytes) ? bytes : new Uint8Array(bytes);
+}
+
+function isArrayBufferBacked(bytes: Uint8Array): bytes is Uint8Array<ArrayBuffer> {
+  return bytes.buffer instanceof ArrayBuffer;
+}
+
+/** Refuse a declared size that is not a byte count, or that a sized body contradicts. */
+function declaredSize(body: UploadBody, sizeBytes: number | undefined): number | undefined {
+  if (sizeBytes === undefined) return undefined;
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 0)
+    throw new TypeError('upload sizeBytes must be a non-negative integer');
+  const own =
+    body instanceof Blob ? body.size : body instanceof Uint8Array ? body.byteLength : sizeBytes;
+  if (own !== sizeBytes) throw new TypeError('upload sizeBytes differs from the body length');
+  return sizeBytes;
+}
+
 /**
  * A relayed upload is sent as one `Blob`: a stream is buffered first, because a streaming request
  * body is not something every browser can send (and needs HTTP/2 where it can), while the server
  * buffers the whole body up to `MAX_UPLOAD_BYTES` before it acts anyway. A signed-link upload
- * (the storage design, §04) hands a `Blob` or `Uint8Array` to the store as it is.
+ * (the storage design, §04) hands a `Blob` or `Uint8Array` to the store as it is, and a stream
+ * of declared size as a stream.
  */
-async function uploadBlob(body: UploadBody): Promise<Blob> {
+async function uploadBlob(body: UploadBody, signal?: AbortSignal): Promise<Blob> {
   if (body instanceof Blob) return body;
-  if (body instanceof Uint8Array) return new Blob([new Uint8Array(body)]);
-  return new Response(body).blob();
+  if (body instanceof Uint8Array) return new Blob([arrayBufferBytes(body)]);
+  // Buffering happens before any request, so `signal` must reach it: an abort cancels the source,
+  // and `pipeTo` releases its lock on every outcome.
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  try {
+    await body.pipeTo(
+      new WritableStream({
+        write(chunk: unknown) {
+          // A plain JavaScript caller is not held to the type: a string chunk would become empty.
+          if (!(chunk instanceof Uint8Array))
+            throw new TypeError('upload body chunks must be Uint8Array');
+          chunks.push(new Uint8Array(chunk));
+        },
+      }),
+      signal === undefined ? {} : { signal },
+    );
+  } catch (cause) {
+    throw new TransportError({
+      operation: 'files.upload',
+      aborted: signal?.aborted === true,
+      cause,
+    });
+  }
+  return new Blob(chunks);
+}
+
+function isDirectUnsupported(error: unknown): boolean {
+  return (
+    error instanceof ApiProblemError &&
+    error.status === 501 &&
+    error.code === 'direct_transfer_unsupported'
+  );
 }
 
 /** Read the folder-metadata arm of a download, refusing anything else as drift. */
@@ -194,7 +254,8 @@ export class FilesClient {
    * Write (or overwrite) one file. Up to `MAX_UPLOAD_BYTES` the bytes are sent as-is through the
    * control plane, the path travelling as a header. A larger body, or `options.direct`, goes to the
    * object store on a signed link and is then completed (the storage design, §03 and §04); the
-   * file is listed only once that finishes.
+   * file is listed only once that finishes. A stream is buffered first unless `options.sizeBytes`
+   * declares its length.
    */
   public async upload(
     path: string,
@@ -202,18 +263,25 @@ export class FilesClient {
     options: UploadFileOptions = {},
   ): Promise<FileResource> {
     // @story US-STO-02
+    const declared = declaredSize(body, options.sizeBytes);
+    if (
+      body instanceof ReadableStream &&
+      declared !== undefined &&
+      (options.direct === true || declared > MAX_UPLOAD_BYTES)
+    ) {
+      // No relay fallback: it would buffer the stream only to send the relay more than it accepts.
+      return this.#uploadSigned(path, body, declared, options);
+    }
     const content =
-      body instanceof Blob || body instanceof Uint8Array ? body : await uploadBlob(body);
+      body instanceof Blob || body instanceof Uint8Array
+        ? body
+        : await uploadBlob(body, options.signal);
     const size = content instanceof Blob ? content.size : content.byteLength;
     if (options.direct === true || size > MAX_UPLOAD_BYTES) {
       try {
         return await this.#uploadSigned(path, content, size, options);
       } catch (error) {
-        const unsupported =
-          error instanceof ApiProblemError &&
-          error.status === 501 &&
-          error.code === 'direct_transfer_unsupported';
-        if (!unsupported || options.direct === true) throw error;
+        if (!isDirectUnsupported(error) || options.direct === true) throw error;
       }
     }
     const response = await this.#http.json({
@@ -375,7 +443,7 @@ export class FilesClient {
 
   async #uploadSigned(
     path: string,
-    content: Blob | Uint8Array,
+    content: UploadBody,
     sizeBytes: number,
     options: UploadFileOptions,
   ): Promise<FileResource> {
@@ -388,7 +456,7 @@ export class FilesClient {
     await this.#http.putSigned({
       operation: 'files.upload',
       target,
-      body: content instanceof Blob ? content : new Uint8Array(content),
+      body: content instanceof Uint8Array ? arrayBufferBytes(content) : content,
       signal: options.signal,
     });
     return this.completeUpload(path, options);

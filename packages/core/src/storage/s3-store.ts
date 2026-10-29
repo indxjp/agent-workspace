@@ -7,7 +7,6 @@ import {
   HeadBucketCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
-  PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -22,18 +21,17 @@ import {
   prefixedListPrefix,
   prefixedObjectKey,
   storeKeyPrefix,
-  toObjectPrefix,
 } from './key-safety.js';
 import {
   scopedObjectStoreProvider,
-  type ObjectContent,
   type ObjectListEntry,
   type ObjectMeta,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
+  type ObjectStore,
+  type ObjectStoreProvider,
   type SignedUrl,
   clampListLimit,
   compareEntryKeys,
+  compareListingNames,
   ObjectConflictError,
   validatedWriteKey,
   PRESIGNED_URL_DEFAULT_TTL_SECONDS,
@@ -48,7 +46,16 @@ export interface S3ObjectStoreOptions {
   readonly keyPrefix?: string;
   /** The host signed links name, for a browser that cannot reach `client`'s endpoint. */
   readonly publicEndpoint?: string;
+  /**
+   * How a one-level `listPage` orders a page, which must match how the server pages folders and
+   * files so pages concatenate into one order. `bare-key` (the default) is SeaweedFS, the bundled
+   * server: folder `a` before file `a.txt`. `native` is AWS: by native name, where folder `a` is
+   * `a/` and sorts after `a.txt`.
+   */
+  readonly listingOrder?: S3ListingOrder;
 }
+
+type S3ListingOrder = 'bare-key' | 'native';
 
 export interface S3ObjectStoreConfig {
   readonly endpoint?: string;
@@ -64,8 +71,26 @@ export interface S3ObjectStoreConfig {
   readonly keyPrefix?: string;
   /** Development endpoints may provision their bucket; native cloud deployments must not. */
   readonly createBucketIfMissing?: boolean;
+  /**
+   * `false` skips the one-key listing an open otherwise sends when `createBucketIfMissing` is
+   * false. A connection store sets it: its key may list only under an allowed folder, which the
+   * store's own prefix need not be, so the connection's first listing of that folder is the check.
+   */
+  readonly checkBucketOnOpen?: boolean;
   /** Resolves every hostname the client dials; a connection store answers only with checked addresses. */
   readonly lookup?: LookupFunction;
+  /**
+   * See {@link S3ObjectStoreOptions.listingOrder}. Left out, it follows `endpoint`: none, or an
+   * `amazonaws.com` host, is AWS (`native`); any other endpoint is `bare-key`.
+   */
+  readonly listingOrder?: S3ListingOrder;
+}
+
+const AWS_HOST = /(?:^|\.)amazonaws\.com(?:\.cn)?$/u;
+
+function listingOrderFor(endpoint: string | undefined): S3ListingOrder {
+  if (endpoint === undefined) return 'native';
+  return AWS_HOST.test(new URL(endpoint).hostname) ? 'native' : 'bare-key';
 }
 
 function httpStatus(error: unknown): number | undefined {
@@ -82,6 +107,15 @@ function errorName(error: unknown): string | undefined {
 
 function isNotFound(error: unknown): boolean {
   return errorName(error) === 'NoSuchKey' || httpStatus(error) === 404;
+}
+
+/**
+ * A 404 for the object, not for its bucket. A bucket deleted under a store is an outage a caller
+ * must see, never an absent object. A HEAD has no body to name the bucket, so only a request that
+ * carries an error body (GET, copy, delete) can tell the two apart.
+ */
+function isMissingObject(error: unknown): boolean {
+  return isNotFound(error) && errorName(error) !== 'NoSuchBucket';
 }
 
 function isRangeRefused(error: unknown): boolean {
@@ -101,6 +135,46 @@ function knownType(
   contentType: string | undefined,
 ): string | null {
   return metadata?.['aw-content-type-known'] === 'true' ? (contentType ?? null) : null;
+}
+
+const RESPONSE_DATE = Symbol('aw.s3.responseDate');
+
+/**
+ * Neither PutObject nor CompleteMultipartUpload answers the object's time, but every S3 response
+ * carries the server's `Date`. This middleware copies it onto each command's output under a
+ * symbol, which the upload library's result keeps (it spreads the PutObject output), so a write
+ * learns the server's time without a second request. The fixed name with `override` registers it
+ * once however many stores share the client.
+ */
+function recordResponseDates(client: S3Client): void {
+  client.middlewareStack.add(
+    (next) => async (args) => {
+      const result = await next(args);
+      const date = dateHeaderOf(result.response);
+      if (date !== null && typeof result.output === 'object' && result.output !== null) {
+        Object.assign(result.output, { [RESPONSE_DATE]: date });
+      }
+      return result;
+    },
+    // `high` runs it outside the SDK's deserializer, where the output already exists.
+    { step: 'deserialize', priority: 'high', name: 'awResponseDate', override: true },
+  );
+}
+
+function dateHeaderOf(response: unknown): Date | null {
+  if (typeof response !== 'object' || response === null) return null;
+  const headers: unknown = Reflect.get(response, 'headers');
+  if (typeof headers !== 'object' || headers === null) return null;
+  const value: unknown = Reflect.get(headers, 'date');
+  if (typeof value !== 'string') return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** The server's `Date` of the response that produced `output`; null when it sent none. */
+function responseDateOf(output: object): Date | null {
+  const value: unknown = Reflect.get(output, RESPONSE_DATE);
+  return value instanceof Date ? value : null;
 }
 
 // One part in flight keeps a write's memory near UPLOAD_PART_BYTES whatever the object size.
@@ -152,14 +226,33 @@ function parsePublicEndpoint(value: string): URL {
 }
 
 /** Raw S3-compatible backend. Tenant scoping is added by {@link createS3ObjectStoreProvider}. */
-export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV2 {
+export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore {
   const bucket = options.bucket.trim();
   if (bucket === '') throw new Error('An S3 object store requires a non-empty bucket name.');
   const prefix = storeKeyPrefix(options.keyPrefix);
   const publicEndpoint =
     options.publicEndpoint === undefined ? undefined : parsePublicEndpoint(options.publicEndpoint);
 
-  const backend: ObjectStoreV2 = {
+  recordResponseDates(options.client);
+  // After a HEAD 404: throws for a missing bucket, which only a GET's error body names. An object
+  // written since the HEAD leaves its answer standing, and the one byte served is discarded.
+  const confirmMissingObject = async (key: string): Promise<void> => {
+    try {
+      const response = await options.client.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: prefixedObjectKey(prefix, key),
+          Range: 'bytes=0-0',
+        }),
+      );
+      (response.Body as Readable | undefined)?.destroy();
+    } catch (error) {
+      // An empty object written since the HEAD refuses even the first byte.
+      if (isMissingObject(error) || isRangeRefused(error)) return;
+      throw error;
+    }
+  };
+  const backend: ObjectStore = {
     capabilities: {
       sign: true,
       boundLengthSign: true,
@@ -180,7 +273,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
           lastModified: response.LastModified ?? new Date(0),
         };
       } catch (error) {
-        if (isNotFound(error)) return null;
+        if (isMissingObject(error)) return null;
         throw error;
       }
     },
@@ -191,7 +284,11 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
       let range: { readonly start: number; readonly end: number } | null = null;
       if (readOptions?.range !== undefined) {
         const meta = await backend.head(key);
-        if (meta === null) return null;
+        if (meta === null) {
+          // A HEAD 404 has no body to name a missing bucket; a one-byte GET's error body does.
+          await confirmMissingObject(key);
+          return null;
+        }
         range = resolveRange(readOptions.range, meta.sizeBytes);
       }
       try {
@@ -221,7 +318,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
           body: toWebStream(source),
         };
       } catch (error) {
-        if (isNotFound(error)) return null;
+        if (isMissingObject(error)) return null;
         // The object changed between the size check and the read.
         if (isRangeRefused(error)) throw new RangeNotSatisfiableError();
         throw error;
@@ -260,11 +357,12 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
       });
       try {
         const done = await upload.done();
+        const etag = done.ETag ?? '';
         return {
           sizeBytes: counted.sizeBytes(),
           contentType: writeOptions.contentType ?? null,
-          etag: done.ETag ?? '',
-          lastModified: new Date(),
+          etag,
+          lastModified: responseDateOf(done) ?? new Date(),
         };
       } catch (error) {
         if (upload.uploadId !== undefined) {
@@ -337,7 +435,16 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
       if (response.IsTruncated === true && cursor === null) {
         throw new Error('S3 returned a truncated listing without a continuation token.');
       }
-      return { entries: entries.sort(compareEntryKeys), cursor };
+      // A recursive page keeps the server's order, which is the order its pages concatenate in;
+      // SeaweedFS lists `a/b.txt` before `a-b/c.txt`, unlike AWS. One level, the two arrays are
+      // merged in the order the server pages folders and files in.
+      if (listOptions?.recursive === true) return { entries, cursor };
+      return {
+        entries: entries.sort(
+          options.listingOrder === 'native' ? compareListingNames : compareEntryKeys,
+        ),
+        cursor,
+      };
     },
 
     async createSignedUrl(key, request): Promise<SignedUrl> {
@@ -381,140 +488,13 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
       return { url, headers };
     },
 
-    async put(key, input): Promise<void> {
-      await options.client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: prefixedObjectKey(prefix, key),
-          Body: input.body,
-          ...(input.contentType === undefined || input.contentType === null
-            ? {}
-            : { ContentType: input.contentType, Metadata: { 'aw-content-type-known': 'true' } }),
-        }),
-      );
-    },
-
-    async get(key): Promise<ObjectContent | null> {
-      try {
-        const response = await options.client.send(
-          new GetObjectCommand({ Bucket: bucket, Key: prefixedObjectKey(prefix, key) }),
-        );
-        if (response.Body === undefined) return null;
-        const body = await response.Body.transformToByteArray();
-        return {
-          body,
-          contentType:
-            response.Metadata?.['aw-content-type-known'] === 'true'
-              ? (response.ContentType ?? null)
-              : null,
-          sizeBytes: response.ContentLength ?? body.byteLength,
-          lastModified: response.LastModified ?? new Date(0),
-        };
-      } catch (error) {
-        if (isNotFound(error)) return null;
-        throw error;
-      }
-    },
-
     async delete(key): Promise<void> {
       await options.client.send(
         new DeleteObjectCommand({ Bucket: bucket, Key: prefixedObjectKey(prefix, key) }),
       );
     },
 
-    async list(key): Promise<readonly ObjectListEntry[]> {
-      const requestedPrefix = prefixedListPrefix(prefix, key);
-      const entries: ObjectListEntry[] = [];
-      let continuationToken: string | undefined;
-      do {
-        const response = await options.client.send(
-          new ListObjectsV2Command({
-            Bucket: bucket,
-            Prefix: requestedPrefix,
-            Delimiter: '/',
-            ...(continuationToken === undefined ? {} : { ContinuationToken: continuationToken }),
-          }),
-        );
-        for (const folder of response.CommonPrefixes ?? []) {
-          if (folder.Prefix === undefined) continue;
-          const key = folder.Prefix.slice(prefix.length).replace(/\/$/u, '');
-          if (addressableObjectName(key) === null) continue;
-          entries.push({ kind: 'folder', key });
-        }
-        for (const object of response.Contents ?? []) {
-          if (object.Key === undefined || object.Key === requestedPrefix) continue;
-          if (addressableObjectName(object.Key.slice(prefix.length)) === null) continue;
-          const metadata = await options.client.send(
-            new HeadObjectCommand({ Bucket: bucket, Key: object.Key }),
-          );
-          entries.push({
-            kind: 'file',
-            key: object.Key.slice(prefix.length),
-            sizeBytes: object.Size ?? 0,
-            contentType:
-              metadata.Metadata?.['aw-content-type-known'] === 'true'
-                ? (metadata.ContentType ?? null)
-                : null,
-            lastModified: object.LastModified ?? new Date(0),
-          });
-        }
-        continuationToken =
-          response.IsTruncated === true ? response.NextContinuationToken : undefined;
-        if (response.IsTruncated === true && continuationToken === undefined) {
-          throw new Error('S3 returned a truncated listing without a continuation token.');
-        }
-      } while (continuationToken !== undefined);
-      return entries.sort(compareEntryKeys);
-    },
-
-    async listPrefix(key): Promise<readonly ObjectListEntry[]> {
-      // No `Delimiter`: every object whose S3 key is `key` itself or nested under it, however
-      // deep — the recursive counterpart to `list`'s one-level `CommonPrefixes` walk.
-      const safe = toObjectPrefix(key);
-      const requestedPrefix = safe === '' ? prefix : `${prefix}${safe}`;
-      const entries: ObjectListEntry[] = [];
-      let continuationToken: string | undefined;
-      do {
-        const response = await options.client.send(
-          new ListObjectsV2Command({
-            Bucket: bucket,
-            Prefix: requestedPrefix,
-            ...(continuationToken === undefined ? {} : { ContinuationToken: continuationToken }),
-          }),
-        );
-        for (const object of response.Contents ?? []) {
-          if (object.Key === undefined) continue;
-          // `requestedPrefix` with no trailing `/` also matches a *sibling* key that merely
-          // starts with the same characters (`docs` matching `docs2/x`); the same boundary
-          // `packages/core/src/db/repositories/resource-catalogs.ts`'s prefix rewrite guards
-          // against. Only `requestedPrefix` itself or `${requestedPrefix}/…` is a real match.
-          const relative = object.Key.slice(prefix.length);
-          if (safe !== '' && relative !== safe && !relative.startsWith(`${safe}/`)) continue;
-          if (addressableObjectName(relative) === null) continue;
-          const metadata = await options.client.send(
-            new HeadObjectCommand({ Bucket: bucket, Key: object.Key }),
-          );
-          entries.push({
-            kind: 'file',
-            key: relative,
-            sizeBytes: object.Size ?? 0,
-            contentType:
-              metadata.Metadata?.['aw-content-type-known'] === 'true'
-                ? (metadata.ContentType ?? null)
-                : null,
-            lastModified: object.LastModified ?? new Date(0),
-          });
-        }
-        continuationToken =
-          response.IsTruncated === true ? response.NextContinuationToken : undefined;
-        if (response.IsTruncated === true && continuationToken === undefined) {
-          throw new Error('S3 returned a truncated listing without a continuation token.');
-        }
-      } while (continuationToken !== undefined);
-      return entries.sort(compareEntryKeys);
-    },
-
-    async copyObject(sourceKey, destinationKey): Promise<void> {
+    async copy(sourceKey, destinationKey): Promise<void> {
       const sourceFullKey = prefixedObjectKey(prefix, sourceKey);
       const destinationFullKey = prefixedObjectKey(prefix, destinationKey);
       try {
@@ -531,7 +511,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
       } catch (error) {
         // A missing source is a no-op — see `object-store.ts`'s header for why this is what makes
         // a retried subtree move idempotent rather than an error the second time.
-        if (isNotFound(error)) return;
+        if (isMissingObject(error)) return;
         throw error;
       }
     },
@@ -539,7 +519,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStoreV
   return backend;
 }
 
-export function createS3ObjectStoreProvider(options: S3ObjectStoreOptions): ObjectStoreProviderV2 {
+export function createS3ObjectStoreProvider(options: S3ObjectStoreOptions): ObjectStoreProvider {
   return scopedObjectStoreProvider(createS3ObjectStore(options));
 }
 
@@ -547,7 +527,7 @@ export function createS3ObjectStoreProvider(options: S3ObjectStoreOptions): Obje
 export async function createS3ObjectStoreProviderFromConfig(
   config: S3ObjectStoreConfig,
   clientOverride?: S3Client,
-): Promise<ObjectStoreProviderV2> {
+): Promise<ObjectStoreProvider> {
   return scopedObjectStoreProvider(await createS3ObjectStoreFromConfig(config, clientOverride));
 }
 
@@ -555,7 +535,7 @@ export async function createS3ObjectStoreProviderFromConfig(
 export async function createS3ObjectStoreFromConfig(
   config: S3ObjectStoreConfig,
   clientOverride?: S3Client,
-): Promise<ObjectStoreV2> {
+): Promise<ObjectStore> {
   const hasAccessKey = config.accessKeyId !== undefined && config.accessKeyId.trim() !== '';
   const hasSecret = config.secretAccessKey !== undefined && config.secretAccessKey.trim() !== '';
   if (hasAccessKey !== hasSecret) {
@@ -592,17 +572,19 @@ export async function createS3ObjectStoreFromConfig(
         : {}),
     });
   if (config.createBucketIfMissing === false) {
-    // List one key under the prefix instead of HeadBucket: the guide's policy grants s3:ListBucket
-    // only with an `s3:prefix` condition, which HeadBucket (no prefix) fails, so a customer
-    // following the guide would be refused. A missing bucket is still a 404 (NoSuchBucket).
-    const prefix = storeKeyPrefix(config.keyPrefix);
-    await client.send(
-      new ListObjectsV2Command({
-        Bucket: config.bucket,
-        MaxKeys: 1,
-        ...(prefix === '' ? {} : { Prefix: prefix }),
-      }),
-    );
+    if (config.checkBucketOnOpen !== false) {
+      // List one key under the prefix instead of HeadBucket: the guide's policy grants s3:ListBucket
+      // only with an `s3:prefix` condition, which HeadBucket (no prefix) fails, so a customer
+      // following the guide would be refused. A missing bucket is still a 404 (NoSuchBucket).
+      const prefix = storeKeyPrefix(config.keyPrefix);
+      await client.send(
+        new ListObjectsV2Command({
+          Bucket: config.bucket,
+          MaxKeys: 1,
+          ...(prefix === '' ? {} : { Prefix: prefix }),
+        }),
+      );
+    }
   } else {
     await ensureS3Bucket(client, config.bucket);
   }
@@ -611,6 +593,7 @@ export async function createS3ObjectStoreFromConfig(
     bucket: config.bucket,
     ...(config.keyPrefix === undefined ? {} : { keyPrefix: config.keyPrefix }),
     ...(config.publicEndpoint === undefined ? {} : { publicEndpoint: config.publicEndpoint }),
+    listingOrder: config.listingOrder ?? listingOrderFor(config.endpoint),
   });
 }
 

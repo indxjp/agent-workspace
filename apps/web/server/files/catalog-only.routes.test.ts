@@ -20,7 +20,7 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 
 import { clearApplicationContext } from '../application-context';
@@ -36,7 +36,7 @@ const PRINCIPAL = '37d41bbb-42d1-4a16-8f5d-de3fef42eed0';
 const ctx = { workspaceId: WORKSPACE, principalId: PRINCIPAL, userId: null };
 
 /** An in-memory root that signs every key, as an S3-style store does. */
-function signingRoot(): ObjectStoreV2 {
+function signingRoot(): ObjectStore {
   const store = createInMemoryObjectStore();
   return {
     ...store,
@@ -124,7 +124,7 @@ async function snapshot(w: CatalogFilesWorld): Promise<string> {
   return JSON.stringify({
     rows: await repository.listFiles(),
     pending: await repository.countPending(),
-    objects: await w.objects.list(''),
+    objects: (await w.objects.listPage('')).entries,
   });
 }
 
@@ -342,5 +342,54 @@ describe('two writers on one path', () => {
     // The writer that got 201 is the one whose bytes are stored.
     expect(text).toBe(responses[0]?.status === 201 ? 'first-writer' : 'second-writer!');
     expect(rows[0]?.sizeBytes).toBe(text.length);
+  });
+});
+
+describe('lastModified comes from the catalog row', () => {
+  afterEach(() => {
+    clearApplicationContext();
+  });
+
+  const writtenAt = async (w: CatalogFilesWorld, path: string): Promise<string | undefined> =>
+    (await (await w.catalogs.forWorkspace(WORKSPACE)).get(path))?.updatedAt?.toISOString();
+
+  // @story US-STO-01
+  it('[US-STO-01][api][sdk] upload, list, rename and upload-complete answer the time the row was written', async () => {
+    const w = world(true);
+    install(w);
+
+    const put = await cases.put.call();
+    expect(put.status).toBe(201);
+    const uploaded = ((await put.json()) as { file: { lastModified: string | null } }).file;
+    expect(uploaded.lastModified).not.toBeNull();
+    expect(uploaded.lastModified).toBe(await writtenAt(w, 'new.txt'));
+
+    await seedFile(w, DOC, 'hello');
+    const listed = await cases.list.call();
+    const files = ((await listed.json()) as { files: { path: string; lastModified: unknown }[] })
+      .files;
+    expect(files.find((file) => file.path === DOC)?.lastModified).toBe(await writtenAt(w, DOC));
+
+    const moved = await cases.move.call();
+    expect(moved.status).toBe(200);
+    const renamed = ((await moved.json()) as { file: { lastModified: string | null } }).file;
+    expect(renamed.lastModified).toBe(await writtenAt(w, 'docs/b.txt'));
+
+    await seedPendingUpload(w, 'big.bin');
+    const completed = await cases.complete.call();
+    expect(completed.status).toBe(200);
+    const done = ((await completed.json()) as { file: { lastModified: string | null } }).file;
+    expect(done.lastModified).toBe(await writtenAt(w, 'big.bin'));
+  });
+
+  // @story US-STO-01
+  it('[US-STO-01][api][sdk] a folder still answers no lastModified', async () => {
+    const w = world(true);
+    install(w);
+    await seedFile(w, DOC, 'hello');
+    const listed = await listRoute(new Request(url('/api/files?path=')));
+    const files = ((await listed.json()) as { files: { path: string; lastModified: unknown }[] })
+      .files;
+    expect(files.find((file) => file.path === 'docs')).toMatchObject({ lastModified: null });
   });
 });

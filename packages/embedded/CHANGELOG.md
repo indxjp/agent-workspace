@@ -3,6 +3,16 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts`, with
 the same version (ADR-0082 D3).
 
+## 0.6.12 — unreleased
+
+### Changed
+
+- The local runtime's database is PostgreSQL 18 (`embedded-postgres` 18.4). A data directory an
+  earlier release created with PostgreSQL 17 cannot be opened by 18: `aw dev` now stops with
+  `data_directory_version` and leaves the directory as it was, instead of failing with the server's
+  own error. Move `.agent-workspace/postgres` aside to start empty, or carry the data over as
+  "Upgrade the local database" in the `aw dev` docs describes.
+
 ## 0.6.11 — unreleased
 
 No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.

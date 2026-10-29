@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AGENT_LIST_ARCHIVED,
+  AGENT_LIST_PROBLEM_CODES,
   AGENT_PERMISSION_KEYS,
   AGENT_POLICY_PROBLEM_CODES,
   agentRequestIssueMessages,
   AgentGrantsSchema,
+  AgentListQuerySchema,
   AgentResourceSchema,
   BUILTIN_AGENT_KEYS,
   BUILTIN_AGENT_PROBLEM_CODES,
@@ -104,6 +107,18 @@ describe('agent lineage and archive on the resource (#1851)', () => {
     expect(parses({ createdByAgent: { ...lineage, runId: '' } })).toBe(false);
     expect(parses({ createdByAgent: { ...lineage, extra: true } })).toBe(false);
     expect(parses({ archivedAt: 'yesterday' })).toBe(false);
+  });
+});
+
+describe('AgentListQuerySchema (#1851)', () => {
+  it('reads no option, and `archived=include`, and nothing else', () => {
+    expect(AGENT_LIST_ARCHIVED).toEqual(['include']);
+    expect(AgentListQuerySchema.safeParse({}).success).toBe(true);
+    expect(AgentListQuerySchema.parse({ archived: 'include' })).toEqual({ archived: 'include' });
+    expect(AgentListQuerySchema.safeParse({ archived: 'all' }).success).toBe(false);
+    expect(AgentListQuerySchema.safeParse({ archived: '' }).success).toBe(false);
+    expect(AgentListQuerySchema.safeParse({ archived: ['include', 'x'] }).success).toBe(false);
+    expect(AGENT_LIST_PROBLEM_CODES).toEqual({ invalid_agent_list_query: 400 });
   });
 });
 

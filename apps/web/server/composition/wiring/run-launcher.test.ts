@@ -3,10 +3,12 @@ import {
   type ModelConnectionRecord,
 } from '@agent-workspace/core/db';
 import { bytesToStream, createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildRunRequestFor } from '../../compose/run-request';
+import type { AgentRunResourceLoader } from '../../compose/resource-loader';
 import { awControlServerFor } from '../../compose/run-request-tool-connectors';
 import type { RuntimeLaunchTarget } from '../../compose/runtime-profile';
 import { writeBackStorage } from '../../compose/storage-writeback';
@@ -26,6 +28,25 @@ import {
   withTranscription,
 } from './run-launcher';
 
+/**
+ * The compose arguments these tests read, by name. The return type is spelled out, so a signature
+ * that moves one of them to another position fails `tsc` here rather than reading the wrong one.
+ */
+const { composeArguments } = vi.hoisted(() => ({
+  composeArguments: (
+    args: Parameters<typeof buildRunRequestFor>,
+  ): {
+    readonly resourceLoader: AgentRunResourceLoader | undefined;
+    readonly projectId: string | null;
+    readonly ceiling: ProjectPolicy | null;
+  } => {
+    // context, runAgent, settings, gateway, agentSecrets, permissionOverride, projectInstructions,
+    // resourceLoader, resolvedModel, projectId, modelProvider, snapshotTools, ceiling.
+    const [, , , , , , , resourceLoader, , projectId, , , ceiling] = args;
+    return { resourceLoader, projectId: projectId ?? null, ceiling: ceiling ?? null };
+  },
+}));
+
 // The wiring is real; only its far ends are seams: the launcher it builds, the request compose
 // builds (which loads the run's resources through the loader it is handed), and the write-back.
 vi.mock('../../runs/launcher', async (importOriginal) => ({
@@ -34,9 +55,10 @@ vi.mock('../../runs/launcher', async (importOriginal) => ({
 }));
 vi.mock('../../compose/run-request', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  buildRunRequestFor: vi.fn(async (...args: unknown[]) => {
-    const loader = args[7] as { load: (...load: unknown[]) => Promise<unknown> };
-    await loader.load();
+  buildRunRequestFor: vi.fn(async (...args: Parameters<typeof buildRunRequestFor>) => {
+    const { resourceLoader } = composeArguments(args);
+    // Each test's loader is a stub that reads no argument.
+    await (resourceLoader as unknown as { load: () => Promise<unknown> } | undefined)?.load();
     return { resources: { files: [] } };
   }),
 }));
@@ -89,8 +111,8 @@ function openai(): ResolvedModelConnection {
 
 async function readBytesFromStore(): Promise<(path: string) => Promise<Uint8Array | null>> {
   const objects = createInMemoryObjectStoreProvider().forWorkspace(WORKSPACE);
-  await objects.put(RECORDING.path, { body: new Uint8Array([7, 7]) });
-  return async (path) => (await objects.get(path))?.body ?? null;
+  await objects.write(RECORDING.path, new Uint8Array([7, 7]), {});
+  return async (path) => (await readWhole(objects, path))?.body ?? null;
 }
 
 describe('withTranscription (the launcher transcription step, issue #1313)', () => {
@@ -184,27 +206,40 @@ describe('withTranscription (the launcher transcription step, issue #1313)', () 
 });
 
 describe('the storage write-back wiring', () => {
-  it('[US-STO-12][unit][run] hands the write-back the folders compose delivered writable', async () => {
-    const folder = { connectionId: '55555555-5555-4555-8555-555555555555', prefix: 'reports' };
-    const scope = {};
+  const ACME = { connectionId: '55555555-5555-4555-8555-555555555555', prefix: 'reports' };
+  const BETA = { connectionId: '99999999-9999-4999-8999-999999999999', prefix: 'reports' };
+  type Folders = ReadonlyMap<string, { connectionId: string; prefix: string }>;
+
+  /**
+   * Launches one run through the real wiring and ends it with a write-back. `loads` answers the
+   * run's resource loads in turn: the input archive's first when there is a catalog, then compose's.
+   */
+  async function writtenBack(loads: readonly Folders[], catalog: boolean) {
+    let load = 0;
     createCompositionRunLauncher({
       root: {
         recordAuditEvent: () => Promise.resolve(),
         runs: { forScope: () => ({ snapshotFileGrants: () => Promise.resolve(true) }) },
       },
-      scopes: { forWorkspaceId: () => Promise.resolve(scope) },
+      scopes: { forWorkspaceId: () => Promise.resolve({}) },
       sessionRows: { forScope: () => ({ get: () => Promise.resolve(null) }) },
       recordRunTelemetry: () => undefined,
       secretsService: null,
       modelsApi: null,
       runnerManager: null,
       resolveProviderCredential: () => Promise.resolve(null),
-      filesRuntime: null,
+      filesRuntime: catalog ? { storage: {} } : null,
       runResources: {
         load: () =>
-          Promise.resolve({ storageFolders: new Map([['storage/acme-data/reports', folder]]) }),
+          Promise.resolve({
+            files: [],
+            skills: [],
+            mcpServers: {},
+            storageFolders: loads[Math.min(load++, loads.length - 1)],
+          }),
       },
-      runAgentOf: () => Promise.resolve({ agent: {} }),
+      runAgentOf: () =>
+        Promise.resolve({ agent: { permissions: {}, policy: null }, assignments: {} }),
       readRunAgent: () => Promise.reject(new Error('unused')),
       runStorageConnections: {},
       wave5Repositories: () => Promise.reject(new Error('unused')),
@@ -232,6 +267,8 @@ describe('the storage write-back wiring', () => {
     const options = vi.mocked(createRunnerLauncher).mock.calls.at(-1)?.[0];
     const context = { ...(await launchContext()), attachments: [] };
 
+    // The launcher's order: the input archive, then compose, then the write-back.
+    await options?.workspaceLifecycle?.inputArchive(context);
     await options?.buildRunRequest(context, {
       runnerUrl: 'http://runner.test',
       workspaceRoot: '/workspace',
@@ -243,10 +280,28 @@ describe('the storage write-back wiring', () => {
       collect: () => Promise.resolve(null),
       signal: new AbortController().signal,
     });
+    const run = vi.mocked(writeBackStorage).mock.calls.at(-1)?.[0];
+    return { folders: run?.folders, hydrated: run?.hydrated, loads: load };
+  }
 
-    expect(vi.mocked(writeBackStorage).mock.calls.at(-1)?.[0].folders).toEqual(
-      new Map([['storage/acme-data/reports', folder]]),
-    );
+  it('[US-STO-12][unit][run] hands the write-back the folders compose delivered writable', async () => {
+    const folders = new Map([['storage/acme-data/reports', ACME]]);
+    const run = await writtenBack([folders], false);
+
+    expect(run.folders).toEqual(folders);
+    // No catalog: no archive was loaded, so there is nothing to compare compose's folders with.
+    expect(run.hydrated).toBeUndefined();
+  });
+
+  it('[US-STO-12][unit][run] hands the write-back the folders the input archive was loaded with', async () => {
+    // `acme-data` was BETA's name when the archive was loaded, and ACME's by the compose load.
+    const archived = new Map([['storage/acme-data/reports', BETA]]);
+    const composed = new Map([['storage/acme-data/reports', ACME]]);
+    const run = await writtenBack([archived, composed], true);
+
+    expect(run.loads).toBe(2);
+    expect(run.folders).toEqual(composed);
+    expect(run.hydrated).toEqual(archived);
   });
 });
 
@@ -311,8 +366,10 @@ describe("the policy ceiling a run is composed under (#1851: a project's policy 
       runnerUrl: 'http://runner.test',
       workspaceRoot: '/workspace',
     } as RuntimeLaunchTarget);
-    const args = vi.mocked(buildRunRequestFor).mock.calls.at(-1) ?? [];
-    return { projectsGot, projectId: args[9], ceiling: args[12] };
+    const args = vi.mocked(buildRunRequestFor).mock.calls.at(-1);
+    if (args === undefined) throw new Error('compose was not called');
+    const { projectId, ceiling } = composeArguments(args);
+    return { projectsGot, projectId, ceiling };
   }
   const doorFor = (ceiling: unknown) =>
     awControlServerFor({ name: NAME }, ceiling as ProjectPolicy | null, 'http://gateway:4000', 't');

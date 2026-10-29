@@ -56,5 +56,8 @@
     }
   },
   "//neverConnectToCloud": "Nx Cloud is decommissioned (docs/adr/0110). This stops Nx from ever contacting it, whatever NX_CLOUD_* variable or nxCloudId reappears; it does NOT disable the self-hosted HTTP remote cache, which CI connects per job through .github/actions/nx-remote-cache (NX_SELF_HOSTED_REMOTE_CACHE_SERVER). scripts/ci/check-nx-cache-config.mjs keeps both true.",
-  "neverConnectToCloud": true
+  "neverConnectToCloud": true,
+  "affected": {
+    "legacy": true
+  }
 }

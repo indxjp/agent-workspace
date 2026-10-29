@@ -482,6 +482,8 @@ def state : State
     [row ([("id", "sc1"), ("workspace_id", "w1"), ("name", "archive"), ("provider", "s3"),
        ("url", "s3://archive/"), ("allowed_prefixes", "{}"), ("write_allowed", "false")] ++
        stamps)]
+  | .workspaceFeatures =>
+    [row [("id", "wf1"), ("workspace_id", "w1"), ("feature", "surfaces"), ("created_at", "1000")]]
   | .storageMigrationRuns =>
     [row [("id", "smr1"), ("finished_at", "1000"), ("rows_checked", "4"), ("legacy_rows", "0"),
        ("mismatches", "0"), ("stage", "finalize"), ("skipped_ownerless", "0"),
@@ -498,7 +500,8 @@ def load : List Stmt :=
     .endpointClientAgents, .endpointClientApiKeys, .oauthTokens, .projects, .projectFiles,
     .projectMcpServers, .sessions, .surfaceSessionKeys, .sessionTranscripts, .sessionMessages, .sessionStateStreams, .sessionStateEntries, .sessionStateBlobs, .runs,
     .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .builderToolCalls, .auditEvents, .shares, .shareViews,
-    .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns].flatMap fun t =>
+    .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns,
+    .workspaceFeatures].flatMap fun t =>
       (state t).map (.insert t)
 
 end Witness

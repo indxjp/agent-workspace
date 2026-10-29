@@ -9,13 +9,15 @@ description: "Every method of AgentsClient, its parameters, return type, and rou
 
 ## list
 
+The workspace's agents; archived ones are left out unless `archived: 'include'` (#1851).
+
 ```ts
-async list(options?: RequestOptions): Promise<readonly AgentResource[]>
+async list(options?: ListAgentsOptions): Promise<readonly AgentResource[]>
 ```
 
 | Name | Type | Required |
 | --- | --- | --- |
-| `options` | `RequestOptions` | No |
+| `options` | `ListAgentsOptions` | No |
 
 **Returns:** `Promise<readonly AgentResource[]>`
 
@@ -157,6 +159,24 @@ async update(agentId: string, patch: UpdateAgentPatch, options?: RequestOptions)
 **Returns:** `Promise<AgentResource>`
 
 **Route:** `PATCH /api/agents/:agentId`
+
+## restore
+
+Bring back an archived agent (`POST /api/agents/:id/restore`). An agent that is not archived is
+returned unchanged, so a repeat is safe. Only an Owner, an Admin or the agent's owner may.
+
+```ts
+async restore(agentId: string, options?: RequestOptions): Promise<AgentResource>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `agentId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<AgentResource>`
+
+**Route:** `POST /api/agents/:agentId/restore`
 
 ## remove
 
@@ -670,3 +690,12 @@ async list(agentId: string, query?: RunFeedbackListQuery, options?: RequestOptio
 **Returns:** `Promise<readonly RunFeedbackItem[]>`
 
 **Route:** `GET /api/agents/:agentId/feedback`
+
+## ListAgentsOptions
+
+Options of `agents.list`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `archived` | `undefined \| "include"` | No | `'include'` also lists archived agents, each with its `archivedAt`. Default: left out. |
+| `signal` | `undefined \| AbortSignal` | No |  |

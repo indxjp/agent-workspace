@@ -79,14 +79,25 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 /**
+ * The new workspace's Builder (#1848). `provisionBuilder` re-reads the `builder` switch inside the
+ * workspace's lock and never throws; `createWorkspace` still logs, not raises, anything that does.
+ */
+function provisionBuilder(workspaceId: string): Promise<void> {
+  const application = applicationContext();
+  if (application === null) return Promise.resolve();
+  return application.workspaceFeatures.provisionBuilder(workspaceId);
+}
+
+/**
  * `POST /api/workspaces` — create a workspace with the caller as its sole Owner. The body is read
  * inside the authorised callback, after `requireResourceAccess` allows — never before it, so an
- * unauthenticated `POST` with a malformed body still answers `401`, not `400`.
+ * unauthenticated `POST` with a malformed body still answers `401`, not `400`. After the commit it
+ * ensures the new workspace's Builder; a failure there does not fail the create.
  */
 export async function POST(request: Request): Promise<Response> {
   return withIdentity(request, async (repository, userId) => {
     const body = await readJsonBody(request);
     if (!body.ok) return body.result;
-    return createWorkspace(repository, userId, body.value);
+    return createWorkspace(repository, userId, body.value, provisionBuilder);
   });
 }

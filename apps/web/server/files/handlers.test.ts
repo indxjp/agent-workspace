@@ -69,10 +69,11 @@ const idContext = (id: string): { params: Promise<{ id: string }> } => ({
 const request = (method: string, url: string, init: RequestInit = {}): Request =>
   new Request(`https://example.invalid${url}`, { method, ...init });
 
+// Bytes, not a string: a string body would declare `text/plain` and the upload would keep it.
 const upload = (path: string, body: string): Promise<Response> =>
   uploadRoute(
     request('POST', '/api/files', {
-      body,
+      body: new TextEncoder().encode(body),
       headers: { 'x-file-path': path },
     }),
   );

@@ -1,0 +1,187 @@
+{
+  "turns": [
+    {
+      "toolUses": [
+        { "name": "mcp__aw-control__catalog_list", "input": { "kinds": ["connectors"] } }
+      ]
+    },
+    { "toolUses": [{ "name": "mcp__aw-control__examples_get", "input": {} }] },
+    {
+      "toolUses": [
+        {
+          "name": "mcp__aw-control__draft_check",
+          "input": {
+            "body": {
+              "definition": {
+                "apiVersion": "agentworkspace.dev/v1",
+                "kind": "AgentDefinition",
+                "agent": {
+                  "name": "Expense refunds",
+                  "instructions": "Answer expense refund requests.",
+                  "permissions": {
+                    "readFiles": true,
+                    "writeFiles": false,
+                    "runCommands": false,
+                    "unrestrictedNetwork": false
+                  },
+                  "model": null,
+                  "modelConnectionName": null,
+                  "runtimeProfileName": null
+                },
+                "policy": {
+                  "engine": "claude-agent-sdk",
+                  "tools": {
+                    "base": "claude_code_preset",
+                    "autoApprove": [],
+                    "deny": [],
+                    "permissionMode": "default",
+                    "allowDangerouslySkipPermissions": false
+                  },
+                  "skills": { "mode": "all" },
+                  "limits": { "maxTurns": null, "maxBudgetUsd": null }
+                },
+                "policySource": "stored",
+                "resources": { "files": [], "skills": [], "connectors": ["erp"] }
+              },
+              "surfaces": []
+            }
+          }
+        }
+      ]
+    },
+    { "text": "Refunds need the erp connector, which this workspace lacks. Use crm instead?" },
+    {
+      "toolUses": [
+        {
+          "name": "mcp__aw-control__draft_check",
+          "input": {
+            "body": {
+              "definition": {
+                "apiVersion": "agentworkspace.dev/v1",
+                "kind": "AgentDefinition",
+                "agent": {
+                  "name": "Expense refunds",
+                  "instructions": "Answer expense refund requests.",
+                  "permissions": {
+                    "readFiles": true,
+                    "writeFiles": false,
+                    "runCommands": false,
+                    "unrestrictedNetwork": false
+                  },
+                  "model": null,
+                  "modelConnectionName": null,
+                  "runtimeProfileName": null
+                },
+                "policy": {
+                  "engine": "claude-agent-sdk",
+                  "tools": {
+                    "base": "claude_code_preset",
+                    "autoApprove": [],
+                    "deny": [],
+                    "permissionMode": "default",
+                    "allowDangerouslySkipPermissions": false
+                  },
+                  "skills": { "mode": "all" },
+                  "limits": { "maxTurns": null, "maxBudgetUsd": null }
+                },
+                "policySource": "stored",
+                "resources": { "files": [], "skills": [], "connectors": ["crm"] }
+              },
+              "surfaces": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "toolUses": [
+        {
+          "name": "mcp__aw-control__draft_save",
+          "input": {
+            "body": {
+              "definition": {
+                "apiVersion": "agentworkspace.dev/v1",
+                "kind": "AgentDefinition",
+                "agent": {
+                  "name": "Expense refunds",
+                  "instructions": "Answer expense refund requests.",
+                  "permissions": {
+                    "readFiles": true,
+                    "writeFiles": false,
+                    "runCommands": false,
+                    "unrestrictedNetwork": false
+                  },
+                  "model": null,
+                  "modelConnectionName": null,
+                  "runtimeProfileName": null
+                },
+                "policy": {
+                  "engine": "claude-agent-sdk",
+                  "tools": {
+                    "base": "claude_code_preset",
+                    "autoApprove": [],
+                    "deny": [],
+                    "permissionMode": "default",
+                    "allowDangerouslySkipPermissions": false
+                  },
+                  "skills": { "mode": "all" },
+                  "limits": { "maxTurns": null, "maxBudgetUsd": null }
+                },
+                "policySource": "stored",
+                "resources": { "files": [], "skills": [], "connectors": ["crm"] }
+              },
+              "surfaces": []
+            }
+          }
+        }
+      ]
+    },
+    { "text": "Never served: the interrupted draft_save leaves a synthetic message in this slot." },
+    {
+      "toolUses": [
+        {
+          "name": "mcp__aw-control__draft_save",
+          "input": {
+            "body": {
+              "definition": {
+                "apiVersion": "agentworkspace.dev/v1",
+                "kind": "AgentDefinition",
+                "agent": {
+                  "name": "Expense refunds",
+                  "instructions": "Answer expense refund requests.",
+                  "permissions": {
+                    "readFiles": true,
+                    "writeFiles": false,
+                    "runCommands": false,
+                    "unrestrictedNetwork": false
+                  },
+                  "model": null,
+                  "modelConnectionName": null,
+                  "runtimeProfileName": null
+                },
+                "policy": {
+                  "engine": "claude-agent-sdk",
+                  "tools": {
+                    "base": "claude_code_preset",
+                    "autoApprove": [],
+                    "deny": [],
+                    "permissionMode": "default",
+                    "allowDangerouslySkipPermissions": false
+                  },
+                  "skills": { "mode": "all" },
+                  "limits": { "maxTurns": null, "maxBudgetUsd": null }
+                },
+                "policySource": "stored",
+                "resources": { "files": [], "skills": [], "connectors": ["crm"] }
+              },
+              "surfaces": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "text": "Saved the refund desk as version 1 on local. Try it, or open its history to promote it."
+    }
+  ]
+}

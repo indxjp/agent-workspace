@@ -6,11 +6,13 @@ import {
   RangeNotSatisfiableError,
   assertRangeShape,
   clampListLimit,
+  compareEntryKeys,
   type ByteRange,
   type ListPageOptions,
+  type ObjectContent,
   type ObjectListEntry,
   type ObjectPage,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from './object-store.js';
 
 export function bytesToStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
@@ -31,6 +33,40 @@ export async function streamToBytes(stream: ReadableStream<Uint8Array>): Promise
     if (done) return Buffer.concat(chunks);
     chunks.push(Buffer.from(value));
   }
+}
+
+/** The whole object at `key` with its meta, or `null` if there is none. Small bodies only. */
+export async function readWhole(
+  store: Pick<ObjectStore, 'read'>,
+  key: string,
+): Promise<ObjectContent | null> {
+  const found = await store.read(key);
+  if (found === null) return null;
+  const body = await streamToBytes(found.body);
+  const { contentType, lastModified } = found.meta;
+  return { body, contentType, sizeBytes: body.byteLength, lastModified };
+}
+
+/**
+ * Every entry of a listing, every page read, sorted by key: one level with folders, or every file
+ * strictly beneath `prefix` (`recursive`).
+ */
+export async function listAll(
+  store: Pick<ObjectStore, 'listPage'>,
+  prefix: string,
+  options: { readonly recursive?: boolean } = {},
+): Promise<ObjectListEntry[]> {
+  const entries: ObjectListEntry[] = [];
+  let cursor: string | null = null;
+  do {
+    const page: ObjectPage = await store.listPage(prefix, {
+      ...options,
+      ...(cursor === null ? {} : { cursor }),
+    });
+    entries.push(...page.entries);
+    cursor = page.cursor;
+  } while (cursor !== null);
+  return entries.sort(compareEntryKeys);
 }
 
 /**
@@ -171,48 +207,77 @@ function compareKeyKind(
   return leftKind < rightKind ? -1 : leftKind > rightKind ? 1 : 0;
 }
 
-/**
- * Page an already complete, key-sorted listing. For backends with no native paging (memory, local
- * filesystem). The cursor is `<kind>:<key>` of the last entry returned, so a page ending on a file
- * does not skip the folder of the same name.
- */
-function pageEntries(
-  sorted: readonly ObjectListEntry[],
-  options: ListPageOptions | undefined,
-): ObjectPage {
-  const limit = clampListLimit(options?.limit);
-  const ordered = [...sorted].sort((left, right) =>
-    compareKeyKind(left.key, left.kind, right.key, right.kind),
-  );
-  const after = options?.cursor;
-  let rest: readonly ObjectListEntry[] = ordered;
-  if (after !== undefined) {
-    // A cursor without a kind resumes after every entry before its key.
-    const sep = after.indexOf(':');
-    const afterKind = after.slice(0, Math.max(sep, 0));
-    const afterKey = after.slice(sep + 1);
-    rest = ordered.filter(
-      (entry) => compareKeyKind(entry.key, entry.kind, afterKey, afterKind) > 0,
-    );
-  }
-  const entries = rest.slice(0, limit);
-  const last = entries[entries.length - 1];
-  return {
-    entries,
-    cursor: rest.length > limit && last !== undefined ? `${last.kind}:${last.key}` : null,
-  };
+/** Where a `<kind>:<key>` cursor resumes; a cursor without a kind resumes after every entry before its key. */
+function cursorPosition(cursor: string): { readonly key: string; readonly kind: string } {
+  const sep = cursor.indexOf(':');
+  return { kind: cursor.slice(0, Math.max(sep, 0)), key: cursor.slice(sep + 1) };
 }
 
-/** `listPage` for a backend whose array-returning `list`/`listPrefix` already work. */
+/**
+ * Entries a backend lists in one call. An array may be in any order; an async iterable yields in
+ * key-then-kind order and may skip every entry whose key is below `after`, so a page walks only
+ * from its cursor on and stops once it is full.
+ */
+type ListedEntries = Promise<readonly ObjectListEntry[]> | AsyncIterable<ObjectListEntry>;
+
+/**
+ * `listPage` for a backend with no native paging (memory, local filesystem, folder) that lists a
+ * whole level (`level`) or tree (`tree`) in one call. The cursor is `<kind>:<key>` of the last entry
+ * returned, so a page ending on a file does not skip the folder of the same name.
+ */
 export async function listPageFrom(
-  store: Pick<ObjectStoreV2, 'list' | 'listPrefix'>,
+  listing: {
+    level(prefix: string, after: string | undefined): ListedEntries;
+    tree(prefix: string, after: string | undefined): ListedEntries;
+  },
   prefix: string,
   options: ListPageOptions | undefined,
 ): Promise<ObjectPage> {
   options?.signal?.throwIfAborted();
-  if (options?.recursive !== true) return pageEntries(await store.list(prefix), options);
+  const limit = clampListLimit(options?.limit);
+  const after = options?.cursor === undefined ? undefined : cursorPosition(options.cursor);
+  const recursive = options?.recursive === true;
   // Strictly beneath the prefix: a file named exactly `prefix` is not "under" it.
-  const self = toObjectPrefix(prefix);
-  const beneath = (await store.listPrefix(prefix)).filter((entry) => entry.key !== self);
-  return pageEntries(beneath, options);
+  const self = recursive ? toObjectPrefix(prefix) : undefined;
+  const listed = recursive ? listing.tree(prefix, after?.key) : listing.level(prefix, after?.key);
+  const ordered =
+    Symbol.asyncIterator in listed
+      ? listed
+      : [...(await listed)].sort((left, right) =>
+          compareKeyKind(left.key, left.kind, right.key, right.kind),
+        );
+  const entries: ObjectListEntry[] = [];
+  for await (const entry of ordered) {
+    if (entry.key === self) continue;
+    if (after !== undefined && compareKeyKind(entry.key, entry.kind, after.key, after.kind) <= 0) {
+      continue;
+    }
+    if (entries.length === limit) {
+      const last = entries[limit - 1];
+      return { entries, cursor: last === undefined ? null : `${last.kind}:${last.key}` };
+    }
+    entries.push(entry);
+  }
+  return { entries, cursor: null };
+}
+
+/**
+ * Whether every key beneath the folder `key` sorts before `after`, so a walk resuming at `after`
+ * need not enter it. A folder's keys all start `key/`.
+ */
+export function walkedBefore(key: string, after: string | undefined): boolean {
+  return after !== undefined && after > `${key}/` && !after.startsWith(`${key}/`);
+}
+
+/** Directory entries in the order their keys sort: a folder's name compares as `name/`. */
+export function inWalkOrder<T extends { readonly name: string }>(
+  entries: readonly T[],
+  isFolder: (entry: T) => boolean,
+): T[] {
+  const sortKey = (entry: T): string => (isFolder(entry) ? `${entry.name}/` : entry.name);
+  return [...entries].sort((left, right) => {
+    const a = sortKey(left);
+    const b = sortKey(right);
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
 }

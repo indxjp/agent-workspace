@@ -40,6 +40,14 @@ export const AGENT_DEFINITION_REFERENCE_KINDS: readonly ["skill", "connector", "
 // @public (undocumented)
 export const AGENT_INSTRUCTIONS_MAX_LENGTH = 100000;
 
+// @public
+export const AGENT_LIST_ARCHIVED: readonly ["include"];
+
+// @public
+export const AGENT_LIST_PROBLEM_CODES: {
+    readonly invalid_agent_list_query: 400;
+};
+
 // @public (undocumented)
 export const AGENT_MODEL_MAX_LENGTH = 200;
 
@@ -268,6 +276,19 @@ export type AgentGrants = z.infer<typeof AgentGrantsSchema>;
 // @public
 export const AgentGrantsSchema: z.ZodReadonly<z.ZodObject<{
     principalIds: z.ZodReadonly<z.ZodArray<z.ZodPipe<z.ZodString, z.ZodTransform<string, string>>>>;
+}, z.core.$strict>>;
+
+// @public (undocumented)
+export type AgentListArchived = (typeof AGENT_LIST_ARCHIVED)[number];
+
+// @public (undocumented)
+export type AgentListProblemCode = keyof typeof AGENT_LIST_PROBLEM_CODES;
+
+// @public
+export const AgentListQuerySchema: z.ZodReadonly<z.ZodObject<{
+    archived: z.ZodOptional<z.ZodEnum<{
+        include: "include";
+    }>>;
 }, z.core.$strict>>;
 
 // @public (undocumented)

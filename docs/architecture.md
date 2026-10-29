@@ -10,8 +10,8 @@ enforces it; a rule with no gate is not listed. Decisions and their reasons live
 Agent Workspace is a pnpm monorepo with two deployable applications and a set of supporting
 packages. The web application is the control plane. The runner executes an agent inside a selected
 runtime through an engine adapter. The gateway substitutes a short-lived run identity for a stored
-provider credential. Core owns persistence, object storage, secrets and the telemetry port; runtime
-owns the sandbox drivers; the engine port and its adapters own agent execution; run-protocol is the
+provider credential. Core owns persistence, the object stores behind the storage catalog
+([Storage](#storage)), secrets and the telemetry port; runtime owns the sandbox drivers; the engine port and its adapters own agent execution; run-protocol is the
 private contract between the control plane, the runner and the adapters. Contracts publish the
 control plane's wire schemas, the SDK is the typed client over them that the web application's
 browser code and external integrations share, and `aw` is the operator's command line over the SDK.
@@ -33,7 +33,7 @@ flowchart LR
   Adapters -->|model calls with traceparent| Gateway[packages/gateway model proxy]
   Gateway --> Providers[External model providers]
   Core --> PostgreSQL[(PostgreSQL)]
-  Core --> Objects[(Local or S3 objects)]
+  Core --> Objects[(Local, S3, GCS or Azure objects)]
 ```
 
 ## Repository ownership
@@ -64,6 +64,112 @@ small leaves, each with its own dependency rule. Tests stay beside the unit they
 cross-package conformance and browser/e2e tests live under `tests/`. Infrastructure is under
 `infra/`, deployment documentation under `docs/deploy/`, and architecture decisions under
 `docs/adr/`.
+
+## Ports and adapters
+
+The same areas, seen as hexagons. Each area has one of five roles: a **driving adapter** calls in
+(a route, a screen, a command line); the **application** runs a use case; a **core** decides, with
+no I/O; a **driven adapter** is called out to (the database, object storage, a runner); a
+**contract or port** is the shared language between them. The control plane is one hexagon:
+callers come in through routes, a use case asks its domain's core for a decision, then calls the
+adapters it needs. The runner and the gateway are hexagons of their own; the diagram shows them
+from the control plane's side, where the gateway also calls in for the Builder. A change that adds
+a component, a port, an adapter or a line of communication updates this section in the same pull
+request.
+
+```mermaid
+flowchart LR
+  subgraph In[Calls in]
+    UI[Browser UI, session cookie]
+    Clients[SDK, aw, CLI, with a token]
+    Hosted[Hosted surfaces and A2A, public routes]
+    Cron[Scheduled pass, cron route]
+    GatewayIn[Gateway, aw-control for the Builder]
+  end
+  subgraph Web[apps/web control plane]
+    Routes[routes] --> UseCases[use cases]
+    UseCases --> DomainCore[domain core, no I/O]
+    UseCases --> Stores[store.ts and adapters]
+    Composition[composition root] -.->|builds| UseCases
+  end
+  subgraph Out[Called out to]
+    PG[(PostgreSQL)]
+    Objects[(Object storage)]
+    Secrets[Secrets]
+    Runner[Runner]
+    Logs[Logs and traces]
+  end
+  UI --> Routes
+  Clients --> Routes
+  Hosted --> Routes
+  Cron --> Routes
+  GatewayIn --> Routes
+  Stores --> PG
+  Stores --> Objects
+  Stores --> Secrets
+  UseCases -->|POST /run| Runner
+  UseCases --> Logs
+```
+
+| Role             | Areas                                                                                                                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Driving adapter  | `apps/web/app` (routes), `apps/web/components` (screens), `packages/sdk`, `packages/react`, `packages/aw`, `packages/cli`                                                                    |
+| Application      | a domain's use cases in `apps/web/server/<domain>`, the composition root `apps/web/server/composition`, `apps/runner`                                                                        |
+| Core             | a domain's `core/` folder (`apps/web/server/builder/core/` is the one checked, by `builder-core-is-pure`); `packages/platforms` (`platforms-are-pure`)                                       |
+| Driven adapter   | `packages/core`, a domain's `store.ts` and `adapters/`, the drivers in `packages/runtime`, the `packages/engine-*` adapters, `packages/gateway`, and the leaf packages                       |
+| Contract or port | `packages/contracts`, `packages/run-protocol`, the `AgentEngine` port in `packages/engine`, the `RuntimeDriver` port in `packages/runtime`, the `PlatformTarget` port, a domain's `ports.ts` |
+
+### Ports
+
+| Port                    | Defined in                                               | Adapters                                                                 | Used by                                               | Held to it by                                                |
+| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `AgentEngine`           | `packages/engine/src/port.ts`                            | one per `packages/engine-*`                                              | the runner, only through `apps/runner/src/engines.ts` | the conformance kit in `@agent-workspace/engine/testing`     |
+| `RuntimeDriver`         | `packages/runtime/src/driver.ts`                         | one per `./driver/*` subpath                                             | the runner                                            | each driver's tests                                          |
+| `PlatformTarget`        | `packages/platforms/src/port.ts`                         | `packages/platforms/src/targets/`, listed in `registry.ts`               | `aw`, the control plane and the CLI                   | the platform conformance kit (ADR-0133)                      |
+| `ObjectStore`           | `packages/core/src/storage/object-store.ts`              | local, S3, GCS, Azure, and memory for tests                              | the storage catalog service                           | one contract suite, `packages/core/src/storage/contract.ts`  |
+| `CatalogPort` (storage) | `packages/core/src/db/repositories/resource-catalogs.ts` | PostgreSQL, and `memory-catalog.ts` for tests                            | the storage catalog service and the files domain      | `resource-catalogs.contract.ts`, run against both            |
+| `SecretsService`        | `packages/core/src/secrets/service.ts`                   | the database, and in memory for tests                                    | the control plane and the gateway                     | `packages/core/src/secrets/service.test.ts`                  |
+| `Logger`                | `packages/core/src/telemetry/logger.ts`                  | JSON lines                                                               | web, runner and gateway                               | `packages/core/src/telemetry/telemetry.test.ts`              |
+| The Builder's ports     | `apps/web/server/builder/ports.ts`                       | a production and a memory adapter each, under `builder/adapters/<port>/` | the Builder's use cases                               | one `<port>.contract.ts` per port, run against both adapters |
+| `<Domain>StoreProvider` | `apps/web/server/<domain>/store.ts`                      | PostgreSQL, and in memory for tests                                      | that domain                                           | `tests/store-conformance.test.ts`                            |
+
+The Builder's ports are `ApprovalPort`, `AuthorizationPort`, `PolicyPort`, `AuditPort`,
+`CheckerPort`, `RunnerPort`, `CatalogPort` and `AgentStorePort`. Its `CatalogPort` (the names and
+ids the Builder may offer) is not the storage `CatalogPort`; the two share a name only.
+
+### How components talk
+
+Every line is HTTP or a port call, and each carries a typed contract. A value that arrives over
+one of them is `unknown` until a schema checks it ([Runtime and trust boundaries](#runtime-and-trust-boundaries)).
+
+| From                 | To              | How, and what it carries                                                                                           |
+| -------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Browser              | control plane   | HTTPS `/api/**` through the SDK with the session cookie; every answer is validated against the contracts           |
+| `aw`, SDK users, CLI | control plane   | the same SDK over HTTPS, with a token                                                                              |
+| Browser              | object storage  | a file above `MAX_UPLOAD_BYTES` (64 MiB): a signed upload link, then an `upload-complete` call                     |
+| Control plane        | PostgreSQL      | `packages/core` repositories, through a domain's `store.ts` (older imports elsewhere are a baseline)               |
+| Control plane        | object storage  | `ObjectStore`, streamed, through the storage catalog service; no rule yet makes it the only way in                 |
+| Control plane        | runner          | `POST /run` with a `RunRequest`, a bearer token when one is set, and `traceparent`                                 |
+| Runner               | control plane   | the `agent.*` frames, as server-sent events on the same response; each frame's `id` is the resume cursor           |
+| Runner               | sandbox         | one `RuntimeDriver`                                                                                                |
+| Engine adapter       | gateway         | model calls with the short-lived run identity and `traceparent`                                                    |
+| Agent tools          | gateway         | `POST /v1/tools/:connectorId/mcp` and `POST /v1/tool-sandbox/mcp`                                                  |
+| Gateway              | control plane   | `POST /v1/tools/aw-control/mcp`, forwarded to `/api/builder/mcp` with only the run token, the body capped at 4 MiB |
+| Gateway              | model providers | provider HTTP with the stored credential                                                                           |
+| Every server process | logs and traces | one JSON line per event through the `Logger` port; W3C `traceparent` joins web, runner and gateway                 |
+
+### Where the code does not match yet
+
+- Only `apps/web/server/builder/core/` is checked for purity. `apps/web/server/shares/core/` is
+  named `core` but reads the application context and HTTP helpers.
+- `builder-core-is-pure` checks imports. A global such as `Date.now()` or `Math.random()` needs no
+  import, so only an ESLint rule catches it, as `packages/platforms` already does.
+- Some domain files still name persistence outside `store.ts`: the
+  `domain-does-not-import-persistence` baseline in `.dependency-cruiser-known-violations.json`.
+- Some files still read `process.env` outside the composition root: the `no-restricted-properties`
+  entries in `eslint-suppressions.json`.
+
+The last two are baselines that may only shrink ([Quality gates](#quality-gates)).
 
 ## Composition
 
@@ -114,6 +220,39 @@ flowchart LR
   A new `defineSlot` that holds composed domain wiring is a review finding: that domain belongs in
   `ApplicationContext`.
 
+## Storage
+
+Stored bytes live in one object store, chosen by one setting. Files, skills, chat attachments and
+run delivery also keep their names in one catalog
+([ADR-0153](adr/0153-object-storage-one-key-layout-catalog-first-writes-references-not-bytes.md)).
+There are three layers:
+
+- **The catalog service** (`apps/web/server/storage/service.ts`) is the only way those four read or
+  write a stored object. Routes and domains call it, never a backend; a domain without it is
+  `unavailable` and its routes answer `503`.
+- **Two ports** sit under it. `CatalogPort` holds the rows: a PostgreSQL version and an in-memory
+  version, both held to `resource-catalogs.contract.ts`; locks and concurrency are proven on
+  PostgreSQL only. `ObjectStore` holds the bytes, with one backend per URL scheme, each held to
+  `packages/core/src/storage/contract.ts`.
+- **The adapters** are the PostgreSQL repositories and the backends in `packages/core/src/storage/`.
+  `openObjectStore` imports only the backend the URL names, so a local install never loads a cloud
+  library, and wraps it in the scoped store that bounds a signed link's lifetime.
+
+Every save is row-first. The catalog reserves a `pending` row under a new object id, the bytes are
+streamed to `workspaces/<workspace id>/<area>/<object id>` (built only by `storageObjectName`), and
+one transaction confirms the row as `ready` with the size and checksum measured on the way. A
+replaced or removed row becomes `deleting` until its object is gone; the cleanup job reports what a
+crash left, and in `delete` mode removes it. Only a `ready` row is listed, searched or granted, and a rename changes the row alone.
+A signed-link upload takes the same steps, with `upload-complete` as the confirm.
+
+A run receives references, not bytes: the `RunRequest` lists each granted file's path, mode, size
+and checksum, the control plane streams the files to the runner as one archive, and the runner
+checks every checksum before the engine starts.
+
+`AW_STORAGE_URL` (`s3://`, `gcs://`, `azblob://` or `file://`) is the one location setting. It is
+parsed once, by `parseStorageUrl` in `packages/contracts/src/storage-url.ts`, for the server and the
+CLI alike, and it never carries a credential.
+
 ## Dependency rules
 
 The direction is delivery (routes, screens, `aw`) → application/domain → ports → infrastructure
@@ -146,6 +285,9 @@ rule in [`dependency-cruiser.config.mjs`](../dependency-cruiser.config.mjs), che
 | `only-the-s3-boundary-imports-the-s3-sdk`                                                                                     | only `core/src/storage/s3-store.ts` and the CLI bucket probe `cli/src/validate.ts` (ADR-0082) import the S3 libraries; tests, `.live.` and `.acceptance.` files may (the storage design, §07 rule 1)                                                                                                                                    |
 | `only-the-gcs-boundary-imports-the-gcs-sdk`                                                                                   | only `core/src/storage/gcs-store.ts` and `cli/src/validate.ts` import `@google-cloud/storage`; tests, `.live.` and `.acceptance.` files may                                                                                                                                                                                             |
 | `only-the-azure-boundary-imports-the-azure-sdk`                                                                               | only `core/src/storage/azure-blob-store.ts` imports `@azure/storage-blob`; tests, `.live.` and `.acceptance.` files may; `@azure/identity` is a credential library and is not covered                                                                                                                                                   |
+| `raw-storage-backends-stay-in-core-storage`                                                                                   | only `core/src/storage/` imports `s3-store.ts`, `gcs-store.ts` or `azure-blob-store.ts`, whose raw factories sign links with no expiry bound; tests may                                                                                                                                                                                 |
+| `storage-backends-are-for-tests`                                                                                              | only tests import `@agent-workspace/core/storage/backends`, which loads the Azure and Google Cloud libraries; production opens a store with `openObjectStore`                                                                                                                                                                           |
+| `memory-catalog-store-is-for-tests`                                                                                           | only tests import `resources/catalog-store.memory.ts`; production wires the PostgreSQL catalog store (the storage design, §07 rule 4)                                                                                                                                                                                                   |
 | `app-does-not-import-storage-adapters`                                                                                        | `app/**` never value-imports a domain `store.ts` or `composition/storage.ts`; type-only imports are allowed; baseline 0 (the storage design, §07 rule 2)                                                                                                                                                                                |
 | `domain-does-not-import-persistence`                                                                                          | only a domain's `store.ts` names `core/db`; baseline 46, 18 of them in the composition root                                                                                                                                                                                                                                             |
 | `production-does-not-import-tests`, `no-unresolved-imports`                                                                   | production code never imports a test module; every internal import resolves                                                                                                                                                                                                                                                             |
@@ -269,6 +411,10 @@ Each ratchet below moves in one direction only.
 | Coverage floors           | three suites (critical packages, apps, UI and CLI) meet their floors, and no floor is lower than on the base                                                     | `scripts/check-coverage-ratchet.mjs`, CI coverage jobs                                                                                 |
 | Public API reports        | an API Extractor report of every exported subpath of contracts, sdk, react and aw is committed and current, so a breaking change is a visible diff               | `docs/sdk/api/`, `pnpm docs:check` (`pnpm api:update` regenerates)                                                                     |
 | Formal specification      | the Lean model builds with no `sorry` or extra axiom, its layers point one way, every `file#symbol` citation resolves, and its vectors replay against TypeScript | `pnpm formal:check`, CI `formal` job ([ADR-0062](adr/0062-the-specification-is-a-lean-4-model-and-typescript-is-tested-against-it.md)) |
+| Storage story coverage    | every storage story × entry-point cell a test covered on the merge base is still covered; a malformed `[US-STO-xx]` tag fails                                    | `pnpm stories:check --base`, CI fast checks                                                                                            |
+| Storage size limits       | each storage size limit is defined in one place; a copy elsewhere in the storage scope fails, and the allowlist may only shrink                                  | `tests/storage-limits.test.ts`                                                                                                         |
+| Storage bridges           | every temporary storage bridge carries a marker, in the form ENGINEERING_GUIDELINES.md gives, naming the issue that deletes it                                   | `tests/storage-bridges.test.ts`, [the debt review](operations/debt-review.md)                                                          |
+| Catalog fakes             | tests use the shared in-memory catalog, not a hand-written copy of the catalog port; the allowlist may only shrink                                               | `tests/catalog-fakes.test.ts`                                                                                                          |
 | Store conformance         | every in-memory store is held to its PostgreSQL implementation by a shared conformance suite; the allowlist is empty                                             | `tests/store-conformance.test.ts`                                                                                                      |
 | PR ownership contract     | every changed file is covered by the `Owns globs:` line of the PR body                                                                                           | `scripts/check-file-ownership.mjs`                                                                                                     |
 | PR size                   | more than 3000 changed lines (generated files excluded) needs a `Large PR justification:` line                                                                   | `scripts/ci/check-pr-size.mjs`                                                                                                         |

@@ -89,6 +89,7 @@ export const SURFACE_SESSION_PROBLEM_CODES: {
     readonly policy_cannot_widen: 403;
     readonly daily_cost_cap_reached: 429;
     readonly daily_cost_unavailable: 503;
+    readonly agent_archived: 409;
     readonly builder_model_unavailable: 503;
     readonly surface_sessions_unavailable: 404;
     readonly surface_origin_not_allowed: 403;

@@ -144,7 +144,7 @@ document.documentElement.className += location.hash ? " js no-reveal" : " js";
           <tr><td class="k">web</td><td>The UI, <code>/api/**</code>, authentication, the setup wizard</td><td>Port <code>3000</code>, the only public one</td></tr>
           <tr><td class="k">gateway</td><td>The model gateway. Substitutes a per-run token for the stored provider credential; Anthropic-compatible <code>/v1/messages</code></td><td>Private; reachable from sandboxes</td></tr>
           <tr><td class="k">runner</td><td>Allocates a sandbox through the chosen runtime driver and relays the agent's events. The Docker socket is mounted here and nowhere else.</td><td>Private</td></tr>
-          <tr><td class="k">postgres</td><td>PostgreSQL 17. Every durable row: workspaces, principals, agents, runs, events</td><td>Private</td></tr>
+          <tr><td class="k">postgres</td><td>PostgreSQL 18. Every durable row: workspaces, principals, agents, runs, events</td><td>Private</td></tr>
           <tr><td class="k">storage</td><td>SeaweedFS, S3 or GCS. Workspace files, skills, transcripts</td><td>Private</td></tr>
         </tbody>
       </table>

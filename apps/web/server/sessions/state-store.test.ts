@@ -49,7 +49,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   bytesToStream,
   createLocalFilesystemObjectStoreProvider,
-  streamToBytes,
 } from '@agent-workspace/core/storage';
 import {
   parseBlobKey,
@@ -58,7 +57,6 @@ import {
   parseSequenceCursor,
   parseSessionStateEntries,
   parseStreamKey,
-  sessionStateBlobStorageKey,
   type SessionStateStore,
   type SessionStateStreamRef,
 } from './state';
@@ -517,28 +515,48 @@ describe.skipIf(!hasDatabase)('the PostgreSQL session-state store', () => {
   );
 });
 
-describe('DatabaseSessionStateStore — the blob half, which is only this file’s', () => {
-  it('writes the bytes before the row, so a failed row never claims a snapshot exists', async () => {
-    const { store, rows, objects } = databaseStore();
-    await expect(store.putBlob(BLOB, new Uint8Array([1, 2, 3]))).resolves.toEqual({ ok: true });
+/** A snapshot an earlier release saved: the bytes at the old key in the old store, and a row with no object id. */
+async function seedLegacyBlob(
+  { rows, objects }: ReturnType<typeof databaseStore>,
+  bytes: Uint8Array,
+): Promise<string> {
+  const storageKey = `session-state/${SESSION}/${BLOB.engine}/${BLOB.blobKey}`;
+  await objects
+    .forWorkspace(WORKSPACE)
+    .write(storageKey, bytesToStream(bytes), { contentType: 'application/octet-stream' });
+  rows.set(`${SESSION}/${BLOB.engine}/${BLOB.blobKey}`, {
+    blobKey: BLOB.blobKey,
+    objectId: null,
+    storageKey,
+    sizeBytes: bytes.byteLength,
+    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+  });
+  return storageKey;
+}
 
-    const storageKey = sessionStateBlobStorageKey(BLOB);
-    const object = await objects.forWorkspace(WORKSPACE).read(storageKey);
-    // `Uint8Array.from`, because the local-filesystem backend hands back a Node `Buffer` — a
-    // `Uint8Array` subclass that vitest's structural comparison reports as a different type.
-    expect(Uint8Array.from(object === null ? [] : await streamToBytes(object.body))).toEqual(
-      new Uint8Array([1, 2, 3]),
-    );
-    // The row records where the bytes are and what they were, never the bytes themselves.
-    const recorded = rows.get(`${SESSION}/claude-agent-sdk/state.tar`);
-    expect(recorded).toMatchObject({ blobKey: 'state.tar', storageKey, sizeBytes: 3 });
-    expect(recorded?.sha256).toMatch(/^[0-9a-f]{64}$/u);
+describe('DatabaseSessionStateStore — the blob half, which is only this file’s', () => {
+  // @story US-STO-13
+  it('[US-STO-13][unit][cli] a blob is never saved without the storage service', async () => {
+    const h = databaseStore();
+
+    const put = await h.store.putBlob(BLOB, new Uint8Array([1, 2, 3]));
+
+    expect(put.ok).toBe(false);
+    // Both causes are named: the variable may be set while the storage service failed to open.
+    expect(put.ok ? '' : put.reason).toMatch(/AW_STORAGE_URL is not set/u);
+    expect(put.ok ? '' : put.reason).toMatch(/storage service failed to open/u);
+    expect(h.rows.size).toBe(0);
+    await expect(
+      h.objects
+        .forWorkspace(WORKSPACE)
+        .head(`session-state/${SESSION}/${BLOB.engine}/${BLOB.blobKey}`),
+    ).resolves.toBeNull();
   });
 
-  it('round-trips a snapshot and reports the digest it recorded', async () => {
-    const { store } = databaseStore();
-    await store.putBlob(BLOB, new Uint8Array([7, 7, 7, 7]));
-    const read = await store.getBlob(BLOB);
+  it('round-trips a snapshot an earlier release saved and reports the digest it recorded', async () => {
+    const h = databaseStore();
+    await seedLegacyBlob(h, new Uint8Array([7, 7, 7, 7]));
+    const read = await h.store.getBlob(BLOB);
     expect(read.ok).toBe(true);
     if (!read.ok) return;
     expect(Uint8Array.from(read.content?.bytes ?? [])).toEqual(new Uint8Array([7, 7, 7, 7]));
@@ -551,16 +569,16 @@ describe('DatabaseSessionStateStore — the blob half, which is only this file�
   });
 
   it('refuses to hand back bytes that are not the ones it recorded', async () => {
-    const { store, objects } = databaseStore();
-    await store.putBlob(BLOB, new Uint8Array([1, 2, 3]));
+    const h = databaseStore();
+    const storageKey = await seedLegacyBlob(h, new Uint8Array([1, 2, 3]));
     // Somebody else wrote over the object. A recorded digest that is only ever *reported* proves
     // nothing about the bytes a caller was handed; it is the check that makes the claim.
-    await objects
+    await h.objects
       .forWorkspace(WORKSPACE)
-      .write(sessionStateBlobStorageKey(BLOB), bytesToStream(new Uint8Array([9, 9, 9])), {
+      .write(storageKey, bytesToStream(new Uint8Array([9, 9, 9])), {
         contentType: 'application/octet-stream',
       });
-    await expect(store.getBlob(BLOB)).rejects.toThrow(/Refusing to replay a snapshot/u);
+    await expect(h.store.getBlob(BLOB)).rejects.toThrow(/Refusing to replay a snapshot/u);
   });
 
   it('reports "no blob backend" rather than pretending to have stored something', async () => {
@@ -573,23 +591,15 @@ describe('DatabaseSessionStateStore — the blob half, which is only this file�
   });
 
   it('purges a blob row and then its bytes, and reports the counts', async () => {
-    const { store, objects } = databaseStore();
-    await store.putBlob(BLOB, new Uint8Array([1, 2, 3]));
-    await expect(store.purgeBefore(WORKSPACE, new Date())).resolves.toEqual({
+    const h = databaseStore();
+    const storageKey = await seedLegacyBlob(h, new Uint8Array([1, 2, 3]));
+    await expect(h.store.purgeBefore(WORKSPACE, new Date())).resolves.toEqual({
       entries: 0,
       blobs: 1,
       sessionIds: [],
     });
-    await expect(store.getBlob(BLOB)).resolves.toEqual({ ok: true, content: null });
-    await expect(
-      objects.forWorkspace(WORKSPACE).head(sessionStateBlobStorageKey(BLOB)),
-    ).resolves.toBeNull();
-  });
-
-  it('derives the old-naming object key from values the platform produced, never from a request', () => {
-    expect(sessionStateBlobStorageKey(BLOB)).toBe(
-      `session-state/${SESSION}/claude-agent-sdk/state.tar`,
-    );
+    await expect(h.store.getBlob(BLOB)).resolves.toEqual({ ok: true, content: null });
+    await expect(h.objects.forWorkspace(WORKSPACE).head(storageKey)).resolves.toBeNull();
   });
 });
 

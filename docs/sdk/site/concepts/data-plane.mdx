@@ -8,7 +8,8 @@ description: "Where the platform keeps state, bytes, secrets and sandboxes — a
 - **Read this when:** you operate a deployment and need to know where files, skills, secrets, state
   and sandboxes live on your cloud.
 - **You will learn:** what the developer sees versus what the operator configures, the per-cloud
-  contract and what is verified today, and how a file, a skill and a secret move through a run.
+  contract and what is verified today, the one storage URL with the stores that sign links and the
+  size limits, and how a file, a skill and a secret move through a run.
 - **Used in:** [Chapter 5: Ship it to your servers](/path/ship).
 
 </Info>
@@ -105,7 +106,7 @@ start):
 | Variable                                                                       | Read by                                                                                                                                                          | Required?                                                      | What it selects                                                                                                                                                                                                                         |
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DATABASE_URL`                                                                 | `packages/core/src/db/client.ts`                                                                                                                                 | Yes                                                            | The relational store — any `postgres://` or `postgresql://` connection string; any other scheme is refused.                                                                                                                             |
-| `AW_STORAGE_URL` | `apps/web/server/composition/config.ts` | No (blank installs no files, skills or session-state API; they answer `503`) | Where files, skills and session transcripts live, in one URL: `s3://bucket[/prefix]?endpoint=&publicEndpoint=&region=&pathStyle=`, `gcs://bucket?project=`, `azblob://account/container` or `file:///absolute/path`. It carries no key or password. Every deploy target sets it: Terraform for Cloud Run, Azure and the single-VM Compose, the rendered `.env` for Compose, Helm, Vercel and Cloudflare. It is the only storage location setting: the old ones are ignored (see below). |
+| `AW_STORAGE_URL` | `apps/web/server/composition/config.ts` | No (blank or invalid installs no files, skills or session-state API; they answer `503` and the server still starts) | Where files, skills and session transcripts live, in one URL: `s3://bucket[/prefix]?endpoint=&publicEndpoint=&region=&pathStyle=`, `gcs://bucket[/prefix]?project=`, `azblob://account/container[/prefix]?endpoint=` or `file:///absolute/path` ([the forms](/getting-started/configuration#tell-the-server-where-files-live)). It carries no key or password. Every deploy target sets it: Terraform for Cloud Run, Azure and the single-VM Compose, the chart's `storage.url` value or its object-store Secret for Helm, and the rendered `.env` for Compose, Vercel and Cloudflare. It is the only storage location setting: the old ones are ignored (see below). |
 | `AW_STORAGE_CREATE_BUCKET` | `apps/web/server/composition/storage.ts` | No (unset is `false`) | `true` creates the bucket of an `s3://` `AW_STORAGE_URL` on first boot, idempotently; the Compose files set it for the bundled SeaweedFS, which starts empty. `false` or unset never creates one, and any other value stops start-up. For another scheme it is ignored, with one warning. It is a platform setting and never a URL parameter, so a storage connection cannot ask for a bucket. |
 | `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES` | `apps/web/server/composition/storage.ts` | No (defaults to 5 GiB) | The largest signed upload in bytes. Terraform passes it when `storage_signed_upload_max_bytes` is set; the Helm chart takes it from the object-store Secret. |
 | The old storage location variables (listed in [storage settings](/reference/contracts/storage-settings)) | nothing | No | Ignored. Each one still set logs one `storage_setting_ignored` warning that names it, never its value. |
@@ -157,6 +158,50 @@ only, while the Azure profile defaults to an `azblob://` container. The Containe
 supplies the native Blob endpoint and managed identity. Naming an `s3://` bucket in the profile
 brings the existing chart path back.
 
+## One storage URL
+
+`AW_STORAGE_URL` names the store for files, skills and session transcripts in one URL; its four
+forms are on [Configuration](/getting-started/configuration#tell-the-server-where-files-live). Each
+object is stored as `workspaces/<workspace id>/<area>/<object id>` under the URL's prefix. The path
+a person sees, such as `reports/q3.pdf`, is a row in the platform's PostgreSQL catalog, so renaming
+or moving a file changes that row and never copies the bytes. A file is listed, searched or granted
+to a run only once its row is `ready`: every save reserves a `pending` row, writes the bytes, then
+confirms the row with the size and checksum it measured.
+
+### Which stores sign links
+
+A signed link lets a browser or `aw` upload or download a file straight from the store, so the
+bytes never pass through the control plane. Each link works for one file, for 5 minutes by default
+and 15 at most.
+
+| Scheme      | Signs upload and download links                                                                                                     | Binds the upload's size into the link                                                                                        |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `s3://`     | Yes                                                                                                                                 | Yes: the store refuses a body of any other length                                                                            |
+| `gcs://`    | Yes, with the server's own Google identity                                                                                          | Yes                                                                                                                          |
+| `azblob://` | Yes, with a user-delegation key from the managed identity                                                                           | No: a SAS cannot carry a length, so `upload-complete` deletes an object larger than declared or over the limit              |
+| `file://`   | No: the link routes answer `501 direct_transfer_unsupported`, and `aw` and the SDK upload through the control plane instead         | No                                                                                                                           |
+
+A browser's `PUT` to a signed link is cross-origin, so the bucket needs a CORS rule that allows
+`PUT` and the returned headers from the web service's origin. The bundled SeaweedFS of a Compose
+project allows only the origins in `SEAWEEDFS_ALLOWED_ORIGINS` in its `.env`; for a `.env` an
+older CLI wrote without it, `agent-workspace doctor` prints the line to add. A workspace holds at
+most 100 unfinished signed uploads (`429 too_many_pending_uploads`), and makes at most 60 link
+requests a minute on one server (`429 link_rate_limited`, with `Retry-After`).
+
+### Size limits
+
+Each limit is defined once in the code, and a CI check fails if a copy of it appears anywhere else.
+
+| What                                                    | Limit                                                                                                         | Defined as                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| One upload through the control plane (`POST /api/files`) | 64 MiB                                                                                                        | `MAX_UPLOAD_BYTES`                    |
+| One upload on a signed link                             | 5 GiB at most; `AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES` lowers it for a deployment, checked at `upload-complete` | `SIGNED_UPLOAD_HARD_MAX_BYTES`        |
+| The files delivered into one run, in total              | 128 MiB                                                                                                       | `RUN_FILES_MAX_BYTES`                 |
+| One session-state snapshot                              | 32 MiB                                                                                                        | `SESSION_STATE_BLOB_MAX_BYTES`        |
+| One skill upload request                                | 16 MiB                                                                                                        | `MAX_SKILL_REQUEST_BODY_BYTES`        |
+| One chat or run attachment                              | 10 MiB                                                                                                        | `SURFACE_ATTACHMENT_MAX_BYTES`        |
+| All attachments of one visitor session                  | 50 MiB, in at most 20 files                                                                                   | `SURFACE_ATTACHMENTS_MAX_TOTAL_BYTES` |
+
 ### Migrating from the old variables
 
 The old storage location variables are ignored: the server reads none of them. Each one still set
@@ -177,13 +222,22 @@ an old setting to the URL form:
 | `AWS_REGION=<region>`                                                           | add `region=<region>`. `AWS_REGION` is still read when the URL has no region        |
 | a GCS bucket `<bucket>` with `GCP_PROJECT=<project>`                            | `gcs://<bucket>?project=<project>`                                                  |
 | an Azure Blob container `<container>` on `https://<account>.blob.core.windows.net` | `azblob://<account>/<container>`                                                 |
+| the same in a sovereign cloud, on `https://<account>.blob.core.usgovcloudapi.net`  | add `?endpoint=https://<account>.blob.core.usgovcloudapi.net`                     |
 | the three local roots `<dir>/files`, `<dir>/skills` and `<dir>/sessions`        | `file://<dir>` (`<dir>` absolute, e.g. `file:///var/lib/agent-workspace`)           |
 | `OBJECT_STORAGE_ACCESS_KEY_ID` and `OBJECT_STORAGE_SECRET_ACCESS_KEY`           | No change. They stay in the environment and never go into the URL                   |
 
 The bundled SeaweedFS of a Compose project is
 `s3://agent-workspace?endpoint=http://seaweedfs:8333&publicEndpoint=http://localhost:8333&pathStyle=true`
 with `AW_STORAGE_CREATE_BUCKET=true`: the same bucket, so its objects stay where they are. Once the
-URL is set, delete the old variables. Where credentials come from and how far access reaches:
+URL is set, delete the old variables.
+
+The Terraform modules already write `AW_STORAGE_URL`: Cloud Run as `gcs://<bucket>?project=<project>`
+(the web service no longer gets `GCP_PROJECT`, which it never read), and Azure Container Apps as
+`azblob://<account>/<container>`, with `storage_blob_endpoint` as its `endpoint=` in a sovereign
+cloud. On Helm, set the chart's `storage.url`, or keep the URL in the object-store Secret: an empty
+`storage.url`, the default, leaves the Secret's value in place ([Kubernetes](/guides/deploy#kubernetes)).
+
+Where credentials come from and how far access reaches:
 [Protect stored files](/features/self-host-securely#protect-stored-files).
 
 ## Per cloud today
@@ -206,7 +260,7 @@ with the live proof still pending; there is no Secrets Manager integration. Sand
 
 Cloud SQL for PostgreSQL is native (`DATABASE_URL`). The Cloud Run module grants the web service
 account `roles/storage.objectAdmin` on its object bucket; `AW_STORAGE_URL=gcs://<bucket>?project=<id>` selects the
-native Google client through ADC, under distinct `files/` and `skills/` prefixes, with no HMAC key.
+native Google client through ADC, in the [one object layout](#one-storage-url), with no HMAC key.
 The module also stores the unchanged 32-byte platform master key in a regional Secret Manager
 secret protected by a dedicated Cloud KMS CMEK. `MASTER_KEY_PROVIDER=secret-manager` reads it before
 the database opens. Rotate the wrapping key by letting Cloud KMS create a new primary version (the
@@ -278,26 +332,30 @@ sequenceDiagram
   participant SB as Sandbox
   participant GW as Gateway
   Dev->>API: files.upload(path, bytes)
-  API->>Obj: write under files/<key>
-  API->>DB: insert files row (path, storage_key, owner)
+  API->>DB: reserve a pending catalog row (path, new object id)
+  API->>Obj: stream to workspaces/<workspace>/files/<object id>, measuring size and SHA-256
+  API->>DB: confirm the row as ready
   Dev->>API: skills.import({ name, files })
-  API->>Obj: write under skills/<key>
-  API->>DB: insert into the resource catalog
+  API->>Obj: the same four steps, under the skills area
   Dev->>API: runs.start(agentId, { prompt })
-  API->>Run: launch, with the agent's assignments
-  Run->>Obj: read assigned files and skills
-  Run->>SB: materialise assigned files (a read-only grant as 0o555 dirs / 0o444 files) and skills
+  API->>Run: launch; the request lists each granted file by path, mode, size and checksum
+  API->>Run: stream the granted files and skills as one archive
+  Run->>SB: unpack it and check every checksum (a read-only grant as 0o555 dirs / 0o444 files)
   Run->>GW: request a per-run token
   SB->>GW: model call with the per-run token
   GW->>GW: resolve the stored provider credential (never sent to SB)
-  Note over Run,Obj: after the run, only a runtime profile's persistPaths are collected back
+  Note over Run,Obj: after the run, outputs/ and the profile's persistPaths are saved under runs/<runId>/outputs/
 ```
 
-Files an agent writes during a run do not come back to the object store today. A run works in
-`/workspace/<workspace>/<session>` inside the runtime; the collect step runs only when the runtime
-profile sets `persistPaths` (no profile does by default), and it reads those paths from the
-runtime's `/workspace` root rather than the run's directory, so a file written in the run's
-directory is not collected (`apps/web/server/runs/launcher.ts`, `apps/runner/src/server.ts`).
+A run request carries references to the granted files, never their bytes. The control plane
+streams the files into the runtime as one archive, so its memory stays flat up to the 128 MiB a run
+can carry, and the runtime refuses to start the engine when a file's checksum does not match
+(`422 run_file_checksum_mismatch`). After a run completes, the agent's own `outputs/` directory
+comes back to the workspace under `runs/<runId>/outputs/` when the agent may write files; a runtime
+profile's `persistPaths` come back after any outcome. A `read-write` grant of a
+[storage connection](/guides/storage-connections) writes the run's new and changed files back to
+that bucket instead, and never deletes one (`apps/web/server/runs/launcher.ts`,
+`apps/web/server/compose/storage-writeback.ts`).
 
 Credentials are resolved only inside the gateway: a sandbox holds a short-lived, run-scoped token,
 never the stored provider key, and the gateway substitutes the real credential only when

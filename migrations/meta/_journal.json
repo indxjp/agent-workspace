@@ -631,6 +631,27 @@
       "when": 1793038322179,
       "tag": "0089_clumsy_leech",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1793089276894,
+      "tag": "0090_natural_eternals",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1793114172946,
+      "tag": "0091_bizarre_jimmy_woo",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1793129418757,
+      "tag": "0092_workspace_features",
+      "breakpoints": true
     }
   ]
 }

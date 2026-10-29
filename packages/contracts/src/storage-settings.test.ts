@@ -60,6 +60,8 @@ describe('storage settings: the old variables are ignored', () => {
     });
 
     expect(settings.kind).toBe('refused');
+    // #1746: the code is a field, not only the start of the reason.
+    expect(settings).toMatchObject({ code: 'storage_url_invalid' });
     expect(settings.warnings).toEqual([
       'storage_setting_ignored: ignoring AW_FILE_STORAGE_ROOT; AW_STORAGE_URL alone says where files, skills and session state are kept (see .env.example).',
     ]);

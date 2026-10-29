@@ -267,7 +267,9 @@ export {
   type StorageMigrationRun,
   type StorageMigrationRunInput,
   type StorageMigrationRunRepository,
+  type AgentRestoreActor,
   type ReplaceAgentPolicyOutcome,
+  type RestoreAgentOutcome,
   type ReplaceAgentResourcesOutcome,
   type ProjectRepository,
   type ProjectRepositoryProvider,
@@ -334,6 +336,8 @@ export {
   type UpdateProjectPatch,
   type UpdateRuntimeProfileOutcome,
   type UpdateRuntimeProfilePatch,
+  type WorkspaceFeatureRepository,
+  type WorkspaceFeatureRepositoryProvider,
   type WorkspaceMembership,
   type WorkspaceScopeResolver,
 } from './repositories/index.js';

@@ -46,17 +46,20 @@ function normalizedAnswer(answer: string): string {
  */
 function localObjectStoreFromAnswers(answers: GeneratorAnswers): LocalObjectStore {
   const database = normalizedAnswer(answers.database);
-  const databases = [
-    'postgresql 17 (container)',
-    'embedded postgresql 17',
-    'postgresql 17',
-    'postgresql',
-    'postgres',
-  ];
+  // ADR-0159. A PostgreSQL 17 answer is refused by name rather than given 18: a new major is a data
+  // migration the operator did not agree to. A deployment generated earlier keeps its 17 pin.
+  if (/^(?:embedded )?postgresql 17(?: \(container\))?$/u.test(database)) {
+    throw new Error(
+      `Unsupported database ${JSON.stringify(answers.database)}. ` +
+        'New Compose deployments run PostgreSQL 18; answer "PostgreSQL 18" or "PostgreSQL". ' +
+        'A deployment generated earlier keeps its PostgreSQL 17 image until you migrate its data.',
+    );
+  }
+  const databases = ['postgresql 18 (container)', 'postgresql 18', 'postgresql', 'postgres'];
   if (!databases.includes(database)) {
     throw new Error(
       `Unsupported database ${JSON.stringify(answers.database)}. ` +
-        'The generated Compose deployment currently supports PostgreSQL 17 only.',
+        'The generated Compose deployment currently supports PostgreSQL 18 only.',
     );
   }
 

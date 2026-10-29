@@ -1,0 +1,11 @@
+# actionlint knows GitHub's hosted runner labels only. These are the other labels the workflows'
+# `runs-on` names: the self-hosted MS-A2 pool and the Blacksmith runners INDXDev jobs use.
+# tests/actionlint-config.test.ts fails when a workflow names a label missing here.
+self-hosted-runner:
+  labels:
+    - blacksmith-2vcpu-ubuntu-2404
+    - blacksmith-4vcpu-ubuntu-2404
+    - blacksmith-4vcpu-windows-2025
+    - blacksmith-6vcpu-macos-latest
+    - blacksmith-8vcpu-ubuntu-2404
+    - ms-a2

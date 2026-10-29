@@ -6,8 +6,10 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
+  readlink,
   realpath,
   rename,
   rm,
@@ -17,10 +19,13 @@ import {
 } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { Worker } from 'node:worker_threads';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { keysOf, textAt } from './contract.js';
 import {
   createFolderObjectStore,
   FolderPathError,
@@ -29,7 +34,7 @@ import {
   type FolderStoreOptions,
 } from './folder-store.js';
 import { UnsafeObjectKeyError } from './key-safety.js';
-import type { ObjectStoreV2 } from './object-store.js';
+import type { ObjectStore } from './object-store.js';
 import { streamToBytes } from './streams.js';
 
 const text = (bytes: Uint8Array | undefined): string => new TextDecoder().decode(bytes);
@@ -123,7 +128,7 @@ describe('folder store', () => {
   let outside: string;
   let skipped: FolderSkipCounts[];
 
-  const openStore = (options: FolderStoreOptions = {}): ObjectStoreV2 =>
+  const openStore = (options: FolderStoreOptions = {}): ObjectStore =>
     createFolderObjectStore(root, { onSkipped: (counts) => skipped.push(counts), ...options });
 
   beforeEach(async () => {
@@ -142,9 +147,67 @@ describe('folder store', () => {
     await rm(base, { recursive: true, force: true });
   });
 
+  // #1835: a body nobody reads used to keep its FileHandle open until the collector closed it,
+  // with Node's DEP0137 warning. The store now closes the handle once the body is unreachable.
+  it('closes the file of a read body that is dropped unread, with no DEP0137 warning', async () => {
+    setFlagsFromString('--expose-gc');
+    const gc: unknown = runInNewContext('gc');
+    if (typeof gc !== 'function') throw new Error('--expose-gc did not expose gc()');
+    const warnings: string[] = [];
+    const onWarning = (warning: Error & { code?: string }): void => {
+      warnings.push(warning.code ?? warning.name);
+    };
+    process.on('warning', onWarning);
+    try {
+      const store = openStore();
+      const before = (await readdir('/proc/self/fd')).length;
+      await (async () => {
+        const object = await store.read('reports/a.txt');
+        expect(object).not.toBeNull();
+      })();
+      expect((await readdir('/proc/self/fd')).length).toBe(before + 1);
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        Reflect.apply(gc, undefined, []);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        if ((await readdir('/proc/self/fd')).length === before) break;
+      }
+      expect((await readdir('/proc/self/fd')).length).toBe(before);
+      expect(warnings).not.toContain('DEP0137');
+    } finally {
+      process.off('warning', onWarning);
+    }
+  });
+
+  // #1835: a write the store reported done survives a crash: the bytes and the folder entry that
+  // names them are flushed before it returns.
+  it('flushes the written file and its folder before a write returns', async () => {
+    const probe = await open(path.join(root, 'reports', 'a.txt'), 'r');
+    const prototype: unknown = Object.getPrototypeOf(probe);
+    await probe.close();
+    const synced: string[] = [];
+    const sync = vi
+      .spyOn(prototype as { sync: () => Promise<void> }, 'sync')
+      .mockImplementation(async function (this: { fd: number }) {
+        synced.push(await readlink(`/proc/self/fd/${String(this.fd)}`));
+      });
+    try {
+      const store = openStore();
+      await store.write('reports/new.txt', new TextEncoder().encode('new'), {});
+      await store.write('reports/new.txt', new TextEncoder().encode('newer'), {
+        ifMatch: (await store.head('reports/new.txt'))?.etag ?? '',
+      });
+      const folder = path.join(root, 'reports');
+      expect(synced.filter((at) => at === folder)).toHaveLength(2);
+      expect(synced.filter((at) => path.dirname(at) === folder && at !== folder)).toHaveLength(2);
+      expect(await textAt(store, 'reports/new.txt')).toBe('newer');
+    } finally {
+      sync.mockRestore();
+    }
+  });
+
   it('[US-STO-12][unit][sdk] a key is the file at that path, typed by its name', async () => {
     const store = openStore();
-    expect(text((await store.get('reports/a.txt'))?.body)).toBe('alpha');
+    expect(await textAt(store, 'reports/a.txt')).toBe('alpha');
     expect(await store.head('reports/2026/b.csv')).toMatchObject({
       sizeBytes: 5,
       contentType: 'text/csv',
@@ -165,12 +228,8 @@ describe('folder store', () => {
 
     expect(await store.read('reports/leak.txt')).toBeNull();
     expect(await store.head('reports/leak.txt')).toBeNull();
-    expect(await store.get('reports/leak.txt')).toBeNull();
-    const keys = [
-      ...(await store.list('reports')),
-      ...(await store.listPrefix('reports')),
-      ...(await store.listPage('reports', { recursive: true })).entries,
-    ].map((entry) => entry.key);
+    expect(await store.read('reports/leak.txt')).toBeNull();
+    const keys = [...(await keysOf(store, 'reports')), ...(await keysOf(store, 'reports', true))];
     expect(keys).not.toContain('reports/leak.txt');
     expect(keys).toContain('reports/a.txt');
     expect(skipped.every((counts) => counts.links === 1 && counts.unreadable === 0)).toBe(true);
@@ -183,22 +242,22 @@ describe('folder store', () => {
 
     expect(await store.read('linked/secret.txt')).toBeNull();
     expect(await store.head('linked/secret.txt')).toBeNull();
-    expect((await store.list('')).map((entry) => entry.key)).toEqual(['reports']);
-    expect(await store.list('linked')).toEqual([]);
-    expect(await store.listPrefix('linked')).toEqual([]);
+    expect(await keysOf(store, '')).toEqual(['reports']);
+    expect(await keysOf(store, 'linked')).toEqual([]);
+    expect(await keysOf(store, 'linked', true)).toEqual([]);
     expect(skipped).toContainEqual({ links: 1, unreadable: 0 });
     // Through the link as a middle component: only what was opened decides, not the path.
     await mkdir(path.join(outside, 'inner'));
     await writeFile(path.join(outside, 'inner', 'deep.txt'), 'outside-deep');
-    expect(await store.list('linked/inner')).toEqual([]);
-    expect(await store.listPrefix('linked/inner')).toEqual([]);
+    expect(await keysOf(store, 'linked/inner')).toEqual([]);
+    expect(await keysOf(store, 'linked/inner', true)).toEqual([]);
     expect((await store.listPage('linked/inner', { recursive: true })).entries).toEqual([]);
-    expect(await store.get('linked/inner/deep.txt')).toBeNull();
+    expect(await store.read('linked/inner/deep.txt')).toBeNull();
 
     await expect(store.write('linked/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
       FolderPathError,
     );
-    await expect(store.put('linked/deeper/new.txt', { body: utf8('x') })).rejects.toBeInstanceOf(
+    await expect(store.write('linked/deeper/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
       FolderPathError,
     );
     await expect(store.delete('linked/secret.txt')).resolves.toBeUndefined();
@@ -210,11 +269,11 @@ describe('folder store', () => {
     await symlink(path.join(root, 'reports', 'a.txt'), path.join(root, 'alias.txt'));
     const store = openStore();
 
-    expect(await store.get('alias.txt')).toBeNull();
+    expect(await store.read('alias.txt')).toBeNull();
     expect(await store.read('alias.txt')).toBeNull();
     expect(await store.head('alias.txt')).toBeNull();
-    expect((await store.list('')).map((entry) => entry.key)).toEqual(['reports']);
-    expect((await store.listPrefix('alias.txt')).map((entry) => entry.key)).toEqual([]);
+    expect(await keysOf(store, '')).toEqual(['reports']);
+    expect(await keysOf(store, 'alias.txt', true)).toEqual([]);
     expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
   });
 
@@ -222,11 +281,8 @@ describe('folder store', () => {
     await symlink(path.join(root, 'reports'), path.join(root, 'again'));
     const store = openStore();
 
-    expect((await store.list('')).map((entry) => entry.key)).toEqual(['reports']);
-    expect((await store.listPrefix('')).map((entry) => entry.key)).toEqual([
-      'reports/2026/b.csv',
-      'reports/a.txt',
-    ]);
+    expect(await keysOf(store, '')).toEqual(['reports']);
+    expect(await keysOf(store, '', true)).toEqual(['reports/2026/b.csv', 'reports/a.txt']);
   });
 
   it('[US-STO-12][unit][sdk] an unsafe key is refused by every member and never decoded', async () => {
@@ -235,7 +291,6 @@ describe('folder store', () => {
     for (const key of unsafe) {
       await expect(store.read(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
       await expect(store.head(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
-      await expect(store.get(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
       await expect(store.write(key, utf8('x'), {})).rejects.toBeInstanceOf(UnsafeObjectKeyError);
       await expect(store.delete(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
       await expect(store.listPage(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
@@ -305,15 +360,12 @@ describe('folder store', () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect((await readdir(path.join(root, 'reports'))).some((n) => n.startsWith('.%'))).toBe(true);
-    expect((await store.list('reports')).map((entry) => entry.key)).toEqual([
-      'reports/2026',
-      'reports/a.txt',
-    ]);
+    expect(await keysOf(store, 'reports')).toEqual(['reports/2026', 'reports/a.txt']);
     expect(await store.head('reports/slow.txt')).toBeNull();
     release?.();
     const meta = await pending;
     expect(meta.sizeBytes).toBe(9);
-    expect(text((await store.get('reports/slow.txt'))?.body)).toBe('new-bytes');
+    expect(await textAt(store, 'reports/slow.txt')).toBe('new-bytes');
 
     const failing = new ReadableStream<Uint8Array>({
       pull(controller) {
@@ -322,7 +374,7 @@ describe('folder store', () => {
       },
     });
     await expect(store.write('reports/a.txt', failing, {})).rejects.toThrow('source broke');
-    expect(text((await store.get('reports/a.txt'))?.body)).toBe('alpha');
+    expect(await textAt(store, 'reports/a.txt')).toBe('alpha');
     expect((await readdir(path.join(root, 'reports'))).sort()).toEqual([
       '2026',
       'a.txt',
@@ -342,19 +394,16 @@ describe('folder store', () => {
 
   it('[US-STO-12][unit][sdk] a write creates missing folders, copy and delete work on plain files', async () => {
     const store = openStore();
-    await store.put('new/deep/note.md', {
-      body: utf8('hello'),
-      contentType: 'application/x-ignored',
-    });
+    await store.write('new/deep/note.md', utf8('hello'), { contentType: 'application/x-ignored' });
     expect((await store.head('new/deep/note.md'))?.contentType).toBe('text/markdown');
-    await store.copyObject('new/deep/note.md', 'copy.md');
-    expect(text((await store.get('copy.md'))?.body)).toBe('hello');
+    await store.copy('new/deep/note.md', 'copy.md');
+    expect(await textAt(store, 'copy.md')).toBe('hello');
     await store.delete('copy.md');
     await store.delete('copy.md');
     expect(await store.head('copy.md')).toBeNull();
     await store.delete('new');
     expect(await store.head('new/deep/note.md')).not.toBeNull();
-    await store.copyObject('never.md', 'dest.md');
+    await store.copy('never.md', 'dest.md');
     expect(await store.head('dest.md')).toBeNull();
   });
 
@@ -364,7 +413,7 @@ describe('folder store', () => {
     await chmod(locked, 0o000);
     const store = openStore();
 
-    const keys = (await store.list('reports')).map((entry) => entry.key);
+    const keys = await keysOf(store, 'reports');
     expect(keys).toEqual(['reports/2026', 'reports/a.txt']);
     expect(skipped).toEqual([{ links: 0, unreadable: 1 }]);
   });
@@ -375,7 +424,7 @@ describe('folder store', () => {
     await writeFile(path.join(root, 'Q3 reports', 'n 2.txt'), 'two');
     const store = openStore();
 
-    expect((await store.list('')).map((entry) => entry.key)).toEqual(['Q3 reports', 'reports']);
+    expect(await keysOf(store, '')).toEqual(['Q3 reports', 'reports']);
     const keys: string[] = [];
     let cursor: string | undefined;
     do {
@@ -394,7 +443,7 @@ describe('folder store', () => {
     await writeFile(path.join(root, '50%.txt'), 'foreign');
     const store = openStore();
 
-    expect((await store.list('')).map((entry) => entry.key)).toEqual(['.hidden', 'reports']);
+    expect(await keysOf(store, '')).toEqual(['.hidden', 'reports']);
   });
 
   /** `root/d` holds `f.txt` ('in'); another thread swaps it with a link to `outside` until stopped. */
@@ -446,7 +495,7 @@ describe('folder store', () => {
     const store = openStore();
     const leaks: string[] = [];
     await race(async () => {
-      if (text((await store.get('d/f.txt'))?.body) === 'outside') leaks.push('get');
+      if ((await textAt(store, 'd/f.txt')) === 'outside') leaks.push('read');
       if ((await store.head('d/f.txt'))?.sizeBytes === 7) leaks.push('head');
     });
 
@@ -458,8 +507,7 @@ describe('folder store', () => {
     const leaks: string[] = [];
     await race(async () => {
       const entries = [
-        ...(await store.listPrefix('d')),
-        ...(await store.list('d')),
+        ...(await store.listPage('d')).entries,
         ...(await store.listPage('d', { recursive: true })).entries,
       ];
       for (const entry of entries) {
@@ -553,9 +601,6 @@ describe('folder store', () => {
   it('[US-STO-12][unit][sdk] a listing whose middle folder is swapped for an outside link lists no outside name', async () => {
     await mkdir(path.join(outside, '2026'));
     await writeFile(path.join(outside, '2026', 'leak.csv'), 'outside-leak');
-    const keysOf = (entries: readonly { readonly key: string }[]): string[] =>
-      entries.map((entry) => entry.key);
-
     // Swapped before the folder is opened: the open goes through the link, so what it opened decides.
     let opened = false;
     const beforeOpen = openStore({
@@ -565,7 +610,7 @@ describe('folder store', () => {
         await swapReports();
       },
     });
-    expect(keysOf(await beforeOpen.listPrefix('reports/2026'))).toEqual([]);
+    expect(await keysOf(beforeOpen, 'reports/2026', true)).toEqual([]);
     expect(opened).toBe(true);
     await restoreReports();
 
@@ -578,7 +623,7 @@ describe('folder store', () => {
         await swapReports();
       },
     });
-    expect(keysOf(await beforeReaddir.listPrefix('reports/2026'))).toEqual(['reports/2026/b.csv']);
+    expect(await keysOf(beforeReaddir, 'reports/2026', true)).toEqual(['reports/2026/b.csv']);
     expect(read).toBe(true);
   });
 
@@ -618,18 +663,15 @@ describe('folder store', () => {
   });
 
   describe('without /proc/self/fd (the path-check fallback)', () => {
-    const openFallback = (): ObjectStoreV2 => openStore({ procFd: false });
+    const openFallback = (): ObjectStore => openStore({ procFd: false });
 
     it('[US-STO-12][unit][sdk] an outside file symlink is never read or listed', async () => {
       await symlink(path.join(outside, 'secret.txt'), path.join(root, 'reports', 'leak.txt'));
       const store = openFallback();
 
-      expect(await store.get('reports/leak.txt')).toBeNull();
+      expect(await store.read('reports/leak.txt')).toBeNull();
       expect(await store.head('reports/leak.txt')).toBeNull();
-      expect((await store.listPrefix('reports')).map((entry) => entry.key)).toEqual([
-        'reports/2026/b.csv',
-        'reports/a.txt',
-      ]);
+      expect(await keysOf(store, 'reports', true)).toEqual(['reports/2026/b.csv', 'reports/a.txt']);
       expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
     });
 
@@ -639,11 +681,11 @@ describe('folder store', () => {
       await writeFile(path.join(outside, 'inner', 'deep.txt'), 'outside-deep');
       const store = openFallback();
 
-      expect(await store.get('linked/secret.txt')).toBeNull();
-      expect(await store.get('linked/inner/deep.txt')).toBeNull();
-      expect(await store.list('linked')).toEqual([]);
-      expect(await store.listPrefix('linked/inner')).toEqual([]);
-      expect((await store.list('')).map((entry) => entry.key)).toEqual(['reports']);
+      expect(await store.read('linked/secret.txt')).toBeNull();
+      expect(await store.read('linked/inner/deep.txt')).toBeNull();
+      expect(await keysOf(store, 'linked')).toEqual([]);
+      expect(await keysOf(store, 'linked/inner', true)).toEqual([]);
+      expect(await keysOf(store, '')).toEqual(['reports']);
       for (const key of ['linked/new.txt', 'linked/inner/new.txt', 'linked/deeper/new.txt']) {
         await expect(store.write(key, utf8('x'), {})).rejects.toBeInstanceOf(FolderPathError);
       }
@@ -655,10 +697,32 @@ describe('folder store', () => {
       ]);
     });
 
+    // #1991 A2: `O_NOFOLLOW` must apply to the name that was asked for, not to its resolved target.
+    it('[US-STO-12][unit][sdk] an inside file symlink addressed directly is not read', async () => {
+      await symlink(path.join(root, 'reports', 'a.txt'), path.join(root, 'alias.txt'));
+      const store = openFallback();
+
+      expect(await store.read('alias.txt')).toBeNull();
+      expect(await store.head('alias.txt')).toBeNull();
+    });
+
+    it('[US-STO-12][unit][sdk] an inside directory alias is not read, written or deleted through', async () => {
+      await symlink(path.join(root, 'reports'), path.join(root, 'alias'));
+      const store = openFallback();
+
+      expect(await store.read('alias/a.txt')).toBeNull();
+      expect(await store.head('alias/a.txt')).toBeNull();
+      await expect(store.write('alias/new.txt', utf8('x'), {})).rejects.toBeInstanceOf(
+        FolderPathError,
+      );
+      await store.delete('alias/a.txt');
+      expect((await readdir(path.join(root, 'reports'))).sort()).toEqual(['2026', 'a.txt']);
+    });
+
     it('[US-STO-12][unit][sdk] the `..` key is refused', async () => {
       const store = openFallback();
       for (const key of ['..', '../outside/secret.txt', 'reports/../../outside/secret.txt']) {
-        await expect(store.get(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
+        await expect(store.read(key)).rejects.toBeInstanceOf(UnsafeObjectKeyError);
         await expect(store.write(key, utf8('x'), {})).rejects.toBeInstanceOf(UnsafeObjectKeyError);
       }
       expect(await readFile(path.join(outside, 'secret.txt'), 'utf8')).toBe('outside-secret');

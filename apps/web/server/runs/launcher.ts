@@ -13,7 +13,7 @@
 import {
   archiveWorkspacePaths,
   extractUstarStream,
-  readStream,
+  RUN_FILES_MAX_ARCHIVE_BYTES,
   RUN_FILES_MAX_BYTES,
 } from '@agent-workspace/runtime/transfer';
 import { EngineIdSchema } from '@indx-workspace/contracts/engines';
@@ -178,7 +178,10 @@ export interface RunnerLauncherOptions {
   readonly runtimeRequestHeaders?: (
     runtime: RuntimeLaunchTarget | undefined,
   ) => Readonly<Record<string, string>>;
-  /** Maximum tar accepted from a runtime before durable promotion is refused. */
+  /**
+   * Maximum tar wire bytes accepted from a runtime before durable promotion is refused. Defaults to
+   * `RUN_FILES_MAX_ARCHIVE_BYTES`; the payload and member limits are enforced when it is decoded.
+   */
   readonly maxOutputArchiveBytes?: number;
   /**
    * Saves what a run left in its read-write storage folders, once it is decided `completed` and
@@ -570,6 +573,14 @@ async function promoteFromRuntime(
   );
 }
 
+/**
+ * `maxBytes` caps archive wire bytes; files collected on this host also stay within the payload
+ * limit a runner's `GET /files` enforces, so tar framing never buys extra file data.
+ */
+function localPayloadBytes(input: OutputCollection): number {
+  return Math.min(input.maxBytes, RUN_FILES_MAX_BYTES);
+}
+
 function isMissingPath(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT';
 }
@@ -587,10 +598,13 @@ async function promoteFromLocalWorkspace(
 ): Promise<void> {
   let archive: Uint8Array;
   try {
-    archive = await readStream(
-      await archiveWorkspacePaths(input.target.workspaceRoot, [directory], {
-        maxBytes: input.maxBytes,
-      }),
+    archive = await readCappedArchive(
+      new Response(
+        await archiveWorkspacePaths(input.target.workspaceRoot, [directory], {
+          maxBytes: localPayloadBytes(input),
+        }),
+      ),
+      input.maxBytes,
     );
   } catch (cause) {
     // An `outputs/` the agent never created is not a failure.
@@ -698,7 +712,7 @@ async function writeBackRunStorage(
         if (target.fileTransfer === 'local-disk') {
           try {
             return await archiveWorkspacePaths(target.workspaceRoot, [path], {
-              maxBytes: input.maxBytes,
+              maxBytes: localPayloadBytes(input),
             });
           } catch (cause) {
             if (isMissingPath(cause)) return null;
@@ -1183,7 +1197,7 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
     Number.isSafeInteger(options.maxOutputArchiveBytes) &&
     options.maxOutputArchiveBytes > 0
       ? options.maxOutputArchiveBytes
-      : RUN_FILES_MAX_BYTES;
+      : RUN_FILES_MAX_ARCHIVE_BYTES;
   const storageWritebackDeadlineMs = positiveOr(
     options.storageWritebackDeadlineMs,
     STORAGE_WRITEBACK_DEADLINE_MS,

@@ -42,7 +42,7 @@ const releaseTags: Required<DeploymentImages> = {
   gateway: platformImageTag('gateway'),
   runner: platformImageTag('runner'),
   runtime: platformImageTag('runtime'),
-  postgres: 'docker.io/library/postgres:17-alpine',
+  postgres: 'docker.io/library/postgres:18-alpine',
   // chrislusf/seaweedfs:4.47, pinned by its multi-arch image index digest: the same digest the
   // S3 contract suite runs against (ADR-0066), so what CI proves is what a project pulls.
   seaweedfs:

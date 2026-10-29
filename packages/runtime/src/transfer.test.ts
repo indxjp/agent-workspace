@@ -18,9 +18,17 @@ import {
   readStream,
 } from './transfer.js';
 
-function run(command: string, args: readonly string[]): Promise<{ code: number; output: string }> {
+function run(
+  command: string,
+  args: readonly string[],
+  options: { readonly timeout?: number } = {},
+): Promise<{ code: number; output: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, [...args], { shell: false, windowsHide: true });
+    const child = spawn(command, [...args], {
+      shell: false,
+      windowsHide: true,
+      ...(options.timeout === undefined ? {} : { timeout: options.timeout, killSignal: 'SIGKILL' }),
+    });
     let output = '';
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -287,6 +295,72 @@ describe('POSIX ustar transfer', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  // #1991 D1: ustar text fields end at NUL; trailing whitespace is part of the name.
+  it('keeps trailing whitespace in names, so distinct names never collapse into one file', async () => {
+    const longDirectory = `${'d'.repeat(100)} `;
+    const names = ['report.txt', 'report.txt ', 'report.txt\u3000', `${longDirectory}/a.txt`];
+    const entries = names.map((name) => ({
+      path: name,
+      type: 'file' as const,
+      mode: 0o600,
+      data: Buffer.from(`data ${name}`),
+    }));
+    const archive = encodeUstar(entries);
+    expect(decodeUstar(archive).map((entry) => entry.path)).toEqual(names);
+
+    const root = await mkdtemp(path.join(tmpdir(), 'w3-literal-whitespace-'));
+    try {
+      await extractUstar(bytesToStream(archive), root);
+      for (const name of names) {
+        expect(await readFile(path.join(root, name), 'utf8')).toBe(`data ${name}`);
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  // #1991 D2: a whole-archive decode budgets payload and members, not wire bytes.
+  it('decodes within the payload and member budgets and refuses past either', () => {
+    const archive = encodeUstar([
+      { path: 'a.txt', type: 'file', mode: 0o600, data: Buffer.from('1234') },
+      { path: 'b.txt', type: 'file', mode: 0o600, data: Buffer.from('5678') },
+    ]);
+    expect(decodeUstar(archive, { maxBytes: 8, maxMembers: 2 })).toHaveLength(2);
+    expect(() => decodeUstar(archive, { maxBytes: 7 })).toThrow(ArchiveTooLargeError);
+    expect(() => decodeUstar(archive, { maxMembers: 1 })).toThrow(ArchiveTooLargeError);
+  });
+
+  // #1991 D4: a leaf swapped for a FIFO after the inventory must not block the late open. A child
+  // process makes the attempt; a regression blocks it in open(), so spawn kills it with SIGKILL.
+  it.skipIf(process.platform === 'win32')(
+    'refuses an output swapped for a FIFO after collection instead of blocking',
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'w3-collect-fifo-'));
+      try {
+        await writeFile(path.join(root, 'out.txt'), 'regular');
+        const transfer = new URL('./transfer.ts', import.meta.url).href;
+        const script = [
+          `const { archiveWorkspacePaths, readStream } = await import(${JSON.stringify(transfer)});`,
+          `const { execFileSync } = await import('node:child_process');`,
+          `const { unlink } = await import('node:fs/promises');`,
+          `const leaf = ${JSON.stringify(path.join(root, 'out.txt'))};`,
+          `const stream = await archiveWorkspacePaths(${JSON.stringify(root)}, ['out.txt']);`,
+          `await unlink(leaf);`,
+          `execFileSync('mkfifo', [leaf]);`,
+          `await readStream(stream).then(() => console.log('read'), (e) => console.log(e.name));`,
+        ].join('\n');
+        const result = await run(process.execPath, ['--input-type=module', '--eval', script], {
+          timeout: 3_000,
+        });
+        expect(result.output.trim().split('\n').at(-1), result.output).toBe(
+          'ArchiveValidationError',
+        );
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('refuses to collect more than the byte budget and accepts exactly the budget', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'w3-collect-cap-'));

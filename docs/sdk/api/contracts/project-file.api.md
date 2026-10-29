@@ -360,6 +360,19 @@ export const ProjectDocumentSchema: z.ZodReadonly<z.ZodObject<{
             }, z.core.$strict>>>;
         }, z.core.$strict>>>;
     }, z.core.$strict>>>;
+    features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+        skills: "skills";
+        files: "files";
+        builder: "builder";
+        runs: "runs";
+        connectors: "connectors";
+        chat: "chat";
+        projects: "projects";
+        sharing: "sharing";
+        surfaces: "surfaces";
+        triggers: "triggers";
+        evaluations: "evaluations";
+    }>>>>;
     environments: z.ZodReadonly<z.ZodObject<{
         local: z.ZodReadonly<z.ZodObject<{
             cloud: z.ZodLiteral<"local">;

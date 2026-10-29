@@ -5,7 +5,7 @@
  * Dockerfile's `build` and `runtime` stages are replayed inside one template, as the tool-host
  * template does (`tool-host-template.mjs`, whose wire-format notes apply here too).
  *
- * The base image, engine, engine version, pnpm version and pnpm tarball checksum are read from the
+ * The base image, engine, engine version, pnpm version and pnpm tarball checksums are read from the
  * Dockerfile; `tests/release/e2b-template.test.ts` holds the COPY paths and commands to it. The
  * differences from the image: the whole of each copied path is in `/srv` (the image keeps only the
  * built runner and its production tree), and the image `LABEL`s have no template equivalent.
@@ -41,7 +41,7 @@ export const contextPaths = (/** @type {string} */ engine) => [
   'infra/images/npx-run-bin.mjs',
   'LICENSE',
 ];
-/** The Dockerfile's final-stage `ENV`s; `PNPM_CLI` is where its pnpm tarball is unpacked. */
+/** The Dockerfile's final-stage `ENV`s; `PNPM_CLI` is pnpm's native executable, as it unpacks it. */
 export const RUN_ENV = [
   'NODE_ENV',
   'production',
@@ -50,7 +50,7 @@ export const RUN_ENV = [
   'PORT',
   '8080',
   'PNPM_CLI',
-  '/opt/pnpm/bin/pnpm.cjs',
+  '/opt/pnpm/pnpm',
 ];
 /**
  * The Dockerfile's final-stage OS upgrade and removal of the package managers (ADR-0087). The
@@ -74,11 +74,18 @@ export const pruneCommand = (/** @type {string} */ engine) =>
   `find . -name node_modules -type d -prune -exec rm -rf {} + && pnpm install --frozen-lockfile --prod --offline ${FILTERS(engine)}`;
 export const linkCommand = (/** @type {string} */ engine) =>
   `mkdir -p apps/runner/node_modules/@agent-workspace && ln -sfn ../../../../packages/engine-${engine} apps/runner/node_modules/@agent-workspace/engine-${engine} && cd apps/runner && node --input-type=module -e "await import('@agent-workspace/engine-${engine}')"`;
-/** `ADD --checksum=sha256:… <registry tarball>`, as a fetch that fails closed on a mismatch (the base image has no curl). */
-export const pnpmFetchCommand = (/** @type {string} */ version, /** @type {string} */ sha256) =>
-  `node --input-type=module -e "import{createHash}from'node:crypto';import{writeFileSync}from'node:fs';const r=await fetch('https://registry.npmjs.org/pnpm/-/pnpm-${version}.tgz');if(!r.ok)throw new Error('pnpm tarball '+r.status);const b=Buffer.from(await r.arrayBuffer());if(createHash('sha256').update(b).digest('hex')!=='${sha256}')throw new Error('pnpm tarball checksum mismatch');writeFileSync('/tmp/pnpm.tgz',b)"`;
+/**
+ * The Dockerfile's `pnpm-amd64` / `pnpm-arm64` stage (`ADD --checksum=sha256:… <registry tarball>`)
+ * for the template's own architecture, as a fetch that fails closed on a mismatch or on any other
+ * architecture (the base image has no curl).
+ */
+export const pnpmFetchCommand = (
+  /** @type {string} */ version,
+  /** @type {{ x64: string, arm64: string }} */ sha256,
+) =>
+  `node --input-type=module -e "import{createHash}from'node:crypto';import{writeFileSync}from'node:fs';const s={x64:'${sha256.x64}',arm64:'${sha256.arm64}'}[process.arch];if(!s)throw new Error('no pnpm for '+process.arch);const r=await fetch('https://registry.npmjs.org/@pnpm/exe.linux-'+process.arch+'/-/exe.linux-'+process.arch+'-${version}.tgz');if(!r.ok)throw new Error('pnpm tarball '+r.status);const b=Buffer.from(await r.arrayBuffer());if(createHash('sha256').update(b).digest('hex')!==s)throw new Error('pnpm tarball checksum mismatch');writeFileSync('/tmp/pnpm.tgz',b)"`;
 /** The Dockerfile's pnpm and `npx` install into the final stage. */
-export const pnpmInstallCommand = `mkdir -p /opt/npx /opt/pnpm && cp ${SRV_DIR}/infra/images/npx.mjs ${SRV_DIR}/infra/images/npx-run-bin.mjs /opt/npx/ && tar -xzf /tmp/pnpm.tgz -C /opt/pnpm --strip-components=1 --no-same-owner && rm -f /tmp/pnpm.tgz && printf '#!/bin/sh\\nexec /usr/local/bin/node /opt/pnpm/bin/pnpm.cjs "$@"\\n' > /usr/local/bin/pnpm && printf '#!/bin/sh\\nexec /usr/local/bin/node /opt/npx/npx.mjs "$@"\\n' > /usr/local/bin/npx && chmod 0755 /usr/local/bin/pnpm /usr/local/bin/npx && ln -s /usr/local/bin/npx /usr/bin/npx && pnpm --version`;
+export const pnpmInstallCommand = `mkdir -p /opt/npx /opt/pnpm && cp ${SRV_DIR}/infra/images/npx.mjs ${SRV_DIR}/infra/images/npx-run-bin.mjs /opt/npx/ && tar -xzf /tmp/pnpm.tgz -C /opt/pnpm --strip-components=1 --no-same-owner && rm -f /tmp/pnpm.tgz && ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm && printf '#!/bin/sh\\nexec /usr/local/bin/node /opt/npx/npx.mjs "$@"\\n' > /usr/local/bin/npx && chmod 0755 /usr/local/bin/npx && ln -s /usr/local/bin/npx /usr/bin/npx && pnpm --version`;
 
 /** The Dockerfile's `ARG name=value` default, refused when it is not a plain token (it is put in a shell command). */
 function argOf(/** @type {string} */ dockerfile, /** @type {string} */ name) {
@@ -96,8 +103,15 @@ export function runtimeBuild(root = REPOSITORY_ROOT) {
   const engine = argOf(dockerfile, 'ENGINE');
   const engineVersion = argOf(dockerfile, 'ENGINE_VERSION');
   const pnpmVersion = argOf(dockerfile, 'PNPM_VERSION');
-  const pnpmSha256 = argOf(dockerfile, 'PNPM_TARBALL_SHA256');
-  if (!/^[0-9a-f]{64}$/u.test(pnpmSha256)) throw new Error(`${DOCKERFILE} has no SHA-256 for pnpm`);
+  const pnpmSha256 = {
+    x64: argOf(dockerfile, 'PNPM_SHA256_AMD64'),
+    arm64: argOf(dockerfile, 'PNPM_SHA256_ARM64'),
+  };
+  for (const [arch, sha256] of Object.entries(pnpmSha256)) {
+    if (!/^[0-9a-f]{64}$/u.test(sha256)) {
+      throw new Error(`${DOCKERFILE} has no SHA-256 for pnpm on ${arch}`);
+    }
+  }
   const pnpm = /corepack prepare pnpm@(\S+) --activate/u.exec(dockerfile)?.[1];
   if (pnpm === undefined) throw new Error(`${DOCKERFILE} names no pnpm version`);
 

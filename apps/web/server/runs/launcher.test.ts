@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInMemoryCatalog } from '@agent-workspace/core/db/unscoped';
 import { createInMemoryObjectStore, streamToBytes } from '@agent-workspace/core/storage';
-import { bytesToStream, encodeUstar } from '@agent-workspace/runtime/transfer';
+import { bytesToStream, encodeUstar, RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 import {
   OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
   RUNTIME_CAPACITY_EXHAUSTED,
@@ -2281,6 +2281,8 @@ describe('createRunnerLauncher collects outputs/ (issue #1274)', () => {
     readonly maxOutputArchiveBytes?: number;
     readonly persistPaths?: readonly string[];
     readonly persisted?: () => Response;
+    /** Replaces durable promotion, so a large archive is not copied into the in-memory store. */
+    readonly promoteOutputs?: (archive: Uint8Array) => Promise<void>;
   }) {
     const store = new InMemoryRunStore();
     const run = await newRun(store);
@@ -2290,6 +2292,12 @@ describe('createRunnerLauncher collects outputs/ (issue #1274)', () => {
       objects: createInMemoryObjectStore(),
       log: quietLog,
     });
+    const lifecycle = createRuntimeWorkspaceLifecycle({
+      storage,
+      granted: () => Promise.resolve({ files: [], skills: [] }),
+      resources: { load: () => Promise.resolve({ files: [], skills: [], mcpServers: {} }) },
+    });
+    const promote = input.promoteOutputs;
     const urls: string[] = [];
     const launch = createRunnerLauncher({
       store,
@@ -2314,11 +2322,10 @@ describe('createRunnerLauncher collects outputs/ (issue #1274)', () => {
       ...(input.maxOutputArchiveBytes === undefined
         ? {}
         : { maxOutputArchiveBytes: input.maxOutputArchiveBytes }),
-      workspaceLifecycle: createRuntimeWorkspaceLifecycle({
-        storage,
-        granted: () => Promise.resolve({ files: [], skills: [] }),
-        resources: { load: () => Promise.resolve({ files: [], skills: [], mcpServers: {} }) },
-      }),
+      workspaceLifecycle:
+        promote === undefined
+          ? lifecycle
+          : { ...lifecycle, promoteOutputs: (_context, _runtime, archive) => promote(archive) },
       fetch: (request) => {
         const url = urlOf(request);
         urls.push(url);
@@ -2468,6 +2475,45 @@ describe('createRunnerLauncher collects outputs/ (issue #1274)', () => {
     expect(settled.error).toBe('Run output could not be saved.');
     expect(keys).toEqual([]);
     log.mockRestore();
+  });
+
+  // #1991 D2: the default cap counts wire bytes, so tar framing never refuses a full payload.
+  it('completes a run whose output is exactly the payload limit plus its tar framing', async () => {
+    const size = RUN_FILES_MAX_BYTES;
+    const header = Buffer.from(
+      encodeUstar([{ path: `${OUTPUTS}/big.bin`, type: 'file', mode: 0o644 }]).subarray(0, 512),
+    );
+    header.write(`${size.toString(8).padStart(11, '0')}\0`, 124);
+    header.fill(0x20, 148, 156);
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148);
+    const chunk = new Uint8Array(1024 * 1024);
+    const chunks = size / chunk.byteLength;
+    let promoted = 0;
+    const { settled } = await launchOutputs({
+      files: () => {
+        let sent = -1;
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (sent === -1) controller.enqueue(header);
+              else if (sent < chunks) controller.enqueue(chunk);
+              else {
+                controller.enqueue(new Uint8Array(1024));
+                controller.close();
+              }
+              sent += 1;
+            },
+          }),
+        );
+      },
+      promoteOutputs: (archive) => {
+        promoted = archive.byteLength;
+        return Promise.resolve();
+      },
+    });
+    expect(settled.status).toBe('completed');
+    expect(promoted).toBe(size + 512 + 1024);
   });
 
   // FX-4: a chunked archive has no Content-Length, so the cap must count the bytes as they arrive.

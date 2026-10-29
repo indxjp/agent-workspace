@@ -12,6 +12,7 @@
  * Both `Principal` constructors are driven, because the `api_key → api-key` mapping has two arms
  * and a `switch` that got one of them wrong would still type-check.
  */
+import type { FeatureId } from '@indx-workspace/contracts/features';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -67,12 +68,14 @@ function apiKeyPrincipal(): Principal {
   });
 }
 
-/** The six fields the contract publishes, in the order `docs/sdk/04-api-specification.md` §5.2 prints them. */
-const WIRE_FIELDS = ['principalId', 'kind', 'role', 'workspaceId', 'userId', 'label'];
+/** The seven fields the contract publishes, in the order `docs/sdk/04-api-specification.md` §5.2 prints them. */
+const WIRE_FIELDS = ['principalId', 'kind', 'role', 'workspaceId', 'userId', 'label', 'features'];
 
-describe('readMe renders exactly the six fields the contract publishes', () => {
+const FEATURES: readonly FeatureId[] = ['chat', 'runs'];
+
+describe('readMe renders exactly the seven fields the contract publishes', () => {
   it('renders a session principal, naming its user and a human label', async () => {
-    const result = readMe(await sessionPrincipal());
+    const result = readMe(await sessionPrincipal(), FEATURES);
     expect(result.status).toBe(200);
     expect(result.body).toEqual({
       principalId: '5730530e-4f41-4d62-88c7-0696f4995dca',
@@ -81,11 +84,12 @@ describe('readMe renders exactly the six fields the contract publishes', () => {
       workspaceId: WORKSPACE.id,
       userId: '580e9cc5-46bf-41ce-94a2-fdaf900e55c5',
       label: 'Workspace Member',
+      features: ['chat', 'runs'],
     });
   });
 
   it('renders an API-key principal with a null userId and the kebab-cased kind', () => {
-    const result = readMe(apiKeyPrincipal());
+    const result = readMe(apiKeyPrincipal(), FEATURES);
     expect(result.status).toBe(200);
     expect(result.body).toEqual({
       principalId: '2e6d9d0f-55f1-4d9f-9a2a-13a4a0f2b0a1',
@@ -96,12 +100,13 @@ describe('readMe renders exactly the six fields the contract publishes', () => {
       workspaceId: WORKSPACE.id,
       userId: null,
       label: 'ci',
+      features: ['chat', 'runs'],
     });
   });
 
   it('publishes that key set and no other, for either kind', async () => {
     for (const principal of [await sessionPrincipal(), apiKeyPrincipal()]) {
-      const body = readMe(principal).body as Record<string, unknown>;
+      const body = readMe(principal, FEATURES).body as Record<string, unknown>;
       expect(Object.keys(body), `${principal.kind} rendered a different key set`).toEqual(
         WIRE_FIELDS,
       );
@@ -129,7 +134,7 @@ describe('readMe renders exactly the six fields the contract publishes', () => {
 
   it('leaves no credential-adjacent text in the rendered JSON', async () => {
     for (const principal of [await sessionPrincipal(), apiKeyPrincipal()]) {
-      const rendered = JSON.stringify(readMe(principal).body);
+      const rendered = JSON.stringify(readMe(principal, FEATURES).body);
       for (const forbidden of [API_KEY_ID, SESSION_EMAIL, 'session', 'api_key', 'ak_live_']) {
         expect(rendered, `${forbidden} reached the body`).not.toContain(forbidden);
       }

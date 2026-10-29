@@ -130,12 +130,14 @@ describe('SkillsClient.import', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     try {
       const fresh = await import('./skills.js');
+      // The once-per-process memory lives beside the client, so it is fresh too.
+      const { HttpClient: FreshHttpClient } = await import('../http.js');
       const marker = `m${String(Date.now())}`;
       const filePath = `scripts/${marker}.sh`;
       const contentBase64 = btoa(`secret-${marker}`);
       const api = fetchDouble(() => json(201, { skill }));
       const skills = new fresh.SkillsClient(
-        new HttpClient({
+        new FreshHttpClient({
           baseUrl: 'https://aw.example.com',
           auth: { kind: 'api-key', apiKey: 'ak_live_k' },
           fetch: api.fetch,
@@ -158,6 +160,45 @@ describe('SkillsClient.import', () => {
       for (const leaked of [marker, filePath, contentBase64, SKILL_MD_BASE64, 'secret']) {
         expect(message).not.toContain(leaked);
       }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  // @story US-STO-08
+  it('[US-STO-08][unit][sdk] onWarning takes the deprecation warning instead of the console', async () => {
+    vi.resetModules();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const fresh = await import('./skills.js');
+      const received: string[] = [];
+      const api = fetchDouble(() => json(201, { skill }));
+      const skills = new fresh.SkillsClient(
+        new HttpClient({
+          baseUrl: 'https://aw.example.com',
+          auth: { kind: 'api-key', apiKey: 'ak_live_k' },
+          fetch: api.fetch,
+          onWarning: (message) => received.push(message),
+        }),
+      );
+      const input = { name: 'demo', files: [{ path: 'SKILL.md', contentBase64: SKILL_MD_BASE64 }] };
+      await skills.import(input);
+      await skills.import(input);
+      expect(warn).not.toHaveBeenCalled();
+      // A handler sees every deprecated call; only the console default is limited to one line.
+      expect(received).toHaveLength(2);
+      expect(received[0]).toContain('next major');
+      // A handler that does nothing silences it.
+      const silent = new fresh.SkillsClient(
+        new HttpClient({
+          baseUrl: 'https://aw.example.com',
+          auth: { kind: 'api-key', apiKey: 'ak_live_k' },
+          fetch: api.fetch,
+          onWarning: () => undefined,
+        }),
+      );
+      await silent.import(input);
+      expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
     }

@@ -25,8 +25,10 @@
  * delete — a support file dropped from a skill between two turns of one session is removed even
  * though the skill itself is still assigned.
  */
+import { createHash } from 'node:crypto';
 import {
   chmodSync,
+  constants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -37,7 +39,7 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import path from 'node:path';
 
 import type {
@@ -357,9 +359,22 @@ export function withoutSkills(request: RunRequest): ResolvedRunRequest {
   return { ...rest, resources: { files: resources.files, skills: [] } };
 }
 
+/** An inbox file whose bytes are not the ones its skill reference names. */
+export class SkillInboxMismatchError extends Error {
+  public constructor(public readonly path: string) {
+    super(`skill inbox file ${JSON.stringify(path)} does not match its reference`);
+    this.name = 'SkillInboxMismatchError';
+  }
+}
+
 /**
  * Replace every skill reference with the verified bytes from the inbox, so the engine port and
  * {@link materializeSkills} receive the content (in the sandbox only).
+ *
+ * The bytes returned are the bytes hashed: each file is checked against its reference again as it
+ * is read, so a file swapped after `verifyReferencedFiles` throws {@link SkillInboxMismatchError}
+ * instead of reaching the engine. Like the verifier, it opens `O_NOFOLLOW | O_NONBLOCK` and judges
+ * the handle.
  */
 // @story US-STO-06
 // @story US-STO-11
@@ -369,12 +384,31 @@ export async function readSkillInbox(
 ): Promise<ResolvedRunRequest> {
   const resources = request.resources;
   if (resources === undefined) return withoutSkills(request);
-  const readInbox = async (name: string, file: string): Promise<string> =>
-    (
-      await readFile(
-        resolveGrantedPath(request.cwd, skillInboxPath(name, file), protectedConfigDirectory),
-      )
-    ).toString('base64');
+  const readInbox = async (
+    name: string,
+    file: RunSkillReference['files'][number],
+  ): Promise<string> => {
+    const relative = skillInboxPath(name, file.path);
+    const handle = await open(
+      resolveGrantedPath(request.cwd, relative, protectedConfigDirectory),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    try {
+      const stats = await handle.stat();
+      if (!stats.isFile()) throw new Error(`skill inbox file ${relative} is not a regular file`);
+      if (stats.size !== file.size) throw new SkillInboxMismatchError(relative);
+      const bytes = await handle.readFile();
+      if (
+        bytes.byteLength !== file.size ||
+        createHash('sha256').update(bytes).digest('hex') !== file.sha256
+      ) {
+        throw new SkillInboxMismatchError(relative);
+      }
+      return bytes.toString('base64');
+    } finally {
+      await handle.close();
+    }
+  };
   return {
     ...request,
     resources: {
@@ -385,7 +419,7 @@ export async function readSkillInbox(
           files: await Promise.all(
             skill.files.map(async (file) => ({
               path: file.path,
-              contentBase64: await readInbox(skill.name, file.path),
+              contentBase64: await readInbox(skill.name, file),
             })),
           ),
         })),

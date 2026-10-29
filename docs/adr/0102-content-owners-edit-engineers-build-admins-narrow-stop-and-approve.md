@@ -47,7 +47,14 @@ Accepted now:
   - Slice-2 keys: `permissions`, `limits.maxTurns`, `limits.maxBudgetUsd`, `engines`, `models`
     and `tools`. Each of `maxCostPerDayUsd`, `network`, `approval` and a per-environment `policy`
     is refused at its path until it is built.
-  - Amendment: `maxCostPerDayUsd` is built (#1851 slice 3, 2026-10-26).
+  - Amendment: `maxCostPerDayUsd` is built (#1851 slice 3, 2026-10-26). The cap is enforced at run
+    start and also mid-run, at the gateway's model-call admission. It travels as a signed run-token
+    claim taken from the deployment ceiling. Spend is the usage ledger's UTC-day sum, and unpriced
+    spend refuses. An unreadable spend answers 503 `daily_cost_unavailable` without ending the run.
+    Over the cap (the mid-run refusal answers `403`; run start answers `429`), the gateway ends the
+    run as `failed` with `daily_cost_cap_reached`, which carries the cap and the reset time. If the
+    run's end cannot be written the call answers 503, never 403. The cap can overshoot by up to one
+    60 s window per instance, plus the call that crossed it (#1851 slice 3b, 2026-10-27).
   - `policyWidenings(effective, ceiling)` and `meetPolicyCeiling(effective, ceiling)` are pure
     functions in contracts. The server's write paths and its compose step use them and no copy.
     The dry run and the save answer identically (C8), and a run start or preflight the ceiling

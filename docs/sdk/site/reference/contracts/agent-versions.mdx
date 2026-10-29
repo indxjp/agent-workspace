@@ -52,6 +52,7 @@ read from it rather than retyped. RBAC's `forbidden` stays in `COMMON_PROBLEM_CO
 | `agent_not_found` | `AGENT_POLICY_PROBLEM_CODES.agent_not_found` |
 | `agent_policy_not_configured` | `AGENT_POLICY_PROBLEM_CODES.agent_policy_not_configured` |
 | `agent_version_not_found` | `404` |
+| `agent_archived` | `RUN_START_PROBLEM_CODES.agent_archived` |
 | `agent_version_number_taken` | `409` |
 | `no_pointer` | `409` |
 | `nothing_to_roll_back` | `409` |
@@ -338,6 +339,7 @@ Which version an environment runs, and when that last changed (ADR-0101; issue #
 - `"agent_not_found"`
 - `"agent_policy_not_configured"`
 - `"agent_version_not_found"`
+- `"agent_archived"`
 - `"agent_version_number_taken"`
 - `"no_pointer"`
 - `"nothing_to_roll_back"`
@@ -815,7 +817,10 @@ One tool of a session's sandbox: what the tool host serves, and the bundle it ru
 
 ## ToolSecretNamesSchema
 
-The secrets a code tool declares (ADR-0118 TS4): names only, each once.
+The secrets a code tool declares (ADR-0118 TS4): names only, each once, and never a storage
+connection's credential (a `STORAGE_CONNECTION_` name). That credential is bound to the
+connection's URL and opened only by the server; a tool that declared it would receive it in its
+environment and could send it anywhere.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |

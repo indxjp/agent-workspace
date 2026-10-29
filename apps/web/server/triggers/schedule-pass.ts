@@ -14,6 +14,7 @@
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { renderTriggerPrompt } from '@indx-workspace/contracts/triggers';
 
+import { enabledFeaturesFor } from '../features/runtime';
 import { getRunApi } from '../runs/environment';
 import { deliver, ownerFor, type Runs } from './fire';
 import type { TriggerRecord, TriggersRuntime } from './runtime';
@@ -65,6 +66,8 @@ export async function runSchedulePass(deps: SchedulePassDependencies): Promise<S
     const workspaceIds = await deps.root.listWorkspaceIds();
     for (const workspaceId of workspaceIds) {
       try {
+        // ADR-0160 D7: a workspace with triggers off is skipped, never refused; nothing of it is read.
+        if (!(await enabledFeaturesFor(workspaceId)).includes('triggers')) continue;
         const repository = await deps.runtime.repository(workspaceId);
         await repository.pruneDeliveries(deps.runtime.now());
         const triggers = await repository.list();

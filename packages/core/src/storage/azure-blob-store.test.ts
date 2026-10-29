@@ -5,7 +5,7 @@ import { finished } from 'node:stream/promises';
 import { BlobServiceClient, BlockBlobClient, ContainerClient } from '@azure/storage-blob';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { defineObjectStoreContract, defineObjectStoreV2Contract } from './contract.js';
+import { defineObjectStoreContract } from './contract.js';
 import {
   createAzureBlobObjectStore,
   createAzureBlobObjectStoreProvider,
@@ -13,17 +13,15 @@ import {
   createAzureSdkBlobContainer,
   type AzureBlobContainer,
   type AzureBlobEntry,
-  type AzureBlobFileEntry,
 } from './azure-blob-store.js';
 import {
   ObjectConflictError,
   RangeNotSatisfiableError,
   type ObjectContent,
   type ObjectMeta,
-  type ObjectStoreV2,
-  type PutObjectInput,
+  type ObjectStore,
 } from './object-store.js';
-import { bytesToStream, streamToBytes } from './streams.js';
+import { bytesToStream, readWhole, streamToBytes } from './streams.js';
 
 type FakeBlob = ObjectContent & { readonly etag: string };
 
@@ -48,16 +46,8 @@ function fakeAzureBlobContainer(): AzureBlobContainer {
     etag: blob.etag,
     lastModified: blob.lastModified,
   });
-  const clone = (value: ObjectContent): ObjectContent => ({
-    ...value,
-    body: Buffer.from(value.body),
-  });
   return {
     assertReady: () => Promise.resolve(),
-    put(name: string, input: PutObjectInput): Promise<void> {
-      store(name, input.body, input.contentType ?? null);
-      return Promise.resolve();
-    },
     head(name) {
       const blob = values.get(name);
       return Promise.resolve(blob === undefined ? null : metaOf(blob));
@@ -115,10 +105,6 @@ function fakeAzureBlobContainer(): AzureBlobContainer {
             : null,
       });
     },
-    get(name: string): Promise<ObjectContent | null> {
-      const value = values.get(name);
-      return Promise.resolve(value === undefined ? null : clone(value));
-    },
     copy(sourceName: string, destinationName: string): Promise<void> {
       const source = values.get(sourceName);
       if (source !== undefined) store(destinationName, source.body, source.contentType);
@@ -128,41 +114,6 @@ function fakeAzureBlobContainer(): AzureBlobContainer {
       values.delete(name);
       return Promise.resolve();
     },
-    listHierarchy(prefix: string): Promise<readonly AzureBlobEntry[]> {
-      const entries = new Map<string, AzureBlobEntry>();
-      for (const [name, value] of values) {
-        if (!name.startsWith(prefix)) continue;
-        const relative = name.slice(prefix.length);
-        if (relative === '') continue;
-        const separator = relative.indexOf('/');
-        if (separator >= 0) {
-          const folderName = `${prefix}${relative.slice(0, separator)}`;
-          entries.set(folderName, { kind: 'folder', name: folderName });
-          continue;
-        }
-        entries.set(name, {
-          kind: 'file',
-          name,
-          sizeBytes: value.sizeBytes,
-          contentType: value.contentType,
-          lastModified: value.lastModified,
-        });
-      }
-      return Promise.resolve([...entries.values()]);
-    },
-    listFlat(prefix: string): Promise<readonly AzureBlobFileEntry[]> {
-      return Promise.resolve(
-        [...values.entries()]
-          .filter(([name]) => name.startsWith(prefix))
-          .map(([name, value]) => ({
-            kind: 'file' as const,
-            name,
-            sizeBytes: value.sizeBytes,
-            contentType: value.contentType,
-            lastModified: value.lastModified,
-          })),
-      );
-    },
   };
 }
 
@@ -171,12 +122,13 @@ const setupFake = () => {
   return Promise.resolve({
     provider: createAzureBlobObjectStoreProvider(container),
     teardown: () => Promise.resolve(),
-    plantRaw: (key: string, bytes: Uint8Array) => container.put(key, { body: bytes }),
+    plantRaw: async (key: string, bytes: Uint8Array) => {
+      await container.writeStream(key, bytes, {});
+    },
   });
 };
 
 defineObjectStoreContract('Azure Blob (fake)', setupFake);
-defineObjectStoreV2Contract('Azure Blob (fake)', setupFake);
 
 describe('Azure Blob v2 capabilities', () => {
   it('cannot bind an upload length into a signed link, so the complete step checks the size', () => {
@@ -308,7 +260,7 @@ describe('Azure SDK streamed write', () => {
       pollUntilDone: () => Promise.resolve({ copyStatus: 'success' }),
     } as never);
     const download = vi.spyOn(BlockBlobClient.prototype, 'download');
-    await sdkStore().copyObject('from.bin', 'to.bin');
+    await sdkStore().copy('from.bin', 'to.bin');
     expect(copy).toHaveBeenCalledWith(
       'https://unit.blob.core.windows.net/c/workspaces/workspace-a/from.bin',
     );
@@ -319,7 +271,7 @@ describe('Azure SDK streamed write', () => {
     vi.spyOn(BlockBlobClient.prototype, 'beginCopyFromURL').mockRejectedValue(
       azureError(404, 'CannotVerifyCopySource'),
     );
-    await expect(sdkStore().copyObject('gone.bin', 'to.bin')).resolves.toBeUndefined();
+    await expect(sdkStore().copy('gone.bin', 'to.bin')).resolves.toBeUndefined();
   });
 
   it("surfaces the caller's own body failure instead of a provider error", async () => {
@@ -343,8 +295,8 @@ describe('Azure Blob prefix placement', () => {
     const store = createAzureBlobObjectStoreProvider(fakeAzureBlobContainer(), prefix).forWorkspace(
       'workspace-a',
     );
-    await store.put('resource.bin', { body: Buffer.from('native-azure') });
-    expect((await store.get('resource.bin'))?.body.toString()).toBe('native-azure');
+    await store.write('resource.bin', Buffer.from('native-azure'), {});
+    expect((await readWhole(store, 'resource.bin'))?.body.toString()).toBe('native-azure');
   });
 
   it('refuses a SAS-bearing service URL before contacting Azure', async () => {
@@ -358,7 +310,7 @@ describe('Azure Blob prefix placement', () => {
 });
 
 /** Every `kind:key` under `o`, read `limit` entries per page. */
-async function drain(store: ObjectStoreV2, limit: number): Promise<string[]> {
+async function drain(store: ObjectStore, limit: number): Promise<string[]> {
   const seen: string[] = [];
   let cursor: string | undefined;
   do {
@@ -426,8 +378,8 @@ if (azuriteUrl !== '') {
       container,
       // No service client, so no signing: a user delegation key needs an Entra token, and Azurite
       // here authenticates with its shared development key (it answers 403). Offline SAS coverage
-      // is in signed-url.test.ts (the real SDK with a stubbed delegation key). Signing against live
-      // Azure is not yet proven: the live fixture has no service client either (a follow-up).
+      // is in signed-url.test.ts (the real SDK with a stubbed delegation key). The live acceptance
+      // fixture passes its service client, so it signs against Azure itself.
       provider: createAzureBlobObjectStoreProvider(createAzureSdkBlobContainer(container)),
       teardown: async () => {
         await container.delete();
@@ -439,7 +391,6 @@ if (azuriteUrl !== '') {
   };
 
   defineObjectStoreContract('Azure Blob (Azurite)', setupAzurite);
-  defineObjectStoreV2Contract('Azure Blob (Azurite)', setupAzurite);
 
   const withAzurite = async (
     run: (fixture: Awaited<ReturnType<typeof setupAzurite>>) => Promise<void>,

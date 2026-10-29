@@ -67,10 +67,12 @@ function exportedNamedTypes(checker, entries) {
 
 /**
  * A non-schema `const`: an array/object of literal members, or a single scalar value.
- * @param {ts.VariableDeclaration} declaration
+ * @param {ts.TypeChecker} checker @param {ts.VariableDeclaration} declaration
  */
-function renderPlainConst(declaration) {
-  return declaration.initializer === undefined ? '' : renderLiteralConst(declaration.initializer);
+function renderPlainConst(checker, declaration) {
+  return declaration.initializer === undefined
+    ? ''
+    : renderLiteralConst(declaration.initializer, checker);
 }
 
 /**
@@ -99,7 +101,7 @@ function renderExport(checker, program, entry, aliases) {
     const schemaType = checker.getTypeAtLocation(entry.node);
     const body = isZodSchemaType(schemaType)
       ? renderZodSchema(checker, program, entry.node, entry.symbol, aliases)
-      : renderPlainConst(entry.node);
+      : renderPlainConst(checker, entry.node);
     return [heading, '', doc, '', body].join('\n\n');
   }
   return [heading, '', doc].join('\n\n');

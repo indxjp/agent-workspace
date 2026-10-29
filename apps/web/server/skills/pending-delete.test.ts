@@ -5,21 +5,23 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { createInMemoryObjectStore } from '@agent-workspace/core/storage';
+import { createInMemoryCatalog } from '@agent-workspace/core/db';
+import { createInMemoryObjectStoreProvider } from '@agent-workspace/core/storage';
 
 import { skillDeleteMarkerKey } from './keys';
-import { readLegacyPendingSkillDelete } from './pending-delete';
+import { readLegacyPendingSkillDelete, skillSyncContext } from './pending-delete';
 
-const putMarker = (store: ReturnType<typeof createInMemoryObjectStore>, json: string) =>
-  store.put(skillDeleteMarkerKey('demo'), {
-    body: new TextEncoder().encode(json),
+const legacyStore = () => createInMemoryObjectStoreProvider().forWorkspace('w');
+
+const putMarker = (store: ReturnType<typeof legacyStore>, json: string) =>
+  store.write(skillDeleteMarkerKey('demo'), new TextEncoder().encode(json), {
     contentType: 'application/json',
   });
 
 describe('the legacy pending-delete marker', () => {
   // @story US-STO-08
   it('[US-STO-08][unit][sdk] reads the owner and the revision numbers it was written with', async () => {
-    const store = createInMemoryObjectStore();
+    const store = legacyStore();
     await putMarker(store, '{"ownerPrincipalId":"p","revisions":[1,3]}');
 
     expect(await readLegacyPendingSkillDelete(store, 'demo')).toEqual({
@@ -30,7 +32,7 @@ describe('the legacy pending-delete marker', () => {
 
   // @story US-STO-08
   it('[US-STO-08][unit][sdk] reads a marker without revisions, or with malformed ones, as none', async () => {
-    const store = createInMemoryObjectStore();
+    const store = legacyStore();
 
     await putMarker(store, '{"ownerPrincipalId":"p"}');
     expect(await readLegacyPendingSkillDelete(store, 'demo')).toEqual({
@@ -51,5 +53,24 @@ describe('the legacy pending-delete marker', () => {
       ownerPrincipalId: null,
       revisions: [],
     });
+  });
+
+  // @story US-STO-08
+  it('[US-STO-08][unit][sdk] finds the names pending as markers on every listing page', async () => {
+    const store = legacyStore();
+    for (let n = 0; n <= 1000; n += 1) {
+      const name = `s${String(n).padStart(4, '0')}`;
+      await store.write(skillDeleteMarkerKey(name), new TextEncoder().encode('{}'), {
+        contentType: 'application/json',
+      });
+    }
+
+    const { pendingDeletes } = await skillSyncContext(
+      store,
+      createInMemoryCatalog().forWorkspace('w'),
+    );
+
+    expect(pendingDeletes.size).toBe(1001);
+    expect(pendingDeletes.has('s1000')).toBe(true);
   });
 });

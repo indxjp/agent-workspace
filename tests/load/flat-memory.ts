@@ -26,38 +26,83 @@ function collect(): void {
   Reflect.apply(gc, undefined, []);
 }
 
-/** Bytes V8 has committed to its young generation (new space). */
-function newSpaceBytes(): number {
+/** V8's young generation (new space): the bytes it has committed and the bytes live objects use. */
+export type NewSpace = Readonly<{ committed: number; used: number }>;
+
+function newSpace(): NewSpace {
   const space = getHeapSpaceStatistics().find((entry) => entry.space_name === 'new_space');
-  return space?.physical_space_size ?? 0;
+  return { committed: space?.physical_space_size ?? 0, used: space?.space_used_size ?? 0 };
 }
 
 /**
- * Peak RSS growth (bytes) while `work` runs; forces GC before the baseline and before each sample.
+ * The most new-space growth a reading may subtract: the largest new space V8 builds on Node 24,
+ * two 64 MiB semi-spaces. V8 reaches it in more than one step, so growth past one 64 MiB step is
+ * legitimate: CI run 40764100611 read 116.6 MiB on GCS, and Node 24 commits up to about 123 MiB of
+ * it, empty after a full GC with nothing live. Growth past the whole new space cannot be V8's and
+ * fails the reading rather than hide anything behind it.
+ */
+export const NEW_SPACE_CREDIT_BOUND = 128 * MiB;
+
+/**
+ * The new-space growth (bytes) one sample subtracts from its RSS reading: only committed pages no
+ * live object uses. The forced full GC before each sample promotes every live young object to old
+ * space, so new space is empty there; any byte still in use is counted as growth, never credited,
+ * so new space cannot hide retention. Growth past {@link NEW_SPACE_CREDIT_BOUND} throws.
+ */
+export function newSpaceCredit(baseline: NewSpace, now: NewSpace): number {
+  const empty = (space: NewSpace): number => Math.max(0, space.committed - space.used);
+  const growth = Math.max(0, empty(now) - empty(baseline));
+  if (growth > NEW_SPACE_CREDIT_BOUND) {
+    throw new Error(
+      `flat-memory: new space grew ${(growth / MiB).toFixed(1)} MiB, over the ` +
+        `${String(NEW_SPACE_CREDIT_BOUND / MiB)} MiB a reading may subtract`,
+    );
+  }
+  return growth;
+}
+
+/** A {@link measureRssGrowth} reading: the peak RSS growth and the new-space growth it subtracted. */
+export type RssReading = Readonly<{ growth: number; newSpaceGrowth: number }>;
+
+/**
+ * Peak RSS growth (bytes) while `work` runs, and the most new-space growth it subtracted; forces GC before the baseline and before each sample.
  * Call `sample()` inside `work` while the data is still referenced; the trailing sample alone
- * cannot see memory `work` has already released.
+ * cannot see memory `work` has already released. Sample at least every bound/16 of payload (every
+ * 4 MiB for a 64 MiB bound): V8 lets uncollected socket-read buffers reach about 64 MiB of external
+ * memory before it collects on its own, and glibc keeps their pages, so sampling every 32 MiB read
+ * 67.6 MiB on CI with about 8 MiB really in flight (PR #1747). A forced GC frees only unreachable
+ * memory, so retention is still counted.
  *
  * Growth of V8's young generation is not counted. Under a high allocation rate V8 enlarges new
- * space (by 64 MiB in one step, measured on Node 24), and a full GC empties it but does not give
+ * space (in steps of up to 64 MiB, to 128 MiB on Node 24), and a full GC empties it but does not give
  * the pages back, so RSS jumped by about 64 MiB at random with nothing retained (PR #1740: up to
  * 104 MiB on S3 and 98 MiB on GCS, 64 MiB of it new space). New space is bounded by V8 whatever the payload, and
  * the forced full GC before every sample promotes anything still live out of it, so retained data
- * (old space, ArrayBuffer backing stores, native buffers) is still counted. A shrinking new space
- * is not credited.
+ * (old space, ArrayBuffer backing stores, native buffers, and any byte left live in new space) is
+ * still counted. A shrinking new space is not credited.
  */
-export async function peakRssGrowth(work: (sample: () => void) => Promise<void>): Promise<number> {
+export async function measureRssGrowth(
+  work: (sample: () => void) => Promise<void>,
+): Promise<RssReading> {
   collect();
   const baseline = process.memoryUsage().rss;
-  const newSpaceBaseline = newSpaceBytes();
+  const newSpaceBaseline = newSpace();
   let peak = 0;
+  let newSpacePeak = 0;
   const sample = (): void => {
     collect();
-    const newSpaceGrowth = Math.max(0, newSpaceBytes() - newSpaceBaseline);
+    const newSpaceGrowth = newSpaceCredit(newSpaceBaseline, newSpace());
+    newSpacePeak = Math.max(newSpacePeak, newSpaceGrowth);
     peak = Math.max(peak, process.memoryUsage().rss - baseline - newSpaceGrowth);
   };
   await work(sample);
   sample();
-  return peak;
+  return { growth: peak, newSpaceGrowth: newSpacePeak };
+}
+
+/** {@link measureRssGrowth}'s peak growth alone. */
+export async function peakRssGrowth(work: (sample: () => void) => Promise<void>): Promise<number> {
+  return (await measureRssGrowth(work)).growth;
 }
 
 /**
@@ -127,7 +172,13 @@ export async function warmHttpTransport(bytes = 64 * MiB): Promise<void> {
     req.resume();
     req.on('end', () => res.writeHead(204).end());
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
   const url = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}/`;
   try {
     // A variable, not a literal: the DOM `RequestInit` that apps/web type-checks against has no `duplex`.
@@ -142,6 +193,7 @@ export async function warmHttpTransport(bytes = 64 * MiB): Promise<void> {
     if (downloaded.body !== null) for await (const chunk of downloaded.body) void chunk;
     await new Promise<void>((resolve, reject) => {
       const upload = request(url, { method: 'PUT' }, (res) => {
+        res.on('error', reject);
         res.resume();
         res.on('end', resolve);
       });
@@ -150,6 +202,7 @@ export async function warmHttpTransport(bytes = 64 * MiB): Promise<void> {
     });
     await new Promise<void>((resolve, reject) => {
       request(url, (res) => {
+        res.on('error', reject);
         res.resume();
         res.on('end', resolve);
       })

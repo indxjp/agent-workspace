@@ -17,7 +17,7 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
-  type ObjectStoreProviderV2,
+  type ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import { FileSearchResponseSchema } from '@indx-workspace/contracts/files';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -121,7 +121,7 @@ async function fixture(files: FakeFile[]) {
   };
   const put = async () => {
     for (const file of files) {
-      await store.put(file.path, { body: Buffer.from(file.body), contentType: file.contentType });
+      await store.write(file.path, Buffer.from(file.body), { contentType: file.contentType });
     }
   };
   const open = (row: CatalogFile) => store.read(row.storageKey ?? row.path);
@@ -461,7 +461,7 @@ const ctxOf = (member: Member): StorageContext => ({
 /** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
 async function saveLegacyRow(
   world: World,
-  legacy: ObjectStoreProviderV2,
+  legacy: ObjectStoreProvider,
   path: string,
   body: Uint8Array,
   claimedSize: number = body.byteLength,
@@ -634,6 +634,16 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
       expect(await hitPaths('a', 'zebracorn')).toEqual(['reports/q3.txt']);
       expect(await hitPaths('b', 'zebracorn')).toEqual([]);
       expect(await downloadStatus('b', 'reports/q3.txt')).toBe(404);
+    });
+
+    // @story US-STO-01
+    it('[US-STO-01][api][sdk] search finds Japanese text by a word inside it, and a Japanese word it lacks finds nothing', async () => {
+      await save('manuals/pump.txt', '保守手順書 第3章');
+
+      expect(await hitPaths('a', encodeURIComponent('手順'))).toEqual(['manuals/pump.txt']);
+      expect(await hitPaths('a', encodeURIComponent('第3章'))).toEqual(['manuals/pump.txt']);
+      expect(await hitPaths('a', encodeURIComponent('点検ガイド'))).toEqual([]);
+      expect(await hitPaths('b', encodeURIComponent('手順'))).toEqual([]);
     });
 
     // @story US-STO-08

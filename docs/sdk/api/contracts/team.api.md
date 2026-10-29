@@ -143,6 +143,19 @@ export const MeResponseSchema: z.ZodObject<{
     workspaceId: z.ZodString;
     userId: z.ZodNullable<z.ZodString>;
     label: z.ZodString;
+    features: z.ZodArray<z.ZodEnum<{
+        skills: "skills";
+        files: "files";
+        builder: "builder";
+        runs: "runs";
+        connectors: "connectors";
+        chat: "chat";
+        projects: "projects";
+        sharing: "sharing";
+        surfaces: "surfaces";
+        triggers: "triggers";
+        evaluations: "evaluations";
+    }>>;
 }, z.core.$strict>;
 
 // @public

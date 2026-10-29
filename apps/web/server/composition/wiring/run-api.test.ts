@@ -26,6 +26,8 @@ const AGENT = { id: 'agent-1', workspaceId: WORKSPACE, engine: 'claude-code' } a
 function wireWith(
   policyCeiling: ProjectPolicy | null,
   usageCostUsd: (from: Date, to: Date) => Promise<{ costUsd: string; unpricedUsage: boolean }>,
+  /** Further wired parts a test reads, over the defaults below. */
+  parts: object = {},
 ) {
   const create = vi.fn();
   const environment = wireRunApi({
@@ -34,6 +36,7 @@ function wireWith(
     withCeiling: {},
     policyCeiling,
     runs: { create },
+    ...parts,
   } as unknown as Parameters<typeof wireRunApi>[0]);
   return { environment, create };
 }
@@ -70,5 +73,33 @@ describe('wireRunApi daily cost cap', () => {
     );
     expect(wireWith(null, usageCostUsd).environment.dailyCostCap).toBe(undefined);
     expect(usageCostUsd).not.toHaveBeenCalled();
+  });
+});
+
+describe('wireRunApi findAgent and an archived agent (issue #1851)', () => {
+  function findingAgent(record: { archivedAt?: Date }) {
+    const { environment } = wireWith(null, vi.fn(), {
+      runGate: { isUsable: () => Promise.resolve(true) },
+      agents: {
+        forWorkspace: () => ({
+          get: () => Promise.resolve({ id: AGENT.id, policy: null, ...record }),
+        }),
+      },
+      sessionPin: () => Promise.resolve(null),
+    });
+    return environment.findAgent(PRINCIPAL, AGENT.id);
+  }
+
+  it('marks the agent archived, so every door that starts a run is refused', async () => {
+    const found = await findingAgent({ archivedAt: new Date('2026-09-01T00:00:00.000Z') });
+
+    expect(found).toMatchObject({ id: AGENT.id, archived: true });
+  });
+
+  it('leaves an active agent unmarked', async () => {
+    const found = await findingAgent({});
+
+    expect(found).not.toBeNull();
+    expect(found).not.toHaveProperty('archived');
   });
 });

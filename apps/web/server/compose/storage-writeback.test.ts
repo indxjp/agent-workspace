@@ -10,14 +10,17 @@ import { createHash, randomBytes } from 'node:crypto';
 import {
   ObjectConflictError,
   streamToBytes,
-  type ObjectStoreV2,
+  type ObjectStore,
   type WriteOptions,
 } from '@agent-workspace/core/storage';
 import { encodeUstar, type TarEntry } from '@agent-workspace/runtime/transfer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { captureLog } from '../telemetry/capture-log';
 import { log } from '../telemetry/logger';
 import {
+  STORAGE_WRITEBACK_AUDIT_DEADLINE_MS,
+  STORAGE_WRITEBACK_STATUS_INTERVAL_MS,
   writeBackLabel,
   writeBackStorage,
   type StorageWriteBackAuditEvent,
@@ -47,8 +50,12 @@ interface Connection {
 
 interface BucketSeams {
   readonly failWrite?: (key: string) => Error | undefined;
+  /** A read the store cannot answer, such as one into a bucket deleted during the run. */
+  readonly failRead?: (key: string) => Error | undefined;
   /** Runs as a write starts: what another writer does between the hash check and the write. */
   readonly beforeWrite?: (key: string, objects: Map<string, string>) => void;
+  /** Runs once the write has read its body's first chunk: another writer racing the upload. */
+  readonly duringWrite?: (key: string, objects: Map<string, string>) => void;
   /** A write that never settles: a hung store. */
   readonly hangWrite?: boolean;
 }
@@ -58,8 +65,20 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
   const objects = new Map(Object.entries(initial));
   const attempts: string[] = [];
   const etag = (text: string) => `"${sha(text)}"`;
-  const store: Pick<ObjectStoreV2, 'read' | 'write'> = {
+  const bodyBytes = async (key: string, body: ReadableStream<Uint8Array>): Promise<Uint8Array> => {
+    if (seams.duringWrite === undefined) return streamToBytes(body);
+    const chunks: Uint8Array[] = [];
+    const reader = body.getReader();
+    for (let next = await reader.read(); !next.done; next = await reader.read()) {
+      if (chunks.length === 0) seams.duringWrite(key, objects);
+      chunks.push(next.value);
+    }
+    return Buffer.concat(chunks);
+  };
+  const store: Pick<ObjectStore, 'read' | 'write'> = {
     read: (key) => {
+      const failure = seams.failRead?.(key);
+      if (failure !== undefined) return Promise.reject(failure);
       const text = objects.get(key);
       return Promise.resolve(
         text === undefined
@@ -84,8 +103,9 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
       if (failure !== undefined) throw failure;
       // Buffered here only: the body is verified as it is read, so a mismatch rejects before the set.
       const text = Buffer.from(
-        body instanceof Uint8Array ? body : await streamToBytes(body),
+        body instanceof Uint8Array ? body : await bodyBytes(key, body),
       ).toString();
+      // The precondition is judged as the upload completes, as a provider judges it.
       const current = objects.get(key);
       if (options.ifNoneMatch === '*' && current !== undefined) throw new ObjectConflictError();
       if (
@@ -150,8 +170,16 @@ interface Setup {
   readonly tar?: (path: string, read: number) => Uint8Array | null;
   /** The run's grants as they are at the end of the run. */
   readonly grants?: readonly Grant[];
+  /** The grants the launch body was composed from; `grants` by default. */
+  readonly launchGrants?: readonly Grant[];
+  /** Files under `reports/` the launch body delivered read-only, as an overlapping grant lists them. */
+  readonly launchReadOnlyFiles?: readonly string[];
+  /** More launch body entries, as they are sent: a runtime body need not name a kind. */
+  readonly launchEntries?: readonly Readonly<Record<string, string>>[];
   /** The grants the run was delivered `read-write`, by folder; the `read-write` grants by default. */
   readonly deliveredFolders?: Readonly<Record<string, { connectionId: string; prefix: string }>>;
+  /** The grant behind each folder the input archive was loaded with; not passed by default. */
+  readonly hydratedFolders?: Readonly<Record<string, { connectionId: string; prefix: string }>>;
   readonly writeAllowed?: boolean;
   readonly allowedPrefixes?: readonly string[];
   /** Connection rows by id at the end of the run; `CONNECTION` is `acme-data` by default. */
@@ -162,6 +190,10 @@ interface Setup {
   readonly seams?: BucketSeams;
   readonly signal?: AbortSignal;
   readonly audit?: (event: StorageWriteBackAuditEvent) => Promise<void>;
+  /** Whether the stored run is still `running`, asked between files; always by default. */
+  readonly stillRunning?: () => Promise<boolean>;
+  /** Folder contents by connection prefix; streamed, for archives too large to build in memory. */
+  readonly streams?: (path: string) => ReadableStream<Uint8Array> | null;
 }
 
 const DEFAULT_GRANTS: readonly Grant[] = [
@@ -182,10 +214,11 @@ async function writeBack(setup: Setup) {
   const reads: string[] = [];
   const opened: string[] = [];
   const grants: readonly Grant[] = setup.grants ?? DEFAULT_GRANTS;
+  const launchGrants: readonly Grant[] = setup.launchGrants ?? grants;
   const folders =
     setup.deliveredFolders ??
     Object.fromEntries(
-      grants
+      launchGrants
         .filter((grant) => grant.access === 'read-write')
         .map((grant) => [`storage/acme-data/${grant.prefix}`, grant]),
     );
@@ -213,13 +246,19 @@ async function writeBack(setup: Setup) {
               path,
               access: 'read-write',
             })),
-            ...grants
+            ...launchGrants
               .filter((grant) => grant.access === 'read')
               .map((grant) => ({
                 kind: 'directory',
                 path: `storage/acme-data/${grant.prefix}`,
                 access: 'read',
               })),
+            ...(setup.launchEntries ?? []),
+            ...(setup.launchReadOnlyFiles ?? []).map((name) => ({
+              kind: 'file',
+              path: `storage/acme-data/reports/${name}`,
+              access: 'read',
+            })),
             ...Object.entries(setup.delivered ?? {}).map(([name, content]) => ({
               kind: 'file',
               path: `storage/acme-data/reports/${name}`,
@@ -232,12 +271,17 @@ async function writeBack(setup: Setup) {
       cwd: CWD,
       collect: (path) => {
         reads.push(path);
+        const stream = setup.streams?.(path);
+        if (stream !== undefined) return Promise.resolve(stream);
         const tar =
           setup.tar?.(path, reads.filter((read) => read === path).length) ??
           (path === FOLDER ? tarOf(setup.files ?? {}) : null);
         return Promise.resolve(tar === null ? null : streamed(tar));
       },
       folders: new Map(Object.entries(folders)),
+      ...(setup.hydratedFolders === undefined
+        ? {}
+        : { hydrated: new Map(Object.entries(setup.hydratedFolders)) }),
       signal: setup.signal ?? new AbortController().signal,
     },
     {
@@ -259,6 +303,7 @@ async function writeBack(setup: Setup) {
         },
       },
       audit,
+      stillRunning: setup.stillRunning ?? (() => Promise.resolve(true)),
     },
   );
   return {
@@ -377,6 +422,73 @@ describe('the folder is the one that was delivered, whatever the connection is c
     expect([...(result.buckets.get(OTHER)?.objects.entries() ?? [])]).toEqual([
       ['reports/b.md', 'for beta'],
     ]);
+  });
+});
+
+describe('the folder is written only when the archive and compose loads agree on its grant', () => {
+  const row = (name: string): Connection => ({
+    name,
+    allowedPrefixes: ['reports'],
+    writeAllowed: true,
+  });
+  const both: readonly Grant[] = [
+    { connectionId: CONNECTION, prefix: 'reports', access: 'read-write' },
+    { connectionId: OTHER, prefix: 'reports', access: 'read-write' },
+  ];
+
+  it('[US-STO-12][unit][run] writes a folder both loads delivered for the same grant', async () => {
+    const result = await writeBack({
+      hydratedFolders: {
+        'storage/acme-data/reports': { connectionId: CONNECTION, prefix: 'reports' },
+      },
+      files: { 'summary.md': '# Q3\n' },
+    });
+
+    expect(result.objects.get('reports/summary.md')).toBe('# Q3\n');
+  });
+
+  it('[US-STO-12][unit][run] refuses a folder whose name moved to another connection between the two loads', async () => {
+    // The archive put OTHER's files at `storage/acme-data/reports`; by the compose load the name
+    // `acme-data` was CONNECTION's, so what the agent left there is OTHER's, not CONNECTION's.
+    const result = await writeBack({
+      grants: both,
+      hydratedFolders: { 'storage/acme-data/reports': { connectionId: OTHER, prefix: 'reports' } },
+      deliveredFolders: {
+        'storage/acme-data/reports': { connectionId: CONNECTION, prefix: 'reports' },
+      },
+      connections: { [CONNECTION]: row('acme-data'), [OTHER]: row('acme-old') },
+      delivered: { 'q3.csv': 'q3,42\n' },
+      bucket: { 'reports/q3.csv': 'q3,42\n' },
+      files: { 'q3.csv': 'q3,43\n', 'new.md': 'from the other connection' },
+    });
+
+    expect(result.reads).toEqual([]);
+    expect(result.opened).toEqual([]);
+    expect(result.objects.get('reports/q3.csv')).toBe('q3,42\n');
+    expect(result.objects.has('reports/new.md')).toBe(false);
+    expect(result.buckets.get(OTHER)).toBeUndefined();
+    expect(result.labels()).toEqual([
+      'run run-1 · 0 written · 0 unchanged · 0 conflicted · 1 refused · 0 failed · 0 bytes · refused: folder_mismatch',
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] refuses a folder the archive load did not deliver', async () => {
+    const result = await writeBack({ hydratedFolders: {}, files: { 'new.md': 'new' } });
+
+    expect(result.objects.size).toBe(0);
+    expect(result.labels()[0]).toContain('refused: folder_mismatch');
+  });
+
+  it('[US-STO-12][unit][run] refuses a folder the archive load delivered for another prefix', async () => {
+    const result = await writeBack({
+      hydratedFolders: {
+        'storage/acme-data/reports': { connectionId: CONNECTION, prefix: 'data' },
+      },
+      files: { 'new.md': 'new' },
+    });
+
+    expect(result.objects.size).toBe(0);
+    expect(result.labels()[0]).toContain('refused: folder_mismatch');
   });
 });
 
@@ -507,6 +619,66 @@ describe('nothing is written outside the granted prefix', () => {
   );
 });
 
+describe('write-back needs the launch body and the grants as they are now to allow a file', () => {
+  const broad: Grant = { connectionId: CONNECTION, prefix: 'reports', access: 'read-write' };
+  const nested: Grant = { connectionId: CONNECTION, prefix: 'reports/2026', access: 'read' };
+  const files = { '2026/q3.csv': 'q3,43\n', 'top.md': '# Top\n' };
+
+  it('[US-STO-12][unit][run] keeps a folder read-only whose read grant was removed during the run', async () => {
+    const result = await writeBack({ launchGrants: [broad, nested], grants: [broad], files });
+
+    expect(result.attempts).toEqual(['reports/top.md']);
+    expect(result.objects.has('reports/2026/q3.csv')).toBe(false);
+    expect(result.counts).toEqual({ ...NOTHING, written: 1, refused: 1, bytes: 6 });
+  });
+
+  it('[US-STO-12][unit][run] keeps an exact file read-only that the launch body delivered read-only', async () => {
+    const result = await writeBack({
+      launchReadOnlyFiles: ['2026/q3.csv'],
+      files: { ...files, '2026/q2.csv': 'q2,41\n' },
+    });
+
+    expect(result.attempts.sort()).toEqual(['reports/2026/q2.csv', 'reports/top.md']);
+    expect(result.objects.has('reports/2026/q3.csv')).toBe(false);
+    expect(result.counts).toEqual({ ...NOTHING, written: 2, refused: 1, bytes: 12 });
+  });
+
+  it('[US-STO-12][unit][run] writes a sibling folder that only shares the read-only folder name as a prefix', async () => {
+    const result = await writeBack({
+      launchGrants: [broad, nested],
+      grants: [broad],
+      files: { ...files, '20261/x.csv': 'x\n' },
+    });
+
+    expect(result.attempts.sort()).toEqual(['reports/20261/x.csv', 'reports/top.md']);
+    expect(result.counts).toEqual({ ...NOTHING, written: 2, refused: 1, bytes: 8 });
+  });
+
+  it('[US-STO-12][unit][run] keeps everything under a read-only launch entry that names no kind', async () => {
+    const result = await writeBack({
+      launchEntries: [{ path: 'storage/acme-data/reports/2026', access: 'read' }],
+      files,
+    });
+
+    expect(result.attempts).toEqual(['reports/top.md']);
+    expect(result.counts).toEqual({ ...NOTHING, written: 1, refused: 1, bytes: 6 });
+  });
+
+  it('[US-STO-12][unit][run] writes nothing when the read-write grant was removed during the run', async () => {
+    const result = await writeBack({ launchGrants: [broad, nested], grants: [nested], files });
+
+    expect(result.attempts).toEqual([]);
+    expect(result.labels()).toEqual([expect.stringContaining('refused: grant_missing')]);
+  });
+
+  it('[US-STO-12][unit][run] honours a read grant added during the run', async () => {
+    const result = await writeBack({ launchGrants: [broad], grants: [broad, nested], files });
+
+    expect(result.attempts).toEqual(['reports/top.md']);
+    expect(result.counts).toEqual({ ...NOTHING, written: 1, refused: 1, bytes: 6 });
+  });
+});
+
 describe('a file that moved on in the bucket is kept', () => {
   it('[US-STO-12][unit][run] keeps the bucket version of a file changed there during the run', async () => {
     const result = await writeBack({
@@ -528,6 +700,18 @@ describe('a file that moved on in the bucket is kept', () => {
 
     expect(result.objects.size).toBe(0);
     expect(result.counts).toMatchObject({ written: 0, conflicted: 1 });
+  });
+
+  it('[US-STO-12][unit][run] counts a delivered file whose bucket is gone as failed, not conflicted', async () => {
+    // The store raises for a missing bucket; only a missing object answers `null`.
+    const result = await writeBack({
+      delivered: { 'q3.csv': 'q3,42\n' },
+      bucket: { 'reports/q3.csv': 'q3,42\n' },
+      files: { 'q3.csv': 'q3,43\n' },
+      seams: { failRead: () => new Error('NoSuchBucket') },
+    });
+
+    expect(result.counts).toMatchObject({ written: 0, conflicted: 0, failed: 1 });
   });
 
   it('[US-STO-12][unit][run] keeps the bucket version of a file created there during the run', async () => {
@@ -568,6 +752,61 @@ describe('a file that moved on in the bucket is kept', () => {
 
     expect(result.objects.get('reports/q3.csv')).toBe('edited in between\n');
     expect(result.counts).toMatchObject({ written: 0, conflicted: 1 });
+  });
+});
+
+describe('a store write racing another writer mid-upload', () => {
+  it('[US-STO-12][unit][run] keeps a delivered file another writer changed while it was uploading', async () => {
+    const result = await writeBack({
+      delivered: { 'q3.csv': 'q3,42\n', 'q2.csv': 'q2,40\n' },
+      bucket: { 'reports/q3.csv': 'q3,42\n', 'reports/q2.csv': 'q2,40\n' },
+      files: { 'q3.csv': 'q3,43\n', 'q2.csv': 'q2,41\n' },
+      seams: {
+        duringWrite: (key, objects) => {
+          if (key === 'reports/q3.csv') objects.set(key, 'theirs, mid-upload\n');
+        },
+      },
+    });
+
+    expect(result.attempts.sort()).toEqual(['reports/q2.csv', 'reports/q3.csv']);
+    expect(result.objects.get('reports/q3.csv')).toBe('theirs, mid-upload\n');
+    expect(result.objects.get('reports/q2.csv')).toBe('q2,41\n');
+    expect(result.counts).toEqual({ ...NOTHING, written: 1, conflicted: 1, bytes: 6 });
+    expect(result.labels()).toEqual([
+      'run run-1 · 1 written · 0 unchanged · 1 conflicted · 0 refused · 0 failed · 6 bytes',
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] keeps a file another writer created while a new one was uploading', async () => {
+    const result = await writeBack({
+      files: { 'new.md': 'ours' },
+      seams: {
+        duringWrite: (key, objects) => {
+          objects.set(key, 'theirs');
+        },
+      },
+    });
+
+    expect(result.attempts).toEqual(['reports/new.md']);
+    expect(result.objects.get('reports/new.md')).toBe('theirs');
+    expect(result.counts).toEqual({ ...NOTHING, conflicted: 1 });
+  });
+
+  it('[US-STO-12][unit][run] keeps a file another writer deleted while it was uploading', async () => {
+    const result = await writeBack({
+      delivered: { 'q3.csv': 'q3,42\n' },
+      bucket: { 'reports/q3.csv': 'q3,42\n' },
+      files: { 'q3.csv': 'q3,43\n' },
+      seams: {
+        duringWrite: (key, objects) => {
+          objects.delete(key);
+        },
+      },
+    });
+
+    // Write-back never deletes, and a delete it raced is not undone by a recreate either.
+    expect(result.objects.has('reports/q3.csv')).toBe(false);
+    expect(result.counts).toEqual({ ...NOTHING, conflicted: 1 });
   });
 });
 
@@ -616,13 +855,16 @@ describe('one file failing does not stop the others', () => {
   });
 });
 
+/** The reason `AbortSignal.timeout` aborts with: what the launcher's deadline signal carries. */
+const timedOut = () => new DOMException('the write-back deadline passed', 'TimeoutError');
+
 describe('the write-back deadline', () => {
   it('[US-STO-12][unit][run] stops at the deadline on a store that never answers, counting the rest failed', async () => {
     // The deadline passes inside the first, hung write: no assertion depends on the clock.
     const deadline = new AbortController();
     const result = await writeBack({
       files: { 'a.md': 'a', 'b.md': 'b', 'c.md': 'c' },
-      seams: { hangWrite: true, beforeWrite: () => deadline.abort() },
+      seams: { hangWrite: true, beforeWrite: () => deadline.abort(timedOut()) },
       signal: deadline.signal,
     });
 
@@ -636,7 +878,7 @@ describe('the write-back deadline', () => {
 
   it('[US-STO-12][unit][run] starts no grant once the deadline has passed', async () => {
     const controller = new AbortController();
-    controller.abort();
+    controller.abort(timedOut());
     const result = await writeBack({ files: { 'a.md': 'a' }, signal: controller.signal });
 
     expect(result.reads).toEqual([]);
@@ -757,5 +999,183 @@ describe('the audit row', () => {
         ],
       ],
     );
+  });
+});
+
+describe('a run stopped while it is being saved', () => {
+  it('[US-STO-12][unit][run] names an interrupt apart from the deadline', async () => {
+    const interrupt = new AbortController();
+    const result = await writeBack({
+      files: { 'a.md': 'a', 'b.md': 'b' },
+      seams: { hangWrite: true, beforeWrite: () => interrupt.abort() },
+      signal: interrupt.signal,
+    });
+
+    expect(result.counts).toEqual({ ...NOTHING, failed: 2 });
+    expect(result.labels()).toEqual([
+      'run run-1 · 0 written · 0 unchanged · 0 conflicted · 0 refused · 2 failed · 0 bytes · refused: interrupted',
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] stops between files once the stored run is no longer running', async () => {
+    // Another replica cancelled the run: only the stored status says so, not this signal. Each
+    // file comes a status interval after the last, so each one asks the store again.
+    let clock = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => (clock += STORAGE_WRITEBACK_STATUS_INTERVAL_MS));
+    let checks = 0;
+    const result = await writeBack({
+      files: { 'a.md': 'a', 'b.md': 'b', 'c.md': 'c' },
+      stillRunning: () => Promise.resolve((checks += 1) === 1),
+    });
+
+    expect(result.attempts).toEqual(['reports/a.md']);
+    expect(result.counts).toEqual({ ...NOTHING, written: 1, failed: 2, bytes: 1 });
+    expect(result.labels()).toEqual([
+      'run run-1 · 1 written · 0 unchanged · 0 conflicted · 0 refused · 2 failed · 1 bytes · refused: interrupted',
+    ]);
+  });
+
+  it('[US-STO-12][unit][run] asks the stored status at most once per interval, first before any write', async () => {
+    // A folder of many changed files must not cost one database read per file.
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    let checks = 0;
+    const files = Object.fromEntries(
+      Array.from({ length: 20 }, (_, index) => [`f${String(index)}.md`, 'x']),
+    );
+    const result = await writeBack({
+      files,
+      stillRunning: () => {
+        checks += 1;
+        return Promise.resolve(true);
+      },
+    });
+
+    expect(result.counts).toMatchObject({ written: 20, failed: 0 });
+    expect(checks).toBe(1);
+
+    let stopped = 0;
+    const cancelled = await writeBack({
+      files,
+      stillRunning: () => {
+        stopped += 1;
+        return Promise.resolve(false);
+      },
+    });
+    expect(cancelled.attempts).toEqual([]);
+    expect(stopped).toBe(1);
+  });
+});
+
+describe('what the write-back logs', () => {
+  it('[US-STO-12][unit][run] names no key a store error carries', async () => {
+    // A customer's file name, not a credential: the redactor masks secrets, not names.
+    const secret = 'board-minutes-acquisition-plan';
+    const logged = captureLog();
+    const result = await writeBack({
+      files: { [`${secret}.md`]: 'x' },
+      seams: {
+        failWrite: (key) => new Error(`PutObject on ${key} failed: AccessDenied`),
+      },
+    });
+    logged.restore();
+
+    expect(result.counts).toMatchObject({ failed: 1 });
+    expect(logged.text()).toContain('storage write-back could not write a file');
+    expect(logged.text()).not.toContain(secret);
+  });
+});
+
+describe('the audit write', () => {
+  it('[US-STO-12][unit][run] cannot keep the session busy when it never answers', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const error = vi.spyOn(log, 'error').mockImplementation(() => undefined);
+      const pending = writeBack({
+        files: { 'a.md': 'a' },
+        audit: () => new Promise<never>(() => undefined),
+      });
+      let settled = false;
+      void pending.then(() => (settled = true));
+      await vi.advanceTimersByTimeAsync(STORAGE_WRITEBACK_AUDIT_DEADLINE_MS);
+      const result = await pending;
+
+      expect(settled).toBe(true);
+      expect(result.objects.get('reports/a.md')).toBe('a');
+      expect(error).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('the run-wide byte budget', () => {
+  const MIB = 1024 * 1024;
+  const SIZE = 80 * MIB;
+
+  /** A one-file archive of `size` zero bytes under `folder`, streamed a MiB at a time. */
+  function zeroArchive(folder: string, name: string, size: number): ReadableStream<Uint8Array> {
+    const empty = encodeUstar([
+      { path: `${folder}/${name}`, type: 'file', mode: 0o644, data: Buffer.alloc(0) },
+    ]);
+    const header = Buffer.from(empty.subarray(0, BLOCK));
+    header.write(`${size.toString(8).padStart(11, '0')}\0`, 124);
+    header.fill(0x20, 148, 156);
+    const checksum = header.reduce((sum, byte) => sum + byte, 0);
+    header.write(`${checksum.toString(8).padStart(6, '0')}\0 `, 148);
+    const chunk = new Uint8Array(MIB);
+    const parts: (() => Uint8Array)[] = [() => header];
+    for (let left = size; left > 0; left -= MIB) {
+      const length = Math.min(left, MIB);
+      parts.push(() => chunk.subarray(0, length));
+    }
+    parts.push(() => new Uint8Array(BLOCK * 2));
+    let next = 0;
+    return new ReadableStream<Uint8Array>({
+      pull: (controller) => {
+        const part = parts[next];
+        next += 1;
+        if (part === undefined) controller.close();
+        else controller.enqueue(part());
+      },
+    });
+  }
+
+  function zeroSha(size: number): string {
+    const hash = createHash('sha256');
+    const chunk = new Uint8Array(MIB);
+    for (let left = size; left > 0; left -= MIB)
+      hash.update(chunk.subarray(0, Math.min(left, MIB)));
+    return hash.digest('hex');
+  }
+
+  it('[US-STO-12][unit][run] refuses a later folder once the run has read its budget', async () => {
+    // Two folders of 80 MiB each: the first is read in full, the second exceeds what is left of
+    // the run's 128 MiB. The first file is unchanged, so no body of it is buffered by this fake.
+    const data = `${CWD}/storage/acme-data/data`;
+    const result = await writeBack({
+      grants: [
+        { connectionId: CONNECTION, prefix: 'reports', access: 'read-write' },
+        { connectionId: CONNECTION, prefix: 'data', access: 'read-write' },
+      ],
+      launchEntries: [
+        {
+          kind: 'file',
+          path: 'storage/acme-data/reports/big.bin',
+          access: 'read-write',
+          sha256: zeroSha(SIZE),
+        },
+      ],
+      streams: (path) =>
+        path === FOLDER
+          ? zeroArchive(FOLDER, 'big.bin', SIZE)
+          : path === data
+            ? zeroArchive(data, 'big.bin', SIZE)
+            : null,
+    });
+
+    expect(result.attempts).toEqual([]);
+    expect(result.labels()).toEqual([
+      'run run-1 · 0 written · 1 unchanged · 0 conflicted · 1 refused · 0 failed · 0 bytes · refused: archive_refused',
+    ]);
   });
 });

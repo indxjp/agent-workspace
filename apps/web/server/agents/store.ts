@@ -54,6 +54,8 @@ import {
   type AgentResourceAssignmentsInput,
   type ReplaceAgentResourcesOutcome,
   type AgentRepository as CoreAgentRepository,
+  type AgentRestoreActor,
+  type RestoreAgentOutcome,
   type AgentRepositoryProvider as CoreAgentRepositoryProvider,
   type AgentStoredPolicy as CoreAgentStoredPolicy,
   type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
@@ -76,7 +78,12 @@ export type CreateAgentOutcome =
   | { readonly kind: 'unknown-model-connection'; readonly modelConnectionId: string }
   | { readonly kind: 'unknown-runtime-profile'; readonly runtimeProfileId: string };
 
-export type { AgentResourceAssignments, AgentResourceAssignmentsInput };
+export type {
+  AgentResourceAssignments,
+  AgentResourceAssignmentsInput,
+  AgentRestoreActor,
+  RestoreAgentOutcome,
+};
 
 /**
  * What creating an agent with its resource assignments can produce (W2-3): the create's refusals,
@@ -135,6 +142,8 @@ export interface WorkspaceAgentStore {
   delete(id: string): Promise<DeleteAgentOutcome>;
   /** `null` writes back to "compiled" — a `PUT` may not partially replace a stored policy. */
   replacePolicy(id: string, policy: AgentPolicy | null): Promise<ReplaceAgentPolicyOutcome>;
+  /** Un-archives an agent and records who did it; an agent that is not archived is left alone. */
+  restore(id: string, actor: AgentRestoreActor): Promise<RestoreAgentOutcome>;
 }
 
 /** Hands out a {@link WorkspaceAgentStore} bound to one workspace. The only place an id is supplied. */
@@ -243,6 +252,9 @@ export function createRepositoryAgentStoreProvider(
             id,
             policy === null ? null : toStoredPolicy(policy),
           );
+        },
+        async restore(id: string, actor: AgentRestoreActor): Promise<RestoreAgentOutcome> {
+          return (await repository()).restore(id, actor);
         },
       };
     },

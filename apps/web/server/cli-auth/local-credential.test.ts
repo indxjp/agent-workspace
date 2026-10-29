@@ -19,6 +19,7 @@ import type {
 
 import type { Role } from '../rbac/roles';
 
+import { fixedClock } from '../clock';
 import { conferRole } from '../rbac/conferral';
 import { ROLES } from '../rbac/roles';
 import {
@@ -210,7 +211,7 @@ describe('issueLocalApiKey', () => {
       directory.members.set(USER_ID, role);
       const credential = await issueLocalApiKey(input, {
         directory: directory.root,
-        now: () => NOW,
+        clock: fixedClock(NOW),
       });
 
       expect(credential.token).toMatch(API_KEY_PATTERN);
@@ -282,7 +283,7 @@ describe('issueLocalApiKey', () => {
     const later = new Date(NOW.getTime() + 1000);
     const credential = await issueLocalApiKey(input, {
       directory: directory.root,
-      now: () => later,
+      clock: fixedClock(later),
     });
 
     const byId = new Map(directory.keys.map((key) => [key.id, key]));

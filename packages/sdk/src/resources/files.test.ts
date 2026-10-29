@@ -420,6 +420,84 @@ describe('FilesClient cancellation', () => {
   });
 });
 
+// #1991 SDK-1: a stream is buffered before any request, so the signal must reach the buffering.
+describe('FilesClient upload source lifetime', () => {
+  /** A source that sends one chunk and then never ends, recording its cancellation. */
+  function endless(): {
+    readonly stream: ReadableStream<Uint8Array>;
+    readonly cancelled: unknown[];
+  } {
+    const cancelled: unknown[] = [];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(utf8('partial'));
+      },
+      cancel(reason) {
+        cancelled.push(reason);
+      },
+    });
+    return { stream, cancelled };
+  }
+
+  it.each([false, true])(
+    'aborting before the source ends cancels it and sends nothing (direct: %s)',
+    async (direct) => {
+      const { stream, cancelled } = endless();
+      const { files, calls } = client(() => json(201, { file }));
+      const controller = new AbortController();
+      const failure = files
+        .upload('a/b c.txt', stream, { signal: controller.signal, direct })
+        .catch((e: unknown) => e);
+      controller.abort();
+
+      const error = await failure;
+      expect(error).toBeInstanceOf(TransportError);
+      expect((error as TransportError).aborted).toBe(true);
+      expect(cancelled).toHaveLength(1);
+      expect(stream.locked).toBe(false);
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it('reports a failing source as a transport failure that keeps its cause', async () => {
+    const broken = new Error('disk read failed');
+    const { files, calls } = client(() => json(201, { file }));
+    const error = await files
+      .upload(
+        'a/b c.txt',
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            controller.error(broken);
+          },
+        }),
+      )
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(TransportError);
+    expect((error as TransportError).aborted).toBe(false);
+    expect((error as TransportError).cause).toBe(broken);
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a chunk that is not a Uint8Array instead of uploading wrong bytes', async () => {
+    const { files, calls } = client(() => json(201, { file }));
+    const strings = new ReadableStream<unknown>({
+      start(controller) {
+        controller.enqueue('abc');
+        controller.close();
+      },
+    });
+    const error = await files
+      .upload('a/b c.txt', strings as ReadableStream<Uint8Array>)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(TransportError);
+    expect((error as TransportError).aborted).toBe(false);
+    expect((error as TransportError).cause).toBeInstanceOf(TypeError);
+    expect(calls).toEqual([]);
+  });
+});
+
 describe('FilesClient signed uploads', () => {
   /** A Blob of `size` bytes made of one shared 1 MiB part, so nothing near 64 MiB is allocated. */
   function largeBlob(size: number): Blob {
@@ -484,6 +562,64 @@ describe('FilesClient signed uploads', () => {
   });
 
   // @story US-STO-02
+  it("[US-STO-02][api][sdk] direct hands the caller's bytes to the store without a copy", async () => {
+    const { files, calls } = signedClient();
+    const bytes = utf8('hello');
+    await files.upload('a/b c.txt', bytes, { direct: true });
+    const body = calls[1]?.init.body;
+    expect(body).toBeInstanceOf(Uint8Array);
+    expect(body instanceof Uint8Array ? body.buffer : null).toBe(bytes.buffer);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] a stream with a declared size above 64 MiB goes straight to the signed link', async () => {
+    const { files, calls } = signedClient();
+    let pulled = 0;
+    // Never read by the double; a buffering upload would drain these four chunks before minting.
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        if (pulled > 4) controller.close();
+        else controller.enqueue(new Uint8Array(1024));
+      },
+    });
+    const sizeBytes = MAX_UPLOAD_BYTES + 1;
+    expect(await files.upload('a/b c.txt', stream, { sizeBytes })).toEqual(file);
+    expect(routes(calls)).toEqual([
+      'POST aw.example.com/api/files/YS9iIGMudHh0/upload-urls',
+      'PUT store.example.com/files/a/b%20c.txt',
+      'POST aw.example.com/api/files/YS9iIGMudHh0/upload-complete',
+    ]);
+    expect(calls[0]?.json).toEqual({ sizeBytes });
+    expect(calls[1]?.init.body).toBe(stream);
+    expect(calls[1]?.init).toMatchObject({ duplex: 'half', credentials: 'omit' });
+    // A ReadableStream starts by pulling once to fill its queue; nothing more was read.
+    expect(pulled).toBeLessThanOrEqual(1);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] refuses a declared size that is not a byte count before any request', async () => {
+    const { files, calls } = signedClient();
+    for (const sizeBytes of [-1, 1.5, Number.NaN]) {
+      const failure = await files
+        .upload('a', new Blob([utf8('x')]).stream(), { sizeBytes })
+        .catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(TypeError);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] refuses a declared size that disagrees with a sized body', async () => {
+    const { files, calls } = signedClient();
+    const failure = await files
+      .upload('a', utf8('hello'), { sizeBytes: 4 })
+      .catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(TypeError);
+    expect(calls).toHaveLength(0);
+  });
+
+  // @story US-STO-02
   it('[US-STO-02][api][sdk] a small body without direct stays one relay call', async () => {
     const { files, calls } = signedClient();
     await files.upload('a/b c.txt', utf8('hello'));
@@ -525,6 +661,31 @@ describe('FilesClient signed uploads', () => {
       .catch((e: unknown) => e);
     expect((failure as ApiProblemError).code).toBe('direct_transfer_unsupported');
     expect(forced.calls).toHaveLength(1);
+  });
+
+  // @story US-STO-02
+  it('[US-STO-02][api][sdk] a declared stream above 64 MiB is not buffered when the store cannot sign', async () => {
+    const unsupported = client(() =>
+      json(501, { error: { code: 'direct_transfer_unsupported', message: 'No direct transfer.' } }),
+    );
+    let pulled = 0;
+    // A fallback would drain these four chunks into memory and then ask the relay to take them.
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          pulled += 1;
+          if (pulled > 4) controller.close();
+          else controller.enqueue(new Uint8Array(1024));
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const failure = await unsupported.files
+      .upload('a', stream, { sizeBytes: MAX_UPLOAD_BYTES + 1 })
+      .catch((e: unknown) => e);
+    expect((failure as ApiProblemError).code).toBe('direct_transfer_unsupported');
+    expect(routes(unsupported.calls)).toEqual(['POST aw.example.com/api/files/YQ/upload-urls']);
+    expect(pulled).toBe(0);
   });
 
   // @story US-STO-02

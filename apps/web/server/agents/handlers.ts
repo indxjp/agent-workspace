@@ -18,6 +18,8 @@
  * There is no search, no bulk and no count operation, and `tests/route-inventory.test.ts` fails the
  * build if one appears as a route.
  */
+import type { AgentListArchived } from '@indx-workspace/contracts/agents';
+
 import { isUuid, toAgentResource, type AgentRecord } from './contract';
 import {
   agentRequestIssueMessages,
@@ -36,6 +38,7 @@ import type {
   WorkspaceAgentStore,
 } from './store';
 import { problem, type ApiResult } from '../http/result';
+import type { Principal } from '../rbac/principal';
 
 /**
  * A check a write runs after its body parses and before the store writes (issue #535: the
@@ -156,11 +159,18 @@ export async function createAgent(
 
 /**
  * `GET /api/agents` — 200 with this workspace's agents, built-ins last (the sort is stable, so the
- * rest keep the store's order). Never another workspace's (§25).
+ * rest keep the store's order). Never another workspace's (§25). Archived agents are left out
+ * unless `archived` is `include`; the filter only removes rows, so `include` shows nobody the
+ * caller could not already list. It sits here and not in the store because the provisioning and
+ * endpoint code read every row from `store.list()`.
  */
-export async function listAgents(store: WorkspaceAgentStore): Promise<ApiResult> {
+export async function listAgents(
+  store: WorkspaceAgentStore,
+  archived?: AgentListArchived,
+): Promise<ApiResult> {
   const agents = await store.list();
   const items: AgentResource[] = agents
+    .filter((agent) => archived === 'include' || agent.archivedAt === undefined)
     .map(toAgentResource)
     .sort((a, b) => Number(a.builtin !== undefined) - Number(b.builtin !== undefined));
   return { status: 200, body: { agents: items } };
@@ -271,6 +281,41 @@ export async function deleteAgent(store: WorkspaceAgentStore, rawId: unknown): P
 }
 
 /**
+ * `POST /api/agents/:id/restore` — 200 with the agent, or 404.
+ *
+ * An agent that is not archived answers 200 as it is and writes no audit row, so a retry after a
+ * lost response is safe.
+ */
+export async function restoreAgent(
+  store: WorkspaceAgentStore,
+  rawId: unknown,
+  principal: Principal,
+): Promise<ApiResult> {
+  const id = requireAgentId(rawId);
+  if (!id.ok) return id.result;
+  const outcome = await store.restore(id.id, {
+    principalId: principal.principalId,
+    userId: principal.userId,
+    label: principal.actor,
+  });
+  switch (outcome.kind) {
+    case 'restored':
+    case 'not-archived':
+      return { status: 200, body: toAgentResource(outcome.agent) };
+    case 'not-found':
+      return agentNotFound();
+    default: {
+      const unreachable: never = outcome;
+      return problem(
+        500,
+        'unhandled_store_outcome',
+        `The store returned an outcome this route does not handle: ${JSON.stringify(unreachable)}.`,
+      );
+    }
+  }
+}
+
+/**
  * The one 404 the agent routes emit.
  *
  * Its message deliberately does not distinguish "no such agent" from "an agent you cannot see":
@@ -284,7 +329,8 @@ export function agentNotFound(): ApiResult {
 
 /**
  * Whether a built-in agent refuses each operation: every change to it is refused, while reading,
- * evaluating and exporting it stay open so people may inspect and evaluate the Builder.
+ * evaluating and exporting it stay open so people may inspect and evaluate the Builder. Advancing an
+ * evaluation run only runs and scores its cases; promote, which reads the score, stays refused.
  */
 const BUILTIN_AGENT_REFUSES: Readonly<Record<BuiltinAgentOperation, boolean>> = {
   read: false,
@@ -297,7 +343,7 @@ const BUILTIN_AGENT_REFUSES: Readonly<Record<BuiltinAgentOperation, boolean>> = 
   'set-pointer': true,
   promote: true,
   rollback: true,
-  'advance-evaluation': true,
+  'advance-evaluation': false,
   evaluate: false,
   'start-evaluation-run': false,
   export: false,

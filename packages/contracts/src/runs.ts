@@ -490,9 +490,14 @@ export type StartRunResponse = z.infer<typeof StartRunResponseSchema>;
  *   model cost today (UTC), so no run starts until the next UTC midnight; `429`, with the cap, the
  *   spend and the reset time in `details` (ADR-0102 SD6, issue #1851). Model responses with no
  *   price are stored at 0, so once any run with usage today is unmeasured the cap refuses the same
- *   way with `unpricedUsage: true` in `details`: a cap that cannot be measured is not met.
+ *   way with `unpricedUsage: true` in `details`: a cap that cannot be measured is not met. A run
+ *   already running meets it at its next model call: the gateway refuses that call `403`
+ *   (`permission_error`, which an SDK does not retry) and ends the run `failed` with this code as
+ *   its `error` prefix (`daily_cost_cap_reached: <message>`). That message carries the cap, the
+ *   reset time and `unpricedUsage`, never the spend.
  * - `daily_cost_unavailable` — the daily cost cap is set but the workspace's spend could not be
  *   read, so the start is refused rather than let through; `503`, with no details (issue #1851).
+ *   A running run's next model call is refused the same way, `503`, and the run is not ended.
  * - `network_policy_unenforceable` — the agent lacks `unrestrictedNetwork`, so its `open` profile
  *   was lowered to `restricted` for its remote connectors' hosts, and the profile's driver cannot
  *   enforce `restricted` (ADR-0117 decisions 7 and 9, issue #785). Grant `unrestrictedNetwork`,
@@ -592,6 +597,11 @@ export const RUN_START_PROBLEM_CODES = {
    * (issue #1851). Fail-closed: the start is refused, with no `details` and no cause.
    */
   daily_cost_unavailable: 503,
+  /**
+   * The agent was archived (issue #1851), by the auto-archive sweep or by a person. An archived agent
+   * starts no run, whatever the door; no run or session is created. Restore it to run it again.
+   */
+  agent_archived: 409,
   /**
    * The built-in Builder's model is served by no connection of the workspace (#1848).
    * `BUILDER_REFUSAL_CODES.builder_model_unavailable` takes its status from here, so the number

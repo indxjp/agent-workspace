@@ -12,12 +12,13 @@ import { PRESIGNED_URL_MAX_TTL_SECONDS } from '@indx-workspace/contracts/files';
 import {
   parseStorageObjectName,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
 import { parseLegacyKey } from './legacy-naming';
 import { BodyTooLargeError, measure } from './measure';
+import { promoteUpload } from './promote-upload';
 import type { CatalogFile, CatalogPort } from './store';
 
 /** The longest a signed link lives, plus an hour: nothing younger is touched. */
@@ -44,9 +45,9 @@ export interface CleanupReport {
 
 export interface CleanupDependencies {
   /** The shared root, new naming. */
-  readonly objects: ObjectStoreV2;
+  readonly objects: ObjectStore;
   /** The old files layout (`legacyAreaPrefixes`); `null` when the deployment has none. */
-  readonly legacy: { readonly objects: ObjectStoreV2; readonly prefix: string } | null;
+  readonly legacy: { readonly objects: ObjectStore; readonly prefix: string } | null;
   /** Rejects for a workspace that no longer exists. */
   readonly catalogs: (workspaceId: string) => Promise<CatalogPort>;
   /** The session-state blob rows of a workspace, which the `session-state` objects belong to. */
@@ -175,22 +176,43 @@ async function settleStalePending(pass: Pass, workspaceId: string, catalog: Cata
           return;
         }
         // The checksum is of the bytes in the store; bytes that are not the declared ones fall
-        // through to the delete below.
-        const sum = await checksum(object, row.sizeBytes);
-        if (sum !== null) {
-          const done = await catalog.confirm(row, {
-            sizeBytes: sum.sizeBytes,
-            sha256: sum.sha256,
-            contentType: row.contentType,
-          });
-          if (done === null) return;
-          pass.counts.stalePendingReady += 1;
-          return;
+        // through to the delete below. A row in the new naming is published on a copy, as
+        // `completeUpload` does (`promote-upload.ts`).
+        const objectId = row.objectId ?? null;
+        if (objectId !== null) {
+          const promoted = await promoteUpload(
+            { objects: pass.deps.objects, catalog, log: pass.deps.log },
+            workspaceId,
+            { ...row, objectId },
+            row.sizeBytes,
+          );
+          if (promoted.kind === 'stale') return;
+          if (promoted.kind === 'confirmed') {
+            pass.counts.stalePendingReady += 1;
+            return;
+          }
+        } else {
+          // A pending row in the old naming (`locate` above) is confirmed on its own object.
+          const sum = await checksum(object, row.sizeBytes);
+          if (sum !== null) {
+            const done = await catalog.confirm(row, {
+              sizeBytes: sum.sizeBytes,
+              sha256: sum.sha256,
+              contentType: row.contentType,
+            });
+            if (done === null) return;
+            pass.counts.stalePendingReady += 1;
+            return;
+          }
         }
       }
       if (mutating) {
+        // Claimed before its bytes go: a row confirmed or reserved again since it was listed is
+        // no longer the abandoned upload this pass looked at, and keeps its object.
+        const [claimed] = await catalog.remove(row.targetPath ?? row.path, { pending: row });
+        if (claimed === undefined) return;
         if (meta !== null) await object.store.delete(object.name);
-        await catalog.forget(row);
+        await catalog.forget(claimed);
       }
       pass.counts.stalePendingDeleted += 1;
     });
@@ -243,7 +265,7 @@ async function referencedAmong(
 /** Count the orphans among one workspace's old-enough objects; in delete mode remove them if `deletable`. */
 async function sweepWorkspace(
   pass: Pass,
-  store: ObjectStoreV2,
+  store: ObjectStore,
   workspaceId: string,
   found: readonly Candidate[],
   deletable: boolean,
@@ -270,7 +292,7 @@ async function sweepWorkspace(
 /** List `prefix` page by page; `parse` names an object by workspace and id or storage key. */
 async function sweepListing(
   pass: Pass,
-  store: ObjectStoreV2,
+  store: ObjectStore,
   prefix: string,
   parse: (key: string) => Parsed | null,
   deletable: boolean,

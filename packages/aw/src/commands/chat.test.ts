@@ -96,6 +96,38 @@ describe('aw chat (one shot)', () => {
     );
   });
 
+  it('never counts a built-in agent as the only agent, yet still runs it by name (#2012)', async () => {
+    const builder = {
+      ...FIXTURES.agent,
+      id: '33333333-3333-4333-8333-333333333333',
+      name: 'builder',
+      builtin: 'builder',
+    };
+    const fresh = await runCli(['chat', '--prompt', 'x'], {
+      route: routes([builder, FIXTURES.agent]),
+    });
+    expect(fresh.stderr).toBe('');
+    expect(fresh.code).toBe(EXIT_CODE.ok);
+    expect(fresh.calls.find((call) => call.method === 'POST')?.url.pathname).toBe(
+      `/api/agents/${IDS.agent}/runs`,
+    );
+    const ambiguous = await runCli(['chat', '--prompt', 'x'], {
+      route: routes([FIXTURES.agent, other, builder]),
+    });
+    expect(ambiguous.code).toBe(EXIT_CODE.usage);
+    expect(ambiguous.stderr).toContain('(Summariser, Billing)');
+    const alone = await runCli(['chat', '--prompt', 'x'], { route: routes([builder]) });
+    expect(alone.code).toBe(EXIT_CODE.problem);
+    expect(alone.stderr).toContain('no agent to talk to');
+    const named = await runCli(['chat', 'builder', '--prompt', 'x'], {
+      route: routes([FIXTURES.agent, builder]),
+    });
+    expect(named.code).toBe(EXIT_CODE.ok);
+    expect(named.calls.find((call) => call.method === 'POST')?.url.pathname).toBe(
+      `/api/agents/${builder.id}/runs`,
+    );
+  });
+
   it('--json prints the settled run and nothing else', async () => {
     const run = await runCli(['chat', '--prompt', 'x', '--json'], {
       route: routes([FIXTURES.agent]),

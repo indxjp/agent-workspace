@@ -359,7 +359,7 @@ describe('every declared route reaches a handler, and the ones that do not are t
           'against. It fails rather than skipping: the criterion it establishes is the one no ' +
           'track could state, and a green run over a probe that never executed is the defect this ' +
           'programme keeps finding (ADR-0015). .github/workflows/ci.yml provides the service and ' +
-          'asserts it is a real PostgreSQL 17 before this runs.',
+          'asserts it is a real PostgreSQL 18 before this runs.',
       );
     }
     runNode(MANAGE_DATABASE, {

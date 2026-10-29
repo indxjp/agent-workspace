@@ -19,6 +19,7 @@ vi.mock('@google-cloud/storage', () => ({
 }));
 
 import { createGcsObjectStoreProviderFromConfig, GcsBucketUnavailableError } from './gcs-store.js';
+import { listAll } from './streams.js';
 
 describe('native GCS readiness', () => {
   beforeEach(() => {
@@ -59,6 +60,27 @@ describe('native GCS readiness', () => {
     expect((unreachable as Error).message).not.toContain('token=secret');
   });
 
+  // #1835 (#1830): the cause is sanitised where it is made, not by each caller that logs it.
+  it('keeps only the HTTP status of a failed bucket check as the cause', async () => {
+    getFiles.mockRejectedValueOnce(
+      Object.assign(new Error('denied token=secret'), {
+        code: 403,
+        config: { headers: { Authorization: 'Bearer token=secret' } },
+      }),
+    );
+    const unreachable = await createGcsObjectStoreProviderFromConfig({ bucket: 'private' }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(unreachable).toMatchObject({ reason: 'unreachable' });
+    const chain = (value: unknown): string =>
+      value instanceof Error
+        ? `${String(value)}\n${JSON.stringify(value)}\n${chain(value.cause)}`
+        : '';
+    expect(chain(unreachable)).not.toContain('token=secret');
+    expect(chain(unreachable)).toContain('HTTP 403');
+  });
+
   it('preserves the safe trailing delimiter used for a prefixed native listing', async () => {
     getFiles.mockResolvedValue([[]]);
     const provider = await createGcsObjectStoreProviderFromConfig({
@@ -66,8 +88,8 @@ describe('native GCS readiness', () => {
       keyPrefix: 'files',
     });
     await expect(
-      provider.forWorkspace('11111111-1111-4111-8111-111111111111').list(''),
-    ).resolves.toEqual([]);
+      provider.forWorkspace('11111111-1111-4111-8111-111111111111').listPage(''),
+    ).resolves.toEqual({ entries: [], cursor: null });
     expect(getFiles).toHaveBeenCalledWith({
       maxResults: 1,
       autoPaginate: false,
@@ -75,6 +97,9 @@ describe('native GCS readiness', () => {
     });
     expect(getFiles).toHaveBeenCalledWith({
       prefix: 'files/workspaces/11111111-1111-4111-8111-111111111111/',
+      autoPaginate: false,
+      maxResults: 1000,
+      delimiter: '/',
     });
   });
 
@@ -105,7 +130,7 @@ describe('native GCS readiness', () => {
     });
 
     await expect(
-      provider.forWorkspace('11111111-1111-4111-8111-111111111111').list(''),
+      listAll(provider.forWorkspace('11111111-1111-4111-8111-111111111111'), ''),
     ).resolves.toEqual([expect.objectContaining({ kind: 'file', key: 'visible.txt' })]);
   });
 });

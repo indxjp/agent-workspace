@@ -81,10 +81,15 @@ async function localKeyProblem(
   return `no model key: ${set}, then restart npm run dev (it will offer to open the console)`;
 }
 
-/** `agent` is a name or an id; with none given, the workspace's only agent. */
+/**
+ * `agent` is a name or an id; with none given, the workspace's only agent. A built-in agent such as
+ * the Builder, which every workspace has, never counts as that one (#2012); `aw chat builder` runs it.
+ */
 async function resolveAgentId(context: CommandContext): Promise<string> {
   if (context.positionals.length > 0) return agentIdNamed(context, positional(context, 0, 'agent'));
-  const agents = await context.client.agents.list({ signal: context.signal });
+  const agents = (await context.client.agents.list({ signal: context.signal })).filter(
+    (agent) => agent.builtin === undefined,
+  );
   const [only, ...others] = agents;
   if (only === undefined) {
     throw new CommandRefusedError('this workspace has no agent to talk to', 'run "aw push --yes"');

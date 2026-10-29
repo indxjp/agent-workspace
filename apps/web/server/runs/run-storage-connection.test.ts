@@ -9,14 +9,17 @@
  * grants through the real `createRunAgentReader`.
  */
 // @story US-STO-12
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, mkdtemp, rm, truncate, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadEgressPolicyFromEnv } from '@agent-workspace/core';
 import { createInMemoryObjectStore, openConnectionStore } from '@agent-workspace/core/storage';
 import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
+import { formatStorageUrl } from '@indx-workspace/contracts/storage-url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { clearApplicationContext } from '../application-context';
@@ -74,6 +77,8 @@ interface StartOptions {
   readonly name?: string;
   /** The connections that exist now, name by id; overrides `gone` and `name` when present. */
   readonly connections?: ReadonlyMap<string, string>;
+  /** Opens the connection's read-only store; the `file://` folder when absent. */
+  readonly open?: RunStorageConnections['open'];
 }
 
 /** The name of connection `id` as it is now, or `undefined` when it does not exist. */
@@ -104,12 +109,14 @@ async function start(options: StartOptions) {
           : { name, allowedPrefixes: ['reports', 'archive'], writeAllowed: options.writeAllowed },
       );
     },
-    open: () =>
-      openConnectionStore(
-        `file://${root}`,
-        { provider: 'file' },
-        { writable: false, fileRoots: [root], egress: loadEgressPolicyFromEnv() },
-      ),
+    open:
+      options.open ??
+      (() =>
+        openConnectionStore(
+          `file://${root}`,
+          { provider: 'file' },
+          { writable: false, fileRoots: [root], egress: loadEgressPolicyFromEnv() },
+        )),
     openWritable: () =>
       openConnectionStore(
         `file://${root}`,
@@ -224,6 +231,19 @@ describe('a run granted a connection folder', () => {
     expect(delivered.archive.map((entry) => entry.path).join('\n')).not.toMatch(/other/u);
   });
 
+  it('[US-STO-12][api][run] a file:// file whose name holds a literal % is skipped, not a failed run', async () => {
+    // A `%` is never decoded in a key, so `50%.csv` cannot be delivered under its own name.
+    await writeFile(join(root, 'reports', '50%.csv'), 'half\n');
+    const { runs, started } = await run({ access: 'read', writeAllowed: false });
+    const delivered = await runs.delivered(started.id);
+
+    // An array matches only at its own length, so `50%.csv` is not among them.
+    expect(delivered.files).toMatchObject([
+      { path: 'storage/acme-data/reports' },
+      { path: 'storage/acme-data/reports/2026/q3.csv' },
+    ]);
+  });
+
   it('[US-STO-12][api][run] a read-write grant on a read-only connection is delivered read-only', async () => {
     const { runs, started } = await run({ access: 'read-write', writeAllowed: false });
     const delivered = await runs.delivered(started.id);
@@ -266,6 +286,48 @@ describe('a run granted a connection folder', () => {
       { access: 'read', writeAllowed: false, gone: true },
       'run_storage_grant_unavailable',
     );
+  });
+
+  it('[US-STO-12][api][run] a bucket that refuses the listing answers 422 run_storage_grant_unavailable before the run is queued', async () => {
+    // A real S3 connection against a bucket that refuses every request with 403 AccessDenied.
+    const server = createServer((_request, response) => {
+      response.statusCode = 403;
+      response.setHeader('content-type', 'application/xml');
+      response.end('<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const url = formatStorageUrl({
+        kind: 's3',
+        bucket: 'acme-data',
+        prefix: '',
+        endpoint: `http://bucket-host.invalid:${String(port)}`,
+        forcePathStyle: true,
+      });
+      const credential = {
+        provider: 's3',
+        accessKeyId: randomBytes(10).toString('hex').toUpperCase(),
+        secretAccessKey: randomBytes(20).toString('base64'),
+      } as const;
+      await expectRefused(
+        {
+          access: 'read',
+          writeAllowed: false,
+          open: () =>
+            openConnectionStore(url, credential, {
+              writable: false,
+              fileRoots: [],
+              egress: { production: false, allowHosts: [] },
+              resolve: () => Promise.resolve([{ address: '127.0.0.1', family: 4 }]),
+            }),
+        },
+        'run_storage_grant_unavailable',
+      );
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
   });
 
   describe('read through the version the run is pinned to', () => {

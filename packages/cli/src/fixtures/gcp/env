@@ -19,6 +19,9 @@ SEAWEEDFS_SECRET_ACCESS_KEY=
 # The loopback host port SeaweedFS is published on. Change it to run beside another project
 # that uses 8333, and change the publicEndpoint port in AW_STORAGE_URL with it.
 SEAWEEDFS_PORT=
+# The origins a browser may upload to SeaweedFS from through a signed link: the web service
+# in both loopback spellings, never `*`. Change it with PORT or when serving a public hostname.
+SEAWEEDFS_ALLOWED_ORIGINS=
 COMPOSE_PROFILES=
 # Where files, skills and session transcripts live, in one URL. No key or password belongs in
 # it: the credential lines below, or the workload identity, supply those.

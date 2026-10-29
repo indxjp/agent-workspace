@@ -11,9 +11,8 @@ import {
 
 import { problem, type ApiResult } from '../http/result';
 import { readBoundedJson } from '../http/json-transport';
-import type { ObjectStore } from '@agent-workspace/core/storage';
 import { applicationContext } from '../application-context';
-import { toolBundleLookup, type ToolBundleLookup } from './handlers';
+import { toolBundleLookup, type ToolBundleLookup, type ToolBundleStore } from './handlers';
 
 /** Base64 of the largest bundle, plus room for the JSON envelope. */
 const MAX_UPLOAD_BODY_BYTES = Math.ceil(TOOL_BUNDLE_MAX_BYTES / 3) * 4 + 1024;
@@ -27,7 +26,7 @@ export function toolBundlesNotConfigured(): ApiResult {
 }
 
 /** The object store of `workspaceId`, or `null` when this deployment has no skills storage. */
-export function openToolBundleStore(workspaceId: string): ObjectStore | null {
+export function openToolBundleStore(workspaceId: string): ToolBundleStore | null {
   const skills = applicationContext()?.skills;
   return skills?.kind === 'serving' ? skills.runtime.store.forWorkspace(workspaceId) : null;
 }

@@ -57,7 +57,25 @@ function behavesAsAPerStageLog(open: () => StorageMigrationRunRepository): void 
       skippedPathTaken: 0,
       skippedFailed: 0,
       clean: null,
+      orphans: null,
+      proofVersion: null,
     });
+  });
+
+  // @story US-STO-13
+  it('[US-STO-13][api][cli] a skills pass keeps its orphan count and its proof version', async () => {
+    const runs = open();
+    await runs.record({
+      stage: 'skills',
+      rowsChecked: 2,
+      legacyRows: 0,
+      mismatches: 0,
+      clean: true,
+      orphans: 4,
+      proofVersion: 2,
+    });
+
+    expect(await runs.latest('skills')).toMatchObject({ clean: true, orphans: 4, proofVersion: 2 });
   });
 }
 

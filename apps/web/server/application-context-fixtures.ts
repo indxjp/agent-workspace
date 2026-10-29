@@ -87,6 +87,7 @@ export function installTestDomains({
     tokens: unwired('tokens'),
     toolEndpoint: unwired('toolEndpoint'),
     triggers: unwired('triggers'),
+    workspaceFeatures: unwired('workspaceFeatures'),
     workspaces: unwired('workspaces'),
   };
   installApplicationContext({

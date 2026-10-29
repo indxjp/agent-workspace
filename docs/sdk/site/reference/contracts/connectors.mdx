@@ -133,7 +133,7 @@ The body of `GET /api/connectors`: every connector of the caller's workspace.
 | `kind` | `undefined \| "mcp" \| "openapi" \| "postgres"` | No |  |
 | `openapi` | `undefined \| Readonly<{ spec: Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>; baseUrl: string; auth: "bearer" \| "none" \| Readonly<{ header: string; }>; allow: readonly string[]; operations: readonly Readonly<{ name: string; method: "GET" \| "HEAD" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"; path: string; }>[]; }>` | No | An `openapi` connector's document summary, base URL, rules and operations. |
 | `postgres` | `undefined \| Readonly<{ tables: readonly string[]; readOnly: true; maxRows: number; }>` | No | A `postgres` connector's tables, `readOnly` and `maxRows`. |
-| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret, never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector. |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret, never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector. A response is not refused for a `STORAGE_CONNECTION_` name, which only a connector stored before inputs refused it can carry; the server never reads that secret. |
 
 ## ConnectorResourceSchema
 
@@ -178,7 +178,7 @@ says whether one is on file and `.strict()` refuses a body that carries the valu
 | `kind` | `undefined \| "mcp" \| "openapi" \| "postgres"` | No |  |
 | `openapi` | `undefined \| Readonly<{ spec: Readonly<{ digest: string; bytes: number; title?: string \| undefined; }>; baseUrl: string; auth: "bearer" \| "none" \| Readonly<{ header: string; }>; allow: readonly string[]; operations: readonly Readonly<{ name: string; method: "GET" \| "HEAD" \| "POST" \| "PUT" \| "PATCH" \| "DELETE"; path: string; }>[]; }>` | No | An `openapi` connector's document summary, base URL, rules and operations. |
 | `postgres` | `undefined \| Readonly<{ tables: readonly string[]; readOnly: true; maxRows: number; }>` | No | A `postgres` connector's tables, `readOnly` and `maxRows`. |
-| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret, never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector. |
+| `identity` | `undefined \| Readonly<{ secret: string; }>` | No | Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret, never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector. A response is not refused for a `STORAGE_CONNECTION_` name, which only a connector stored before inputs refused it can carry; the server never reads that secret. |
 
 ## CONNECTORS_PROBLEM_CODES
 

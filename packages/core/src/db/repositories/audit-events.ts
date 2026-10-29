@@ -1,4 +1,7 @@
-import { AgentCreatedAuditDetailsSchema } from '@indx-workspace/contracts/observability';
+import {
+  AgentChangedAuditDetailsSchema,
+  AgentCreatedAuditDetailsSchema,
+} from '@indx-workspace/contracts/observability';
 import { and, count, desc, eq, type SQL } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { auditEvents, type AuditAction, type NewAuditEvent } from '../schema/index.js';
@@ -29,18 +32,24 @@ interface AuditEventListInput {
 
 /**
  * The one check every audit write passes before its insert: `details` belongs to `agent-created`
- * alone and must satisfy the strict contracts schema. Returns the event with the parsed details.
+ * and `agent-changed` alone and must satisfy that action's strict contracts schema. Returns the
+ * event with the parsed details.
  */
 export function checkedAuditEvent<T extends { action: AuditAction; details?: unknown }>(
   event: T,
 ): T {
   if (event.details === undefined || event.details === null) return event;
-  if (event.action !== 'agent-created') {
-    throw new Error(`An '${event.action}' audit row cannot carry details.`);
+  if (event.action === 'agent-created') {
+    const parsed = AgentCreatedAuditDetailsSchema.safeParse(event.details);
+    if (!parsed.success) throw new Error('The audit row details are not AgentCreatedAuditDetails.');
+    return { ...event, details: parsed.data };
   }
-  const parsed = AgentCreatedAuditDetailsSchema.safeParse(event.details);
-  if (!parsed.success) throw new Error('The audit row details are not AgentCreatedAuditDetails.');
-  return { ...event, details: parsed.data };
+  if (event.action === 'agent-changed') {
+    const parsed = AgentChangedAuditDetailsSchema.safeParse(event.details);
+    if (!parsed.success) throw new Error('The audit row details are not AgentChangedAuditDetails.');
+    return { ...event, details: parsed.data };
+  }
+  throw new Error(`An '${event.action}' audit row cannot carry details.`);
 }
 
 type AuditEventWrite = Omit<NewAuditEvent, 'workspaceId' | 'actorPrincipalId' | 'actorUserId'> & {

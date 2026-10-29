@@ -31,6 +31,30 @@
 # infra/release/build-and-push.sh publishes all four for amd64/arm64 with SBOM and provenance.
 ARG NODE_IMAGE=node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 
+# pnpm for `npx` through `pnpm dlx` (ADR-0087 D1), installed by the final stage below. From pnpm 12
+# a release is a native executable per platform, `@pnpm/exe.linux-<x64|arm64>` on the npm registry,
+# so each architecture has its own checksum-verified tarball and the build's TARGETARCH picks one:
+# only that stage is built, and the final stage bind-mounts its tarball rather than copying it into
+# a layer. Bump PNPM_VERSION with `packageManager`, the `corepack prepare` lines and both SHA-256s
+# together (`https://registry.npmjs.org/@pnpm/exe.linux-<arch>/-/exe.linux-<arch>-<version>.tgz`).
+ARG PNPM_VERSION=12.15.0
+ARG PNPM_SHA256_AMD64=402f7045b1e0587acb1542f18d38afbccb6babf3c7451394e6fb3d9f0160c6ca
+ARG PNPM_SHA256_ARM64=8117d65f28e627e949d5fc65d63342266326826a56fa374317bf13fe1166a50e
+
+FROM scratch AS pnpm-amd64
+ARG PNPM_VERSION
+ARG PNPM_SHA256_AMD64
+ADD --checksum=sha256:${PNPM_SHA256_AMD64} \
+    https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-${PNPM_VERSION}.tgz /pnpm.tgz
+
+FROM scratch AS pnpm-arm64
+ARG PNPM_VERSION
+ARG PNPM_SHA256_ARM64
+ADD --checksum=sha256:${PNPM_SHA256_ARM64} \
+    https://registry.npmjs.org/@pnpm/exe.linux-arm64/-/exe.linux-arm64-${PNPM_VERSION}.tgz /pnpm.tgz
+
+FROM pnpm-${TARGETARCH} AS pnpm
+
 # ── base ────────────────────────────────────────────────────────────────────────────────────────
 # Debian `bookworm-slim`, not Alpine, and the reason is glibc. The Agent SDK resolves a
 # platform-specific binary through its `optionalDependencies` — `@anthropic-ai/claude-agent-sdk-
@@ -43,7 +67,7 @@ FROM ${NODE_IMAGE} AS base
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     CI=1
-RUN corepack enable && corepack prepare pnpm@11.28.8 --activate
+RUN corepack enable && corepack prepare pnpm@12.15.0 --activate
 WORKDIR /srv
 
 # ── runtime-base ────────────────────────────────────────────────────────────────────────────────
@@ -89,8 +113,9 @@ COPY packages/run-protocol/package.json packages/run-protocol/package.json
 COPY packages/runtime/package.json     packages/runtime/package.json
 COPY packages/sdk/package.json         packages/sdk/package.json
 COPY packages/aw/package.json          packages/aw/package.json
-# Filtered to the two processes this file builds and what they depend on: pnpm 11.28 refuses a
-# frozen install of the whole workspace when a lockfile importer's manifest was not copied (#373).
+# Filtered to the two processes this file builds and what they depend on: pnpm (11.28 and later)
+# refuses a frozen install of the whole workspace when a lockfile importer's manifest was not
+# copied (#373).
 RUN pnpm install --frozen-lockfile --filter "@agent-workspace/web..." --filter "@agent-workspace/runner..."
 
 # ── build ───────────────────────────────────────────────────────────────────────────────────────
@@ -184,29 +209,24 @@ RUN tar -xzf "/tmp/docker-${TARGETARCH}.tgz" -C /usr/local/bin --strip-component
     && rm -f /tmp/docker-*.tgz \
     && docker --version
 # `npx` through `pnpm dlx` (ADR-0087 D1). A `stdio` connector's documented command is `npx`, and
-# this process launches connectors, so the image carries pnpm (the patched release, from the npm
-# registry tarball, checksum-verified) and `infra/images/npx.mjs` as `npx`. It still carries no
-# npm and no corepack. Bump PNPM_VERSION with `packageManager`, the `corepack prepare` lines and
-# the SHA-256 together (`https://registry.npmjs.org/pnpm/-/pnpm-<version>.tgz`).
+# this process launches connectors, so the image carries pnpm (the patched release's native
+# executable, from the checksum-verified `pnpm` stage above) and `infra/images/npx.mjs` as `npx`.
+# It still carries no npm and no corepack.
 #
 # Engines launch a connector with a replaced environment, often without PATH, and on a read-only
 # root filesystem. So the wrappers name Node by absolute path, the shim needs no variable (it
 # defaults PNPM_CLI and puts pnpm's directories under /tmp), and `npx` is also linked into
 # /usr/bin, which is where a spawn with no PATH looks (libuv's default is /usr/bin:/bin).
-ARG PNPM_VERSION=11.28.8
-ARG PNPM_TARBALL_SHA256=02bf6cec47fe28f30a224204f924175c2d8750c60e84e315a25cba57ce84da6a
-ADD --checksum=sha256:${PNPM_TARBALL_SHA256} \
-    https://registry.npmjs.org/pnpm/-/pnpm-${PNPM_VERSION}.tgz /tmp/pnpm.tgz
 COPY infra/images/npx.mjs infra/images/npx-run-bin.mjs /opt/npx/
-RUN mkdir -p /opt/pnpm \
+RUN --mount=type=bind,from=pnpm,source=/pnpm.tgz,target=/tmp/pnpm.tgz \
+    mkdir -p /opt/pnpm \
     && tar -xzf /tmp/pnpm.tgz -C /opt/pnpm --strip-components=1 --no-same-owner \
-    && rm -f /tmp/pnpm.tgz \
-    && printf '#!/bin/sh\nexec /usr/local/bin/node /opt/pnpm/bin/pnpm.cjs "$@"\n' > /usr/local/bin/pnpm \
+    && ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm \
     && printf '#!/bin/sh\nexec /usr/local/bin/node /opt/npx/npx.mjs "$@"\n' > /usr/local/bin/npx \
-    && chmod 0755 /usr/local/bin/pnpm /usr/local/bin/npx \
+    && chmod 0755 /usr/local/bin/npx \
     && ln -s /usr/local/bin/npx /usr/bin/npx \
     && pnpm --version
-ENV PNPM_CLI=/opt/pnpm/bin/pnpm.cjs
+ENV PNPM_CLI=/opt/pnpm/pnpm
 COPY --from=build --chown=node:node /srv /srv
 # The same `/workspace` `runtime.Dockerfile` already creates, and for the same reason it gives
 # there: it is the SDK's `cwd` for a run and the only path in the image the process writes to.

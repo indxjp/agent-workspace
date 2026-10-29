@@ -24,11 +24,10 @@ import {
 } from '@agent-workspace/core/db';
 import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
 import { bytesToStream, readBytes } from '@agent-workspace/core/storage/streams';
-import type { ObjectStoreProviderV2 } from '@agent-workspace/core/storage';
+import type { ObjectStoreProvider } from '@agent-workspace/core/storage';
 
 import type { StorageService } from '../storage/service';
 import {
-  sessionStateBlobStorageKey,
   type SessionStateBlobContent,
   type SessionStateBlobRef,
   type SessionStateBlobsUnavailable,
@@ -158,23 +157,24 @@ export class DatabaseTranscriptStore implements TranscriptStore {
  * a blob is read once per resume.
  */
 /**
- * What {@link DatabaseSessionStateStore} needs. With neither `storage` nor `blobs` this deployment
- * stores no blob; absent is reported, never substituted (ADR-0035).
+ * What {@link DatabaseSessionStateStore} needs. Without `storage` this deployment saves no blob;
+ * absent is reported, never substituted (ADR-0035).
  */
 export interface SessionStateStoreDeps {
   readonly repositories: SessionStateRepositoryProvider;
   readonly scopes: WorkspaceScopeResolver;
   /** The one storage service: new blobs are saved through it, and rows are opened and deleted by it. */
   readonly storage?: Pick<StorageService, 'saveSessionState' | 'open' | 'deleteObject'> | undefined;
-  /** storage-bridge(#1699): the old per-area store, for a deployment with no shared storage root. */
-  readonly blobs?: ObjectStoreProviderV2 | undefined;
+  /** storage-bridge(#1699): the old per-area store, read and purged for rows with no object id; never written. */
+  readonly blobs?: ObjectStoreProvider | undefined;
 }
 
 const BLOBS_NOT_CONFIGURED: SessionStateBlobsUnavailable = {
   ok: false,
   reason:
     'this deployment has no object storage for session-state blobs, so an engine whose state is a ' +
-    'file snapshot cannot be made durable here. Set AW_STORAGE_URL and restart. Stream entries ' +
+    'file snapshot cannot be made durable here: either AW_STORAGE_URL is not set, or the storage ' +
+    'service failed to open (see the start-up log). Fix the cause and restart. Stream entries ' +
     'are unaffected — they are database rows.',
 };
 
@@ -245,8 +245,10 @@ export class DatabaseSessionStateStore implements SessionStateStore {
     ref: SessionStateBlobRef,
     bytes: Uint8Array,
   ): Promise<{ readonly ok: true } | SessionStateBlobsUnavailable> {
-    const { storage, blobs } = this.deps;
-    if (storage === undefined && blobs === undefined) return BLOBS_NOT_CONFIGURED;
+    const { storage } = this.deps;
+    // Without the storage service a blob would be saved with no object id; the old area store is
+    // only read from now on.
+    if (storage === undefined) return BLOBS_NOT_CONFIGURED;
     if (bytes.byteLength > SESSION_STATE_BLOB_MAX_BYTES) {
       // The route refuses an over-cap body while reading it, so reaching this line means a caller
       // inside the process bypassed that check. A throw, because it is a programming fault and not
@@ -255,26 +257,10 @@ export class DatabaseSessionStateStore implements SessionStateStore {
         `a session-state blob of ${String(bytes.byteLength)} bytes exceeds the cap of ${String(SESSION_STATE_BLOB_MAX_BYTES)}.`,
       );
     }
-    if (storage !== undefined) {
-      const saved = await storage.saveSessionState(ref, ref, bytesToStream(bytes));
-      // The route refuses an over-cap body first; reaching this is the same programming fault.
-      if (!saved.ok)
-        throw new Error('a session-state blob was refused as too large after the cap check.');
-      return { ok: true };
-    }
-    // storage-bridge(#1699): no shared root, so the bytes go to the old area store under the old key
-    const repository = await this.#repository(ref.workspaceId);
-    const storageKey = sessionStateBlobStorageKey(ref);
-    await blobs?.forWorkspace(ref.workspaceId).write(storageKey, bytesToStream(bytes), {
-      contentType: 'application/octet-stream',
-    });
-    await repository.putBlob(ref.sessionId, {
-      engine: ref.engine,
-      blobKey: ref.blobKey,
-      storageKey,
-      sizeBytes: bytes.byteLength,
-      sha256: sha256Of(bytes),
-    });
+    const saved = await storage.saveSessionState(ref, ref, bytesToStream(bytes));
+    // The route refuses an over-cap body first; reaching this is the same programming fault.
+    if (!saved.ok)
+      throw new Error('a session-state blob was refused as too large after the cap check.');
     return { ok: true };
   }
 

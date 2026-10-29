@@ -22,8 +22,9 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
+import { listAll } from '@agent-workspace/core/storage/streams';
 import {
   SURFACE_ATTACHMENT_MAX_BYTES,
   SURFACE_ATTACHMENTS_MAX_FILES,
@@ -149,7 +150,7 @@ afterEach(() => {
 function defineSuite(name: string, setup: () => Promise<World>) {
   describe(`attachments on the ${name}`, () => {
     let world: World;
-    let root: ObjectStoreV2;
+    let root: ObjectStore;
     let storage: StorageService;
     let surface: SurfaceDefinition | null;
     /** The archive state of the project the session lives in; `null` is a session in no project. */
@@ -314,11 +315,13 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       expect(saved.ok).toBe(true);
     }
     const rootObjects = async () =>
-      (await root.listPrefix(`workspaces/${world.workspaceId}/files`)).map((entry) => entry.key);
+      (
+        await root.listPage(`workspaces/${world.workspaceId}/files`, { recursive: true })
+      ).entries.map((entry) => entry.key);
     const legacyObjects = async () =>
-      (await legacy.forWorkspace(world.workspaceId).listPrefix('.attachments')).map(
-        (entry) => entry.key,
-      );
+      (
+        await listAll(legacy.forWorkspace(world.workspaceId), '.attachments', { recursive: true })
+      ).map((entry) => entry.key);
     const readyFiles = async () =>
       (await (await catalog()).listFiles()).filter((row) => row.kind === 'file');
     /** What a refusal must leave unchanged: the ready rows, nothing pending or half-removed, the objects. */
@@ -616,7 +619,7 @@ function defineSuite(name: string, setup: () => Promise<World>) {
     it('[US-STO-11][api][chat] purge removes service rows, legacy rows and their objects, and a second purge is a no-op', async () => {
       expect((await upload('a.txt')).status).toBe(201);
       const legacyPath = `.attachments/${SESSION}/${crypto.randomUUID()}/old.txt`;
-      await legacy.forWorkspace(world.workspaceId).put(legacyPath, { body: Buffer.from('old') });
+      await legacy.forWorkspace(world.workspaceId).write(legacyPath, Buffer.from('old'), {});
       await (
         await catalog()
       ).putFile({
@@ -651,7 +654,7 @@ function defineSuite(name: string, setup: () => Promise<World>) {
     // @story US-STO-11
     it('[US-STO-11][api][chat] purge removes a session that holds only legacy rows', async () => {
       const legacyPath = `.attachments/${SESSION}/${crypto.randomUUID()}/old.txt`;
-      await legacy.forWorkspace(world.workspaceId).put(legacyPath, { body: Buffer.from('old') });
+      await legacy.forWorkspace(world.workspaceId).write(legacyPath, Buffer.from('old'), {});
       await (
         await catalog()
       ).putFile({

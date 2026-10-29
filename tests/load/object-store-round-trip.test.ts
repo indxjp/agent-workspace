@@ -10,23 +10,25 @@
  * requires all four non-memory cases to pass (the storage design, §07 "Load test").
  */
 import { DeleteBucketCommand, S3Client } from '@aws-sdk/client-s3';
-import { BlobServiceClient } from '@azure/storage-blob';
-import { Storage } from '@google-cloud/storage';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import {
-  createAzureBlobObjectStoreProvider,
-  createAzureSdkBlobContainer,
-  createGcsObjectStoreProvider,
-  createNativeGcsClient,
+  createAzuriteObjectStore,
+  createFakeGcsObjectStore,
 } from '@agent-workspace/core/storage/backends';
-import { openObjectStore, type ObjectStoreV2 } from '@agent-workspace/core/storage';
+import { openObjectStore, type ObjectStore } from '@agent-workspace/core/storage';
 import { expect, it } from 'vitest';
 
-import { generatedBody, LOAD_BYTES, MiB, peakRssGrowth, warmHttpTransport } from './flat-memory.js';
+import {
+  generatedBody,
+  LOAD_BYTES,
+  measureRssGrowth,
+  MiB,
+  warmHttpTransport,
+} from './flat-memory.js';
 
 const PAYLOAD_BYTES = Math.max(LOAD_BYTES, 256 * MiB);
 // Collecting every 4 MiB keeps uncollected socket-read garbage out of the reading (PR #1747).
@@ -35,7 +37,7 @@ const RSS_BOUND = 64 * MiB;
 
 function defineLoadRoundTrip(
   label: string,
-  open: () => Promise<{ store: ObjectStoreV2; teardown: () => Promise<void> }>,
+  open: () => Promise<{ store: ObjectStore; teardown: () => Promise<void> }>,
 ): void {
   it(`[load] ${label}: 1 GiB round-trips with flat memory`, { timeout: 300_000 }, async () => {
     const { store, teardown } = await open();
@@ -43,7 +45,7 @@ function defineLoadRoundTrip(
       await warmHttpTransport();
       const { body, sha256 } = generatedBody(PAYLOAD_BYTES);
       let readDigest = '';
-      const growth = await peakRssGrowth(async (sample) => {
+      const { growth, newSpaceGrowth } = await measureRssGrowth(async (sample) => {
         let written = 0;
         const sampled = body.pipeThrough(
           new TransformStream<Uint8Array, Uint8Array>({
@@ -76,7 +78,7 @@ function defineLoadRoundTrip(
         readDigest = hash.digest('hex');
       });
       console.info(
-        `[load] ${label}: peak RSS growth ${(growth / MiB).toFixed(1)} MiB of ${String(PAYLOAD_BYTES / MiB)} MiB`,
+        `[load] ${label}: peak RSS growth ${(growth / MiB).toFixed(1)} MiB of ${String(PAYLOAD_BYTES / MiB)} MiB, new space growth ${(newSpaceGrowth / MiB).toFixed(1)} MiB`,
       );
       // Before the digest: a buffering store also reads back reused generator bytes, and the
       // memory bound is the failure this test exists to name.
@@ -130,37 +132,15 @@ if (s3Endpoint !== '') {
 const azuriteUrl = process.env['TEST_AZURITE_URL']?.trim() ?? '';
 if (azuriteUrl !== '') {
   defineLoadRoundTrip('Azure Blob (Azurite)', async () => {
-    // Azurite's well-known development account, read from the SDK so no key literal lives here.
-    const service = new BlobServiceClient(
-      azuriteUrl,
-      BlobServiceClient.fromConnectionString('UseDevelopmentStorage=true').credential,
-    );
-    const container = service.getContainerClient(`aw-load-${randomUUID()}`);
-    await container.create();
-    return {
-      store: createAzureBlobObjectStoreProvider(
-        createAzureSdkBlobContainer(container, service),
-      ).forWorkspace(randomUUID()),
-      teardown: async () => {
-        await container.delete();
-      },
-    };
+    const { provider, teardown } = await createAzuriteObjectStore(azuriteUrl);
+    return { store: provider.forWorkspace(randomUUID()), teardown };
   });
 }
 
 const gcsEndpoint = process.env['TEST_GCS_ENDPOINT']?.trim() ?? '';
 if (gcsEndpoint !== '') {
   defineLoadRoundTrip('Google Cloud Storage (fake-gcs-server)', async () => {
-    const storage = new Storage({ apiEndpoint: gcsEndpoint, projectId: 'aw-load' });
-    const [bucket] = await storage.createBucket(`aw-load-${randomUUID()}`);
-    return {
-      store: createGcsObjectStoreProvider({ client: createNativeGcsClient(bucket) }).forWorkspace(
-        randomUUID(),
-      ),
-      teardown: async () => {
-        await bucket.deleteFiles({ force: true });
-        await bucket.delete();
-      },
-    };
+    const { provider, teardown } = await createFakeGcsObjectStore(gcsEndpoint);
+    return { store: provider.forWorkspace(randomUUID()), teardown };
   });
 }

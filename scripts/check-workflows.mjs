@@ -524,17 +524,17 @@ export function validateWorkflowDocuments(
       }
       if (
         !/^ {4}services:\s*$/mu.test(heavyChecks) ||
-        !heavyChecks.includes('postgres:17-alpine')
+        !heavyChecks.includes('postgres:18-alpine')
       ) {
-        failures.push(`${CI_WORKFLOW}: heavy-checks must provision the PostgreSQL 17 service`);
+        failures.push(`${CI_WORKFLOW}: heavy-checks must provision the PostgreSQL 18 service`);
       }
       for (const requiredCheck of [
         'uses: ./.github/actions/workspace-build',
-        'PostgreSQL service is a real PostgreSQL 17',
+        'PostgreSQL service is a real PostgreSQL 18',
         'Start the S3 test server for the object-store contract suite',
         // Same pair as typecheck-lint: the affected projects for pull requests, all for main.
-        'nx show projects --with-target test --affected',
-        'nx show projects --with-target test)',
+        'nx show projects --json=false --with-target test --affected',
+        'nx show projects --json=false --with-target test)',
         'scripts/ci/nx.sh run-many -t test',
         'No test in the run was skipped',
         'run: node scripts/ci/vitest-no-skip.mjs',

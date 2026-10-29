@@ -1,5 +1,5 @@
-import { UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
-import type { ObjectStore } from '@agent-workspace/core/storage';
+import { toObjectPrefix, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
+import type { ObjectPage, ObjectStore } from '@agent-workspace/core/storage';
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
 
 import type { Ownership } from '../rbac/decide';
@@ -38,20 +38,29 @@ async function holdsRowlessObject(
   rows: readonly CatalogRow[],
   path: string,
 ): Promise<boolean> {
-  let entries;
+  const catalogued = new Set(rows.flatMap((row) => [row.path, row.storageKey]));
+  const rowless = (key: string): boolean =>
+    (key === path || key.startsWith(`${path}/`)) &&
+    !key.endsWith(`/${EMPTY_FOLDER_MARKER}`) &&
+    !catalogued.has(key);
   try {
-    entries = await store.listPrefix(path);
+    // The object at `path` itself, then every object beneath it, page by page until one is found.
+    const self = toObjectPrefix(path);
+    if (self !== '' && (await store.head(self)) !== null && rowless(self)) return true;
+    let cursor: string | null = null;
+    do {
+      const page: ObjectPage = await store.listPage(path, {
+        recursive: true,
+        ...(cursor === null ? {} : { cursor }),
+      });
+      if (page.entries.some((entry) => rowless(entry.key))) return true;
+      cursor = page.cursor;
+    } while (cursor !== null);
   } catch (error) {
     if (error instanceof UnsafeObjectKeyError) return false;
     throw error;
   }
-  const catalogued = new Set(rows.flatMap((row) => [row.path, row.storageKey]));
-  return entries.some(
-    (entry) =>
-      (entry.key === path || entry.key.startsWith(`${path}/`)) &&
-      !entry.key.endsWith(`/${EMPTY_FOLDER_MARKER}`) &&
-      !catalogued.has(entry.key),
-  );
+  return false;
 }
 
 function outcome(ownership: Ownership): OwnershipOutcome {
@@ -78,7 +87,8 @@ export function ownershipOfPath(path: string): OwnershipResolver {
   return async (principal) => {
     const view = await catalogView(principal.workspaceId);
     if (view === null) return outcome('unknown');
-    if (!view.rows.some((file) => file.path === path)) return outcome('unknown');
+    if (!view.rows.some((file) => file.path === path))
+      return pendingOwnership(view.catalog, path, principal);
     const subtree = view.rows.filter(
       (file) => file.path === path || file.path.startsWith(`${path}/`),
     );
@@ -86,6 +96,21 @@ export function ownershipOfPath(path: string): OwnershipResolver {
       return outcome('other');
     return outcome((await holdsRowlessObject(view.store, view.rows, path)) ? 'unknown' : 'own');
   };
+}
+
+/**
+ * A path with no ready row may still hold a pending upload. Its uploader owns it, so an `own` grant
+ * may delete it (STO-111 #2); another member's is `other`. The row accounts for the upload's bytes,
+ * so no row-less object is looked for. With no pending row either, the owner is `unknown`.
+ */
+async function pendingOwnership(
+  catalog: NonNullable<Awaited<ReturnType<typeof catalogView>>>['catalog'],
+  path: string,
+  principal: { readonly ownerPrincipalId: string },
+): Promise<OwnershipOutcome> {
+  const row = await catalog.get(path, { includePending: true });
+  if (row?.status !== 'pending') return outcome('unknown');
+  return outcome(row.ownerPrincipalId === principal.ownerPrincipalId ? 'own' : 'other');
 }
 
 /**
@@ -105,4 +130,16 @@ export function ownershipOfWriteTarget(path: string): OwnershipResolver {
       (await holdsRowlessObject(view.store, view.rows, path)) ? 'unknown' : 'not-applicable',
     );
   };
+}
+
+/**
+ * The owner of one catalog row the caller is about to replace: the ready file a reservation read
+ * under its lock (`ReserveOutcome.replaces`). Decided on that row, not by reading its path again,
+ * which a rename and a new file can make name another file meanwhile (#1991 C1).
+ */
+export function ownershipOfFileOwner(row: {
+  readonly ownerPrincipalId: string;
+}): OwnershipResolver {
+  return (principal) =>
+    Promise.resolve(outcome(row.ownerPrincipalId === principal.ownerPrincipalId ? 'own' : 'other'));
 }

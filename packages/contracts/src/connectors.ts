@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { IsoDateTimeSchema } from './identifiers.js';
 import { ConnectorIdentitySchema, type ConnectorIdentity } from './identity-assertion.js';
+import { SecretReferenceSchema } from './secret-reference.js';
 import {
   OPENAPI_DOCUMENT_MAX_BYTES,
   OpenApiToolConfigSchema,
@@ -129,8 +130,10 @@ export const ConnectorResourceSchema = z
     /**
      * Opt-in to the signed identity assertion (ADR-0142 D1): the reference to the signing secret,
      * never its value. Present only on an `http`/`sse` MCP connector or an `openapi` connector.
+     * A response is not refused for a `STORAGE_CONNECTION_` name, which only a connector stored
+     * before inputs refused it can carry; the server never reads that secret.
      */
-    identity: ConnectorIdentitySchema.optional(),
+    identity: SecretReferenceSchema.optional(),
   })
   .strict()
   .superRefine((resource, context) => {

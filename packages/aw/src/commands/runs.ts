@@ -80,8 +80,8 @@ async function outputSchemaOf(
 }
 
 /**
- * `--attach <file>`: a workspace file id, or a workspace path (a leading `./` or `/` allowed, `..`
- * refused) resolved to its id from its folder's listing. The server grants every attachment
+ * `--attach <file>`: a workspace file id, or a workspace path (`./`, `/` and `.` segments allowed,
+ * `..` refused) resolved to its id from its folder's listing. The server grants every attachment
  * read-only (ADR-0146); uploading a local file is not part of it.
  */
 // @story US-STO-06
@@ -92,10 +92,12 @@ async function attachmentsOf(context: CommandContext): Promise<{ readonly fileId
       attachments.push({ fileId: file });
       continue;
     }
-    // `./reports/q3.txt` and `/reports/q3.txt` name the workspace path `reports/q3.txt`.
-    const wanted = file.replace(/^\.?\//u, '');
-    if (wanted.split('/').includes('..'))
+    // `./reports/q3.txt`, `/reports/q3.txt` and `././reports/./q3.txt` all name the workspace
+    // path `reports/q3.txt`: empty and `.` segments are dropped, a `..` is refused.
+    const segments = file.split('/').filter((segment) => segment !== '' && segment !== '.');
+    if (segments.includes('..'))
       throw new UsageError(`--attach ${file}: a workspace path may not contain ".."`);
+    const wanted = segments.join('/');
     const slash = wanted.lastIndexOf('/');
     const listed = await context.client.files.list(
       slash === -1 ? {} : { path: wanted.slice(0, slash) },

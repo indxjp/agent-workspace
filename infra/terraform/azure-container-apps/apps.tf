@@ -345,8 +345,10 @@ resource "azurerm_container_app" "web" {
       }
       env {
         # One setting for where files, skills and session transcripts live (the storage design, §04).
+        # The server derives the public cloud's blob host from the account; a sovereign cloud names
+        # its own through storage_blob_endpoint.
         name  = "AW_STORAGE_URL"
-        value = "azblob://${azurerm_storage_account.workspace.name}/${azurerm_storage_container.workspace_objects.name}"
+        value = "azblob://${azurerm_storage_account.workspace.name}/${azurerm_storage_container.workspace_objects.name}${var.storage_blob_endpoint == null ? "" : "?endpoint=${var.storage_blob_endpoint}"}"
       }
       dynamic "env" {
         # Absent when unset, so the server default applies and an existing app gets no new revision.

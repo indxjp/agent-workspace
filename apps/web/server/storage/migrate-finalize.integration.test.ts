@@ -23,7 +23,7 @@ import {
   createLocalFilesystemObjectStore,
   createLocalFilesystemObjectStoreProvider,
   streamToBytes,
-  type ObjectStoreProviderV2,
+  type ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
@@ -106,7 +106,7 @@ describe.skipIf(!hasDatabase)('the finalize stage on PostgreSQL and a local-disk
     };
   }
 
-  const keysOf = async (provider: ObjectStoreProviderV2) =>
+  const keysOf = async (provider: ObjectStoreProvider) =>
     (await provider.forWorkspace(workspaceId).listPage('', { recursive: true })).entries
       .map((entry) => entry.key)
       .sort();

@@ -15,7 +15,8 @@ import {
   PORTABLE_AGENT_LIST_MAX,
   PORTABLE_AGENT_SUBAGENTS_MAX,
 } from './portable-agent.js';
-import { SecretNameSchema } from './secret-reference.js';
+import { RUN_START_PROBLEM_CODES } from './runs.js';
+import { isStorageConnectionSecretName, SecretNameSchema } from './secret-reference.js';
 import { STORAGE_CONNECTION_PROBLEM_CODES } from './storage-connections.js';
 import { SurfaceDefinitionSchema } from './surfaces.js';
 import { ToolOperationNameSchema } from './tool-connectors.js';
@@ -109,9 +110,18 @@ export const TOOL_BUNDLE_TIMEOUT_MAX_MS = 600_000;
  */
 const TOOL_ALLOWED_DOMAIN_PATTERN = /^(?:\*\.)?[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?$/u;
 
-/** The secrets a code tool declares (ADR-0118 TS4): names only, each once. */
+/**
+ * The secrets a code tool declares (ADR-0118 TS4): names only, each once, and never a storage
+ * connection's credential (a `STORAGE_CONNECTION_` name). That credential is bound to the
+ * connection's URL and opened only by the server; a tool that declared it would receive it in its
+ * environment and could send it anywhere.
+ */
 export const ToolSecretNamesSchema = z
-  .array(SecretNameSchema)
+  .array(
+    SecretNameSchema.refine((name) => !isStorageConnectionSecretName(name), {
+      error: 'must not name a storage connection credential (STORAGE_CONNECTION_)',
+    }),
+  )
   .max(TOOL_SANDBOX_DECLARATION_MAX)
   .refine((names) => new Set(names).size === names.length, { error: 'must not repeat a name' })
   .readonly();
@@ -596,6 +606,11 @@ export const AGENT_VERSION_PROBLEM_CODES = {
    * model's `version_not_found` (issue #615).
    */
   agent_version_not_found: 404,
+  /**
+   * The agent is archived, so no version is saved and no pointer moves until it is restored
+   * (#1851). The run refusal's code and status, so the two cannot drift.
+   */
+  agent_archived: RUN_START_PROBLEM_CODES.agent_archived,
   /** Another save took the version number an in-process create named; start over (#1848). */
   agent_version_number_taken: 409,
   /** A promote's source, `local`, points at no version, so there is nothing to promote (#615). */

@@ -28,6 +28,7 @@
  * input unchanged, so a caller cannot mistake "refused" for "nothing to do".
  */
 import { UuidSchema } from '@indx-workspace/contracts';
+import type { BuiltinAgentKey } from '@indx-workspace/contracts/agents';
 import { StartRunRequestSchema } from '@indx-workspace/contracts/runs';
 import type { Badge } from '@indx-workspace/react/run-model';
 
@@ -99,6 +100,8 @@ export interface ComposerAgent {
    * only models on these (`../models/engine-models.ts`).
    */
   readonly drivableProviders: readonly string[];
+  /** Present only on a built-in agent, such as the Builder: listed, but never picked by default. */
+  readonly builtin?: BuiltinAgentKey;
 }
 
 /**
@@ -273,6 +276,9 @@ function isRunnable(agent: ComposerAgent): boolean {
  * 4. the first agent that can run at all;
  * 5. the remembered agent, the setup agent, then the first agent — so the screen still opens on
  *    something, and the composer says why it cannot run rather than hiding the agent.
+ *
+ * Steps 3 to 5 skip a built-in agent such as the Builder (#2012): every workspace has one, so it is
+ * never the default unless it was remembered or is the only agent listed.
  */
 export function preferredAgent(
   agents: readonly ComposerAgent[],
@@ -283,13 +289,16 @@ export function preferredAgent(
   if (remembered !== null && isRunnable(remembered)) return remembered;
   const setup = findAgent(agents, setupAgentId);
   if (setup !== null && isRunnable(setup)) return setup;
+  const own = agents.filter((agent) => agent.builtin === undefined);
   return (
-    agents.find(
+    own.find(
       (agent) => agent.runTarget.kind === 'runnable' && agent.runTarget.source === 'agent',
     ) ??
-    agents.find(isRunnable) ??
+    own.find(isRunnable) ??
     remembered ??
     setup ??
+    own[0] ??
+    // Only a built-in agent is listed: open on it, because a screen with no session disables the picker.
     agents[0] ??
     null
   );

@@ -33,7 +33,7 @@ async function writeObjects(folder, keys) {
       egress: { production: false, allowHosts: [] },
     },
   );
-  for (const key of keys) await store.put(key, { body: new TextEncoder().encode(key) });
+  for (const key of keys) await store.write(key, new TextEncoder().encode(key), {});
 }
 
 test('[US-STO-12][api][sdk] a folder named with a space, an accent, a plus or an ampersand lists through next start', async ({

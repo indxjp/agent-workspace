@@ -99,7 +99,9 @@ structure SubDeclaration where
 @[aw_spec (ts := "apps/web/server/rbac/declared-sub-resources.ts#DECLARED_SUB_RESOURCES")
   (doc := "docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision")]
 def declaredSubResources : List SubDeclaration :=
-  [ ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", .agents, "promote"⟩,
+  [ ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", .workspaces, "features"⟩,
+    ⟨"BLD-8-AGENT-RESTORE-1851", .agents, "restore"⟩,
+    ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", .agents, "promote"⟩,
     ⟨"DJ-80-08-PROMOTE-ROLLBACK-615", .agents, "rollback"⟩,
     ⟨"DJ-80-11-EVALUATIONS-618", .agents, "evaluations"⟩,
     ⟨"DJ-80-11-EVALUATIONS-618", .agents, "evaluation-runs"⟩,

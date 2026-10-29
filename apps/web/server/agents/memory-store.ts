@@ -31,11 +31,13 @@ import type { AgentRecord } from './contract';
 import type {
   AgentResourceAssignments,
   AgentResourceAssignmentsInput,
+  AgentRestoreActor,
   AgentStoreProvider,
   CreateAgentOutcome,
   CreateAgentWithAssignmentsOutcome,
   DeleteAgentOutcome,
   ReplaceAgentPolicyOutcome,
+  RestoreAgentOutcome,
   UpdateAgentOutcome,
   WorkspaceAgentStore,
 } from './store';
@@ -69,6 +71,25 @@ export interface InMemoryAgentStoreOptions {
   readonly newId?: (() => string) | undefined;
 }
 
+/** The `agent-changed` audit row a restore writes, as the in-memory store records it. */
+export interface RecordedRestoreAudit {
+  readonly workspaceId: string;
+  readonly action: 'agent-changed';
+  readonly subjectId: string;
+  readonly subjectLabel: string;
+  readonly actorPrincipalId: string;
+  readonly actorUserId: string | null;
+  readonly actorLabel: string;
+  readonly details: { readonly archived: false };
+}
+
+/** The provider plus the two things only a test needs: marking a row archived and the audit rows. */
+export interface InMemoryAgentStoreProvider extends AgentStoreProvider {
+  /** Marks an agent archived at `at`, as the sweep would; the in-memory store has no sweep. */
+  archive(workspaceId: string, id: string, at: Date): void;
+  audits(): readonly RecordedRestoreAudit[];
+}
+
 /**
  * Create a provider. The rows live in a closure, one bucket per workspace, so two stores handed out
  * by the same provider genuinely share storage — which is what makes the isolation assertions in
@@ -76,7 +97,8 @@ export interface InMemoryAgentStoreOptions {
  */
 export function createInMemoryAgentStoreProvider(
   options: InMemoryAgentStoreOptions = {},
-): AgentStoreProvider {
+): InMemoryAgentStoreProvider {
+  const audits: RecordedRestoreAudit[] = [];
   const byWorkspace = new Map<string, Map<string, AgentRecord>>();
   const now = options.now ?? ((): Date => new Date());
   const newId = options.newId ?? ((): string => crypto.randomUUID());
@@ -161,6 +183,11 @@ export function createInMemoryAgentStoreProvider(
   }
 
   return {
+    archive(workspaceId, id, at) {
+      const row = bucket(workspaceId).get(id);
+      if (row !== undefined) bucket(workspaceId).set(id, { ...row, archivedAt: at });
+    },
+    audits: () => [...audits],
     forWorkspace(workspaceId: string): WorkspaceAgentStore {
       // The workspace is captured here, once. Nothing below takes a workspace id, so nothing below
       // can read or write another workspace's bucket (spec §25).
@@ -309,6 +336,27 @@ export function createInMemoryAgentStoreProvider(
           const updated: AgentRecord = { ...existing, policy, updatedAt: now() };
           current.set(id, updated);
           return Promise.resolve({ kind: 'updated', agent: updated });
+        },
+
+        restore(id: string, actor: AgentRestoreActor): Promise<RestoreAgentOutcome> {
+          const existing = rows().get(id);
+          if (existing === undefined) return Promise.resolve({ kind: 'not-found' });
+          const { archivedAt, ...active } = existing;
+          if (archivedAt === undefined) {
+            return Promise.resolve({ kind: 'not-archived', agent: existing });
+          }
+          rows().set(id, active);
+          audits.push({
+            workspaceId,
+            action: 'agent-changed',
+            subjectId: id,
+            subjectLabel: existing.name,
+            actorPrincipalId: actor.principalId,
+            actorUserId: actor.userId,
+            actorLabel: actor.label,
+            details: { archived: false },
+          });
+          return Promise.resolve({ kind: 'restored', agent: active });
         },
       };
     },

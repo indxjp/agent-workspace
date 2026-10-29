@@ -1,6 +1,6 @@
 {
   "name": "@indx-workspace/sdk",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "The typed, isomorphic TypeScript client for the Agent Workspace API, with agents and surfaces as code at /define, the project file and starter project at /project, and a test double and contract-valid fixtures at /testing.",
   "license": "Apache-2.0",
   "homepage": "https://docs.agentworkspace.indx.jp",

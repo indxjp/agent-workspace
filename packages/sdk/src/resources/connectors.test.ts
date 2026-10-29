@@ -637,6 +637,20 @@ describe('ConnectorsClient identity opt-in (ADR-0142 D1)', () => {
   });
 });
 
+// @story US-STO-12
+describe('ConnectorsClient and a legacy reserved identity', () => {
+  it('[US-STO-12][unit][sdk] reads a connector whose stored identity names a storage connection credential', async () => {
+    const legacy = {
+      ...connector,
+      identity: { secret: 'STORAGE_CONNECTION_77777777777747778777777777777777' },
+    };
+    const { connectors } = client(() => json(200, legacy));
+    expect(await connectors.get(CONNECTOR)).toEqual(legacy);
+    const listed = client(() => json(200, { connectors: [legacy] }));
+    expect(await listed.connectors.list()).toEqual([legacy]);
+  });
+});
+
 describe('ConnectorsClient.checkTool (C15, issue #549)', () => {
   const DOCUMENT = '{"openapi":"3.1.0","info":{"title":"Orders","version":"1"},"paths":{}}';
   const body = {

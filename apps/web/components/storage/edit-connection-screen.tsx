@@ -2,7 +2,14 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
 
 import { browserClient } from '../../lib/browser-client';
 
@@ -43,14 +50,52 @@ function Problem({ message }: Readonly<{ message: string }>) {
   );
 }
 
+/**
+ * While the dialog is open, the page behind it is `inert`: every sibling of the dialog and of each
+ * of its ancestors up to `<body>`, the shell's navigation included. `aria-modal` alone leaves that
+ * page clickable and reachable by a screen reader's virtual cursor. Only the elements this marked
+ * are restored, so one that was already inert stays inert. Focus goes back to `returnFocusTo` once
+ * the page is live again: an inert element cannot take focus.
+ */
+function useInertBackground(
+  dialogRef: RefObject<HTMLElement | null>,
+  returnFocusTo: RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    const marked: Element[] = [];
+    for (let node = dialogRef.current; node?.parentElement; node = node.parentElement) {
+      if (node === document.body) break;
+      for (const sibling of node.parentElement.children) {
+        if (sibling === node || sibling.hasAttribute('inert')) continue;
+        sibling.setAttribute('inert', '');
+        marked.push(sibling);
+      }
+    }
+    return () => {
+      for (const element of marked) element.removeAttribute('inert');
+      returnFocusTo.current?.focus();
+    };
+  }, [dialogRef, returnFocusTo]);
+}
+
 function DeleteDialog({
   name,
   busy,
+  returnFocusTo,
   onCancel,
   onConfirm,
-}: Readonly<{ name: string; busy: boolean; onCancel: () => void; onConfirm: () => void }>) {
+}: Readonly<{
+  name: string;
+  busy: boolean;
+  /** Focused when the dialog closes, whichever way it closes. */
+  returnFocusTo: RefObject<HTMLElement | null>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}>) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  useInertBackground(dialogRef, returnFocusTo);
   useEffect(() => cancelRef.current?.focus(), []);
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -76,6 +121,7 @@ function DeleteDialog({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="storage-delete-title"
@@ -253,11 +299,6 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
     }
   }
 
-  function closeDialog() {
-    setConfirmingDelete(false);
-    deleteTriggerRef.current?.focus();
-  }
-
   async function remove() {
     if (busy || connection === null) return;
     reset();
@@ -416,7 +457,8 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
         <DeleteDialog
           name={connection.name}
           busy={busy}
-          onCancel={closeDialog}
+          returnFocusTo={deleteTriggerRef}
+          onCancel={() => setConfirmingDelete(false)}
           onConfirm={() => {
             void remove();
           }}

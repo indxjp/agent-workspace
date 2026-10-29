@@ -22,7 +22,7 @@ import {
   newObjectId,
   storageObjectName,
   streamToBytes,
-  type ObjectStoreProviderV2,
+  type ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 import type { AgentResourceAssignments } from '@indx-workspace/contracts/agents';
@@ -123,15 +123,15 @@ describe('agent run resource loader', () => {
   it('loads only assigned files and enabled skills, and refuses an assigned disabled connector', async () => {
     const assignedConnectorIds = ['connector-enabled'];
     const skillObjects = createInMemoryObjectStoreProvider();
-    await skillObjects.forWorkspace(WORKSPACE).put('skills/enabled/SKILL.md', {
-      body: Buffer.from('# enabled'),
-    });
-    await skillObjects.forWorkspace(WORKSPACE).put('skills/disabled/SKILL.md', {
-      body: Buffer.from('# disabled'),
-    });
-    await skillObjects.forWorkspace(WORKSPACE).put('skills/unassigned/SKILL.md', {
-      body: Buffer.from('# unassigned'),
-    });
+    await skillObjects
+      .forWorkspace(WORKSPACE)
+      .write('skills/enabled/SKILL.md', Buffer.from('# enabled'), {});
+    await skillObjects
+      .forWorkspace(WORKSPACE)
+      .write('skills/disabled/SKILL.md', Buffer.from('# disabled'), {});
+    await skillObjects
+      .forWorkspace(WORKSPACE)
+      .write('skills/unassigned/SKILL.md', Buffer.from('# unassigned'), {});
 
     const catalogs = createInMemoryCatalogStore();
     const catalog = catalogs.forWorkspaceSync(WORKSPACE);
@@ -1052,7 +1052,7 @@ const ctxOf = (member: Member): StorageContext => ({
 /** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
 async function saveLegacyRow(
   world: World,
-  legacy: ObjectStoreProviderV2,
+  legacy: ObjectStoreProvider,
   path: string,
   body: Uint8Array,
   claimedSize: number = body.byteLength,
@@ -1444,8 +1444,8 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
     it('[US-STO-08][api][sdk] a legacy skill (prefix only, no rows) is still delivered to a run', async () => {
       const { world, skills, saveRow, loadFiles } = await skillWorld();
       const store = skills.forWorkspace(world.a.workspaceId);
-      await store.put('skills/demo/SKILL.md', { body: Buffer.from('# legacy') });
-      await store.put('skills/demo/scripts/run.sh', { body: Buffer.from('echo legacy') });
+      await store.write('skills/demo/SKILL.md', Buffer.from('# legacy'), {});
+      await store.write('skills/demo/scripts/run.sh', Buffer.from('echo legacy'), {});
 
       expect(await loadFiles()).toEqual({
         'SKILL.md': '# legacy',

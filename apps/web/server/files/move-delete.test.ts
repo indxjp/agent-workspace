@@ -35,8 +35,8 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   storageObjectName,
-  type ObjectStoreProviderV2,
-  type ObjectStoreV2,
+  type ObjectStoreProvider,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 
 import { clearApplicationContext } from '../application-context';
@@ -73,6 +73,8 @@ interface World {
    * not 10,000 uploads.
    */
   seed(paths: readonly string[]): Promise<void>;
+  /** Another principal of workspace `a`, one that may own rows. */
+  member(): Promise<string>;
 }
 
 const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
@@ -97,20 +99,27 @@ function memoryWorld(): Promise<World> {
       }
       return Promise.resolve();
     },
+    member: () => Promise.resolve(crypto.randomUUID()),
   });
 }
 
 let isolated: IsolatedTestDatabase | undefined;
 
-async function postgresMember(db: IsolatedTestDatabase['db']): Promise<Member> {
-  const workspaceId = crypto.randomUUID();
+/** The owner of a new workspace, or, given `joining`, a builder of that existing one. */
+async function postgresMember(db: IsolatedTestDatabase['db'], joining?: string): Promise<Member> {
+  const workspaceId = joining ?? crypto.randomUUID();
   const userId = crypto.randomUUID();
   const membershipId = crypto.randomUUID();
   const principalId = crypto.randomUUID();
-  await db.insert(workspaces).values({ id: workspaceId, slug: `s-${workspaceId}`, name: 'files' });
+  if (joining === undefined) {
+    await db
+      .insert(workspaces)
+      .values({ id: workspaceId, slug: `s-${workspaceId}`, name: 'files' });
+  }
   await db.insert(users).values({ id: userId, email: `${userId}@example.test`, name: 'Member' });
   await db.transaction(async (tx) => {
-    await tx.insert(memberships).values({ id: membershipId, workspaceId, userId, role: 'owner' });
+    const role = joining === undefined ? 'owner' : 'builder';
+    await tx.insert(memberships).values({ id: membershipId, workspaceId, userId, role });
     await tx
       .insert(workspacePrincipals)
       .values({ id: principalId, workspaceId, kind: 'membership', membershipId });
@@ -149,6 +158,7 @@ async function postgresWorld(): Promise<World> {
         await db.insert(files).values(rows.slice(at, at + 2000));
       }
     },
+    member: async () => (await postgresMember(db, a.workspaceId)).principalId,
   };
 }
 
@@ -167,20 +177,16 @@ afterEach(() => {
 });
 
 /** Counts every call that would write or copy bytes. */
-function counting(store: ObjectStoreV2, calls: { writes: number }): ObjectStoreV2 {
+function counting<S extends ObjectStore>(store: S, calls: { writes: number }): S {
   return {
     ...store,
-    put: (...args) => {
-      calls.writes += 1;
-      return store.put(...args);
-    },
     write: (...args) => {
       calls.writes += 1;
       return store.write(...args);
     },
-    copyObject: (...args) => {
+    copy: (...args) => {
       calls.writes += 1;
-      return store.copyObject(...args);
+      return store.copy(...args);
     },
   };
 }
@@ -191,20 +197,35 @@ function defineSuite(name: string, setup: () => Promise<World>) {
     let storage: StorageService;
     const calls = { writes: 0 };
     const rawLegacy = createInMemoryObjectStoreProvider();
-    const legacy: ObjectStoreProviderV2 = {
+    const legacy: ObjectStoreProvider = {
       forWorkspace: (workspaceId) => counting(rawLegacy.forWorkspace(workspaceId), calls),
     };
-    let objects: ObjectStoreV2;
+    let objects: ObjectStore;
     // Another member of the same workspace, and a read-only one: neither owns the seeded files.
-    const builderId = crypto.randomUUID();
+    let builderId = crypto.randomUUID();
     const viewerId = crypto.randomUUID();
+    // Runs inside the service's `remove`, just before the catalog marks rows.
+    const hooks: { beforeRemove: () => Promise<unknown> } = {
+      beforeRemove: () => Promise.resolve(),
+    };
 
     beforeEach(async () => {
       world = await setup();
+      builderId = await world.member();
       calls.writes = 0;
+      hooks.beforeRemove = () => Promise.resolve();
       objects = counting(createInMemoryObjectStore(), calls);
       storage = createStorageService({
-        catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
+        catalog: async (workspaceId) => {
+          const catalog = await world.catalogs.forWorkspace(workspaceId);
+          return {
+            ...catalog,
+            remove: async (...args) => {
+              await hooks.beforeRemove();
+              return catalog.remove(...args);
+            },
+          };
+        },
         objects,
         legacy: { files: legacy },
         log: noLog,
@@ -329,8 +350,8 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       const response = await move('big', 'archive/big');
 
       expect(response.status, await response.clone().text()).toBe(200);
-      // The folder row moves with its files.
-      expect(await response.json()).toEqual({ status: 'ok', moved: FOLDER_FILES + 1 });
+      // The folder row moves with its files, and `moved` counts the files only.
+      expect(await response.json()).toEqual({ status: 'ok', moved: FOLDER_FILES });
       expect(calls.writes).toBe(0);
       const moved = await download('archive/big/keep.txt');
       expect(moved.status).toBe(200);
@@ -582,6 +603,24 @@ function defineSuite(name: string, setup: () => Promise<World>) {
     });
 
     // @story US-STO-04
+    it('[US-STO-04][api][sdk] a recursive delete names a file saved under the folder while it ran', async () => {
+      await save('docs/a.txt', 'alpha');
+      hooks.beforeRemove = async () => {
+        hooks.beforeRemove = () => Promise.resolve();
+        await save('docs/late.txt', 'late');
+      };
+
+      const response = await remove('docs', { recursive: true });
+
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect(await response.json()).toEqual({
+        status: 'ok',
+        deleted: ['docs/a.txt', 'docs/late.txt'],
+      });
+      expect((await download('docs/late.txt')).status).toBe(404);
+    });
+
+    // @story US-STO-04
     it('[US-STO-04][api][sdk] an empty folder deletes without recursive', async () => {
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
       await catalog.createFolder('empty', { ownerPrincipalId: world.a.principalId });
@@ -615,6 +654,86 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       expect(calls.writes).toBe(0);
       expect(await objects.head(name)).not.toBeNull();
       expect(await (await download('docs/a.txt')).text()).toBe('alpha');
+    });
+
+    /** A signed upload reserved by `owner` at `path`, its bytes already in the object store. */
+    async function pendingUpload(owner: string, path: string): Promise<string> {
+      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
+      const objectId = crypto.randomUUID();
+      const reserved = await catalog.reserve(path, {
+        ownerPrincipalId: owner,
+        sizeBytes: 5,
+        contentType: 'text/plain',
+        objectId,
+        uploadMode: 'signed',
+      });
+      if (reserved.kind !== 'reserved') throw new Error(`${path} was already taken`);
+      const name = storageObjectName(world.a.workspaceId, 'files', objectId);
+      await objects.write(name, bytesOf('hello'), { contentType: 'text/plain' });
+      return name;
+    }
+
+    // @story US-STO-04
+    it('[US-STO-04][api][sdk] the uploader deletes its own pending upload, row and object', async () => {
+      const name = await pendingUpload(builderId, 'docs/in-flight.txt');
+      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
+
+      const response = await remove('docs/in-flight.txt', { actor: 'builder' });
+
+      expect(response.status, await response.clone().text()).toBe(204);
+      expect(await catalog.pending('docs/in-flight.txt')).toBeNull();
+      expect(await objects.head(name)).toBeNull();
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][api][sdk] another member’s pending upload is not the builder’s to delete, and a viewer deletes none', async () => {
+      const name = await pendingUpload(world.a.principalId, 'docs/theirs.txt');
+      const mine = await pendingUpload(builderId, 'docs/mine.txt');
+      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
+
+      expect((await remove('docs/theirs.txt', { actor: 'builder' })).status).toBe(403);
+      expect((await remove('docs/mine.txt', { actor: 'viewer' })).status).toBe(403);
+
+      expect(await catalog.pending('docs/theirs.txt')).not.toBeNull();
+      expect(await catalog.pending('docs/mine.txt')).not.toBeNull();
+      expect(await objects.head(name)).not.toBeNull();
+      expect(await objects.head(mine)).not.toBeNull();
+    });
+
+    // @story US-STO-03
+    // @story US-STO-04
+    it('[US-STO-04][api][sdk] owning a folder does not let a member move or delete another member’s file in it', async () => {
+      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
+      const builder = { ...ctx(), principalId: builderId, userId: null };
+      const saveAs = async (who: StorageContext, path: string, text: string) => {
+        const saved = await storage.save(who, {
+          area: 'files',
+          path,
+          maxBytes: 1024,
+          replace: true,
+          body: bytesToStream(bytesOf(text)),
+        });
+        if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
+        return saved.row;
+      };
+      // The builder's folder, holding one file of the builder's and one of the owner's.
+      await catalog.createFolder('shared', { ownerPrincipalId: builderId });
+      await saveAs(builder, 'shared/mine.txt', 'mine');
+      const theirs = await saveAs(ctx(), 'shared/theirs.txt', 'theirs');
+      const name = storageObjectName(world.a.workspaceId, 'files', theirs.objectId ?? '');
+      // A folder of the builder's own files only: the control that the builder may move its own.
+      await catalog.createFolder('own', { ownerPrincipalId: builderId });
+      await saveAs(builder, 'own/a.txt', 'a');
+      calls.writes = 0;
+
+      expect((await move('shared', 'elsewhere', 'builder')).status).toBe(403);
+      expect((await remove('shared', { actor: 'builder', recursive: true })).status).toBe(403);
+      expect((await move('own', 'moved-own', 'builder')).status).toBe(200);
+
+      expect(calls.writes).toBe(0);
+      expect(await objects.head(name)).not.toBeNull();
+      expect(await (await download('shared/theirs.txt')).text()).toBe('theirs');
+      expect(await (await download('shared/mine.txt')).text()).toBe('mine');
     });
   });
 }

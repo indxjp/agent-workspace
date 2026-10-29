@@ -256,6 +256,7 @@ describe('API keys', () => {
       workspaceId: 'w1',
       userId: 'u1',
       label: 'Ada',
+      features: ['chat'],
     };
     const { client } = api(() => jsonResponse(200, me));
     await expect(loadMe(client)).resolves.toMatchObject({ role: 'owner' });

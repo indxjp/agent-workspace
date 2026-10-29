@@ -243,6 +243,23 @@ done
 aw deploy production --yes          # or `agent-workspace start` for a --cloud local project
 ```
 
+**Move a Compose project from PostgreSQL 17 to 18.** A project generated before PostgreSQL 18
+keeps its 17 pin: `render --upgrade` never moves `POSTGRES_IMAGE`, because a new major cannot open
+the old data directory. To move it, install the new CLI and run `agent-workspace render`, so
+`compose.yaml` names the data directory (`PGDATA`) for both majors. Then take the backup above with
+the 17 image, set `POSTGRES_IMAGE` in `.env` to the `postgres:18-alpine` digest
+(`docker buildx imagetools inspect postgres:18-alpine` prints it), and give PostgreSQL an empty
+volume before you restore into it:
+
+```sh title="illustrative" claim="illustrative"
+project="$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)"
+docker compose stop
+docker volume rm "${project}_postgres-data"   # only after the dump is copied off the machine
+```
+
+Then follow the restore above with `backup-<date>.dump`. To go back, restore the old `.env` (its
+17 pin) and the same dump the same way.
+
 **Cloud Run.** Upgrade and rollback are the same `--plan` then `--yes` with the new or previous
 image references; Cloud SQL's point-in-time recovery is the database backup. To restore, clone the
 instance to a moment before the upgrade, then point the module at the clone or copy the data back:

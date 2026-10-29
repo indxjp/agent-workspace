@@ -4,6 +4,10 @@
  * host's remaining budget or an interrupt, so a slow or hung store never holds the run for good.
  */
 // @story US-STO-12
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+
 import { encodeUstar } from '@agent-workspace/runtime/transfer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -83,6 +87,14 @@ interface Launch {
   readonly storageWriteback: NonNullable<RunnerLauncherOptions['storageWriteback']>;
   readonly maxRunDurationMs?: number;
   readonly hostMaxRunDurationMs?: number;
+  /** How the runtime's files reach this host; `push-archive` (streamed over `GET /files`) by default. */
+  readonly fileTransfer?: 'push-archive' | 'local-disk';
+  /** The runtime root; a real directory for `local-disk`. */
+  readonly workspaceRoot?: string;
+  /** The launch body's `resources.files`; the read-write folder alone by default. */
+  readonly bodyFiles?: readonly Record<string, string>[];
+  /** What the runtime answers for the folder over `GET /files`. */
+  readonly folderFiles?: Readonly<Record<string, string>>;
 }
 
 /** Launches one run against a runner double; answers when the launch has settled. */
@@ -108,15 +120,17 @@ async function launch(options: Launch, store = new InMemoryRunStore()) {
           networkPolicy: 'none',
           filesystem: 'read-write',
           runnerUrl: 'http://runtime:8080',
-          workspaceRoot: '/workspace',
-          fileTransfer: 'push-archive',
+          workspaceRoot: options.workspaceRoot ?? '/workspace',
+          fileTransfer: options.fileTransfer ?? 'push-archive',
         }),
     },
     buildRunRequest: () => ({
       runId: RUN,
-      cwd: `/workspace/${CWD}`,
+      cwd: `${options.workspaceRoot ?? '/workspace'}/${CWD}`,
       portable: { permissions: { writeFiles: true } },
-      resources: { files: [{ kind: 'directory', path: FOLDER, access: 'read-write' }] },
+      resources: {
+        files: options.bodyFiles ?? [{ kind: 'directory', path: FOLDER, access: 'read-write' }],
+      },
     }),
     workspaceLifecycle: {
       inputArchive: () => Promise.resolve(null),
@@ -132,7 +146,9 @@ async function launch(options: Launch, store = new InMemoryRunStore()) {
       }
       if (path === `${CWD}/${FOLDER}`) {
         return Promise.resolve(
-          new Response(tar({ 'a.md': 'a', 'b.md': 'b', 'c.md': 'c' }, path).slice()),
+          new Response(
+            tar(options.folderFiles ?? { 'a.md': 'a', 'b.md': 'b', 'c.md': 'c' }, path).slice(),
+          ),
         );
       }
       return Promise.resolve(Response.json({ error: 'file_not_found' }, { status: 404 }));
@@ -152,9 +168,12 @@ async function launch(options: Launch, store = new InMemoryRunStore()) {
 
 const completing = () => new Response(DONE, { headers: { 'Content-Type': 'text/event-stream' } });
 
-afterEach(() => {
+const roots: string[] = [];
+
+afterEach(async () => {
   resetLiveRuns();
   vi.restoreAllMocks();
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe('a run that did not conclude completed leaves the connection untouched', () => {
@@ -305,6 +324,7 @@ async function saveToHungStore(
         labels.push(event.subjectLabel);
         return Promise.resolve();
       },
+      stillRunning: () => Promise.resolve(true),
     },
   );
   return { writes, labels, counts: counts.get(CONNECTION) };
@@ -316,11 +336,12 @@ describe('the write-back stops', () => {
     const record = await launch({
       run: completing,
       storageWriteback: async (run) => {
-        // Stopped from inside the first write, so no assertion depends on how long planning took.
+        // The deadline passes inside the first write, so no assertion depends on how long planning
+        // took. It aborts with the reason `AbortSignal.timeout` gives.
         const stop = new AbortController();
         saved = await saveToHungStore(
           { ...run, signal: AbortSignal.any([run.signal, stop.signal]) },
-          () => stop.abort(),
+          () => stop.abort(new DOMException('the write-back deadline passed', 'TimeoutError')),
         );
       },
     });
@@ -412,3 +433,92 @@ describe('the write-back stops', () => {
     expect(saved?.labels).toEqual([expect.stringContaining(' · 3 failed · ')]);
   });
 });
+
+/** Saves `run` with the run's grants as they are now, to a connection that records every write. */
+async function saveWithGrants(
+  run: Omit<StorageWriteBackRun, 'folders'>,
+  grants: readonly { prefix: string; access: 'read' | 'read-write' }[],
+) {
+  const writes: string[] = [];
+  const counts = await writeBackStorage(
+    { ...run, folders: new Map([[FOLDER, { connectionId: CONNECTION, prefix: 'reports' }]]) },
+    {
+      readRunAgent: () =>
+        Promise.resolve({
+          agent: { permissions: { writeFiles: true } },
+          assignments: {
+            files: [],
+            skillIds: [],
+            connectorIds: [],
+            storageGrants: grants.map((grant) => ({ connectionId: CONNECTION, ...grant })),
+          },
+        } as never),
+      connections: {
+        get: () =>
+          Promise.resolve({ name: 'acme-data', allowedPrefixes: ['reports'], writeAllowed: true }),
+        openWritable: () =>
+          Promise.resolve({
+            read: () => Promise.resolve(null),
+            write: async (key: string, body: ReadableStream<Uint8Array> | Uint8Array) => {
+              writes.push(key);
+              if (!(body instanceof Uint8Array)) await new Response(body).arrayBuffer();
+              return { sizeBytes: 0, contentType: null, etag: '"e"', lastModified: new Date(0) };
+            },
+          }),
+      },
+      audit: () => Promise.resolve(),
+      stillRunning: () => Promise.resolve(true),
+    },
+  );
+  return { writes, counts: counts.get(CONNECTION) };
+}
+
+// `push-archive` streams the folder from the runtime's `GET /files`; `local-disk` archives it here.
+describe.each(['push-archive', 'local-disk'] as const)(
+  'a %s write-back keeps the launch body read-only paths',
+  (fileTransfer) => {
+    const after = { '2026/q3.csv': 'q3,43\n', 'top.md': '# Top\n' };
+
+    /** Launches with `reports` read-write and `reports/2026` read-only; `grants` are the ones now. */
+    async function saveAfter(grants: readonly { prefix: string; access: 'read' | 'read-write' }[]) {
+      const root = await mkdtemp(join(tmpdir(), 'aw-wb-launch-'));
+      roots.push(root);
+      for (const [name, content] of Object.entries(after)) {
+        const file = join(root, CWD, FOLDER, name);
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, content);
+      }
+      let saved: Awaited<ReturnType<typeof saveWithGrants>> | undefined;
+      const record = await launch({
+        run: completing,
+        fileTransfer,
+        workspaceRoot: root,
+        folderFiles: after,
+        bodyFiles: [
+          { kind: 'directory', path: FOLDER, access: 'read-write' },
+          { kind: 'directory', path: `${FOLDER}/2026`, access: 'read' },
+          { kind: 'file', path: `${FOLDER}/2026/q3.csv`, access: 'read' },
+        ],
+        storageWriteback: async (run) => {
+          saved = await saveWithGrants(run, grants);
+        },
+      });
+      expect(record?.status).toBe('completed');
+      return saved;
+    }
+
+    it('[US-STO-12][unit][run] writes only the sibling once the read grant is removed during the run', async () => {
+      const saved = await saveAfter([{ prefix: 'reports', access: 'read-write' }]);
+
+      expect(saved?.writes).toEqual(['reports/top.md']);
+      expect(saved?.counts).toMatchObject({ written: 1, refused: 1 });
+    });
+
+    it('[US-STO-12][unit][run] writes nothing once the read-write grant is removed during the run', async () => {
+      const saved = await saveAfter([{ prefix: 'reports/2026', access: 'read' }]);
+
+      expect(saved?.writes).toEqual([]);
+      expect(saved?.counts).toMatchObject({ written: 0, refused: 1 });
+    });
+  },
+);

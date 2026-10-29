@@ -185,6 +185,7 @@ import {
   SKILLS_PROBLEM_CODES,
   type SkillsProblemCode,
 } from '@indx-workspace/contracts/skills';
+import { FEATURE_IDS, WorkspaceFeaturesSchema } from '@indx-workspace/contracts/features';
 import {
   CreatedUserResponseSchema,
   MEMBERSHIP_ROLES,
@@ -313,7 +314,7 @@ import { createCatalogFilesWorld, type CatalogFilesWorld } from './files/catalog
 import {
   createInMemoryObjectStore,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { GET as listFilesRoute, POST as uploadFileRoute } from '../app/api/files/route';
 import {
@@ -472,6 +473,7 @@ import {
   installTestRunApi,
   resetTestRunApi,
 } from './application-context-fixtures';
+import { listWorkspaceFeatures } from './workspaces/features';
 
 const WORKSPACE = '44444444-4444-4444-8444-444444444444';
 const AGENT = '11111111-1111-4111-8111-111111111111';
@@ -1544,7 +1546,7 @@ describe('files', () => {
   const idContext = (id: string) => ({ params: Promise.resolve({ id }) });
   let world: CatalogFilesWorld;
 
-  function install(objects?: ObjectStoreV2): void {
+  function install(objects?: ObjectStore): void {
     world = createCatalogFilesWorld({
       catalogs: createInMemoryCatalogStore(),
       scopes: createInMemoryWorkspaceScopeResolver(
@@ -1759,7 +1761,7 @@ describe('files', () => {
 
   it('renders presigned URLs into the published shape, or 501 when the store cannot sign', async () => {
     const plain = createInMemoryObjectStore();
-    const signing: ObjectStoreV2 = {
+    const signing: ObjectStore = {
       ...plain,
       capabilities: { ...plain.capabilities, sign: true },
       createSignedUrl: (key, request) =>
@@ -2637,7 +2639,7 @@ describe('me', () => {
 
   it('renders both principal kinds through the real serializer into bodies the contract accepts', async () => {
     for (const principal of [await meSessionPrincipal(), meApiKeyPrincipal()]) {
-      const result = readMe(principal);
+      const result = readMe(principal, ['chat', 'runs']);
       expect(result.status).toBe(200);
       const parsed = MeResponseSchema.safeParse(result.body);
       expect(
@@ -2646,6 +2648,7 @@ describe('me', () => {
       ).toBe(true);
       if (!parsed.success) continue;
       expect(parsed.data.workspaceId).toBe(ME_WORKSPACE);
+      expect(parsed.data.features).toEqual(['chat', 'runs']);
       // The wire's own promise about the field the two kinds differ in.
       expect(parsed.data.userId === null).toBe(principal.kind === 'api_key');
     }
@@ -3139,6 +3142,9 @@ describe('sessions', () => {
       update: unused,
       delete: unused,
       replacePolicy: unused,
+      listArchiveCandidates: unused,
+      archive: unused,
+      restore: unused,
     };
     const principal = Principal.fromApiKey({
       principalId: SESSIONS_PRINCIPAL,
@@ -3374,6 +3380,16 @@ describe('observability', () => {
 
   it('restates the same audit actions as the contract', () => {
     expect([...serverAuditActions]).toEqual([...AUDIT_ACTIONS]);
+  });
+
+  it('records the workspace feature switches under an action the contract lists', () => {
+    expect(serverAuditActions).toContain('workspace-features-changed');
+    expect(AUDIT_ACTIONS).toContain('workspace-features-changed');
+  });
+
+  it('renders the workspace features into a body the contract accepts', () => {
+    const parsed = WorkspaceFeaturesSchema.safeParse(listWorkspaceFeatures(FEATURE_IDS, ['files']));
+    expect(parsed.success).toBe(true);
   });
 });
 

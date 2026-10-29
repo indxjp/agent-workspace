@@ -314,6 +314,32 @@ aw agents update <id> --file patch.json
 | `400`  | `unknown_runtime_profile`             | `runtimeProfileId` does not name a runtime profile in this workspace.                                                                                                                             |
 | `503`  | `runtime_switch_audit_not_configured` | The patch carries a `runtimeProfileId` key that actually changes the value (a "runtime switch"), and the workspace has no audit sink configured for it (`apps/web/app/api/agents/[id]/route.ts`). |
 
+## restore
+
+Bring back an archived agent. Agents an agent made are archived automatically after 30 days unused;
+`restore` clears the archive mark so the agent can run again. An agent that is not archived is
+returned unchanged. A restored agent is skipped by the auto-archive sweep for the next 30 days.
+
+<CodeGroup>
+
+```ts title="sdk (illustrative)" claim="illustrative"
+const agent = await aw.agents.restore(agentId);
+```
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw agents restore <id>
+```
+
+</CodeGroup>
+
+**Route:** `POST /api/agents/:id/restore` (`200`, no request body) · **SDK:** `agents.restore` · **Who:** the workspace Owner, an Admin, or the agent's owner.
+
+| Status | Code              | When                                                              |
+| ------ | ----------------- | ----------------------------------------------------------------- |
+| `400`  | `malformed_body`  | The request carries a body; this route takes none.                |
+| `404`  | `agent_not_found` | No agent with that id in this workspace, or the id is not a UUID. |
+| `403`  | `forbidden`       | The caller is a Viewer, or a Builder who does not own the agent.  |
+
 ## remove
 
 Delete an agent.

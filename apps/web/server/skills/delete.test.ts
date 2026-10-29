@@ -33,6 +33,7 @@ import {
   createInMemoryObjectStore,
   createLocalFilesystemObjectStoreProvider,
 } from '@agent-workspace/core/storage';
+import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
 import {
   createRepositorySkillsStoreProvider,
   type WorkspaceSkillsStoreProvider,
@@ -197,8 +198,8 @@ async function rowPaths(workspaceId: string, folder = skillRowFolder('demo')): P
 
 async function storedKeys(workspaceId: string): Promise<readonly string[]> {
   const store = skills.forWorkspace(workspaceId);
-  const files = await store.listPrefix('skills/demo');
-  const meta = await store.get(skillMetaKey('demo'));
+  const files = await listAll(store, 'skills/demo', { recursive: true });
+  const meta = await readWhole(store, skillMetaKey('demo'));
   return [
     ...(await rowPaths(workspaceId)),
     ...files.map((entry) => entry.key),
@@ -393,7 +394,9 @@ describe('DELETE /api/skills/:name', () => {
       const retried = await remove('demo', builder);
       expect(retried.status).toBe(204);
       expect(await storedKeys(WORKSPACE_A)).toEqual([]);
-      expect(await skills.forWorkspace(WORKSPACE_A).get(skillDeleteMarkerKey('demo'))).toBeNull();
+      expect(
+        await readWhole(skills.forWorkspace(WORKSPACE_A), skillDeleteMarkerKey('demo')),
+      ).toBeNull();
       expect(await catalogRows()).toEqual([]);
       expect((await remove('demo')).status).toBe(404);
     });

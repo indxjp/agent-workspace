@@ -18,7 +18,7 @@
  */
 import { createAgent } from '../../../server/agents/create';
 import { listAgents } from '../../../server/agents/handlers';
-import { withAuthorisedWorkspaceStore } from '../../../server/agents/http';
+import { parseAgentListQuery, withAuthorisedWorkspaceStore } from '../../../server/agents/http';
 import type { ApiResult } from '../../../server/http/result';
 import { route } from '../../../server/http/route';
 
@@ -33,7 +33,10 @@ export const runtime = 'nodejs';
 
 /** `GET /api/agents` — the agents of the caller's workspace, and no other workspace's (§25). */
 async function serveGet(request: Request): Promise<ApiResult> {
-  return withAuthorisedWorkspaceStore(request, 'not-applicable', (store) => listAgents(store));
+  return withAuthorisedWorkspaceStore(request, 'not-applicable', (store) => {
+    const query = parseAgentListQuery(request);
+    return query.ok ? listAgents(store, query.archived) : Promise.resolve(query.result);
+  });
 }
 
 export const GET = route({ component: 'agents', operation: 'list' }, serveGet);

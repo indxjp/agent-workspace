@@ -25,6 +25,7 @@
  * boundary — a CRUD handler that tried to call `resolveForProbe` would need to widen its own
  * parameter type first, which is a reviewable one-line change, not an accident.
  */
+import { isStorageConnectionSecretName } from '../secrets/contract';
 import { log } from '../telemetry/logger';
 import {
   UnknownWorkspaceError,
@@ -671,6 +672,8 @@ export function createRepositoryConnectorsStoreProvider(
           const repository = dependencies.mcpServers.forScope(resolved);
           const record = (await repository.get(id)) ?? (await toolRepository(repository).get(id));
           if (record === null || record.identitySecretName === null) return undefined;
+          // Never a storage connection's credential, even on a row stored before it was refused.
+          if (isStorageConnectionSecretName(record.identitySecretName)) return null;
           const secret = await dependencies.secrets.resolveByName(
             resolved,
             record.identitySecretName,

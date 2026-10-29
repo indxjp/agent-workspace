@@ -79,6 +79,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 - A storage connection to S3 can hold temporary (STS) credentials: the credential's optional `sessionToken` is sent with every request. Temporary credentials expire; rotate them with `aw storage connections credential`.
 - A platform setting, `AW_STORAGE_CREATE_BUCKET`: `true` creates the bucket of an `s3://` `AW_STORAGE_URL` on first boot, idempotently, as the old settings did for the bundled SeaweedFS. Unset or `false` never creates one, and any other value stops start-up. It is not a URL parameter, so a storage connection cannot ask for a bucket.
 - The "Use your own bucket" guide: connect an S3, Google Cloud Storage or Azure Blob bucket, or a local folder, give an agent a folder of it, run, and read the write-back.
+- Agents an agent made (a Builder, or an agent's own `agents.create`) are archived automatically
+  once they are 30 days old with no run in the last 30 days. The sweep is offered on every
+  `/api/cron/triggers` delivery, or on a 15 minute timer when the deployment runs interval
+  triggers, and runs at most once an hour per instance. It writes an `agent-changed` audit row
+  (`{ archived: true }`) per agent. An archived agent refuses every run start with `409
+  agent_archived`. Agents a person created are never auto-archived.
+- The console shows an Archived badge (English and Japanese) on an archived agent's page and in the
+  agent list, with the archive time on hover. Anyone who may restore the agent (the Owner, an Admin
+  or the agent's owner) also gets a Restore button on the agent page. The agent list hides archived
+  agents and has a Show archived toggle (`?archived=include`).
+- `POST /api/agents/:id/restore` brings back an archived agent. The workspace Owner, an Admin or the
+  agent's owner may call it, with no request body. It clears `archivedAt` and writes one
+  `agent-changed` audit row (`{ archived: false }`); restoring an agent that is not archived is a
+  `200` that changes nothing and writes no row. The auto-archive sweep leaves a restored agent
+  alone for 30 days, so an agent someone restored is not archived again the next hour. The
+  `agent-changed` audit details are now `{ archived: boolean }` (were `{ archived: true }`).
+- The Azure Container Apps Terraform module takes `storage_blob_endpoint`, the storage account's blob endpoint in a sovereign cloud (`*.blob.core.usgovcloudapi.net`, `*.blob.core.chinacloudapi.cn`). It reaches web as the `endpoint=` of `AW_STORAGE_URL`; left unset, the public cloud's endpoint applies as before.
+- An admin can let a named agent build agents through the Builder's tools: a policy key
+  (`builder.allow`), a creator that can never give a new agent more than it has, a daily creation
+  quota, a per-day cost cap and automatic archiving. The guide "Build an agent in chat" explains the
+  setup.
+- A run of the Builder, or of a person-made agent whose name the deployment's `builder.allow`
+  lists, now has the `aw-control` tools. A run the rule does not give them to is refused
+  `not_allowed_to_build` at the door, before anything is journalled. The composed door does not
+  widen the agent. The server logs one warning per agent when it first sees a run of an allow-listed
+  agent whose owner is not an Owner or Admin of its workspace.
+- Creating an agent with a name in the deployment's `builder.allow`, or renaming one to it, needs a
+  workspace Owner or Admin; a Member is answered `403 builder_name_reserved`. An edit that keeps an
+  agent's stored name is not a rename.
+- A console create of an agent now takes the per-workspace creation lock, so it cannot race a
+  Builder or agent create past the workspace's agent limit.
+- A workspace with the `builder` feature on now has its Builder agent: the web server ensures it for every such workspace at start-up, when a features write switches `builder` on, and when `POST /api/workspaces` creates a workspace.
+- The Builder never counts as a workspace's only agent: `aw chat` with no agent name still picks the one agent you made, its "name the agent" list leaves the Builder out, and the console's new chat does not open on the Builder unless you last chatted with it or it is the only agent. `aw chat builder` still runs it.
+- A running run in a workspace over its `maxCostPerDayUsd` is now stopped at its next model call, and ends `failed` with the visible reason `daily_cost_cap_reached` (the cap and the reset time, not the spend). A spend that cannot be read refuses the call with `daily_cost_unavailable` and leaves the run running. Deploy the gateway before, or with, the web service: it must know the new run token claim.
+- The Helm chart takes `storage.url`, an `AW_STORAGE_URL` (`s3://`, `gcs://`, `azblob://` or `file://`) that web, the gateway and the runner manager read in place of the object-store Secret's copy. Left empty, the default, the Secret still supplies it.
+- A route whose feature is not installed in the deployment (`AW_DEPLOYMENT_FEATURES`) or is switched off for the caller's workspace answers `404 feature_disabled` with `details: [<feature id>]`. The deployment check runs at the edge before authentication; the workspace check runs once the route's own credential verifies and before any row is read. With the variable unset and no switched-off features, every answer is unchanged.
+- `GET /api/workspaces/:id/features` lists every feature with whether the deployment installs it
+  and whether the workspace has it on (any member); `PUT` replaces the workspace's whole off set
+  (Owner of that workspace only). A change that moves the set writes one
+  `workspace-features-changed` audit row; a `PUT` that leaves it as it was writes none. Switching
+  off a feature another enabled feature needs is `409 feature_in_use`; naming one the deployment
+  does not install as on is `409 feature_not_installed` (ADR-0160 D6–D8).
+- `GET /api/me` carries the caller's workspace's enabled `features`, in `FEATURE_IDS` order
+  (ADR-0160 D8).
 
 ### Changed
 
@@ -140,6 +184,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
   `ghcr.io/indxdev/agent-workspace/*`. The npm packages now carry npm provenance.
 - **Breaking:** `db:migrate` refuses to run while a `files` or `session_state_blobs` row still has no `object_id`, and says `legacy_storage_rows_remain: run the storage migration first (AW_STORAGE_MIGRATE=copy)`. Nothing is deleted or rewritten. An install that kept the default `adopt` setting on 0.6.10 and had files from before the new naming has such rows (adopt gives them a row without an object id; only the opt-in copy fills it in), and so may an install that ran with `AW_STORAGE_MIGRATE=off`. Before upgrading, start 0.6.10 once with `AW_STORAGE_MIGRATE=copy` (it adopts, then copies) and wait until its last progress line has `"done":true`, then upgrade.
 - At start-up the storage migration now also gives every skill kept in the old forms (a record object, a bare object prefix, a published revision's prefix) a catalog row and file rows, once across servers, never replacing an existing row. A skill whose delete is pending is left alone, and a published revision's prefix is moved only when the revision has a record. Each pass is recorded as a `skills` run in `storage_migration_runs`, and each file adopt pass as an `adopt` run with the objects it adopted, what it skipped by reason (no workspace owner, path taken, failed workspace) and whether it was clean; a pass that changed nothing is not recorded again.
+- `GET /api/agents` no longer lists archived agents; `?archived=include` lists them with their `archivedAt`, and `GET /api/agents/{id}` still returns one. Setting, promoting or rolling back a pointer, saving a version, and the Builder's `draft_save` on an archived agent answer 409 `agent_archived`.
+- The workspace's `builder` feature switch now turns the Builder on and off. It is on by default; an
+  Owner switches it off with `aw workspaces features disable builder`. While it is off, both
+  Builder doors answer `404 feature_disabled` (including to a run already in progress) and the
+  console hides the Chat tab of the new-agent screen.
+- On a default deployment the Builder is on with the per-run caps (a chat turn's budget and $0.30
+  per trial); the daily cost cap (`maxCostPerDayUsd`) applies only when the deployment policy
+  ceiling sets it.
+- The GCP Cloud Run Terraform module no longer sets `GCP_PROJECT` on the web service, which never read it: web takes the project from the `?project=` of `AW_STORAGE_URL`. Applying the module rolls a new web revision with that one variable fewer. The runner manager keeps `GCP_PROJECT`.
+- The build moves to Nx 24.0.1. `nx affected` keeps selecting whole projects (`affected.legacy`),
+  and CI asks `nx show projects` for its line output explicitly: Nx 24 prints a JSON array under an
+  AI agent, which would have matched no test project.
+- The repository and its images move to pnpm 12.15.0. The `runner` and runtime images carry pnpm's
+  native executable for their architecture, from a checksum-verified registry tarball, and `npx`
+  for `stdio` connectors still runs through `pnpm dlx` (ADR-0087, amendment 2026-10-25).
+- CI, `pnpm test`, the repository's `compose.yaml` and the isolation harness run PostgreSQL 18
+  (ADR-0159). A `postgres-data` volume a 17 server initialised does not start under 18: dump it
+  with the 17 image, or remove it to start empty.
+- A GCS storage connection whose stored service-account key does not give `service_account` as its `type` no longer opens; it fails with `storage_connection_url_invalid`. Rotate its credential with the key file Google Cloud issued, which carries the `type`.
+- The storage adopt and skills passes now record every pass in `storage_migration_runs`, a failed one and an unchanged one included, and the skills record counts the files of skill revisions with no committed revision record in a new `orphans` column. Session-state blobs are no longer saved without the storage service: `PUT` answers `session_state_blobs_not_configured` while the files API is not serving (`AW_STORAGE_URL` is unset, or the storage service or its catalog failed to open). Run this release once before the next one, which will refuse to upgrade without a clean record of both passes.
+- Before upgrading past the `legacy_storage_rows_remain` guard, check more than `"done":true` in
+  the last `storage-migrate` progress line: every area's `failed`, `missing` and `mismatched`
+  should be `0`. A row counted there kept no object id, so `db:migrate` still refuses. Run 0.6.10
+  with `AW_STORAGE_MIGRATE=copy` again after fixing the cause (a `failed` row is retried; a
+  `missing` row's old object is gone and needs the file re-uploaded or the row removed).
 
 ### Removed
 
@@ -296,6 +365,71 @@ model_connection_incomplete` naming the field (for example `config.apiVersion`),
   catch-up run at once for the windows it missed: it next fires at its next scheduled time.
 - Trigger delivery records older than the dedupe window are pruned by the schedule pass instead of
   being kept forever.
+- A Builder provisioned before first-run setup now runs once setup has made its model connection and the default runtime profile: setup, and creating or changing a model connection, bring the Builder's connection and runtime profile up to date without writing a new version.
+- `POST /api/agents/:id/evaluation-advance` now advances an evaluation run of the built-in Builder, so `aw eval builder` scores it end to end. Promoting, rolling back or otherwise changing the Builder is still refused with `builtin_agent_read_only`.
+- The built-in Builder now runs on a fresh install. Its definition names the `default` model connection, but first-run setup names its connection `anthropic default`, so the Builder was bound to no connection and every run was refused with `builder_model_unavailable`. The Builder now binds to the connection named `default` when there is one, and otherwise to the connection setup made for its model's provider. Other agents still resolve `default` only to a connection named `default`.
+- Model-graded evaluation cases now give the judge a system instruction and up to 1024 output tokens, and read its verdict even after other JSON in the reply. A reply that holds verdicts that disagree fails the case with `judge_unparseable`.
+- Copying a file on local-disk storage no longer leaves a partial file behind when the copy fails part way, and a download during the copy gets the old file or the new one, never a mix.
+- A model, tool or skill option the Claude engine refuses to translate at run start is now answered with its own code (`engine_policy_invalid`) and message on the run's `run-error` frame, like any other engine refusal, instead of the generic `422 run_rejected`. Engine adapters signal such a refusal with the new `EngineRefusalError` from `@agent-workspace/engine`.
+- A refused `POST /files` hydrate now leaves the run workspace as it was. Members stream into a staging directory and move into place only once the whole archive is accepted; a refusal, in the archive or against the workspace (a symlink, a directory where a file goes), keeps every file the hydrate would have replaced and removes a workspace it created.
+- A runtime profile `persistPaths` entry under a sibling of the workspace, such as `/workspaces/out`, is refused as not workspace-relative. Before, only the `/workspace` prefix was stripped from it, so the run persisted `s/out` instead.
+- Run file archives keep trailing whitespace in file names, so `report.txt` and `report.txt ` stay two files instead of one overwriting the other.
+- Collecting run outputs no longer hangs when an output file is swapped for a named pipe after it was listed; the file is refused.
+- A remote run output of exactly the 128 MiB payload limit is saved: the default cap on the output archive now counts tar headers on top of the payload, while the payload and member limits are enforced when the archive is decoded.
+- A `file://` storage connection on a host without `/proc/self/fd` (such as macOS) refuses a file symlink or folder alias inside its root when it is addressed directly, as it already did on Linux.
+- A Google Cloud Storage download that fails after it started no longer exposes the provider's response, which can carry the bearer token; it fails with the same safe error and HTTP status as other GCS failures.
+- Refusing a write to a read-only storage connection now cancels the streamed body it was given.
+- An Azure Blob signed link whose signing time is in the past no longer fails with "Azure blob user delegation key failed": the delegation key is requested for a window that is valid now, while the link keeps the expiry it was asked for.
+- A storage connection to a server folder closes a file whose read was dropped unread, instead of leaving it to the garbage collector with Node's DEP0137 warning.
+- A write to a storage connection's server folder flushes the file and its folder entry to disk before it is reported done, so a crash right after cannot lose it.
+- A Google Cloud Storage write whose source stream fails reports the source's own error instead of "Google Cloud Storage write failed."
+- A cleanup pass in delete mode, a failed save and a stale completion no longer delete or confirm an upload that was completed or re-minted meanwhile; each acts only on the unchanged reservation it saw.
+- A save whose confirm reply is lost no longer deletes the saved bytes when the file was renamed meanwhile.
+- Uploads abandoned for longer than the longest signed link plus an hour no longer count toward the 100 unfinished uploads per workspace.
+- An upload whose replacement permission check fails releases its reservation instead of leaving the path busy, and the error is reported.
+- A storage connection's credential secret that a failed delete left behind is now removed by the next storage-connection delete in the workspace, once it is more than ten minutes old.
+- The storage connection page's delete dialog makes the page behind it, the navigation included,
+  inert while it is open, so neither a pointer nor a screen reader can reach it; focus returns to
+  "Delete this connection" when the dialog closes, also after a refused delete.
+- Removing a storage grant on an agent's page moves focus to the grant that takes its row, or the
+  one above it, and to "Add files or folders" only when no grant is left. The pressed Remove
+  button keeps focus while the removal runs and after a refused removal.
+- `DELETE /api/files/:id` on a path that only holds a pending upload removes that upload, its
+  reservation and its bytes. Its uploader may delete it with an own-files grant (a Builder); before,
+  the Builder was refused with `403` and an Owner's delete answered `204` while leaving the upload
+  in place. Another member's pending upload is still refused to a Builder.
+- A stored file now answers `lastModified` (the time its catalog row was last written) on
+  `POST /api/files`, `GET /api/files`, `PATCH /api/files/:id` and
+  `POST /api/files/:id/upload-complete`, instead of `null`. A folder still answers `null`.
+- Moving a folder with `PATCH /api/files/:id` answers `moved` as the number of files it moved, as
+  it did before moves became catalog-only. It no longer counts the folder rows, so a folder of
+  10,000 files answers `moved: 10000`, not `10001`.
+- Deploying an agent whose `storage://` grant names a connection deleted after the deploy was validated no longer fails with a `500`. The agent's grant on the deleted connection is dropped, as its version's grant already was, and a run of that version is refused with `run_storage_grant_unavailable` until it is redeployed.
+- A storage bucket deleted while the server runs is reported as a failure on S3 and Google Cloud Storage, instead of every file in it reading as missing. Run write-back then marks a changed file as failed rather than conflicted.
+- When a Google Cloud Storage upload fails its integrity check, only that upload's own version is deleted, never a newer one a concurrent writer stored.
+- S3 writes report the server's time, taken from the `Date` of the write's own response, instead of the client clock. A write sends no second request to learn it.
+- Listing a folder page by page on Google Cloud Storage, or listing it recursively on S3-compatible servers such as the bundled SeaweedFS, returns the same order as one large page, so a page boundary never repeats or reorders entries.
+- A one-level S3 listing orders each page the way the server pages it: on AWS S3 (no endpoint, or an `amazonaws.com` one) by native name, where folder `a/` follows file `a.txt`, and on any other endpoint, such as the bundled SeaweedFS, by bare key. Deployment storage and storage connections both pick the order from the endpoint, so a folder named like the start of a file name no longer reorders across a page boundary on AWS.
+- An S3 or Azure storage connection whose endpoint resolves to both IPv4 and IPv6 answers each address-family lookup with a checked address of that family.
+- A Google Cloud Storage connection is refused while `STORAGE_EMULATOR_HOST` points the Google client at another host, so a customer connection never bypasses the outbound endpoint check.
+- The least-privilege grants in the storage connections guide are now enough to connect a Google Cloud Storage or S3 bucket: neither `storage.buckets.get` nor an unprefixed `s3:ListBucket` is needed. The platform's own object store checks its bucket at startup by listing one object under its prefix. A storage connection sends no request when it is opened, so its first listing of an allowed folder is the check, and a connection URL without a prefix works with a grant limited to that folder.
+- A storage connection whose bucket refuses its key, or is gone, now tests as `forbidden` or `not_found` on Google Cloud Storage as it already did on S3, instead of `unreachable`. A run whose granted bucket refuses the listing is refused with `run_storage_grant_unavailable` before it is queued, instead of failing later as `run_preparation_failed`.
+- The runner manager passes the client's `content-length` on a proxied `/files` or tool request instead of re-sending the body chunked, so a runtime or tool server that refuses a chunked body now accepts it. A declared length over the limit is refused before the runtime is called.
+- A run the runtime cannot start answers `422 run_rejected` with a fixed message instead of the cause, which could name an absolute host path. The cause is in the runner's `run start failed` log line, keyed by the run ID.
+- A granted skill file whose bytes change after the runner verified them answers `422 run_file_checksum_mismatch`, and the engine never starts with the changed file.
+- A client that disconnects in the middle of a proxied request is no longer logged as `runner manager request failed`. A runtime or tool sandbox that fails in the middle of its response still is, including after the response has started.
+- A run file archive whose first header does not parse no longer creates an empty workspace directory.
+- A run's storage write-back no longer saves a folder to the wrong connection when a connection is
+  renamed while the run is being prepared. The run's input files and its `/run` body are loaded
+  separately; a folder the two loads delivered for different connections or prefixes is now refused
+  and audited as `refused: folder_mismatch`, rather than written to the connection that holds the
+  name at the second load.
+- A storage write-back stops before its next file once the stored run is no longer running, so a
+  cancel on another replica takes effect within a second rather than at the write-back deadline.
+  The stored status is read at most once a second, not once per file. Its audit
+  row names an interrupt `refused: interrupted`, apart from `refused: deadline`, and the audit
+  write itself is bounded, so a hung audit store no longer keeps the session busy. Its warnings
+  name an error's type, never a provider message that could carry an object key.
 
 ### Added
 
@@ -635,6 +769,48 @@ secret rotate` and `update --redirect-uri`; `/signin?next=` is honoured for same
 - A session share publishes the turns its publisher chose, copied by the server from the session's stored runs with secrets masked, instead of text the browser sent. A run of another session, or a transcript over 1 MiB, is refused with `400 invalid_share`, and a raw transcript array is no longer accepted. The public page shows the copied conversation, and labels a share published before this change as provided by the person who shared it.
 - A storage endpoint on `AW_PUBLIC_URL`'s origin is refused (`storage_endpoint_same_origin`), so signed downloads never come from the app's domain. Without `AW_PUBLIC_URL` an endpoint is not checked and a warning says so. Platform archive downloads now also send `X-Content-Type-Options: nosniff`.
 - `POST /api/files/:id/upload-urls` decides again, after reserving the path, whether the caller may overwrite a file that another member created in the meantime, so a Builder no longer receives a link that overwrites someone else's file.
+- Server logs now mask the value of a bare `sig=`, `X-Amz-Signature=` or `X-Goog-Signature=` pair that appears outside a full signed URL, such as a query string or header quoted in an error.
+- A storage connection's credential is now bound to the endpoint, account and bucket it was supplied
+  for. Browse, test and run start open the connection only when the row they read names the same
+  target; a mismatch from a concurrent edit is refused before storage is opened, with the existing
+  errors, and never falls back to another identity. Revisions up to 0.6.11 cannot read a credential
+  stored this way and refuse the connection: drain older revisions before you create, edit or rotate
+  a storage connection (see the self-hosting guide).
+- A credential sent with `PATCH /api/storage-connections/:id` or `PUT …/credential` is bound to the
+  URL the request was checked against. When another edit has moved the connection to a different
+  target in the meantime, the request is refused with `409 storage_connection_credential_required`
+  and the stored credential is left as it is.
+- A credential stored before this release is bound to the connection's URL the first time it is
+  read, and is never used for a URL the connection did not have then.
+- `POST` and `PUT /api/secrets` now refuse every name starting with `STORAGE_CONNECTION_`
+  (`409 secret_name_conflict` on create, `409 secret_in_use` on replace): only the storage-connection
+  routes write a connection's credential. `DELETE /api/secrets/:id` refuses such a secret with
+  `409 secret_in_use` while its connection exists, and deletes it once the connection is gone.
+- A code tool's `secrets` and a connector's `identity` secret can no longer name a storage
+  connection's credential. A `STORAGE_CONNECTION_` name is refused when a version is saved (`400`
+  with the schema's validation details) and on every connector write: create, `PATCH`, tool
+  connectors and the project file. A version or connector stored earlier never reads it; the tool
+  is refused as for a missing secret.
+- After you deploy this release, restart running tool sandboxes: one opened before it that declared
+  a `STORAGE_CONNECTION_` secret may still hold that credential in its environment. Rotate the
+  credential of any storage connection whose secret a code tool could have named.
+- An S3 storage connection's `publicEndpoint` goes through the same outbound check as its `endpoint`: a link signed for a private or link-local address is refused with `storage_connection_endpoint_forbidden`, so a signed link never sends its fetcher to one.
+- An Azure Blob storage connection on the default account host (`<account>.blob.core.windows.net`) is checked against the outbound policy and pinned to the checked addresses, as one with `?endpoint=` already was.
+- A file upload that replaces an existing file (`POST /api/files`, `POST /api/files/{id}/upload-urls`) is now authorized against the file the catalog reserved under its path lock, not against an earlier read of the path. A Builder can no longer overwrite another member's file that was created at the path, or renamed away from it and the path reused, while the upload was starting; the upload answers 403 and the other member's file and bytes are kept.
+- A signed upload link can no longer change a file after its upload was completed. Completing an
+  upload (explicitly, or by the cleanup job) now streams the uploaded object once into a new object
+  that no link was ever signed for, records the size and SHA-256 of the bytes written to that copy,
+  and switches the catalog row to it in the same transaction that makes it ready; the file keeps
+  its id. Reusing the link afterwards only rewrites the now-unreferenced uploaded object, which the
+  cleanup job's orphan sweep removes once it is older than the longest link lifetime plus an hour.
+  The cost is one extra bounded streaming copy per upload, with flat memory. Files that were already
+  ready before this release are not migrated: they keep the object their upload link named, and any
+  such link has expired after at most its signed lifetime.
+- A run's storage write-back now keeps every path its launch delivered read-only. Removing an
+  overlapping read-only grant (an exact file or a folder inside a `read-write` grant) while the run
+  is in flight no longer lets that run write the path back; the file is counted as refused. A
+  read-only grant added during the run is still honoured, and a removed `read-write` grant still
+  writes nothing.
 
 ## 0.1.0 — release candidate
 

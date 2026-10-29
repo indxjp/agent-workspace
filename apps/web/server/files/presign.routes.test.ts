@@ -15,7 +15,7 @@ import {
   createInMemoryObjectStore,
   storageObjectName,
   workspaceFolder,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { SIGNED_UPLOAD_HARD_MAX_BYTES } from '@indx-workspace/contracts/files';
 
@@ -52,13 +52,13 @@ function principalFor(actor: Actor): Principal {
 }
 
 /** The in-memory object store, which cannot sign: what a deployment on a plain store looks like. */
-const unsigningObjects = (): ObjectStoreV2 => createInMemoryObjectStore();
+const unsigningObjects = (): ObjectStore => createInMemoryObjectStore();
 
 /**
  * An in-memory store that also signs: the URL spells out what the route asked the store for.
  * `bindsLength: false` behaves like Azure Blob, whose SAS cannot carry an upload length.
  */
-function signingObjects(bindsLength = true): ObjectStoreV2 {
+function signingObjects(bindsLength = true): ObjectStore {
   const inner = createInMemoryObjectStore();
   return {
     ...inner,
@@ -87,7 +87,7 @@ function signingObjects(bindsLength = true): ObjectStoreV2 {
 let world: CatalogFilesWorld;
 
 function configure(
-  objects: ObjectStoreV2,
+  objects: ObjectStore,
   catalogs = createInMemoryCatalogStore(),
 ): CatalogFilesWorld {
   world = createCatalogFilesWorld({

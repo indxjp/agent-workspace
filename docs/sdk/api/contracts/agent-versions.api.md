@@ -27,6 +27,7 @@ export const AGENT_VERSION_PROBLEM_CODES: {
     readonly agent_not_found: 404;
     readonly agent_policy_not_configured: 503;
     readonly agent_version_not_found: 404;
+    readonly agent_archived: 409;
     readonly agent_version_number_taken: 409;
     readonly no_pointer: 409;
     readonly nothing_to_roll_back: 409;

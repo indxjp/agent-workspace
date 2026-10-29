@@ -19,7 +19,7 @@ import {
   createInMemoryObjectStore,
   openConnectionStore,
   streamToBytes,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { encodeUstar, type TarEntry } from '@agent-workspace/runtime/transfer';
 import { formatStorageUrl } from '@indx-workspace/contracts/storage-url';
@@ -52,7 +52,7 @@ const localEgress = { production: false, allowHosts: [] } as const;
 const BLOCK = 512;
 
 interface Backend {
-  readonly open: (writable: boolean) => Promise<ObjectStoreV2>;
+  readonly open: (writable: boolean) => Promise<ObjectStore>;
   readonly teardown: () => Promise<void>;
 }
 
@@ -111,7 +111,7 @@ async function s3Backend(): Promise<Backend> {
   };
 }
 
-const text = async (store: ObjectStoreV2, key: string): Promise<string | null> => {
+const text = async (store: ObjectStore, key: string): Promise<string | null> => {
   const object = await store.read(key);
   return object === null ? null : Buffer.from(await streamToBytes(object.body)).toString('utf8');
 };
@@ -159,6 +159,8 @@ interface World {
   readonly makeBackend: () => Promise<Backend>;
   agentWrites: boolean;
   grantAccess: 'read' | 'read-write';
+  /** The run is also granted `reports/2026` read only. */
+  nestedReadOnly: boolean;
 }
 
 /**
@@ -199,6 +201,8 @@ describe.each([
    */
   async function run(options: {
     readonly access?: 'read' | 'read-write';
+    /** Also grant `reports/2026` read only at launch. */
+    readonly nestedReadOnly?: boolean;
     readonly after?: Readonly<Record<string, string>>;
     readonly tar?: (folder: string) => Uint8Array;
     readonly duringRun?: (world: World) => Promise<void>;
@@ -223,6 +227,7 @@ describe.each([
       },
       agentWrites: true,
       grantAccess: options.access ?? 'read-write',
+      nestedReadOnly: options.nestedReadOnly ?? false,
     };
     const uploads: string[] = [];
     const audits: StorageWriteBackAuditEvent[] = [];
@@ -268,7 +273,13 @@ describe.each([
       role: 'owner',
       scope: null,
     };
-    const storageGrants = [{ connectionId, prefix: 'reports', access: state.grantAccess }];
+    const grantsOf = (world: World) => [
+      { connectionId, prefix: 'reports', access: world.grantAccess },
+      ...(world.nestedReadOnly
+        ? [{ connectionId, prefix: 'reports/2026', access: 'read' as const }]
+        : []),
+    ];
+    const storageGrants = grantsOf(state);
     const { agents, profiles, models, discover, agent } = await runnableAgent(
       world.workspaceId,
       principal,
@@ -281,7 +292,7 @@ describe.each([
           files: [],
           skillIds: [],
           connectorIds: [],
-          storageGrants: [{ connectionId, prefix: 'reports', access: state.grantAccess }],
+          storageGrants: grantsOf(state),
         },
         toolBundles: [],
         subagents: [],
@@ -345,6 +356,7 @@ describe.each([
             audits.push(event);
             return Promise.resolve();
           },
+          stillRunning: () => Promise.resolve(true),
         });
       },
     });
@@ -447,6 +459,21 @@ describe.each([
     },
   );
 
+  it('[US-STO-12][api][run] keeps a folder read only whose read grant is removed during the run', async () => {
+    const saved = await run({
+      nestedReadOnly: true,
+      after: { '2026/q3.csv': 'q3,43\n', 'top.md': '# Top\n' },
+      duringRun: (world) => {
+        world.nestedReadOnly = false;
+        return Promise.resolve();
+      },
+    });
+    expect(saved.uploads).toEqual(['reports/top.md']);
+    expect(await saved.text('reports/2026/q3.csv')).toBe(CSV);
+    expect(await saved.text('reports/top.md')).toBe('# Top\n');
+    expect(saved.labels).toEqual([expect.stringMatching(/ · 1 written · .* · 1 refused · /u)]);
+  });
+
   const escapes: readonly [string, (folder: string) => Uint8Array][] = [
     [
       'a parent segment',
@@ -504,7 +531,7 @@ describe.each([
   });
 
   it('[US-STO-12][api][run] a connection deleted and recreated under the same name receives nothing', async () => {
-    const recreated: { store?: ObjectStoreV2 } = {};
+    const recreated: { store?: ObjectStore } = {};
     const saved = await run({
       after: { 'summary.md': '# Q3\n' },
       duringRun: async (world) => {

@@ -6,7 +6,7 @@ import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
   type ObjectStoreProvider,
-  type ObjectStoreV2,
+  type ObjectStore,
   type OpenObjectStoreOptions,
   type StorageArea,
 } from '@agent-workspace/core/storage';
@@ -22,9 +22,7 @@ const injected = vi.hoisted(() => ({
     ) => Promise<ObjectStoreProvider>
   >(),
   openRoot:
-    vi.fn<
-      (location: StorageLocation, options?: OpenObjectStoreOptions) => Promise<ObjectStoreV2>
-    >(),
+    vi.fn<(location: StorageLocation, options?: OpenObjectStoreOptions) => Promise<ObjectStore>>(),
 }));
 
 vi.mock('@agent-workspace/core/storage', async (original) => ({
@@ -282,6 +280,11 @@ describe('cloud object-store composition', () => {
 
     await expect(sessionStateBlobStore()).resolves.not.toBeNull();
 
+    // The old store never writes, so its log line must not claim blobs are installed.
+    expect(logInfo).toHaveBeenCalledWith(
+      expect.stringContaining('session-state old blob store opened for reads and purges'),
+    );
+    expect(logInfo).not.toHaveBeenCalledWith(expect.stringContaining('blobs installed'));
     expect(injected.open).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 's3', bucket: 'workspace-objects' }),
       'session-state',
@@ -512,6 +515,24 @@ describe('storage service composition', () => {
   });
 });
 
+describe('skills area opened once', () => {
+  // @story US-STO-08
+  it('[US-STO-08][unit][sdk] the skills runtime reuses the skills store the storage service opened', async () => {
+    setStorageUrl('azblob://account/workspace-objects');
+
+    const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
+    if (files.kind !== 'serving') throw new Error('the files API did not install');
+    const skills = await installSkillsApi(resolveWorkspace, scopes, catalog, files.runtime.storage);
+
+    expect(skills.kind).toBe('serving');
+    expect(injected.open.mock.calls.map(([, area]) => area)).toEqual([
+      'files',
+      'skills',
+      'session-state',
+    ]);
+  });
+});
+
 describe('skills runtime storage service', () => {
   // @story US-STO-08
   it('[US-STO-08][unit][sdk] the skills runtime carries the storage service it is given, and none otherwise', async () => {
@@ -627,7 +648,9 @@ describe('every storage scheme installs the catalog service', () => {
       // Chat attachments run on the files runtime: an upload needs its catalog service and
       // catalog, and the retention purge removes through the same service.
       expect(files.runtime.catalog).toBe(catalog);
-      const remove = vi.spyOn(storage, 'remove').mockResolvedValue({ ok: true, removed: 1 });
+      const remove = vi
+        .spyOn(storage, 'remove')
+        .mockResolvedValue({ ok: true, removed: 1, files: [] });
       installTestDomains({ files });
       try {
         const workspaceId = randomUUID();
@@ -835,7 +858,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
       release = resolve;
     });
     const store = createInMemoryObjectStore();
-    const listPage = vi.fn<ObjectStoreV2['listPage']>(async (prefix, options) => {
+    const listPage = vi.fn<ObjectStore['listPage']>(async (prefix, options) => {
       await gate;
       return store.listPage(prefix, options);
     });
@@ -866,7 +889,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
   it('[US-STO-13][unit][cli] an unknown value starts nothing and is not echoed', async () => {
     useS3Root();
     vi.stubEnv('AW_STORAGE_MIGRATE', 'purge-everything');
-    const listPage = vi.fn<ObjectStoreV2['listPage']>();
+    const listPage = vi.fn<ObjectStore['listPage']>();
     injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
 
     await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners);
@@ -882,7 +905,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
   it('[US-STO-13][unit][cli] unset starts adopt in the background', async () => {
     useS3Root();
     vi.stubEnv('AW_STORAGE_MIGRATE', '');
-    const listPage = vi.fn<ObjectStoreV2['listPage']>();
+    const listPage = vi.fn<ObjectStore['listPage']>();
     injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
     listPage.mockResolvedValue({ entries: [], cursor: null });
 
@@ -903,10 +926,42 @@ describe('AW_STORAGE_MIGRATE composition', () => {
   });
 
   // @story US-STO-13
+  it('[US-STO-13][unit][cli] an old files root that does not open is recorded as an unclean adopt pass', async () => {
+    useS3Root();
+    vi.stubEnv('AW_STORAGE_MIGRATE', 'adopt');
+    const wiring = runLog();
+    await wiring.migrationRuns.record({
+      stage: 'adopt',
+      rowsChecked: 0,
+      legacyRows: 0,
+      mismatches: 0,
+      clean: true,
+      proofVersion: 2,
+    });
+    // The storage service opens the root first; the adopt pass's open of the old root fails.
+    injected.openRoot
+      .mockResolvedValueOnce(createInMemoryObjectStore())
+      .mockRejectedValueOnce(Object.assign(new Error('refused'), { name: 'AccessDenied' }));
+
+    await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners, undefined, wiring);
+
+    await vi.waitFor(() =>
+      expect(logError).toHaveBeenCalledWith(
+        '[compose] AW_STORAGE_MIGRATE=adopt stopped adopting (name=AccessDenied).',
+      ),
+    );
+    expect(await wiring.migrationRuns.latest('adopt')).toMatchObject({
+      clean: false,
+      mismatches: 1,
+      proofVersion: 2,
+    });
+  });
+
+  // @story US-STO-13
   it('[US-STO-13][unit][cli] off starts nothing', async () => {
     useS3Root();
     vi.stubEnv('AW_STORAGE_MIGRATE', 'off');
-    const listPage = vi.fn<ObjectStoreV2['listPage']>();
+    const listPage = vi.fn<ObjectStore['listPage']>();
     injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
 
     await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners);
@@ -919,7 +974,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
     useS3Root();
     vi.stubEnv('AW_STORAGE_MIGRATE', mode);
     vi.stubEnv('CRON_SECRET', '');
-    const listPage = vi.fn<ObjectStoreV2['listPage']>();
+    const listPage = vi.fn<ObjectStore['listPage']>();
     listPage.mockResolvedValue({ entries: [], cursor: null });
     injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
     const locked: string[] = [];

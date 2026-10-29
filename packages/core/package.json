@@ -63,6 +63,10 @@
       "types": "./src/storage/backends.ts",
       "default": "./dist/storage/backends.js"
     },
+    "./daily-cost": {
+      "types": "./src/daily-cost.ts",
+      "default": "./dist/daily-cost.js"
+    },
     "./posture": {
       "types": "./src/posture.ts",
       "default": "./dist/posture.js"

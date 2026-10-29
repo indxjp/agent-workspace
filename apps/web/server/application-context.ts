@@ -39,6 +39,7 @@ import type { PublicSurfaces } from './surfaces/public/runtime';
 import type { Tokens } from './tokens/runtime';
 import type { ToolEndpoint } from './tool-endpoint/env';
 import type { Triggers } from './triggers/runtime';
+import type { WorkspaceFeaturesRuntime } from './workspaces/features-runtime';
 import type { WorkspacesRuntime } from './workspaces/runtime';
 
 /** Every domain the composition root has collected, each fully built. */
@@ -70,6 +71,7 @@ export interface ApplicationContext {
   readonly tokens: Tokens;
   readonly toolEndpoint: ToolEndpoint;
   readonly triggers: Triggers;
+  readonly workspaceFeatures: WorkspaceFeaturesRuntime;
   readonly workspaces: WorkspacesRuntime;
 }
 

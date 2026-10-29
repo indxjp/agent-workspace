@@ -195,3 +195,30 @@ from its tarball for `npx` (D1).
 pnpm 11.28.2 bundles undici 6.28.1, inside CVE-2026-109869 (HIGH, fixed in 6.29.1), which the
 `image-scan` gate reports under `/opt/pnpm` in the `runner` and runtime images. 11.28.8 is the first
 release that bundles 6.29.1 (11.28.6 bundles 6.29.0), so every pin in D5 moves to 11.28.8 together.
+
+## Amendment 2026-10-25: pnpm 12.15.0, a native executable
+
+From pnpm 12 a release is a native executable per platform, `@pnpm/exe.linux-<x64|arm64>` on the
+npm registry. The `pnpm` package's own tarball holds only a script that finds that executable or
+downloads it on first use, which a read-only root filesystem with no egress cannot do. So the D1
+install changes shape, and every pin in D5 moves to 12.15.0 together:
+
+- `Dockerfile` and `runtime.Dockerfile` add one `FROM scratch` stage per architecture,
+  `pnpm-amd64` and `pnpm-arm64`, each `ADD --checksum` of its registry tarball (`PNPM_SHA256_AMD64`,
+  `PNPM_SHA256_ARM64`), and `FROM pnpm-${TARGETARCH} AS pnpm` selects one. The final stage
+  bind-mounts that tarball, unpacks it into `/opt/pnpm` and links `/usr/local/bin/pnpm` to the
+  executable; `PNPM_CLI` is `/opt/pnpm/pnpm`. Only the selected stage is built, and no tarball
+  stays in a layer.
+- `infra/images/npx.mjs` spawns `PNPM_CLI` directly, and still runs a JavaScript entry point
+  (`.js`, `.cjs`, `.mjs`) with its own Node.
+- The E2B runtime template fetches the tarball for its own `process.arch` and refuses any other
+  architecture or checksum.
+
+`runtime.Dockerfile` is no longer free of architecture-specific inputs, but the build's own
+`TARGETARCH` picks the one it has, so a `--platform linux/amd64,linux/arm64` build still needs no
+change to the file. The `npx` forms D1 supports behave as they did under 11.28.8: a trial against
+the 12.15.0 executable with a local bin package ran the `<pkg>` and `-p <pkg> <cmd>` forms, passed
+their exit status through, and failed a command the package does not link with exit status 1.
+pnpm 12 records the pinned pnpm in a leading document of `pnpm-lock.yaml`
+(`packageManagerDependencies`); osv-scanner reads every document, and the tests that read the
+lockfile take the last one.

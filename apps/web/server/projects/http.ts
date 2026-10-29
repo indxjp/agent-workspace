@@ -1,4 +1,5 @@
-import { problemBody } from '../http/result';
+import { refuseIfFeatureDisabled } from '../features/guard';
+import { noStoreResultResponse, problemBody } from '../http/result';
 import { ownerPrincipalIdOf } from '../rbac/owner-principal';
 import { requireResourceAccess, type ResourceAccess } from '../resources/authorise';
 import type { ProjectCreateInput, ProjectPatchInput } from '../../contracts/projects';
@@ -33,6 +34,9 @@ export async function withProjects(
   const actor = await runtime.resolveActor(request);
   if (actor.kind === 'unauthenticated') return problem(401, 'unauthenticated', actor.reason);
   if (actor.kind === 'forbidden') return problem(403, 'forbidden', actor.reason);
+  // ADR-0160 D7: before the workspace's rows are read, so a switched-off feature confirms no row.
+  const refused = await refuseIfFeatureDisabled(request, actor.workspaceId);
+  if (refused !== null) return noStoreResultResponse(refused);
   return fn({ ...(await runtime.forWorkspace(actor.workspaceId)), actor });
 }
 

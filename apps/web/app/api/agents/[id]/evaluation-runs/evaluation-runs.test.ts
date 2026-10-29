@@ -5,8 +5,10 @@ import { EvaluationRunResourceSchema } from '@indx-workspace/contracts/evaluatio
 
 import { GET, POST } from './route';
 import { POST as ADVANCE } from '../evaluation-advance/route';
+import { POST as PROMOTE } from '../promote/route';
 import { createInMemoryAgentStoreProvider } from '../../../../../server/agents/memory-store';
 import { type WorkspaceResolution } from '../../../../../server/agents/runtime';
+import type { AgentStoreProvider } from '../../../../../server/agents/store';
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../../../../server/agent-versions/fixtures';
 import { createAgentVersion } from '../../../../../server/agent-versions/handlers';
 import { createInMemoryAgentVersionStoreProvider } from '../../../../../server/agent-versions/memory-store';
@@ -58,6 +60,8 @@ interface Row {
 let agentOfBuilderA: string;
 let runs: InMemoryRunStore;
 let rows: Map<string, Row>;
+/** Set by a test that evaluates the agent as the built-in Builder (#1848). */
+let builtin = false;
 
 function isActor(value: string): value is Actor {
   return Object.hasOwn(ACTORS, value);
@@ -65,8 +69,22 @@ function isActor(value: string): value is Actor {
 
 beforeEach(async () => {
   rows = new Map();
-  const agents = createInMemoryAgentStoreProvider();
-  const created = await agents.forWorkspace(WORKSPACE).create(
+  builtin = false;
+  const memory = createInMemoryAgentStoreProvider();
+  // The memory store has no built-in rows; the resolvers only read the marker off what `get` returns.
+  const agents: AgentStoreProvider = {
+    forWorkspace: (workspaceId) => {
+      const bound = memory.forWorkspace(workspaceId);
+      return {
+        ...bound,
+        get: async (id) => {
+          const agent = await bound.get(id);
+          return builtin && agent !== null ? { ...agent, builtin: 'builder' } : agent;
+        },
+      };
+    },
+  };
+  const created = await memory.forWorkspace(WORKSPACE).create(
     {
       name: 'Support triage',
       instructions: 'Before any version.',
@@ -78,7 +96,7 @@ beforeEach(async () => {
   );
   if (created.kind !== 'created') throw new Error('the memory store creates the fixture agent');
   agentOfBuilderA = created.agent.id;
-  const versions = createInMemoryAgentVersionStoreProvider({ agents });
+  const versions = createInMemoryAgentVersionStoreProvider({ agents: memory });
   const store = await versions.forWorkspace(WORKSPACE);
   if (store === null) throw new Error('the memory store answers every workspace');
   const saved = await createAgentVersion(
@@ -260,5 +278,22 @@ describe('evaluation run routes (issue #799)', () => {
     const created = EvaluationRunResourceSchema.parse(await (await create('builderA')).json());
     expect((await read('viewer', created.id)).status).toBe(200);
     expect((await read('viewer', '55555555-5555-4555-8555-555555555555')).status).toBe(404);
+  });
+
+  it('runs and scores an evaluation of a built-in agent, which still cannot be promoted (#1848)', async () => {
+    builtin = true;
+    const run = EvaluationRunResourceSchema.parse(await (await create('builderA')).json());
+    const advanced = await advance('builderA', run.id);
+    expect(advanced.status).toBe(200);
+    expect(EvaluationRunResourceSchema.parse(await advanced.json())).toMatchObject({
+      status: 'completed',
+      passed: 2,
+    });
+
+    const promoted = await PROMOTE(request('builderA', 'promote', 'POST', {}), {
+      params: Promise.resolve({ id: agentOfBuilderA }),
+    });
+    expect(promoted.status).toBe(403);
+    expect(await errorOf(promoted)).toMatchObject({ code: 'builtin_agent_read_only' });
   });
 });

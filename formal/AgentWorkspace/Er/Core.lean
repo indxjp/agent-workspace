@@ -49,6 +49,7 @@ inductive SqlType where
   | uuid
   | text
   | boolean
+  | smallint
   | integer
   | bigint
   | numeric (precision scale : Nat)
@@ -65,6 +66,7 @@ def SqlType.toSql : SqlType → String
   | .uuid => "uuid"
   | .text => "text"
   | .boolean => "boolean"
+  | .smallint => "smallint"
   | .integer => "integer"
   | .bigint => "bigint"
   | .numeric p s => s!"numeric({p}, {s})"
@@ -82,6 +84,7 @@ def SqlType.ofSql? (s : String) : Option SqlType :=
   | "uuid" => some .uuid
   | "text" => some .text
   | "boolean" => some .boolean
+  | "smallint" => some .smallint
   | "integer" => some .integer
   | "bigint" => some .bigint
   | "jsonb" => some .jsonb
@@ -238,6 +241,7 @@ inductive TableName where
   | users
   | workspaces
   | workspacePrincipals
+  | workspaceFeatures
   deriving DecidableEq, Repr, Inhabited
 
 namespace TableName
@@ -301,6 +305,7 @@ def toWire : TableName → String
   | .users => "users"
   | .workspaces => "workspaces"
   | .workspacePrincipals => "workspace_principals"
+  | .workspaceFeatures => "workspace_features"
 
 /-- The table a SQL name denotes, if any. -/
 def ofSqlName? : String → Option TableName
@@ -361,6 +366,7 @@ def ofSqlName? : String → Option TableName
   | "users" => some .users
   | "workspaces" => some .workspaces
   | "workspace_principals" => some .workspacePrincipals
+  | "workspace_features" => some .workspaceFeatures
   | _ => none
 
 private theorem ofSqlName?_toWire (t : TableName) : ofSqlName? (toWire t) = some t := by
@@ -376,7 +382,7 @@ instance : WireEnum TableName where
     runtimeProfiles, runtimeVerifications, secrets, sessionMessages, sessionStateBlobs, sessionStateEntries,
     sessionStateStreams, sessionTranscripts, sessions, storageConnections, storageMigrationRuns,
     shareViews,
-    shareRunCharges, shares, skillRevisions, skills, surfaceSessionKeys, triggerDeliveries, triggers, userIdentities, users, workspaces, workspacePrincipals]
+    shareRunCharges, shares, skillRevisions, skills, surfaceSessionKeys, triggerDeliveries, triggers, userIdentities, users, workspaces, workspacePrincipals, workspaceFeatures]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -423,6 +429,7 @@ def idKind? : TableName → Option IdKind
   | sessions => some .session
   | storageConnections => some .storageConnection
   | storageMigrationRuns => some .storageMigrationRun
+  | workspaceFeatures => some .workspaceFeature
   | runs => some .run
   | runTokens => some .runToken
   | runUsageRecords => some .runUsageRecord
@@ -809,7 +816,7 @@ def catalogue : Schema
       { name := "audit_events_actor_principal_workspace_fk", columns := ["workspace_id", "actor_principal_id"], refTable := .workspacePrincipals, refColumns := ["workspace_id", "id"], onDelete := .noAction, inline := false }]
     uniques := []
     checks := [
-      .oneOf "audit_events_action_valid" "action" ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed"],
+      .oneOf "audit_events_action_valid" "action" ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed", "workspace-features-changed"],
       .other "audit_events_details_only_agent_created",
       .other "audit_events_actor_label_not_blank",
       .other "audit_events_subject_label_not_blank",
@@ -1597,7 +1604,9 @@ def catalogue : Schema
       ⟨"skipped_ownerless", .bigint, true⟩,
       ⟨"skipped_path_taken", .bigint, true⟩,
       ⟨"skipped_failed", .bigint, true⟩,
-      ⟨"clean", .boolean, false⟩]
+      ⟨"clean", .boolean, false⟩,
+      ⟨"orphans", .bigint, false⟩,
+      ⟨"proof_version", .smallint, false⟩]
     foreignKeys := []
     uniques := []
     checks := [
@@ -1867,6 +1876,20 @@ def catalogue : Schema
       .other "workspace_principals_revoked_after_activation",
       .other "workspace_principals_acts_for_api_key_only",
       .other "workspace_principals_acts_for_not_self"] }
+  | .workspaceFeatures => {
+    table := .workspaceFeatures, source := "workspace-features.ts", tsExport := "workspaceFeatures", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"feature", .text, true⟩,
+      ⟨"created_at", .timestamptz, true⟩]
+    foreignKeys := [
+      { name := "workspace_features_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true }]
+    uniques := [
+      { name := "workspace_features_workspace_feature_key", columns := ["workspace_id", "feature"], kind := .constraint, partialNullColumns := [] }]
+    checks := [
+      .oneOf "workspace_features_feature_valid" "feature" ["chat", "projects", "files", "skills", "connectors", "runs", "sharing", "surfaces", "triggers", "evaluations", "builder"]] }
 
 /-! ## Looking things up in a table specification -/
 

@@ -124,7 +124,7 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
           log,
           ...(pageSize === undefined ? {} : { pageSize }),
         });
-      return { f, known, legacyObject, run, runs, lines, log };
+      return { f, known, legacyObject, objects, run, runs, lines, log };
     }
 
     // @story US-STO-13
@@ -365,21 +365,34 @@ function defineSuite(enabled: boolean, name: string, setup: () => Promise<Fixtur
     });
 
     // @story US-STO-13
-    it('[US-STO-13][unit][cli] a pass that adopts nothing and finds what the last one found is not recorded again', async () => {
+    it('[US-STO-13][unit][cli] every pass is recorded, an idle one included', async () => {
       const { known, legacyObject, run, runs } = await harness();
       const ws = await known();
       await legacyObject(ws.id, 'a.txt');
       const recorded = vi.spyOn(runs, 'record');
 
-      // The pass that adopts and the first idle one after it differ; idle passes after that do not.
       await run();
       await run();
       await run();
-      expect(recorded).toHaveBeenCalledTimes(2);
 
-      await legacyObject(ws.id, 'b.txt');
-      await run();
       expect(recorded).toHaveBeenCalledTimes(3);
+      expect(await runs.latest('adopt')).toMatchObject({ clean: true, proofVersion: 2 });
+    });
+
+    // @story US-STO-13
+    it('[US-STO-13][unit][cli] a listing that fails is recorded as an unclean pass and still throws', async () => {
+      const { objects, run, runs } = await harness();
+      await run();
+      expect(await runs.latest('adopt')).toMatchObject({ clean: true });
+      vi.spyOn(objects, 'listPage').mockRejectedValueOnce(new Error('the store is down'));
+
+      await expect(run()).rejects.toThrow('the store is down');
+
+      expect(await runs.latest('adopt')).toMatchObject({
+        clean: false,
+        mismatches: 1,
+        proofVersion: 2,
+      });
     });
 
     // @story US-STO-13

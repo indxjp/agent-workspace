@@ -15,6 +15,7 @@ import {
   type AgentVersionProblemCode,
 } from '@indx-workspace/contracts/agent-versions';
 
+import type { AgentRecord } from '../agents/contract';
 import { problem, type ApiResult } from '../http/result';
 
 /**
@@ -218,6 +219,19 @@ export function agentNameConflict(name: string): ApiResult {
   return versionProblem(
     'agent_name_conflict',
     `This workspace already has an agent named ${JSON.stringify(name)}.`,
+  );
+}
+
+/**
+ * `409 agent_archived` for a version save or a pointer move on an archived agent, or `null` for an
+ * active one. The code and status are the run refusal's (issue #1851): an archived agent is frozen
+ * whatever the door, so each write path asks this first, before it reads or writes anything.
+ */
+export function agentArchivedRefusal(agent: AgentRecord): ApiResult | null {
+  if (agent.archivedAt === undefined) return null;
+  return versionProblem(
+    'agent_archived',
+    'This agent is archived; restore it before moving a pointer or saving a version.',
   );
 }
 

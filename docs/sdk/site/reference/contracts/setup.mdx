@@ -21,6 +21,7 @@ description: "The @indx-workspace/contracts/setup exports, sorted alphabetically
 | `admin.platforms` | `readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | Yes |  |
 | `admin.modelBaseUrl` | `undefined \| string` | No |  |
 | `content.openapiDocument` | `undefined \| string` | No |  |
+| `admin.features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No |  |
 
 ## CompleteSetupAnswersSchema
 
@@ -40,6 +41,7 @@ Every question that applies answered: what the renderer writes a project from.
 | `admin.platforms` | `readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | Yes |  |
 | `admin.modelBaseUrl` | `undefined \| string` | No |  |
 | `content.openapiDocument` | `undefined \| string` | No |  |
+| `admin.features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No |  |
 
 ## HEX_COLOUR_PATTERN
 
@@ -95,9 +97,9 @@ The model providers first-run setup offers: `MODEL_PROVIDERS` without
 
 ## SETUP_QUESTIONS
 
-The twelve setup questions, in the order they are asked; frozen throughout.
+The thirteen setup questions, in the order they are asked; frozen throughout.
 
-Value: `Object.freeze([ frozenQuestion(themeQuestion), frozenQuestion(sandboxQuestion), frozenQuestion(modelProviderQuestion), frozenQuestion(modelBaseUrlQuestion), frozenQuestion(agentNameQuestion), frozenQuestion(engineQuestion), frozenQuestion(internalToolsQuestion), frozenQuestion(openapiDocumentQuestion), frozenQuestion(permissionsQuestion), frozenQuestion(surfaceTitleQuestion), frozenQuestion(brandColourQuestion), frozenQuestion(platformsQuestion), ] as const)`
+Value: `Object.freeze([ frozenQuestion(themeQuestion), frozenQuestion(sandboxQuestion), frozenQuestion(modelProviderQuestion), frozenQuestion(modelBaseUrlQuestion), frozenQuestion(agentNameQuestion), frozenQuestion(engineQuestion), frozenQuestion(internalToolsQuestion), frozenQuestion(openapiDocumentQuestion), frozenQuestion(permissionsQuestion), frozenQuestion(surfaceTitleQuestion), frozenQuestion(brandColourQuestion), frozenQuestion(platformsQuestion), frozenQuestion(featuresQuestion), ] as const)`
 
 ## SETUP_SANDBOX_CHOICES
 
@@ -152,6 +154,7 @@ free text in a stated grammar.
 | `embedder.surfaceTitle` | `undefined \| string` | No |  |
 | `embedder.brandColour` | `undefined \| string` | No |  |
 | `admin.platforms` | `undefined \| readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | No |  |
+| `admin.features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No |  |
 
 ## SetupAnswersSchema
 
@@ -171,6 +174,7 @@ Answers given so far, keyed by question id; any may be missing, an unknown id is
 | `embedder.surfaceTitle` | `undefined \| string` | No |  |
 | `embedder.brandColour` | `undefined \| string` | No |  |
 | `admin.platforms` | `undefined \| readonly ("none" \| "aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise")[]` | No |  |
+| `admin.features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No |  |
 
 ## SetupAudience
 
@@ -241,6 +245,7 @@ The condition of a conditional question: a multi answer includes a choice, or a 
 - `"embedder.surfaceTitle"`
 - `"embedder.brandColour"`
 - `"admin.platforms"`
+- `"admin.features"`
 
 ## SetupSandboxChoice
 

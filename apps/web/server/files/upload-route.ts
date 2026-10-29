@@ -12,6 +12,7 @@ import type { CatalogFile } from '../storage/store';
 import type { StorageService } from '../storage/service';
 import {
   attachmentsRefusal,
+  lastModifiedOf,
   problem,
   reservedFileWriteRefusal,
   uploadInProgress,
@@ -19,7 +20,7 @@ import {
   type FileResult,
 } from './handlers';
 import { boundedBodyStream, storageContextOf, tooLarge } from './http';
-import { ownershipOfWriteTarget } from './ownership';
+import { ownershipOfFileOwner } from './ownership';
 
 function created(row: CatalogFile): FileResult {
   const file: FileResource =
@@ -38,9 +39,19 @@ function created(row: CatalogFile): FileResult {
           kind: 'file',
           sizeBytes: row.sizeBytes,
           contentType: row.contentType,
-          lastModified: null,
+          lastModified: lastModifiedOf(row),
         };
   return { status: 201, kind: 'json', body: { file } };
+}
+
+/**
+ * The request's `Content-Type`, as the presign contract bounds a declared type (1..255 characters),
+ * or `null` so the name decides. It is only recorded: a download answers with a type from the
+ * closed table (`downloadContentType`), never with this text.
+ */
+function declaredContentType(request: Request): string | null {
+  const declared = request.headers.get('content-type')?.trim() ?? '';
+  return declared.length > 0 && declared.length <= 255 ? declared : null;
 }
 
 const nameConflict = (path: string): FileResult =>
@@ -104,26 +115,27 @@ export async function saveUpload(
   const bounded = boundedBodyStream(request, MAX_UPLOAD_BYTES);
   if (!bounded.ok) return bounded.result;
   // The ownership read before this call can be stale: another member may have written the path
-  // since, so decide again before replacing it (FX-1).
-  // ponytail: not atomic with the reserve, so a replace can race an ownership change by
-  // milliseconds; check the owner inside `reserve` to close it.
-  const denied = await recheckResourceAccess(
-    request,
-    principal,
-    ownershipOfWriteTarget(target.key),
-  );
-  if (denied !== null) {
-    await bounded.body.cancel().catch(() => undefined);
-    return { ...denied, kind: 'json' };
-  }
+  // since. The file a replacement takes the path from is decided again, as the reservation read
+  // it under its lock (FX-1, #1991 C1).
+  const refusal: { denied: FileResult | null } = { denied: null };
   const saved = await storage.save(storageContextOf(principal), {
     area: 'files',
     path: target.key,
     body: bounded.body,
     maxBytes: MAX_UPLOAD_BYTES,
-    replace: true,
+    contentType: declaredContentType(request),
+    replace: async (replaced) => {
+      const denied = await recheckResourceAccess(
+        request,
+        principal,
+        ownershipOfFileOwner(replaced),
+      );
+      refusal.denied = denied === null ? null : { ...denied, kind: 'json' };
+      return denied === null;
+    },
   });
   if (saved.ok) return created(saved.row);
+  if (refusal.denied !== null) return refusal.denied;
   switch (saved.code) {
     case 'too_large':
       return tooLarge('sent more than that and was not read to the end', MAX_UPLOAD_BYTES);
@@ -131,8 +143,9 @@ export async function saveUpload(
     case 'path_changed':
       return uploadInProgress();
     case 'path_taken':
-      // A folder (or anything that cannot be replaced) holds the path.
-      return nameConflict(target.key);
+      // The caller may not replace the file there, or a folder (anything that cannot be replaced)
+      // holds the path.
+      return refusal.denied ?? nameConflict(target.key);
     case 'invalid_path':
       return problem(400, 'invalid_path', '"path" is not a valid file path.');
   }

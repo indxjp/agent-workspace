@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Writable } from 'node:stream';
@@ -9,24 +9,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   defineObjectStoreContract,
-  defineObjectStoreV2Contract,
-  type ObjectStoreV2ContractFixture,
+  defineObjectKeyContract,
+  type ObjectStoreContractFixture,
 } from './contract.js';
 import {
+  createFakeGcsObjectStore,
   createGcsObjectStore,
   createGcsObjectStoreFromConfig,
   createGcsObjectStoreProvider,
   createNativeGcsClient,
+  GcsEndpointForbiddenError,
   gcsStorageOptions,
   type GcsClient,
-  type GcsObjectContent,
   type GcsStoredObject,
 } from './gcs-store.js';
-import { ObjectConflictError, type PutObjectInput } from './object-store.js';
-import { bytesToStream, resolveRange, streamToBytes } from './streams.js';
+import { ObjectConflictError } from './object-store.js';
+import { bytesToStream, listAll, readWhole, resolveRange, streamToBytes } from './streams.js';
 
-// Points every client the store builds at a local stub while set. The store's config has no
-// endpoint, so production keeps none; a custom endpoint drops auth unless asked to keep it.
+// Points every client the store builds at a local stub while set, over any endpoint its config
+// names; a custom endpoint drops auth unless asked to keep it.
 const redirect = vi.hoisted(() => ({ apiEndpoint: '' }));
 vi.mock('@google-cloud/storage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@google-cloud/storage')>();
@@ -106,33 +107,9 @@ function createFakeGcsClient(): GcsClient & { readonly objects: Map<string, Fake
   });
   return {
     objects,
-    write(name: string, input: PutObjectInput): Promise<void> {
-      clock += 1;
-      objects.set(name, {
-        body: Uint8Array.from(input.body),
-        contentType: input.contentType ?? null,
-        contentTypeKnown: input.contentType !== undefined && input.contentType !== null,
-        lastModified: new Date(clock * 1_000),
-        generation: clock,
-      });
-      return Promise.resolve();
-    },
-    read(name: string): Promise<GcsObjectContent | null> {
-      const object = objects.get(name);
-      return Promise.resolve(
-        object === undefined ? null : { ...metadata(name, object), body: object.body },
-      );
-    },
     delete(name: string): Promise<void> {
       objects.delete(name);
       return Promise.resolve();
-    },
-    list(prefix: string): Promise<readonly GcsStoredObject[]> {
-      return Promise.resolve(
-        [...objects.entries()]
-          .filter(([name]) => name.startsWith(prefix))
-          .map(([name, object]) => metadata(name, object)),
-      );
     },
     copy(sourceName: string, destinationName: string): Promise<void> {
       const source = objects.get(sourceName);
@@ -205,7 +182,7 @@ function createFakeGcsClient(): GcsClient & { readonly objects: Map<string, Fake
   };
 }
 
-function setup(): Promise<ObjectStoreV2ContractFixture> {
+function setup(): Promise<ObjectStoreContractFixture> {
   const client = createFakeGcsClient();
   return Promise.resolve({
     provider: createGcsObjectStoreProvider({ client }),
@@ -213,34 +190,71 @@ function setup(): Promise<ObjectStoreV2ContractFixture> {
       client.objects.clear();
       return Promise.resolve();
     },
-    plantRaw: (key, bytes) => client.write(key, { body: bytes }),
+    plantRaw: async (key, bytes) => {
+      await client.writeStream(key, bytes, {});
+    },
   });
 }
 
 defineObjectStoreContract('Google Cloud Storage (offline fake)', setup);
-defineObjectStoreV2Contract('Google Cloud Storage (offline fake)', setup);
 
 // The real SDK adapter against fake-gcs-server over HTTP. The live acceptance fixture stays the
 // proof for Google Cloud Storage itself (the emulator does not verify signatures).
 //
-// Only the v1 contract: fake-gcs-server 1.56.1 returns every common prefix on every page of a
-// delimited listing and does not count prefixes against maxResults (GCS counts items and prefixes
-// together), so the v2 contract's paging case fails on the emulator, not on the store. The v2
-// read and write paths over this emulator are exercised by tests/load/object-store-round-trip.
+// Only the keys-and-tenants contract: fake-gcs-server 1.56.1 returns every common prefix on every
+// page of a delimited listing and does not count prefixes against maxResults (GCS counts items and
+// prefixes together), so the full contract's paging case fails on the emulator, not on the store.
+// The read and write paths over this emulator are exercised by tests/load/object-store-round-trip.
 const gcsEndpoint = process.env['TEST_GCS_ENDPOINT']?.trim() ?? '';
 if (gcsEndpoint !== '') {
-  const storage = new Storage({ apiEndpoint: gcsEndpoint, projectId: 'aw-test' });
-  const setupEmulator = async (): Promise<ObjectStoreV2ContractFixture> => {
-    const [bucket] = await storage.createBucket(`aw-${randomUUID()}`);
-    return {
-      provider: createGcsObjectStoreProvider({ client: createNativeGcsClient(bucket) }),
-      teardown: async () => {
-        await bucket.deleteFiles({ force: true });
-        await bucket.delete();
-      },
-    };
-  };
-  defineObjectStoreContract('Google Cloud Storage (fake-gcs-server)', setupEmulator);
+  // The factory tests/load opens its store with, so this leg also proves it.
+  const setupEmulator = (): Promise<ObjectStoreContractFixture> =>
+    createFakeGcsObjectStore(gcsEndpoint);
+  defineObjectKeyContract('Google Cloud Storage (fake-gcs-server)', setupEmulator);
+
+  // Owner decision (c) on #1746: a foreign `name/` placeholder object (a console "create folder")
+  // is hidden: never a file entry, and the folder it implies lists as empty, as on S3 and Azure.
+  it('hides a foreign folder placeholder object from every fake-gcs-server listing', async () => {
+    const { provider, teardown, plantRaw } = await createFakeGcsObjectStore(gcsEndpoint);
+    try {
+      const workspace = '11111111-1111-4111-8111-111111111111';
+      const store = provider.forWorkspace(workspace);
+      await store.write('docs/real.txt', new TextEncoder().encode('real'), {});
+      await plantRaw(`workspaces/${workspace}/docs/console-folder/`, new Uint8Array());
+      await plantRaw(`workspaces/${workspace}/docs/console-folder/inner/`, new Uint8Array());
+
+      const keys = async (prefix: string, recursive: boolean): Promise<string[]> =>
+        (await listAll(store, prefix, { recursive })).map((entry) => `${entry.kind}:${entry.key}`);
+      await expect(keys('docs', true)).resolves.toEqual(['file:docs/real.txt']);
+      await expect(keys('docs', false)).resolves.toEqual([
+        'folder:docs/console-folder',
+        'file:docs/real.txt',
+      ]);
+      await expect(keys('docs/console-folder', true)).resolves.toEqual([]);
+      await expect(keys('docs/console-folder', false)).resolves.toEqual([
+        'folder:docs/console-folder/inner',
+      ]);
+    } finally {
+      await teardown();
+    }
+  });
+
+  it('copy() copies bytes and content type on fake-gcs-server and ignores a missing source', async () => {
+    const { provider, teardown } = await setupEmulator();
+    try {
+      const store = provider.forWorkspace('11111111-1111-4111-8111-111111111111');
+      await store.write('from.txt', new TextEncoder().encode('payload'), {
+        contentType: 'text/plain',
+      });
+      await store.copy('from.txt', 'to.txt');
+      await store.copy('gone.txt', 'never.txt');
+      expect(await store.head('to.txt')).toMatchObject({ sizeBytes: 7, contentType: 'text/plain' });
+      expect(await store.head('from.txt')).not.toBeNull();
+      expect(await store.head('never.txt')).toBeNull();
+    } finally {
+      await teardown();
+    }
+  });
 }
 
 describe('GCS deployment prefixes', () => {
@@ -252,11 +266,11 @@ describe('GCS deployment prefixes', () => {
     const skills = createGcsObjectStoreProvider({ client, keyPrefix: 'skills' }).forWorkspace(
       '11111111-1111-4111-8111-111111111111',
     );
-    await files.put('shared.txt', { body: new TextEncoder().encode('file') });
-    await skills.put('shared.txt', { body: new TextEncoder().encode('skill') });
+    await files.write('shared.txt', new TextEncoder().encode('file'), {});
+    await skills.write('shared.txt', new TextEncoder().encode('skill'), {});
 
-    expect(new TextDecoder().decode((await files.get('shared.txt'))?.body)).toBe('file');
-    expect(new TextDecoder().decode((await skills.get('shared.txt'))?.body)).toBe('skill');
+    expect(new TextDecoder().decode((await readWhole(files, 'shared.txt'))?.body)).toBe('file');
+    expect(new TextDecoder().decode((await readWhole(skills, 'shared.txt'))?.body)).toBe('skill');
     expect([...client.objects.keys()].sort()).toEqual([
       'files/workspaces/11111111-1111-4111-8111-111111111111/shared.txt',
       'skills/workspaces/11111111-1111-4111-8111-111111111111/shared.txt',
@@ -283,12 +297,14 @@ describe('GCS deployment prefixes', () => {
       'files/workspaces/11111111-1111-4111-8111-111111111111/foreign%name.txt',
       foreignObject,
     );
-    await store.put('visible.txt', { body: new TextEncoder().encode('visible') });
+    await store.write('visible.txt', new TextEncoder().encode('visible'), {});
 
-    await expect(store.list('')).resolves.toEqual([
+    // A delimited listing reports the placeholder's prefix as a folder, as S3 and Azure do.
+    await expect(listAll(store, '')).resolves.toEqual([
+      { kind: 'folder', key: 'reports' },
       expect.objectContaining({ kind: 'file', key: 'visible.txt' }),
     ]);
-    await expect(store.listPrefix('')).resolves.toEqual([
+    await expect(listAll(store, '', { recursive: true })).resolves.toEqual([
       expect.objectContaining({ kind: 'file', key: 'visible.txt' }),
     ]);
   });
@@ -296,10 +312,10 @@ describe('GCS deployment prefixes', () => {
   it('lists every object of the raw store under an empty prefix, in code-unit order', async () => {
     const store = createGcsObjectStore({ client: createFakeGcsClient() });
     for (const key of ['b.txt', 'a/z.txt', 'B.txt']) {
-      await store.put(key, { body: new TextEncoder().encode(key) });
+      await store.write(key, new TextEncoder().encode(key), {});
     }
 
-    const listed = await store.listPrefix('');
+    const { entries: listed } = await store.listPage('', { recursive: true });
 
     expect(listed.map((entry) => entry.key)).toEqual(['B.txt', 'a/z.txt', 'b.txt']);
   });
@@ -379,6 +395,62 @@ describe('native GCS client errors', () => {
     }
   });
 
+  // #1991 A3: the media request starts lazily, after `readStream` resolved with the metadata.
+  it('[US-STO-12][unit][sdk] a delayed download refusal never exposes its bearer token', async () => {
+    const token = `ya29.${randomUUID()}`;
+    const stub = createServer((request, response) => {
+      if (request.url?.includes('alt=media') === true) {
+        response.writeHead(403, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { code: 403, message: `denied Bearer ${token}` } }));
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          name: 'ws/a.txt',
+          bucket: 'acme-data',
+          size: '4',
+          generation: '7',
+          updated: '2026-10-28T00:00:00.000Z',
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => stub.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = stub.address() as AddressInfo;
+      const storage = new Storage({
+        ...(await gcsStorageOptions({
+          bucket: 'acme-data',
+          projectId: 'acme-prod',
+          accessToken: token,
+        })),
+        apiEndpoint: `http://127.0.0.1:${String(port)}`,
+        useAuthWithCustomEndpoint: true,
+        retryOptions: { autoRetry: false },
+      });
+
+      const found = await createNativeGcsClient(storage.bucket('acme-data')).readStream(
+        'ws/a.txt',
+        undefined,
+      );
+      expect(found?.object.sizeBytes).toBe(4);
+      const error: unknown = await streamToBytes(
+        found?.body ?? new ReadableStream<Uint8Array>(),
+      ).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(Error);
+      const chain = (value: unknown): string =>
+        value instanceof Error
+          ? `${String(value)}\n${value.stack ?? ''}\n${JSON.stringify(value)}\n${chain(value.cause)}`
+          : '';
+      expect(chain(error)).not.toContain(token);
+      expect(error).toMatchObject({ statusCode: 403 });
+    } finally {
+      stub.closeAllConnections();
+      stub.close();
+    }
+  });
+
   it('[US-STO-12][unit][sdk] keep the HTTP status and drop the request that carries the bearer token', async () => {
     const token = `ya29.${randomUUID()}`;
     // Shaped like a GaxiosError: the request config, with its Authorization header, rides along.
@@ -403,6 +475,41 @@ describe('native GCS client errors', () => {
     expect(String((error as Error).cause)).toContain('HTTP 403');
   });
 
+  // #1925 item 15: a bucket deleted after delivery must fail a write-back, not count as a conflict.
+  it('[US-STO-12][unit][sdk] a missing bucket is an error on head and read, a missing object is null', async () => {
+    // The JSON API's own 404 bodies for objects.get: the bucket's, then the object's.
+    let body = { error: { code: 404, message: 'The specified bucket does not exist.' } };
+    const stub = createServer((_request, response) => {
+      response.writeHead(404, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(body));
+    });
+    await new Promise<void>((resolve) => stub.listen(0, '127.0.0.1', resolve));
+    try {
+      const { port } = stub.address() as AddressInfo;
+      const storage = new Storage({
+        ...(await gcsStorageOptions({
+          bucket: 'gone-bucket',
+          projectId: 'acme-prod',
+          accessToken: `ya29.${randomUUID()}`,
+        })),
+        apiEndpoint: `http://127.0.0.1:${String(port)}`,
+        useAuthWithCustomEndpoint: true,
+        retryOptions: { autoRetry: false },
+      });
+      const client = createNativeGcsClient(storage.bucket('gone-bucket'));
+
+      await expect(client.head('ws/a.txt')).rejects.toThrow(/bucket/iu);
+      await expect(client.readStream('ws/a.txt', undefined)).rejects.toThrow(/bucket/iu);
+
+      body = { error: { code: 404, message: 'No such object: gone-bucket/ws/a.txt' } };
+      await expect(client.head('ws/a.txt')).resolves.toBeNull();
+      await expect(client.readStream('ws/a.txt', undefined)).resolves.toBeNull();
+    } finally {
+      stub.closeAllConnections();
+      stub.close();
+    }
+  });
+
   it('[US-STO-12][unit][sdk] let the store own conflict errors through unchanged', async () => {
     const bucket = { file: () => ({}) } as unknown as Bucket;
     const error: unknown = await createNativeGcsClient(bucket)
@@ -421,6 +528,135 @@ describe('native GCS client errors', () => {
         credentials: { client_email: 'a@b.c', private_key: 'key' },
       }),
     ).rejects.toThrow('either credentials or an access token, not both');
+  });
+});
+
+// Live GCS (#1835 follow-up): a configured store sanitises provider errors, and it wrapped the
+// caller's own failing body as "Google Cloud Storage write failed." too. fake-gcs-server runs the
+// unsanitised native client, so only a configured store over a stub shows it.
+describe('a configured GCS store whose caller body fails', () => {
+  it('rejects with the body error, not a sanitised provider error', async () => {
+    const server = await recordingServer(() => ({ status: 200, body: {} }));
+    try {
+      const store = await createGcsObjectStoreFromConfig({
+        bucket: 'acme-data',
+        projectId: 'acme-prod',
+        accessToken: `ya29.${randomUUID()}`,
+        apiEndpoint: server.url,
+        checkBucketOnOpen: false,
+      });
+      let pulls = 0;
+      const failing = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          pulls += 1;
+          if (pulls > 2) controller.error(new Error('source broke'));
+          else controller.enqueue(new Uint8Array(1024).fill(7));
+        },
+      });
+      await expect(store.write('half.bin', failing, {})).rejects.toThrow('source broke');
+      // A provider failure is still sanitised.
+      const refused = await recordingServer(() => ({ status: 503, body: { error: 'down' } }));
+      try {
+        const down = await createGcsObjectStoreFromConfig({
+          bucket: 'acme-data',
+          projectId: 'acme-prod',
+          accessToken: `ya29.${randomUUID()}`,
+          apiEndpoint: refused.url,
+          checkBucketOnOpen: false,
+          timeoutMs: 1_000,
+        });
+        await expect(down.write('a.txt', new Uint8Array([1]), {})).rejects.toThrow(
+          'Google Cloud Storage write failed.',
+        );
+      } finally {
+        refused.close();
+      }
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe('a GCS store that must dial its endpoint', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('[US-STO-12][unit][sdk] is refused before any request when STORAGE_EMULATOR_HOST redirects the SDK', async () => {
+    const emulator = await recordingServer(() => ({ status: 200, body: {} }));
+    vi.stubEnv('STORAGE_EMULATOR_HOST', emulator.url);
+    const config = {
+      bucket: 'acme-data',
+      projectId: 'acme-prod',
+      accessToken: `ya29.${randomUUID()}`,
+      checkBucketOnOpen: false,
+    } as const;
+    try {
+      // The SDK honours the variable by itself, so only the flag stops the redirect.
+      await expect(createGcsObjectStoreFromConfig(config)).resolves.toBeDefined();
+      await expect(
+        createGcsObjectStoreFromConfig({ ...config, requireApiEndpoint: true }),
+      ).rejects.toBeInstanceOf(GcsEndpointForbiddenError);
+      expect(emulator.requests).toEqual([]);
+    } finally {
+      emulator.close();
+    }
+  });
+
+  it('[US-STO-12][unit][sdk] opens when the SDK keeps the Google endpoint', async () => {
+    await expect(
+      createGcsObjectStoreFromConfig({
+        bucket: 'acme-data',
+        projectId: 'acme-prod',
+        accessToken: `ya29.${randomUUID()}`,
+        checkBucketOnOpen: false,
+        requireApiEndpoint: true,
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('[US-STO-12][unit][sdk] dials a configured endpoint, and is still refused when STORAGE_EMULATOR_HOST redirects it', async () => {
+    const configured = await recordingServer(() => ({
+      status: 200,
+      body: { kind: 'storage#objects' },
+    }));
+    const emulator = await recordingServer(() => ({ status: 200, body: {} }));
+    const token = `ya29.${randomUUID()}`;
+    const config = {
+      bucket: 'acme-data',
+      projectId: 'acme-prod',
+      accessToken: token,
+      apiEndpoint: configured.url,
+      requireApiEndpoint: true,
+    } as const;
+    try {
+      vi.stubEnv('STORAGE_EMULATOR_HOST', emulator.url);
+      await expect(createGcsObjectStoreFromConfig(config)).rejects.toBeInstanceOf(
+        GcsEndpointForbiddenError,
+      );
+      vi.unstubAllEnvs();
+      expect(configured.requests).toEqual([]);
+      expect(emulator.requests).toEqual([]);
+
+      const store = await createGcsObjectStoreFromConfig(config);
+      await expect(store.listPage('', { limit: 1 })).resolves.toEqual({
+        entries: [],
+        cursor: null,
+      });
+      // The open's one-object bucket check, then the listing; both carry the connection's token.
+      expect(configured.requests.map(({ method, url }) => `${method} ${url}`)).toEqual([
+        expect.stringMatching(/^GET \/storage\/v1\/b\/acme-data\/o\?/u),
+        expect.stringMatching(/^GET \/storage\/v1\/b\/acme-data\/o\?/u),
+      ]);
+      expect(configured.requests.map(({ authorization }) => authorization)).toEqual([
+        `Bearer ${token}`,
+        `Bearer ${token}`,
+      ]);
+      expect(emulator.requests).toEqual([]);
+    } finally {
+      configured.close();
+      emulator.close();
+    }
   });
 });
 
@@ -465,8 +701,11 @@ describe('a GCS store opened with an access token', () => {
         entries: [],
         cursor: null,
       });
-      await expect(store.list('')).resolves.toEqual([]);
-      await expect(store.get('a.txt')).resolves.toBeNull();
+      await expect(store.listPage('', { recursive: true })).resolves.toEqual({
+        entries: [],
+        cursor: null,
+      });
+      await expect(store.read('a.txt')).resolves.toBeNull();
       await expect(store.write('a.txt', new TextEncoder().encode('a'), {})).rejects.toThrow();
       await store.createSignedUrl?.('a.txt', { method: 'GET' }).catch(() => undefined);
 
@@ -481,9 +720,19 @@ describe('a GCS store opened with an access token', () => {
   });
 });
 
+/** GCS's `md5Hash`: the base64 MD5 of the stored bytes. */
+function md5Of(text: string): string {
+  return createHash('md5').update(text).digest('base64');
+}
+
 describe('native GCS client streamed write', () => {
   it('returns the generation of its own upload, not one a later metadata call sees', async () => {
-    const written = { size: '4', updated: '2026-10-22T00:00:00.000Z', generation: '5' };
+    const written = {
+      size: '4',
+      updated: '2026-10-22T00:00:00.000Z',
+      generation: '5',
+      md5Hash: md5Of('mine'),
+    };
     // Another writer replaced the object between the upload and any follow-up metadata call.
     const replaced = { ...written, generation: '6' };
     const file = {
@@ -511,5 +760,98 @@ describe('native GCS client streamed write', () => {
     );
 
     expect(object.etag).toBe('5');
+  });
+
+  // #1746: the SDK's own check deleted a mismatched upload with no precondition, so it could
+  // delete a concurrent writer's newer generation.
+  it('deletes an upload whose bytes do not match only at its own generation', async () => {
+    const deletes: unknown[] = [];
+    const uploading = (md5Hash: string) => {
+      const file = {
+        name: 'ws/a.txt',
+        metadata: {},
+        createWriteStream: () =>
+          new Writable({
+            write: (_chunk, _encoding, callback) => {
+              callback();
+            },
+            final: (callback) => {
+              file.metadata = {
+                size: '4',
+                updated: '2026-10-22T00:00:00.000Z',
+                generation: '7',
+                md5Hash,
+              };
+              callback();
+            },
+          }),
+        delete: (options: unknown) => {
+          deletes.push(options);
+          return Promise.resolve([{}]);
+        },
+      };
+      return { file: () => file } as unknown as Bucket;
+    };
+    const body = (): Uint8Array => new TextEncoder().encode('mine');
+
+    await expect(
+      createNativeGcsClient(uploading(md5Of('else'))).writeStream('ws/a.txt', body(), {}),
+    ).rejects.toThrow(Error);
+    expect(deletes).toEqual([{ ifGenerationMatch: 7 }]);
+
+    deletes.length = 0;
+    const object = await createNativeGcsClient(uploading(md5Of('mine'))).writeStream(
+      'ws/a.txt',
+      body(),
+      {},
+    );
+    expect(object.etag).toBe('7');
+    expect(deletes).toEqual([]);
+  });
+
+  it('reports a failed cleanup of a mismatched upload by its status alone', async () => {
+    const providerWords = `provider words ${randomUUID()}`;
+    const failingDelete = (): Promise<never> =>
+      Promise.reject(Object.assign(new Error(providerWords), { code: 503 }));
+    const file = {
+      name: 'ws/a.txt',
+      metadata: {},
+      createWriteStream: () =>
+        new Writable({
+          write: (_chunk, _encoding, callback) => {
+            callback();
+          },
+          final: (callback) => {
+            file.metadata = {
+              size: '4',
+              updated: '2026-10-22T00:00:00.000Z',
+              generation: '7',
+              md5Hash: md5Of('else'),
+            };
+            callback();
+          },
+        }),
+      delete: failingDelete,
+    };
+    const bucket = { file: () => file } as unknown as Bucket;
+
+    const failure: unknown = await createNativeGcsClient(bucket)
+      .writeStream('ws/a.txt', new TextEncoder().encode('mine'), {})
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(failure).toBeInstanceOf(Error);
+    const { message, cause } = failure as Error;
+    expect(message).toBe('Google Cloud Storage stored bytes that differ from the ones sent.');
+    expect(cause).toMatchObject({
+      message: 'Google Cloud Storage integrity cleanup failed.',
+      statusCode: 503,
+    });
+    expect(JSON.stringify(failure, Object.getOwnPropertyNames(failure))).not.toContain(
+      providerWords,
+    );
+    expect(String((cause as Error).cause)).not.toContain(providerWords);
   });
 });

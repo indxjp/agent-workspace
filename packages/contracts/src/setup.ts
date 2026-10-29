@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { AGENT_PERMISSION_KEYS } from './agents.js';
 import { DEFAULT_ENGINE_ID, ENGINE_IDS } from './engines.js';
+import { FEATURE_IDS, FeatureListSchema } from './features.js';
 import { HOSTED_PLATFORM_IDS } from './platform-ids.js';
 import { NAME_KEY_PATTERN } from './project-file.js';
 import { MODEL_PROVIDERS, type ModelProvider } from './runs.js';
@@ -414,6 +415,17 @@ const platformsQuestion: SetupQuestion<'admin.platforms', typeof platformsSchema
   schema: platformsSchema,
 };
 
+const featuresQuestion: SetupQuestion<'admin.features', typeof FeatureListSchema> = {
+  id: 'admin.features',
+  flag: 'features',
+  audience: 'admin',
+  prompt: 'Which features should this deployment include?',
+  answer: { kind: 'multi', choices: FEATURE_IDS, max: FEATURE_IDS.length },
+  recommended: [...FEATURE_IDS],
+  writes: ['agent-workspace.yaml'],
+  schema: FeatureListSchema,
+};
+
 function frozenCondition(when: SetupQuestionCondition): SetupQuestionCondition {
   return 'oneOf' in when
     ? Object.freeze({ id: when.id, oneOf: Object.freeze([...when.oneOf]) })
@@ -442,7 +454,7 @@ function frozenQuestion<Id extends string, Schema extends z.ZodType<string | rea
   });
 }
 
-/** The twelve setup questions, in the order they are asked; frozen throughout. */
+/** The thirteen setup questions, in the order they are asked; frozen throughout. */
 export const SETUP_QUESTIONS = Object.freeze([
   frozenQuestion(themeQuestion),
   frozenQuestion(sandboxQuestion),
@@ -456,6 +468,7 @@ export const SETUP_QUESTIONS = Object.freeze([
   frozenQuestion(surfaceTitleQuestion),
   frozenQuestion(brandColourQuestion),
   frozenQuestion(platformsQuestion),
+  frozenQuestion(featuresQuestion),
 ] as const);
 
 export type SetupQuestionId = (typeof SETUP_QUESTIONS)[number]['id'];
@@ -475,6 +488,7 @@ const setupAnswersShape = z
     [surfaceTitleQuestion.id]: surfaceTitleQuestion.schema,
     [brandColourQuestion.id]: brandColourQuestion.schema,
     [platformsQuestion.id]: platformsQuestion.schema,
+    [featuresQuestion.id]: featuresQuestion.schema.optional(),
   })
   .strict();
 

@@ -2,6 +2,7 @@ import {
   IDENTITY_PRINCIPAL_KINDS,
   IDENTITY_SUBJECT_MAX_LENGTH,
 } from '@indx-workspace/contracts/identity-assertion';
+import { POLICY_CEILING_MAX_COST_PER_DAY_USD } from '@indx-workspace/contracts/policy-ceiling';
 import { z } from 'zod';
 
 import { base64Url, decodeBase64Url } from './base64url.js';
@@ -27,6 +28,11 @@ const RunTokenClaimsSchema = z
       })
       .readonly()
       .optional(),
+    /**
+     * The deployment's `maxCostPerDayUsd` when it sets one (issue #1851), signed here so the
+     * sandbox cannot change it; absent exactly when no cap is set. Bounded as the policy bounds it.
+     */
+    dailyCostCapUsd: z.number().positive().max(POLICY_CEILING_MAX_COST_PER_DAY_USD).optional(),
     issuedAt: z.number().int(),
     expiresAt: z.number().int(),
   })
@@ -38,7 +44,13 @@ export type RunTokenClaims = z.infer<typeof RunTokenClaimsSchema>;
 
 export type RunTokenSubject = Pick<
   RunTokenClaims,
-  'runId' | 'sessionId' | 'workspaceId' | 'agentId' | 'modelConnectionId' | 'caller'
+  | 'runId'
+  | 'sessionId'
+  | 'workspaceId'
+  | 'agentId'
+  | 'modelConnectionId'
+  | 'caller'
+  | 'dailyCostCapUsd'
 >;
 
 export type RunTokenVerification =
@@ -91,7 +103,7 @@ export function createRunTokenCodec(options: RunTokenCodecOptions): RunTokenCode
   return {
     async issue(subject) {
       for (const [name, value] of Object.entries(subject)) {
-        if (name !== 'caller' && !nonBlank(value))
+        if (name !== 'caller' && name !== 'dailyCostCapUsd' && !nonBlank(value))
           throw new Error(`Run token ${name} must not be blank.`);
       }
       const issuedAt = now();

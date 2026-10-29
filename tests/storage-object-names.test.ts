@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { trackedTextFiles } from '../scripts/ci/debt-review.mjs';
 
 const TEMPLATE_NAME = '`workspaces/${';
+/** A template literal, or a quoted `'workspaces/'` that a `+` continues. */
+const OBJECT_NAME = /`workspaces\/\$\{|(['"])workspaces\/\1\s*\+/u;
 const ALLOWED = new Set([
   'packages/core/src/storage/object-name.ts',
   'packages/core/src/storage/object-store.ts',
@@ -15,10 +17,11 @@ function violations(files: readonly { path: string; text: string }[]): string[] 
   return files
     .filter(
       ({ path, text }) =>
-        /^(?:apps|packages)\/.*\.ts$/u.test(path) &&
-        !/\.(?:test|spec)\.ts$/u.test(path) &&
+        /^(?:apps|packages)\/.*\.(?:ts|tsx|mts)$/u.test(path) &&
+        !/\.(?:test|spec)\.(?:ts|tsx|mts)$/u.test(path) &&
+        !path.endsWith('.d.ts') &&
         !ALLOWED.has(path) &&
-        text.includes(TEMPLATE_NAME),
+        OBJECT_NAME.test(text),
     )
     .map(({ path }) => path);
 }
@@ -28,6 +31,22 @@ describe('storage object names', () => {
     const planted = { path: 'apps/web/server/x.ts', text: `const k = ${TEMPLATE_NAME}id}/a\`;` };
     expect(violations([planted])).toEqual(['apps/web/server/x.ts']);
     expect(violations([{ ...planted, path: 'apps/web/server/x.test.ts' }])).toEqual([]);
+    for (const path of ['apps/web/components/x.tsx', 'packages/aw/src/x.mts']) {
+      expect(violations([{ ...planted, path }])).toEqual([path]);
+    }
+    expect(violations([{ ...planted, path: 'apps/web/components/x.test.tsx' }])).toEqual([]);
+    for (const text of [
+      "const k = 'workspaces/' + id;",
+      'const k = "workspaces/"+id;',
+      "const k = 'workspaces/' +\n  id;",
+    ]) {
+      expect(violations([{ path: 'apps/web/server/x.ts', text }])).toEqual([
+        'apps/web/server/x.ts',
+      ]);
+    }
+    expect(
+      violations([{ path: 'apps/web/server/x.ts', text: "const label = 'workspaces/';" }]),
+    ).toEqual([]);
     expect(violations([{ ...planted, path: 'packages/core/src/storage/object-name.ts' }])).toEqual(
       [],
     );

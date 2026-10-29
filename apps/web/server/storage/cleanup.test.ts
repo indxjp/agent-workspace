@@ -25,7 +25,7 @@ import {
 import {
   createInMemoryObjectStore,
   storageObjectName,
-  type ObjectStoreV2,
+  type ObjectStore,
   type StorageArea,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
@@ -174,8 +174,8 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       interface RunOptions {
         readonly pageSize?: number;
         readonly now?: () => Date;
-        readonly objects?: ObjectStoreV2;
-        readonly legacy?: ObjectStoreV2;
+        readonly objects?: ObjectStore;
+        readonly legacy?: ObjectStore;
         readonly catalogs?: (workspaceId: string) => Promise<CatalogPort>;
       }
       const run = (mode: 'report' | 'delete', options: RunOptions = {}) =>
@@ -198,7 +198,12 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const reserveRow = async (
         ws: { id: string; principalId: string },
         path: string,
-        input: { sizeBytes?: number; objectId?: string; area?: StorageArea } = {},
+        input: {
+          sizeBytes?: number;
+          objectId?: string;
+          area?: StorageArea;
+          uploadMode?: 'relay' | 'signed';
+        } = {},
       ) => {
         const catalog = await f.catalog(ws.id);
         const reserved = await catalog.reserve(path, {
@@ -207,6 +212,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
           sizeBytes: input.sizeBytes ?? 0,
           contentType: 'text/plain',
           ...(input.objectId === undefined ? {} : { objectId: input.objectId }),
+          ...(input.uploadMode === undefined ? {} : { uploadMode: input.uploadMode }),
         });
         if (reserved.kind !== 'reserved') throw new Error(`${path} was already taken`);
         return reserved.row;
@@ -425,6 +431,20 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await expect(h.objects.head(h.newName(first.id, kept))).resolves.not.toBeNull();
     });
 
+    // @story US-STO-14
+    it('[US-STO-14][unit][sdk] cleanup reads past the first page at the default page size', async () => {
+      const h = await harness();
+      const ws = await h.known();
+      for (let n = 0; n <= 1000; n += 1) await h.newObject(ws.id, crypto.randomUUID());
+
+      await expect(h.run('delete')).resolves.toMatchObject({
+        scanned: 1001,
+        orphans: 1001,
+        deleted: 1001,
+      });
+      expect((await h.objects.listPage('', { recursive: true })).entries).toEqual([]);
+    });
+
     // @story US-STO-02
     it('[US-STO-02][unit][sdk] a signed-link upload without complete becomes ready', async () => {
       const h = await harness();
@@ -451,8 +471,12 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await h.newObject(ws.id, objectId, 5);
 
       await expect(h.run('delete')).resolves.toMatchObject({ stalePendingReady: 1, orphans: 0 });
-      await expect(catalog.get('up.bin')).resolves.toMatchObject({ status: 'ready', sizeBytes: 5 });
-      await expect(h.objects.head(h.newName(ws.id, objectId))).resolves.not.toBeNull();
+      const ready = await catalog.get('up.bin');
+      expect(ready).toMatchObject({ status: 'ready', sizeBytes: 5 });
+      // Published on a copy, as `completeUpload` does; the uploaded object is gone.
+      expect(ready?.objectId).not.toBe(objectId);
+      await expect(h.objects.head(h.newName(ws.id, ready?.objectId ?? ''))).resolves.not.toBeNull();
+      await expect(h.objects.head(h.newName(ws.id, objectId))).resolves.toBeNull();
     });
 
     // @story US-STO-02
@@ -479,7 +503,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const catalog = await h.f.catalog(ws.id);
       const objectId = crypto.randomUUID();
       const pause = () => new Promise((resolve) => setTimeout(resolve, 25));
-      await h.reserveRow(ws, 'mint.bin', { sizeBytes: 5, objectId });
+      await h.reserveRow(ws, 'mint.bin', { sizeBytes: 5, objectId, uploadMode: 'signed' });
       await h.newObject(ws.id, objectId, 5);
       await pause();
       const cut = new Date();
@@ -491,6 +515,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
           sizeBytes: 5,
           contentType: 'text/plain',
           objectId,
+          uploadMode: 'signed',
         }),
       ).resolves.toMatchObject({ kind: 'taken' });
 
@@ -502,6 +527,72 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       });
       await expect(catalog.pending('mint.bin')).resolves.not.toBeNull();
       await expect(h.objects.head(h.newName(ws.id, objectId))).resolves.not.toBeNull();
+    });
+
+    /** The objects store, running `during` once when the pass checks the object `name`. */
+    const onHead = (store: ObjectStore, name: string, during: () => Promise<unknown>) => {
+      let ran = false;
+      return new Proxy(store, {
+        get: (inner, property) =>
+          property === 'head'
+            ? async (key: string) => {
+                if (key === name && !ran) {
+                  ran = true;
+                  await during();
+                }
+                return inner.head(key);
+              }
+            : (Reflect.get(inner, property) as unknown),
+      });
+    };
+
+    // @story US-STO-04
+    it('[US-STO-04][unit][sdk] a stale cleanup snapshot cannot delete an upload that was confirmed during its object check', async () => {
+      const h = await harness();
+      const ws = await h.known();
+      const catalog = await h.f.catalog(ws.id);
+      const objectId = crypto.randomUUID();
+      // A relay save wrote its bytes and has not confirmed them yet: its row still declares 0.
+      const row = await h.reserveRow(ws, 'late.bin', { objectId, uploadMode: 'relay' });
+      await h.newObject(ws.id, objectId, 4);
+      const confirmLate = () => catalog.confirm(row, { sizeBytes: 4, contentType: 'text/plain' });
+
+      await h.run('delete', {
+        objects: onHead(h.objects, h.newName(ws.id, objectId), confirmLate),
+      });
+
+      await expect(catalog.get('late.bin')).resolves.toMatchObject({ id: row.id, objectId });
+      await expect(h.objects.head(h.newName(ws.id, objectId))).resolves.not.toBeNull();
+      await expect(catalog.deleting()).resolves.toEqual([]);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][unit][sdk] a stale cleanup snapshot cannot delete an upload that was refreshed during its object check', async () => {
+      const h = await harness();
+      const ws = await h.known();
+      const catalog = await h.f.catalog(ws.id);
+      const objectId = crypto.randomUUID();
+      // The first PUT stopped short; the owner mints the link again while the pass looks at it.
+      const row = await h.reserveRow(ws, 'again.bin', {
+        sizeBytes: 5,
+        objectId,
+        uploadMode: 'signed',
+      });
+      await h.newObject(ws.id, objectId, 4);
+      const remint = () =>
+        catalog.reserve('again.bin', {
+          ownerPrincipalId: ws.principalId,
+          sizeBytes: 5,
+          contentType: 'text/plain',
+          objectId,
+          uploadMode: 'signed',
+        });
+
+      await h.run('delete', { objects: onHead(h.objects, h.newName(ws.id, objectId), remint) });
+
+      await expect(catalog.pending('again.bin')).resolves.toMatchObject({ id: row.id });
+      await expect(h.objects.head(h.newName(ws.id, objectId))).resolves.not.toBeNull();
+      await expect(catalog.deleting()).resolves.toEqual([]);
     });
 
     // @story US-STO-02
@@ -607,7 +698,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await h.legacyObject(ws.id, 'old.txt');
       await h.readyRow(ws, 'old.txt', { sizeBytes: 7 });
       await catalog.remove('old.txt');
-      const failing: ObjectStoreV2 = {
+      const failing: ObjectStore = {
         ...h.legacyObjects,
         delete: () => Promise.reject(new Error('the store is down')),
       };

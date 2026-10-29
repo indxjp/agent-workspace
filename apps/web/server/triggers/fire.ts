@@ -36,6 +36,7 @@ import {
 } from '@indx-workspace/contracts/triggers';
 
 import { readCappedBody } from '../endpoints/request';
+import { featureRefusalResponse } from '../features/guard';
 import { noStoreResultResponse, problemWithDetail as problem } from '../http/result';
 import { clientSecretDigest } from '../oauth/tokens';
 import { hashesEqual } from '../rbac/api-key';
@@ -153,6 +154,9 @@ export async function fire(request: Request, id: unknown, secret: unknown): Prom
   }
   const trigger = await authenticated(runtime, id, secret);
   if (trigger === null) return notFound();
+  // ADR-0160 D7: the secret matched, so the workspace is the trigger row's own; nothing else is read yet.
+  const disabled = await featureRefusalResponse(request, trigger.workspaceId);
+  if (disabled !== null) return disabled;
   const owner = await ownerFor(runtime, trigger);
   if (owner === null) return ownerNotAllowed();
 

@@ -7,6 +7,7 @@ import type {
   RunResolution,
   UsageRecorder,
 } from './auth.js';
+import type { DailyCostLedger } from './daily-cost.js';
 import { calculateUsageCost, priceFor, type ModelPrice, type PricingCatalog } from './pricing.js';
 import { registryProviderId } from './providers/registry.js';
 
@@ -134,6 +135,33 @@ export function createDatabaseGatewayRunResolver(
         credential: secret.value.toString('utf8'),
         settings: connection.config,
       };
+    },
+  };
+}
+
+/**
+ * The gateway appends exactly one terminal `run.status` event and trims nothing: the retention
+ * limit is web's, and web reads no deployment override the gateway could share (its run store takes
+ * the default), so a trim here could only disagree with it. With this limit the repository's cutoff
+ * is never positive, so the event is appended and no earlier event is deleted.
+ */
+const KEEP_EVERY_EVENT = Number.MAX_SAFE_INTEGER;
+
+/** The usage ledger and run end the daily cost cap reads and writes, tenant-scoped like the rest. */
+export function createDatabaseDailyCostLedger(database: DatabaseRoot): DailyCostLedger {
+  const scopeOf = async (workspaceId: string) => {
+    const scope = await database.scopes.forWorkspaceId(workspaceId);
+    if (scope === null) throw new Error(`daily cost cap: workspace ${workspaceId} did not resolve`);
+    return scope;
+  };
+  return {
+    async sumCostUsd(workspaceId, from, to) {
+      return database.runs.forScope(await scopeOf(workspaceId)).usageCostUsd(from, to);
+    },
+    async endRun(workspaceId, runId, error) {
+      await database.runs
+        .forScope(await scopeOf(workspaceId))
+        .finish(runId, 'failed', error, KEEP_EVERY_EVENT);
     },
   };
 }

@@ -275,6 +275,33 @@ describe('a grant is re-checked when the run starts', () => {
     });
   });
 
+  it('[US-STO-12][unit][run] refuses a bucket that refuses the listing, by status class alone', async () => {
+    // Opening sends nothing, so the listing is where the bucket first refuses the key.
+    const secret = 'provider-reply-with-a-secret';
+    const refused = (httpStatusCode: number): RunStorageConnections => ({
+      get: () =>
+        Promise.resolve({ name: 'acme-data', allowedPrefixes: ['reports'], writeAllowed: false }),
+      open: () =>
+        Promise.resolve({
+          listPage: () =>
+            Promise.reject(Object.assign(new Error(secret), { $metadata: { httpStatusCode } })),
+          read: () => Promise.reject(new Error('never read')),
+        }),
+      openWritable: () => Promise.reject(new Error('never opened')),
+    });
+    for (const [status, kind] of [
+      [403, 'forbidden'],
+      [404, 'not_found'],
+      [503, 'unreachable'],
+    ] as const) {
+      const failure: unknown = await load(refused(status)).catch((error: unknown) => error);
+      expect(failure).toMatchObject({ code: 'run_storage_grant_unavailable' });
+      const message = (failure as { publicMessage: string }).publicMessage;
+      expect(message).toContain(`"acme-data" cannot list its folder (${kind})`);
+      expect(message).not.toContain(secret);
+    }
+  });
+
   it('[US-STO-12][unit][run] names the folder after the connection as it is called now', async () => {
     const { storageConnections } = connection([[file('reports/a.csv')]], { name: 'acme-archive' });
     expect(paths(await load(storageConnections))).toEqual([

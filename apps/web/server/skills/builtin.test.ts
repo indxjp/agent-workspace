@@ -16,8 +16,9 @@ import {
   createInMemoryObjectStore,
   createLocalFilesystemObjectStoreProvider,
   UnsafeObjectKeyError,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
+import { readWhole } from '@agent-workspace/core/storage/streams';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
@@ -39,7 +40,7 @@ const NAME = 'office-reader';
 const text = (value: string): string => Buffer.from(value).toString('base64');
 
 let rootDir: string;
-let store: ObjectStoreV2;
+let store: ObjectStore;
 let catalogOfTest: ResourceCatalogRepository;
 let world: ReturnType<typeof createSkillRowsWorld>;
 
@@ -86,8 +87,7 @@ async function installOlderRelease(catalog: ResourceCatalogRepository): Promise<
   const digest = digestOf(
     old.map((file) => ({ path: file.path, bytes: Buffer.from(file.content) })),
   );
-  await store.put(skillBuiltinMarkerKey(NAME), {
-    body: Buffer.from(JSON.stringify({ digest })),
+  await store.write(skillBuiltinMarkerKey(NAME), Buffer.from(JSON.stringify({ digest })), {
     contentType: 'application/json',
   });
 }
@@ -108,10 +108,10 @@ describe('ensureBuiltinSkills', () => {
   it('does nothing the second time and ignores names that are not built in', async () => {
     const { catalog, names } = newCatalog();
     await ensureBuiltinSkills(store, catalog, PRINCIPAL, [NAME, 'my-own-skill', NAME], world.rows);
-    const before = await store.get(skillBuiltinMarkerKey(NAME));
+    const before = await readWhole(store, skillBuiltinMarkerKey(NAME));
     await ensureBuiltinSkills(store, catalog, PRINCIPAL, [NAME], world.rows);
-    expect(await store.get(skillBuiltinMarkerKey(NAME))).toEqual(before);
-    expect(await store.get(skillFileKey('my-own-skill', 'SKILL.md'))).toBeNull();
+    expect(await readWhole(store, skillBuiltinMarkerKey(NAME))).toEqual(before);
+    expect(await readWhole(store, skillFileKey('my-own-skill', 'SKILL.md'))).toBeNull();
     expect(await names()).toEqual([NAME]);
   });
 
@@ -161,13 +161,12 @@ describe('ensureBuiltinSkills', () => {
 
     expect(await bytesOf('SKILL.md')).toBe(mine);
     expect(await bytesOf('scripts/pdf.mjs')).toBeNull();
-    expect(await store.get(skillBuiltinMarkerKey(NAME))).toBeNull();
+    expect(await readWhole(store, skillBuiltinMarkerKey(NAME))).toBeNull();
   });
 
   it('does not bring back a skill whose delete is pending', async () => {
     const { catalog, names } = newCatalog();
-    await store.put(skillDeleteMarkerKey(NAME), {
-      body: Buffer.from('{}'),
+    await store.write(skillDeleteMarkerKey(NAME), Buffer.from('{}'), {
       contentType: 'application/json',
     });
 

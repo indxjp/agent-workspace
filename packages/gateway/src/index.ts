@@ -16,8 +16,18 @@ import {
   parseGatewayToolPath,
 } from '@indx-workspace/contracts/tool-connectors';
 
-import { createAuthenticatedGateway, type GatewayRunResolver, type UsageRecorder } from './auth.js';
-import { createDatabaseGatewayRunResolver, createDatabaseUsageRecorder } from './database.js';
+import {
+  createAuthenticatedGateway,
+  type GatewayAdmission,
+  type GatewayRunResolver,
+  type UsageRecorder,
+} from './auth.js';
+import { createDailyCostAdmission } from './daily-cost.js';
+import {
+  createDatabaseDailyCostLedger,
+  createDatabaseGatewayRunResolver,
+  createDatabaseUsageRecorder,
+} from './database.js';
 import { parsePricingCatalog, type PricingCatalog } from './pricing.js';
 import { createProviderRegistry, type ProviderRegistryOptions } from './providers/registry.js';
 import { createRouter, ROUTES } from './router.js';
@@ -85,6 +95,8 @@ export type GatewayApplicationDependencies = {
   readonly usage?: UsageRecorder;
   /** `request` is the one whose usage failed to settle, for its trace id. */
   readonly onUsageError?: (error: unknown, request: Request) => void;
+  /** Refuses a model call over the workspace's daily cost cap; without it no call is gated. */
+  readonly dailyCost?: GatewayAdmission;
   /** Serves `POST /v1/tools/:connectorId/mcp`. Without it that path is an unknown route. */
   readonly tools?: ToolConnectorResolver;
   /** Serves `POST /v1/tool-sandbox/mcp` and `POST /v1/tool-sandbox/endpoint/mcp`. Without it those paths are unknown routes. */
@@ -127,6 +139,8 @@ export function createGatewayApplication(
     dependencies.resolver,
     dependencies.usage,
     dependencies.onUsageError,
+    undefined,
+    dependencies.dailyCost,
   );
   const { tools, toolSandbox } = dependencies;
   const postgres = dependencies.postgres ?? createPostgresExecutor();
@@ -261,6 +275,12 @@ export async function createGatewayFromEnvironment(
     postgres,
     tokenSecret,
     usage: createDatabaseUsageRecorder(database, pricing),
+    dailyCost: createDailyCostAdmission(createDatabaseDailyCostLedger(database), {
+      now: () => new Date(),
+      onError(error, context) {
+        log.error('daily cost admission failed', { error, ...context });
+      },
+    }),
     onUsageError(error, request) {
       requestLogger(log, request).error('usage settlement failed', { error });
     },

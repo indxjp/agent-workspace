@@ -253,24 +253,25 @@ describe('workflow validator', () => {
     );
   });
 
-  it.each(['Secret scan (gitleaks)', 'Dependency vulnerability scan (osv-scanner)'])(
-    'rejects fast-checks without the %s step',
-    async (step) => {
-      const workflows = await repositoryWorkflowDocuments();
-      const ci = workflows.get('.github/workflows/ci.yml');
-      if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
-      expect(ci).toContain(step);
-      workflows.set('.github/workflows/ci.yml', ci.replaceAll(step, 'renamed'));
-      const template = await readFile(
-        path.join(process.cwd(), '.github/pull_request_template.md'),
-        'utf8',
-      );
+  it.each([
+    'Secret scan (gitleaks)',
+    'Dependency vulnerability scan (osv-scanner)',
+    'pnpm stories:check --base',
+  ])('rejects fast-checks without the %s step', async (step) => {
+    const workflows = await repositoryWorkflowDocuments();
+    const ci = workflows.get('.github/workflows/ci.yml');
+    if (ci === undefined) throw new Error('.github/workflows/ci.yml is missing');
+    expect(ci).toContain(step);
+    workflows.set('.github/workflows/ci.yml', ci.replaceAll(step, 'renamed'));
+    const template = await readFile(
+      path.join(process.cwd(), '.github/pull_request_template.md'),
+      'utf8',
+    );
 
-      expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
-        expect.stringContaining(`fast-checks must include ${step}`),
-      );
-    },
-  );
+    expect(validateWorkflowDocuments(workflows, template)).toContainEqual(
+      expect.stringContaining(`fast-checks must include ${step}`),
+    );
+  });
 
   // Owner decision D6 (docs/adr/0149, Amendment 2026-10-19): main merges through a merge queue,
   // and a required check whose workflow does not run on merge_group never reports there, so every

@@ -18,8 +18,8 @@ import {
 } from '@agent-workspace/core/db';
 import type {
   ObjectListEntry,
-  ObjectStoreProviderV2,
-  ObjectStoreV2,
+  ObjectStore,
+  ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 
 export { renamedKey } from '@agent-workspace/core/db';
@@ -69,8 +69,8 @@ export type SkillObjectEntry = ObjectListEntry;
  * `listPage` let moving them into rows stream the bytes and page the listing.
  */
 export type SkillObjects = Pick<
-  ObjectStoreV2,
-  'get' | 'put' | 'delete' | 'list' | 'listPrefix' | 'copyObject' | 'read' | 'listPage'
+  ObjectStore,
+  'delete' | 'copy' | 'head' | 'read' | 'write' | 'listPage'
 >;
 
 /** Hands out the {@link SkillObjects} of one workspace, named by the workspace's id. */
@@ -81,7 +81,7 @@ export interface WorkspaceSkillsStoreProvider {
 /** What {@link createRepositorySkillsStoreProvider} needs, and the whole of it. */
 export interface RepositorySkillsStoreDependencies {
   /** The scoped object-store provider — see `composition/storage.ts`. */
-  readonly store: ObjectStoreProviderV2;
+  readonly store: ObjectStoreProvider;
   /** Turns a workspace id into a `WorkspaceScope`, or answers `null`. */
   readonly scopes: WorkspaceScopeResolver;
 }
@@ -97,9 +97,9 @@ export function createRepositorySkillsStoreProvider(
 ): WorkspaceSkillsStoreProvider {
   return {
     forWorkspace(workspaceId: string): SkillObjects {
-      let pending: Promise<ObjectStoreV2> | null = null;
-      const resolved = (): Promise<ObjectStoreV2> => {
-        pending ??= (async (): Promise<ObjectStoreV2> => {
+      let pending: Promise<ObjectStore> | null = null;
+      const resolved = (): Promise<ObjectStore> => {
+        pending ??= (async (): Promise<ObjectStore> => {
           const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
           if (scope === null) throw new UnknownWorkspaceError(workspaceId);
           return dependencies.store.forWorkspace(workspaceId);
@@ -108,14 +108,11 @@ export function createRepositorySkillsStoreProvider(
       };
 
       return {
-        put: async (key, input) => (await resolved()).put(key, input),
-        get: async (key) => (await resolved()).get(key),
         delete: async (key) => (await resolved()).delete(key),
-        list: async (prefix) => (await resolved()).list(prefix),
-        listPrefix: async (prefix) => (await resolved()).listPrefix(prefix),
-        copyObject: async (source, destination) =>
-          (await resolved()).copyObject(source, destination),
+        copy: async (source, destination) => (await resolved()).copy(source, destination),
+        head: async (key) => (await resolved()).head(key),
         read: async (key, options) => (await resolved()).read(key, options),
+        write: async (key, body, options) => (await resolved()).write(key, body, options),
         listPage: async (prefix, options) => (await resolved()).listPage(prefix, options),
       };
     },

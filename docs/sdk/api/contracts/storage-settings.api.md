@@ -63,6 +63,9 @@ export type ResolvedStorageSettings = Extract<StorageSettings, {
     warnings: readonly string[];
 } | {
     kind: 'refused';
+    code: NonNullable<Extract<StorageSettings, {
+        kind: 'refused';
+    }>['code']>;
     reason: string;
     warnings: readonly string[];
 };
@@ -141,6 +144,7 @@ export type StorageSettings = {
     warnings?: readonly string[];
 } | {
     kind: 'refused';
+    code?: 'storage_url_invalid' | 'storage_endpoint_same_origin';
     reason: string;
     warnings?: readonly string[];
 };

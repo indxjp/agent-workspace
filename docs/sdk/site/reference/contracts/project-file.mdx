@@ -348,6 +348,7 @@ only remote connectors.
 | `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | No |  |
 | `policy` | `undefined \| PlatformOptions` | No |  |
 | `platforms` | `undefined \| ProjectPlatforms` | No |  |
+| `features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No | The features this deployment installs; absent means every feature (ADR-0160 D5). |
 
 ## ProjectDocumentSchema
 
@@ -380,6 +381,7 @@ reads it.
 | `connectors` | `undefined \| Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "bearer" \| "api-key"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>>` | No |  |
 | `policy` | `undefined \| PlatformOptions` | No |  |
 | `platforms` | `undefined \| ProjectPlatforms` | No |  |
+| `features` | `undefined \| readonly ("skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers")[]` | No | The features this deployment installs; absent means every feature (ADR-0160 D5). |
 
 ## ProjectEnvironment
 

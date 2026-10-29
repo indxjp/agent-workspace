@@ -17,7 +17,14 @@ import {
   AGENT_NAME_MAX_LENGTH,
 } from '../../contracts/agents';
 import type { ApiProblem, ApiResult } from '../http/result';
-import { MAX_REQUEST_BODY_BYTES, readAgentIdParam, readJsonBody, withWorkspaceStore } from './http';
+import {
+  MAX_REQUEST_BODY_BYTES,
+  parseAgentListQuery,
+  readAgentIdParam,
+  readJsonBody,
+  withWorkspaceStore,
+} from './http';
+import { AGENT_LIST_PROBLEM_CODES } from '@indx-workspace/contracts/agents';
 import { apiResultResponse } from '../http/json-transport';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import { type WorkspaceResolution } from './runtime';
@@ -223,6 +230,32 @@ describe('apiResultResponse', () => {
   });
 });
 
+describe('parseAgentListQuery (issue #1851)', () => {
+  const parse = (query: string) =>
+    parseAgentListQuery(new Request(`http://localhost/api/agents${query}`));
+
+  it('reads no option as the default, and include as include', () => {
+    expect(parse('')).toEqual({ ok: true, archived: undefined });
+    expect(parse('?other=1')).toEqual({ ok: true, archived: undefined });
+    expect(parse('?archived=include')).toEqual({ ok: true, archived: 'include' });
+  });
+
+  it.each([
+    '?archived=all',
+    '?archived=',
+    '?archived=include&archived=x',
+    '?archived=include&archived=include',
+  ])('refuses %s with 400 invalid_agent_list_query, without echoing the value', (query) => {
+    const parsed = parse(query);
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.result.status).toBe(AGENT_LIST_PROBLEM_CODES.invalid_agent_list_query);
+    const error = (parsed.result.body as ApiProblem).error;
+    expect(error.code).toBe('invalid_agent_list_query');
+    expect(error.details).toBeUndefined();
+  });
+});
+
 describe('readAgentIdParam', () => {
   it('reads the id out of the resolved params', async () => {
     expect(await readAgentIdParam({ params: Promise.resolve({ id: 'abc' }) })).toBe('abc');
@@ -321,6 +354,7 @@ describe('withWorkspaceStore — the gate every agent route passes through', () 
       'get',
       'list',
       'replacePolicy',
+      'restore',
       'update',
     ]);
   });

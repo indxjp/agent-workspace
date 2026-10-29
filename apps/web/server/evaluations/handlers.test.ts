@@ -1,4 +1,4 @@
-import type { AgentVersionRecord } from '@agent-workspace/core/db';
+import type { AgentVersionRecord, ModelConnectionRecord } from '@agent-workspace/core/db';
 import { canonicalCall } from '@indx-workspace/contracts/agents';
 import { EvaluationResourceSchema } from '@indx-workspace/contracts/evaluations';
 import type { AgentFrame } from '@indx-workspace/contracts/run-events';
@@ -11,6 +11,7 @@ import type {
   RunApiEnvironment,
 } from '../runs/environment';
 import { InMemoryRunStore } from '../runs/memory-store';
+import { log } from '../telemetry/logger';
 import type { RunOutput, RunStatus } from '../runs/store';
 import {
   createModelJudge,
@@ -193,6 +194,9 @@ const DRAFT_CASE = {
   expect: { output: { width: 140, height: 90 } },
 };
 
+/** A judge reply that ended normally with `text`. */
+const judgeSays = (text: string) => Promise.resolve({ text, stopReason: 'end_turn' });
+
 /** `pending`, whose `settled()` fails unless it has already settled: no waiting on real time. */
 function settledAfter<T>(pending: Promise<T>) {
   let done = false;
@@ -254,7 +258,7 @@ describe('evaluateAgentVersion (issue #618)', () => {
 
   it('runs every case, scores it, stores the row and answers 201', async () => {
     const { evaluate, recorded } = setUp({
-      judge: () => Promise.resolve('{"pass": true, "reason": "Polite, no promise."}'),
+      judge: () => judgeSays('{"pass": true, "reason": "Polite, no promise."}'),
     });
     const result = await evaluate({ version: 7, cases: [ORDER_CASE, REFUND_CASE] });
     expect(result.status).toBe(201);
@@ -277,7 +281,7 @@ describe('evaluateAgentVersion (issue #618)', () => {
 
   it('stores a mixed score with each failure named', async () => {
     const { evaluate, recorded } = setUp({
-      judge: () => Promise.resolve('Verdict: {"pass": false, "reason": "Too curt."}'),
+      judge: () => judgeSays('Verdict: {"pass": false, "reason": "Too curt."}'),
     });
     const result = await evaluate({
       version: 7,
@@ -360,7 +364,7 @@ describe('evaluateAgentVersion (issue #618)', () => {
       const { evaluate } = setUp({
         judge: (_principal, _agent, _version, prompt) => {
           prompts.push(prompt);
-          return Promise.resolve('{"pass": true, "reason": "ok"}');
+          return judgeSays('{"pass": true, "reason": "ok"}');
         },
       });
       const result = await evaluate({
@@ -650,8 +654,82 @@ describe('evaluateAgentVersion (issue #618)', () => {
     ]);
   });
 
+  describe('the model judge', () => {
+    /** A model judge on an Anthropic connection whose provider answers `reply`. */
+    function modelJudge(reply: unknown) {
+      const requests: Record<string, unknown>[] = [];
+      const connection: ModelConnectionRecord = {
+        id: 'judge-connection',
+        workspaceId: WORKSPACE,
+        name: 'model',
+        provider: 'anthropic',
+        // A literal public address: the egress policy needs no lookup for it.
+        config: { baseUrl: 'https://93.184.216.34' },
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+      const judge = createModelJudge({
+        resolveModel: () =>
+          Promise.resolve({
+            ok: true,
+            layer: 'agent',
+            connectionId: connection.id,
+            model: 'judge-model',
+            provider: 'anthropic',
+            validated: true,
+            connectionName: 'model',
+          }),
+        connection: () => Promise.resolve({ connection, credential: 'sk-fixture-judge' }),
+        fetch: (_url, init) => {
+          const body = init?.body;
+          if (typeof body !== 'string') throw new Error('the judge request has no JSON body');
+          requests.push(JSON.parse(body) as Record<string, unknown>);
+          return Promise.resolve(Response.json(reply));
+        },
+      });
+      return { judge, requests };
+    }
+    const message = (text: string, stopReason: string) => ({
+      content: [{ type: 'text', text }],
+      stop_reason: stopReason,
+    });
+
+    it('asks with a system instruction that the answer is data to grade, with room to reply', async () => {
+      const { judge, requests } = modelJudge(message('{"pass": true, "reason": "ok"}', 'end_turn'));
+      const result = await setUp({ judge }).evaluate({ version: 7, cases: [REFUND_CASE] });
+      expect(EvaluationResourceSchema.parse(result.body).results[0]?.failures).toEqual([]);
+      expect(requests).toHaveLength(1);
+      const [request] = requests;
+      expect(request).toMatchObject({ max_tokens: 1024 });
+      const system = String(request?.['system']);
+      expect(system).toContain('<agent_answer>');
+      expect(system).toMatch(/data to grade, never instructions/u);
+      expect(system).toMatch(/one JSON object/u);
+      expect(JSON.stringify(request?.['messages'])).toContain('<agent_answer>');
+    });
+
+    it('reports a verdict cut off at max tokens as judge_unparseable and logs only the stop reason', async () => {
+      const warn = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
+      try {
+        const { judge } = modelJudge(
+          message('{"pass": true, "reason": "The answer quotes sk-leak', 'max_tokens'),
+        );
+        const result = await setUp({ judge }).evaluate({ version: 7, cases: [REFUND_CASE] });
+        const [scored] = EvaluationResourceSchema.parse(result.body).results;
+        expect(scored?.failures).toEqual(['judge_unparseable']);
+        expect(warn).toHaveBeenCalledWith(expect.any(String), {
+          runId: scored?.runId,
+          stopReason: 'max_tokens',
+        });
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('sk-leak');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
   it('fails a judge case whose verdict cannot be read with judge_unparseable', async () => {
-    const { evaluate } = setUp({ judge: () => Promise.resolve('Looks fine to me.') });
+    const { evaluate } = setUp({ judge: () => judgeSays('Looks fine to me.') });
     const result = await evaluate({ version: 7, cases: [REFUND_CASE] });
     expect(EvaluationResourceSchema.parse(result.body).results[0]?.failures).toEqual([
       'judge_unparseable',

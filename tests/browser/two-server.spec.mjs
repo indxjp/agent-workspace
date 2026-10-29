@@ -249,7 +249,15 @@ test('[US-STO-14][two-server][sdk] two servers save one path: one wins, nothing 
     expect(workspaces).toHaveLength(1);
 
     const store = await openRootObjectStore({ kind: 'file', root });
-    const entries = await store.list(`${workspaceFolder(workspaces[0])}files`);
+    const entries = [];
+    let cursor = null;
+    do {
+      const page = await store.listPage(`${workspaceFolder(workspaces[0])}files`, {
+        ...(cursor === null ? {} : { cursor }),
+      });
+      entries.push(...page.entries);
+      cursor = page.cursor;
+    } while (cursor !== null);
     const objectIds = entries
       .filter((entry) => entry.kind === 'file')
       .map((entry) => entry.key.slice(entry.key.lastIndexOf('/') + 1))

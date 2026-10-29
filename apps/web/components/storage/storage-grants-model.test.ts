@@ -8,6 +8,8 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import {
+  grantKey,
+  grantFocusedAfterRemoval,
   removeStorageGrant,
   saveStorageGrant,
   storageGrantPath,
@@ -23,6 +25,31 @@ describe('storageGrantPath', () => {
     expect(storageGrantPath('acme-data', '/reports/Q3 drafts/')).toBe(
       'storage://acme-data/reports/Q3 drafts',
     );
+  });
+});
+
+describe('grantFocusedAfterRemoval', () => {
+  const grant = (prefix: string) => ({ connectionId: 'c-1', prefix, access: 'read' as const });
+  const [a, b, c] = [grant('a'), grant('b'), grant('c')];
+
+  it('names the grant that moves into the removed row', () => {
+    expect(grantFocusedAfterRemoval([a, b, c], grantKey(b), [a, c])).toBe(grantKey(c));
+  });
+
+  it('names the grant above when the last one was removed', () => {
+    expect(grantFocusedAfterRemoval([a, b, c], grantKey(c), [a, b])).toBe(grantKey(b));
+  });
+
+  it('is null when no grant is left', () => {
+    expect(grantFocusedAfterRemoval([a], grantKey(a), [])).toBeNull();
+  });
+
+  it('skips a neighbour that is gone from the saved list', () => {
+    expect(grantFocusedAfterRemoval([a, b, c], grantKey(b), [a])).toBe(grantKey(a));
+  });
+
+  it('falls back to the first saved grant when the removed one was not listed', () => {
+    expect(grantFocusedAfterRemoval([a], grantKey(b), [c])).toBe(grantKey(c));
   });
 });
 

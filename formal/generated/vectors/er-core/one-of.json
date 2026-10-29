@@ -122,12 +122,13 @@
      "storage-connection-credential-changed",
      "storage-connection-tested",
      "storage-connection-written",
-     "storage-grant-changed"]},
+     "storage-grant-changed",
+     "workspace-features-changed"]},
    "id":
-   "one-of/[\"user-created\",\"user-deleted\",\"agent-changed\",\"agent-created\",\"provider-credential-changed\",\"api-key-created\",\"api-key-revoked\",\"connector-changed\",\"permission-changed\",\"runtime-profile-changed\",\"project-created\",\"project-deleted\",\"project-archived\",\"project-restored\",\"session-published\",\"public-link-revoked\",\"runnable-link-stopped\",\"public-sharing-policy-changed\",\"invitation-created\",\"invitation-resent\",\"invitation-revoked\",\"invitation-accepted\",\"endpoint-client-created\",\"endpoint-client-changed\",\"endpoint-client-revoked\",\"endpoint-tool-called\",\"oauth-client-secret-rotated\",\"oauth-grant-issued\",\"oauth-grant-revoked\",\"file-uploaded\",\"file-downloaded\",\"file-link-created\",\"file-moved\",\"file-deleted\",\"storage-connection-created\",\"storage-connection-updated\",\"storage-connection-deleted\",\"storage-connection-credential-changed\",\"storage-connection-tested\",\"storage-connection-written\",\"storage-grant-changed\"]",
+   "one-of/[\"user-created\",\"user-deleted\",\"agent-changed\",\"agent-created\",\"provider-credential-changed\",\"api-key-created\",\"api-key-revoked\",\"connector-changed\",\"permission-changed\",\"runtime-profile-changed\",\"project-created\",\"project-deleted\",\"project-archived\",\"project-restored\",\"session-published\",\"public-link-revoked\",\"runnable-link-stopped\",\"public-sharing-policy-changed\",\"invitation-created\",\"invitation-resent\",\"invitation-revoked\",\"invitation-accepted\",\"endpoint-client-created\",\"endpoint-client-changed\",\"endpoint-client-revoked\",\"endpoint-tool-called\",\"oauth-client-secret-rotated\",\"oauth-grant-issued\",\"oauth-grant-revoked\",\"file-uploaded\",\"file-downloaded\",\"file-link-created\",\"file-moved\",\"file-deleted\",\"storage-connection-created\",\"storage-connection-updated\",\"storage-connection-deleted\",\"storage-connection-credential-changed\",\"storage-connection-tested\",\"storage-connection-written\",\"storage-grant-changed\",\"workspace-features-changed\"]",
    "expected":
    {"rendered":
-    "('user-created', 'user-deleted', 'agent-changed', 'agent-created', 'provider-credential-changed', 'api-key-created', 'api-key-revoked', 'connector-changed', 'permission-changed', 'runtime-profile-changed', 'project-created', 'project-deleted', 'project-archived', 'project-restored', 'session-published', 'public-link-revoked', 'runnable-link-stopped', 'public-sharing-policy-changed', 'invitation-created', 'invitation-resent', 'invitation-revoked', 'invitation-accepted', 'endpoint-client-created', 'endpoint-client-changed', 'endpoint-client-revoked', 'endpoint-tool-called', 'oauth-client-secret-rotated', 'oauth-grant-issued', 'oauth-grant-revoked', 'file-uploaded', 'file-downloaded', 'file-link-created', 'file-moved', 'file-deleted', 'storage-connection-created', 'storage-connection-updated', 'storage-connection-deleted', 'storage-connection-credential-changed', 'storage-connection-tested', 'storage-connection-written', 'storage-grant-changed')"}},
+    "('user-created', 'user-deleted', 'agent-changed', 'agent-created', 'provider-credential-changed', 'api-key-created', 'api-key-revoked', 'connector-changed', 'permission-changed', 'runtime-profile-changed', 'project-created', 'project-deleted', 'project-archived', 'project-restored', 'session-published', 'public-link-revoked', 'runnable-link-stopped', 'public-sharing-policy-changed', 'invitation-created', 'invitation-resent', 'invitation-revoked', 'invitation-accepted', 'endpoint-client-created', 'endpoint-client-changed', 'endpoint-client-revoked', 'endpoint-tool-called', 'oauth-client-secret-rotated', 'oauth-grant-issued', 'oauth-grant-revoked', 'file-uploaded', 'file-downloaded', 'file-link-created', 'file-moved', 'file-deleted', 'storage-connection-created', 'storage-connection-updated', 'storage-connection-deleted', 'storage-connection-credential-changed', 'storage-connection-tested', 'storage-connection-written', 'storage-grant-changed', 'workspace-features-changed')"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ErCore.render_value_list_accepts_iff",
     "AgentWorkspace.Theorems.WellFormed.ErCore.safe_value_boundaries",
@@ -529,6 +530,33 @@
    "input": {"values": ["membership", "api_key"]},
    "id": "one-of/[\"membership\",\"api_key\"]",
    "expected": {"rendered": null}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ErCore.render_value_list_accepts_iff",
+    "AgentWorkspace.Theorems.WellFormed.ErCore.safe_value_boundaries",
+    "AgentWorkspace.Theorems.WellFormed.ErCore.slug_of_64_characters_is_safe",
+    "AgentWorkspace.Theorems.WellFormed.ErCore.slug_of_65_characters_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.ErCore.quoted_value_is_refused",
+    "AgentWorkspace.Theorems.Adversarial.ErCore.safe_value_has_only_slug_characters",
+    "AgentWorkspace.Theorems.Adversarial.ErCore.upper_case_value_is_refused",
+    "AgentWorkspace.Theorems.Meta.ErCore.only_principal_kind_escapes_the_value_gate"],
+   "input":
+   {"values":
+    ["chat",
+     "projects",
+     "files",
+     "skills",
+     "connectors",
+     "runs",
+     "sharing",
+     "surfaces",
+     "triggers",
+     "evaluations",
+     "builder"]},
+   "id":
+   "one-of/[\"chat\",\"projects\",\"files\",\"skills\",\"connectors\",\"runs\",\"sharing\",\"surfaces\",\"triggers\",\"evaluations\",\"builder\"]",
+   "expected":
+   {"rendered":
+    "('chat', 'projects', 'files', 'skills', 'connectors', 'runs', 'sharing', 'surfaces', 'triggers', 'evaluations', 'builder')"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ErCore.render_value_list_accepts_iff",
     "AgentWorkspace.Theorems.WellFormed.ErCore.safe_value_boundaries",

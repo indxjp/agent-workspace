@@ -3,6 +3,10 @@
 One heading per release, newest first. Released in lock-step with `@indx-workspace/contracts` and
 `@indx-workspace/sdk`, with the same version; the deprecation rule is theirs.
 
+## 0.6.12 — unreleased
+
+No changes to this package. Released in lock-step with the 0.6.12 storage proof release.
+
 ## 0.6.11 — unreleased
 
 No changes to this package. Released in lock-step with the 0.6.11 storage and Builder release.

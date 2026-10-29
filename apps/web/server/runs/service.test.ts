@@ -146,6 +146,53 @@ describe('startRunOnSession: the lower-only limits override', () => {
   });
 });
 
+describe('startRunOnSession: an archived agent (#1851 slice 4)', () => {
+  const ARCHIVED: AgentRef = { ...AGENT, archived: true };
+
+  it('refuses 409 agent_archived before it opens a session or creates a run', async () => {
+    const { env, sessions, store } = harness();
+    const create = vi.spyOn(store, 'create');
+
+    await expect(startRunOnSession(env, PRINCIPAL, ARCHIVED, START)).resolves.toMatchObject({
+      kind: 'refused',
+      status: 409,
+      code: 'agent_archived',
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
+  });
+
+  it('refuses a follow-up in an existing session too, and starts nothing', async () => {
+    const { env, store } = harness();
+    const create = vi.spyOn(store, 'create');
+
+    await expect(
+      startRunOnSession(env, PRINCIPAL, ARCHIVED, { ...START, sessionId: EXISTING_SESSION }),
+    ).resolves.toMatchObject({ kind: 'refused', status: 409, code: 'agent_archived' });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('names the archive before the daily cost cap', async () => {
+    const { env } = harness();
+    const capped: RunApiEnvironment = {
+      ...env,
+      dailyCostCap: { refusal: () => Promise.reject(new Error('ledger unreachable')) },
+    };
+
+    await expect(startRunOnSession(capped, PRINCIPAL, ARCHIVED, START)).resolves.toMatchObject({
+      code: 'agent_archived',
+    });
+  });
+
+  it('starts an agent without the archived mark', async () => {
+    const { env } = harness();
+
+    await expect(startRunOnSession(env, PRINCIPAL, AGENT, START)).resolves.toMatchObject({
+      kind: 'started',
+    });
+  });
+});
+
 describe('startRunOnSession: the daily cost cap (#1851 slice 3)', () => {
   it('parses a policy with maxCostPerDayUsd: 5 and refuses a start once the workspace spent 5 USD today', async () => {
     expect(ProjectPolicySchema.parse({ maxCostPerDayUsd: 5 })).toEqual({ maxCostPerDayUsd: 5 });

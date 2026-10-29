@@ -31,7 +31,7 @@ import {
 import {
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
-  type ObjectStoreV2,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
@@ -433,7 +433,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await h.as(h.user).put(new Uint8Array([3, 3]));
 
       // The whole root store and the old store, so a name under any prefix shows up.
-      const keys = async (store: ObjectStoreV2) =>
+      const keys = async (store: ObjectStore) =>
         (await store.listPage('', { recursive: true })).entries.map((entry) => entry.key);
       const all = [
         ...(await keys(h.objects)),

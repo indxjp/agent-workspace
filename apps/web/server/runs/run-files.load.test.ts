@@ -45,7 +45,7 @@ import {
 } from './run-files-load-fixtures';
 import { createResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
-import { MiB, peakRssGrowth, warmHttpTransport } from '../../../../tests/load/flat-memory';
+import { measureRssGrowth, MiB, warmHttpTransport } from '../../../../tests/load/flat-memory';
 
 // Collecting every 4 MiB keeps uncollected socket-read garbage out of the reading (PR #1747).
 const SAMPLE_EVERY = 4 * MiB;
@@ -198,14 +198,14 @@ function defineLoadSuite(name: string, setup: () => Promise<World>) {
 
           await warmHttpTransport();
           let outcome = '';
-          const growth = await peakRssGrowth(async (sample) => {
+          const { growth, newSpaceGrowth } = await measureRssGrowth(async (sample) => {
             sampler = sample;
             launch(context);
             outcome = await settle(store);
           });
           const runBody = sink.runBodies[0] ?? '';
           console.info(
-            `[load] run files (${name}): peak RSS growth ${(growth / MiB).toFixed(1)} MiB of ${String(TOTAL_BYTES / MiB)} MiB, /run body ${String(Buffer.byteLength(runBody))} bytes`,
+            `[load] run files (${name}): peak RSS growth ${(growth / MiB).toFixed(1)} MiB of ${String(TOTAL_BYTES / MiB)} MiB, new space growth ${(newSpaceGrowth / MiB).toFixed(1)} MiB, /run body ${String(Buffer.byteLength(runBody))} bytes`,
           );
           expect(outcome).toBe('completed');
           expect(growth).toBeLessThan(RSS_BOUND);

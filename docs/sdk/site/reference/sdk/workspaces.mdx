@@ -13,7 +13,8 @@ fixed role and has no human membership to list, create or administer workspace r
 Build the client with
 `auth: { kind: 'session' }` in a browser, or `{ kind: 'user-token' }` with the token `aw login`
 holds (issue #242), to use any of them. `sharingPolicy` is the exception: its routes belong to
-the caller's current workspace and serve every principal.
+the caller's current workspace and serve every principal. `features` refuses an API key the
+same way `list` does.
 
 ## list
 
@@ -134,3 +135,41 @@ set(input: UpdateSharingPolicyInput, options?: RequestOptions): Promise<SharingP
 **Returns:** `Promise<SharingPolicy>`
 
 **Route:** `PATCH /api/sharing-policies`
+
+## features.list
+
+Which features exist, and which the workspace has on. A person who is a member may read it.
+
+```ts
+list(workspaceId: string, options?: RequestOptions): Promise<WorkspaceFeatures>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `workspaceId` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<WorkspaceFeatures>`
+
+**Route:** `GET /api/workspaces/:workspaceId/features`
+
+## features.set
+
+Replace the whole set of features that are off. Owner only (`403 forbidden` for any other
+role). A set that leaves a feature on without one it needs is `409 feature_in_use`, with the
+dependents in `details`; one that would switch on a feature this deployment does not install is
+`409 feature_not_installed`.
+
+```ts
+set(workspaceId: string, input: { readonly disabled: readonly FeatureId[] }, options?: RequestOptions): Promise<WorkspaceFeatures>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `workspaceId` | `string` | Yes |
+| `input` | `{ readonly disabled: readonly FeatureId[] }` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<WorkspaceFeatures>`
+
+**Route:** `PUT /api/workspaces/:workspaceId/features`

@@ -90,6 +90,64 @@ describe('aw storage connections', () => {
     }
   });
 
+  it('[US-STO-12][api][cli] refuses a body and a credential that would both read stdin', async () => {
+    // Only update takes --file; create names its fields as flags.
+    for (const argv of [
+      ['storage', 'connections', 'update', 'acme', '--file', '-', '--credential-file', '-'],
+    ]) {
+      const refused = await runCli(argv, {
+        route: () => json(200, CONNECTION),
+        stdin: JSON.stringify(secret),
+      });
+      expect(refused.code, argv.join(' ')).toBe(EXIT_CODE.usage);
+      expect(refused.stderr).toContain('--file - and --credential-file - both read stdin');
+      expect(refused.calls).toHaveLength(0);
+    }
+  });
+
+  it('[US-STO-12][api][cli] credential takes one connection and checks its flag before any lookup', async () => {
+    const good = await tempFile(directory, 'one.json', JSON.stringify(secret));
+    const extra = await runCli(
+      ['storage', 'connections', 'credential', 'acme', 'other', '--credential-file', good],
+      { route: () => json(200, CONNECTION) },
+    );
+    expect(extra.code).toBe(EXIT_CODE.usage);
+    expect(extra.stderr).toContain(
+      'credential takes one <name|id>; the credential is read from --credential-file, never an argument',
+    );
+    expect(extra.calls).toHaveLength(0);
+  });
+
+  it('[US-STO-12][api][cli] credential never echoes a stray positional, which may be a pasted credential', async () => {
+    const good = await tempFile(directory, 'pasted.json', JSON.stringify(secret));
+    const pasted = JSON.stringify(secret);
+    const refused = await runCli(
+      ['storage', 'connections', 'credential', 'acme', pasted, '--credential-file', good],
+      { route: () => json(200, CONNECTION) },
+    );
+    expect(refused.code).toBe(EXIT_CODE.usage);
+    expect(refused.stderr).not.toContain(pasted);
+    expect(refused.stderr).not.toContain(secret.secretAccessKey);
+    expect(refused.stdout).not.toContain(secret.secretAccessKey);
+    expect(refused.calls).toHaveLength(0);
+  });
+
+  it('[US-STO-12][api][cli] update turns writing on with --write-allowed, without --file', async () => {
+    const route: Route = (call) =>
+      call.url.pathname === '/api/storage-connections'
+        ? json(200, { connections: [CONNECTION] })
+        : json(200, { ...CONNECTION, writeAllowed: true });
+    const run = await runCli(['storage', 'connections', 'update', 'acme', '--write-allowed'], {
+      route,
+    });
+    expect(run.code, run.stderr).toBe(EXIT_CODE.ok);
+    expect(request(run)).toEqual([
+      'GET /api/storage-connections',
+      `PATCH /api/storage-connections/${IDS.connection}`,
+    ]);
+    expect(run.calls[1]?.json).toEqual({ writeAllowed: true });
+  });
+
   it('[US-STO-12][api][cli] never echoes the credential, on success or failure', async () => {
     const good = await tempFile(directory, 'good.json', JSON.stringify(secret));
     const notJson = await tempFile(directory, 'raw.txt', secret.secretAccessKey);
@@ -162,6 +220,25 @@ describe('aw storage connections', () => {
         argv: ['storage', 'connections', 'credential', 'acme', '--credential-file', good],
         route: () => problem(404, 'storage_connection_not_found'),
         code: EXIT_CODE.problem,
+      },
+      {
+        argv: [...create, 's3://acme-bucket', '--allow', 'a', '--credential-file', good],
+        route: () => problem(400, 'invalid_storage_connection'),
+        code: EXIT_CODE.problem,
+      },
+      {
+        argv: ['storage', 'connections', 'test', 'acme', '--json'],
+        route: (call) =>
+          call.method === 'POST' ? json(200, { ok: false, code: 'forbidden' }) : ok(call),
+        code: EXIT_CODE.problem,
+      },
+      {
+        argv: ['storage', 'ls', 'acme/reports/', '--json'],
+        route: (call) =>
+          call.url.pathname.endsWith('/browse')
+            ? json(200, { entries: [{ path: 'reports/a.txt', kind: 'file', size: 3 }] })
+            : ok(call),
+        code: 0,
       },
     ];
 

@@ -223,7 +223,7 @@
    "name": "AgentWorkspace.Authz.Decide.declaredRoutes",
    "module": "AgentWorkspace.Authz.Decide",
    "kind": "def",
-   "docstring": "The declared route union (184 routes).",
+   "docstring": "The declared route union (187 routes).",
    "doc": []},
   {"ts": ["apps/web/server/rbac/authorisation-matrix.test.ts#IDENTITY_ONLY_ROUTES"],
    "tier": null,
@@ -14776,6 +14776,19 @@
    "docstring":
    "In every consistent state a run's ledger holds at most one row per provider response, which\nis what lets a delayed usage frame be retried \"without charging the run twice\".",
    "doc": []},
+  {"ts":
+   ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures",
+    "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault"],
+   "tier": "T2",
+   "statement":
+   "∀ (st : AgentWorkspace.Er.Core.State), AgentWorkspace.Er.Core.consistent AgentWorkspace.Er.Core.catalogue st = true → ∀ {r r' : AgentWorkspace.Er.Core.Row}, AgentWorkspace.Er.Core.References AgentWorkspace.Er.Core.catalogue st AgentWorkspace.Er.Core.TableName.workspaceFeatures (AgentWorkspace.Er.Current.Work.workFk AgentWorkspace.Er.Core.TableName.workspaceFeatures \"workspace_features_workspace_id_workspaces_id_fk\") r r' → AgentWorkspace.Er.Core.tenantOf AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures r = AgentWorkspace.Er.Core.tenantOf AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaces r'",
+   "name":
+   "AgentWorkspace.Theorems.Invariants.ConceptWork.workspace_features_workspace_id_workspaces_id_fk_preserves_tenant",
+   "module": "AgentWorkspace.Theorems.Invariants.ConceptWork",
+   "kind": "theorem",
+   "docstring":
+   "In every consistent state, a `workspace_features` row and the `workspaces` row it references through `workspace_features_workspace_id_workspaces_id_fk` belong to the same workspace.",
+   "doc": ["docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"]},
   {"ts": [],
    "tier": "T2",
    "statement":
@@ -16997,7 +17010,7 @@
   {"ts": [],
    "tier": "T5",
    "statement":
-   "List.filter (fun t => !(AgentWorkspace.Er.Core.catalogue t).hasColumn \"created_at\") AgentWorkspace.Er.Core.allTables = [AgentWorkspace.Er.Core.TableName.agentPointerMoves, AgentWorkspace.Er.Core.TableName.endpointClientAgents, AgentWorkspace.Er.Core.TableName.endpointClientApiKeys, AgentWorkspace.Er.Core.TableName.projectFiles, AgentWorkspace.Er.Core.TableName.projectMcpServers, AgentWorkspace.Er.Core.TableName.runtimeVerifications, AgentWorkspace.Er.Core.TableName.storageMigrationRuns] ∧ List.filter (fun t => !(AgentWorkspace.Er.Core.catalogue t).hasColumn \"updated_at\") AgentWorkspace.Er.Core.allTables = [AgentWorkspace.Er.Core.TableName.agentGrants, AgentWorkspace.Er.Core.TableName.agentMcpServers, AgentWorkspace.Er.Core.TableName.agentSkills, AgentWorkspace.Er.Core.TableName.agentStorageGrants, AgentWorkspace.Er.Core.TableName.agentVersionStorageGrants, AgentWorkspace.Er.Core.TableName.agentPointerMoves, AgentWorkspace.Er.Core.TableName.agentVersionEvaluations, AgentWorkspace.Er.Core.TableName.agentVersions, AgentWorkspace.Er.Core.TableName.auditEvents, AgentWorkspace.Er.Core.TableName.browserTokens, AgentWorkspace.Er.Core.TableName.builderToolCalls, AgentWorkspace.Er.Core.TableName.cliSessions, AgentWorkspace.Er.Core.TableName.endpointClientAgents, AgentWorkspace.Er.Core.TableName.endpointClientApiKeys, AgentWorkspace.Er.Core.TableName.fileTexts, AgentWorkspace.Er.Core.TableName.oauthTokens, AgentWorkspace.Er.Core.TableName.projectFiles, AgentWorkspace.Er.Core.TableName.projectMcpServers, AgentWorkspace.Er.Core.TableName.runEvents, AgentWorkspace.Er.Core.TableName.runFeedback, AgentWorkspace.Er.Core.TableName.runUsageRecords, AgentWorkspace.Er.Core.TableName.runTokens, AgentWorkspace.Er.Core.TableName.runtimeVerifications, AgentWorkspace.Er.Core.TableName.sessionMessages, AgentWorkspace.Er.Core.TableName.sessionStateEntries, AgentWorkspace.Er.Core.TableName.storageMigrationRuns, AgentWorkspace.Er.Core.TableName.shareViews, AgentWorkspace.Er.Core.TableName.shares, AgentWorkspace.Er.Core.TableName.skillRevisions, AgentWorkspace.Er.Core.TableName.surfaceSessionKeys, AgentWorkspace.Er.Core.TableName.triggerDeliveries, AgentWorkspace.Er.Core.TableName.workspacePrincipals]",
+   "List.filter (fun t => !(AgentWorkspace.Er.Core.catalogue t).hasColumn \"created_at\") AgentWorkspace.Er.Core.allTables = [AgentWorkspace.Er.Core.TableName.agentPointerMoves, AgentWorkspace.Er.Core.TableName.endpointClientAgents, AgentWorkspace.Er.Core.TableName.endpointClientApiKeys, AgentWorkspace.Er.Core.TableName.projectFiles, AgentWorkspace.Er.Core.TableName.projectMcpServers, AgentWorkspace.Er.Core.TableName.runtimeVerifications, AgentWorkspace.Er.Core.TableName.storageMigrationRuns] ∧ List.filter (fun t => !(AgentWorkspace.Er.Core.catalogue t).hasColumn \"updated_at\") AgentWorkspace.Er.Core.allTables = have y := have y := have y := [AgentWorkspace.Er.Core.TableName.skillRevisions, AgentWorkspace.Er.Core.TableName.surfaceSessionKeys, AgentWorkspace.Er.Core.TableName.triggerDeliveries, AgentWorkspace.Er.Core.TableName.workspacePrincipals, AgentWorkspace.Er.Core.TableName.workspaceFeatures]; AgentWorkspace.Er.Core.TableName.sessionStateEntries :: AgentWorkspace.Er.Core.TableName.storageMigrationRuns :: AgentWorkspace.Er.Core.TableName.shareViews :: AgentWorkspace.Er.Core.TableName.shares :: y; have y := AgentWorkspace.Er.Core.TableName.runUsageRecords :: AgentWorkspace.Er.Core.TableName.runTokens :: AgentWorkspace.Er.Core.TableName.runtimeVerifications :: AgentWorkspace.Er.Core.TableName.sessionMessages :: y; AgentWorkspace.Er.Core.TableName.projectFiles :: AgentWorkspace.Er.Core.TableName.projectMcpServers :: AgentWorkspace.Er.Core.TableName.runEvents :: AgentWorkspace.Er.Core.TableName.runFeedback :: y; have y := have y := AgentWorkspace.Er.Core.TableName.endpointClientAgents :: AgentWorkspace.Er.Core.TableName.endpointClientApiKeys :: AgentWorkspace.Er.Core.TableName.fileTexts :: AgentWorkspace.Er.Core.TableName.oauthTokens :: y; AgentWorkspace.Er.Core.TableName.auditEvents :: AgentWorkspace.Er.Core.TableName.browserTokens :: AgentWorkspace.Er.Core.TableName.builderToolCalls :: AgentWorkspace.Er.Core.TableName.cliSessions :: y; have y := AgentWorkspace.Er.Core.TableName.agentVersionStorageGrants :: AgentWorkspace.Er.Core.TableName.agentPointerMoves :: AgentWorkspace.Er.Core.TableName.agentVersionEvaluations :: AgentWorkspace.Er.Core.TableName.agentVersions :: y; AgentWorkspace.Er.Core.TableName.agentGrants :: AgentWorkspace.Er.Core.TableName.agentMcpServers :: AgentWorkspace.Er.Core.TableName.agentSkills :: AgentWorkspace.Er.Core.TableName.agentStorageGrants :: y",
    "name": "AgentWorkspace.Theorems.Meta.ErCore.timestamps_are_not_on_every_table",
    "module": "AgentWorkspace.Theorems.Meta.ErCore",
    "kind": "theorem",
@@ -22191,6 +22204,17 @@
    "kind": "theorem",
    "docstring": "In every consistent state every run row and every ledger row settles in USD.",
    "doc": []},
+  {"ts": ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures"],
+   "tier": "T1",
+   "statement":
+   "∀ (st : AgentWorkspace.Er.Core.State), AgentWorkspace.Er.Core.consistent AgentWorkspace.Er.Core.catalogue st = true → ∀ {r : AgentWorkspace.Er.Core.Row}, r ∈ st AgentWorkspace.Er.Core.TableName.workspaceFeatures → (∃ r', AgentWorkspace.Er.Core.References AgentWorkspace.Er.Core.catalogue st AgentWorkspace.Er.Core.TableName.workspaceFeatures (AgentWorkspace.Er.Current.Work.workFk AgentWorkspace.Er.Core.TableName.workspaceFeatures \"workspace_features_workspace_id_workspaces_id_fk\") r r') ∧ ∀ (r1 r2 : AgentWorkspace.Er.Core.Row), AgentWorkspace.Er.Core.References AgentWorkspace.Er.Core.catalogue st AgentWorkspace.Er.Core.TableName.workspaceFeatures (AgentWorkspace.Er.Current.Work.workFk AgentWorkspace.Er.Core.TableName.workspaceFeatures \"workspace_features_workspace_id_workspaces_id_fk\") r r1 → AgentWorkspace.Er.Core.References AgentWorkspace.Er.Core.catalogue st AgentWorkspace.Er.Core.TableName.workspaceFeatures (AgentWorkspace.Er.Current.Work.workFk AgentWorkspace.Er.Core.TableName.workspaceFeatures \"workspace_features_workspace_id_workspaces_id_fk\") r r2 → r1 = r2",
+   "name":
+   "AgentWorkspace.Theorems.Normative.ConceptWork.workspace_features_workspace_id_workspaces_id_fk_links_exactly_one_parent",
+   "module": "AgentWorkspace.Theorems.Normative.ConceptWork",
+   "kind": "theorem",
+   "docstring":
+   "In every consistent state, every `workspace_features` row references exactly one `workspaces` row through `workspace_features_workspace_id_workspaces_id_fk`.",
+   "doc": ["docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"]},
   {"ts":
    ["packages/contracts/src/sessions.ts#PROJECT_KEY_PATTERN",
     "packages/run-protocol/src/schemas.ts#validateTenantSessionScope"],
@@ -25662,12 +25686,12 @@
   {"ts": ["apps/web/server/rbac/authorisation-matrix.test.ts#undecidedCells"],
    "tier": "T0",
    "statement":
-   "AgentWorkspace.Authz.Decide.matrixRoutes.length = 154 ∧ ∀ (r : AgentWorkspace.Authz.Decide.DeclaredRoute), r ∈ AgentWorkspace.Authz.Decide.matrixRoutes → ∀ (role : AgentWorkspace.Concepts.Membership.Role) (o : AgentWorkspace.Authz.Decide.Ownership), (AgentWorkspace.Authz.Decide.decideOrdinary { role := AgentWorkspace.WireEnum.toWire role, method := r.method, path := r.path, ownership := o, scope := none }).effect ≠ AgentWorkspace.Authz.Decide.Effect.refuse",
+   "AgentWorkspace.Authz.Decide.matrixRoutes.length = 157 ∧ ∀ (r : AgentWorkspace.Authz.Decide.DeclaredRoute), r ∈ AgentWorkspace.Authz.Decide.matrixRoutes → ∀ (role : AgentWorkspace.Concepts.Membership.Role) (o : AgentWorkspace.Authz.Decide.Ownership), (AgentWorkspace.Authz.Decide.decideOrdinary { role := AgentWorkspace.WireEnum.toWire role, method := r.method, path := r.path, ownership := o, scope := none }).effect ≠ AgentWorkspace.Authz.Decide.Effect.refuse",
    "name": "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_matrix_route_is_decided",
    "module": "AgentWorkspace.Theorems.WellFormed.AuthzDecide",
    "kind": "theorem",
    "docstring":
-   "The authorisation matrix is total: its 154 routes (the declared union minus the eighteen\npre-authentication routes and the nine identity-only routes) are decided — `allow` or `deny`, never\n`refuse` — for every role and every ownership answer, 3 080 cells.",
+   "The authorisation matrix is total: its 157 routes (the declared union minus the eighteen\npre-authentication routes and the nine identity-only routes) are decided — `allow` or `deny`, never\n`refuse` — for every role and every ownership answer, 3 140 cells.",
    "doc": ["docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision"]},
   {"ts": ["apps/web/server/rbac/decide.ts#decide"],
    "tier": "T0",
@@ -25703,12 +25727,12 @@
     "apps/web/server/rbac/declared-sub-resources.ts#composeSubResources"],
    "tier": "T0",
    "statement":
-   "(match AgentWorkspace.Authz.Resources.composeSubResources AgentWorkspace.Authz.Resources.spec34SubResources AgentWorkspace.Authz.Resources.declaredSubResources with | Except.ok a => true | Except.error a => false) = true ∧ (AgentWorkspace.Authz.Resources.pairsOf AgentWorkspace.Authz.Resources.subResources = have y := have y := have y := [(AgentWorkspace.Authz.Resources.Resource.sessions, \"subkeys\"), (AgentWorkspace.Authz.Resources.Resource.skills, \"revisions\"), (AgentWorkspace.Authz.Resources.Resource.storageConnections, \"credential\"), (AgentWorkspace.Authz.Resources.Resource.storageConnections, \"test\"), (AgentWorkspace.Authz.Resources.Resource.storageConnections, \"browse\"), (AgentWorkspace.Authz.Resources.Resource.triggers, \"secret\")]; (AgentWorkspace.Authz.Resources.Resource.sessions, \"state-streams\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"state-blobs\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"attachments\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"file-search\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"transcript\") :: y; have y := (AgentWorkspace.Authz.Resources.Resource.runs, \"feedback\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"approval\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"interrupt\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"revoke-tokens\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"messages\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"state-entries\") :: y; (AgentWorkspace.Authz.Resources.Resource.modelConnections, \"credential\") :: (AgentWorkspace.Authz.Resources.Resource.projects, \"sessions\") :: (AgentWorkspace.Authz.Resources.Resource.projects, \"archive\") :: (AgentWorkspace.Authz.Resources.Resource.projects, \"restore\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"events\") :: y; have y := have y := (AgentWorkspace.Authz.Resources.Resource.endpointClients, \"secret\") :: (AgentWorkspace.Authz.Resources.Resource.files, \"upload-urls\") :: (AgentWorkspace.Authz.Resources.Resource.files, \"upload-complete\") :: (AgentWorkspace.Authz.Resources.Resource.files, \"download-urls\") :: (AgentWorkspace.Authz.Resources.Resource.invitations, \"resend\") :: (AgentWorkspace.Authz.Resources.Resource.modelConnections, \"test\") :: y; (AgentWorkspace.Authz.Resources.Resource.agents, \"policy\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"grants\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"resources\") :: (AgentWorkspace.Authz.Resources.Resource.connectors, \"test-connection\") :: (AgentWorkspace.Authz.Resources.Resource.endpointClients, \"keys\") :: y; have y := (AgentWorkspace.Authz.Resources.Resource.agents, \"evaluation-advance\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"feedback\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"versions\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"pointers\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"platform-exports\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"platform-archives\") :: y; (AgentWorkspace.Authz.Resources.Resource.agents, \"runs\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"promote\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"rollback\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"evaluations\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"evaluation-runs\") :: y) ∧ (AgentWorkspace.Authz.Resources.pairsOf AgentWorkspace.Authz.Resources.subResources).length = 44 ∧ (AgentWorkspace.Authz.Resources.pairsOf AgentWorkspace.Authz.Resources.subResources).Nodup",
-   "name": "AgentWorkspace.Theorems.WellFormed.AuthzDecide.sub_resource_composition_yields_forty_four_pairs",
+   "(match AgentWorkspace.Authz.Resources.composeSubResources AgentWorkspace.Authz.Resources.spec34SubResources AgentWorkspace.Authz.Resources.declaredSubResources with | Except.ok a => true | Except.error a => false) = true ∧ (AgentWorkspace.Authz.Resources.pairsOf AgentWorkspace.Authz.Resources.subResources = have y := have y := have y := [(AgentWorkspace.Authz.Resources.Resource.skills, \"revisions\"), (AgentWorkspace.Authz.Resources.Resource.storageConnections, \"credential\"), (AgentWorkspace.Authz.Resources.Resource.storageConnections, \"test\"), (AgentWorkspace.Authz.Resources.Resource.storageConnections, \"browse\"), (AgentWorkspace.Authz.Resources.Resource.triggers, \"secret\"), (AgentWorkspace.Authz.Resources.Resource.workspaces, \"features\")]; (AgentWorkspace.Authz.Resources.Resource.sessions, \"state-streams\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"state-blobs\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"attachments\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"file-search\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"transcript\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"subkeys\") :: y; have y := (AgentWorkspace.Authz.Resources.Resource.runs, \"feedback\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"approval\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"interrupt\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"revoke-tokens\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"messages\") :: (AgentWorkspace.Authz.Resources.Resource.sessions, \"state-entries\") :: y; (AgentWorkspace.Authz.Resources.Resource.modelConnections, \"credential\") :: (AgentWorkspace.Authz.Resources.Resource.projects, \"sessions\") :: (AgentWorkspace.Authz.Resources.Resource.projects, \"archive\") :: (AgentWorkspace.Authz.Resources.Resource.projects, \"restore\") :: (AgentWorkspace.Authz.Resources.Resource.runs, \"events\") :: y; have y := have y := (AgentWorkspace.Authz.Resources.Resource.endpointClients, \"secret\") :: (AgentWorkspace.Authz.Resources.Resource.files, \"upload-urls\") :: (AgentWorkspace.Authz.Resources.Resource.files, \"upload-complete\") :: (AgentWorkspace.Authz.Resources.Resource.files, \"download-urls\") :: (AgentWorkspace.Authz.Resources.Resource.invitations, \"resend\") :: (AgentWorkspace.Authz.Resources.Resource.modelConnections, \"test\") :: y; (AgentWorkspace.Authz.Resources.Resource.agents, \"platform-archives\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"policy\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"grants\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"resources\") :: (AgentWorkspace.Authz.Resources.Resource.connectors, \"test-connection\") :: (AgentWorkspace.Authz.Resources.Resource.endpointClients, \"keys\") :: y; have y := (AgentWorkspace.Authz.Resources.Resource.agents, \"evaluation-runs\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"evaluation-advance\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"feedback\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"versions\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"pointers\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"platform-exports\") :: y; (AgentWorkspace.Authz.Resources.Resource.agents, \"runs\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"restore\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"promote\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"rollback\") :: (AgentWorkspace.Authz.Resources.Resource.agents, \"evaluations\") :: y) ∧ (AgentWorkspace.Authz.Resources.pairsOf AgentWorkspace.Authz.Resources.subResources).length = 46 ∧ (AgentWorkspace.Authz.Resources.pairsOf AgentWorkspace.Authz.Resources.subResources).Nodup",
+   "name": "AgentWorkspace.Theorems.WellFormed.AuthzDecide.sub_resource_composition_yields_forty_six_pairs",
    "module": "AgentWorkspace.Theorems.WellFormed.AuthzDecide",
    "kind": "theorem",
    "docstring":
-   "`composeSubResources` does not throw on the tracked declarations, and `SUB_RESOURCES` is §34's\nthree pairs plus the forty-one declared ones: 44 classified `(resource, sub)` pairs.",
+   "`composeSubResources` does not throw on the tracked declarations, and `SUB_RESOURCES` is §34's\nthree pairs plus the forty-three declared ones: 46 classified `(resource, sub)` pairs.",
    "doc": ["docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision"]},
   {"ts": ["packages/gateway/src/tokens/run-token.ts#RunTokenClaimsSchema"],
    "tier": "T0",
@@ -28352,11 +28376,11 @@
   {"ts": ["packages/core/src/db/schema/one-of.ts#oneOf"],
    "tier": "T0",
    "statement":
-   "(List.flatMap AgentWorkspace.Er.Current.Work.otherChecks AgentWorkspace.Er.Current.Work.workTables).length = 25 ∧ (List.flatMap (fun t => (AgentWorkspace.Er.Core.catalogue t).checks) AgentWorkspace.Er.Current.Work.workTables).length = 44",
+   "(List.flatMap AgentWorkspace.Er.Current.Work.otherChecks AgentWorkspace.Er.Current.Work.workTables).length = 25 ∧ (List.flatMap (fun t => (AgentWorkspace.Er.Core.catalogue t).checks) AgentWorkspace.Er.Current.Work.workTables).length = 45",
    "name": "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts",
    "module": "AgentWorkspace.Theorems.WellFormed.ConceptWork",
    "kind": "theorem",
-   "docstring": "The work tables carry 25 checks that are not closed sets and 19 closed-set checks.",
+   "docstring": "The work tables carry 25 checks that are not closed sets and 20 closed-set checks.",
    "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
   {"ts": ["packages/core/src/db/schema/index.ts"],
    "tier": "T0",
@@ -28371,12 +28395,23 @@
   {"ts": [],
    "tier": "T0",
    "statement":
-   "AgentWorkspace.Er.Current.Work.workForeignKeys.length = 49 ∧ (List.filter (fun p => AgentWorkspace.Er.Current.Work.fkCardinality AgentWorkspace.Er.Core.catalogue p.fst p.snd == AgentWorkspace.Er.Current.Work.Cardinality.exactlyOne) AgentWorkspace.Er.Current.Work.workForeignKeys).length = 35",
+   "AgentWorkspace.Er.Current.Work.workForeignKeys.length = 50 ∧ (List.filter (fun p => AgentWorkspace.Er.Current.Work.fkCardinality AgentWorkspace.Er.Core.catalogue p.fst p.snd == AgentWorkspace.Er.Current.Work.Cardinality.exactlyOne) AgentWorkspace.Er.Current.Work.workForeignKeys).length = 36",
    "name": "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_foreign_key_counts",
    "module": "AgentWorkspace.Theorems.WellFormed.ConceptWork",
    "kind": "theorem",
    "docstring":
-   "The work tables declare 49 foreign keys: 35 whose every column is `NOT NULL` and 14 with a\nnullable column.",
+   "The work tables declare 50 foreign keys: 36 whose every column is `NOT NULL` and 14 with a\nnullable column.",
+   "doc": ["docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"]},
+  {"ts": ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures"],
+   "tier": "T0",
+   "statement":
+   "Option.map (fun fk => (fk.refTable, AgentWorkspace.Er.Current.Work.fkCardinality AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures fk)) ((AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).foreignKey? \"workspace_features_workspace_id_workspaces_id_fk\") = some (AgentWorkspace.Er.Core.TableName.workspaces, AgentWorkspace.Er.Current.Work.Cardinality.exactlyOne)",
+   "name":
+   "AgentWorkspace.Theorems.WellFormed.ConceptWork.workspace_features_workspace_id_workspaces_id_fk_is_exactly_one",
+   "module": "AgentWorkspace.Theorems.WellFormed.ConceptWork",
+   "kind": "theorem",
+   "docstring":
+   "`workspace_features_workspace_id_workspaces_id_fk` of `workspace_features` references `workspaces`, and every key column is `NOT NULL`, so every child row links exactly one parent.",
    "doc": ["docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"]},
   {"ts": ["packages/contracts/src/engines.ts#EngineBudgetEnforcementSchema"],
    "tier": "T0",
@@ -30480,7 +30515,7 @@
     "packages/core/src/db/schema/one-of.ts#oneOf"],
    "tier": "T0",
    "statement":
-   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.auditEvents).oneOfCheck? \"audit_events_action_valid\" = some (\"action\", have y := have y := have y := [\"storage-connection-updated\", \"storage-connection-deleted\", \"storage-connection-credential-changed\", \"storage-connection-tested\", \"storage-connection-written\", \"storage-grant-changed\"]; \"file-downloaded\" :: \"file-link-created\" :: \"file-moved\" :: \"file-deleted\" :: \"storage-connection-created\" :: y; have y := \"endpoint-tool-called\" :: \"oauth-client-secret-rotated\" :: \"oauth-grant-issued\" :: \"oauth-grant-revoked\" :: \"file-uploaded\" :: y; \"invitation-revoked\" :: \"invitation-accepted\" :: \"endpoint-client-created\" :: \"endpoint-client-changed\" :: \"endpoint-client-revoked\" :: y; have y := have y := \"public-link-revoked\" :: \"runnable-link-stopped\" :: \"public-sharing-policy-changed\" :: \"invitation-created\" :: \"invitation-resent\" :: y; \"project-created\" :: \"project-deleted\" :: \"project-archived\" :: \"project-restored\" :: \"session-published\" :: y; have y := \"api-key-created\" :: \"api-key-revoked\" :: \"connector-changed\" :: \"permission-changed\" :: \"runtime-profile-changed\" :: y; \"user-created\" :: \"user-deleted\" :: \"agent-changed\" :: \"agent-created\" :: \"provider-credential-changed\" :: y)",
+   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.auditEvents).oneOfCheck? \"audit_events_action_valid\" = some (\"action\", have y := have y := have y := [\"storage-connection-deleted\", \"storage-connection-credential-changed\", \"storage-connection-tested\", \"storage-connection-written\", \"storage-grant-changed\", \"workspace-features-changed\"]; \"file-link-created\" :: \"file-moved\" :: \"file-deleted\" :: \"storage-connection-created\" :: \"storage-connection-updated\" :: y; have y := \"oauth-client-secret-rotated\" :: \"oauth-grant-issued\" :: \"oauth-grant-revoked\" :: \"file-uploaded\" :: \"file-downloaded\" :: y; \"invitation-accepted\" :: \"endpoint-client-created\" :: \"endpoint-client-changed\" :: \"endpoint-client-revoked\" :: \"endpoint-tool-called\" :: y; have y := have y := \"public-link-revoked\" :: \"runnable-link-stopped\" :: \"public-sharing-policy-changed\" :: \"invitation-created\" :: \"invitation-resent\" :: \"invitation-revoked\" :: y; \"project-created\" :: \"project-deleted\" :: \"project-archived\" :: \"project-restored\" :: \"session-published\" :: y; have y := \"api-key-created\" :: \"api-key-revoked\" :: \"connector-changed\" :: \"permission-changed\" :: \"runtime-profile-changed\" :: y; \"user-created\" :: \"user-deleted\" :: \"agent-changed\" :: \"agent-created\" :: \"provider-credential-changed\" :: y)",
    "name": "AgentWorkspace.Theorems.WellFormed.ErCore.audit_events_action_valid_matches_snapshot",
    "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
    "kind": "theorem",
@@ -35736,7 +35771,7 @@
   {"ts": ["packages/core/src/db/schema/storage-migration-runs.ts#storageMigrationRuns"],
    "tier": "T0",
    "statement":
-   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).columns = [{ name := \"id\", type := AgentWorkspace.Er.Core.SqlType.uuid, notNull := true }, { name := \"finished_at\", type := AgentWorkspace.Er.Core.SqlType.timestamptz, notNull := true }, { name := \"rows_checked\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"legacy_rows\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"mismatches\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"stage\", type := AgentWorkspace.Er.Core.SqlType.text, notNull := true }, { name := \"skipped_ownerless\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"skipped_path_taken\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"skipped_failed\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"clean\", type := AgentWorkspace.Er.Core.SqlType.boolean, notNull := false }] ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).primaryKey = [\"id\"] ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).foreignKeys.length = 0 ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).uniques.length = 0 ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).checks.length = 1",
+   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).columns = [{ name := \"id\", type := AgentWorkspace.Er.Core.SqlType.uuid, notNull := true }, { name := \"finished_at\", type := AgentWorkspace.Er.Core.SqlType.timestamptz, notNull := true }, { name := \"rows_checked\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"legacy_rows\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"mismatches\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"stage\", type := AgentWorkspace.Er.Core.SqlType.text, notNull := true }, { name := \"skipped_ownerless\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"skipped_path_taken\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"skipped_failed\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := true }, { name := \"clean\", type := AgentWorkspace.Er.Core.SqlType.boolean, notNull := false }, { name := \"orphans\", type := AgentWorkspace.Er.Core.SqlType.bigint, notNull := false }, { name := \"proof_version\", type := AgentWorkspace.Er.Core.SqlType.smallint, notNull := false }] ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).primaryKey = [\"id\"] ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).foreignKeys.length = 0 ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).uniques.length = 0 ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.storageMigrationRuns).checks.length = 1",
    "name": "AgentWorkspace.Theorems.WellFormed.ErCore.table_storage_migration_runs_matches_snapshot",
    "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
    "kind": "theorem",
@@ -35842,6 +35877,26 @@
    "kind": "theorem",
    "docstring":
    "`users` has the columns (name, type, `NOT NULL`), primary key and numbers of foreign keys, unique keys and checks that `drizzle-kit` records for it.",
+   "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
+  {"ts": ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures"],
+   "tier": "T0",
+   "statement":
+   "AgentWorkspace.Er.Core.tableWellFormed AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures = true",
+   "name": "AgentWorkspace.Theorems.WellFormed.ErCore.table_workspace_features_is_well_formed",
+   "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
+   "kind": "theorem",
+   "docstring":
+   "The specification of `workspace_features` is well formed: unique column and constraint names, a `NOT NULL` primary key, well-formed keys and checks, and the tenancy rule for a scoped table.",
+   "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
+  {"ts": ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures"],
+   "tier": "T0",
+   "statement":
+   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).columns = [{ name := \"id\", type := AgentWorkspace.Er.Core.SqlType.uuid, notNull := true }, { name := \"workspace_id\", type := AgentWorkspace.Er.Core.SqlType.uuid, notNull := true }, { name := \"feature\", type := AgentWorkspace.Er.Core.SqlType.text, notNull := true }, { name := \"created_at\", type := AgentWorkspace.Er.Core.SqlType.timestamptz, notNull := true }] ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).primaryKey = [\"id\"] ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).foreignKeys.length = 1 ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).uniques.length = 1 ∧ (AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).checks.length = 1",
+   "name": "AgentWorkspace.Theorems.WellFormed.ErCore.table_workspace_features_matches_snapshot",
+   "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
+   "kind": "theorem",
+   "docstring":
+   "`workspace_features` has the columns (name, type, `NOT NULL`), primary key and numbers of foreign keys, unique keys and checks that `drizzle-kit` records for it.",
    "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
   {"ts": ["packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals"],
    "tier": "T0",
@@ -36224,6 +36279,52 @@
    "docstring":
    "A string of the canonical shape with a `g` in a digit position, at the start or at the end,\nis not a canonical UUID.",
    "doc": []},
+  {"ts":
+   ["packages/core/src/db/schema/workspace-features.ts#workspace_features_feature_valid",
+    "packages/core/src/db/schema/one-of.ts#oneOf"],
+   "tier": "T0",
+   "statement":
+   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).oneOfCheck? \"workspace_features_feature_valid\" = some (\"feature\", [\"chat\", \"projects\", \"files\", \"skills\", \"connectors\", \"runs\", \"sharing\", \"surfaces\", \"triggers\", \"evaluations\", \"builder\"])",
+   "name": "AgentWorkspace.Theorems.WellFormed.ErCore.workspace_features_feature_valid_matches_snapshot",
+   "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
+   "kind": "theorem",
+   "docstring":
+   "The check `workspace_features_feature_valid` of `workspace_features` holds `feature` to exactly the closed set of values that `drizzle-kit` records for it.",
+   "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
+  {"ts": ["packages/core/src/db/schema/workspace-features.ts#workspace_features_workspace_feature_key"],
+   "tier": "T0",
+   "statement":
+   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).uniqueSignature? \"workspace_features_workspace_feature_key\" = some ([\"workspace_id\", \"feature\"], AgentWorkspace.Er.Core.UniqueKind.constraint, [], [])",
+   "name": "AgentWorkspace.Theorems.WellFormed.ErCore.workspace_features_workspace_feature_key_matches_snapshot",
+   "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
+   "kind": "theorem",
+   "docstring":
+   "The unique key `workspace_features_workspace_feature_key` of `workspace_features` has the columns, kind and partial filter that `drizzle-kit` records for it.",
+   "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
+  {"ts":
+   ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures",
+    "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN"],
+   "tier": "T0",
+   "statement":
+   "AgentWorkspace.Er.Core.fkVerdict AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures \"workspace_features_workspace_id_workspaces_id_fk\" = some (true, AgentWorkspace.Er.Core.FkClass.rootReference)",
+   "name":
+   "AgentWorkspace.Theorems.WellFormed.ErCore.workspace_features_workspace_id_workspaces_id_fk_is_root_reference",
+   "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
+   "kind": "theorem",
+   "docstring":
+   "The foreign key `workspace_features_workspace_id_workspaces_id_fk` of `workspace_features` is well formed and is the table's reference to the tenant root `workspaces`.",
+   "doc": ["docs/formal/inventory.md#4-tenant-isolation-predicates"]},
+  {"ts": ["packages/core/src/db/schema/workspace-features.ts#workspaceFeatures"],
+   "tier": "T0",
+   "statement":
+   "(AgentWorkspace.Er.Core.catalogue AgentWorkspace.Er.Core.TableName.workspaceFeatures).foreignKeySignature? \"workspace_features_workspace_id_workspaces_id_fk\" = some ([\"workspace_id\"], AgentWorkspace.Er.Core.TableName.workspaces, [\"id\"], AgentWorkspace.Er.Core.OnDelete.cascade)",
+   "name":
+   "AgentWorkspace.Theorems.WellFormed.ErCore.workspace_features_workspace_id_workspaces_id_fk_matches_snapshot",
+   "module": "AgentWorkspace.Theorems.WellFormed.ErCore",
+   "kind": "theorem",
+   "docstring":
+   "The foreign key `workspace_features_workspace_id_workspaces_id_fk` of `workspace_features` has the columns, target and `ON DELETE` action that `drizzle-kit` records for it.",
+   "doc": ["docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"]},
   {"ts": ["packages/core/src/db/schema/workspace-principals.ts#workspace_principals_acts_for_api_key_only"],
    "tier": "T0",
    "statement":
@@ -36514,12 +36615,12 @@
   {"ts": [],
    "tier": "T0",
    "statement":
-   "(List.map (fun x => x.snd.name) (AgentWorkspace.Er.Target.drawn AgentWorkspace.Er.Target.schema)).Nodup ∧ (AgentWorkspace.Er.Target.drawn AgentWorkspace.Er.Target.schema).length + 53 + 10 = (List.map (fun t => (AgentWorkspace.Er.Target.schema t).foreignKeys.length) AgentWorkspace.Er.Core.allTables).sum",
+   "(List.map (fun x => x.snd.name) (AgentWorkspace.Er.Target.drawn AgentWorkspace.Er.Target.schema)).Nodup ∧ (AgentWorkspace.Er.Target.drawn AgentWorkspace.Er.Target.schema).length + 54 + 10 = (List.map (fun t => (AgentWorkspace.Er.Target.schema t).foreignKeys.length) AgentWorkspace.Er.Core.allTables).sum",
    "name": "AgentWorkspace.Theorems.WellFormed.ErSynthesis.er_diagram_draws_each_relationship_once",
    "module": "AgentWorkspace.Theorems.WellFormed.ErSynthesis",
    "kind": "theorem",
    "docstring":
-   "The target ER diagram draws each foreign key at most once, and draws every key except the 53\nreferences to the tenant root and the 10 single-column `SET NULL` siblings.",
+   "The target ER diagram draws each foreign key at most once, and draws every key except the 54\nreferences to the tenant root and the 10 single-column `SET NULL` siblings.",
    "doc": ["docs/formal/concepts.md#the-target-er-model"]},
   {"ts": ["packages/core/src/db/schema/index.ts"],
    "tier": "T0",

@@ -11,12 +11,25 @@ import { installTestDomains } from '../../../server/application-context-fixtures
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../../../server/rbac/testing';
+import type { WorkspaceFeaturesRuntime } from '../../../server/workspaces/features-runtime';
 import { createMemoryWorkspaceRepository } from '../../../server/workspaces/testing';
 import { GET, POST } from './route';
 
 afterEach(() => {
   clearApplicationContext();
 });
+
+/** A features runtime whose only live member is `provisionBuilder`. */
+function features(
+  provisionBuilder: WorkspaceFeaturesRuntime['provisionBuilder'],
+): WorkspaceFeaturesRuntime {
+  return {
+    deployment: [],
+    repositoryFor: () => Promise.resolve(null),
+    recordAuditEvent: () => Promise.resolve(),
+    provisionBuilder,
+  };
+}
 
 describe('GET /api/workspaces', () => {
   it('lists exactly the caller’s current memberships, across every one of §21’s four roles', async () => {
@@ -93,6 +106,67 @@ describe('POST /api/workspaces', () => {
       harness.teardown();
       clearApplicationContext();
     }
+  });
+
+  it('ensures the new workspace’s Builder once after a create, and not for a refused one (#1848)', async () => {
+    const harness = installRbacHarness([
+      {
+        email: 'creator@example.com',
+        name: 'Creator',
+        workspaceId: TEST_WORKSPACE_ID,
+        role: 'owner',
+      },
+    ]);
+    const provisioned: string[] = [];
+    installTestDomains({
+      workspaces: { repository: createMemoryWorkspaceRepository() },
+      workspaceFeatures: features((id) => {
+        provisioned.push(id);
+        return Promise.resolve();
+      }),
+    });
+    const created = await harness.call(POST, {
+      method: 'POST',
+      path: '/api/workspaces',
+      as: { email: 'creator@example.com' },
+      body: { name: 'New Co', slug: 'new-co' },
+    });
+    expect(created.status).toBe(201);
+    const { workspace } = created.body as { workspace: { id: string } };
+    expect(provisioned).toEqual([workspace.id]);
+
+    const taken = await harness.call(POST, {
+      method: 'POST',
+      path: '/api/workspaces',
+      as: { email: 'creator@example.com' },
+      body: { name: 'New Co', slug: 'new-co' },
+    });
+    expect(taken.status).toBe(409);
+    expect(provisioned).toEqual([workspace.id]);
+    harness.teardown();
+  });
+
+  it('still answers 201 when ensuring the Builder fails (#1848)', async () => {
+    const harness = installRbacHarness([
+      {
+        email: 'creator@example.com',
+        name: 'Creator',
+        workspaceId: TEST_WORKSPACE_ID,
+        role: 'owner',
+      },
+    ]);
+    installTestDomains({
+      workspaces: { repository: createMemoryWorkspaceRepository() },
+      workspaceFeatures: features(() => Promise.reject(new Error('relation "agents" is locked'))),
+    });
+    const response = await harness.call(POST, {
+      method: 'POST',
+      path: '/api/workspaces',
+      as: { email: 'creator@example.com' },
+      body: { name: 'New Co', slug: 'new-co' },
+    });
+    expect(response.status).toBe(201);
+    harness.teardown();
   });
 
   it('rejects a blank name and a missing slug as 400s', async () => {
