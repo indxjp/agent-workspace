@@ -80,11 +80,11 @@
     "db:seed": "pnpm --filter \"@agent-workspace/core...\" run build && node dist/db/seed.js"
   },
   "dependencies": {
-    "@aws-sdk/client-kms": "3.1156.0",
-    "@aws-sdk/client-s3": "3.1156.0",
-    "@aws-sdk/lib-storage": "3.1156.0",
+    "@aws-sdk/client-kms": "3.1158.0",
+    "@aws-sdk/client-s3": "3.1158.0",
+    "@aws-sdk/lib-storage": "3.1158.0",
     "@azure/identity": "4.14.0",
-    "@azure/keyvault-secrets": "4.11.2",
+    "@azure/keyvault-secrets": "4.12.0",
     "@azure/storage-blob": "12.34.0",
     "@google-cloud/secret-manager": "7.2.0",
     "@google-cloud/storage": "8.4.0",

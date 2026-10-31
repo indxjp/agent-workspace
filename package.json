@@ -76,7 +76,7 @@
     "@agent-workspace/runtime": "workspace:*",
     "@agent-workspace/skills-office": "workspace:*",
     "@indx-workspace/sdk": "workspace:*",
-    "@aws-sdk/client-s3": "3.1156.0",
+    "@aws-sdk/client-s3": "3.1158.0",
     "@cloudflare/containers": "0.3.7",
     "@eslint/js": "10.0.1",
     "@microsoft/api-extractor": "7.59.4",
