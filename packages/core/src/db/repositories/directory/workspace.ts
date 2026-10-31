@@ -35,6 +35,7 @@ import {
   type Transaction,
   USER_COLUMNS,
 } from './queries.js';
+import { UUID_PATTERN } from '../runs/rows.js';
 
 function membershipColumns() {
   return {
@@ -98,7 +99,9 @@ export function createDatabaseWorkspaceDirectory(
   db: Database,
   workspaceId: string,
 ): DatabaseWorkspaceDirectory {
-  const listMemberships = async (): Promise<readonly DirectoryMembershipRecord[]> =>
+  // One query for both reads, so a by-principal lookup can never see a different set of members
+  // than the list: a membership whose principal is revoked is in neither.
+  const membershipRows = (principalId?: string) =>
     db
       .select(membershipColumns())
       .from(memberships)
@@ -112,8 +115,24 @@ export function createDatabaseWorkspaceDirectory(
           isNull(workspacePrincipals.revokedAt),
         ),
       )
-      .where(eq(memberships.workspaceId, workspaceId))
+      .where(
+        and(
+          eq(memberships.workspaceId, workspaceId),
+          principalId === undefined ? undefined : eq(workspacePrincipals.id, principalId),
+        ),
+      )
       .orderBy(asc(users.email));
+
+  const listMemberships = async (): Promise<readonly DirectoryMembershipRecord[]> =>
+    membershipRows();
+
+  const findMembershipByPrincipal = async (
+    principalId: string,
+  ): Promise<DirectoryMembershipRecord | null> =>
+    // `workspace_principals.id` is a uuid column: a malformed id is no principal, not a driver error.
+    UUID_PATTERN.test(principalId)
+      ? ((await membershipRows(principalId).limit(1))[0] ?? null)
+      : null;
 
   const findInvitation = async (id: string): Promise<DirectoryInvitationRecord | null> => {
     const rows = await db
@@ -184,6 +203,7 @@ export function createDatabaseWorkspaceDirectory(
       });
     },
     listMemberships,
+    findMembershipByPrincipal,
     async createMembership(input) {
       const email = normaliseEmail(input.email);
       const found = await db
@@ -381,6 +401,8 @@ export function createDatabaseWorkspaceDirectory(
               break;
             case 'builder':
               throw new Error('A builder endpoint client has no API key.');
+            case 'app-backend':
+              throw new Error('An app-backend endpoint client has no API key.');
             default: {
               const unreachable: never = client.kind;
               throw new Error(`unhandled endpoint client kind ${String(unreachable)}`);

@@ -1152,6 +1152,7 @@ export const API_SCHEMAS: {
                 "storage-connection-written": "storage-connection-written";
                 "storage-grant-changed": "storage-grant-changed";
                 "workspace-features-changed": "workspace-features-changed";
+                "user-token-exchanged": "user-token-exchanged";
             }>;
             subjectId: z.ZodNullable<z.ZodString>;
             subjectLabel: z.ZodString;
@@ -1842,9 +1843,11 @@ export const API_SCHEMAS: {
             builder: "builder";
             "mcp-project": "mcp-project";
             "a2a-agent": "a2a-agent";
+            "app-backend": "app-backend";
         }>;
         agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
         toolNames: z.ZodOptional<z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>>;
+        oidcAudience: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>;
     readonly CreateEvaluationRequestSchema: z.ZodReadonly<z.ZodObject<{
         version: z.ZodNumber;
@@ -1952,6 +1955,28 @@ export const API_SCHEMAS: {
             updatedAt: z.ZodISODateTime;
         }, z.core.$strict>>;
     }, z.core.$strict>>]>>;
+    readonly CreateWebhookRequestSchema: z.ZodReadonly<z.ZodObject<{
+        url: z.ZodString;
+        events: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+            "run.completed": "run.completed";
+            "run.failed": "run.failed";
+            "run.cancelled": "run.cancelled";
+        }>>>;
+    }, z.core.$strict>>;
+    readonly CreateWebhookResponseSchema: z.ZodReadonly<z.ZodObject<{
+        webhook: z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            url: z.ZodString;
+            events: z.ZodArray<z.ZodEnum<{
+                "run.completed": "run.completed";
+                "run.failed": "run.failed";
+                "run.cancelled": "run.cancelled";
+            }>>;
+            createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>;
+        secret: z.ZodString;
+    }, z.core.$strict>>;
     readonly CreatedUserResponseSchema: z.ZodObject<{
         user: z.ZodObject<{
             id: z.ZodString;
@@ -2019,10 +2044,12 @@ export const API_SCHEMAS: {
                 builder: "builder";
                 "mcp-project": "mcp-project";
                 "a2a-agent": "a2a-agent";
+                "app-backend": "app-backend";
             }>;
             agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
             toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+            oidcAudience: z.ZodNullable<z.ZodString>;
             hasClientSecret: z.ZodBoolean;
             actsForPrincipalId: z.ZodString;
             apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -2039,10 +2066,12 @@ export const API_SCHEMAS: {
                 builder: "builder";
                 "mcp-project": "mcp-project";
                 "a2a-agent": "a2a-agent";
+                "app-backend": "app-backend";
             }>;
             agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
             toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+            oidcAudience: z.ZodNullable<z.ZodString>;
             hasClientSecret: z.ZodBoolean;
             actsForPrincipalId: z.ZodString;
             apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -3640,6 +3669,18 @@ export const API_SCHEMAS: {
         }>;
         message: z.ZodString;
     }, z.core.$strict>>], "ok">;
+    readonly TokenExchangeRequestSchema: z.ZodReadonly<z.ZodObject<{
+        grant_type: z.ZodLiteral<"urn:ietf:params:oauth:grant-type:token-exchange">;
+        subject_token: z.ZodString;
+        subject_token_type: z.ZodLiteral<"urn:ietf:params:oauth:token-type:id_token">;
+        requested_token_type: z.ZodOptional<z.ZodLiteral<"urn:ietf:params:oauth:token-type:access_token">>;
+    }, z.core.$strict>>;
+    readonly TokenExchangeResponseSchema: z.ZodReadonly<z.ZodObject<{
+        access_token: z.ZodString;
+        issued_token_type: z.ZodLiteral<"urn:ietf:params:oauth:token-type:access_token">;
+        token_type: z.ZodLiteral<"Bearer">;
+        expires_in: z.ZodNumber;
+    }, z.core.$strict>>;
     readonly ToolBundleResponseSchema: z.ZodReadonly<z.ZodObject<{
         bundle: z.ZodReadonly<z.ZodObject<{
             digest: z.ZodString;
@@ -3728,6 +3769,7 @@ export const API_SCHEMAS: {
         agentIds: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         toolNames: z.ZodOptional<z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>>;
         redirectUris: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+        oidcAudience: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>;
     readonly UpdateTriggerRequestSchema: z.ZodReadonly<z.ZodObject<{
         name: z.ZodOptional<z.ZodString>;
@@ -3770,6 +3812,19 @@ export const API_SCHEMAS: {
             createdAt: z.ZodISODateTime;
         }, z.core.$strict>>;
     }, z.core.$strict>;
+    readonly WebhookListResponseSchema: z.ZodReadonly<z.ZodObject<{
+        webhooks: z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            url: z.ZodString;
+            events: z.ZodArray<z.ZodEnum<{
+                "run.completed": "run.completed";
+                "run.failed": "run.failed";
+                "run.cancelled": "run.cancelled";
+            }>>;
+            createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>>;
+    }, z.core.$strict>>;
     readonly WorkspaceFeaturesSchema: z.ZodObject<{
         features: z.ZodArray<z.ZodObject<{
             id: z.ZodEnum<{
@@ -3891,10 +3946,21 @@ export interface ApiMultipartPart {
 }
 
 // @public
+export interface ApiRequestHeader {
+    // (undocumented)
+    readonly description: string;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly required: boolean;
+}
+
+// @public
 export interface ApiRoute {
     readonly deprecated?: true;
     readonly deprecatedRequests?: readonly ApiBody[];
     readonly feature: RouteFeature;
+    readonly headers?: readonly ApiRequestHeader[];
     // (undocumented)
     readonly method: ApiRouteMethod;
     readonly operationId: string;

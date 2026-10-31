@@ -57,7 +57,7 @@ import {
   SignedUrlUnsupportedError,
   type SignedUrl,
   type SignedUrlRequest,
-} from '@agent-workspace/core/storage';
+} from '../storage/objects';
 
 import type { StorageContext, StorageService } from '../storage/service';
 import type { CatalogFile, CatalogPort } from '../storage/store';

@@ -114,6 +114,10 @@ export function createPostgresDirectory(
       async listMemberships() {
         return (await directory.listMemberships()).map(membership);
       },
+      async findMembershipByPrincipal(principalId) {
+        const row = await directory.findMembershipByPrincipal(principalId);
+        return row === null ? null : membership(row);
+      },
       async createMembership(input) {
         const outcome = await directory.createMembership(input);
         return outcome.kind === 'created'

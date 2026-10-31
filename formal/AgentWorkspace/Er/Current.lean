@@ -361,7 +361,7 @@ def state : State
   | .files =>
     [row ([("id", "f1"), ("workspace_id", "w1"), ("path", "docs/a.md"), ("kind", "file"),
        ("storage_key", "docs/a.md"), ("size_bytes", "12"), ("content_type", "text/markdown"),
-       ("created_by", "u1"), ("status", "ready"), ("area", "files"),
+       ("created_by", "u1"), ("status", "ready"), ("object_id", "o1"), ("area", "files"),
        ("owner_principal_id", "p1")] ++ stamps),
      row ([("id", "f2"), ("workspace_id", "w1"), ("path", "docs"), ("kind", "folder"),
        ("size_bytes", "0"), ("status", "ready"), ("area", "files"),
@@ -437,7 +437,7 @@ def state : State
   | .sessionStateBlobs =>
     [row ([("workspace_id", "w1"), ("session_id", "se1"), ("engine", "claude-agent-sdk"),
        ("blob_key", "state.tar"), ("storage_key", "session-state/se1/claude-agent-sdk/state.tar"),
-       ("status", "ready"), ("size_bytes", "3"), ("sha256", "ab12")] ++ stamps)]
+       ("object_id", "o3"), ("status", "ready"), ("size_bytes", "3"), ("sha256", "ab12")] ++ stamps)]
   | .runs =>
     [row ([("id", "r1"), ("workspace_id", "w1"), ("session_id", "se1"), ("status", "completed"),
        ("model", "claude-sonnet"), ("provider", "anthropic"), ("model_connection_id", "c1"),
@@ -484,6 +484,13 @@ def state : State
        stamps)]
   | .workspaceFeatures =>
     [row [("id", "wf1"), ("workspace_id", "w1"), ("feature", "surfaces"), ("created_at", "1000")]]
+  | .webhooks =>
+    [row [("id", "wh1"), ("workspace_id", "w1"), ("url", "https://hooks.example.com/"),
+       ("events", "{run.completed,run.failed}"), ("created_at", "1000")]]
+  | .webhookDeliveries =>
+    [row [("id", "wd1"), ("workspace_id", "w1"), ("webhook_id", "wh1"), ("run_id", "r1"),
+       ("event_type", "run.completed"), ("state", "pending"), ("attempts", "0"),
+       ("next_attempt_at", "1000"), ("created_at", "1000")]]
   | .storageMigrationRuns =>
     [row [("id", "smr1"), ("finished_at", "1000"), ("rows_checked", "4"), ("legacy_rows", "0"),
        ("mismatches", "0"), ("stage", "finalize"), ("skipped_ownerless", "0"),
@@ -501,7 +508,7 @@ def load : List Stmt :=
     .projectMcpServers, .sessions, .surfaceSessionKeys, .sessionTranscripts, .sessionMessages, .sessionStateStreams, .sessionStateEntries, .sessionStateBlobs, .runs,
     .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .builderToolCalls, .auditEvents, .shares, .shareViews,
     .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns,
-    .workspaceFeatures].flatMap fun t =>
+    .workspaceFeatures, .webhooks, .webhookDeliveries].flatMap fun t =>
       (state t).map (.insert t)
 
 end Witness

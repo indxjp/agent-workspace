@@ -239,6 +239,32 @@ describe('stories:check', () => {
     expect(check(dir, '--bogus').status).toBe(2);
   });
 
+  it('--require-complete fails on one gap', () => {
+    // Every storage cell but one: US-STO-13 cli has no test.
+    const covering = Object.entries(MATRIX)
+      .filter(([story]) => story.startsWith('US-STO-') && story !== 'US-STO-13')
+      .flatMap(([story, entries]) =>
+        entries.map((entry) => {
+          const type = entry === 'web' ? 'browser' : story === 'US-STO-14' ? 'two-server' : 'api';
+          return tagged(`[${story}][${type}][${entry}]`);
+        }),
+      );
+    const gap = repoWith({ 'tests/a.test.ts': covering.join('\n') });
+    const failed = check(gap, '--report', '--require-complete');
+    expect(failed.status).toBe(1);
+    expect(failed.stdout).toContain('incomplete: US-STO-13 cli:api');
+    expect(failed.stdout).not.toContain('incomplete: US-BLD-');
+
+    const whole = repoWith({
+      'tests/a.test.ts': [...covering, tagged('[US-STO-13][api][cli]')].join('\n'),
+    });
+    expect(check(whole, '--report', '--require-complete').status).toBe(0);
+  });
+
+  it('the repository has no storage gap', () => {
+    expect(check(process.cwd(), '--report', '--require-complete').status).toBe(0);
+  });
+
   it('comparing the repository with itself passes in under 10 s', () => {
     const started = Date.now();
     expect(check(process.cwd(), '--base', 'HEAD').status).toBe(0);

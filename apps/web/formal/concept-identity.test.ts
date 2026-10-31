@@ -7,7 +7,7 @@
  *   - the enumerations against the contracts, the Drizzle schema and the server's own lists, and
  *     `parseRole` / `wireKind`;
  *   - the 36 refined checks against the CHECK bodies `drizzle-kit` recorded in
- *     `migrations/meta/0051_snapshot.json`, and the pattern checks' boundary rows against the
+ *     `migrations/meta/0096_snapshot.json`, and the pattern checks' boundary rows against the
  *     snapshot's own regular expressions;
  *   - every foreign key and unique key of the cluster against the live Drizzle table objects
  *     (columns, target, `ON DELETE`, and the multiplicities the model derives);
@@ -237,7 +237,7 @@ function tableShape(name: string): TableShape {
 }
 
 const snapshot: unknown = JSON.parse(
-  readFileSync(path.join(REPO_ROOT, 'migrations/meta/0051_snapshot.json'), 'utf8'),
+  readFileSync(path.join(REPO_ROOT, 'migrations/meta/0096_snapshot.json'), 'utf8'),
 );
 
 function snapshotCheck(table: string, check: string): string {

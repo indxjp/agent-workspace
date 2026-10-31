@@ -1,14 +1,20 @@
 # The run_skill_script unit tests on Windows (issue #1095). Every other job runs on Linux, where
 # the `/`-joined containment check passed by accident; on Windows realpath returns `\` paths and
 # the same check refused every script. This job runs only the files that pin that behaviour, so
-# it cannot regress unseen. The tests resolve two workspace packages from dist, so the job builds
+# it cannot regress unseen. It also runs the `file://` folder store's Windows test (#1835): only NTFS
+# mints the stream, trailing-dot and device-name aliases that store refuses. The tests resolve two workspace packages from dist, so the job builds
 # just those first.
+#
+# It also runs the three files whose cases create symlinks (issue #1749): the runner's file
+# verification and resource staging, and the runtime's archive streaming. On Windows a symlink
+# needs Developer Mode or the SeCreateSymbolicLinkPrivilege, so this proves they run on the
+# Windows runner rather than only on Linux.
 #
 # A separate workflow, not a ci.yml job: ci.yml is held to Linux labels by
 # scripts/check-workflows.mjs, and a Windows VM is the only Windows runner this repository uses
 # (as in install-live.yml; Blacksmith's while GitHub-hosted billing is blocked, ADR-0053). Not required by ci-success on purpose, like
 # ci-nx-cache.yml: it is path-filtered, and a required check that a diff never triggers would
-# block that diff. Cost: one Windows VM, a filtered install and four test files per
+# block that diff. Cost: one Windows VM, a filtered install and eight test files per
 # matching pull request (a few minutes); nothing runs for a diff that cannot reach them.
 name: CI Windows unit
 
@@ -24,6 +30,13 @@ on:
       - 'packages/sdk/**'
       - 'tests/engine/**'
       - 'tests/gallery/run-access.test.ts'
+      - 'apps/runner/src/verify-files*.ts'
+      - 'apps/runner/src/resources*.ts'
+      - 'packages/run-protocol/**'
+      - 'packages/runtime/**'
+      - 'packages/core/src/storage/folder-store.ts'
+      - 'packages/core/src/storage/folder-store.windows.test.ts'
+      - 'packages/core/src/storage/key-safety.ts'
       - 'vitest.config.ts'
       - 'pnpm-lock.yaml'
       - '.github/workflows/windows-unit.yml'
@@ -64,13 +77,18 @@ jobs:
         timeout-minutes: 8
         run: pnpm install --frozen-lockfile
 
-      # The tests import the engine, its Claude adapter and the SDK by package name, which resolves to
-      # dist. Nx builds each project's dependencies first (`^build`), so naming three is enough.
+      # The tests import the engine, its Claude adapter, the SDK, the run protocol and the runtime by
+      # package name, which resolves to dist. Nx builds each project's dependencies first (`^build`).
       - name: Build the packages the tests import
         timeout-minutes: 10
-        run: pnpm nx run-many -t build --projects=@agent-workspace/engine,@agent-workspace/engine-claude-agent-sdk,@indx-workspace/sdk --output-style=static
+        run: pnpm nx run-many -t build --projects=@agent-workspace/engine,@agent-workspace/engine-claude-agent-sdk,@indx-workspace/sdk,@agent-workspace/run-protocol,@agent-workspace/runtime --output-style=static
 
-      - name: Run the skill-script tests
+      - name: Run the skill-script and folder-store tests
         timeout-minutes: 10
         shell: bash
-        run: pnpm exec vitest run tests/engine/run-skill-script.test.ts tests/engine/skill-script-windows-paths.test.ts tests/gallery/run-access.test.ts packages/engine/src/skill-script.test.ts
+        run: pnpm exec vitest run tests/engine/run-skill-script.test.ts tests/engine/skill-script-windows-paths.test.ts tests/gallery/run-access.test.ts packages/engine/src/skill-script.test.ts packages/core/src/storage/folder-store.windows.test.ts
+
+      - name: Run the symlink tests
+        timeout-minutes: 10
+        shell: bash
+        run: pnpm exec vitest run apps/runner/src/verify-files.test.ts apps/runner/src/resources.test.ts packages/runtime/src/transfer.stream.test.ts

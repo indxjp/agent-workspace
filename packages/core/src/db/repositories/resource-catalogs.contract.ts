@@ -1,8 +1,7 @@
 /**
  * The one catalog contract suite (the storage design, §03 and §04): the in-memory catalog and the
  * PostgreSQL catalog both run it, so a test that passes against the memory version cannot hide a
- * rule the database enforces. Cases drive {@link CatalogPort}, plus the one-step writes
- * (`putFile`, `renameFile`, `renameFilesByPrefix`) where a rule constrains them too.
+ * rule the database enforces. Cases drive {@link CatalogPort}.
  *
  * A fixture owes the suite one catalog per workspace (`'a'` and `'b'`, empty and unrelated to every
  * other fixture's) and the principal that owns rows written in each. `makeFixture` runs once per
@@ -31,7 +30,7 @@ export interface CatalogConformanceFixture {
   /** Put a file row in any state, bypassing the port, the way a raw insert does. Rejects on a duplicate. */
   readonly seed: (
     workspace: 'a' | 'b',
-    row: { readonly path: string; readonly status: FileStatus; readonly objectId?: string },
+    row: { readonly path: string; readonly status: FileStatus; readonly objectId: string },
   ) => Promise<void>;
 }
 
@@ -47,6 +46,7 @@ export function describeCatalogConformance(
       sizeBytes = 1,
     ): Promise<CatalogFile> => {
       const reserved = await catalog.reserve(path, {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: owner,
         sizeBytes,
         contentType: null,
@@ -70,6 +70,7 @@ export function describeCatalogConformance(
     const paths = (rows: readonly CatalogFile[]) => rows.map((row) => row.path);
     const pending = async (catalog: CatalogPort, owner: string, path: string) => {
       const reserved = await catalog.reserve(path, {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: owner,
         sizeBytes: 5,
         contentType: null,
@@ -77,14 +78,6 @@ export function describeCatalogConformance(
       if (reserved.kind !== 'reserved') throw new Error(`${path} was already taken`);
       return reserved.row;
     };
-    const fileInput = (path: string, owner: string) => ({
-      path,
-      kind: 'file' as const,
-      storageKey: path,
-      sizeBytes: 3,
-      contentType: 'text/plain',
-      ownerPrincipalId: owner,
-    });
     /** PostgreSQL's CHECK violation, as the driver error's cause carries it. */
     const checkViolation = (constraint: string) => ({ cause: { code: '23514', constraint } });
 
@@ -93,6 +86,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
@@ -106,20 +100,26 @@ export function describeCatalogConformance(
     });
 
     // @story US-STO-02
-    it('[US-STO-02][contract][sdk] new rows default to the files area with no object id', async () => {
+    it('[US-STO-02][contract][sdk] new rows default to the files area with the reserved object id', async () => {
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('docs/big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
       });
-      const defaults = { objectId: null, area: 'files', sha256: null };
-      expect(reserved.row).toMatchObject(defaults);
+      const defaults = { area: 'files', sha256: null };
+      const { objectId } = reserved.row;
+      expect(reserved.row).toMatchObject({ ...defaults, storageKey: `files/${String(objectId)}` });
       await expect(
         a.confirm(reserved.row, { sizeBytes: 5, contentType: null }),
-      ).resolves.toMatchObject({ row: defaults });
-      await expect(a.get('docs')).resolves.toMatchObject({ kind: 'folder', ...defaults });
+      ).resolves.toMatchObject({ row: { ...defaults, objectId } });
+      await expect(a.get('docs')).resolves.toMatchObject({
+        kind: 'folder',
+        ...defaults,
+        objectId: null,
+      });
     });
 
     // @story US-STO-02
@@ -138,6 +138,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
@@ -154,6 +155,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
@@ -181,6 +183,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('dated/a.txt', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -225,7 +228,12 @@ export function describeCatalogConformance(
       const a = catalog('a');
       const b = catalog('b');
       const reserve = (target: CatalogPort, owner: string, path: string) =>
-        target.reserve(path, { ownerPrincipalId: owner, sizeBytes: 1, contentType: null });
+        target.reserve(path, {
+          objectId: crypto.randomUUID(),
+          ownerPrincipalId: owner,
+          sizeBytes: 1,
+          contentType: null,
+        });
       const x = await reserve(a, ownerA, 'x.bin');
       await reserve(a, ownerA, 'y.bin');
       await reserve(b, ownerB, 'z.bin');
@@ -269,23 +277,32 @@ export function describeCatalogConformance(
       const { catalog, ownerA, ownerB } = await makeFixture();
       const a = catalog('a');
       const first = await a.reserve('big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
       });
       await expect(
-        a.reserve('big.bin', { ownerPrincipalId: ownerB, sizeBytes: 9, contentType: 'text/plain' }),
+        a.reserve('big.bin', {
+          objectId: crypto.randomUUID(),
+          ownerPrincipalId: ownerB,
+          sizeBytes: 9,
+          contentType: 'text/plain',
+        }),
       ).rejects.toBeInstanceOf(CatalogPathPendingError);
       await expect(a.get('big.bin')).resolves.toBeNull();
       await a.confirm(first.row, { sizeBytes: 5, contentType: null });
       const third = await a.reserve('big.bin', {
-        ownerPrincipalId: ownerB,
+        objectId: crypto.randomUUID(),
+        ownerPrincipalId: ownerA,
         sizeBytes: 9,
         contentType: null,
       });
+      // A reserve over a ready file waits aside to replace it.
       expect(third).toMatchObject({
-        kind: 'taken',
-        row: { id: first.row.id, ownerPrincipalId: ownerA, status: 'ready' },
+        kind: 'reserved',
+        row: { targetPath: 'big.bin', status: 'pending' },
+        replaces: { id: first.row.id, ownerPrincipalId: ownerA, status: 'ready' },
       });
       expect(paths((await a.list('')).rows).filter((path) => path === 'big.bin')).toHaveLength(1);
     });
@@ -297,24 +314,45 @@ export function describeCatalogConformance(
       const input = { ownerPrincipalId: ownerA, contentType: null };
       // (a) a relay save over the owner's pending signed upload must not reset its declared size.
       const signed = await a.reserve('signed.bin', {
+        objectId: crypto.randomUUID(),
         ...input,
         sizeBytes: 9,
         uploadMode: 'signed',
       });
       await expect(
-        a.reserve('signed.bin', { ...input, sizeBytes: 0, uploadMode: 'relay' }),
+        a.reserve('signed.bin', {
+          objectId: crypto.randomUUID(),
+          ...input,
+          sizeBytes: 0,
+          uploadMode: 'relay',
+        }),
       ).rejects.toBeInstanceOf(CatalogPathPendingError);
-      await expect(a.reserve('signed.bin', { ...input, sizeBytes: 0 })).rejects.toBeInstanceOf(
-        CatalogPathPendingError,
-      );
       await expect(
-        a.reserve('signed.bin', { ...input, sizeBytes: 9, uploadMode: 'signed' }),
+        a.reserve('signed.bin', { objectId: crypto.randomUUID(), ...input, sizeBytes: 0 }),
+      ).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(
+        a.reserve('signed.bin', {
+          objectId: crypto.randomUUID(),
+          ...input,
+          sizeBytes: 9,
+          uploadMode: 'signed',
+        }),
       ).resolves.toMatchObject({ kind: 'taken', row: { id: signed.row.id, sizeBytes: 9 } });
       await expect(a.pending('signed.bin')).resolves.toMatchObject({ sizeBytes: 9 });
       // (b) a mint during the owner's in-flight relay save must not take over the save's row.
-      const relay = await a.reserve('relay.bin', { ...input, sizeBytes: 0, uploadMode: 'relay' });
+      const relay = await a.reserve('relay.bin', {
+        objectId: crypto.randomUUID(),
+        ...input,
+        sizeBytes: 0,
+        uploadMode: 'relay',
+      });
       await expect(
-        a.reserve('relay.bin', { ...input, sizeBytes: 5, uploadMode: 'signed' }),
+        a.reserve('relay.bin', {
+          objectId: crypto.randomUUID(),
+          ...input,
+          sizeBytes: 5,
+          uploadMode: 'signed',
+        }),
       ).rejects.toBeInstanceOf(CatalogPathPendingError);
       await expect(a.pending('relay.bin')).resolves.toMatchObject({
         id: relay.row.id,
@@ -327,6 +365,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
@@ -361,44 +400,18 @@ export function describeCatalogConformance(
       ).resolves.toMatchObject({ row: { id: ready.id, status: 'ready', sizeBytes: 9 } });
     });
 
-    // @story US-STO-02
-    it('[US-STO-02][contract][sdk] confirm refuses a row that moved off its storage key', async () => {
-      // A pending row cannot move (`renameFile` and folder moves refuse it), so the storage-key
-      // guard is pinned with a ready row re-confirmed under `expect: 'any'` after a rename.
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const row = await a.putFile(fileInput('docs/x.bin', ownerA));
-      const moved = await a.renameFile('docs/x.bin', {
-        path: 'moved/x.bin',
-        kind: 'file',
-        storageKey: 'moved/x.bin',
-        sizeBytes: 3,
-        contentType: 'text/plain',
-      });
-      await expect(
-        a.confirm(row, { sizeBytes: 9, contentType: null, expect: 'any' }),
-      ).resolves.toBeNull();
-      await expect(a.get('moved/x.bin')).resolves.toEqual(moved);
-    });
-
-    // @story US-STO-02
-    it('[US-STO-02][contract][sdk] putFile on a pending path is refused and the row is unchanged', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const row = await pending(a, ownerA, 'inbox/reserved.bin');
-      await expect(a.putFile(fileInput('inbox/reserved.bin', ownerA))).rejects.toBeInstanceOf(
-        CatalogPathPendingError,
-      );
-      await expect(a.get('inbox/reserved.bin', { includePending: true })).resolves.toEqual(row);
-    });
-
     // @story US-STO-14
     it('[US-STO-14][contract][sdk] the owner re-reserves a pending path with a new size', async () => {
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const row = await pending(a, ownerA, 'big.bin');
       await expect(
-        a.reserve('big.bin', { ownerPrincipalId: ownerA, sizeBytes: 9, contentType: 'text/csv' }),
+        a.reserve('big.bin', {
+          objectId: crypto.randomUUID(),
+          ownerPrincipalId: ownerA,
+          sizeBytes: 9,
+          contentType: 'text/csv',
+        }),
       ).resolves.toMatchObject({
         kind: 'taken',
         row: { id: row.id, status: 'pending', sizeBytes: 9, contentType: 'text/csv' },
@@ -411,7 +424,12 @@ export function describeCatalogConformance(
       const a = catalog('a');
       const row = await pending(a, ownerA, 'big.bin');
       await expect(
-        a.reserve('big.bin', { ownerPrincipalId: ownerB, sizeBytes: 9, contentType: null }),
+        a.reserve('big.bin', {
+          objectId: crypto.randomUUID(),
+          ownerPrincipalId: ownerB,
+          sizeBytes: 9,
+          contentType: null,
+        }),
       ).rejects.toBeInstanceOf(CatalogPathPendingError);
       await expect(a.get('big.bin', { includePending: true })).resolves.toEqual(row);
     });
@@ -423,19 +441,50 @@ export function describeCatalogConformance(
       const done = await upload(a, ownerA, 'docs/done.txt');
       const row = await pending(a, ownerA, 'docs/sub/x.bin');
       await expect(a.rename('docs', 'moved')).rejects.toBeInstanceOf(CatalogPathPendingError);
-      await expect(a.renameFilesByPrefix('docs', 'moved')).rejects.toBeInstanceOf(
-        CatalogPathPendingError,
-      );
       await expect(a.get('docs/done.txt')).resolves.toMatchObject({ id: done.id });
       await expect(a.get('docs/sub/x.bin', { includePending: true })).resolves.toEqual(row);
       await expect(a.get('moved', { includePending: true })).resolves.toBeNull();
+    });
+
+    // @story US-STO-02
+    it('[US-STO-02][contract][sdk] a move never carries a pending row: the row itself, a replacement, or the destination', async () => {
+      const { catalog, ownerA } = await makeFixture();
+      const a = catalog('a');
+      // The pending row itself: an in-flight PUT still targets its key.
+      const lone = await pending(a, ownerA, 'big.bin');
+      await expect(a.rename('big.bin', 'moved.bin')).rejects.toBeInstanceOf(
+        CatalogPathPendingError,
+      );
+      await expect(a.get('big.bin', { includePending: true })).resolves.toEqual(lone);
+      await expect(a.get('moved.bin', { includePending: true })).resolves.toBeNull();
+
+      // A ready child whose replacement is pending at its side path.
+      const ready = await upload(a, ownerA, 'docs/x.bin');
+      const replacement = await replace(a, ownerA, 'docs/x.bin');
+      if (replacement.kind !== 'reserved') throw new Error('docs/x.bin was not replaceable');
+      await expect(a.rename('docs', 'moved')).rejects.toBeInstanceOf(CatalogPathPendingError);
+      await expect(a.get('docs/x.bin')).resolves.toMatchObject({ id: ready.id });
+      await expect(a.pending('docs/x.bin')).resolves.toMatchObject({ id: replacement.row.id });
+      await expect(a.get('moved', { includePending: true })).resolves.toBeNull();
+
+      // A destination held by a pending upload is taken, not overwritten.
+      await a.forget(replacement.row);
+      const target = await pending(a, ownerA, 'dest/x.bin');
+      await expect(a.rename('docs', 'dest')).rejects.toBeInstanceOf(CatalogPathTakenError);
+      await expect(a.get('dest/x.bin', { includePending: true })).resolves.toEqual(target);
+      await expect(a.get('docs/x.bin')).resolves.toMatchObject({ id: ready.id });
     });
 
     it('refuses a dot segment in a path as the files_path_no_dot_segments CHECK does', async () => {
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       await expect(
-        a.reserve('docs/../x.bin', { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null }),
+        a.reserve('docs/../x.bin', {
+          objectId: crypto.randomUUID(),
+          ownerPrincipalId: ownerA,
+          sizeBytes: 1,
+          contentType: null,
+        }),
       ).rejects.toMatchObject(checkViolation('files_path_no_dot_segments'));
       await expect(a.get('docs', { includePending: true })).resolves.toBeNull();
     });
@@ -444,33 +493,29 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       await expect(
-        a.reserve('neg.bin', { ownerPrincipalId: ownerA, sizeBytes: -1, contentType: null }),
+        a.reserve('neg.bin', {
+          objectId: crypto.randomUUID(),
+          ownerPrincipalId: ownerA,
+          sizeBytes: -1,
+          contentType: null,
+        }),
       ).rejects.toMatchObject(checkViolation('files_size_non_negative'));
       await expect(a.get('neg.bin', { includePending: true })).resolves.toBeNull();
     });
 
-    it('refuses a folder with a storage key as the files_storage_key_iff_file CHECK does', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      await expect(
-        a.putFile({ ...fileInput('dir', ownerA), kind: 'folder', sizeBytes: 0, contentType: null }),
-      ).rejects.toMatchObject(checkViolation('files_storage_key_iff_file'));
-      await expect(a.get('dir')).resolves.toBeNull();
-    });
-
     // @story US-STO-02
-    it('[US-STO-02][contract][sdk] renameFile refuses a pending row and leaves it in place', async () => {
+    it('[US-STO-02][contract][sdk] rename refuses a pending row and leaves it in place', async () => {
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
-      await a.reserve('big.bin', { ownerPrincipalId: ownerA, sizeBytes: 5, contentType: null });
-      const moved = {
-        path: 'moved.bin',
-        kind: 'file' as const,
-        storageKey: 'moved.bin',
+      await a.reserve('big.bin', {
+        objectId: crypto.randomUUID(),
+        ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
-      };
-      await expect(a.renameFile('big.bin', moved)).resolves.toBeNull();
+      });
+      await expect(a.rename('big.bin', 'moved.bin')).rejects.toBeInstanceOf(
+        CatalogPathPendingError,
+      );
       await expect(a.get('big.bin', { includePending: true })).resolves.toMatchObject({
         status: 'pending',
       });
@@ -481,6 +526,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       await a.reserve('docs/deep/big.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 5,
         contentType: null,
@@ -542,7 +588,12 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       for (const name of ['f3', 'f1', 'f5', 'f2', 'f4']) await upload(a, ownerA, name);
-      await a.reserve('f0', { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null });
+      await a.reserve('f0', {
+        objectId: crypto.randomUUID(),
+        ownerPrincipalId: ownerA,
+        sizeBytes: 1,
+        contentType: null,
+      });
 
       const first = await a.list('', { limit: 2 });
       expect(paths(first.rows)).toEqual(['f1', 'f2']);
@@ -589,7 +640,7 @@ export function describeCatalogConformance(
 
       await expect(a.get('guides/sub/a.txt')).resolves.toMatchObject({
         id: inside.id,
-        storageKey: 'guides/sub/a.txt',
+        storageKey: inside.storageKey,
       });
       await expect(a.get('docs/sub/a.txt')).resolves.toBeNull();
       await expect(a.get('docs2/b.txt')).resolves.toMatchObject({ id: sibling.id });
@@ -614,6 +665,7 @@ export function describeCatalogConformance(
       const a = catalog('a');
       await upload(a, ownerA, 'docs/sub/a.txt');
       await a.reserve('docs/pending.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -672,6 +724,7 @@ export function describeCatalogConformance(
       const a = catalog('a');
       const sha256 = 'ab'.repeat(32);
       const reserved = await a.reserve('sum.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -687,6 +740,7 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const reserved = await a.reserve('gone.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -704,9 +758,9 @@ export function describeCatalogConformance(
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
       const input = { ownerPrincipalId: ownerA, sizeBytes: 1, contentType: null };
-      const reserved = await a.reserve('gone.bin', input);
+      const reserved = await a.reserve('gone.bin', { ...input, objectId: crypto.randomUUID() });
       await a.remove('gone.bin');
-      const again = await a.reserve('gone.bin', input);
+      const again = await a.reserve('gone.bin', { ...input, objectId: crypto.randomUUID() });
       expect(again).toMatchObject({
         kind: 'reserved',
         row: { path: 'gone.bin', status: 'pending' },
@@ -721,6 +775,7 @@ export function describeCatalogConformance(
       const a = catalog('a');
       await upload(a, ownerA, 'ready.bin');
       const pending = await a.reserve('pending.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -759,6 +814,7 @@ export function describeCatalogConformance(
     it('[US-STO-04][contract][sdk] a fresh reservation is not stale through another handle', async () => {
       const { catalog, ownerA } = await makeFixture();
       const pending = await catalog('a').reserve('pending.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -769,23 +825,6 @@ export function describeCatalogConformance(
       await expect(catalog('a').stalePending(new Date(Date.now() + minute))).resolves.toEqual([
         pending.row,
       ]);
-    });
-
-    it('putFile over a row with no creator keeps createdBy null', async () => {
-      const { catalog, ownerA, actorA } = await makeFixture();
-      const a = catalog('a');
-      const input = {
-        path: 'a.txt',
-        kind: 'file' as const,
-        storageKey: 'a.txt',
-        sizeBytes: 1,
-        contentType: 'text/plain',
-        ownerPrincipalId: ownerA,
-      };
-      await a.putFile(input);
-      const again = await a.putFile({ ...input, sizeBytes: 2, createdBy: actorA });
-      expect(again.createdBy).toBeNull();
-      await expect(a.get('a.txt')).resolves.toMatchObject({ createdBy: null, sizeBytes: 2 });
     });
 
     // @story US-STO-04
@@ -803,6 +842,7 @@ export function describeCatalogConformance(
       for (const row of [...removed, ...removed]) await a.forget(row);
       await expect(a.deleting()).resolves.toEqual([]);
       const again = await a.reserve('doomed.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -826,52 +866,34 @@ export function describeCatalogConformance(
     });
 
     // @story US-STO-14
-    it('[US-STO-14][contract][sdk] referencing finds rows in every status by object id and legacy key', async () => {
-      const { catalog, ownerA, ownerB, seed } = await makeFixture();
+    it('[US-STO-14][contract][sdk] referencing finds rows in every status by object id', async () => {
+      const { catalog, ownerA, ownerB } = await makeFixture();
       const a = catalog('a');
-      const readyId = crypto.randomUUID();
-      const goneId = crypto.randomUUID();
-      const replacementId = crypto.randomUUID();
-      const ready = await upload(a, ownerA, 'legacy.bin');
+      const ready = await upload(a, ownerA, 'ready.bin');
       await upload(a, ownerA, 'gone.bin');
-      const [legacyGone] = await a.remove('gone.bin');
+      const [gone] = await a.remove('gone.bin');
       const stillPending = await pending(a, ownerA, 'pending.bin');
-      await seed('a', { path: 'new/ready.bin', status: 'ready', objectId: readyId });
-      await seed('a', { path: 'new/gone.bin', status: 'ready', objectId: goneId });
-      const [newGone] = await a.remove('new/gone.bin');
-      const replacement = await a.reserve('legacy.bin', {
-        ownerPrincipalId: ownerA,
-        sizeBytes: 1,
-        contentType: null,
-        objectId: replacementId,
-      });
+      const replacement = await replace(a, ownerA, 'ready.bin');
       if (replacement.kind !== 'reserved') throw new Error('the replacement was not reserved');
-      expect(replacement.row.path).not.toBe('legacy.bin');
-      await upload(catalog('b'), ownerB, 'legacy.bin');
+      expect(replacement.row.path).not.toBe('ready.bin');
+      const elsewhere = await upload(catalog('b'), ownerB, 'ready.bin');
+      const idsOf = (rows: readonly (CatalogFile | undefined)[]) =>
+        rows.map((row) => row?.objectId ?? '');
 
       const found = await a.referencing({
-        objectIds: [readyId, goneId, replacementId, crypto.randomUUID()],
-        storageKeys: ['legacy.bin', 'gone.bin', 'pending.bin', 'absent.bin'],
+        objectIds: [
+          ...idsOf([ready, gone, stillPending, replacement.row, elsewhere]),
+          crypto.randomUUID(),
+        ],
       });
 
       expect(found.map((row) => row.id).sort()).toEqual(
-        [
-          ready.id,
-          legacyGone?.id,
-          stillPending.id,
-          newGone?.id,
-          replacement.row.id,
-          (await a.get('new/ready.bin'))?.id,
-        ].sort(),
+        [ready.id, gone?.id, stillPending.id, replacement.row.id].sort(),
       );
-      await expect(a.referencing({ objectIds: [], storageKeys: [] })).resolves.toEqual([]);
-      // A key only matches a legacy row, and an object id only a row that has one.
-      await expect(
-        a.referencing({ objectIds: [], storageKeys: [`files/${readyId}`] }),
-      ).resolves.toEqual([]);
-      await expect(
-        catalog('b').referencing({ objectIds: [readyId, goneId], storageKeys: ['gone.bin'] }),
-      ).resolves.toEqual([]);
+      await expect(a.referencing({ objectIds: [] })).resolves.toEqual([]);
+      await expect(catalog('b').referencing({ objectIds: idsOf([ready, gone]) })).resolves.toEqual(
+        [],
+      );
     });
 
     // @story US-STO-14
@@ -947,49 +969,6 @@ export function describeCatalogConformance(
     });
 
     // @story US-STO-14
-    it('[US-STO-14][contract][sdk] a replacement names the ready file it replaces, and keeps naming it after a rename', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const fresh = await replace(a, ownerA, 'new.bin');
-      expect(fresh.kind).toBe('reserved');
-      expect(fresh.replaces).toBeUndefined();
-
-      const old = await upload(a, ownerA, 'r.bin');
-      const first = await replace(a, ownerA, 'r.bin');
-      expect(first).toMatchObject({
-        kind: 'reserved',
-        replaces: { id: old.id, path: 'r.bin', ownerPrincipalId: ownerA, status: 'ready' },
-      });
-      await a.renameFile('r.bin', {
-        path: 'moved.bin',
-        kind: 'file',
-        storageKey: old.storageKey,
-        sizeBytes: old.sizeBytes,
-        contentType: old.contentType,
-      });
-      // The path it was reserved at is free again; the retried replacement follows its file.
-      await expect(replace(a, ownerA, 'r.bin')).resolves.not.toHaveProperty('replaces');
-      expect(await replace(a, ownerA, 'moved.bin')).toMatchObject({
-        kind: 'taken',
-        row: { id: first.row.id, status: 'pending', targetPath: 'moved.bin' },
-        replaces: { id: old.id, path: 'moved.bin', status: 'ready' },
-      });
-    });
-
-    // @story US-STO-14
-    it('[US-STO-14][contract][sdk] a reserve without an object id on a ready path is taken by the ready row', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const old = await upload(a, ownerA, 'r.bin');
-      const again = await a.reserve('r.bin', {
-        ownerPrincipalId: ownerA,
-        sizeBytes: 1,
-        contentType: null,
-      });
-      expect(again).toMatchObject({ kind: 'taken', row: { id: old.id, status: 'ready' } });
-    });
-
-    // @story US-STO-14
     it('[US-STO-14][contract][sdk] a reserve with an object id on a free path stores the object id and key', async () => {
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
@@ -1034,7 +1013,7 @@ export function describeCatalogConformance(
         storageKey: `files/${published}`,
       });
       await expect(a.get('up.bin')).resolves.toMatchObject({ objectId: published });
-      await expect(a.referencing({ objectIds: [ingress], storageKeys: [] })).resolves.toEqual([]);
+      await expect(a.referencing({ objectIds: [ingress] })).resolves.toEqual([]);
       // The reservation's snapshot names the ingress object, so it confirms nothing again.
       await expect(
         a.confirm(reserved.row, { sizeBytes: 1, contentType: null, objectId: ingress }),
@@ -1069,28 +1048,6 @@ export function describeCatalogConformance(
       await expect(a.get('r.bin')).resolves.toMatchObject({ id: old.id, status: 'ready' });
       await expect(a.deleting()).resolves.toEqual([]);
       expect((await replace(a, ownerA, 'r.bin')).kind).toBe('reserved');
-    });
-
-    // @story US-STO-14
-    it('[US-STO-14][contract][sdk] renaming a file carries its pending replacement along', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const old = await upload(a, ownerA, 'r.bin');
-      const reserved = await replace(a, ownerA, 'r.bin');
-      await a.renameFile('r.bin', {
-        path: 'moved.bin',
-        kind: 'file',
-        storageKey: old.storageKey,
-        sizeBytes: old.sizeBytes,
-        contentType: old.contentType,
-      });
-
-      const done = await a.confirm(reserved.row, { sizeBytes: 2, contentType: null });
-      expect(done).toMatchObject({
-        row: { id: reserved.row.id, path: 'moved.bin', status: 'ready' },
-        replaced: { id: old.id, targetPath: 'moved.bin' },
-      });
-      expect(paths((await a.list('')).rows)).toEqual(['moved.bin']);
     });
 
     // @story US-STO-04
@@ -1139,15 +1096,7 @@ export function describeCatalogConformance(
       await expect(a.rename('from.bin', 'to.bin')).rejects.toBeInstanceOf(CatalogPathTakenError);
       await expect(a.get('from.bin')).resolves.toMatchObject({ id: from.id });
       await expect(a.get('to.bin')).resolves.toMatchObject({ id: to.id });
-      await expect(
-        a.renameFile('from.bin', {
-          path: 'to.bin',
-          kind: 'file',
-          storageKey: 'to.bin',
-          sizeBytes: 1,
-          contentType: null,
-        }),
-      ).rejects.toBeInstanceOf(CatalogPathTakenError);
+      await expect(a.rename('from.bin', 'to.bin')).rejects.toBeInstanceOf(CatalogPathTakenError);
       await expect(a.get('from.bin')).resolves.toMatchObject({ id: from.id });
     });
 
@@ -1163,178 +1112,13 @@ export function describeCatalogConformance(
       expect((await a.list('')).rows.every((row) => row.path !== reserved.row.path)).toBe(true);
       await expect(
         a.reserve(sidePath(crypto.randomUUID()), {
+          objectId: crypto.randomUUID(),
           ownerPrincipalId: ownerA,
           sizeBytes: 1,
           contentType: null,
         }),
       ).rejects.toThrow();
       await expect(a.rename('r.bin', sidePath(crypto.randomUUID()))).rejects.toThrow();
-    });
-
-    const legacyObject = (storageKey: string) => ({ storageKey, sizeBytes: 4, contentType: null });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] adopting a row-less legacy object gives it a ready row and its folders', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-
-      await expect(
-        a.adoptLegacyFiles([legacyObject('docs/deep/a.txt'), legacyObject('b.txt')], ownerA),
-      ).resolves.toEqual({ adopted: 2, hadRow: 0, pathTaken: 0 });
-
-      await expect(a.get('docs/deep/a.txt')).resolves.toMatchObject({
-        kind: 'file',
-        status: 'ready',
-        storageKey: 'docs/deep/a.txt',
-        objectId: null,
-        area: 'files',
-        sizeBytes: 4,
-        ownerPrincipalId: ownerA,
-      });
-      await expect(a.get('docs/deep')).resolves.toMatchObject({ kind: 'folder' });
-      await expect(a.get('docs')).resolves.toMatchObject({ kind: 'folder' });
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] adopting twice, and adopting a file that has a row, changes nothing', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const existing = await a.putFile(fileInput('kept.txt', ownerA));
-
-      const outcome = await a.adoptLegacyFiles(
-        [legacyObject('kept.txt'), legacyObject('new.txt')],
-        ownerA,
-      );
-      expect(outcome).toEqual({ adopted: 1, hadRow: 1, pathTaken: 0 });
-      await expect(a.adoptLegacyFiles([legacyObject('new.txt')], ownerA)).resolves.toEqual({
-        adopted: 0,
-        hadRow: 1,
-        pathTaken: 0,
-      });
-      await expect(a.get('kept.txt')).resolves.toEqual(existing);
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] a legacy object whose row is deleting is never brought back', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      await a.putFile(fileInput('gone.txt', ownerA));
-      await a.remove('gone.txt');
-
-      await expect(a.adoptLegacyFiles([legacyObject('gone.txt')], ownerA)).resolves.toEqual({
-        adopted: 0,
-        hadRow: 1,
-        pathTaken: 0,
-      });
-      await expect(a.get('gone.txt')).resolves.toBeNull();
-      expect(paths((await a.list('')).rows)).not.toContain('gone.txt');
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] a path held by another object is skipped, never overwritten', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const heldReservation = await replace(a, ownerA, 'held.txt');
-      const held = await a.confirm(heldReservation.row, { sizeBytes: 1, contentType: null });
-      const waiting = await replace(a, ownerA, 'waiting.txt');
-
-      await expect(
-        a.adoptLegacyFiles([legacyObject('held.txt'), legacyObject('waiting.txt')], ownerA),
-      ).resolves.toEqual({ adopted: 0, hadRow: 0, pathTaken: 2 });
-      await expect(a.get('held.txt')).resolves.toMatchObject({
-        id: held?.row.id,
-        status: 'ready',
-      });
-      await expect(a.get('waiting.txt', { includePending: true })).resolves.toMatchObject({
-        id: waiting.row.id,
-        status: 'pending',
-      });
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] a side path is never adopted and the rest of the batch is', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-
-      await expect(
-        a.adoptLegacyFiles([legacyObject('%aside/x'), legacyObject('kept.txt')], ownerA),
-      ).resolves.toEqual({ adopted: 1, hadRow: 0, pathTaken: 1 });
-      expect(paths((await a.list('')).rows)).toEqual(['kept.txt']);
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] two calls at once adopt each object exactly once', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const objects = Array.from({ length: 8 }, (_, index) => legacyObject(`dir/f-${index}.txt`));
-
-      const [first, second] = await Promise.all([
-        a.adoptLegacyFiles(objects, ownerA),
-        a.adoptLegacyFiles(objects, ownerA),
-      ]);
-
-      expect(first.adopted + second.adopted).toBe(objects.length);
-      expect(first.hadRow + second.hadRow + first.pathTaken + second.pathTaken).toBe(
-        objects.length,
-      );
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] adopting in one workspace leaves the other alone', async () => {
-      const { catalog, ownerA, ownerB } = await makeFixture();
-      await catalog('a').adoptLegacyFiles([legacyObject('only-a.txt')], ownerA);
-
-      await expect(catalog('b').get('only-a.txt')).resolves.toBeNull();
-      await expect(catalog('b').adoptLegacyFiles([], ownerB)).resolves.toEqual({
-        adopted: 0,
-        hadRow: 0,
-        pathTaken: 0,
-      });
-    });
-
-    /** A ready file stored under the new naming (it has an object id). */
-    async function movedFile(a: ResourceCatalogRepository, owner: string, path: string) {
-      const reserved = await a.reserve(path, {
-        ownerPrincipalId: owner,
-        sizeBytes: 1,
-        contentType: null,
-        objectId: crypto.randomUUID(),
-      });
-      const confirmed = await a.confirm(reserved.row, { sizeBytes: 1, contentType: null });
-      return confirmed?.row ?? never();
-    }
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] the legacy count covers rows without an object id and no others', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      await expect(a.countLegacyFiles()).resolves.toBe(0);
-
-      await a.putFile(fileInput('old.txt', ownerA));
-      await a.adoptLegacyFiles([legacyObject('docs/adopted.txt')], ownerA);
-      await movedFile(a, ownerA, 'new.txt');
-
-      // Folders hold no object, and a moved file is not legacy.
-      await expect(a.countLegacyFiles()).resolves.toBe(2);
-      await expect(catalog('b').countLegacyFiles()).resolves.toBe(0);
-    });
-
-    // @story US-STO-13
-    it('[US-STO-13][contract][sdk] the holders of an old key are the rows that name it by key or, for files, by path', async () => {
-      const { catalog, ownerA } = await makeFixture();
-      const a = catalog('a');
-      const legacy = await a.putFile(fileInput('legacy.txt', ownerA));
-      const moved = await movedFile(a, ownerA, 'moved.txt');
-      // A moved row keeps its path as the old key only when it had one: here the old key is another.
-      const keys = ['legacy.txt', 'moved.txt', moved.storageKey ?? never(), 'nobody.txt'];
-
-      const files = await a.holdersOfKeys('files', keys);
-
-      expect(files.map((row) => row.id).sort()).toEqual([legacy.id, moved.id].sort());
-      // Another area's rows are not in the answer, and a skills key is matched by key alone.
-      await expect(a.holdersOfKeys('skills', keys)).resolves.toEqual([]);
-      await expect(a.holdersOfKeys('files', [])).resolves.toEqual([]);
-      await expect(catalog('b').holdersOfKeys('files', keys)).resolves.toEqual([]);
     });
 
     const signed = (catalog: CatalogPort, owner: string, path: string, objectId: string) =>
@@ -1430,12 +1214,17 @@ export function describeCatalogConformance(
     it('[US-STO-14][contract][sdk] an unchanged retry without an upload mode keeps the snapshot; a changed one does not', async () => {
       const { catalog, ownerA } = await makeFixture();
       const a = catalog('a');
-      const input = { ownerPrincipalId: ownerA, sizeBytes: 5, contentType: null };
-      const first = await a.reserve('legacy.bin', input);
-      const same = await a.reserve('legacy.bin', input);
+      const input = {
+        ownerPrincipalId: ownerA,
+        sizeBytes: 5,
+        contentType: null,
+        objectId: crypto.randomUUID(),
+      };
+      const first = await a.reserve('retried.bin', input);
+      const same = await a.reserve('retried.bin', input);
       expect(same.row.reservationToken).toBe(first.row.reservationToken);
 
-      const resized = await a.reserve('legacy.bin', { ...input, sizeBytes: 6 });
+      const resized = await a.reserve('retried.bin', { ...input, sizeBytes: 6 });
       expect(resized.row.reservationToken).not.toBe(first.row.reservationToken);
       await expect(a.confirm(first.row, { sizeBytes: 5, contentType: null })).resolves.toBeNull();
       await expect(
@@ -1476,12 +1265,6 @@ export function describeCatalogConformance(
       const fresh = await signed(a, ownerA, 'new.bin', crypto.randomUUID());
       expect(fresh.kind).toBe('reserved');
       expect(fresh.replaces).toBeUndefined();
-      const taken = await a.reserve('swap.bin', {
-        ownerPrincipalId: ownerA,
-        sizeBytes: 1,
-        contentType: null,
-      });
-      expect(taken.replaces).toBeUndefined();
     });
 
     it('never shows workspace A to workspace B, and B can reserve the same path', async () => {
@@ -1490,6 +1273,7 @@ export function describeCatalogConformance(
       const b = catalog('b');
       const fileA = await upload(a, ownerA, 'shared/same.txt');
       const pendingA = await a.reserve('pending.bin', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerA,
         sizeBytes: 1,
         contentType: null,
@@ -1505,6 +1289,7 @@ export function describeCatalogConformance(
       await expect(b.remove('shared')).resolves.toEqual([]);
 
       const reservedInB = await b.reserve('shared/same.txt', {
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: ownerB,
         sizeBytes: 2,
         contentType: null,
@@ -1883,8 +1668,4 @@ export function describeSkillCatalogConformance(
       expect(await a.listSkillRevisions('private')).toHaveLength(1);
     });
   });
-}
-
-function never(): never {
-  throw new Error('unreachable');
 }

@@ -113,6 +113,7 @@ export { createDatabaseProjectMcpServerRepositoryProvider } from './project-mcp-
 export { createDatabaseProjectRepositoryProvider } from './projects.js';
 export { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
 export { createInMemoryCatalog } from './memory-catalog.js';
+export { createInMemorySessionStateBlobs } from './memory-session-state-blobs.js';
 export { createDatabaseStorageConnectionRepositoryProvider } from './storage-connections.js';
 export { createInMemoryStorageConnectionRepositoryProvider } from './memory-storage-connections.js';
 export {
@@ -140,6 +141,7 @@ export { createDatabaseSessionTranscriptRepositoryProvider } from './session-tra
 export { createDatabaseRuntimeVerificationRepositoryProvider } from './runtime-verifications.js';
 export { createDatabaseSurfaceSessionKeyRepositoryProvider } from './surface-session-keys.js';
 export { createDatabaseTriggerRepositoryProvider } from './triggers.js';
+export { createDatabaseWebhookRepositoryProvider } from './webhooks.js';
 // Added by W3-CP-06, outside this task's `Owns` cell — declared on its PR. `scope-forgery.test.ts`
 // derives every `forScope`-shaped factory `repositories/index.ts` exports and fails unless it is
 // also reachable here, so `createDatabaseRuntimeProfileRepositoryProvider` has nowhere else to go.

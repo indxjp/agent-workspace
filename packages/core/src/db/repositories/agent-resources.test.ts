@@ -16,6 +16,7 @@ import { createDatabaseAgentResourceRepositoryProvider } from './agent-resources
 import { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
 import { createDatabaseWorkspaceScopeResolver, type WorkspaceScope } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -184,6 +185,7 @@ describe.skipIf(!hasDatabase)('AgentResourceRepository against PostgreSQL', () =
         path,
         kind: 'file',
         storageKey: path,
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
@@ -207,6 +209,7 @@ describe.skipIf(!hasDatabase)('AgentResourceRepository against PostgreSQL', () =
       path: 'pending/upload.pdf',
       kind: 'file',
       storageKey: 'pending/upload.pdf',
+      objectId: crypto.randomUUID(),
       status: 'pending',
       ownerPrincipalId: principalA,
       createdBy: userA,
@@ -220,10 +223,9 @@ describe.skipIf(!hasDatabase)('AgentResourceRepository against PostgreSQL', () =
   it('[US-STO-14][contract][sdk] a grant follows its path to the replacement row, and a removed row grants nothing', async () => {
     const repo = createDatabaseAgentResourceRepositoryProvider(isolated.db).forScope(scopeA);
     const catalog = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-    const old = await catalog.putFile({
+    const old = await seedCatalogFile(catalog, {
       path: 'granted/report.pdf',
       kind: 'file',
-      storageKey: 'granted/report.pdf',
       sizeBytes: 1,
       contentType: null,
       ownerPrincipalId: principalA,

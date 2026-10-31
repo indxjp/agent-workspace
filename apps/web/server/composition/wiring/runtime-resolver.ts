@@ -15,7 +15,7 @@ import {
 import { buildToolSandboxRequest } from '../../compose/tool-sandbox';
 import { atStep } from '../../runs/failures';
 import type { LaunchContext } from '../../runs/environment';
-import { isStorageConnectionSecretName } from '../../secrets/contract';
+import { isPlatformOwnedSecretName } from '../../secrets/contract';
 import { readToolBundle } from '../../tool-bundles/handlers';
 import { openToolBundleStore } from '../../tool-bundles/http';
 import { runnerManagerDriverId } from '../config';
@@ -26,8 +26,8 @@ import type { SubsystemsWiring } from './subsystems';
 
 /**
  * A run's tool-sandbox secret source: the workspace secret `name`, or `null` when it is not set.
- * A storage connection's credential is never a tool's: it is `null` without being read, whoever
- * calls this.
+ * A platform-owned credential (a storage connection's, a webhook's signing secret) is never a
+ * tool's: it is `null` without being read, whoever calls this.
  */
 export function runToolSecretSource(
   dependencies: {
@@ -38,7 +38,7 @@ export function runToolSecretSource(
 ): (name: string) => Promise<string | null> {
   return (name) =>
     atStep('secrets', async () => {
-      if (isStorageConnectionSecretName(name)) return null;
+      if (isPlatformOwnedSecretName(name)) return null;
       const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
       const resolved =
         scope === null || dependencies.secretsService === null

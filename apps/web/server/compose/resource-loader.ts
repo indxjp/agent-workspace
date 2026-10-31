@@ -31,7 +31,7 @@ import type { ConnectorsStoreProvider } from '../connectors/store';
 import { narrowFileGrants } from '../files/search-terms';
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { skillRevisionPrefix, skillRevisionRowFolder, skillRowFolder } from '../skills/keys';
-import type { WorkspaceSkillsStoreProvider } from '../storage/store';
+import { listCatalogFiles, type WorkspaceSkillsStoreProvider } from '../storage/store';
 import { skillFiles } from '../skills/tree';
 import type { StorageService } from '../storage/service';
 import { DomainError } from '../errors';
@@ -78,16 +78,25 @@ export interface RunConnectionStore {
   read(key: string): Promise<{ readonly body: ReadableStream<Uint8Array> } | null>;
 }
 
-/** The two calls a run's write-back makes of a connection's store; the object-store port satisfies it. */
+/**
+ * The two calls a run's write-back makes of a connection's store; the object-store port satisfies
+ * it. `signal` is the save's: once it aborts, the store's own SDK call is stopped, not only waited
+ * out.
+ */
 export interface RunWritableConnectionStore {
-  read(key: string): Promise<{
+  read(
+    key: string,
+    options: { readonly signal: AbortSignal },
+  ): Promise<{
     readonly body: ReadableStream<Uint8Array>;
     readonly meta: { readonly etag: string };
   } | null>;
   write(
     key: string,
     body: ReadableStream<Uint8Array>,
-    options: { readonly ifNoneMatch: '*' } | { readonly ifMatch: string },
+    options: { readonly signal: AbortSignal } & (
+      { readonly ifNoneMatch: '*' } | { readonly ifMatch: string }
+    ),
   ): Promise<unknown>;
 }
 
@@ -109,8 +118,15 @@ export interface RunStorageConnections {
   } | null>;
   /** A read-only store, opened with the credential as it is now. */
   open(workspaceId: string, connectionId: string): Promise<RunConnectionStore>;
-  /** A store that can write: opened only by the write-back of a `read-write` grant. */
-  openWritable(workspaceId: string, connectionId: string): Promise<RunWritableConnectionStore>;
+  /**
+   * A store that can write: opened only by the write-back of a `read-write` grant. `signal`
+   * abandons the open once the save stops.
+   */
+  openWritable(
+    workspaceId: string,
+    connectionId: string,
+    signal?: AbortSignal,
+  ): Promise<RunWritableConnectionStore>;
 }
 
 /** Where the archive puts a granted skill's file, relative to the run's cwd; the runner reads it there. */
@@ -311,8 +327,8 @@ export function withAttachedFiles(
 }
 
 /**
- * The size and checksum a reference carries: the row's own. A row without a checksum is an object
- * in the old naming that the copy has not reached yet; its bytes are hashed in one streaming pass.
+ * The size and checksum a reference carries: the row's own. A skill file read from a bare object
+ * prefix has no row and so no checksum; its bytes are hashed in one streaming pass.
  */
 async function referenceOf(
   row: { readonly sizeBytes: number; readonly sha256?: string | null },
@@ -322,7 +338,7 @@ async function referenceOf(
   if (row.sha256 !== undefined && row.sha256 !== null) {
     return { size: row.sizeBytes, sha256: row.sha256 };
   }
-  // storage-bridge(#1699): an old-naming row has no sha256 until the copy records it
+  // storage-bridge(#1699): a skill file of a bare object prefix has no recorded sha256
   const body = await source.open();
   if (body === null) throw new Error(`${what} has no stored bytes`);
   const hash = createHash('sha256');
@@ -372,7 +388,7 @@ async function loadFiles(
   }
 
   const catalog = await dependencies.catalog.forWorkspace(workspaceId);
-  const rows = await catalog.listFiles();
+  const rows = await listCatalogFiles(catalog);
   // Skill files are rows of the same catalog; no grant, direct or by folder, ever reaches them.
   // @story US-STO-08
   const byId = new Map(

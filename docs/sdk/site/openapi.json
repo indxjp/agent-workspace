@@ -6071,7 +6071,8 @@
                     "storage-connection-tested",
                     "storage-connection-written",
                     "storage-grant-changed",
-                    "workspace-features-changed"
+                    "workspace-features-changed",
+                    "user-token-exchanged"
                   ],
                   "type": "string"
                 },
@@ -10768,12 +10769,18 @@
             "enum": [
               "mcp-project",
               "a2a-agent",
-              "builder"
+              "builder",
+              "app-backend"
             ],
             "type": "string"
           },
           "name": {
             "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
+            "type": "string"
+          },
+          "oidcAudience": {
+            "maxLength": 255,
+            "minLength": 1,
             "type": "string"
           },
           "toolNames": {
@@ -11784,6 +11791,90 @@
         ],
         "type": "object"
       },
+      "CreateWebhookRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "enum": [
+                "run.completed",
+                "run.failed",
+                "run.cancelled"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "url": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "CreateWebhookResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "pattern": "^whsec_[A-Za-z0-9+/]{43}=$",
+            "type": "string"
+          },
+          "webhook": {
+            "additionalProperties": false,
+            "properties": {
+              "createdAt": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                "type": "string"
+              },
+              "events": {
+                "items": {
+                  "enum": [
+                    "run.completed",
+                    "run.failed",
+                    "run.cancelled"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "id": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "url": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "workspaceId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "readOnly": true,
+            "required": [
+              "id",
+              "workspaceId",
+              "url",
+              "events",
+              "createdAt"
+            ],
+            "type": "object"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "webhook",
+          "secret"
+        ],
+        "type": "object"
+      },
       "CreatedUserResponse": {
         "additionalProperties": false,
         "properties": {
@@ -12112,13 +12203,26 @@
                   "enum": [
                     "mcp-project",
                     "a2a-agent",
-                    "builder"
+                    "builder",
+                    "app-backend"
                   ],
                   "type": "string"
                 },
                 "name": {
                   "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
                   "type": "string"
+                },
+                "oidcAudience": {
+                  "anyOf": [
+                    {
+                      "maxLength": 255,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "redirectUris": {
                   "items": {
@@ -12171,6 +12275,7 @@
                 "agentIds",
                 "toolNames",
                 "redirectUris",
+                "oidcAudience",
                 "hasClientSecret",
                 "actsForPrincipalId",
                 "apiKeyIds",
@@ -12233,13 +12338,26 @@
                 "enum": [
                   "mcp-project",
                   "a2a-agent",
-                  "builder"
+                  "builder",
+                  "app-backend"
                 ],
                 "type": "string"
               },
               "name": {
                 "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$",
                 "type": "string"
+              },
+              "oidcAudience": {
+                "anyOf": [
+                  {
+                    "maxLength": 255,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               },
               "redirectUris": {
                 "items": {
@@ -12292,6 +12410,7 @@
               "agentIds",
               "toolNames",
               "redirectUris",
+              "oidcAudience",
               "hasClientSecret",
               "actsForPrincipalId",
               "apiKeyIds",
@@ -19017,6 +19136,65 @@
           }
         ]
       },
+      "TokenExchangeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "grant_type": {
+            "const": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "type": "string"
+          },
+          "requested_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:access_token",
+            "type": "string"
+          },
+          "subject_token": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string"
+          },
+          "subject_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:id_token",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "grant_type",
+          "subject_token",
+          "subject_token_type"
+        ],
+        "type": "object"
+      },
+      "TokenExchangeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "pattern": "^awo_live_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]{43})$",
+            "type": "string"
+          },
+          "expires_in": {
+            "exclusiveMinimum": 0,
+            "maximum": 300,
+            "type": "integer"
+          },
+          "issued_token_type": {
+            "const": "urn:ietf:params:oauth:token-type:access_token",
+            "type": "string"
+          },
+          "token_type": {
+            "const": "Bearer",
+            "type": "string"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "access_token",
+          "issued_token_type",
+          "token_type",
+          "expires_in"
+        ],
+        "type": "object"
+      },
       "ToolBundleResponse": {
         "additionalProperties": false,
         "properties": {
@@ -19534,6 +19712,11 @@
             "readOnly": true,
             "type": "array"
           },
+          "oidcAudience": {
+            "maxLength": 255,
+            "minLength": 1,
+            "type": "string"
+          },
           "redirectUris": {
             "items": {
               "maxLength": 2048,
@@ -19885,6 +20068,63 @@
         },
         "required": [
           "users"
+        ],
+        "type": "object"
+      },
+      "WebhookListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "webhooks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "createdAt": {
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
+                  "type": "string"
+                },
+                "events": {
+                  "items": {
+                    "enum": [
+                      "run.completed",
+                      "run.failed",
+                      "run.cancelled"
+                    ],
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                },
+                "id": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "url": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "workspaceId": {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                }
+              },
+              "readOnly": true,
+              "required": [
+                "id",
+                "workspaceId",
+                "url",
+                "events",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10,
+            "type": "array"
+          }
+        },
+        "readOnly": true,
+        "required": [
+          "webhooks"
         ],
         "type": "object"
       },
@@ -21687,6 +21927,15 @@
             }
           },
           {
+            "description": "Makes a retried start safe (S-6, ADR-0151, spec §5.12): 1–255 characters after trimming, scoped to the calling principal. The same key with the same request returns the run the first start queued; the same key with a different request answers `409 run_idempotency_conflict`; a blank or longer key answers `400 invalid_idempotency_key`.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "$ref": "#/components/parameters/ContractsVersion"
           }
         ],
@@ -22253,6 +22502,61 @@
         "summary": "Move the CLI's user token to another of the person's workspaces",
         "tags": [
           "workspaces"
+        ],
+        "x-agent-workspace-feature": "core"
+      }
+    },
+    "/api/auth/token-exchange": {
+      "post": {
+        "operationId": "auth.exchange",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "security": [],
+        "summary": "Exchange the signed-in person's OIDC ID token for a short-lived access token of an app-backend endpoint client (ADR-0161)",
+        "tags": [
+          "auth"
         ],
         "x-agent-workspace-feature": "core"
       }
@@ -28105,6 +28409,147 @@
         "x-agent-workspace-feature": "core"
       }
     },
+    "/api/webhooks": {
+      "get": {
+        "operationId": "webhooks.list",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookListResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "List the workspace's webhooks (at most 10, unpaginated); the secret is never listed",
+        "tags": [
+          "webhooks"
+        ],
+        "x-agent-workspace-feature": "runs"
+      },
+      "post": {
+        "operationId": "webhooks.create",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWebhookResponse"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Register a webhook for terminal run outcomes. The URL must pass the egress policy; the whsec_ signing secret is returned once, in this answer",
+        "tags": [
+          "webhooks"
+        ],
+        "x-agent-workspace-feature": "runs"
+      }
+    },
+    "/api/webhooks/{id}": {
+      "delete": {
+        "operationId": "webhooks.remove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ContractsVersion"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content.",
+            "headers": {
+              "x-agent-workspace-contracts": {
+                "$ref": "#/components/headers/ContractsVersion"
+              },
+              "x-agent-workspace-contracts-minimum": {
+                "$ref": "#/components/headers/ContractsMinimumVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "426": {
+            "$ref": "#/components/responses/ContractsVersionUnsupported"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "summary": "Remove a webhook, its pending deliveries and its signing secret",
+        "tags": [
+          "webhooks"
+        ],
+        "x-agent-workspace-feature": "runs"
+      }
+    },
     "/api/workspaces": {
       "get": {
         "operationId": "workspaces.list",
@@ -28638,6 +29083,9 @@
     },
     {
       "name": "triggers"
+    },
+    {
+      "name": "webhooks"
     },
     {
       "name": "workspaces"

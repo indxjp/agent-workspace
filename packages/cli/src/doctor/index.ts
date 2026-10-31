@@ -2,20 +2,15 @@
  * `agent-workspace doctor [dir] [--json]` — whether this project can start, and whether this CLI
  * matches the server it talks to, in one run.
  *
- * Six checks — the profile, the storage setting, its stores, what is left in the old storage layout,
- * the tools its target needs on `PATH`, and the server's contracts version — each report pass, warn or fail with one line of advice. The report is
+ * Five checks — the profile, the storage setting, its stores, the tools its target needs on
+ * `PATH`, and the server's contracts version — each report pass, warn or fail with one line of advice. The report is
  * written in full before the command refuses, so a failure exits 1 with every finding visible and
  * warnings alone exit 0. Every probe is injectable: the suite needs neither Docker nor a network.
  */
 import path from 'node:path';
 
 import type { CommandProbe } from '../host-capabilities.ts';
-import {
-  projectEnvironment,
-  ProjectEnvironmentError,
-  type LegacyObjectCounter,
-  type ProfileProbes,
-} from '../validate.ts';
+import { projectEnvironment, ProjectEnvironmentError, type ProfileProbes } from '../validate.ts';
 import {
   checkComposeOrigins,
   checkProfile,
@@ -25,14 +20,11 @@ import {
   notChecked,
   type DoctorCheck,
 } from './checks.ts';
-import { checkStorageLayout } from './layout.ts';
 import { checkPrerequisites, runToolCommand } from './prerequisites.ts';
 import { collectSecrets, redact } from './redact.ts';
 
 export interface DoctorOptions {
   readonly probes?: ProfileProbes;
-  /** Counts objects under an old-layout prefix in a bucket. */
-  readonly layout?: LegacyObjectCounter;
   readonly command?: CommandProbe;
   readonly fetch?: typeof fetch;
   /** Replaces the project `.env` merged over `process.env`. */
@@ -120,20 +112,6 @@ async function runChecks(
   } else {
     checks.push(...(await checkStores(profile, reading.environment, options)));
   }
-
-  checks.push(
-    ...(environment === null
-      ? [notChecked('storage-layout', 'storage', '.env could not be read')]
-      : await checkStorageLayout(
-          environment,
-          profile,
-          checks.some(
-            ({ check, subject, status }) =>
-              check === 'stores' && subject === 'objects' && status === 'pass',
-          ),
-          options,
-        )),
-  );
 
   checks.push(
     ...(profile === null

@@ -116,7 +116,8 @@ describe('debt-review', () => {
 
   it('shows the catalog-fakes allowlist row', () => {
     const m = measure('2027-01-18');
-    expect(m.catalogFakesAllowlist).toBeGreaterThan(0);
+    // Emptied by #1745; the row still reports it, so a regrown allowlist shows in the review.
+    expect(m.catalogFakesAllowlist).toBe(0);
     expect(render({ ...m, catalogFakesAllowlist: 6 })).toContain(
       '| catalog-fakes allowlist sites | 6 |',
     );

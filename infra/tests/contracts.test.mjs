@@ -230,6 +230,23 @@ test('Azure preview keeps control-plane scale-to-zero and sandboxes separately i
   assert.doesNotMatch(workflow, /client-secret:/u);
 });
 
+test('GCP Cloud Run passes the project features to web only when set (ADR-0160 D5, #1495)', async () => {
+  const terraform = await read('infra/terraform/gcp-cloudrun/main.tf');
+  const declarations = declaredVariables(await read('infra/terraform/gcp-cloudrun/variables.tf'));
+  const declaration = declarations.get('deployment_features') ?? '';
+  const service = terraform.split('resource "google_cloud_run_v2_service" "web" {')[1] ?? '';
+  const web = service.split(/\nresource /u)[0] ?? '';
+
+  assert.match(
+    web,
+    /for_each\s*=\s*var\.deployment_features == "" \? \[\] : \[var\.deployment_features\][\s\S]{0,120}name\s*=\s*"AW_DEPLOYMENT_FEATURES"/u,
+  );
+  assert.equal((terraform.match(/"AW_DEPLOYMENT_FEATURES"/gu) ?? []).length, 1);
+  assert.match(declaration, /type\s*=\s*string/u);
+  assert.match(declaration, /default\s*=\s*""/u);
+  assert.ok(declaration.includes('can(regex("^([a-z]+(,[a-z]+)*)?$", var.deployment_features))'));
+});
+
 /**
  * Split a `variables.tf` into `{ name → declaration }`, so a rendered key can be held against
  * both "is this variable declared" and "does the module already default it".
@@ -965,6 +982,18 @@ test('the chart renders an Ingress with cert-manager TLS only when asked, and ca
   );
   assert.match(base, /^deploymentPolicy: ''$/mu);
   assert.deepEqual(schema.properties.deploymentPolicy, { type: 'string' });
+
+  // ADR-0160 D5 (#1495): the project's features, rendered only when set, so an empty value
+  // renders the web Deployment exactly as before.
+  assert.match(
+    deployments,
+    /if and \(eq \$name "web"\) \$\.Values\.deploymentFeatures[\s\S]*name: AW_DEPLOYMENT_FEATURES, value: \{\{ \$\.Values\.deploymentFeatures \| quote \}\}/u,
+  );
+  assert.match(base, /^deploymentFeatures: ''$/mu);
+  assert.deepEqual(schema.properties.deploymentFeatures, {
+    type: 'string',
+    pattern: '^([a-z]+(,[a-z]+)*)?$',
+  });
 
   assert.match(
     deployments,

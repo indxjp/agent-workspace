@@ -115,6 +115,15 @@ export interface SessionPrincipalIdentity {
   readonly label: string;
 }
 
+/** ADR-0161 D8: an app-backend scope carries its bound agents, and no other scope carries any. */
+function carriesBoundAgentsCorrectly(scope: TokenScope | null): boolean {
+  if (scope === null) return true;
+  const bound = scope.agentIds;
+  return scope.kind === 'app-backend'
+    ? bound !== undefined && bound.length > 0
+    : bound === undefined;
+}
+
 /**
  * An authenticated caller.
  *
@@ -425,11 +434,13 @@ export class Principal {
         : value.via === 'oauth-token'
           ? value.scope !== null && isEndpointScope(value.scope.kind)
           : value.via === 'api-key'
-            ? // A builder scope is a consented member's, so it rides on an OAuth token only.
+            ? // A builder or app-backend scope is a person's, so it rides on an OAuth token only.
               value.scope === null ||
-              (isEndpointScope(value.scope.kind) && value.scope.kind !== 'builder')
+              (isEndpointScope(value.scope.kind) &&
+                value.scope.kind !== 'builder' &&
+                value.scope.kind !== 'app-backend')
             : value.scope === null;
-    if (!scopeInvariant) return false;
+    if (!scopeInvariant || !carriesBoundAgentsCorrectly(value.scope)) return false;
     // A grant rides on an OAuth token and on nothing else.
     if ((value.via === 'oauth-token') !== (value.oauth !== null)) return false;
     // Only an API key may act for someone else; every other principal owns what it writes.

@@ -17,6 +17,7 @@ const CLIENT = {
   agentIds: [IDS.agent],
   toolNames: null,
   redirectUris: ['https://app.example.com/oauth/callback'],
+  oidcAudience: null,
   hasClientSecret: false,
   actsForPrincipalId: IDS.principal,
   apiKeyIds: [FIXTURES.apiKey.id],

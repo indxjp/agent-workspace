@@ -398,3 +398,31 @@ describe('current public documentation follows executable truth', () => {
     for (const sentence of live) expect(sentence).toContain('--experimental');
   });
 });
+
+// @story US-STO-13
+describe('the required storage upgrade stop', () => {
+  const read = async (relative: string) =>
+    (await readFile(new URL(relative, repository), 'utf8')).replace(/\s+/gu, ' ');
+
+  it('names a remedy for every cause that keeps a pass record from proving the move', async () => {
+    const page = await read('docs/sdk/site/building/self-hosting.mdx');
+    const note = await read('changes/storage-upgrade-proof-guard.md');
+    for (const text of [page, note]) {
+      for (const cause of [
+        '`skipped_ownerless`',
+        '`skipped_path_taken`',
+        '`skipped_failed`',
+        'DELETE /api/skills/<name>',
+      ])
+        expect(text).toContain(cause);
+    }
+    expect(page).toContain('read the latest `adopt` row');
+    expect(page).toContain("the latest `skills` row's `legacy_rows`");
+  });
+
+  it('says the finalize start is the last chance to remove the old objects', async () => {
+    const page = await read('docs/sdk/site/building/self-hosting.mdx');
+    expect(page).toContain('This is the last release that removes the old objects');
+    expect(page).toContain('would adopt a leftover old object as a live file again');
+  });
+});

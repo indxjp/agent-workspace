@@ -20,7 +20,15 @@
  *
  * The list of inert entries is therefore derived from this table, never asserted in prose. See
  * `navigation.test.ts`, which pins both the order and which entries resolve.
+ *
+ * ## Why each entry names a feature
+ *
+ * A workspace can switch features off (ADR-0160), and the console then hides their entries
+ * (spec §44 as amended). The hiding rule reads the `feature` tag on this table through
+ * `visibleNavigation`, rather than a second list that would drift from it.
  */
+import { FEATURE_IDS, type FeatureId, type RouteFeature } from '@indx-workspace/contracts/features';
+
 import type { IconName } from './icons';
 
 interface NavItem {
@@ -29,6 +37,8 @@ interface NavItem {
   /** The visible label. Copied from §44; do not reword. */
   readonly label: string;
   readonly icon: IconName;
+  /** The feature that hides this entry when switched off, or `core` (ADR-0160 D4). */
+  readonly feature: RouteFeature;
   /**
    * The route this entry navigates to, or `null` when no task has built it yet. `null` is a
    * statement that the destination is absent, and the sidebar renders it as disabled — it is
@@ -52,34 +62,80 @@ export const NAVIGATION: readonly NavGroup[] = [
   {
     label: null,
     items: [
-      { id: 'home', label: 'New chat', icon: 'chat', href: '/' },
-      { id: 'projects', label: 'Projects', icon: 'projects', href: '/projects' },
-      { id: 'agents', label: 'Agents', icon: 'agents', href: '/agents' },
-      { id: 'files', label: 'Files', icon: 'files', href: '/files' },
-      { id: 'skills', label: 'Skills', icon: 'skills', href: '/skills' },
-      { id: 'connectors', label: 'Connectors', icon: 'connectors', href: '/connectors' },
-      { id: 'runs', label: 'Runs', icon: 'runs', href: '/runs' },
+      { id: 'home', label: 'New chat', icon: 'chat', feature: 'chat', href: '/' },
+      {
+        id: 'projects',
+        label: 'Projects',
+        icon: 'projects',
+        feature: 'projects',
+        href: '/projects',
+      },
+      { id: 'agents', label: 'Agents', icon: 'agents', feature: 'core', href: '/agents' },
+      { id: 'files', label: 'Files', icon: 'files', feature: 'files', href: '/files' },
+      { id: 'skills', label: 'Skills', icon: 'skills', feature: 'skills', href: '/skills' },
+      {
+        id: 'connectors',
+        label: 'Connectors',
+        icon: 'connectors',
+        feature: 'connectors',
+        href: '/connectors',
+      },
+      { id: 'runs', label: 'Runs', icon: 'runs', feature: 'runs', href: '/runs' },
     ],
   },
   {
     label: 'Administration',
     items: [
-      { id: 'models', label: 'Models', icon: 'models', href: '/admin/models' },
+      { id: 'models', label: 'Models', icon: 'models', feature: 'core', href: '/admin/models' },
       {
         id: 'storage',
         label: 'Storage',
         icon: 'files',
+        feature: 'core',
         href: '/admin/storage',
         managersOnly: true,
       },
-      { id: 'users', label: 'Users', icon: 'users', href: '/admin/users' },
-      { id: 'apikeys', label: 'API Keys', icon: 'keys', href: '/admin/api-keys' },
-      { id: 'runtimes', label: 'Runtimes', icon: 'runtimes', href: '/admin/runtimes' },
-      { id: 'shares', label: 'Shared links', icon: 'share', href: '/admin/shares' },
-      { id: 'settings', label: 'Settings', icon: 'settings', href: '/admin/settings' },
+      { id: 'users', label: 'Users', icon: 'users', feature: 'core', href: '/admin/users' },
+      { id: 'apikeys', label: 'API Keys', icon: 'keys', feature: 'core', href: '/admin/api-keys' },
+      {
+        id: 'runtimes',
+        label: 'Runtimes',
+        icon: 'runtimes',
+        feature: 'core',
+        href: '/admin/runtimes',
+      },
+      {
+        id: 'shares',
+        label: 'Shared links',
+        icon: 'share',
+        feature: 'sharing',
+        href: '/admin/shares',
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: 'settings',
+        feature: 'core',
+        href: '/admin/settings',
+      },
     ],
   },
 ];
+
+/**
+ * The navigation a workspace with `features` switched on shows: every `core` entry and every entry
+ * whose feature is listed, in §44's order, without a group left empty. With every feature on (the
+ * default) it is `NAVIGATION` itself. `activeNavId` and `crumbsFor` keep reading the whole table:
+ * a crumb for a hidden page is harmless, and that page explains it is switched off.
+ */
+export function visibleNavigation(
+  features: readonly FeatureId[] = FEATURE_IDS,
+): readonly NavGroup[] {
+  const shown = (item: NavItem) => item.feature === 'core' || features.includes(item.feature);
+  return NAVIGATION.map((group) => ({ ...group, items: group.items.filter(shown) })).filter(
+    (group) => group.items.length > 0,
+  );
+}
 
 /**
  * `usePathname()` is typed `string`, but a component can be rendered outside a router and a

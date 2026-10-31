@@ -103,6 +103,10 @@ async function evaluate(
       status,
     ),
   });
+  // ADR-0161 D4: no member consents to an app-backend client; its tokens come from the exchange.
+  if (client.kind === 'app-backend') {
+    return fail('unauthorized_client', 'An app-backend client is not authorized here.');
+  }
 
   if (params.get('response_type') !== 'code') {
     return fail('unsupported_response_type', 'response_type must be code.');

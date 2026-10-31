@@ -338,6 +338,14 @@ export function createMemoryDirectory(options: MemoryDirectoryOptions = {}): Mem
           .sort((a, b) => a.email.localeCompare(b.email)),
       ),
 
+    findMembershipByPrincipal: (principalId: string): Promise<MembershipSummary | null> => {
+      const row = [...memberships.values()].find(
+        (candidate) =>
+          candidate.workspaceId === workspaceId && candidate.principalId === principalId,
+      );
+      return Promise.resolve(row === undefined ? null : summariseMembership(row));
+    },
+
     createMembership: (input: CreateMembershipInput): Promise<CreateMembershipOutcome> => {
       const email = normaliseEmail(input.email);
       const user = userByEmail(email);

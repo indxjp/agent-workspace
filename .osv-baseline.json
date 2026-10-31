@@ -1,5 +1,7 @@
 {
   "comment": "Known osv-scanner findings on main when the gate was added (engineering audit W1-4, F-03). Entries may only be removed: a finding missing from this list fails CI, and so does a listed finding that is no longer reported.",
-  "findings": [],
-  "justifications": {}
+  "findings": ["minimatch@5.1.9 GHSA-g3hv-75wg-m249"],
+  "justifications": {
+    "minimatch@5.1.9 GHSA-g3hv-75wg-m249": "Pending Owner review, review by 2027-01-31. No fixed minimatch 5.x exists (the advisory, published 2026-10-30, is fixed only in 11.0.1). Reached only via openapi-typescript@7.13.0 (latest) > @redocly/openapi-core@1.x, a dev-only OpenAPI type generator run by pnpm docs:generate on repository-owned specs; it calls minimatch(url, pattern) with patterns from its own config, never from untrusted input. @redocly/openapi-core 1.x requires the v5 CommonJS default export, so minimatch 11 cannot be overridden there. Remove when openapi-typescript moves to @redocly/openapi-core 2.x. glob and minimatch 10.x are overridden to fixed versions in pnpm-workspace.yaml."
+  }
 }

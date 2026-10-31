@@ -3,7 +3,8 @@
  * §05 and §06 Phase 5). The workspace is the principal's and nothing else; a credential goes to the
  * secret store and is never part of a response, an audit row or an error. Every successful write is
  * audited once, and so is every test. `test` and `browse` reach the customer's storage only through
- * `openConnectionStore`, which owns the egress guard, the pinned lookup and the read-only wrapper.
+ * `openConnectionStore`, which owns the egress guard, the pinned lookup or the outbound proxy, and
+ * the read-only wrapper.
  */
 import {
   CreateStorageConnectionInputSchema,
@@ -20,22 +21,22 @@ import {
   type StorageConnectionTestOutcome,
 } from '@indx-workspace/contracts/storage-connections';
 import { parseStorageUrl } from '@indx-workspace/contracts/storage-url';
-import {
-  ConnectionStoreError,
-  openConnectionStore,
-  resolveFileRoot,
-  storageProviderStatus,
-  storageRefusalClass,
-  toObjectKey,
-  UnsafeObjectKeyError,
-  type ObjectPage,
-} from '@agent-workspace/core/storage';
+import { toObjectKey, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
 
 import { isUnderAllowedPrefix } from '../agent-versions/storage-grants';
 import { formatIssues, problem, type ApiResult } from '../http/result';
 import { PROBE_TIMEOUT_MS } from '../models/probe';
 import type { Principal } from '../rbac/principal';
 import { isUuid } from '../secrets/contract';
+import {
+  ConnectionStoreError,
+  folderFailure,
+  openConnectionStore,
+  resolveFileRoot,
+  storageProviderStatus,
+  storageRefusalClass,
+  type ObjectPage,
+} from '../storage/objects';
 import { log } from '../telemetry/logger';
 import type { StorageConnections, StorageConnectionsRuntime } from './runtime';
 import { credentialTarget } from './store';
@@ -226,6 +227,7 @@ async function listConnection(
     writable: false,
     fileRoots: runtime.fileRoots,
     egress: runtime.egress,
+    ...(runtime.proxy === undefined ? {} : { proxy: runtime.proxy }),
     signal: options.signal,
     // Counts and the id only: a name or path could carry the target of a link.
     onSkipped: (counts) =>
@@ -250,8 +252,29 @@ function withProbeTimeout<T>(work: (signal: AbortSignal) => Promise<T>): Promise
   return Promise.race([work(controller.signal), expired]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * A `file` connection's own failure, logged by its reason code alone: its message names the
+ * customer's key. `null` for any other error.
+ */
+function loggedFolderFailure(
+  route: 'test' | 'browse',
+  connectionId: string,
+  error: unknown,
+): ReturnType<typeof folderFailure> {
+  const failure = folderFailure(error);
+  if (failure !== null) {
+    log.warn(`[storage-connections] ${route}: the connection's folder failed`, {
+      connectionId,
+      reason: failure.reason,
+    });
+  }
+  return failure;
+}
+
 /** Only the code or the status is read: the message and `cause` may echo the provider's reply. */
-function testOutcome(error: unknown): StorageConnectionTestOutcome {
+function testOutcome(connectionId: string, error: unknown): StorageConnectionTestOutcome {
+  const folder = loggedFolderFailure('test', connectionId, error);
+  if (folder !== null) return { ok: false, code: folder.refusal };
   if (error instanceof ConnectionStoreError) {
     return error.code === 'storage_connection_endpoint_forbidden'
       ? { ok: false, code: 'forbidden' }
@@ -285,7 +308,7 @@ export async function testStorageConnection(
       listConnection(runtime, store, connection, folder, { limit: 1, signal }),
     );
   } catch (error) {
-    outcome = testOutcome(error);
+    outcome = testOutcome(connection.id, error);
   }
   await audit(runtime, principal, 'storage-connection-tested', connection);
   return { status: 200, body: outcome };
@@ -325,8 +348,18 @@ function decodeQueryValue(value: string): string | null {
   }
 }
 
-function browseFailure(error: unknown): ApiResult {
+function browseFailure(connectionId: string, error: unknown): ApiResult {
   if (error instanceof ConnectionStoreError) return refusal(error.code);
+  // A key resolved outside the folder is refused like a forbidden endpoint; anything else the
+  // folder failed with (an I/O error, the walk cap) is unreachable.
+  const folder = loggedFolderFailure('browse', connectionId, error);
+  if (folder !== null) {
+    return refusal(
+      folder.reason === 'outside_root'
+        ? 'storage_connection_endpoint_forbidden'
+        : 'storage_connection_unreachable',
+    );
+  }
   // A key the store's guard refuses (`%2e%2e` and the like) is a folder this API will not show.
   if (error instanceof UnsafeObjectKeyError)
     return refusal('storage_connection_prefix_not_allowed');
@@ -390,7 +423,7 @@ export async function browseStorageConnection(
       ),
     );
   } catch (error) {
-    return browseFailure(error);
+    return browseFailure(connection.id, error);
   }
   // Whatever the cursor was, nothing outside the prefix is shown.
   const entries = page.entries

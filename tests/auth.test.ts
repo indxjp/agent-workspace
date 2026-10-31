@@ -1024,6 +1024,8 @@ describe('the running server refuses every /api/** request without a session', (
     '/api/auth/workspace',
     '/api/auth/cli-device',
     '/api/auth/cli-token',
+    // ADR-0161 D3: the ID-token exchange authenticates the endpoint client itself.
+    '/api/auth/token-exchange',
     INVITATION_ACCEPT_PROBE,
     // ADR-0144: the secret in the path is the authentication; the route answers 404 without it.
     '/api/triggers/probe-id/fire/probe-secret',
@@ -1125,6 +1127,21 @@ describe('the running server refuses every /api/** request without a session', (
       // routes against a fully configured deployment, where none of them answers 503.
       expect(response.status, `${method} ${pathname}`).not.toBe(401);
     }
+  });
+
+  it('allows the ID-token exchange with no session, and names why it cannot serve — ADR-0161', async () => {
+    const response = await fetch(`${base}/api/auth/token-exchange`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    // This server has neither OIDC nor a database, so the handler, not the gate, answers D6's 503.
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({
+      error: { code: 'token_exchange_not_configured' },
+    });
   });
 
   // ── every redirect on the sign-in path is relative, observed on the wire (issue #201) ───────

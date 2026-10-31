@@ -953,6 +953,8 @@ def leadingIndexedColumns : TableName → List String
   | .workspaces => ["slug"]
   | .workspacePrincipals => ["workspace_id"]
   | .workspaceFeatures => ["workspace_id"]
+  | .webhooks => ["workspace_id"]
+  | .webhookDeliveries => ["created_at", "next_attempt_at", "workspace_id"]
 
 /-- Rule 1 of `tenancy.test.ts` ("the table is scoped"), as the test states it: an exempt table
 (the root or a global table, `TENANT_EXEMPT`) has no `workspace_id`; any other has a `NOT NULL`

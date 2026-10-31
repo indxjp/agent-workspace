@@ -1,3 +1,4 @@
+import { OAUTH_ACCESS_TOKEN_PATTERN } from '@indx-workspace/contracts/token-exchange';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -25,6 +26,13 @@ describe('OAuth token wire format', () => {
       expect(minted.presented).not.toContain(minted.tokenHash);
       expect(await oauthTokenHash(kind, minted.presented)).toBe(minted.tokenHash);
     }
+  });
+
+  it('mints access tokens the contract pattern accepts, and only those (ADR-0161 D3)', async () => {
+    expect(OAUTH_ACCESS_TOKEN_PATTERN.test((await mintOAuthToken('access')).presented)).toBe(true);
+    expect(OAUTH_ACCESS_TOKEN_PATTERN.test((await mintOAuthToken('refresh')).presented)).toBe(
+      false,
+    );
   });
 
   it('does not accept a token of one kind as another (audience of the credential)', async () => {

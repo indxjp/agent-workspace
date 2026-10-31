@@ -17,6 +17,8 @@
  * workspace slug otherwise, so the switcher can tell which of `GET /api/workspaces`' rows is the
  * one already open.
  */
+import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
+
 import { SidebarNav } from './sidebar-nav';
 import { WorkspaceSwitcher } from './workspace-switcher';
 
@@ -39,12 +41,15 @@ export function Sidebar({
   workspace,
   user,
   managers,
+  features = FEATURE_IDS,
 }: {
   readonly workspace: WorkspaceBrand;
   /** `null` when the request carries no session — the foot is then omitted, not faked. */
   readonly user: SidebarUser | null;
   /** Whether the caller is an Owner or Admin, who also see the entries meant for managers. */
   readonly managers: boolean;
+  /** The features switched on; omitted means all of them, so the navigation is unchanged. */
+  readonly features?: readonly FeatureId[];
 }) {
   return (
     <aside className="flex w-full flex-none flex-col border-b border-border bg-surface-2 md:sticky md:top-0 md:h-screen md:w-(--sidebar-w) md:border-r md:border-b-0">
@@ -66,7 +71,7 @@ export function Sidebar({
         />
       )}
 
-      <SidebarNav managers={managers} />
+      <SidebarNav managers={managers} features={features} />
 
       {user === null ? null : (
         <div className="border-t border-border p-2.5">

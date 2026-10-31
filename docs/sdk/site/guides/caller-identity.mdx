@@ -10,6 +10,7 @@ the signed-in person when it starts the run, and the platform signs that name fo
 **What you can do**
 
 - [Start a run for a person](#start-a-run-for-a-person)
+- [Act as the signed-in person](#act-as-the-signed-in-person)
 - [Opt a connector in](#opt-a-connector-in)
 - [Check the header in your server](#check-the-header-in-your-server)
 - [Rotate the key](#rotate-the-key)
@@ -47,6 +48,41 @@ starts asserts that caller, and the firing body cannot change it.
 A run that pauses for approval keeps its subject. The run that carries on after the decision acts
 for the same person, and the person who approves only decides: the approval request cannot name a
 different subject.
+
+## Act as the signed-in person
+
+A `subject` names the person to your tools, but the run still uses the API key's permissions. To
+start runs with the person's own permissions, give your backend an `app-backend` endpoint client and
+exchange the person's ID token for a short-lived access token. The ID token must come from the
+deployment's own identity provider (`OIDC_ISSUER_URL`), issued to the app named by the client's
+`oidcAudience`.
+
+```ts title="backend/act-as.ts (illustrative)" claim="illustrative"
+import { createClient } from '@indx-workspace/sdk';
+
+// No credential of its own: the exchange authenticates with the client pair.
+const exchanger = createClient({ baseUrl, auth: { kind: 'session' } });
+
+const { access_token } = await exchanger.auth.exchange({
+  clientId: process.env.AW_APP_CLIENT_ID ?? '',
+  clientSecret: process.env.AW_APP_CLIENT_SECRET ?? '',
+  idToken: signedInUser.idToken, // from your sign-in, never from the request body
+});
+
+const asPerson = createClient({ baseUrl, auth: { kind: 'access-token', token: access_token } });
+await asPerson.runs.start(agentId, { prompt: question });
+```
+
+The token reaches only five routes: starting a run on one of the client's bound agents, reading a
+run and its events, interrupting a run, and `me`. On each one it still needs the person's own role
+and agent grants, so a person without a grant to an agent is refused even if the client binds it.
+Anything else answers `403 token_out_of_scope`.
+
+The token lasts 300 seconds (`expires_in`) and has no refresh token. Keep one per person until it
+expires, then exchange again with a fresh ID token; each exchange writes an audit row. Keep the
+client secret and both tokens on the server, and never log them. A person who is not a member of
+the client's workspace gets `403 subject_not_member`; a wrong or revoked client gets
+`401 invalid_client`.
 
 ## Opt a connector in
 

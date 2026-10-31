@@ -58,6 +58,16 @@ variable "deployment_policy" {
   }
 }
 
+variable "deployment_features" {
+  description = "The project's features as comma-separated ids (web's AW_DEPLOYMENT_FEATURES, ADR-0160 D5), rendered by aw deploy from agent-workspace.yaml. Empty installs every feature."
+  type        = string
+  default     = ""
+  validation {
+    condition     = can(regex("^([a-z]+(,[a-z]+)*)?$", var.deployment_features))
+    error_message = "deployment_features must be empty or comma-separated lower-case feature ids."
+  }
+}
+
 variable "public_url" {
   description = "web's AW_PUBLIC_URL: the https origin (no path) A2A agent cards (ADR-0135) and the OAuth issuer use, rendered by aw deploy. Empty leaves it unset."
   type        = string

@@ -10,6 +10,7 @@
  */
 import { problemWithDetail as problem } from '../http/result';
 import type { OwnershipOutcome, OwnershipResolver } from '../rbac/http';
+import type { Principal } from '../rbac/principal';
 
 /** The ownership facts accepted during the principal migration window. */
 export interface OwnedRow {
@@ -38,7 +39,7 @@ export interface ApiResultLike {
 export function resolverForRow<Row extends OwnedRow>(
   load: () => Promise<Row | null>,
   notFound: () => ApiResultLike,
-  refuse?: (row: Row) => ApiResultLike | null,
+  refuse?: (row: Row, principal: Principal) => ApiResultLike | null,
 ): OwnershipResolver {
   return async (principal): Promise<OwnershipOutcome> => {
     const row = await load();
@@ -51,7 +52,7 @@ export function resolverForRow<Row extends OwnedRow>(
     if (row.workspaceId !== principal.workspaceId) {
       return { kind: 'refuse', result: notFound() };
     }
-    const refusal = refuse?.(row) ?? null;
+    const refusal = refuse?.(row, principal) ?? null;
     if (refusal !== null) return { kind: 'refuse', result: refusal };
     if (row.ownerPrincipalId !== undefined && row.ownerPrincipalId !== null) {
       return {

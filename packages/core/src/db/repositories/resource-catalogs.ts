@@ -38,8 +38,8 @@ export interface CatalogFile {
   // storage-bridge(#1634): optional until the hand-written file-catalog fakes are replaced; the
   // database repository always sets it.
   readonly status?: FileStatus;
-  // storage-bridge(#1634): optional for the same reason as `status`. `objectId` null is a legacy
-  // row whose `storageKey` is still the path.
+  // storage-bridge(#1634): optional for the same reason as `status`. `objectId` null is a folder,
+  // which has no object.
   readonly objectId?: string | null;
   readonly area?: StorageArea;
   readonly sha256?: string | null;
@@ -200,6 +200,23 @@ export class CatalogPathTakenError extends Error {
 const CATALOG_PAGE_MAX = 1000;
 
 /**
+ * Every ready row of the workspace, ordered by path, read page by page through {@link CatalogPort.list}.
+ * For a caller that needs the whole tree at once (a grant check, a search, a run's file set).
+ */
+export async function listCatalogFiles(
+  catalog: Pick<CatalogPort, 'list'>,
+): Promise<readonly CatalogFile[]> {
+  const all: CatalogFile[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await catalog.list('', cursor === undefined ? {} : { cursor });
+    all.push(...page.rows);
+    cursor = page.cursor ?? undefined;
+  } while (cursor !== undefined);
+  return all;
+}
+
+/**
  * Where a rename of `from` to `to` moves `key`, a path or a legacy storage key at or under `from`.
  * The JS cut is safe: `from` is a prefix of `key`. The database update applies the same rule in SQL.
  */
@@ -227,14 +244,12 @@ export function clampCatalogPageLimit(limit: number | undefined): number {
 export interface CatalogPort {
   /**
    * Add a pending row for `path` (and ready parent folders), or say who holds it. On a free path the
-   * row takes the path itself. A ready file is replaced only by a caller that gives an `objectId`:
-   * the new row then waits at a side path until `confirm` swaps it in; without one, the ready row
-   * holds the path and comes back as `taken` with nothing changed. A pending row for the path (at
+   * row takes the path itself. A ready file is replaced: the new row waits at a side path until
+   * `confirm` swaps it in. A folder holds its path and comes back as `taken`. A pending row for the path (at
    * it, or waiting to replace it) of the same owner is an upload retried: its size and content type
    * are refreshed and it comes back as `taken` (one `reserved` per row). A pending replacement, new
    * or retried, comes back with the ready file it replaces as `replaces`. A pending row of another
-   * owner throws {@link CatalogPathPendingError}. `storageKey` is `<area>/<objectId>` for a row with
-   * an object id and the path otherwise.
+   * owner throws {@link CatalogPathPendingError}. `storageKey` is `<area>/<objectId>`.
    */
   reserve(
     path: string,
@@ -243,7 +258,7 @@ export interface CatalogPort {
       readonly createdBy?: string | null;
       readonly sizeBytes: number;
       readonly contentType: string | null;
-      readonly objectId?: string;
+      readonly objectId: string;
       readonly area?: StorageArea;
       /**
        * How the upload is written. A pending row is refreshed only by a caller of the same mode;
@@ -342,125 +357,13 @@ export interface CatalogPort {
   forget(row: CatalogFile): Promise<void>;
   /**
    * Every file row in any status, a `deleting` row and a side-path row included, whose `objectId`
-   * is in `objectIds`, or that is a legacy row (`objectId` null) whose `storageKey` is in
-   * `storageKeys`. An object no such row points at is an orphan. For the cleanup job, which passes
-   * one listing page at a time.
+   * is in `objectIds`. An object no such row points at is an orphan. For the cleanup job, which
+   * passes one listing page at a time.
    */
-  referencing(input: {
-    readonly objectIds: readonly string[];
-    readonly storageKeys: readonly string[];
-  }): Promise<readonly CatalogFile[]>;
+  referencing(input: { readonly objectIds: readonly string[] }): Promise<readonly CatalogFile[]>;
 }
 
 export interface ResourceCatalogRepository extends CatalogPort {
-  // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-  /** Ready rows only: a pending upload is not listed, searched or granted (design §04). */
-  listFiles(): Promise<readonly CatalogFile[]>;
-  // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-  /**
-   * A one-step write: the row is always `ready`, and the input cannot say otherwise. Throws
-   * {@link CatalogPathPendingError}, writing nothing, over a pending row: the upload in flight
-   * owns the path until it is confirmed or removed.
-   */
-  putFile(
-    input: Omit<
-      CatalogFile,
-      'id' | 'createdBy' | 'status' | 'objectId' | 'area' | 'sha256' | 'targetPath' | 'updatedAt'
-    > & {
-      readonly createdBy?: string | null;
-    },
-  ): Promise<CatalogFile>;
-  // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-  /**
-   * Ownership and compatibility attribution are excluded from `input`: a rename changes the row's
-   * path and content metadata, never who owns or originally created it. A pending replacement
-   * follows the file. Throws {@link CatalogPathTakenError} when `input.path` is held by another row.
-   */
-  renameFile(
-    path: string,
-    input: Omit<
-      CatalogFile,
-      | 'id'
-      | 'path'
-      | 'createdBy'
-      | 'ownerPrincipalId'
-      | 'status'
-      | 'objectId'
-      | 'area'
-      | 'sha256'
-      | 'targetPath'
-      | 'updatedAt'
-    > & {
-      path: string;
-    },
-  ): Promise<CatalogFile | null>;
-  // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-  deleteFile(path: string): Promise<void>;
-  // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-  /**
-   * W9-FILES-131: rewrite every row whose path is `oldPrefix` itself, or lies under it
-   * (`oldPrefix/…`, however deep), replacing that leading segment with `newPrefix` — in one
-   * transaction, and by `UPDATE` rather than delete-then-insert, so every row keeps its `id` and
-   * every `agent_files`/`project_files` grant pointing at it survives untouched. A `file` row's
-   * `storage_key` is rewritten the same way (folders have none to touch) unless the row has an
-   * `object_id`: that key is permanent and only the path moves. Rows outside the prefix,
-   * and a sibling whose path merely starts with the same characters (`docs2/x.txt` under a prefix
-   * of `docs`), are never touched — see this method's implementation for the boundary check.
-   * Matches zero rows without error when nothing in the catalog is under `oldPrefix`, which is
-   * what makes retrying a subtree move after this step already ran a no-op rather than a failure.
-   * Throws {@link CatalogPathPendingError}, moving nothing, while a row in the subtree is pending.
-   */
-  renameFilesByPrefix(oldPrefix: string, newPrefix: string): Promise<readonly CatalogFile[]>;
-  // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-  /**
-   * W9-FILES-131: delete every row whose path is `prefix` itself or lies under it, in one
-   * statement. The same prefix boundary as {@link renameFilesByPrefix} applies. A no-op, not an
-   * error, when nothing in the catalog is under `prefix`.
-   */
-  deleteFilesByPrefix(prefix: string): Promise<void>;
-  // storage-bridge(#1699): adopts objects that the old naming left without a row
-  /**
-   * Give each object that sits at `storageKey` in the old naming a `ready` legacy row at that path
-   * (`objectId` null, area `files`), owned by `ownerPrincipalId`, with its parent folders. An object
-   * that already has a row with that `storageKey` in any status, a `deleting` or side-path row
-   * included, is left alone (`hadRow`), so a removed file is never revived. A path held by a row
-   * with another `storageKey` is never overwritten, and a side path is never inserted (both
-   * `pathTaken`). Safe to repeat and to run twice at
-   * once: every path is locked and the insert does nothing on a conflict.
-   */
-  adoptLegacyFiles(
-    objects: readonly {
-      readonly storageKey: string;
-      readonly sizeBytes: number;
-      readonly contentType: string | null;
-    }[],
-    ownerPrincipalId: string,
-  ): Promise<{ readonly adopted: number; readonly hadRow: number; readonly pathTaken: number }>;
-  // storage-bridge(#1699): moves a legacy row to the new naming
-  /**
-   * Point the legacy row `rowId` at the object `objectId` and record its `sha256`, only while the
-   * row is still `ready`, still has no object id and still has `expectedStorageKey` (a rename keeps
-   * the old key, a replace or remove leaves `ready`). `false`, nothing changed, when any of that no
-   * longer holds: the caller then deletes the copy it made. One conditional `UPDATE`, so it is safe
-   * beside any other writer and never needs the object store.
-   */
-  switchObject(
-    rowId: string,
-    expectedStorageKey: string,
-    objectId: string,
-    sha256: string,
-  ): Promise<boolean>;
-  // storage-bridge(#1699): the finalize stage of the naming migration
-  /** File rows in any status still without an object id: the work the copy stage has left. */
-  countLegacyFiles(): Promise<number>;
-  // storage-bridge(#1699): the finalize stage of the naming migration
-  /**
-   * Every file row of `area`, in any status, that holds one of `keys` as its `storageKey` or, in
-   * area `files` (where the old object name is the path), as its path. It tells whether an old
-   * object is a row's current bytes (a row without an object id) or only left behind by a row that
-   * has moved to the new naming.
-   */
-  holdersOfKeys(area: StorageArea, keys: readonly string[]): Promise<readonly CatalogFile[]>;
   listSkills(): Promise<readonly CatalogSkill[]>;
   /** The skill named `name`, or `null` when there is none. */
   getSkill(name: string): Promise<CatalogSkill | null>;
@@ -707,9 +610,9 @@ const pathLockCall = (workspaceId: string, path: string): SQL =>
 /**
  * The one lock order every writer of `files` follows, first thing in its transaction: the
  * workspace lock, then the per-path locks in one sorted batch, so no two writers wait on each other
- * in a cycle. A prefix writer (`remove`, `renameFilesByPrefix`, `deleteFilesByPrefix`) takes the
- * workspace lock `exclusive` and needs no path locks, since no other writer can run beside it. A
- * single-path writer takes it `shared` and passes every path it touches, parent folders included.
+ * in a cycle. A prefix writer (`rename` and `remove` of a folder) takes the workspace lock
+ * `exclusive` and needs no path locks, since no other writer can run beside it. A single-path
+ * writer takes it `shared` and passes every path it touches, parent folders included.
  */
 async function lockForWrite(
   tx: Transaction,
@@ -834,6 +737,77 @@ export function createDatabaseResourceCatalogRepositoryProvider(
         scope,
         'ResourceCatalogRepositoryProvider',
       ).workspaceId;
+      /** Move every live row at or under `oldPrefix` to `newPrefix`, keeping ids; returns the rows moved. */
+      const moveUnder = async (oldPrefix: string, newPrefix: string): Promise<CatalogFile[]> => {
+        if (isSidePath(newPrefix)) throw new Error(`${newPrefix} is a reserved catalog path.`);
+        // The cut point — one past `oldPrefix` itself — is computed by Postgres as
+        // `char_length(${oldPrefix}) + 1`, never as JS's `oldPrefix.length + 1`. `substr`
+        // counts CHARACTERS; JS `.length` counts UTF-16 code units, which over-counts by one
+        // for every character outside the BMP (most emoji) and so cuts at the wrong character
+        // boundary for a prefix containing one — the same class of bug `pathUnderPrefix`
+        // documents above. See W9-FILES-131's verification-round-2 notes for the reproduction.
+        return db.transaction(async (tx) => {
+          await lockForWrite(tx, workspaceId, 'exclusive', []);
+          // A `deleting` row is out of the tree: its object is removed from its own key.
+          const moving = and(
+            eq(files.workspaceId, workspaceId),
+            ne(files.status, 'deleting'),
+            pathUnderPrefix(oldPrefix, logicalPath),
+          );
+          const moved = await tx
+            .select({ id: files.id, path: logicalPath })
+            .from(files)
+            .where(moving);
+          // Both cuts use the JS length of `oldPrefix`, which is a prefix of every path it cuts.
+          const destinations = moved.map((row) => renamedKey(row.path, oldPrefix, newPrefix));
+          if (destinations.length > 0) {
+            const movedIds = new Set(moved.map((row) => row.id));
+            const held = await tx
+              .select({ id: files.id, path: logicalPath })
+              .from(files)
+              .where(
+                and(
+                  eq(files.workspaceId, workspaceId),
+                  ne(files.status, 'deleting'),
+                  inArray(logicalPath, destinations),
+                ),
+              );
+            const clash = held.find((row) => !movedIds.has(row.id));
+            if (clash !== undefined) throw new CatalogPathTakenError(clash.path);
+          }
+          const rows = await tx
+            .update(files)
+            .set({
+              // `substr(text, int)`, not the two-argument `substring(text FROM ...)` form:
+              // that form has a *second* overload — POSIX regexp extraction — and a bound
+              // parameter's type is not always pinned to `integer` early enough to rule it out,
+              // so `substring(path from $2)` silently became "search `path` for a regex
+              // matching `$2`" and returned `NULL` (no match) for every row, which this method's
+              // own test caught as a `NOT NULL` violation on `path`. `substr` has only the
+              // integer-offset overload, so there is no second meaning to fall into.
+              // A pending replacement waits at its side path and moves its `target_path` instead.
+              path: sql`case when ${files.targetPath} is null
+                then ${newPrefix} || substr(${files.path}, char_length(${oldPrefix}) + 1)
+                else ${files.path} end`,
+              targetPath: sql`case when ${files.targetPath} is not null
+                then ${newPrefix} || substr(${files.targetPath}, char_length(${oldPrefix}) + 1)
+                end`,
+            })
+            .where(moving)
+            .returning(fileColumns);
+          // storage-bridge(#1657): a folder move refuses while an upload under it is pending, so
+          // its confirm never meets a moved storage key. Checked on the rows the update itself
+          // moved, so a reserve committed before its snapshot is caught and the throw rolls it
+          // back; one committed after it is untouched and stays at the old path.
+          if (rows.some((row) => row.status === 'pending')) {
+            throw new CatalogPathPendingError(oldPrefix);
+          }
+          // The moved rows come back first so the parent rows never shadow `newPrefix` itself.
+          await insertParentFolders(tx, workspaceId, rows.map(atLogicalPath));
+          return rows;
+        });
+      };
+
       const repository: ResourceCatalogRepository = {
         async reserve(path, input) {
           if (isSidePath(path)) throw new Error(`${path} is a reserved catalog path.`);
@@ -911,21 +885,19 @@ export function createDatabaseResourceCatalogRepositoryProvider(
             );
             // The ready file a pending replacement takes the path from, read under the path lock.
             const target = live?.status === 'ready' && live.kind === 'file' ? live : undefined;
-            const replacing = input.objectId !== undefined && target !== undefined;
+            const replacing = target !== undefined;
             if (live !== undefined && !replacing) return takenOrRefreshed(live, undefined);
             if (waiting !== undefined) return takenOrRefreshed(waiting, target);
             // The untargeted `onConflictDoNothing` below would swallow this key too and report the
             // path; refuse it here, as the memory catalog does.
-            if (input.objectId !== undefined) {
-              const [sameObject] = await tx
-                .select({ id: files.id })
-                .from(files)
-                .where(and(eq(files.workspaceId, workspaceId), eq(files.objectId, input.objectId)));
-              if (sameObject !== undefined) {
-                throw new Error(
-                  'duplicate key value violates unique constraint "files_workspace_object_key"',
-                );
-              }
+            const [sameObject] = await tx
+              .select({ id: files.id })
+              .from(files)
+              .where(and(eq(files.workspaceId, workspaceId), eq(files.objectId, input.objectId)));
+            if (sameObject !== undefined) {
+              throw new Error(
+                'duplicate key value violates unique constraint "files_workspace_object_key"',
+              );
             }
             const id = crypto.randomUUID();
             // No conflict target: valid with or without `files_workspace_path_key`. A conflict can
@@ -939,14 +911,11 @@ export function createDatabaseResourceCatalogRepositoryProvider(
                 path: replacing ? sidePath(id) : path,
                 targetPath: replacing ? path : null,
                 kind: 'file',
-                storageKey:
-                  input.objectId === undefined
-                    ? path
-                    : `${input.area ?? 'files'}/${input.objectId}`,
+                storageKey: `${input.area ?? 'files'}/${input.objectId}`,
                 sizeBytes: input.sizeBytes,
                 contentType: input.contentType,
                 status: 'pending',
-                objectId: input.objectId ?? null,
+                objectId: input.objectId,
                 area: input.area ?? 'files',
                 uploadMode: input.uploadMode ?? null,
                 ownerPrincipalId: input.ownerPrincipalId,
@@ -1127,7 +1096,7 @@ export function createDatabaseResourceCatalogRepositoryProvider(
           return rows[0] ?? null;
         },
         async rename(from, to) {
-          return renameCount(await repository.renameFilesByPrefix(from, to));
+          return renameCount(await moveUnder(from, to));
         },
         // @story US-STO-04
         async remove(path, options) {
@@ -1236,10 +1205,8 @@ export function createDatabaseResourceCatalogRepositoryProvider(
               );
           });
         },
-        async referencing({ objectIds, storageKeys }) {
-          if (objectIds.length === 0 && storageKeys.length === 0) return [];
-          // ponytail: `storage_key` has no index, so the legacy arm scans the workspace's rows
-          // (at most one listing page of keys per call); index (workspace_id, storage_key) if slow.
+        async referencing({ objectIds }) {
+          if (objectIds.length === 0) return [];
           return db
             .select(fileColumns)
             .from(files)
@@ -1247,337 +1214,10 @@ export function createDatabaseResourceCatalogRepositoryProvider(
               and(
                 eq(files.workspaceId, workspaceId),
                 eq(files.kind, 'file'),
-                or(
-                  objectIds.length === 0 ? undefined : inArray(files.objectId, [...objectIds]),
-                  storageKeys.length === 0
-                    ? undefined
-                    : and(isNull(files.objectId), inArray(files.storageKey, [...storageKeys])),
-                ),
+                inArray(files.objectId, [...objectIds]),
               ),
             )
             .orderBy(asc(files.path));
-        },
-        async listFiles() {
-          return (
-            db
-              .select(fileColumns)
-              .from(files)
-              // @story US-STO-02
-              // Design §04: only ready files appear in lists, search and grants.
-              .where(and(eq(files.workspaceId, workspaceId), eq(files.status, 'ready')))
-              .orderBy(asc(files.path))
-          );
-        },
-        async putFile(input) {
-          return db.transaction(async (tx) => {
-            await lockForWrite(tx, workspaceId, 'shared', [input.path, ...parentPaths(input.path)]);
-            await insertParentFolders(tx, workspaceId, [
-              { ...input, createdBy: input.createdBy ?? null },
-            ]);
-            const rows = await tx
-              .insert(files)
-              .values({
-                workspaceId,
-                ...input,
-                createdBy: input.createdBy ?? null,
-                status: 'ready',
-              })
-              .onConflictDoUpdate({
-                target: [files.workspaceId, files.path],
-                // Ownership and compatibility attribution are deliberately absent: a re-upload
-                // updates content but never transfers the existing row.
-                set: {
-                  kind: input.kind,
-                  storageKey: input.storageKey,
-                  sizeBytes: input.sizeBytes,
-                  contentType: input.contentType,
-                  status: 'ready',
-                  // `$onUpdate` does not run for an upsert; file search compares this to know the
-                  // cached text of an overwritten file is stale.
-                  updatedAt: sql`now()`,
-                },
-                // A pending row belongs to the upload in flight: no row comes back, and the
-                // transaction rolls back the parent folders written above.
-                setWhere: ne(files.status, 'pending'),
-              })
-              .returning(fileColumns);
-            const row = rows[0];
-            if (row === undefined) throw new CatalogPathPendingError(input.path);
-            return row;
-          });
-        },
-        async renameFile(path, input) {
-          if (isSidePath(input.path)) throw new Error(`${input.path} is a reserved catalog path.`);
-          // Neither ownership nor compatibility attribution is part of a rename, so `set(input)`
-          // cannot transfer the row, matching the invariant `putFile` keeps above.
-          return db.transaction(async (tx) => {
-            await lockForWrite(tx, workspaceId, 'shared', [
-              path,
-              input.path,
-              ...parentPaths(input.path),
-            ]);
-            const [source] = await tx
-              .select({ id: files.id })
-              .from(files)
-              .where(
-                and(
-                  eq(files.workspaceId, workspaceId),
-                  eq(files.path, path),
-                  // A pending upload is not renamed (the storage design, §04).
-                  eq(files.status, 'ready'),
-                ),
-              );
-            if (source === undefined) return null;
-            if (input.path !== path) {
-              const [held] = await tx
-                .select({ id: files.id })
-                .from(files)
-                .where(
-                  and(
-                    eq(files.workspaceId, workspaceId),
-                    ne(files.status, 'deleting'),
-                    eq(logicalPath, input.path),
-                  ),
-                );
-              if (held !== undefined) throw new CatalogPathTakenError(input.path);
-            }
-            const rows = await tx
-              .update(files)
-              .set(input)
-              .where(and(eq(files.workspaceId, workspaceId), eq(files.id, source.id)))
-              .returning(fileColumns);
-            if (input.path !== path) {
-              // The upload that was going to replace this file follows it, keeping its
-              // reservation: the uploader's snapshot still completes it.
-              await tx
-                .update(files)
-                .set({ targetPath: input.path, updatedAt: sql`${files.updatedAt}` })
-                .where(
-                  and(
-                    eq(files.workspaceId, workspaceId),
-                    eq(files.status, 'pending'),
-                    eq(files.targetPath, path),
-                  ),
-                );
-            }
-            await insertParentFolders(tx, workspaceId, rows);
-            return rows[0] ?? null;
-          });
-        },
-        async deleteFile(path) {
-          await db.transaction(async (tx) => {
-            await lockForWrite(tx, workspaceId, 'shared', [path]);
-            // A `deleting` row stays until `forget`: its object is still to be removed.
-            await tx
-              .delete(files)
-              .where(
-                and(
-                  eq(files.workspaceId, workspaceId),
-                  ne(files.status, 'deleting'),
-                  eq(logicalPath, path),
-                ),
-              );
-          });
-        },
-        // storage-bridge(#1699): old object naming
-        async adoptLegacyFiles(objects, ownerPrincipalId) {
-          // As in `putFile`, a side path is never a file's own path: its insert breaks the CHECK.
-          const candidates = objects.filter((object) => !isSidePath(object.storageKey));
-          const sidePaths = objects.length - candidates.length;
-          const storageKeys = [...new Set(candidates.map((object) => object.storageKey))];
-          if (storageKeys.length === 0) return { adopted: 0, hadRow: 0, pathTaken: sidePaths };
-          return db.transaction(async (tx) => {
-            await lockForWrite(tx, workspaceId, 'shared', [
-              ...storageKeys,
-              ...storageKeys.flatMap(parentPaths),
-            ]);
-            // ponytail: no index on `storage_key`, so this scans the workspace's rows once per batch
-            const known = await tx
-              .select({ storageKey: files.storageKey })
-              .from(files)
-              .where(
-                and(
-                  eq(files.workspaceId, workspaceId),
-                  eq(files.area, 'files'),
-                  inArray(files.storageKey, storageKeys),
-                ),
-              );
-            const hadRow = new Set(known.map((row) => row.storageKey));
-            const fresh = candidates.filter((object) => !hadRow.has(object.storageKey));
-            if (fresh.length === 0) {
-              return { adopted: 0, hadRow: hadRow.size, pathTaken: sidePaths };
-            }
-            await insertParentFolders(
-              tx,
-              workspaceId,
-              fresh.map((object) => ({
-                path: object.storageKey,
-                ownerPrincipalId,
-                createdBy: null,
-              })),
-            );
-            const inserted = await tx
-              .insert(files)
-              .values(
-                fresh.map((object) => ({
-                  workspaceId,
-                  path: object.storageKey,
-                  kind: 'file' as const,
-                  storageKey: object.storageKey,
-                  sizeBytes: object.sizeBytes,
-                  contentType: object.contentType,
-                  status: 'ready' as const,
-                  ownerPrincipalId,
-                })),
-              )
-              .onConflictDoNothing({ target: [files.workspaceId, files.path] })
-              .returning({ path: files.path });
-            return {
-              adopted: inserted.length,
-              hadRow: hadRow.size,
-              pathTaken: sidePaths + fresh.length - inserted.length,
-            };
-          });
-        },
-        // storage-bridge(#1699): moves a legacy row to the new naming
-        async switchObject(rowId, expectedStorageKey, objectId, sha256) {
-          const switched = await db
-            .update(files)
-            .set({ objectId, sha256 })
-            .where(
-              and(
-                eq(files.workspaceId, workspaceId),
-                eq(files.id, rowId),
-                eq(files.kind, 'file'),
-                eq(files.status, 'ready'),
-                isNull(files.objectId),
-                eq(files.storageKey, expectedStorageKey),
-              ),
-            )
-            .returning({ id: files.id });
-          return switched.length === 1;
-        },
-        // storage-bridge(#1699): the finalize stage of the naming migration
-        async countLegacyFiles() {
-          const [found] = await db
-            .select({ n: count() })
-            .from(files)
-            .where(
-              and(
-                eq(files.workspaceId, workspaceId),
-                eq(files.kind, 'file'),
-                isNull(files.objectId),
-              ),
-            );
-          return found?.n ?? 0;
-        },
-        // storage-bridge(#1699): the finalize stage of the naming migration
-        async holdersOfKeys(area, keys) {
-          if (keys.length === 0) return [];
-          return db
-            .select(fileColumns)
-            .from(files)
-            .where(
-              and(
-                eq(files.workspaceId, workspaceId),
-                eq(files.kind, 'file'),
-                eq(files.area, area),
-                or(
-                  inArray(files.storageKey, [...keys]),
-                  area === 'files' ? inArray(files.path, [...keys]) : undefined,
-                ),
-              ),
-            )
-            .orderBy(asc(files.path));
-        },
-        async renameFilesByPrefix(oldPrefix, newPrefix) {
-          if (isSidePath(newPrefix)) throw new Error(`${newPrefix} is a reserved catalog path.`);
-          // The cut point — one past `oldPrefix` itself — is computed by Postgres as
-          // `char_length(${oldPrefix}) + 1`, never as JS's `oldPrefix.length + 1`. `substr`
-          // counts CHARACTERS; JS `.length` counts UTF-16 code units, which over-counts by one
-          // for every character outside the BMP (most emoji) and so cuts at the wrong character
-          // boundary for a prefix containing one — the same class of bug `pathUnderPrefix`
-          // documents above. See W9-FILES-131's verification-round-2 notes for the reproduction.
-          return db.transaction(async (tx) => {
-            await lockForWrite(tx, workspaceId, 'exclusive', []);
-            // A `deleting` row is out of the tree: its object is removed from its own key.
-            const moving = and(
-              eq(files.workspaceId, workspaceId),
-              ne(files.status, 'deleting'),
-              pathUnderPrefix(oldPrefix, logicalPath),
-            );
-            const moved = await tx
-              .select({ id: files.id, path: logicalPath })
-              .from(files)
-              .where(moving);
-            // Both cuts use the JS length of `oldPrefix`, which is a prefix of every path it cuts.
-            const destinations = moved.map((row) => renamedKey(row.path, oldPrefix, newPrefix));
-            if (destinations.length > 0) {
-              const movedIds = new Set(moved.map((row) => row.id));
-              const held = await tx
-                .select({ id: files.id, path: logicalPath })
-                .from(files)
-                .where(
-                  and(
-                    eq(files.workspaceId, workspaceId),
-                    ne(files.status, 'deleting'),
-                    inArray(logicalPath, destinations),
-                  ),
-                );
-              const clash = held.find((row) => !movedIds.has(row.id));
-              if (clash !== undefined) throw new CatalogPathTakenError(clash.path);
-            }
-            const rows = await tx
-              .update(files)
-              .set({
-                // `substr(text, int)`, not the two-argument `substring(text FROM ...)` form:
-                // that form has a *second* overload — POSIX regexp extraction — and a bound
-                // parameter's type is not always pinned to `integer` early enough to rule it out,
-                // so `substring(path from $2)` silently became "search `path` for a regex
-                // matching `$2`" and returned `NULL` (no match) for every row, which this method's
-                // own test caught as a `NOT NULL` violation on `path`. `substr` has only the
-                // integer-offset overload, so there is no second meaning to fall into.
-                // A pending replacement waits at its side path and moves its `target_path` instead.
-                path: sql`case when ${files.targetPath} is null
-                  then ${newPrefix} || substr(${files.path}, char_length(${oldPrefix}) + 1)
-                  else ${files.path} end`,
-                targetPath: sql`case when ${files.targetPath} is not null
-                  then ${newPrefix} || substr(${files.targetPath}, char_length(${oldPrefix}) + 1)
-                  end`,
-                // A folder row has no `storage_key` to rewrite; `files_storage_key_iff_file`
-                // already guarantees that. A row with an `object_id` keeps its permanent key; only
-                // a legacy file's key is its path and moves with it.
-                storageKey: sql`case when ${files.kind} = 'file' and ${files.objectId} is null
-                  then ${newPrefix} || substr(${files.storageKey}, char_length(${oldPrefix}) + 1)
-                  else ${files.storageKey} end`,
-              })
-              .where(moving)
-              .returning(fileColumns);
-            // storage-bridge(#1657): a folder move refuses while an upload under it is pending, so
-            // its confirm never meets a moved storage key. Checked on the rows the update itself
-            // moved, so a reserve committed before its snapshot is caught and the throw rolls it
-            // back; one committed after it is untouched and stays at the old path.
-            if (rows.some((row) => row.status === 'pending')) {
-              throw new CatalogPathPendingError(oldPrefix);
-            }
-            // The moved rows come back first so the parent rows never shadow `newPrefix` itself.
-            await insertParentFolders(tx, workspaceId, rows.map(atLogicalPath));
-            return rows;
-          });
-        },
-        async deleteFilesByPrefix(prefix) {
-          await db.transaction(async (tx) => {
-            await lockForWrite(tx, workspaceId, 'exclusive', []);
-            await tx
-              .delete(files)
-              .where(
-                and(
-                  eq(files.workspaceId, workspaceId),
-                  ne(files.status, 'deleting'),
-                  pathUnderPrefix(prefix, logicalPath),
-                ),
-              );
-          });
         },
         async listSkills() {
           const rows = await db
@@ -1602,7 +1242,8 @@ export function createDatabaseResourceCatalogRepositoryProvider(
             .values({ workspaceId, ...input, createdBy: input.createdBy ?? null })
             .onConflictDoUpdate({
               target: [skills.workspaceId, skills.name],
-              // Ownership and compatibility attribution are absent; see `putFile` above.
+              // Ownership and compatibility attribution are deliberately absent: a re-upload
+              // updates content but never transfers the existing row.
               set: { skillMd: input.skillMd, enabled: input.enabled },
             })
             .returning(skillColumns);

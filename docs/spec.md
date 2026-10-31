@@ -2395,6 +2395,7 @@ GET    /oauth/authorize                 consent page for one endpoint client (br
 POST   /oauth/authorize                 approve or deny that consent (browser session only, same-origin)
 POST   /oauth/token                     authorization_code with PKCE S256, client_credentials, refresh_token (rate limited)
 POST   /oauth/revoke                    revoke an access or refresh token (RFC 7009)
+POST   /api/auth/token-exchange     ID token -> short-lived access token for an app-backend endpoint client (ADR-0161)
 POST   /api/a2a/agents/:agentName      A2A v0.3 JSON-RPC of the agent's production version (ADR-0135: endpoint-scoped or workspace API key, rate limited)
 GET    /api/a2a/agents/:agentName/.well-known/agent-card.json   its A2A agent card (ADR-0135)
 ```
@@ -2408,8 +2409,9 @@ answerable by looking at the path prefix alone.
 
 The one other prefix is `/mcp/`, where a project's public tool endpoint (ADR-0134) lives. It is not a page: it answers `401` without an API key, and it accepts only an API key scoped to that project's endpoint client.
 
-The OAuth 2.1 authorization server for endpoint clients (ADR-0134 part 3) lives under `/oauth/`, and its discovery documents under `/.well-known/`, because the OAuth and MCP specifications fix those paths. The discovery documents and the token and revocation endpoints are public by protocol: the last two authenticate the endpoint client, never a member. The consent page requires a browser session. An access token they issue is accepted only by the endpoint it names (`/mcp/projects/:name` or an agent's A2A endpoint, whose protected-resource metadata is declared with a mandate beside the A2A routes, ADR-0135).
+The OAuth 2.1 authorization server for endpoint clients (ADR-0134 part 3) lives under `/oauth/`, and its discovery documents under `/.well-known/`, because the OAuth and MCP specifications fix those paths. The discovery documents and the token and revocation endpoints are public by protocol: the last two authenticate the endpoint client, never a member. The consent page requires a browser session. An access token they issue is accepted only by the endpoint it names (`/mcp/projects/:name` or an agent's A2A endpoint, whose protected-resource metadata is declared with a mandate beside the A2A routes, ADR-0135). The one exception is an access token from `POST /api/auth/token-exchange` (ADR-0161): it is bound to an `app-backend` endpoint client, acts as the signed-in person whose ID token the deployment's own OIDC issuer signed, lasts 300 seconds, and is accepted on exactly that kind's routes (`POST /api/agents/:id/runs` for a bound agent, `GET /api/runs/:id`, `GET /api/runs/:id/events`, `POST /api/runs/:id/interrupt` and `GET /api/me`) and by no endpoint.
 `/api/a2a/` is a protocol prefix, not a resource: A2A v0.3 fixes where a client finds an agent and its card (ADR-0135), so the two routes above are the only ones under it, they authorise as `POST /api/agents/:id/runs`, and `a2a` has no row in the §21 permission table.
+`/api/auth/` is likewise a protocol prefix, not a resource: its routes sign a person or an app backend in, authenticate a client or the presented credential itself rather than through `authorise()`, and `auth` has no row in the §21 permission table (ADR-0083 D8, ADR-0161 D3).
 
 `POST /api/agents/:id/runs` takes an optional `attachments`: one to ten `{ "fileId" }` objects,
 without repeats, naming workspace files the run receives read-only (ADR-0146, §16). A file the
@@ -2555,6 +2557,10 @@ Explicitly treat the following as non-goals for the initial project:
 
 RAG, embeddings and vector search stay non-goals. On-demand text extraction and lexical PostgreSQL
 full-text search over extracted text are not RAG and are in scope (ADR-0147).
+
+Exchanging an ID token from the deployment's one configured OIDC issuer for a short-lived access
+token (ADR-0161) is not identity-provider replacement: the platform accepts no other issuer, issues
+no identity and provisions no person.
 
 Sharing (section 20.6) is deliberately link-shaped and stops there. A share is a URL with a visibility
 setting. Explicitly not in scope: a public directory of agents, install counts, ratings, comments,

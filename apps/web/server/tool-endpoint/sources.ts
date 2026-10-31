@@ -18,7 +18,7 @@ import type { RuntimeManagerClient } from '../compose/runtime-manager-client';
 import type { ProviderCredentialSpec } from '../compose/runtime-provider-credential';
 import { buildToolSandboxRequest } from '../compose/tool-sandbox';
 import type { GatewayIssuerSettingsResult } from '../gateway/issuer';
-import { isStorageConnectionSecretName } from '../secrets/contract';
+import { isPlatformOwnedSecretName } from '../secrets/contract';
 import type { ToolEndpointEnvironment } from './env';
 import type { EndpointAgentVersions, EndpointRuntimeProfiles, WorkspaceScope } from './store';
 
@@ -40,15 +40,15 @@ export interface ToolEndpointSourceDependencies {
 
 /**
  * The endpoint sandbox's secret source: the workspace secret `name`, or `null` when it is not set.
- * A storage connection's credential is never a tool's: it is `null` without being read, whoever
- * calls this.
+ * A platform-owned credential (a storage connection's, a webhook's signing secret) is never a
+ * tool's: it is `null` without being read, whoever calls this.
  */
 export function endpointToolSecretSource(
   secrets: Pick<SecretsService, 'resolveByName'> | null,
   scope: WorkspaceScope,
 ): (name: string) => Promise<string | null> {
   return async (name) => {
-    if (secrets === null || isStorageConnectionSecretName(name)) return null;
+    if (secrets === null || isPlatformOwnedSecretName(name)) return null;
     const resolved = await secrets.resolveByName(scope, name);
     return resolved === null ? null : resolved.value.toString('utf8');
   };

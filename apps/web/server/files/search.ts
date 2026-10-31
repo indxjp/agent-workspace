@@ -11,14 +11,13 @@
  * from extraction and from the text query. A run keeps the attachments its grants name. No search
  * reads a skill's rows.
  */
-import { readBytes } from '@agent-workspace/core/storage/streams';
-import type { ObjectStream } from '@agent-workspace/core/storage';
+import { readBytes, type ObjectStream } from '../storage/objects';
 import type { FileSearchResponse } from '@indx-workspace/contracts/files';
 
 import { EXTRACT_MAX_FILE_BYTES, extractKind, extractPassages } from './extract';
 import { isReservedAttachmentPath } from './handlers';
 import { isGrantedPath, snippetAround, searchTerms, toTsQuery } from './search-terms';
-import type { CatalogFile } from '../storage/store';
+import { listCatalogFiles, type CatalogFile, type CatalogPort } from '../storage/store';
 import { FILE_TEXT_MAX_CHARS, type FileTextStore } from './store';
 
 /** Files one search request may extract, and the bytes of them it may read. */
@@ -28,8 +27,8 @@ const SEARCH_EXTRACT_BYTES = 40 * 1024 * 1024;
 export interface SearchFilesDependencies {
   readonly texts: FileTextStore;
   /** Turns the paths in scope into the file ids the text query is restricted to. */
-  readonly catalog: { listFiles(): Promise<readonly CatalogFile[]> };
-  /** Reads a row's object through the catalog service, old and new naming alike. */
+  readonly catalog: Pick<CatalogPort, 'list'>;
+  /** Reads a row's object through the catalog service. */
   readonly open: (row: CatalogFile) => Promise<ObjectStream | null>;
   /** The extraction budget; defaults to {@link SEARCH_EXTRACT_BUDGET}. */
   readonly budget?: number;
@@ -53,7 +52,7 @@ export async function searchFiles(
   if (tsquery === null) return null;
   const { texts, catalog } = dependencies;
   const { grants } = input;
-  const rows = await catalog.listFiles();
+  const rows = await listCatalogFiles(catalog);
   const rowsById = new Map(rows.map((row) => [row.id, row]));
   // A skill's files are rows of the same catalog; they are found by area, not by path.
   // @story US-STO-08

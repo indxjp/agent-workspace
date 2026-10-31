@@ -454,8 +454,8 @@ compared unrounded, so 19,999 of 20,000 cases does not reach a bar of 1. With no
 says so on stderr: `no promotion bar is set; production needs no evaluation`.
 
 Saving `agent-workspace.yaml` while `aw dev` runs applies its `models` and `connectors` at once, with
-no restart. The runtime reads the policy, the port, the runtime driver and the default engine only
-when it starts, so a change to one of them prints one line, for example
+no restart. The runtime reads the policy, the features, the port, the runtime driver and the
+default engine only when it starts, so a change to one of them prints one line, for example
 `agent-workspace.yaml: policy changed; restart aw dev to apply`, and is not applied:
 
 ```sh title="illustrative" claim="illustrative"

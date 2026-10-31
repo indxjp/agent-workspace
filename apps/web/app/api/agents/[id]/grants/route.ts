@@ -1,7 +1,7 @@
 import { applicationContext } from '../../../../../server/application-context';
 import { AgentGrantsSchema, type BuiltinAgentOperation } from '../../../../../contracts/agents';
 
-import { agentNotFound, refuseBuiltinWrite } from '../../../../../server/agents/handlers';
+import { agentNotFound, refuseBuiltinWriteFor } from '../../../../../server/agents/handlers';
 import { problem, type ApiResult } from '../../../../../server/http/result';
 import { isUuid } from '../../../../../server/agents/contract';
 import {
@@ -19,7 +19,7 @@ function ownershipOf(id: unknown, operation: BuiltinAgentOperation): OwnershipRe
     if (runtime === null || !isUuid(id)) return { kind: 'refuse', result: agentNotFound() };
     const row = await runtime.agents.forWorkspace(principal.workspaceId).get(id);
     if (row === null) return { kind: 'refuse', result: agentNotFound() };
-    const readOnly = refuseBuiltinWrite(row, operation);
+    const readOnly = refuseBuiltinWriteFor(principal, row, operation);
     if (readOnly !== null) return { kind: 'refuse', result: readOnly };
     return {
       kind: 'ownership',

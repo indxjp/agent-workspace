@@ -31,6 +31,7 @@ export function workspaceFeatureSwitches<Scope>(
   deploymentFeatures: readonly FeatureId[],
 ): FeatureSwitches {
   return {
+    deployment: deploymentFeatures,
     enabledFor: async (workspaceId) => {
       const scope = await rows.scopes.forWorkspaceId(workspaceId);
       if (scope === null) return [];

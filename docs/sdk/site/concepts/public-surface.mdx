@@ -278,13 +278,12 @@ tiers, stated so that a reader can tell them apart on the page:
 | -------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Stable**           | Shape and behaviour will change only with a major version once published                      | Every method whose route the API specification marks ✅ and whose page carries no Today / Target callout                                                                    |
 | **Provisional**      | Documented and working, but the behaviour is known to change when a listed roadmap item lands | A Today / Target callout on the page or method, linking to the [roadmap](/concepts/roadmap)                                                                                 |
-| **Absent by design** | Described so you know not to look for it, and where it will appear                            | A roadmap entry with no SDK method yet — webhooks ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)) |
+| **Absent by design** | Described so you know not to look for it, and where it will appear                            | A roadmap entry with no SDK method yet — an organisation catalog ([N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces)) |
 
 A **Provisional** method is safe to build on: it works as documented today, and its roadmap
 entry says what will change. It is not safe to build on the _absence_ of a behaviour — for
-example, that `follow` ignores the stream's `retry:` field
-([K-3](/concepts/roadmap#k-3-backoff-and-retry-hints-in-follow)) or that `runs.start` compares
-an idempotency key's input byte for byte ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
+example, that a skill can never be assigned from another workspace
+([N-2](/concepts/roadmap#n-2-an-organisation-catalog-above-workspaces)).
 
 ## What is settled
 

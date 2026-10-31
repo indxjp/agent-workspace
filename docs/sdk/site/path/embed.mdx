@@ -128,10 +128,8 @@ flowchart TD
 
 - A customer's own frontend on another origin cannot call the rest of the API directly; only a
   surface's chat is admitted cross-origin ([Build a frontend](/building/frontend#pick-the-credential-your-page-can-use)).
-- No webhook tells your backend a run finished; follow the stream or poll `runs.get`
-  ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes)).
 - `runs.start` is idempotent only when you pass an `idempotencyKey`
-  ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
+  ([Retries and idempotency](/guides/retries-and-idempotency#make-runs-start-idempotent-with-a-key)).
 - File bytes for a canvas pass through your backend; only a session's `.attachments/` downloads can
   come straight from the object store ([Files](/resources/files#createdownloadurl)).
 

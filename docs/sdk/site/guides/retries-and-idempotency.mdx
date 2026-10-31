@@ -24,12 +24,16 @@ or throws once. The only built-in retry is
 - [Decide whether a failure is worth retrying](#decide-whether-a-failure-is-worth-retrying)
 - [Retry a read with backoff](#retry-a-read-with-backoff)
 - [Avoid starting a run twice](#make-runs-start-idempotent-with-a-key)
+- [Learn the outcome without a polling loop](#learn-the-outcome-from-a-webhook-not-a-polling-loop)
 
 ## The one built-in retry: `follow()`'s reconnect
 
 `runs.follow` reconnects a dropped event-stream connection by itself, resuming from the last
-durable event id with `Last-Event-ID`. Tune it, or leave the defaults (`maxReconnects` 5,
-`reconnectDelayMs` 3000):
+durable event id with `Last-Event-ID`, and backs off while reconnects keep failing: from the
+stream's own `retry:` value (or `reconnectDelayMs` before one arrives), doubling up to
+`maxReconnectDelayMs`, each pause jittered, and exactly the `Retry-After` of a `429` or `5xx` that
+names one. Tune it, or leave the defaults (`maxReconnects` 5, `reconnectDelayMs` 3000,
+`maxReconnectDelayMs` 30000):
 
 ```ts title="illustrative" claim="illustrative"
 for await (const frame of aw.runs.follow(runId, { maxReconnects: 8, reconnectDelayMs: 2000 })) {
@@ -138,11 +142,41 @@ const started = await withRetry(() =>
 );
 ```
 
+From the CLI, `--idempotency-key` sends the same header, so a script can rerun a start it is unsure
+about. A blank key is refused before anything is sent; a reused key with another prompt exits with
+the problem's code:
+
+```sh title="aw (illustrative)" claim="illustrative"
+aw runs start <agent> --prompt "Reply to ticket 8841" --idempotency-key ticket-8841-reply --json
+```
+
 The key is 1 to 255 characters (`400 invalid_idempotency_key` otherwise), scoped to the caller, and
 never freed: the same key with a different input is `409 run_idempotency_conflict`. Inputs are
 compared as JSON whose object members may come in any order; array items keep theirs. Both codes are
 in `RUN_IDEMPOTENCY_PROBLEM_CODES`. Without a key, a retried `runs.start` after a lost response may
 start a second run.
+
+## Learn the outcome from a webhook, not a polling loop
+
+A retried start returns the run, but the job that started it may not live long enough to see it
+end. Do not wrap `runs.get` in `withRetry` on a timer to wait for a terminal status: register a
+[webhook](/resources/webhooks) once, and the platform posts a signed `run.completed`, `run.failed`
+or `run.cancelled` to your backend when the run stops. Store the run id with your job when the
+start answers, and match the event's `data.run.id` against it.
+
+The platform retries a delivery for you, so the receiver is where idempotency matters next:
+
+- **Any 2xx settles a delivery.** Anything else, or no answer within 10 seconds, is retried after
+  30 s, 2 min, 10 min, 30 min, 2 h, 6 h and 12 h, each jittered, then dropped.
+- **Deliveries are at least once.** A retry repeats the same `webhook-id` (the event's `id`), so
+  record each id you accept and answer `2xx` to a repeat without doing the work again. A run sends
+  at most one event to each webhook, so `data.run.id` works as the key too.
+- **Answer first, work after.** Verify with `verifyWebhookSignature`, store the event, answer, and
+  then process it; slow work in the request turns into a timeout and a retry.
+
+[Integrate a backend](/building/backend#receive-run-outcomes-with-a-webhook) has the receiver.
+`follow` and `waitForOutcome` remain the simplest choice when the process that started the run is
+still there when it ends.
 
 ## See also
 

@@ -1,5 +1,6 @@
 import { ProjectDetail } from '../../../../components/projects/project-detail';
 import { resolveProjectArchiveCapability } from '../../../../server/projects/archive-capability';
+import { switchedOffPanel } from '../../feature-gate';
 
 /**
  * `/projects/:id` — the project settings surface.
@@ -14,6 +15,8 @@ import { resolveProjectArchiveCapability } from '../../../../server/projects/arc
 export const dynamic = 'force-dynamic';
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
+  const off = await switchedOffPanel('projects');
+  if (off !== null) return off;
   const [{ id }, capability] = await Promise.all([params, resolveProjectArchiveCapability()]);
   return <ProjectDetail id={id} capability={capability} />;
 }

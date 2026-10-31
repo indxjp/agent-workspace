@@ -4,7 +4,7 @@
  * is refused unless the connection exists in this workspace, the folder sits under one of its
  * `allowedPrefixes`, and a `read-write` grant finds the connection `writeAllowed`.
  */
-import { storageRefusalClass } from '@agent-workspace/core/storage';
+import { storageRefusalClass } from '../storage/objects';
 
 import type { StorageGrantRef } from './store';
 import {

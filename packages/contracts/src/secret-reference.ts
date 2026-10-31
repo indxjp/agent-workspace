@@ -7,11 +7,12 @@ import { SECRET_NAME_MAX_LENGTH, SECRET_NAME_PATTERN } from './secrets.js';
  * environment, so no project secret may take one. A secret named `PORT` or `PATH` would reach the
  * runtime's environment and change how it starts, so a reference to one is refused at its path.
  *
- * In order: the C1 set, `AW_DEPLOYMENT_POLICY`, the names `applyLocalRuntimeEnvironment` writes,
- * the names `applyLocalSecrets` writes, `DATABASE_URL` and the process variables. Every name
- * starting with {@link RESERVED_SECRET_NAME_PREFIX} is reserved as well; the `AW_` names stay in
- * this list so a drift test can compare against it directly. Matching ignores case
- * ({@link isReservedSecretName}). The list is frozen, so it always matches what is enforced.
+ * In order: the C1 set, `AW_DEPLOYMENT_POLICY`, `AW_DEPLOYMENT_FEATURES`, the names
+ * `applyLocalRuntimeEnvironment` writes, the names `applyLocalSecrets` writes, `DATABASE_URL` and
+ * the process variables. Every name starting with {@link RESERVED_SECRET_NAME_PREFIX} is reserved
+ * as well; the `AW_` names stay in this list so a drift test can compare against it directly.
+ * Matching ignores case ({@link isReservedSecretName}). The list is frozen, so it always matches
+ * what is enforced.
  */
 export const RESERVED_SECRET_NAMES = [
   'HOST',
@@ -22,6 +23,7 @@ export const RESERVED_SECRET_NAMES = [
   'RUNTIME_DRIVER',
   'WORKSPACE_SLUG',
   'AW_DEPLOYMENT_POLICY',
+  'AW_DEPLOYMENT_FEATURES',
   'NODE_ENV',
   'MIGRATIONS_DIR',
   'GATEWAY_PRICING_JSON',

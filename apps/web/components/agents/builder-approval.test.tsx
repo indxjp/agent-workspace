@@ -28,12 +28,12 @@ function say(text: string): AgentEvent {
   };
 }
 
-function asksToCall(toolName: string, input: unknown): AgentEvent {
+function asksToCall(toolName: string, input: unknown, toolCallId = 'call-1'): AgentEvent {
   return {
     frame: 'agent.approval.requested',
     engine: ENGINE,
     raw: null,
-    toolCallId: 'call-1',
+    toolCallId,
     toolName,
     canonicalCall: JSON.stringify({ input }),
   };
@@ -72,7 +72,7 @@ const WRITES = withTools(
   { permissionMode: 'acceptEdits' },
 );
 
-const HIDDEN = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/u;
+const HIDDEN = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/u;
 
 let container: HTMLDivElement;
 
@@ -139,6 +139,8 @@ describe('BuilderApproval', () => {
     expect(text).toContain('Checks2');
     expect(text).toContain('happy path');
     expect(text).toContain('injection');
+    expect(text).toContain('Input: x');
+    expect(text).toContain('Expect: {"contains":["ok"]}');
     expect(text).toContain(
       'Each check runs the draft with at most a $0.30 budget. Its tools may change real systems.',
     );
@@ -206,8 +208,10 @@ describe('BuilderApproval', () => {
     expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
   });
 
-  const HIDDEN_RUN = '\u00AD\u200B\u200F\u202E\u2060\u2066\u2069\uFEFF';
+  const HIDDEN_RUN = '\u00AD\u200B\u200F\u202E\u2060\u2066\u2069\uFEFF\u{E0041}';
+  const SHOWN_RUN = '<U+00AD><U+200B><U+200F><U+202E><U+2060><U+2066><U+2069><U+FEFF><U+E0041>';
   const withHidden = (text: string) => `${text.slice(0, 3)}${HIDDEN_RUN}${text.slice(3)}`;
+  const shownHidden = (text: string) => `${text.slice(0, 3)}${SHOWN_RUN}${text.slice(3)}`;
   it.each([
     [
       'the trial input',
@@ -216,7 +220,7 @@ describe('BuilderApproval', () => {
         version: 1,
         input: withHidden('Refund 12 EUR'),
       }),
-      'Refund 12 EUR',
+      shownHidden('Refund 12 EUR'),
     ],
     [
       'a check name',
@@ -225,7 +229,16 @@ describe('BuilderApproval', () => {
         version: 1,
         cases: [{ name: withHidden('happy path'), input: 'x', expect: { contains: ['ok'] } }],
       }),
-      'happy path',
+      shownHidden('happy path'),
+    ],
+    [
+      'a check input',
+      asksToCall('evals_run', {
+        agentId: AGENT_ID,
+        version: 1,
+        cases: [{ name: 'n', input: withHidden('Refund 12 EUR'), expect: { contains: ['ok'] } }],
+      }),
+      shownHidden('Refund 12 EUR'),
     ],
     [
       'a changed instruction and path in the diff',
@@ -237,12 +250,72 @@ describe('BuilderApproval', () => {
           resources: { files: [{ path: withHidden('notes/'), access: 'read' }] },
         }),
       }),
-      'Always ask first.|notes/',
+      `${shownHidden('Always ask first.')}|${shownHidden('notes/')}`,
     ],
-  ])('strips bidirectional and zero-width characters from %s', async (_name, asked, visible) => {
+  ])('shows hidden characters in %s as visible escapes', async (_name, asked, visible) => {
     const text = await show([asked]);
     for (const part of visible.split('|')) expect(text).toContain(part);
     expect(text).not.toMatch(HIDDEN);
+  });
+
+  it('shows hidden characters in the agent name of a trial as visible escapes', async () => {
+    const body = definitionBody({ agent: { name: 'refunds\u200B' } });
+    client.list.mockResolvedValue({ items: [{ number: 1, body }] });
+    const text = await show([
+      asksToCall('trial_run', { agentId: AGENT_ID, version: 1, input: 'Refund' }),
+    ]);
+    expect(text).toContain('refunds<U+200B>');
+    expect(text).not.toMatch(HIDDEN);
+  });
+
+  it('shows two rules that differ only by a zero-width space differently', async () => {
+    const after = withTools(BASE, { autoApprove: ['Bash(git status)', 'Bash(git\u200B status)'] });
+    client.list.mockResolvedValue({ items: [{ number: 1, body: BASE }] });
+    await show([asksToCall('draft_save', { agentId: AGENT_ID, baseVersion: 1, body: after })]);
+    const paths = [...container.querySelectorAll('code')].map((node) => node.textContent);
+    expect(paths).toContain('definition.policy.tools.autoApprove["Bash(git status)"]');
+    expect(paths).toContain('definition.policy.tools.autoApprove["Bash(git<U+200B> status)"]');
+  });
+
+  it('shows the whole of a long check input and its expectation, never a cut', async () => {
+    const long = `${'a'.repeat(300)}${'b'.repeat(25)}`;
+    const text = await show([
+      asksToCall('evals_run', {
+        agentId: AGENT_ID,
+        version: 1,
+        cases: [{ name: 'n', input: long, expect: { contains: ['ok\u200B'] } }],
+      }),
+    ]);
+    expect(text).toContain(long);
+    expect(text).not.toContain('not shown');
+    expect(text).toContain('Expect: {"contains":["ok<U+200B>"]}');
+  });
+
+  it('shows two rules that differ only by a no-break space differently', async () => {
+    const after = withTools(BASE, { autoApprove: ['Bash(git status)', 'Bash(git\u00A0status)'] });
+    client.list.mockResolvedValue({ items: [{ number: 1, body: BASE }] });
+    await show([asksToCall('draft_save', { agentId: AGENT_ID, baseVersion: 1, body: after })]);
+    const paths = [...container.querySelectorAll('code')].map((node) => node.textContent);
+    expect(paths).toContain('definition.policy.tools.autoApprove["Bash(git status)"]');
+    expect(paths).toContain('definition.policy.tools.autoApprove["Bash(git<U+00A0>status)"]');
+  });
+
+  it('asks again for a second identical trial run, with a new request id', async () => {
+    const input = { agentId: AGENT_ID, version: 1, input: 'Refund' };
+    const first = asksToCall('trial_run', input, 'call-1');
+    const second = asksToCall('trial_run', input, 'call-2');
+    const root = createRoot(container);
+    const render = async (events: readonly AgentEvent[]) => {
+      await act(async () => {
+        root.render(<BuilderApproval events={events} onDecide={() => Promise.resolve(null)} />);
+        await Promise.resolve();
+      });
+    };
+    await render([first]);
+    await render([first, say('Ran it.'), second]);
+    expect(client.list).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Approve');
+    expect(container.textContent).toContain('Refund');
   });
 
   it('shows a new agent with no base and no lookup', async () => {

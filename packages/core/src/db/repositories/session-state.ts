@@ -9,7 +9,8 @@
  *   * `deleteLast` — the OpenAI Agents SDK's `popItem`;
  *   * `replaceAll` — its `clearSession` followed by a rewrite;
  *   * `deleteStream` — the Agent SDK's `delete(key)`;
- *   * `putBlob` / `getBlob` metadata — an ACP agent's state directory, snapshotted.
+ *   * `reserveBlob` / `confirmBlob` / `getBlob` metadata — an ACP agent's state directory,
+ *     snapshotted.
  *
  * There is deliberately no sixth stream operation. The platform reads no field of an entry, so
  * there is nothing else it could offer that would not be an engine's own business.
@@ -30,9 +31,10 @@ import {
   gt,
   inArray,
   isNotNull,
-  isNull,
   lt,
   max,
+  ne,
+  or,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -40,6 +42,7 @@ import {
 import type { Database } from '../client.js';
 import type { EngineId } from '../schema/agents.js';
 import { sessionStateBlobs } from '../schema/session-state-blobs.js';
+import { isSidePath, SIDE_PATH_ROOT } from '../side-paths.js';
 import { sessionStateEntries } from '../schema/session-state-entries.js';
 import { sessionStateStreams } from '../schema/session-state-streams.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
@@ -77,29 +80,38 @@ export interface StoredSessionStateStream {
 export interface StoredSessionStateBlob {
   readonly blobKey: string;
   readonly storageKey: string;
-  /** `null` for a blob written before object IDs: its bytes are at `storageKey`. */
-  readonly objectId: string | null;
+  /** The permanent object ID the bytes are stored under. */
+  readonly objectId: string;
   readonly sizeBytes: number;
   readonly sha256: string;
 }
 
-/** A blob still in the old naming: its bytes are at `storageKey` in the session-state store. */
-export interface LegacySessionStateBlob {
+/**
+ * A blob row no read serves (the storage design, §04 "Saving a file"): a save's reservation
+ * (`pending`), or a row on its way out (`deleting`) whose object is deleted before the row is
+ * forgotten. It waits under a side key (`%aside/…`, the file catalog's side-path root), never under
+ * a caller's blob key, so that key stays free for the next save while it waits.
+ */
+export interface SessionStateBlobClaim {
   readonly sessionId: string;
   readonly engine: EngineId;
-  readonly blobKey: string;
+  /** The side key the row waits under. */
+  readonly rowKey: string;
+  readonly status: 'pending' | 'deleting';
+  /** The permanent object ID the bytes are stored under. */
+  readonly objectId: string;
   readonly storageKey: string;
-  readonly sizeBytes: number;
-  readonly sha256: string;
+  /**
+   * The reservation a pending row was made under (the file catalog's token): `confirmBlob`,
+   * `claimBlob` and `forgetBlob` act on a pending row only while it still carries this token.
+   * `null` for a `deleting` row.
+   */
+  readonly reservationToken: string | null;
 }
 
-/** What {@link SessionStateRepository.putBlob} records. `storageKey` is derived by the caller. */
-export interface SessionStateBlobInput {
-  readonly engine: EngineId;
+/** What a save measured on the way to the object store, and the key it saves the blob under. */
+export interface SessionStateBlobConfirmation {
   readonly blobKey: string;
-  readonly storageKey: string;
-  /** Absent for a blob in the old naming, whose bytes are at `storageKey`. */
-  readonly objectId?: string | null;
   readonly sizeBytes: number;
   readonly sha256: string;
 }
@@ -131,15 +143,35 @@ export interface SessionStateRepository {
   /** Every stream of one session, newest write first. */
   listStreams(sessionId: string): Promise<readonly StoredSessionStateStream[]>;
   /**
-   * Record one blob's location and digest as `ready`, replacing any previous record under the same
-   * key, and answer where the replaced blob's bytes were so the caller can delete them.
+   * Step 1 of a save: a `pending` row for `objectId`, written before any byte. It holds its object
+   * against the cleanup job, and no read serves it.
    */
-  putBlob(
+  reserveBlob(
     sessionId: string,
-    blob: SessionStateBlobInput,
-  ): Promise<{
-    readonly replaced: { readonly objectId: string | null; readonly storageKey: string } | null;
-  }>;
+    blob: { readonly engine: EngineId; readonly objectId: string; readonly storageKey: string },
+  ): Promise<SessionStateBlobClaim>;
+  /**
+   * Step 3 of a save, in one transaction: `pending`, still under its reservation, becomes the
+   * `ready` row of `blobKey`, and the row it replaces moves aside as `deleting` and is returned for
+   * the caller to delete. `null`, and nothing changed, when the reservation is gone (confirmed,
+   * claimed or purged since, or its session deleted). Throws for a side key.
+   */
+  confirmBlob(
+    pending: SessionStateBlobClaim,
+    confirmation: SessionStateBlobConfirmation,
+  ): Promise<{ readonly replaced: SessionStateBlobClaim | null } | null>;
+  /**
+   * Mark a stale pending row `deleting` before its object goes (the cleanup job). `null` when the
+   * row no longer carries the reservation `pending` names.
+   */
+  claimBlob(pending: SessionStateBlobClaim): Promise<SessionStateBlobClaim | null>;
+  /**
+   * Drop a row no read serves: a `deleting` row once its object is gone, or a pending row under its
+   * own reservation. `false` when nothing matched.
+   */
+  forgetBlob(row: SessionStateBlobClaim): Promise<boolean>;
+  /** What a crash or a failed delete left: every `deleting` row, and `pending` rows older than `before`. */
+  unsettledBlobs(before: Date): Promise<readonly SessionStateBlobClaim[]>;
   /** What is recorded about one `ready` blob, or `null`. */
   getBlob(
     sessionId: string,
@@ -148,33 +180,39 @@ export interface SessionStateRepository {
   ): Promise<StoredSessionStateBlob | null>;
   /** Every `ready` blob of one session, for cleanup. */
   listBlobs(sessionId: string): Promise<readonly StoredSessionStateBlob[]>;
-  // storage-bridge(#1699): the naming migration reads and switches blobs still in the old naming
-  /** Every `ready` blob of this workspace with no object id yet, for the naming migration. */
-  listLegacyBlobs(): Promise<readonly LegacySessionStateBlob[]>;
-  /**
-   * Point a `ready` blob with no object id and `expectedStorageKey` at `objectId`. `false`, nothing
-   * changed, when the blob was replaced, removed or switched meanwhile: the caller deletes its copy.
-   */
-  switchBlobObject(
-    blob: { readonly sessionId: string; readonly engine: EngineId; readonly blobKey: string },
-    expectedStorageKey: string,
-    objectId: string,
-  ): Promise<boolean>;
-  // storage-bridge(#1699): the finalize stage of the naming migration
-  /** Blob rows in any status still without an object id: the work the copy stage has left. */
-  countLegacyBlobs(): Promise<number>;
-  /** Every `ready` blob of this workspace that has an object id, for the finalize check. */
-  listObjectBlobs(): Promise<readonly (StoredSessionStateBlob & { readonly objectId: string })[]>;
-  /** Which of `keys` a blob row in any status without an object id holds as its bytes. */
-  legacyBlobKeysHeld(keys: readonly string[]): Promise<readonly string[]>;
   /** Which of `objectIds` a blob row in any status holds, for the cleanup job. */
   referencedObjectIds(objectIds: readonly string[]): Promise<readonly string[]>;
   /**
-   * Retention: remove every stream (with its entries) and every blob record of this workspace whose
-   * last write is before `before`. The same rule the legacy `session_transcripts` purge applies, over
-   * the same `updated_at`, so one policy covers both stores.
+   * Retention: remove every stream (with its entries) of this workspace whose last write is before
+   * `before`, and mark every blob row written before it `deleting`, aside from its key. The same
+   * rule the legacy `session_transcripts` purge applies, over the same `updated_at`, so one policy
+   * covers both stores.
    */
   purgeBefore(before: Date): Promise<SessionStatePurge>;
+}
+
+/** The blob half of {@link SessionStateRepository}: what a save, a read, a purge and the cleanup job use. */
+export type SessionStateBlobRepository = Pick<
+  SessionStateRepository,
+  | 'reserveBlob'
+  | 'confirmBlob'
+  | 'claimBlob'
+  | 'forgetBlob'
+  | 'unsettledBlobs'
+  | 'getBlob'
+  | 'listBlobs'
+  | 'referencedObjectIds'
+  | 'purgeBefore'
+>;
+
+/** A side key for a blob row. A caller's key starts with a letter or a digit, so none collides. */
+export const blobSideKey = (id: string): string => `${SIDE_PATH_ROOT}/${id}`;
+
+/** Refuse a side key where a caller's blob key is expected. */
+export function assertCallerBlobKey(blobKey: string): void {
+  if (isSidePath(blobKey)) {
+    throw new Error('a session-state blob cannot be saved under a side key');
+  }
 }
 
 /** What one {@link SessionStateRepository.purgeBefore} pass removed. */
@@ -183,8 +221,11 @@ interface SessionStatePurge {
   readonly streams: number;
   /** The entries those streams held. */
   readonly entries: number;
-  /** The blob records removed. The caller deletes their bytes from the object store. */
-  readonly blobs: readonly StoredSessionStateBlob[];
+  /**
+   * The blob rows this pass marked `deleting`. The caller deletes their bytes, then forgets each
+   * row; a row whose delete failed stays `deleting` for the cleanup job.
+   */
+  readonly blobs: readonly SessionStateBlobClaim[];
   /** The sessions this pass left with no stream at all: their conversation is purged. */
   readonly sessionIds: readonly string[];
 }
@@ -200,6 +241,44 @@ const readableColumns = {
   sizeBytes: sessionStateBlobs.sizeBytes,
   sha256: sessionStateBlobs.sha256,
 };
+
+/**
+ * A pending row's reservation token: the exact time of its reservation, as text, as the file
+ * catalog keeps it. A `ready` or `deleting` row has none.
+ */
+const blobReservationToken = sql<
+  string | null
+>`case when ${sessionStateBlobs.status} = 'pending' then extract(epoch from ${sessionStateBlobs.updatedAt})::text end`;
+
+const claimColumns = {
+  sessionId: sessionStateBlobs.sessionId,
+  engine: sessionStateBlobs.engine,
+  rowKey: sessionStateBlobs.blobKey,
+  status: sessionStateBlobs.status,
+  objectId: sessionStateBlobs.objectId,
+  storageKey: sessionStateBlobs.storageKey,
+  reservationToken: blobReservationToken,
+};
+
+function toClaim(
+  row: Omit<SessionStateBlobClaim, 'status'> & { readonly status: string },
+): SessionStateBlobClaim {
+  if (row.status !== 'pending' && row.status !== 'deleting') {
+    throw new Error(`a ${row.status} session-state blob row is not a claim`);
+  }
+  return { ...row, status: row.status };
+}
+
+/** The row is the one `claim` names: still in its status and, for a pending row, its reservation. */
+const unchanged = (claim: SessionStateBlobClaim): SQL =>
+  claim.status === 'deleting'
+    ? sql`${sessionStateBlobs.status} = 'deleting'`
+    : claim.reservationToken === null
+      ? sql`false`
+      : sql`(${sessionStateBlobs.status} = 'pending' and ${blobReservationToken} = ${claim.reservationToken})`;
+
+/** A new side key, made by the database inside the statement that moves a row aside. */
+const newSideKey = sql`${`${SIDE_PATH_ROOT}/`} || gen_random_uuid()::text`;
 
 function every(...predicates: readonly SQL[]): SQL {
   const combined = and(...predicates);
@@ -254,6 +333,17 @@ export function createDatabaseSessionStateRepositoryProvider(
           eq(sessionStateEntries.engine, key.engine),
           eq(sessionStateEntries.streamKey, key.streamKey),
         );
+
+      /** Two writers of one blob key would each read the other's row as the one they replace. */
+      const lockBlobKey = async (
+        tx: SessionStateTransaction,
+        sessionId: string,
+        engine: EngineId,
+        blobKey: string,
+      ): Promise<void> => {
+        const lockKey = JSON.stringify([checked.workspaceId, sessionId, engine, 'blob', blobKey]);
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+      };
 
       const blobWhere = (sessionId: string, engine: EngineId, blobKey: string): SQL =>
         every(
@@ -511,52 +601,103 @@ export function createDatabaseSessionStateRepositoryProvider(
           }));
         },
 
-        async putBlob(sessionId, blob) {
-          return db.transaction(async (tx) => {
-            // Two writers of one blob key would each read the other's row as the one they replace.
-            const lockKey = JSON.stringify([
-              checked.workspaceId,
+        async reserveBlob(sessionId, blob) {
+          const [row] = await db
+            .insert(sessionStateBlobs)
+            .values({
+              workspaceId: checked.workspaceId,
               sessionId,
-              blob.engine,
-              'blob',
-              blob.blobKey,
-            ]);
-            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-            const previous = await tx
-              .select({
-                objectId: sessionStateBlobs.objectId,
-                storageKey: sessionStateBlobs.storageKey,
-              })
-              .from(sessionStateBlobs)
-              .where(blobWhere(sessionId, blob.engine, blob.blobKey))
-              .limit(1);
-            const values = {
+              engine: blob.engine,
+              blobKey: blobSideKey(blob.objectId),
+              objectId: blob.objectId,
               storageKey: blob.storageKey,
-              objectId: blob.objectId ?? null,
-              status: 'ready',
-              sizeBytes: blob.sizeBytes,
-              sha256: blob.sha256,
-            } as const;
+              status: 'pending',
+              // Measured on the way to the store and recorded by the confirm; no read serves a
+              // pending row, so these placeholders are never handed out.
+              sizeBytes: 0,
+              sha256: '',
+            })
+            .returning(claimColumns);
+          if (row === undefined) throw new Error('the session-state reservation was not written');
+          return toClaim(row);
+        },
+
+        async confirmBlob(pending, confirmation) {
+          assertCallerBlobKey(confirmation.blobKey);
+          if (pending.status !== 'pending') return null;
+          return db.transaction(async (tx) => {
+            await lockBlobKey(tx, pending.sessionId, pending.engine, confirmation.blobKey);
+            const held = await tx
+              .select({ rowKey: sessionStateBlobs.blobKey })
+              .from(sessionStateBlobs)
+              .where(
+                every(
+                  blobWhere(pending.sessionId, pending.engine, pending.rowKey),
+                  unchanged(pending),
+                ),
+              )
+              .for('update');
+            if (held.length === 0) return null;
+            const replaced = await tx
+              .update(sessionStateBlobs)
+              .set({ blobKey: newSideKey, status: 'deleting' })
+              .where(blobWhere(pending.sessionId, pending.engine, confirmation.blobKey))
+              .returning(claimColumns);
             await tx
-              .insert(sessionStateBlobs)
-              .values({
-                workspaceId: checked.workspaceId,
-                sessionId,
-                engine: blob.engine,
-                blobKey: blob.blobKey,
-                ...values,
+              .update(sessionStateBlobs)
+              .set({
+                blobKey: confirmation.blobKey,
+                status: 'ready',
+                sizeBytes: confirmation.sizeBytes,
+                sha256: confirmation.sha256,
               })
-              .onConflictDoUpdate({
-                target: [
-                  sessionStateBlobs.workspaceId,
-                  sessionStateBlobs.sessionId,
-                  sessionStateBlobs.engine,
-                  sessionStateBlobs.blobKey,
-                ],
-                set: { ...values, updatedAt: sql`now()` },
-              });
-            return { replaced: previous[0] ?? null };
+              .where(blobWhere(pending.sessionId, pending.engine, pending.rowKey));
+            const [aside] = replaced;
+            return { replaced: aside === undefined ? null : toClaim(aside) };
           });
+        },
+
+        async claimBlob(pending) {
+          if (pending.status !== 'pending') return null;
+          const [row] = await db
+            .update(sessionStateBlobs)
+            .set({ status: 'deleting' })
+            .where(
+              every(
+                blobWhere(pending.sessionId, pending.engine, pending.rowKey),
+                unchanged(pending),
+              ),
+            )
+            .returning(claimColumns);
+          return row === undefined ? null : toClaim(row);
+        },
+
+        async forgetBlob(row) {
+          const gone = await db
+            .delete(sessionStateBlobs)
+            .where(every(blobWhere(row.sessionId, row.engine, row.rowKey), unchanged(row)))
+            .returning({ rowKey: sessionStateBlobs.blobKey });
+          return gone.length > 0;
+        },
+
+        async unsettledBlobs(before) {
+          const rows = await db
+            .select(claimColumns)
+            .from(sessionStateBlobs)
+            .where(
+              every(
+                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                or(
+                  eq(sessionStateBlobs.status, 'deleting'),
+                  every(
+                    eq(sessionStateBlobs.status, 'pending'),
+                    lt(sessionStateBlobs.updatedAt, before),
+                  ),
+                ) ?? sql`false`,
+              ),
+            )
+            .orderBy(asc(sessionStateBlobs.updatedAt), asc(sessionStateBlobs.blobKey));
+          return rows.map(toClaim);
         },
 
         async getBlob(sessionId, engine, blobKey) {
@@ -584,97 +725,6 @@ export function createDatabaseSessionStateRepositoryProvider(
             .orderBy(asc(sessionStateBlobs.blobKey));
         },
 
-        // storage-bridge(#1699): the naming migration
-        async listLegacyBlobs() {
-          return db
-            .select({
-              sessionId: sessionStateBlobs.sessionId,
-              engine: sessionStateBlobs.engine,
-              blobKey: sessionStateBlobs.blobKey,
-              storageKey: sessionStateBlobs.storageKey,
-              sizeBytes: sessionStateBlobs.sizeBytes,
-              sha256: sessionStateBlobs.sha256,
-            })
-            .from(sessionStateBlobs)
-            .where(
-              every(
-                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
-                eq(sessionStateBlobs.status, 'ready'),
-                isNull(sessionStateBlobs.objectId),
-              ),
-            )
-            .orderBy(asc(sessionStateBlobs.sessionId), asc(sessionStateBlobs.blobKey));
-        },
-
-        // storage-bridge(#1699): the naming migration
-        async switchBlobObject(blob, expectedStorageKey, objectId) {
-          const switched = await db
-            .update(sessionStateBlobs)
-            .set({ objectId })
-            .where(
-              every(
-                blobWhere(blob.sessionId, blob.engine, blob.blobKey),
-                eq(sessionStateBlobs.status, 'ready'),
-                isNull(sessionStateBlobs.objectId),
-                eq(sessionStateBlobs.storageKey, expectedStorageKey),
-              ),
-            )
-            .returning({ blobKey: sessionStateBlobs.blobKey });
-          return switched.length === 1;
-        },
-
-        // storage-bridge(#1699): the finalize stage of the naming migration
-        async countLegacyBlobs() {
-          const [found] = await db
-            .select({ value: sql<number>`count(*)::int` })
-            .from(sessionStateBlobs)
-            .where(
-              every(
-                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
-                isNull(sessionStateBlobs.objectId),
-              ),
-            );
-          return found?.value ?? 0;
-        },
-
-        async listObjectBlobs() {
-          const found = await db
-            .select({
-              blobKey: sessionStateBlobs.blobKey,
-              storageKey: sessionStateBlobs.storageKey,
-              objectId: sessionStateBlobs.objectId,
-              sizeBytes: sessionStateBlobs.sizeBytes,
-              sha256: sessionStateBlobs.sha256,
-            })
-            .from(sessionStateBlobs)
-            .where(
-              every(
-                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
-                eq(sessionStateBlobs.status, 'ready'),
-                isNotNull(sessionStateBlobs.objectId),
-              ),
-            )
-            .orderBy(asc(sessionStateBlobs.sessionId), asc(sessionStateBlobs.blobKey));
-          return found.flatMap((blob) =>
-            blob.objectId === null ? [] : [{ ...blob, objectId: blob.objectId }],
-          );
-        },
-
-        async legacyBlobKeysHeld(keys) {
-          if (keys.length === 0) return [];
-          const found = await db
-            .select({ storageKey: sessionStateBlobs.storageKey })
-            .from(sessionStateBlobs)
-            .where(
-              every(
-                eq(sessionStateBlobs.workspaceId, checked.workspaceId),
-                isNull(sessionStateBlobs.objectId),
-                inArray(sessionStateBlobs.storageKey, [...keys]),
-              ),
-            );
-          return found.map((blob) => blob.storageKey);
-        },
-
         async referencedObjectIds(objectIds) {
           if (objectIds.length === 0) return [];
           const rows = await db
@@ -686,7 +736,7 @@ export function createDatabaseSessionStateRepositoryProvider(
                 inArray(sessionStateBlobs.objectId, [...objectIds]),
               ),
             );
-          return rows.flatMap((found) => (found.objectId === null ? [] : [found.objectId]));
+          return rows.map((found) => found.objectId);
         },
 
         async purgeBefore(before) {
@@ -731,16 +781,29 @@ export function createDatabaseSessionStateRepositoryProvider(
                     );
             const keptIds = new Set(kept.map((row) => row.sessionId));
             const sessionIds = touched.filter((id) => !keptIds.has(id));
+            // Marked before their bytes go, and a ready row moved off its key so the key is free for
+            // the next save; a pending row already waits aside, and a purged reservation is never
+            // confirmed. Rows already `deleting` are the cleanup job's.
             const blobs = await tx
-              .delete(sessionStateBlobs)
+              .update(sessionStateBlobs)
+              .set({
+                blobKey: sql`case when ${sessionStateBlobs.status} = 'ready' then ${newSideKey} else ${sessionStateBlobs.blobKey} end`,
+                status: 'deleting',
+              })
               .where(
                 every(
                   eq(sessionStateBlobs.workspaceId, checked.workspaceId),
+                  ne(sessionStateBlobs.status, 'deleting'),
                   lt(sessionStateBlobs.updatedAt, before),
                 ),
               )
-              .returning(readableColumns);
-            return { streams: streams.length, entries: counted[0]?.value ?? 0, blobs, sessionIds };
+              .returning(claimColumns);
+            return {
+              streams: streams.length,
+              entries: counted[0]?.value ?? 0,
+              blobs: blobs.map(toClaim),
+              sessionIds,
+            };
           });
         },
       };

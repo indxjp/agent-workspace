@@ -265,6 +265,7 @@ export type ApplyAndPointOutcome =
       readonly pointer: AgentVersionPointerRecord;
     }
   | { readonly kind: 'not-found' }
+  | { readonly kind: 'agent-archived' }
   | { readonly kind: 'version-not-found' }
   | { readonly kind: 'name-conflict'; readonly name: string }
   | { readonly kind: 'surface-name-taken'; readonly name: string }
@@ -400,7 +401,9 @@ export interface AgentVersionRepository {
   /**
    * Point `environment` at a version and write the move's `agent-changed` audit row, in one
    * transaction. A `local` move also rewrites the agent row and its assignments from the version;
-   * any other environment's leaves them as they are. A refused outcome writes nothing; a failing
+   * any other environment's leaves them as they are. An archived agent is frozen: the locked row is
+   * read with its `archived_at`, so an archive that commits after the caller's own read still
+   * answers `agent-archived`. A refused outcome writes nothing; a failing
    * audit insert rejects and rolls the whole move back.
    */
   applyAndPoint(agentId: string, input: ApplyAndPointInput): Promise<ApplyAndPointOutcome>;

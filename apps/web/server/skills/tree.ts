@@ -8,13 +8,9 @@
  * but does not forbid more), and this task's export must reproduce every one of them, so this is
  * that caller.
  */
+import { withCompensation } from '@agent-workspace/core';
 import { toObjectKey } from '@agent-workspace/core/storage/keys';
-import {
-  bytesToStream,
-  listAll,
-  readBytes,
-  readWhole,
-} from '@agent-workspace/core/storage/streams';
+import { bytesToStream, listAll, readBytes, readWhole } from '../storage/objects';
 import type { SkillObjects } from '../storage/store';
 import { MAX_SKILL_REQUEST_BODY_BYTES } from '@indx-workspace/contracts/skills';
 
@@ -256,15 +252,21 @@ export async function ensureSkillRows(
   for (const file of legacy) {
     const object = await store.read(file.key);
     if (object === null) continue;
-    const saved = await storage.save(
-      { workspaceId, ...principal },
-      {
-        area: 'skills',
-        path: `${folder}/${file.relativePath}`,
-        body: object.body,
-        maxBytes: MAX_SKILL_REQUEST_BODY_BYTES,
-        replace: false,
-      },
+    // A save that throws instead of refusing may never have read the body: release its source.
+    // A body the save already locked is the save's to finish.
+    const saved = await withCompensation(
+      () =>
+        storage.save(
+          { workspaceId, ...principal },
+          {
+            area: 'skills',
+            path: `${folder}/${file.relativePath}`,
+            body: object.body,
+            maxBytes: MAX_SKILL_REQUEST_BODY_BYTES,
+            replace: false,
+          },
+        ),
+      () => (object.body.locked ? Promise.resolve() : object.body.cancel()),
     );
     // A ready row was copied earlier or written since; a pending one is another writer's.
     if (!saved.ok && saved.code !== 'path_taken' && saved.code !== 'upload_in_progress') {

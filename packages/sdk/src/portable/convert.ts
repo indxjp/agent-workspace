@@ -292,6 +292,14 @@ function convertBody(
     }
   };
 
+  // The portable tool has no identity field: the assertion is an Agent Workspace feature (ADR-0142).
+  const dropIdentity = (path: string, secretName: string): void => {
+    drop(
+      `${path}.identity`,
+      `the signed identity assertion (secret ${secretName}) is an Agent Workspace feature and is not carried in the portable definition`,
+    );
+  };
+
   let codeToolsSeen = false;
   resources.connectors.forEach((name, index) => {
     const path = `definition.resources.connectors.${index}`;
@@ -328,13 +336,15 @@ function convertBody(
     if (catalogTool?.kind === 'openapi') {
       if (catalogTool.auth !== 'none' && catalogTool.credential === undefined) {
         drop(path, 'its credential secret is not named');
-      } else {
-        keep(path, openApiToolOf(catalogTool));
+      } else if (keep(path, openApiToolOf(catalogTool)) && catalogTool.identity !== undefined) {
+        dropIdentity(path, catalogTool.identity.secret);
       }
     } else if (catalogTool?.kind === 'postgres') {
       drop(path, 'postgres tools run only inside Agent Workspace');
     } else if (connector !== undefined) {
-      keep(path, mcpToolOf(name, connector));
+      if (keep(path, mcpToolOf(name, connector)) && connector.identity !== undefined) {
+        dropIdentity(path, connector.identity.secret);
+      }
     } else {
       drop(
         path,

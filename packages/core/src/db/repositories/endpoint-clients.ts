@@ -27,6 +27,8 @@ export interface EndpointClientRecord {
   readonly redirectUris: readonly string[];
   /** Whether a confidential OAuth secret is set. The hash itself never leaves the repository. */
   readonly hasClientSecret: boolean;
+  /** The ID token audience of an `app-backend` client (ADR-0161 D4); `null` for every other kind. */
+  readonly oidcAudience: string | null;
   readonly actsForPrincipalId: string;
   readonly createdByPrincipalId: string;
   /** Every key bound to the client, revoked ones included. Ids only; never a secret. */
@@ -41,6 +43,8 @@ export interface NewEndpointClientInput {
   readonly kind: EndpointClientKind;
   readonly agentIds: readonly string[];
   readonly toolNames?: readonly string[] | null;
+  /** Required for, and only for, an `app-backend` client. */
+  readonly oidcAudience?: string | null;
   readonly actsForPrincipalId: string;
   readonly createdByPrincipalId: string;
 }
@@ -49,6 +53,8 @@ export interface EndpointClientPatch {
   readonly agentIds?: readonly string[] | undefined;
   readonly toolNames?: readonly string[] | null | undefined;
   readonly redirectUris?: readonly string[] | undefined;
+  /** An `app-backend` client's ID token audience; refused for every other kind. */
+  readonly oidcAudience?: string | undefined;
 }
 
 export interface EndpointClientRepository {
@@ -103,7 +109,10 @@ export interface EndpointClientRepositoryProvider {
 
 const REDIRECT_URIS_MAX = 10;
 
-/** Dedupe and check the agent-count invariant: one for `a2a-agent`, 1-64 for `mcp-project`, none for `builder`. */
+/**
+ * Dedupe and check the agent-count invariant: one for `a2a-agent`, 1-64 for `mcp-project` and
+ * `app-backend`, none for `builder`.
+ */
 function checkedAgentIds(kind: EndpointClientKind, agentIds: readonly string[]): string[] {
   const unique = [...new Set(agentIds)];
   const invalid =
@@ -121,6 +130,18 @@ function checkedAgentIds(kind: EndpointClientKind, agentIds: readonly string[]):
     );
   }
   return unique;
+}
+
+/** `endpoint_clients_oidc_audience_app_backend`, checked before the insert names the kind wrongly. */
+function checkedOidcAudience(
+  kind: EndpointClientKind,
+  oidcAudience: string | null | undefined,
+): string | null {
+  const audience = oidcAudience ?? null;
+  if ((kind === 'app-backend') !== (audience !== null)) {
+    throw new Error('oidcAudience is required for, and only for, an app-backend endpoint client.');
+  }
+  return audience;
 }
 
 function checkedToolNames(
@@ -173,6 +194,7 @@ async function hydrate(
     toolNames: row.toolNames,
     redirectUris: row.redirectUris,
     hasClientSecret: row.clientSecretHash !== null,
+    oidcAudience: row.oidcAudience,
     actsForPrincipalId: row.actsForPrincipalId,
     createdByPrincipalId: row.createdByPrincipalId,
     apiKeyIds: keyRows.filter((key) => key.clientId === row.id).map((key) => key.apiKeyId),
@@ -228,6 +250,7 @@ export function createDatabaseEndpointClientRepositoryProvider(
         async create(input) {
           const agentIds = checkedAgentIds(input.kind, input.agentIds);
           const toolNames = checkedToolNames(input.kind, input.toolNames);
+          const oidcAudience = checkedOidcAudience(input.kind, input.oidcAudience);
           try {
             return await db.transaction(async (tx) => {
               const inserted = await tx
@@ -237,6 +260,7 @@ export function createDatabaseEndpointClientRepositoryProvider(
                   name: input.name,
                   kind: input.kind,
                   toolNames,
+                  oidcAudience,
                   actsForPrincipalId: input.actsForPrincipalId,
                   createdByPrincipalId: input.createdByPrincipalId,
                 })
@@ -279,6 +303,10 @@ export function createDatabaseEndpointClientRepositoryProvider(
               patch.toolNames === undefined
                 ? undefined
                 : checkedToolNames(current.kind, patch.toolNames);
+            const oidcAudience =
+              patch.oidcAudience === undefined
+                ? undefined
+                : checkedOidcAudience(current.kind, patch.oidcAudience);
             if (patch.redirectUris !== undefined && patch.redirectUris.length > REDIRECT_URIS_MAX) {
               throw new Error(
                 `An endpoint client lists at most ${String(REDIRECT_URIS_MAX)} redirect URIs.`,
@@ -304,6 +332,7 @@ export function createDatabaseEndpointClientRepositoryProvider(
               .set({
                 updatedAt: sql`now()`,
                 ...(toolNames === undefined ? {} : { toolNames }),
+                ...(oidcAudience === undefined ? {} : { oidcAudience }),
                 ...(patch.redirectUris === undefined
                   ? {}
                   : { redirectUris: [...new Set(patch.redirectUris)] }),

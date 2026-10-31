@@ -47,6 +47,7 @@ import { TeamClient } from './resources/team.js';
 import { AuthClient } from './resources/auth.js';
 import { TokensClient } from './resources/tokens.js';
 import { TriggersClient } from './resources/triggers.js';
+import { WebhooksClient } from './resources/webhooks.js';
 import { WorkspacesClient } from './resources/workspaces.js';
 
 export type { ClientAuth, ClientOptions, RequestOptions } from './http.js';
@@ -146,10 +147,25 @@ export type {
   TeamClient,
   UsersClient,
 } from './resources/team.js';
-export type { AuthClient } from './resources/auth.js';
+export type { AuthClient, TokenExchangeInput } from './resources/auth.js';
 export type { MintTokenOptions, TokensClient } from './resources/tokens.js';
 export type { BuiltinAgentProblemCode } from '@indx-workspace/contracts/agents';
 export type { TriggersClient } from './resources/triggers.js';
+export type { CreateWebhookInput, WebhooksClient } from './resources/webhooks.js';
+export {
+  verifyWebhookSignature,
+  WebhookVerificationError,
+  type VerifyWebhookSignatureInput,
+  type WebhookHeaders,
+  type WebhookVerificationErrorCode,
+} from './webhooks/verify.js';
+export type {
+  CreateWebhookRequest,
+  CreateWebhookResponse,
+  WebhookEndpoint,
+  WebhookEvent,
+  WebhookEventType,
+} from '@indx-workspace/contracts/webhooks';
 export type {
   SharingPolicyClient,
   WorkspaceFeaturesClient,
@@ -211,6 +227,11 @@ export interface AgentWorkspaceClient {
   readonly endpointClients: EndpointClientsClient;
   /** `/api/triggers` — issue #1295, ADR-0144: start a run of one agent from a webhook URL. */
   readonly triggers: TriggersClient;
+  /**
+   * `/api/webhooks` — issue #250 (N-3), ADR-SDK-18-N3-250: the endpoints a run's outcome is posted
+   * to, signed; a receiver checks a delivery with {@link verifyWebhookSignature}.
+   */
+  readonly webhooks: WebhooksClient;
   readonly team: TeamClient;
   readonly shares: SharesClient;
   readonly observability: ObservabilityClient;
@@ -241,6 +262,7 @@ export function createClient(options: ClientOptions): AgentWorkspaceClient {
     platforms: new PlatformsClient(http),
     endpointClients: new EndpointClientsClient(http),
     triggers: new TriggersClient(http),
+    webhooks: new WebhooksClient(http),
     team: new TeamClient(http),
     shares: new SharesClient(http),
     observability: new ObservabilityClient(http),

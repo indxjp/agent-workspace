@@ -36,6 +36,17 @@ describe('runToolSecretSource', () => {
     expect(reads).toEqual([]);
   });
 
+  it("never hands a run a webhook's signing secret, and does not read it", async () => {
+    const { secret, reads } = source();
+    await expect(
+      secret('WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET'),
+    ).resolves.toBeNull();
+    await expect(secret('WEBHOOK_STRIPE_SIGNING_SECRET')).resolves.toBe(
+      'value-of-WEBHOOK_STRIPE_SIGNING_SECRET',
+    );
+    expect(reads).toEqual(['WEBHOOK_STRIPE_SIGNING_SECRET']);
+  });
+
   it('[US-STO-12][unit][run] reads any other secret the tool declares', async () => {
     const { secret, reads } = source();
     await expect(secret('TICKETS_TOKEN')).resolves.toBe('value-of-TICKETS_TOKEN');

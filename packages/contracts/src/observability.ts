@@ -98,6 +98,8 @@ export const AUDIT_ACTIONS = [
   'storage-grant-changed',
   // ADR-0160 D8: one row per PUT of a workspace's feature switches.
   'workspace-features-changed',
+  // ADR-0161 D11: one row per exchange of a person's ID token at an app-backend endpoint client.
+  'user-token-exchanged',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

@@ -187,7 +187,8 @@
               "resources/engines",
               "resources/models",
               "resources/runtimes",
-              "resources/triggers"
+              "resources/triggers",
+              "resources/webhooks"
             ]
           },
           {
@@ -238,7 +239,8 @@
               "reference/sdk/runtimes",
               "reference/sdk/secrets",
               "reference/sdk/storage",
-              "reference/sdk/triggers"
+              "reference/sdk/triggers",
+              "reference/sdk/webhooks"
             ]
           },
           {
@@ -283,9 +285,11 @@
               "reference/contracts/storage-url",
               "reference/contracts/surfaces",
               "reference/contracts/team",
+              "reference/contracts/token-exchange",
               "reference/contracts/tokens",
               "reference/contracts/tool-connectors",
               "reference/contracts/triggers",
+              "reference/contracts/webhooks",
               "reference/contracts/workspaces"
             ]
           },

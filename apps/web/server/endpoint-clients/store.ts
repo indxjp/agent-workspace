@@ -31,6 +31,7 @@ function resource(record: EndpointClientRecord): EndpointClientResource {
     apiKeyIds: record.apiKeyIds,
     redirectUris: record.redirectUris,
     hasClientSecret: record.hasClientSecret,
+    oidcAudience: record.oidcAudience,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

@@ -49,6 +49,8 @@ import { CreateStorageConnectionInput } from '@indx-workspace/contracts/storage-
 import { CreateTriggerRequest } from '@indx-workspace/contracts/triggers';
 import { CreateTriggerResponse } from '@indx-workspace/contracts/triggers';
 import { CreateUserInput } from '@indx-workspace/contracts/team';
+import { CreateWebhookRequest } from '@indx-workspace/contracts/webhooks';
+import { CreateWebhookResponse } from '@indx-workspace/contracts/webhooks';
 import { CreateWorkspaceInput } from '@indx-workspace/contracts/workspaces';
 import { DeleteModelConnectionResponse } from '@indx-workspace/contracts/models';
 import { DeviceAuthorizationResponse } from '@indx-workspace/contracts/cli-auth';
@@ -128,6 +130,7 @@ import { StorageConnectionTestOutcome } from '@indx-workspace/contracts/storage-
 import { StreamResetFrameData } from '@indx-workspace/contracts/run-events';
 import { SurfaceAttachmentResponse } from '@indx-workspace/contracts/surfaces';
 import { TestConnectionOutcome } from '@indx-workspace/contracts/connectors';
+import { TokenExchangeResponse } from '@indx-workspace/contracts/token-exchange';
 import { TokenScope } from '@indx-workspace/contracts/tokens';
 import { ToolBundle } from '@indx-workspace/contracts/agent-versions';
 import { TranscriptEntry } from '@indx-workspace/contracts/sessions';
@@ -148,6 +151,9 @@ import { UploadToolBundleRequest } from '@indx-workspace/contracts/agent-version
 import { UploadToolBundleResponse } from '@indx-workspace/contracts/agent-versions';
 import { UserResource } from '@indx-workspace/contracts/team';
 import { verifyIdentity } from '@indx-workspace/contracts/identity-assertion';
+import { WebhookEndpoint } from '@indx-workspace/contracts/webhooks';
+import { WebhookEvent } from '@indx-workspace/contracts/webhooks';
+import { WebhookEventType } from '@indx-workspace/contracts/webhooks';
 import { WorkspaceFeatures } from '@indx-workspace/contracts/features';
 import { WorkspaceMembershipView } from '@indx-workspace/contracts/workspaces';
 import { WorkspaceResource } from '@indx-workspace/contracts/workspaces';
@@ -245,6 +251,7 @@ export interface AgentWorkspaceClient {
     readonly tokens: TokensClient;
     readonly toolBundles: ToolBundlesClient;
     readonly triggers: TriggersClient;
+    readonly webhooks: WebhooksClient;
     // (undocumented)
     readonly workspaces: WorkspacesClient;
 }
@@ -295,6 +302,7 @@ export class AuditClient {
 // @public
 export class AuthClient {
     constructor(http: HttpClient);
+    exchange(input: TokenExchangeInput, options?: RequestOptions): Promise<TokenExchangeResponse>;
     pollToken(deviceCode: string, options?: RequestOptions): Promise<CliTokenResponse>;
     revoke(options?: RequestOptions): Promise<void>;
     startDevice(options?: RequestOptions): Promise<DeviceAuthorizationResponse>;
@@ -319,6 +327,9 @@ export type ClientAuth = {
     readonly token: string;
 } | {
     readonly kind: 'user-token';
+    readonly token: string;
+} | {
+    readonly kind: 'access-token';
     readonly token: string;
 };
 
@@ -396,6 +407,15 @@ type CreateTriggerInput = CreateTriggerRequest extends infer Wire ? Wire extends
     readonly outputSchema?: TriggerOutputSchema;
 } : never : never;
 
+// @public
+export type CreateWebhookInput = Omit<CreateWebhookRequest, 'events'> & {
+    readonly events?: readonly WebhookEventType[];
+};
+
+export { CreateWebhookRequest }
+
+export { CreateWebhookResponse }
+
 // @public (undocumented)
 export interface DownloadUrlInput {
     // (undocumented)
@@ -468,6 +488,7 @@ export class FilesClient {
 
 // @public (undocumented)
 export interface FollowRunOptions extends RunEventsOptions {
+    readonly maxReconnectDelayMs?: number;
     readonly maxReconnects?: number;
     readonly reconnectDelayMs?: number;
 }
@@ -984,6 +1005,13 @@ export class TeamClient {
 }
 
 // @public
+export interface TokenExchangeInput {
+    readonly clientId: string;
+    readonly clientSecret: string;
+    readonly idToken: string;
+}
+
+// @public
 export class TokensClient {
     constructor(http: HttpClient);
     mint(scope: TokenScope, options?: MintTokenOptions): Promise<MintTokenResponse>;
@@ -1067,6 +1095,46 @@ export class UsersClient {
 }
 
 export { verifyIdentity }
+
+// @public
+export function verifyWebhookSignature(input: VerifyWebhookSignatureInput): Promise<WebhookEvent>;
+
+// @public (undocumented)
+export interface VerifyWebhookSignatureInput {
+    readonly body: string;
+    // (undocumented)
+    readonly headers: WebhookHeaders;
+    readonly now?: Date;
+    readonly secret: string;
+    readonly toleranceSeconds?: number;
+}
+
+export { WebhookEndpoint }
+
+export { WebhookEvent }
+
+export { WebhookEventType }
+
+// @public
+export type WebhookHeaders = Headers | Readonly<Record<string, string | readonly string[] | undefined>>;
+
+// @public
+export class WebhooksClient {
+    constructor(http: HttpClient);
+    create(input: CreateWebhookInput, options?: RequestOptions): Promise<CreateWebhookResponse>;
+    list(options?: RequestOptions): Promise<readonly WebhookEndpoint[]>;
+    remove(id: string, options?: RequestOptions): Promise<void>;
+}
+
+// @public
+export class WebhookVerificationError extends Error {
+    constructor(code: WebhookVerificationErrorCode, message: string);
+    // (undocumented)
+    readonly code: WebhookVerificationErrorCode;
+}
+
+// @public
+export type WebhookVerificationErrorCode = 'missing_header' | 'invalid_secret' | 'timestamp_out_of_tolerance' | 'signature_mismatch' | 'invalid_payload';
 
 // @public
 export class WorkspaceFeaturesClient {

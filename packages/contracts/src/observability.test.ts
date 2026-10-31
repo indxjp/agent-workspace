@@ -100,7 +100,7 @@ describe('AuditEventSchema', () => {
   it('lists every action once, in the order the column restates them', () => {
     expect(new Set(AUDIT_ACTIONS).size).toBe(AUDIT_ACTIONS.length);
     expect(AUDIT_ACTIONS[0]).toBe('user-created');
-    expect(AUDIT_ACTIONS.at(-1)).toBe('workspace-features-changed');
+    expect(AUDIT_ACTIONS.at(-1)).toBe('user-token-exchanged');
   });
 
   it('records a new agent as agent-created, and AuditEventSchema reads it', () => {

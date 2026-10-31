@@ -37,6 +37,7 @@ One property per resource family.
 | [`platforms`](/reference/sdk/platforms) | `PlatformsClient` |
 | [`endpointClients`](/reference/sdk/endpointClients) | `EndpointClientsClient` |
 | [`triggers`](/reference/sdk/triggers) | `TriggersClient` |
+| [`webhooks`](/reference/sdk/webhooks) | `WebhooksClient` |
 | [`team`](/reference/sdk/team) | `TeamClient` |
 | [`shares`](/reference/sdk/shares) | `SharesClient` |
 | [`observability`](/reference/sdk/observability) | `ObservabilityClient` |
@@ -65,7 +66,7 @@ me(options?: RequestOptions): Promise<MeResponse>
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `baseUrl` | `string \| URL` | Yes | The control plane's origin, optionally with a path prefix: `https://aw.example.com`. |
-| `auth` | `{ readonly kind: "api-key"; readonly apiKey: string; } \| { readonly kind: "session"; } \| { readonly kind: "browser-token"; readonly token: string; } \| { readonly kind: "user-token"; readonly token: string; }` | Yes |  |
+| `auth` | `{ readonly kind: "api-key"; readonly apiKey: string; } \| { readonly kind: "session"; } \| { readonly kind: "browser-token"; readonly token: string; } \| { readonly kind: "user-token"; readonly token: string; } \| { readonly kind: "access-token"; readonly token: string; }` | Yes |  |
 | `fetch` | `undefined \| (input: RequestInfo \| URL, init?: RequestInit) => Promise<Response>` | No | Injected for tests and for runtimes that wrap `fetch`; defaults to the global. |
 | `headers` | `undefined \| Readonly<Record<string, string>>` | No | Extra headers on every request, e.g. a trace id. Never used for credentials, and never the contracts version: `X-Agent-Workspace-Contracts` is always the version this SDK was built against. |
 | `timeoutMs` | `undefined \| number` | No | Abort a request that has produced no response headers within this many milliseconds. |
@@ -95,6 +96,11 @@ workspace API key must never reach a browser, but this token was minted *for* on
 admitted only on the person-facing routes (`me`, `workspaces`, `team.invitations`, the sharing
 policy, `auth.revoke` and `workspaces.select`; ADR-0083), and like the other two bearers never
 `credentials: 'include'`.
+`access-token` (ADR-0161) sends the `awo_live_…` token `aw.auth.exchange` returns: a backend
+acting as the signed-in person, admitted only on the `app-backend` grammar's routes (start a run
+on one of the endpoint client's bound agents, read and interrupt a run, and `me`) and only within
+the person's own role and agent grants. It lasts 300 s, so a backend caches one per person and
+exchanges again when it expires. Like the other bearers it never sets `credentials: 'include'`.
 
 One of:
 
@@ -123,6 +129,13 @@ One of:
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `kind` | `"user-token"` | Yes |  |
+| `token` | `string` | Yes |  |
+
+**`{ readonly kind: "access-token"; readonly token: string; }`**
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"access-token"` | Yes |  |
 | `token` | `string` | Yes |  |
 
 ## AgentWorkspaceError

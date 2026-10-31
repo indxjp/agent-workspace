@@ -125,29 +125,39 @@ function holdPort(port: number): Promise<Server | null> {
   });
 }
 
-/** The first and last port {@link freeDatabasePort} draws from: below the Linux ephemeral range. */
-const DATABASE_PORT_RANGE = { first: 20_000, last: 32_767 } as const;
+/** The range {@link freeLoopbackPorts} draws from: below the Linux ephemeral range (32768-60999). */
+const LOOPBACK_PORT_RANGE = { first: 20_000, last: 32_767 } as const;
 
 /**
- * A loopback port nothing listens on, for the runtime's embedded PostgreSQL. It is drawn at random
- * from {@link DATABASE_PORT_RANGE}, so two runs of this file on one host almost never draw the same
- * one, and no outgoing connection is handed it before the postmaster binds it, as one could be an
- * OS-assigned (ephemeral) port. A port that cannot be bound for any reason is skipped.
+ * `count` distinct loopback ports nothing listens on, for the runtime's listeners and its embedded
+ * PostgreSQL. Each is drawn at random from {@link LOOPBACK_PORT_RANGE}, so two runs of this file on
+ * one host almost never draw the same one, and, being outside the ephemeral range, none is handed
+ * to an outgoing connection (the runtime's own database clients make many) between this probe and
+ * the service binding it. An OS-assigned port is ephemeral: one such port was taken that way and
+ * the start failed with `port <n> (runner) is already in use`. All probes hold their port until
+ * every one is found, so no two are equal. A port that cannot be bound for any reason is skipped.
  */
-async function freeDatabasePort(): Promise<number> {
-  const span = DATABASE_PORT_RANGE.last - DATABASE_PORT_RANGE.first + 1;
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const port = DATABASE_PORT_RANGE.first + Math.floor(Math.random() * span);
-    const server = await holdPort(port).catch(() => null);
-    if (server !== null) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-      return port;
+async function freeLoopbackPorts(count: number, avoid: readonly number[] = []): Promise<number[]> {
+  const span = LOOPBACK_PORT_RANGE.last - LOOPBACK_PORT_RANGE.first + 1;
+  const held: { readonly port: number; readonly server: Server }[] = [];
+  try {
+    for (let attempt = 0; held.length < count && attempt < 50 * count; attempt += 1) {
+      const port = LOOPBACK_PORT_RANGE.first + Math.floor(Math.random() * span);
+      if (avoid.includes(port) || held.some((entry) => entry.port === port)) continue;
+      const server = await holdPort(port).catch(() => null);
+      if (server !== null) held.push({ port, server });
     }
+    if (held.length < count)
+      throw new Error(`no ${String(count)} free loopback ports after many attempts`);
+    return held.map((entry) => entry.port);
+  } finally {
+    await Promise.all(
+      held.map(async ({ server }) => new Promise<void>((resolve) => server.close(() => resolve()))),
+    );
   }
-  throw new Error('no free port for the embedded PostgreSQL after 50 attempts');
 }
 
-const DATABASE_PORT = await freeDatabasePort();
+const [DATABASE_PORT = 0] = await freeLoopbackPorts(1);
 /** The fixed loopback-only role `embedded-db.ts` creates for the embedded database. */
 const EMBEDDED_DATABASE_URL = `postgresql://agent_workspace:agent_workspace_local@127.0.0.1:${String(DATABASE_PORT)}/postgres`;
 
@@ -184,33 +194,10 @@ const INHERITED_VARIABLES_REMOVED = new Set([
 
 const LocalSecretsFileSchema = z.looseObject({ BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12) });
 
-/**
- * Three distinct OS-assigned loopback ports. All probes listen at once before any is released, so
- * the OS cannot hand the same port out twice in a row (it recycles a just-closed one), which made
- * two of the runtime's listeners collide with `port <n> is already in use` (#857).
- */
+/** Three distinct loopback ports for the web, gateway and runner, none the database's. */
 async function freePorts(): Promise<{ web: number; gateway: number; runner: number }> {
-  const probes = [createServer(), createServer(), createServer()];
-  try {
-    const [web, gateway, runner] = await Promise.all(
-      probes.map(
-        async (probe) =>
-          new Promise<number>((resolve, reject) => {
-            probe.once('error', reject);
-            probe.listen(0, '127.0.0.1', () => {
-              const address = probe.address();
-              if (address !== null && typeof address === 'object') resolve(address.port);
-              else reject(new Error('the probe server reported no port'));
-            });
-          }),
-      ),
-    );
-    return { web: web ?? 0, gateway: gateway ?? 0, runner: runner ?? 0 };
-  } finally {
-    await Promise.all(
-      probes.map(async (probe) => new Promise<void>((resolve) => probe.close(() => resolve()))),
-    );
-  }
+  const [web = 0, gateway = 0, runner = 0] = await freeLoopbackPorts(3, [DATABASE_PORT]);
+  return { web, gateway, runner };
 }
 
 interface Ports {

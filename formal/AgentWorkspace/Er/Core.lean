@@ -242,6 +242,8 @@ inductive TableName where
   | workspaces
   | workspacePrincipals
   | workspaceFeatures
+  | webhooks
+  | webhookDeliveries
   deriving DecidableEq, Repr, Inhabited
 
 namespace TableName
@@ -306,6 +308,8 @@ def toWire : TableName → String
   | .workspaces => "workspaces"
   | .workspacePrincipals => "workspace_principals"
   | .workspaceFeatures => "workspace_features"
+  | .webhooks => "webhooks"
+  | .webhookDeliveries => "webhook_deliveries"
 
 /-- The table a SQL name denotes, if any. -/
 def ofSqlName? : String → Option TableName
@@ -367,6 +371,8 @@ def ofSqlName? : String → Option TableName
   | "workspaces" => some .workspaces
   | "workspace_principals" => some .workspacePrincipals
   | "workspace_features" => some .workspaceFeatures
+  | "webhooks" => some .webhooks
+  | "webhook_deliveries" => some .webhookDeliveries
   | _ => none
 
 private theorem ofSqlName?_toWire (t : TableName) : ofSqlName? (toWire t) = some t := by
@@ -382,7 +388,8 @@ instance : WireEnum TableName where
     runtimeProfiles, runtimeVerifications, secrets, sessionMessages, sessionStateBlobs, sessionStateEntries,
     sessionStateStreams, sessionTranscripts, sessions, storageConnections, storageMigrationRuns,
     shareViews,
-    shareRunCharges, shares, skillRevisions, skills, surfaceSessionKeys, triggerDeliveries, triggers, userIdentities, users, workspaces, workspacePrincipals, workspaceFeatures]
+    shareRunCharges, shares, skillRevisions, skills, surfaceSessionKeys, triggerDeliveries, triggers, userIdentities, users, workspaces, workspacePrincipals, workspaceFeatures,
+    webhooks, webhookDeliveries]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -430,6 +437,8 @@ def idKind? : TableName → Option IdKind
   | storageConnections => some .storageConnection
   | storageMigrationRuns => some .storageMigrationRun
   | workspaceFeatures => some .workspaceFeature
+  | webhooks => some .webhook
+  | webhookDeliveries => some .webhookDelivery
   | runs => some .run
   | runTokens => some .runToken
   | runUsageRecords => some .runUsageRecord
@@ -816,7 +825,7 @@ def catalogue : Schema
       { name := "audit_events_actor_principal_workspace_fk", columns := ["workspace_id", "actor_principal_id"], refTable := .workspacePrincipals, refColumns := ["workspace_id", "id"], onDelete := .noAction, inline := false }]
     uniques := []
     checks := [
-      .oneOf "audit_events_action_valid" "action" ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed", "workspace-features-changed"],
+      .oneOf "audit_events_action_valid" "action" ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed", "workspace-features-changed", "user-token-exchanged"],
       .other "audit_events_details_only_agent_created",
       .other "audit_events_actor_label_not_blank",
       .other "audit_events_subject_label_not_blank",
@@ -939,6 +948,7 @@ def catalogue : Schema
       ⟨"client_secret_hash", .text, false⟩,
       ⟨"redirect_uris", .textArray, true⟩,
       ⟨"client_secret_rotated_at", .timestamptz, false⟩,
+      ⟨"oidc_audience", .text, false⟩,
       ⟨"revoked_at", .timestamptz, false⟩,
       ⟨"created_at", .timestamptz, true⟩,
       ⟨"updated_at", .timestamptz, true⟩]
@@ -950,9 +960,10 @@ def catalogue : Schema
       { name := "endpoint_clients_workspace_id_key", columns := ["workspace_id", "id"], kind := .constraint, partialNullColumns := [] },
       { name := "endpoint_clients_workspace_kind_name_key", columns := ["workspace_id", "kind", "name"], kind := .index, partialNullColumns := [] }]
     checks := [
-      .oneOf "endpoint_clients_kind_valid" "kind" ["mcp-project", "a2a-agent", "builder"],
+      .oneOf "endpoint_clients_kind_valid" "kind" ["mcp-project", "a2a-agent", "builder", "app-backend"],
       .other "endpoint_clients_tool_names_mcp_only",
       .other "endpoint_clients_redirect_uris_max",
+      .other "endpoint_clients_oidc_audience_app_backend",
       .other "endpoint_clients_revoked_after_created"] }
   | .fileTexts => {
     table := .fileTexts, source := "file-texts.ts", tsExport := "fileTexts", tenancy := .scoped
@@ -1019,6 +1030,7 @@ def catalogue : Schema
       .other "files_path_no_dot_segments",
       .other "files_storage_key_iff_file",
       .other "files_storage_key_not_blank",
+      .other "files_file_has_object_id",
       .other "files_size_non_negative",
       .other "files_folder_has_no_content"] }
   | .invitations => {
@@ -1512,7 +1524,7 @@ def catalogue : Schema
       ⟨"engine", .text, true⟩,
       ⟨"blob_key", .text, true⟩,
       ⟨"storage_key", .text, true⟩,
-      ⟨"object_id", .uuid, false⟩,
+      ⟨"object_id", .uuid, true⟩,
       ⟨"status", .text, true⟩,
       ⟨"size_bytes", .bigint, true⟩,
       ⟨"sha256", .text, true⟩,
@@ -1890,6 +1902,49 @@ def catalogue : Schema
       { name := "workspace_features_workspace_feature_key", columns := ["workspace_id", "feature"], kind := .constraint, partialNullColumns := [] }]
     checks := [
       .oneOf "workspace_features_feature_valid" "feature" ["chat", "projects", "files", "skills", "connectors", "runs", "sharing", "surfaces", "triggers", "evaluations", "builder"]] }
+  | .webhooks => {
+    table := .webhooks, source := "webhooks.ts", tsExport := "webhooks", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"url", .text, true⟩,
+      ⟨"events", .textArray, true⟩,
+      ⟨"created_at", .timestamptz, true⟩]
+    foreignKeys := [
+      { name := "webhooks_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true }]
+    uniques := [
+      { name := "webhooks_workspace_id_key", columns := ["workspace_id", "id"], kind := .constraint, partialNullColumns := [] }]
+    checks := [
+      .other "webhooks_url_length",
+      .other "webhooks_events_valid"] }
+  | .webhookDeliveries => {
+    table := .webhookDeliveries, source := "webhook-deliveries.ts", tsExport := "webhookDeliveries", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"webhook_id", .uuid, true⟩,
+      ⟨"run_id", .uuid, true⟩,
+      ⟨"event_type", .text, true⟩,
+      ⟨"state", .text, true⟩,
+      ⟨"attempts", .smallint, true⟩,
+      ⟨"next_attempt_at", .timestamptz, true⟩,
+      ⟨"last_attempt_at", .timestamptz, false⟩,
+      ⟨"last_status_code", .integer, false⟩,
+      ⟨"last_error", .text, false⟩,
+      ⟨"delivered_at", .timestamptz, false⟩,
+      ⟨"created_at", .timestamptz, true⟩]
+    foreignKeys := [
+      { name := "webhook_deliveries_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true },
+      { name := "webhook_deliveries_webhook_workspace_fk", columns := ["workspace_id", "webhook_id"], refTable := .webhooks, refColumns := ["workspace_id", "id"], onDelete := .cascade, inline := false },
+      { name := "webhook_deliveries_run_workspace_fk", columns := ["run_id", "workspace_id"], refTable := .runs, refColumns := ["id", "workspace_id"], onDelete := .cascade, inline := false }]
+    uniques := [
+      { name := "webhook_deliveries_webhook_run_key", columns := ["workspace_id", "webhook_id", "run_id"], kind := .index, partialNullColumns := [] }]
+    checks := [
+      .oneOf "webhook_deliveries_state_valid" "state" ["pending", "delivered", "failed"],
+      .other "webhook_deliveries_event_type_valid",
+      .other "webhook_deliveries_delivered_shape"] }
 
 /-! ## Looking things up in a table specification -/
 

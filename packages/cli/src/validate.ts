@@ -85,7 +85,7 @@ interface GcsObjectStoreProbeInput {
   readonly projectId?: string;
 }
 
-export type ObjectStoreProbeInput = S3ObjectStoreProbeInput | GcsObjectStoreProbeInput;
+type ObjectStoreProbeInput = S3ObjectStoreProbeInput | GcsObjectStoreProbeInput;
 
 /** Whether the bucket the profile names is already there. `validate` never creates it. */
 export type ObjectStorePresence = 'present' | 'absent';
@@ -273,104 +273,6 @@ async function probeObjects(
   }
 }
 
-/**
- * The listing seam of doctor's storage-layout check: how many objects sit under `prefix`, at most
- * `cap`. It lives here because this is the one file the CLI may import the bucket clients in (the
- * storage design, §07 rule 1).
- */
-export interface LegacyObjectCounter {
-  readonly bucket: (
-    input: ObjectStoreProbeInput,
-    prefix: string,
-    cap: number,
-    signal: AbortSignal,
-  ) => Promise<number>;
-}
-
-const PAGE_SIZE = 1_000;
-
-async function countS3(
-  input: Extract<ObjectStoreProbeInput, { backend: 's3' }>,
-  prefix: string,
-  cap: number,
-  signal: AbortSignal,
-): Promise<number> {
-  const { ListObjectsV2Command, S3Client } = await importOptionalPeer(
-    '@aws-sdk/client-s3',
-    () => import('@aws-sdk/client-s3'),
-  );
-  const client = new S3Client({
-    region: input.region,
-    forcePathStyle: input.forcePathStyle,
-    credentials: { accessKeyId: input.accessKeyId, secretAccessKey: input.secretAccessKey },
-    ...(input.endpoint === undefined ? {} : { endpoint: input.endpoint }),
-  });
-  try {
-    let counted = 0;
-    let token: string | undefined;
-    do {
-      const page = await client.send(
-        new ListObjectsV2Command({
-          Bucket: input.bucket,
-          Prefix: prefix,
-          MaxKeys: Math.min(PAGE_SIZE, cap - counted),
-          ContinuationToken: token,
-        }),
-        { abortSignal: signal },
-      );
-      counted += page.KeyCount ?? 0;
-      token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
-    } while (token !== undefined && counted < cap);
-    return Math.min(counted, cap);
-  } finally {
-    client.destroy();
-  }
-}
-
-async function countGcs(
-  input: Extract<ObjectStoreProbeInput, { backend: 'gcs' }>,
-  prefix: string,
-  cap: number,
-  signal: AbortSignal,
-  timeoutMs: number,
-): Promise<number> {
-  const { Storage } = await importOptionalPeer(
-    '@google-cloud/storage',
-    () => import('@google-cloud/storage'),
-  );
-  const bucket = new Storage({
-    ...(input.projectId === undefined ? {} : { projectId: input.projectId }),
-    retryOptions: { totalTimeout: Math.max(1, timeoutMs / 1_000) },
-  }).bucket(input.bucket);
-  let counted = 0;
-  let pageToken: string | undefined;
-  do {
-    signal.throwIfAborted();
-    const [files, next] = await Promise.race([
-      bucket.getFiles({
-        prefix,
-        autoPaginate: false,
-        maxResults: Math.min(PAGE_SIZE, cap - counted),
-        ...(pageToken === undefined ? {} : { pageToken }),
-      }),
-      rejectWhenAborted(signal),
-    ]);
-    counted += files.length;
-    const token: unknown = (next as { pageToken?: unknown } | null | undefined)?.pageToken;
-    pageToken = typeof token === 'string' ? token : undefined;
-  } while (pageToken !== undefined && counted < cap);
-  return Math.min(counted, cap);
-}
-
-export function liveLegacyObjectCounter(timeoutMs: number): LegacyObjectCounter {
-  return {
-    bucket: (input, prefix, cap, signal) =>
-      input.backend === 's3'
-        ? countS3(input, prefix, cap, signal)
-        : countGcs(input, prefix, cap, signal, timeoutMs),
-  };
-}
-
 async function probeIdentity(issuer: string, signal: AbortSignal): Promise<void> {
   const discovery = `${issuer.replace(/\/+$/u, '')}/.well-known/openid-configuration`;
   const response = await fetch(discovery, { signal, redirect: 'follow' });
@@ -395,7 +297,7 @@ export function liveProfileProbes(timeoutMs: number): ProfileProbes {
 }
 
 /** How long a probe waits for a store that has not been told to hurry. */
-export const DEFAULT_PROBE_TIMEOUT_MS = 10_000;
+const DEFAULT_PROBE_TIMEOUT_MS = 10_000;
 
 export interface RunProfileProbesOptions {
   readonly probes?: ProfileProbes;
@@ -470,7 +372,7 @@ function relationalTarget(
  * the server reads nothing from them.
  */
 // @story US-STO-10
-export function objectStoreTarget(
+function objectStoreTarget(
   environment: Readonly<Record<string, string | undefined>>,
 ): ObjectStoreProbeInput | null {
   const settings = resolveStorageSettings(environment);

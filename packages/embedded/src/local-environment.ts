@@ -16,8 +16,12 @@
  * `start.environment.policy` (contract C13, SD5) becomes `AW_DEPLOYMENT_POLICY` as canonical JSON. A
  * hand-set `AW_DEPLOYMENT_POLICY` must be a valid policy ceiling whether or not `policy` is sent, and
  * must equal it when it is; with no `policy` a valid hand-set value applies as is, with a warning.
+ *
+ * Issue #1495 (ADR-0160 D5): `start.environment.features` becomes `AW_DEPLOYMENT_FEATURES`, the
+ * comma-separated list the web control plane reads, under the same rules as the policy ceiling.
  */
 import { checkDeploymentPosture, isLoopbackHost } from '@agent-workspace/core/posture';
+import { type FeatureId, FeatureListSchema } from '@indx-workspace/contracts/features';
 import {
   LocalRuntimeCredentialMessageSchema,
   type LocalRuntimeStartMessage,
@@ -75,15 +79,25 @@ export type LocalRuntimeEnvironmentErrorCode =
 /** The variable the project file's policy ceiling travels in (C13, ADR-0102 SD6). */
 const POLICY_VARIABLE = 'AW_DEPLOYMENT_POLICY';
 
+/** The variable the project file's features travel in (ADR-0160 D5), as a comma-separated list. */
+const FEATURES_VARIABLE = 'AW_DEPLOYMENT_FEATURES';
+
 /** The variable `start.environment.modelSecrets` travels in, as a JSON array (issue #661). */
 const MODEL_SECRETS_VARIABLE = 'AW_LOCAL_MODEL_SECRETS';
 
 /**
- * The one warning {@link applyLocalRuntimeEnvironment} returns, word for word from the ADR-0109
- * slice-2 amendment: a hand-set ceiling applies although the project file declares none.
+ * A warning {@link applyLocalRuntimeEnvironment} returns, word for word from the ADR-0109 slice-2
+ * amendment: a hand-set ceiling applies although the project file declares none.
  */
 export const HAND_SET_POLICY_WARNING =
   'warning: AW_DEPLOYMENT_POLICY is set in the environment or .env and agent-workspace.yaml has no policy; that ceiling applies';
+
+/**
+ * A warning {@link applyLocalRuntimeEnvironment} returns, worded as {@link HAND_SET_POLICY_WARNING}:
+ * a hand-set feature list applies although the project file declares none (issue #1495).
+ */
+export const HAND_SET_FEATURES_WARNING =
+  'warning: AW_DEPLOYMENT_FEATURES is set in the environment or .env and agent-workspace.yaml has no features; that list applies';
 
 /**
  * The variables, in the environment or `.env`, that move the runner's or the gateway's port off its
@@ -120,8 +134,9 @@ export type LocalRuntimeVariable =
 
 /**
  * The variable a {@link LocalRuntimeEnvironmentError} names: a C1 {@link LocalRuntimeVariable},
- * `AW_DEPLOYMENT_POLICY`, or (for `withheld_secret_set`) a name from `start.environment.withheld`,
- * which the start message schema has already validated as a secret name. Never a value.
+ * `AW_DEPLOYMENT_POLICY`, `AW_DEPLOYMENT_FEATURES`, or (for `withheld_secret_set`) a name from
+ * `start.environment.withheld`, which the start message schema has already validated as a secret
+ * name. Never a value.
  */
 export type LocalRuntimeEnvironmentVariable = string;
 
@@ -136,6 +151,16 @@ function reservedPortMessage(
   return reserved.variable === undefined
     ? `${taken}; choose another environments.local.port`
     : `${taken} (${reserved.variable} in the environment or .env); change ${reserved.variable} or choose another environments.local.port`;
+}
+
+function invalidValueMessage(variable: LocalRuntimeEnvironmentVariable): string {
+  if (variable === POLICY_VARIABLE) {
+    return `${variable} in the environment or .env must be a JSON policy ceiling (ADR-0102 SD6); unset it, or set policy in agent-workspace.yaml instead`;
+  }
+  if (variable === FEATURES_VARIABLE) {
+    return `${variable} in the environment or .env must be a comma-separated list of feature ids, each once and with the features it needs (ADR-0160 D5); unset it, or set features in agent-workspace.yaml instead`;
+  }
+  return `${variable} in the environment or .env must be a workspace slug: lower-case letters, digits and hyphens, at most 63 characters`;
 }
 
 function environmentErrorMessage(
@@ -154,9 +179,7 @@ function environmentErrorMessage(
         ? `the local runtime binds ${LOCAL_RUNTIME_HOST}: unset HOST or set it to ${LOCAL_RUNTIME_HOST}`
         : `${variable} is set in the environment or .env to a value the local runtime cannot use; unset it, or change the project file instead`;
     case 'invalid_value':
-      return variable === POLICY_VARIABLE
-        ? `${variable} in the environment or .env must be a JSON policy ceiling (ADR-0102 SD6); unset it, or set policy in agent-workspace.yaml instead`
-        : `${variable} in the environment or .env must be a workspace slug: lower-case letters, digits and hyphens, at most 63 characters`;
+      return invalidValueMessage(variable);
     case 'withheld_secret_set':
       return `${variable} is named by secret() and is set in .env; the local runtime holds no secret: remove it from .env and start aw dev with ${variable} in its environment`;
     case 'reserved_port':
@@ -297,6 +320,42 @@ function applyPolicy(
     return [];
   }
   return parsedHandSet === undefined ? [] : [HAND_SET_POLICY_WARNING];
+}
+
+/**
+ * A hand-set `AW_DEPLOYMENT_FEATURES`, parsed as the web control plane parses it (split on `,`, each
+ * id trimmed, one `FeatureListSchema`); refused as `invalid_value`, a blank one included, since only
+ * an unset variable means every feature here.
+ */
+function parseHandSetFeatures(value: string): readonly FeatureId[] {
+  const result = FeatureListSchema.safeParse(value.split(',').map((id) => id.trim()));
+  if (!result.success) throw new LocalRuntimeEnvironmentError('invalid_value', FEATURES_VARIABLE);
+  return result.data;
+}
+
+/** True when both lists hold the same features; order is not meaningful to the control plane. */
+function sameFeatures(left: readonly FeatureId[], right: readonly FeatureId[]): boolean {
+  return left.length === right.length && left.every((id) => right.includes(id));
+}
+
+/**
+ * Map the project file's features (ADR-0160 D5) to `AW_DEPLOYMENT_FEATURES` and return the warnings
+ * to print. A hand-set value must be a valid list, and name the same features when `features` is sent.
+ */
+function applyFeatures(
+  env: Record<string, string | undefined>,
+  features: readonly FeatureId[] | undefined,
+): readonly string[] {
+  const handSet = env[FEATURES_VARIABLE];
+  const parsedHandSet = handSet === undefined ? undefined : parseHandSetFeatures(handSet);
+  if (features !== undefined) {
+    if (parsedHandSet !== undefined && !sameFeatures(parsedHandSet, features)) {
+      throw new LocalRuntimeEnvironmentError('conflicting_value', FEATURES_VARIABLE);
+    }
+    env[FEATURES_VARIABLE] = features.join(',');
+    return [];
+  }
+  return parsedHandSet === undefined ? [] : [HAND_SET_FEATURES_WARNING];
 }
 
 /** A port the service itself would accept from its variable: digits only, in 1..65535. */
@@ -520,7 +579,10 @@ export function applyLocalRuntimeEnvironment(
   ) {
     throw new LocalRuntimeEnvironmentError('invalid_value', 'WORKSPACE_SLUG');
   }
-  const warnings = applyPolicy(env, start.environment.policy);
+  const warnings = [
+    ...applyPolicy(env, start.environment.policy),
+    ...applyFeatures(env, start.environment.features),
+  ];
   // Names only (issue #661): the try page names them in the fix for a missing or rejected key.
   if (start.environment.modelSecrets !== undefined) {
     env[MODEL_SECRETS_VARIABLE] = JSON.stringify(start.environment.modelSecrets);

@@ -3,6 +3,7 @@
  * conflict"; §04 "Saving a file"). Each case runs on the in-memory catalog and on PostgreSQL; the
  * two "servers" are two catalog handles (two connection pools on PostgreSQL) over one object store.
  */
+import { listCatalogFiles } from '@agent-workspace/core/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -598,7 +599,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
         body: null,
       });
 
-      const left = (await catalogs[0].listFiles()).filter((row) => row.kind === 'file');
+      const left = (await listCatalogFiles(catalogs[0])).filter((row) => row.kind === 'file');
       expect(left.map((row) => row.path)).toEqual(['.skills/dup-two/SKILL.md']);
       expect(await walkFiles(shared, 'skills')).toEqual([]);
       expect((await objects.listPage('', { recursive: true })).entries).toHaveLength(1);
@@ -632,7 +633,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       release();
       await expect(stuck).resolves.toBeNull();
 
-      const left = (await catalogs[0].listFiles()).filter((row) => row.kind === 'file');
+      const left = (await listCatalogFiles(catalogs[0])).filter((row) => row.kind === 'file');
       expect(left).toEqual([]);
     });
 
@@ -1109,7 +1110,9 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
       failRemove = false;
       expect(await deleteSkill(shared, catalogs[0], 'dup', rows)).toMatchObject({ status: 204 });
 
-      expect((await catalogs[0].listFiles()).filter((row) => row.kind === 'file')).toEqual([]);
+      expect((await listCatalogFiles(catalogs[0])).filter((row) => row.kind === 'file')).toEqual(
+        [],
+      );
 
       const again = await importSkillWithId(shared, catalogs[0], principal, importBody('N'), rows);
       expect(again.status).toBe(201);
@@ -1153,7 +1156,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
         status: 409,
         body: { error: { code: 'skill_in_use' } },
       });
-      expect((await catalogs[0].listFiles()).map((row) => row.path)).toContain(
+      expect((await listCatalogFiles(catalogs[0])).map((row) => row.path)).toContain(
         '.skills/dup/SKILL.md',
       );
     });

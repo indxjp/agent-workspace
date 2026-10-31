@@ -1,3 +1,4 @@
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -45,5 +46,50 @@ describe('Sidebar', () => {
     expect(render(true)).toContain('href="/admin/storage"');
     expect(render(false)).not.toContain('/admin/storage');
     expect(render(false)).toContain('href="/admin/models"');
+  });
+
+  it('renders byte-identically with no features prop and with every feature on', () => {
+    for (const managers of [true, false]) {
+      const props = {
+        workspace: { name: 'Acme Corp', detail: 'Self-hosted', slug: 'acme' },
+        user: { name: 'Aya Ito', role: 'Owner', initials: 'AI' },
+        managers,
+      };
+      expect(renderToStaticMarkup(createElement(Sidebar, props))).toBe(
+        renderToStaticMarkup(createElement(Sidebar, { ...props, features: FEATURE_IDS })),
+      );
+    }
+  });
+
+  it('omits the entry of a feature that is not listed, and keeps the core entries', () => {
+    const html = renderToStaticMarkup(
+      createElement(Sidebar, {
+        workspace: { name: 'Acme Corp', detail: 'Self-hosted', slug: 'acme' },
+        user: null,
+        managers: false,
+        features: FEATURE_IDS.filter((feature) => feature !== 'files'),
+      }),
+    );
+    expect(html).not.toContain('href="/files"');
+    expect(html).toContain('href="/agents"');
+    expect(html).toContain('href="/skills"');
+  });
+
+  it("shows only chat's and files' entries beside the core ones when just those are on", () => {
+    const html = renderToStaticMarkup(
+      createElement(Sidebar, {
+        workspace: { name: 'Acme Corp', detail: 'Self-hosted', slug: 'acme' },
+        user: null,
+        managers: true,
+        features: ['chat', 'files'],
+      }),
+    );
+    for (const href of ['/', '/files', '/agents', '/admin/models', '/admin/settings']) {
+      expect(html).toContain(`href="${href}"`);
+    }
+    for (const href of ['/projects', '/skills', '/connectors', '/runs', '/admin/shares']) {
+      expect(html).not.toContain(`href="${href}"`);
+    }
+    expect(html).not.toContain('Shared links');
   });
 });

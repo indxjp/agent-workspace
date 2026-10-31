@@ -22,11 +22,7 @@ import {
   type WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
-import type {
-  ObjectStoreCapabilities,
-  ObjectStore,
-  ObjectStoreProvider,
-} from '@agent-workspace/core/storage';
+import type { ObjectStoreCapabilities, ObjectStore, ObjectStoreProvider } from '../storage/objects';
 
 /** What an unusable workspace id reports: every operation on it rejects before reaching a store. */
 const NO_CAPABILITIES: ObjectStoreCapabilities = {

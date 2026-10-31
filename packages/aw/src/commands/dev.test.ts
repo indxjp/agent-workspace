@@ -1977,6 +1977,7 @@ describe('aw dev applies the project file (issue #547)', () => {
     ],
     ['engine', (yaml: string) => `${yaml}engine: pi\n`],
     ['policy', (yaml: string) => `${yaml}policy:\n  permissions:\n    runCommands: false\n`],
+    ['features', (yaml: string) => `${yaml}features: [chat, files]\n`],
   ])(
     'names a changed %s in one restart line and applies nothing for it (#695)',
     async (key, edit) => {

@@ -7,8 +7,9 @@ import type { AgentFrame } from '@indx-workspace/contracts/run-events';
 import { z } from 'zod';
 
 /**
- * The run's answer: the text of its last assistant message. An engine re-sends a growing turn under
- * the same message id, so the last frame is the whole of that turn. `''` when it said nothing.
+ * The text of the last assistant message. An engine re-sends a growing turn under the same message
+ * id, so the last frame is the whole of that message. `''` when it said nothing. This is what a
+ * person rating a run sees (`../runs/feedback.ts`); scoring reads {@link turnAnswer}.
  */
 export function finalAnswer(frames: readonly AgentFrame[]): string {
   const last = frames.findLast(
@@ -21,15 +22,49 @@ export function finalAnswer(frames: readonly AgentFrame[]): string {
     .join('');
 }
 
+/**
+ * What a case is scored against: the assistant text of the whole turn, not only its last message (a
+ * question asked before a tool call is part of the answer, EVL-02). Each message id counts once, as
+ * its last frame, in the order its id first appeared; a message with no id is its own. Messages are
+ * separated by a blank line. `''` when the run said nothing.
+ */
+export function turnAnswer(frames: readonly AgentFrame[]): string {
+  const messages = new Map<string, string>();
+  let anonymous = 0;
+  for (const frame of frames) {
+    if (frame.frame !== 'agent.message' || frame.role !== 'assistant') continue;
+    const text = frame.blocks
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+    // `Map.set` on a known key keeps its first position, so a re-sent message replaces its text only.
+    messages.set(frame.messageId ?? `\0anonymous:${String(anonymous++)}`, text);
+  }
+  return [...messages.values()].filter((text) => text !== '').join('\n\n');
+}
+
 export interface ToolCall {
   readonly name: string;
   readonly input: unknown;
 }
 
-/** Every tool the run called, in call order, with the arguments it called it with. */
+/**
+ * Every tool the run called that succeeded, in call order, with the arguments it called it with. A
+ * call counts when the `agent.tool.result` with its call id says it completed and was not an
+ * error: a call the tool refused, one that failed and one that never answered are not calls the
+ * `tool` check can be satisfied by. The last result for an id is the one that counts.
+ */
 export function toolCalls(frames: readonly AgentFrame[]): readonly ToolCall[] {
+  const succeeded = new Map<string, boolean>();
+  for (const frame of frames) {
+    if (frame.frame === 'agent.tool.result') {
+      succeeded.set(frame.toolCallId, frame.status === 'completed' && !frame.isError);
+    }
+  }
   return frames.flatMap((frame) =>
-    frame.frame === 'agent.tool.call' ? [{ name: frame.name, input: frame.input }] : [],
+    frame.frame === 'agent.tool.call' && succeeded.get(frame.toolCallId) === true
+      ? [{ name: frame.name, input: frame.input }]
+      : [],
   );
 }
 

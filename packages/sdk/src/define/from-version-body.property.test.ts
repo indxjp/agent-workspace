@@ -197,7 +197,7 @@ const input = fc
     };
   });
 
-/** The bundle aw pins for a code tool (`pinnedOf` in packages/aw), as a body carries it. */
+/** The bundle aw pins for a code tool (`pinnedOf()`, written out so the test does not use what it checks), as a body carries it. */
 const bundleOf = (tool: CodeTool) => ({
   tool: tool.name,
   digest: 'b'.repeat(64),

@@ -207,6 +207,73 @@ describe('aw runs start', () => {
   });
 });
 
+describe('aw runs start --idempotency-key (issue #250, S-6)', () => {
+  it('sends the key as the Idempotency-Key header, never in the body, and no header without the flag', async () => {
+    const keyed = await runCli(
+      ['runs', 'start', IDS.agent, '--prompt', 'x', '--idempotency-key', 'order-42', '--json'],
+      { route: runRoutes },
+    );
+    expect(keyed.code).toBe(EXIT_CODE.ok);
+    expect(keyed.calls[0]?.headers.get('idempotency-key')).toBe('order-42');
+    expect(keyed.calls[0]?.json).not.toHaveProperty('idempotencyKey');
+
+    const plain = await runCli(['runs', 'start', IDS.agent, '--prompt', 'x', '--json'], {
+      route: runRoutes,
+    });
+    expect(plain.calls[0]?.headers.has('idempotency-key')).toBe(false);
+  });
+
+  it('exits with the problem code for a key reused with another input', async () => {
+    const run = await runCli(
+      ['runs', 'start', IDS.agent, '--prompt', 'other', '--idempotency-key', 'order-42'],
+      {
+        route: () =>
+          json(409, {
+            error: {
+              code: 'run_idempotency_conflict',
+              message: 'this Idempotency-Key was used with a different request.',
+            },
+          }),
+      },
+    );
+    expect(run.code).toBe(EXIT_CODE.problem);
+    expect(run.stderr).toBe(
+      'error: run_idempotency_conflict: this Idempotency-Key was used with a different request.\n',
+    );
+  });
+
+  it('refuses a blank key as a usage error before any request, and reports the server’s length refusal', async () => {
+    for (const key of ['', '   ']) {
+      const refused = await runCli([
+        'runs',
+        'start',
+        IDS.agent,
+        '--prompt',
+        'x',
+        '--idempotency-key',
+        key,
+      ]);
+      expect(refused.code, JSON.stringify(key)).toBe(EXIT_CODE.usage);
+      expect(refused.stderr).toContain('--idempotency-key must not be blank');
+      expect(refused.calls).toHaveLength(0);
+    }
+    const tooLong = await runCli(
+      ['runs', 'start', IDS.agent, '--prompt', 'x', '--idempotency-key', 'k'.repeat(256)],
+      {
+        route: () =>
+          json(400, {
+            error: {
+              code: 'invalid_idempotency_key',
+              message: 'Idempotency-Key must be 1 to 255 characters.',
+            },
+          }),
+      },
+    );
+    expect(tooLong.code).toBe(EXIT_CODE.problem);
+    expect(tooLong.stderr).toContain('error: invalid_idempotency_key: ');
+  });
+});
+
 describe('aw runs start --file-scope (issue #1539)', () => {
   it('sends each --file-scope as the run file scope, and nothing when absent', async () => {
     const scoped = await runCli(

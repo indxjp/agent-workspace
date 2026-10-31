@@ -167,7 +167,7 @@ const started = await aw.runs.start(agentId, {
 
 ```sh title="aw (illustrative)" claim="illustrative"
 aw runs start <agent> --prompt "Summarise the attached diff" \
-  [--session <id>] [--model <connection-id>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait | --follow]
+  [--session <id>] [--model <connection-id>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--idempotency-key <key>] [--wait | --follow]
 ```
 
 </CodeGroup>
@@ -221,6 +221,15 @@ aw runs start <agent> --prompt "Summarise the attached diff" \
   `404 file_not_found`, and no run is created. From the CLI, repeat `--attach <file>`, where
   `<file>` is a file id or a workspace path.
 </ParamField>
+<ParamField path="idempotencyKey" type="string">
+  Sent as the `Idempotency-Key` header, never in the body (ADR-0151). A start sent again with the
+  same key and the same input answers `202` with the run the first one started, whatever its status
+  now, so a retry after a lost response does not start a second run. The same key with a different
+  input is `409 run_idempotency_conflict`; a blank key or one over 255 characters is
+  `400 invalid_idempotency_key`. A key is scoped to the caller and never freed. From the CLI,
+  `--idempotency-key <key>`; the CLI refuses a blank key before it sends anything. See
+  [Retries and idempotency](/guides/retries-and-idempotency#make-runs-start-idempotent-with-a-key).
+</ParamField>
 
 | Status | Code                            | When                                                                                      |
 | ------ | ------------------------------- | ----------------------------------------------------------------------------------------- |
@@ -230,6 +239,8 @@ aw runs start <agent> --prompt "Summarise the attached diff" \
 | `500`  | `authorisation_undecidable`     | The authorisation decision could not be made (a server defect, not a caller error).       |
 | `400`  | `invalid_agent_id`              | The agent id in the path is not a UUID.                                                   |
 | `400`  | `invalid_body`                  | The body does not parse into a `StartRunRequest`.                                         |
+| `400`  | `invalid_idempotency_key`       | `Idempotency-Key` is blank after trimming, or over 255 characters.                        |
+| `409`  | `run_idempotency_conflict`      | The `Idempotency-Key` already started a run with a different input — send a new key.      |
 | `404`  | `agent_not_found`               | No agent with that id in this workspace.                                                  |
 | `404`  | `file_not_found`                | An attachment names a file the caller may not read, or none.                              |
 | `404`  | `agent_version_not_found`       | `version` names no version of this agent in this workspace.                               |
@@ -429,8 +440,9 @@ not fix it. See [Errors](/guides/errors).
 
 ```ts title="sdk (illustrative)" claim="illustrative"
 for await (const frame of aw.runs.follow(runId, {
-  maxReconnects: 5, //      default 5
-  reconnectDelayMs: 3000, // default 3000, the server's own SSE `retry:` value
+  maxReconnects: 5, //            default 5
+  reconnectDelayMs: 3000, //      default 3000; the stream's own `retry:` replaces it once sent
+  maxReconnectDelayMs: 30_000, // default 30000, the backoff's ceiling
 })) {
   if (frame.kind === 'stream-reset') {
     // discard any transcript you've rendered so far — what follows is not contiguous with it
@@ -447,8 +459,13 @@ aw runs follow <id> [--after <event-id>]
 **SDK:** [`runs.follow`](/reference/sdk/runs#follow)
 
 `follow` reconnects on a dropped connection (any `TransportError` not caused by the caller's own
-`signal`) up to `maxReconnects` times, waiting `reconnectDelayMs` between attempts, resuming from
-the last `run-status`/`runtime` id it saw. It throws once reconnection is exhausted, or immediately
+`signal`) up to `maxReconnects` times, resuming from the last `run-status`/`runtime` id it saw. It
+backs off while reconnects keep failing (issue #250): the base is the stream's last `retry:`, or
+`reconnectDelayMs` before one arrives; the _n_-th reconnect in a row waits a random time between half
+and all of `min(maxReconnectDelayMs, base × 2^(n−1))`; a connection that delivers a new event starts
+the count again; and a `429` or `5xx` with `Retry-After` is waited exactly that long. Bounds that are
+negative, not finite, or with `reconnectDelayMs` above `maxReconnectDelayMs` throw a `TypeError`
+before the first request. [Streaming](/guides/streaming#reconnection) has the details. It throws once reconnection is exhausted, or immediately
 for any error that is not a dropped connection (a `ContractViolationError`, for instance, is never
 retried). A `stream-reset` frame is yielded as-is, not swallowed: it means the server could not
 serve the requested cursor, and a consumer rendering a transcript must discard what it has and

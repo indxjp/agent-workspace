@@ -126,6 +126,18 @@ function modelOverride(
   return { connectionId, model };
 }
 
+/**
+ * `--idempotency-key <key>` (issue #250, S-6): sent as the `Idempotency-Key` header, so a start
+ * retried with the same key and input answers with the run the first one started. A blank key is
+ * refused here, before any request; the server judges the length (`400 invalid_idempotency_key`).
+ */
+function idempotencyKeyOf(context: CommandContext): { readonly idempotencyKey?: string } {
+  const key = value(context, 'idempotency-key');
+  if (key === undefined) return {};
+  if (key.trim() === '') throw new UsageError('--idempotency-key must not be blank');
+  return { idempotencyKey: key };
+}
+
 function eventsOptions(context: CommandContext): RunEventsOptions {
   const after = value(context, 'after');
   return { signal: context.signal, ...(after === undefined ? {} : { after }) };
@@ -153,6 +165,7 @@ async function start(context: CommandContext): Promise<CommandResult | undefined
     );
   }
   const { client, signal, mode, io } = context;
+  const idempotency = idempotencyKeyOf(context);
   const prompt = await promptOf(context);
   const outputSchema = await outputSchemaOf(context);
   const fileScope = values(context, 'file-scope');
@@ -166,6 +179,7 @@ async function start(context: CommandContext): Promise<CommandResult | undefined
       ...(outputSchema === undefined ? {} : { outputSchema }),
       ...(fileScope.length === 0 ? {} : { fileScope }),
       ...(attachments.length === 0 ? {} : { attachments }),
+      ...idempotency,
     },
     { signal },
   );
@@ -216,7 +230,7 @@ async function outputs(context: CommandContext): Promise<CommandResult> {
 export const runCommands: readonly Command[] = [
   command(
     'runs start',
-    '<agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait|--follow] [--fail-on-error]',
+    '<agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--idempotency-key <key>] [--wait|--follow] [--fail-on-error]',
     'Queue a run, and optionally wait for or follow it',
     start,
   ),

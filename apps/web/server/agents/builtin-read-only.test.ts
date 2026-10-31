@@ -36,6 +36,8 @@ import type { AgentStoreProvider } from './store';
 const WORKSPACE = '66666666-6666-4666-8666-666666666666';
 const OWNER_PRINCIPAL = 'a0000000-0000-4000-8000-000000000001';
 const ROLE_HEADER = 'x-test-role';
+/** Set to give the key the scope of an `a2a-agent` endpoint, which cannot read the agent routes. */
+const SCOPED_HEADER = 'x-test-scoped';
 
 let builtinId: string;
 let ordinaryId: string;
@@ -107,6 +109,9 @@ beforeEach(async () => {
                 workspaceId: WORKSPACE,
                 role,
                 label: `${role} key`,
+                ...(request.headers.has(SCOPED_HEADER)
+                  ? { scope: { kind: 'a2a-agent' as const, id: crypto.randomUUID() } }
+                  : {}),
               }),
         );
       },
@@ -120,10 +125,14 @@ afterEach(() => {
 
 const routeContext = (id: string) => ({ params: Promise.resolve({ id }) });
 
-function call(method: string, role: Role, body?: unknown): Request {
+function call(method: string, role: Role, body?: unknown, scoped = false): Request {
   return new Request('http://localhost/api/agents/x', {
     method,
-    headers: { 'Content-Type': 'application/json', [ROLE_HEADER]: role },
+    headers: {
+      'Content-Type': 'application/json',
+      [ROLE_HEADER]: role,
+      ...(scoped ? { [SCOPED_HEADER]: 'yes' } : {}),
+    },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
@@ -183,6 +192,13 @@ describe.each(WRITES)('%s', (_name, run, method, body, ordinaryStatus) => {
       });
     },
   );
+
+  it('answers a credential that cannot read agents the 404 of a missing agent, not the built-in refusal (SEC-12)', async () => {
+    const missing = '55555555-5555-4555-8555-555555555555';
+    const absent = await answer(run, call(method, 'owner', body, true), missing);
+    expect(absent).toEqual({ status: 404, code: 'agent_not_found' });
+    expect(await answer(run, call(method, 'owner', body, true), builtinId)).toEqual(absent);
+  });
 
   it('does not give the refusal to an ordinary agent', async () => {
     const outcome = await answer(run, call(method, 'owner', body), ordinaryId);

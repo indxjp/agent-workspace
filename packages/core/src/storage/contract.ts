@@ -463,6 +463,55 @@ export function defineObjectStoreContract(
         });
       });
 
+      // #1835 (STO-509): a write-back's deadline must stop a write or a read the store's SDK holds.
+      it('write() with a signal already aborted rejects with its reason, writes nothing and cancels the body', async () => {
+        await withStore(async (store) => {
+          const stopped = new Error('stopped before the write');
+          let cancelled: unknown;
+          const body = new ReadableStream<Uint8Array>({
+            cancel(reason) {
+              cancelled = reason;
+            },
+          });
+          await expect(
+            store.write('aborted.txt', body, { signal: AbortSignal.abort(stopped) }),
+          ).rejects.toBe(stopped);
+          expect(cancelled).toBe(stopped);
+          expect(await store.head('aborted.txt')).toBeNull();
+        });
+      });
+
+      it('write() whose signal aborts while the body is still open rejects and leaves the key as it was', async () => {
+        await withStore(async (store) => {
+          await store.write('kept.txt', utf8('before'), {});
+          const controller = new AbortController();
+          const stalled = new ReadableStream<Uint8Array>({
+            start(streamController) {
+              streamController.enqueue(utf8('partial'));
+            },
+          });
+          const writing = store.write('kept.txt', stalled, { signal: controller.signal });
+          setTimeout(() => controller.abort(new Error('the deadline passed')), 50);
+          await expect(writing).rejects.toThrow();
+          expect(await textAt(store, 'kept.txt')).toBe('before');
+        });
+      });
+
+      it('read() with a signal already aborted rejects, and a body whose signal aborts errors', async () => {
+        await withStore(async (store) => {
+          await store.write('r.bin', bytesToStream(new Uint8Array(200_000)), {});
+          const stopped = new Error('stopped before the read');
+          await expect(store.read('r.bin', { signal: AbortSignal.abort(stopped) })).rejects.toBe(
+            stopped,
+          );
+
+          const controller = new AbortController();
+          const found = await store.read('r.bin', { signal: controller.signal });
+          controller.abort(new Error('stopped mid-read'));
+          await expect(streamToBytes(found!.body)).rejects.toThrow();
+        });
+      });
+
       it('head(), read() and write() refuse an unsafe key like put() does', async () => {
         await withStore(async (store) => {
           await expect(store.write('../x', utf8('x'), {})).rejects.toThrow(UnsafeObjectKeyError);
@@ -1030,25 +1079,32 @@ export function defineOwnPagingContract(
   setup: () => Promise<ObjectStoreContractFixture>,
 ): void {
   describe(`ObjectStore own paging — ${label}`, () => {
-    async function withStore(run: (store: ObjectStore) => Promise<void>): Promise<void> {
-      const { provider, teardown } = await setup();
+    async function withStore(
+      run: (store: ObjectStore, fixture: ObjectStoreContractFixture) => Promise<void>,
+    ): Promise<void> {
+      const fixture = await setup();
       try {
-        await run(provider.forWorkspace(WORKSPACE_A));
+        await run(fixture.provider.forWorkspace(WORKSPACE_A), fixture);
       } finally {
-        await teardown();
+        await fixture.teardown();
       }
     }
 
     it('pages more than one default page in key order, clamping a larger limit to 1000', async () => {
-      await withStore(async (store) => {
+      await withStore(async (store, { plantRaw }) => {
         const expected = Array.from(
           { length: 1001 },
           (_, index) => `big/${String(index).padStart(4, '0')}.txt`,
         );
+        // Seeded the way a foreign tool fills the folder where the backend allows it: a store
+        // write is durable (two fsyncs on a folder), and 2,002 fsyncs beside the parallel suite's
+        // disk traffic took this test past its timeout. Paging, not the write path, is under test.
+        const seed = (key: string): Promise<unknown> =>
+          plantRaw === undefined
+            ? store.write(key, utf8('x'), {})
+            : plantRaw(`${workspaceFolder(WORKSPACE_A)}${key}`, utf8('x'));
         for (let from = 0; from < expected.length; from += 50) {
-          await Promise.all(
-            expected.slice(from, from + 50).map((key) => store.write(key, utf8('x'), {})),
-          );
+          await Promise.all(expected.slice(from, from + 50).map(seed));
         }
 
         const first = await store.listPage('big');

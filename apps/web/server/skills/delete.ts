@@ -30,7 +30,7 @@ import {
   skillRevisionsPrefix,
   skillRowFolder,
 } from './keys';
-import { readWhole } from '@agent-workspace/core/storage/streams';
+import { readWhole } from '../storage/objects';
 import type { SkillObjects } from '../storage/store';
 import { withSkillMetaColumn } from './meta-column';
 import { clearLegacyPendingSkillDelete, pendingSkillDelete } from './pending-delete';

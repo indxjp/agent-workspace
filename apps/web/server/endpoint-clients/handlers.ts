@@ -17,6 +17,7 @@ import {
   UpdateEndpointClientRequestSchema,
   type EndpointClientProblemCode,
   type EndpointClientResource,
+  type UpdateEndpointClientRequest,
 } from '@indx-workspace/contracts/endpoint-clients';
 import type { ZodError } from 'zod';
 
@@ -116,6 +117,53 @@ const apiKeyRefusal = (): ApiResult =>
 
 const bodyOf = (client: EndpointClientResource) => ({ endpointClient: client });
 
+/**
+ * The kinds whose tokens act as a person rather than as the client's creator: a `builder` token is
+ * the consenting member's, an `app-backend` token any member's who signs in to the app (ADR-0161
+ * D4). Only an owner or admin creates, changes or rotates the secret of one.
+ */
+const actsAsAnyMember = (kind: EndpointClientResource['kind']): boolean =>
+  kind === 'builder' || kind === 'app-backend';
+
+const isOwnerOrAdmin = (principal: Principal): boolean =>
+  principal.role === 'owner' || principal.role === 'admin';
+
+/** The `400 endpoint_client_invalid` a PATCH that does not fit the stored client's kind gets. */
+function patchKindRefusal(
+  kind: EndpointClientResource['kind'],
+  patch: UpdateEndpointClientRequest,
+): ApiResult | null {
+  const narrowsTools = patch.toolNames !== undefined && patch.toolNames !== null;
+  if (kind !== 'app-backend' && patch.oidcAudience !== undefined) {
+    return domainProblem(
+      'endpoint_client_invalid',
+      'oidcAudience applies to app-backend clients only.',
+    );
+  }
+  if (kind === 'builder' && (patch.agentIds !== undefined || narrowsTools)) {
+    return domainProblem(
+      'endpoint_client_invalid',
+      'a builder client names no agent and no toolNames.',
+    );
+  }
+  if (kind === 'app-backend' && (narrowsTools || patch.redirectUris !== undefined)) {
+    return domainProblem(
+      'endpoint_client_invalid',
+      'an app-backend client has no toolNames and no redirect URIs.',
+    );
+  }
+  if (kind === 'a2a-agent') {
+    const agents = patch.agentIds === undefined ? 1 : new Set(patch.agentIds).size;
+    if (agents !== 1 || narrowsTools) {
+      return domainProblem(
+        'endpoint_client_invalid',
+        'an a2a-agent client names exactly one agent and no toolNames.',
+      );
+    }
+  }
+  return null;
+}
+
 export async function list(request: Request): Promise<ApiResult> {
   return authorise(request, 'not-applicable', async ({ principal }) => {
     const runtime = applicationContext()?.endpointClients ?? null;
@@ -138,9 +186,10 @@ export async function create(request: Request): Promise<ApiResult> {
     if (!parsed.success) return invalidField(parsed.error);
     const input = parsed.data;
     // A builder token carries the consenting member's whole role, so only an owner or admin
-    // creates one; otherwise a builder could phish an owner's consent onto their own redirect.
-    if (input.kind === 'builder' && principal.role !== 'owner' && principal.role !== 'admin') {
-      return problem(403, 'forbidden', 'only an owner or admin creates a builder client.');
+    // creates one; otherwise a builder could phish an owner's consent onto their own redirect. An
+    // app-backend token acts as any member who signs in to the app (ADR-0161 D4).
+    if (actsAsAnyMember(input.kind) && !isOwnerOrAdmin(principal)) {
+      return problem(403, 'forbidden', `only an owner or admin creates a ${input.kind} client.`);
     }
 
     const refused = await unrunnableAgent(runtime, principal, input.agentIds);
@@ -151,6 +200,7 @@ export async function create(request: Request): Promise<ApiResult> {
       kind: input.kind,
       agentIds: input.agentIds,
       toolNames: input.toolNames ?? null,
+      oidcAudience: input.oidcAudience ?? null,
       actsForPrincipalId: principal.ownerPrincipalId,
       createdByPrincipalId: principal.ownerPrincipalId,
     });
@@ -198,27 +248,11 @@ export async function update(request: Request, id: unknown): Promise<ApiResult> 
         'a revoked endpoint client cannot be changed.',
       );
     }
-    if (client.kind === 'builder' && principal.role !== 'owner' && principal.role !== 'admin') {
-      return problem(403, 'forbidden', 'only an owner or admin changes a builder client.');
+    if (actsAsAnyMember(client.kind) && !isOwnerOrAdmin(principal)) {
+      return problem(403, 'forbidden', `only an owner or admin changes a ${client.kind} client.`);
     }
-    if (
-      client.kind === 'builder' &&
-      (patch.agentIds !== undefined || (patch.toolNames !== undefined && patch.toolNames !== null))
-    ) {
-      return domainProblem(
-        'endpoint_client_invalid',
-        'a builder client names no agent and no toolNames.',
-      );
-    }
-    if (client.kind === 'a2a-agent') {
-      const agents = patch.agentIds === undefined ? 1 : new Set(patch.agentIds).size;
-      if (agents !== 1 || (patch.toolNames !== undefined && patch.toolNames !== null)) {
-        return domainProblem(
-          'endpoint_client_invalid',
-          'an a2a-agent client names exactly one agent and no toolNames.',
-        );
-      }
-    }
+    const misfit = patchKindRefusal(client.kind, patch);
+    if (misfit !== null) return misfit;
     if (patch.agentIds !== undefined) {
       const refused = await unrunnableAgent(runtime, principal, patch.agentIds);
       if (refused !== null) return agentNotRunnable(refused);
@@ -293,12 +327,16 @@ export async function mintKey(request: Request, id: unknown): Promise<ApiResult>
     const parsed = MintEndpointKeyRequestSchema.safeParse(raw.value);
     if (!parsed.success) return invalidField(parsed.error);
 
-    // A builder client is reached by OAuth consent alone; a static key would carry no member.
+    // A builder client is reached by OAuth consent alone; a static key would carry no member. An
+    // app-backend client is reached by the ID-token exchange alone (ADR-0161 D4): a key would act
+    // as its creator, which is what the exchange exists to avoid.
     const client = await runtime.get(principal.workspaceId, clientId);
-    if (client?.kind === 'builder') {
+    if (client?.kind === 'builder' || client?.kind === 'app-backend') {
       return domainProblem(
         'endpoint_client_invalid',
-        'a builder client authorizes through OAuth and cannot mint keys.',
+        `a ${client.kind} client cannot mint keys; its tokens come from ${
+          client.kind === 'builder' ? 'OAuth consent' : 'POST /api/auth/token-exchange'
+        }.`,
       );
     }
 
@@ -371,8 +409,8 @@ export async function rotateSecret(request: Request, id: unknown): Promise<ApiRe
     // A rotated secret mints tokens that act as a consenting member, so a builder client's
     // credentials are an owner's or admin's to change, as its creation is.
     const existing = await runtime.get(principal.workspaceId, clientId);
-    if (existing?.kind === 'builder' && principal.role !== 'owner' && principal.role !== 'admin') {
-      return problem(403, 'forbidden', 'only an owner or admin changes a builder client.');
+    if (existing !== null && actsAsAnyMember(existing.kind) && !isOwnerOrAdmin(principal)) {
+      return problem(403, 'forbidden', `only an owner or admin changes a ${existing.kind} client.`);
     }
     const minted = await mintClientSecret();
     const outcome = await runtime.rotateSecret(principal.workspaceId, clientId, minted.secretHash);

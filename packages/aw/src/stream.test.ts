@@ -190,4 +190,38 @@ describe('renderFrame', () => {
       JSON.stringify({ frame: 'agent.telepathy', engine: ENGINE, raw: null }),
     ]);
   });
+
+  it('renders model and server text with every control sequence dropped, for a human only', () => {
+    const hostile = 'a\x1b[2Jb\x1b]0;pwned\x07c\x9b31md\x7fe\x00f\rg';
+    const clean = 'abc31mdefg';
+    const message = agent('agent.message', {
+      messageId: 'm1',
+      role: 'assistant',
+      blocks: [{ type: 'text', text: `${hostile}\nnext\tline` }],
+    });
+    expect(renderFrame(message, HUMAN)).toEqual([`${clean}\nnext\tline`]);
+    const delta = agent('agent.message.delta', { messageId: 'm1', block: 'text', text: hostile });
+    expect(renderFrame(delta, HUMAN)).toEqual([clean]);
+    const call = agent('agent.tool.call', {
+      toolCallId: 't1',
+      name: hostile,
+      kind: 'other',
+      input: {},
+    });
+    expect(renderFrame(call, HUMAN)).toEqual([`tool ${clean} (other) {}`]);
+    const result = agent('agent.tool.result', {
+      toolCallId: hostile,
+      status: 'completed',
+      output: hostile,
+      isError: false,
+    });
+    expect(renderFrame(result, HUMAN)).toEqual([`tool result ${clean} completed: ${clean}`]);
+    const failed: RunEventFrame = {
+      kind: 'run-failed',
+      data: { message: hostile, status: 'failed' },
+    };
+    expect(renderFrame(failed, HUMAN)).toEqual([`run failed: ${clean} (status failed)`]);
+    // The machine-readable modes carry the value as it is: JSON escapes it.
+    expect(renderFrame(message, JSONL)[0]).toContain('\\u001b[2J');
+  });
 });

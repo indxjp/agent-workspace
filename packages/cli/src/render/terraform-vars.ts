@@ -31,6 +31,7 @@ export interface TerraformVariablesArtefact {
 /** The `.env` values a module takes as variables; unset values are not rendered. */
 export interface TerraformVariableOptions {
   readonly deploymentPolicy?: string | undefined;
+  readonly deploymentFeatures?: string | undefined;
   readonly publicUrl?: string | undefined;
 }
 
@@ -42,14 +43,16 @@ export interface TerraformVariableOptions {
  * hand-written HCL does.
  *
  * `deploymentPolicy` is the policy ceiling JSON `.env` carries as `AW_DEPLOYMENT_POLICY`; only the
- * gcp-cloudrun module declares `deployment_policy`, so no other module is given it. `publicUrl` is
+ * gcp-cloudrun module declares `deployment_policy`, so no other module is given it.
+ * `deploymentFeatures` is the comma-separated feature list `.env` carries as `AW_DEPLOYMENT_FEATURES`
+ * (ADR-0160 D5); it is the gcp-cloudrun module's `deployment_features`, likewise. `publicUrl` is
  * the origin `.env` carries as `AW_PUBLIC_URL` (ADR-0135); the gcp-cloudrun and azure-container-apps
  * modules both declare `public_url`.
  */
 export function renderTerraformVariables(
   profile: DeploymentProfile,
   images: DeploymentImages,
-  { deploymentPolicy, publicUrl }: TerraformVariableOptions = {},
+  { deploymentPolicy, deploymentFeatures, publicUrl }: TerraformVariableOptions = {},
 ): TerraformVariablesArtefact | null {
   const module = TERRAFORM_MODULES[profile.cloud];
   if (module === null) return null;
@@ -63,6 +66,9 @@ export function renderTerraformVariables(
     ...(deploymentPolicy === undefined || module !== 'gcp-cloudrun'
       ? {}
       : { deployment_policy: deploymentPolicy }),
+    ...(deploymentFeatures === undefined || module !== 'gcp-cloudrun'
+      ? {}
+      : { deployment_features: deploymentFeatures }),
     ...(publicUrl === undefined ? {} : { public_url: publicUrl }),
     images: {
       web: images.web,

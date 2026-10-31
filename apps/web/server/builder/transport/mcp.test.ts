@@ -12,10 +12,12 @@ import type { BuilderPorts } from '../tools/types';
 import type { BuilderRunReader } from './call-context';
 import {
   createBuilderCallerVerifier,
+  MISSING_TOOL_USE_ID,
   serveBuilderMcp,
   type BuilderCallerVerifier,
   type BuilderDoor,
 } from './mcp';
+import { BUILDER_DOOR_RATE_LIMITS, resetBuilderDoorLimits } from './limits';
 
 const RUN_IDENTITY = {
   kind: 'run',
@@ -60,6 +62,7 @@ const call = (method: string, params?: unknown): unknown => ({
 afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  resetBuilderDoorLimits();
 });
 
 const readRun = vi.fn<BuilderRunReader>(() =>
@@ -333,6 +336,87 @@ describe('POST /api/builder/mcp (#1846)', () => {
     expect(new Set(ids).size).toBe(2);
     for (const id of ids) expect(id).not.toMatch(/^(client-id|7)$/);
     expect(await journalled()).toBe(2);
+  });
+
+  it.each([
+    ['no _meta', {}],
+    ['another _meta key', { _meta: { callId: 'client-id' } }],
+    ['an empty id', { _meta: { 'claudecode/toolUseId': '' } }],
+    ['an id over 128 characters', { _meta: { 'claudecode/toolUseId': 'x'.repeat(129) } }],
+    ['an id that is not a string', { _meta: { 'claudecode/toolUseId': 7 } }],
+  ])(
+    'refuses a write or spend tool when the request carries %s, before any port (AUD-07)',
+    async (_label, meta) => {
+      const { ports, reached, journalled } = spyPorts();
+      for (const name of ['draft_save', 'evals_run', 'trial_run']) {
+        const params = { name, arguments: {}, ...meta };
+        const response = await serveBuilderMcp(
+          rpc(call('tools/call', params)),
+          door(allow, { ports }),
+        );
+        const answer = await toolAnswer(response);
+        expect(answer.isError, name).toBe(true);
+        expect(answer.result, name).toMatchObject({
+          ok: false,
+          code: 'invalid_arguments',
+          details: [MISSING_TOOL_USE_ID],
+        });
+      }
+      expect(reached).not.toHaveBeenCalled();
+      expect(await journalled()).toBe(0);
+    },
+  );
+
+  it('lets a write that carries a tool-use id through to the core', async () => {
+    const { ports, reached } = spyPorts();
+    const params = {
+      name: 'draft_save',
+      arguments: {},
+      _meta: { 'claudecode/toolUseId': 'toolu_02' },
+    };
+    const answer = await toolAnswer(
+      await serveBuilderMcp(rpc(call('tools/call', params)), door(allow, { ports })),
+    );
+    expect(answer.result).toMatchObject({ ok: false, code: 'invalid_arguments' });
+    expect(answer.result).not.toMatchObject({ details: [MISSING_TOOL_USE_ID] });
+    expect(recordedIds(reached)).toEqual(['toolu_02']);
+  });
+
+  describe('rate limit per run (SEC-14)', () => {
+    const { callsPerMinutePerRun } = BUILDER_DOOR_RATE_LIMITS;
+    const listing = (verifyCaller: BuilderCallerVerifier) =>
+      serveBuilderMcp(rpc(call('tools/list')), door(verifyCaller));
+    const otherRun: BuilderCallerVerifier = () =>
+      Promise.resolve({ ...CALLER, caller: { ...CALLER.caller, runId: 'run-other' } });
+
+    it('pins the limit at 120 requests a minute', () => {
+      expect(BUILDER_DOOR_RATE_LIMITS).toEqual({ callsPerMinutePerRun: 120 });
+    });
+
+    it('answers 429 builder_rate_limited with Retry-After once a run passes the limit, whoever its caller is', async () => {
+      for (let sent = 0; sent < callsPerMinutePerRun; sent += 1) {
+        expect((await listing(allow)).status).toBe(200);
+      }
+      const limited = await listing(allow);
+      expect(limited.status).toBe(429);
+      expect(Number(limited.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
+      expect(await limited.json()).toMatchObject({ error: { code: 'builder_rate_limited' } });
+      // A reads-only run is counted under the same run id as the person's.
+      expect((await listing(readOnly)).status).toBe(429);
+    });
+
+    it('counts per run: another run is still admitted', async () => {
+      for (let sent = 0; sent <= callsPerMinutePerRun; sent += 1) await listing(allow);
+      expect((await listing(allow)).status).toBe(429);
+      expect((await listing(otherRun)).status).toBe(200);
+    });
+
+    it('counts nothing for a token that does not verify, and refuses it first', async () => {
+      for (let sent = 0; sent <= callsPerMinutePerRun; sent += 1) {
+        expect((await listing(refuse)).status).toBe(403);
+      }
+      expect((await listing(allow)).status).toBe(200);
+    });
   });
 
   it('answers any other method with -32601', async () => {

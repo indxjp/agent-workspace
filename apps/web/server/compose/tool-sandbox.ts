@@ -14,7 +14,7 @@ import {
 } from '@indx-workspace/contracts/agent-versions';
 
 import { DomainError } from '../errors';
-import { isStorageConnectionSecretName } from '../secrets/contract';
+import { isPlatformOwnedSecretName } from '../secrets/contract';
 
 /** Used when an entry pinned no `timeoutMs`; `aw push` always records one. */
 const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
@@ -70,9 +70,10 @@ export async function buildToolSandboxRequest(
 
   const env: Record<string, string> = {};
   for (const name of [...secretNames].toSorted()) {
-    // A storage connection's credential is never a tool's, even for a version stored before the
-    // contracts refused the name: it is not read, and the tool is refused as for a missing secret.
-    const value = isStorageConnectionSecretName(name) ? null : await sources.secret(name);
+    // A platform-owned credential (a storage connection's, a webhook's signing secret) is never a
+    // tool's, even for a version stored before the name was refused: it is not read, and the tool
+    // is refused as for a missing secret.
+    const value = isPlatformOwnedSecretName(name) ? null : await sources.secret(name);
     if (value === null) {
       throw refuse(
         'code_tool_secret_missing',

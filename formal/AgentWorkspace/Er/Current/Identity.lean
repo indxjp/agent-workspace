@@ -12,8 +12,8 @@ closed-set checks, all compared with the live Drizzle schema and the 0031 snapsh
 suite), plus the one thing `Er/Core.lean` leaves to the clusters: the **meaning of every other
 check**.
 
-`Er/Core.lean` records 36 checks of these tables only by name (`Check.other`), and gives only
-`workspace_principals_source_xor` a semantics. This module gives each of the 36 a `CheckExpr`: a
+`Er/Core.lean` records 37 checks of these tables only by name (`Check.other`), and gives only
+`workspace_principals_source_xor` a semantics. This module gives each of the 37 a `CheckExpr`: a
 small SQL expression language whose `render` is exactly the text `drizzle-kit` stored in
 the latest snapshot (`Er.Snapshot.file`) (the conformance suite compares them), and whose `eval` is
 SQL's three-valued logic — a check passes unless its expression is `FALSE`.
@@ -97,7 +97,7 @@ quote an element). -/
 def arrayCardinality (s : String) : Nat :=
   if s == "{}" then 0 else (s.toList.filter (· == ',')).length + 1
 
-/-- The shapes the 36 non-closed-set checks of the identity tables take. -/
+/-- The shapes the 37 non-closed-set checks of the identity tables take. -/
 @[aw_spec (ts := "packages/core/src/db/schema/workspace-principals.ts#workspacePrincipals")
   (ts := "packages/core/src/db/schema/browser-tokens.ts#browserTokens")
   (ts := "packages/core/src/db/schema/invitations.ts#invitations")
@@ -215,7 +215,7 @@ def CheckExpr.render (table : String) : CheckExpr → String
   | .nullOrDistinct a b => quote table a ++ " is null or " ++ quote table a ++ " <> " ++ quote table b
   | .atMostElements c n => "cardinality(" ++ quote table c ++ ") <= " ++ toString n
 
-/-! ### The 36 checks -/
+/-! ### The 37 checks -/
 
 /-- Every non-closed-set check of the identity tables, with its meaning, table by table in
 `tables` order and, within a table, in the order `catalogue` lists them. -/
@@ -271,6 +271,8 @@ def checks : List (TableName × String × CheckExpr) :=
    (.endpointClients, "endpoint_clients_tool_names_mcp_only",
      .nullOrEquals "tool_names" "kind" "mcp-project"),
    (.endpointClients, "endpoint_clients_redirect_uris_max", .atMostElements "redirect_uris" 10),
+   (.endpointClients, "endpoint_clients_oidc_audience_app_backend",
+     .valueIffPresent "kind" ["app-backend"] ["oidc_audience"]),
    (.endpointClients, "endpoint_clients_revoked_after_created",
      .nullOr "revoked_at" .ge "created_at"),
    (.oauthTokens, "oauth_tokens_code_fields",
@@ -281,7 +283,7 @@ def checks : List (TableName × String × CheckExpr) :=
 def checksOf (t : TableName) : List (String × CheckExpr) :=
   (checks.filter (·.1 == t)).map (·.2)
 
-/-- The meaning of a named check, if it is one of the 36. -/
+/-- The meaning of a named check, if it is one of the 37. -/
 def semantics? (n : String) : Option CheckExpr := (checks.find? (·.2.1 == n)).map (·.2.2)
 
 /-- The names of the checks `catalogue` records without a semantics, for one table. -/
@@ -292,7 +294,7 @@ def otherCheckNames (t : TableName) : List String :=
 
 /-! ## Sample rows: what each check accepts and refuses
 
-For every one of the 36 checks, rows it accepts and rows it refuses, chosen at the boundaries the
+For every one of the 37 checks, rows it accepts and rows it refuses, chosen at the boundaries the
 check draws (a `NULL`, an equal timestamp, a 63- and a 64-character slug, a tab-only name, a
 second `@`, a ten- and an eleven-element array). The T0 theorems `<check>_separates_its_samples` pin each verdict, and the vectors carry
 them. Each row holds only the columns its check reads. -/
@@ -431,6 +433,10 @@ def samples : List (String × List Row × List Row) :=
      [row [("redirect_uris", "{}")], row [("redirect_uris", "{https://a.example/cb}")],
       row [("redirect_uris", "{a,b,c,d,e,f,g,h,i,j}")]],
      [row [("redirect_uris", "{a,b,c,d,e,f,g,h,i,j,k}")]]),
+   ("endpoint_clients_oidc_audience_app_backend",
+     [row [("kind", "app-backend"), ("oidc_audience", "portal-web")], row [("kind", "mcp-project")],
+      row [("kind", "builder")]],
+     [row [("kind", "app-backend")], row [("kind", "a2a-agent"), ("oidc_audience", "portal-web")]]),
    ("endpoint_clients_revoked_after_created",
      [row [("created_at", "10")], row [("created_at", "10"), ("revoked_at", "10")]],
      [row [("created_at", "10"), ("revoked_at", "9")]]),

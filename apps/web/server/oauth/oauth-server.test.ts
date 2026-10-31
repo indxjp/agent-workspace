@@ -64,6 +64,10 @@ function fakeTokens(rows: Row[]): OAuthTokenRepository {
       rows.push({ ...input, usedAt: null, revokedAt: null });
       return Promise.resolve();
     },
+    issueExchanged: (input) => {
+      rows.push({ ...input, usedAt: null, revokedAt: null });
+      return Promise.resolve();
+    },
     consume: (kind, tokenHash, clientId): Promise<OAuthConsumeOutcome> => {
       const row = rows.find(
         (r) => r.kind === kind && r.tokenHash === tokenHash && r.clientId === clientId,
@@ -142,6 +146,7 @@ function client(over: Partial<OAuthClient> & Pick<OAuthClient, 'id' | 'name'>): 
     actsForPrincipalId: ownerId,
     clientSecretHash: null,
     redirectUris: [REDIRECT],
+    oidcAudience: null,
     agentIds: ['agent-1'],
     resourcePath: '/mcp/projects/docs',
     ...over,
@@ -210,6 +215,8 @@ beforeEach(async () => {
         audits.push({ workspaceId, actor, event });
         return Promise.resolve();
       },
+      findMember: () => Promise.resolve(null),
+      issueExchanged: () => Promise.reject(new Error('the exchange is not under test here')),
     },
   });
 });
@@ -333,6 +340,8 @@ describe('discovery documents', () => {
         agentNames: () => Promise.reject(new Error('no database')),
         tokens: () => Promise.reject(new Error('no database')),
         audit: () => Promise.reject(new Error('no database')),
+        findMember: () => Promise.reject(new Error('no database')),
+        issueExchanged: () => Promise.reject(new Error('no database')),
       },
     });
     const mcpOut = await send(
@@ -916,6 +925,31 @@ describe('a builder client (#1846 slice 5a)', () => {
     expect(out.response.status).toBe(400);
     expect(out.json()).toMatchObject({ error: 'unauthorized_client' });
     expect(rows).toEqual([]);
+  });
+});
+
+describe('POST /oauth/token: an app-backend client (ADR-0161 D4)', () => {
+  it('is unauthorized_client for every grant: its tokens come from the ID-token exchange', async () => {
+    const appBackend = client({
+      id: crypto.randomUUID(),
+      name: 'portal',
+      kind: 'app-backend',
+      oidcAudience: 'portal-web',
+      redirectUris: [],
+      resourcePath: null,
+      clientSecretHash: (await mintClientSecret()).secretHash,
+    });
+    clients.set(appBackend.id, { ...appBackend, clientSecretHash: mcp.clientSecretHash });
+    for (const grant of ['client_credentials', 'authorization_code', 'refresh_token']) {
+      const out = await send(
+        tokenRequest({ grant_type: grant }, basic(appBackend.id, secret)),
+        TOKEN,
+      );
+      expect(out.response.status, grant).toBe(400);
+      expect(out.json()).toMatchObject({ error: 'unauthorized_client' });
+    }
+    expect(rows).toEqual([]);
+    expect(audits).toEqual([]);
   });
 });
 

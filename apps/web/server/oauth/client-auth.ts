@@ -43,8 +43,14 @@ const invalidClient = (): ClientAuthentication => ({
 
 const refuse = (response: Response): ClientAuthentication => ({ ok: false, response });
 
-/** `client_secret_basic` (RFC 6749 §2.3.1): form-urlencoded id and secret, joined by `:` and base64'd. */
-function readBasic(header: string | null): { id: string; secret: string } | null | undefined {
+/**
+ * `client_secret_basic` (RFC 6749 §2.3.1): form-urlencoded id and secret, joined by `:` and
+ * base64'd. `undefined` when there is no Basic header, `null` when there is a malformed one. Also
+ * read by the ID-token exchange (ADR-0161 D3), which takes this method only.
+ */
+export function readBasic(
+  header: string | null,
+): { id: string; secret: string } | null | undefined {
   if (header === null || !/^Basic[ ]/iu.test(header)) return undefined;
   try {
     const decoded = atob(header.slice(6).trim());

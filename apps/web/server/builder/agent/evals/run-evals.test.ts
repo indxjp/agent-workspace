@@ -1,10 +1,16 @@
-import { mkdtemp, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { caseRuns, PLACEHOLDER_KEY, sessionFetch, writeTranscripts } from './run-evals.mjs';
+import {
+  caseRuns,
+  PLACEHOLDER_KEY,
+  reportRuns,
+  sessionFetch,
+  writeTranscripts,
+} from './run-evals.mjs';
 
 const BASE = 'http://127.0.0.1:8333';
 const COOKIE = 'aw_session=signed.token';
@@ -106,5 +112,57 @@ describe('writeTranscripts', () => {
     };
     expect(bad.case).toBe('second');
     expect(bad.error).toMatch(/done/u);
+  });
+});
+
+describe('writeTranscripts budget (EVL-04)', () => {
+  it('spends one budget on all the runs, and files the runs it had none left for', async () => {
+    const dir = path.join(await mkdtemp(path.join(tmpdir(), 'transcripts-')), 'transcripts');
+    let clock = 0;
+    const client = {
+      runs: {
+        async *events() {
+          await Promise.resolve();
+          // Reading one run takes 40 s of the budget.
+          clock += 40_000;
+          yield { kind: 'runtime', id: '1', name: 'message', data: {} };
+        },
+      },
+    };
+    const incomplete = await writeTranscripts(
+      client,
+      [
+        { name: 'a', runId: 'r1' },
+        { name: 'b', runId: 'r2' },
+        { name: 'c', runId: 'r3' },
+      ],
+      dir,
+      { budgetMs: 70_000, timeoutMs: 60_000, now: () => clock },
+    );
+    expect(incomplete).toEqual(['r3']);
+    const late = JSON.parse(await readFile(path.join(dir, 'r3.json'), 'utf8')) as {
+      readonly frames: readonly unknown[];
+      readonly error: string;
+    };
+    expect(late.frames).toEqual([]);
+    expect(late.error).toMatch(/budget/u);
+  });
+});
+
+describe('reportRuns (EVL-04)', () => {
+  it("reads the case runs of a report the evals wrote, whatever aw's exit code was", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'report-'));
+    await writeFile(
+      path.join(dir, 'report.json'),
+      JSON.stringify({ results: [{ name: 'a', runId: 'r1' }] }),
+    );
+    expect(await reportRuns(dir)).toEqual([{ name: 'a', runId: 'r1' }]);
+  });
+
+  it('has no runs when the report is missing or is not JSON', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'report-'));
+    expect(await reportRuns(dir)).toEqual([]);
+    await writeFile(path.join(dir, 'report.json'), 'usage: aw eval');
+    expect(await reportRuns(dir)).toEqual([]);
   });
 });

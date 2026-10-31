@@ -45,6 +45,7 @@ import { teamCommands } from './team.js';
 import { toolCommands } from './tool.js';
 import { tokenCommands } from './tokens.js';
 import { triggerCommands } from './triggers.js';
+import { webhookCommands } from './webhooks.js';
 import { workspaceCommands } from './workspaces.js';
 
 export const COMMANDS: readonly Command[] = [
@@ -78,6 +79,8 @@ export const COMMANDS: readonly Command[] = [
   ...endpointClientCommands,
   // Issue #1295 (ADR-0144): the triggers that start a run from a webhook URL.
   ...triggerCommands,
+  // Issue #250 (N-3, ADR-SDK-18-N3-250): the endpoints a run's outcome is posted to, signed.
+  ...webhookCommands,
   ...modelCommands,
   ...runtimeCommands,
   ...secretCommands,

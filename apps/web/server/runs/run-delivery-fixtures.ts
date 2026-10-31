@@ -6,7 +6,7 @@
  * `run-request.ts`'s own functions. No route imports it, and it imports no test-only module: each
  * test file builds its {@link RunWorld} on both catalogs.
  */
-import { streamToBytes } from '@agent-workspace/core/storage';
+import { streamToBytes } from '../storage/objects';
 import { decodeUstar } from '@agent-workspace/runtime/transfer';
 
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';

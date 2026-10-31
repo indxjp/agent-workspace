@@ -3,7 +3,7 @@
  * share: the run size, the memory bound, a member on either catalog, and a run granted a folder of
  * files written before any baseline is taken. Vitest-free, so each file owns its own database.
  */
-import { openRootObjectStore } from '@agent-workspace/core/storage';
+import { openRootObjectStore } from '../storage/testing';
 import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 
 import { createAgentRunResourceLoader } from '../compose/resource-loader';

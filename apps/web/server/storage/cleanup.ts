@@ -1,12 +1,10 @@
 /**
  * The storage cleanup pass (the storage design, §04 "The cleanup job"): finish deletes that were
- * interrupted, settle uploads that never completed, and find objects no catalog row points at, in
- * the new naming and the old one. An object is removed only when no row in any status references
- * it (a `session-state` object: no session-state blob row in any status), and never when it is
- * younger than the longest signed link plus an hour. In `report` mode the
- * pass reads and counts and writes nothing. An object in the old naming is counted and reported
- * in either mode and never deleted: a row-less old object may be a file adopt has not reached.
- * One copy at a time is the caller's job (`cleanup-cron.ts` holds the database lock).
+ * interrupted, settle uploads that never completed, and find objects no catalog row points at. An
+ * object is removed only when no row in any status references it (a `session-state` object: no
+ * session-state blob row in any status), and never when it is younger than the longest signed link
+ * plus an hour. In `report` mode the pass reads and counts and writes nothing. One copy at a time is
+ * the caller's job (`cleanup-cron.ts` holds the database lock).
  */
 import { PRESIGNED_URL_MAX_TTL_SECONDS } from '@indx-workspace/contracts/files';
 import {
@@ -16,10 +14,8 @@ import {
 } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 
-import { parseLegacyKey } from './legacy-naming';
-import { BodyTooLargeError, measure } from './measure';
 import { promoteUpload } from './promote-upload';
-import type { CatalogFile, CatalogPort } from './store';
+import type { CatalogFile, CatalogPort, SessionStateBlobSettler } from './store';
 
 /** The longest a signed link lives, plus an hour: nothing younger is touched. */
 export const CLEANUP_MIN_AGE_MS = (PRESIGNED_URL_MAX_TTL_SECONDS + 3600) * 1000;
@@ -28,12 +24,10 @@ const PAGE_SIZE = 1000;
 
 export interface CleanupReport {
   readonly mode: 'report' | 'delete';
-  /** Objects listed in a naming this job owns. */
+  /** Objects listed under the workspaces prefix. */
   readonly scanned: number;
   /** Objects no row references and that are old enough to remove. */
   readonly orphans: number;
-  /** The orphans in the old naming: counted in both modes, never deleted. */
-  readonly legacyOrphans: number;
   readonly stalePendingReady: number;
   readonly stalePendingDeleted: number;
   /** Rows marked `deleting` whose object is gone and whose row is dropped. */
@@ -44,16 +38,12 @@ export interface CleanupReport {
 }
 
 export interface CleanupDependencies {
-  /** The shared root, new naming. */
+  /** The shared root. */
   readonly objects: ObjectStore;
-  /** The old files layout (`legacyAreaPrefixes`); `null` when the deployment has none. */
-  readonly legacy: { readonly objects: ObjectStore; readonly prefix: string } | null;
   /** Rejects for a workspace that no longer exists. */
   readonly catalogs: (workspaceId: string) => Promise<CatalogPort>;
   /** The session-state blob rows of a workspace, which the `session-state` objects belong to. */
-  readonly sessionState: (workspaceId: string) => Promise<{
-    referencedObjectIds(objectIds: readonly string[]): Promise<readonly string[]>;
-  }>;
+  readonly sessionState: (workspaceId: string) => Promise<SessionStateBlobSettler>;
   readonly workspaceIds: () => Promise<readonly string[]>;
   readonly now: () => Date;
   readonly mode: 'report' | 'delete';
@@ -71,20 +61,11 @@ interface Pass {
   readonly cutoff: Date;
 }
 
-/** One listed object, named by the id or the storage key a row would hold for it. */
+/** One listed object, named by the object id a row would hold for it. */
 interface Candidate {
   readonly area: string;
   readonly key: string;
-  readonly objectId: string | null;
-  readonly storageKey: string | null;
-}
-
-/** What a listed key names: the workspace, and the object id (new naming) or catalog path (old). */
-interface Parsed {
-  readonly area: string;
-  readonly workspaceId: string;
-  readonly objectId: string | null;
-  readonly path: string | null;
+  readonly objectId: string;
 }
 
 /** A failure of one step must not stop the others; only the error name is logged. */
@@ -99,59 +80,26 @@ async function attempt(pass: Pass, stage: string, work: () => Promise<void>): Pr
   }
 }
 
-/** Where a row's bytes are, as `service.ts` finds them; `null` when no store holds that naming. */
-function locate(deps: CleanupDependencies, workspaceId: string, row: CatalogFile) {
-  const area = row.area ?? 'files';
+/** Where a row's bytes are, as `service.ts` finds them; `null` for a row with no object id. */
+function locate(workspaceId: string, row: CatalogFile) {
   const objectId = row.objectId ?? null;
-  if (objectId !== null) {
-    return { store: deps.objects, name: storageObjectName(workspaceId, area, objectId) };
-  }
-  // storage-bridge(#1699): rows still in the old naming keep their bytes at the old key
-  if (deps.legacy === null || area !== 'files' || row.storageKey === null) return null;
+  if (objectId === null) return null;
   return {
-    store: deps.legacy.objects,
-    name: `${deps.legacy.prefix}/${workspaceId}/${row.storageKey}`,
+    objectId,
+    name: storageObjectName(workspaceId, row.area ?? 'files', objectId),
   };
 }
-
-const lookupOf = (found: readonly Candidate[]) => ({
-  objectIds: found.flatMap((entry) => (entry.objectId === null ? [] : [entry.objectId])),
-  storageKeys: found.flatMap((entry) => (entry.storageKey === null ? [] : [entry.storageKey])),
-});
 
 async function finishDeletes(pass: Pass, workspaceId: string, catalog: CatalogPort) {
   for (const row of await catalog.deleting()) {
     await attempt(pass, 'deleting', async () => {
-      const object = locate(pass.deps, workspaceId, row);
+      const object = locate(workspaceId, row);
       if (object === null) return;
       if (pass.deps.mode === 'delete') {
-        // Another live row on the same key (a path re-uploaded at once) owns the object now.
-        const objectId = row.objectId ?? null;
-        const holders = await catalog.referencing(
-          lookupOf([
-            {
-              area: row.area ?? 'files',
-              key: object.name,
-              objectId,
-              storageKey: objectId === null ? row.storageKey : null,
-            },
-          ]),
-        );
+        // Another live row naming the same object owns it now.
+        const holders = await catalog.referencing({ objectIds: [object.objectId] });
         const shared = holders.some((other) => other.id !== row.id && other.status !== 'deleting');
-        if (!shared) await object.store.delete(object.name);
-        // storage-bridge(#1699): the old object of a row the copy stage switched goes with it, or
-        // the adopt stage would give a removed file a row again.
-        const { legacy } = pass.deps;
-        if (
-          !shared &&
-          legacy !== null &&
-          objectId !== null &&
-          (row.area ?? 'files') === 'files' &&
-          row.storageKey !== null &&
-          row.storageKey !== `files/${objectId}`
-        ) {
-          await legacy.objects.delete(`${legacy.prefix}/${workspaceId}/${row.storageKey}`);
-        }
+        if (!shared) await pass.deps.objects.delete(object.name);
         await catalog.forget(row);
       }
       pass.counts.deletingFinished += 1;
@@ -162,9 +110,9 @@ async function finishDeletes(pass: Pass, workspaceId: string, catalog: CatalogPo
 async function settleStalePending(pass: Pass, workspaceId: string, catalog: CatalogPort) {
   for (const row of await catalog.stalePending(pass.cutoff)) {
     await attempt(pass, 'stale-pending', async () => {
-      const object = locate(pass.deps, workspaceId, row);
+      const object = locate(workspaceId, row);
       if (object === null) return;
-      const meta = await object.store.head(object.name);
+      const meta = await pass.deps.objects.head(object.name);
       // A pending row declares its size when reserved, so an object of that size is what was
       // uploaded, whether it is a signed-link upload or a save that wrote its bytes but not its confirm.
       const mutating = pass.deps.mode === 'delete';
@@ -176,34 +124,18 @@ async function settleStalePending(pass: Pass, workspaceId: string, catalog: Cata
           return;
         }
         // The checksum is of the bytes in the store; bytes that are not the declared ones fall
-        // through to the delete below. A row in the new naming is published on a copy, as
-        // `completeUpload` does (`promote-upload.ts`).
-        const objectId = row.objectId ?? null;
-        if (objectId !== null) {
-          const promoted = await promoteUpload(
-            { objects: pass.deps.objects, catalog, log: pass.deps.log },
-            workspaceId,
-            { ...row, objectId },
-            row.sizeBytes,
-          );
-          if (promoted.kind === 'stale') return;
-          if (promoted.kind === 'confirmed') {
-            pass.counts.stalePendingReady += 1;
-            return;
-          }
-        } else {
-          // A pending row in the old naming (`locate` above) is confirmed on its own object.
-          const sum = await checksum(object, row.sizeBytes);
-          if (sum !== null) {
-            const done = await catalog.confirm(row, {
-              sizeBytes: sum.sizeBytes,
-              sha256: sum.sha256,
-              contentType: row.contentType,
-            });
-            if (done === null) return;
-            pass.counts.stalePendingReady += 1;
-            return;
-          }
+        // through to the delete below. The row is published on a copy, as `completeUpload` does
+        // (`promote-upload.ts`).
+        const promoted = await promoteUpload(
+          { objects: pass.deps.objects, catalog, log: pass.deps.log },
+          workspaceId,
+          { ...row, objectId: object.objectId },
+          row.sizeBytes,
+        );
+        if (promoted.kind === 'stale') return;
+        if (promoted.kind === 'confirmed') {
+          pass.counts.stalePendingReady += 1;
+          return;
         }
       }
       if (mutating) {
@@ -211,7 +143,7 @@ async function settleStalePending(pass: Pass, workspaceId: string, catalog: Cata
         // no longer the abandoned upload this pass looked at, and keeps its object.
         const [claimed] = await catalog.remove(row.targetPath ?? row.path, { pending: row });
         if (claimed === undefined) return;
-        if (meta !== null) await object.store.delete(object.name);
+        if (meta !== null) await pass.deps.objects.delete(object.name);
         await catalog.forget(claimed);
       }
       pass.counts.stalePendingDeleted += 1;
@@ -219,22 +151,27 @@ async function settleStalePending(pass: Pass, workspaceId: string, catalog: Cata
   }
 }
 
-/** Stream the object through {@link measure}, as `completeUpload` does; `null` if it is not `sizeBytes` long. */
-async function checksum(
-  object: NonNullable<ReturnType<typeof locate>>,
-  sizeBytes: number,
-): Promise<{ readonly sizeBytes: number; readonly sha256: string } | null> {
-  const stream = await object.store.read(object.name);
-  if (stream === null) return null;
-  const measured = measure(sizeBytes);
-  try {
-    await stream.body.pipeThrough(measured.stream).pipeTo(new WritableStream());
-  } catch (error) {
-    if (error instanceof BodyTooLargeError) return null;
-    throw error;
+/**
+ * Finish what a session-state save or purge left: a `deleting` row's object, then the row; and a
+ * reservation older than the cutoff, claimed (`deleting`) before its object goes, so a save that
+ * confirms meanwhile keeps its bytes.
+ */
+async function settleSessionState(pass: Pass, workspaceId: string) {
+  const rows = await pass.deps.sessionState(workspaceId);
+  for (const row of await rows.unsettledBlobs(pass.cutoff)) {
+    await attempt(pass, 'session-state', async () => {
+      if (pass.deps.mode === 'delete') {
+        const doomed = row.status === 'pending' ? await rows.claimBlob(row) : row;
+        if (doomed === null) return;
+        await pass.deps.objects.delete(
+          storageObjectName(workspaceId, 'session-state', row.objectId),
+        );
+        await rows.forgetBlob(doomed);
+      }
+      if (row.status === 'pending') pass.counts.stalePendingDeleted += 1;
+      else pass.counts.deletingFinished += 1;
+    });
   }
-  const result = measured.result();
-  return result.sizeBytes === sizeBytes ? result : null;
 }
 
 /** Which of `found` a row holds: a files-catalog row, or a session-state blob row in any status. */
@@ -244,32 +181,20 @@ async function referencedAmong(
   workspaceId: string,
   found: readonly Candidate[],
 ): Promise<(entry: Candidate) => boolean> {
-  const rows = await catalog.referencing(lookupOf(found));
+  const rows = await catalog.referencing({ objectIds: found.map((entry) => entry.objectId) });
   const stateIds = found.flatMap((entry) =>
-    entry.area === 'session-state' && entry.objectId !== null ? [entry.objectId] : [],
+    entry.area === 'session-state' ? [entry.objectId] : [],
   );
   const held = new Set(
     stateIds.length === 0
       ? []
       : await (await pass.deps.sessionState(workspaceId)).referencedObjectIds(stateIds),
   );
-  return (entry) =>
-    rows.some((row) =>
-      entry.objectId === null
-        ? (row.objectId ?? null) === null && row.storageKey === entry.storageKey
-        : row.objectId === entry.objectId,
-    ) ||
-    (entry.objectId !== null && held.has(entry.objectId));
+  return (entry) => rows.some((row) => row.objectId === entry.objectId) || held.has(entry.objectId);
 }
 
-/** Count the orphans among one workspace's old-enough objects; in delete mode remove them if `deletable`. */
-async function sweepWorkspace(
-  pass: Pass,
-  store: ObjectStore,
-  workspaceId: string,
-  found: readonly Candidate[],
-  deletable: boolean,
-) {
+/** Count the orphans among one workspace's old-enough objects; in delete mode remove them. */
+async function sweepWorkspace(pass: Pass, workspaceId: string, found: readonly Candidate[]) {
   await attempt(pass, 'orphans', async () => {
     // A workspace that is gone rejects here: its objects are not ours to call orphans.
     const catalog = await pass.deps.catalogs(workspaceId);
@@ -277,29 +202,22 @@ async function sweepWorkspace(
     for (const entry of found) {
       if (isReferenced(entry)) continue;
       pass.counts.orphans += 1;
-      if (!deletable) pass.counts.legacyOrphans += 1;
-      if (!deletable || pass.deps.mode !== 'delete') continue;
+      if (pass.deps.mode !== 'delete') continue;
       await attempt(pass, 'delete-orphan', async () => {
         // A row may have been written since the page was read: look again at this one object.
         if ((await referencedAmong(pass, catalog, workspaceId, [entry]))(entry)) return;
-        await store.delete(entry.key);
+        await pass.deps.objects.delete(entry.key);
         pass.counts.deleted += 1;
       });
     }
   });
 }
 
-/** List `prefix` page by page; `parse` names an object by workspace and id or storage key. */
-async function sweepListing(
-  pass: Pass,
-  store: ObjectStore,
-  prefix: string,
-  parse: (key: string) => Parsed | null,
-  deletable: boolean,
-) {
+/** List the workspaces prefix page by page; a key that is no object name is not ours. */
+async function sweepListing(pass: Pass) {
   let cursor: string | undefined;
   do {
-    const page = await store.listPage(prefix, {
+    const page = await pass.deps.objects.listPage('workspaces', {
       recursive: true,
       limit: pass.deps.pageSize ?? PAGE_SIZE,
       ...(cursor === undefined ? {} : { cursor }),
@@ -307,7 +225,7 @@ async function sweepListing(
     const byWorkspace = new Map<string, Candidate[]>();
     for (const entry of page.entries) {
       if (entry.kind !== 'file') continue;
-      const parsed = parse(entry.key);
+      const parsed = parseStorageObjectName(entry.key);
       if (parsed === null) continue;
       pass.counts.scanned += 1;
       if (entry.lastModified.getTime() > pass.cutoff.getTime()) {
@@ -315,16 +233,11 @@ async function sweepListing(
         continue;
       }
       const found = byWorkspace.get(parsed.workspaceId) ?? [];
-      found.push({
-        area: parsed.area,
-        key: entry.key,
-        objectId: parsed.objectId,
-        storageKey: parsed.path,
-      });
+      found.push({ area: parsed.area, key: entry.key, objectId: parsed.objectId });
       byWorkspace.set(parsed.workspaceId, found);
     }
     for (const [workspaceId, found] of byWorkspace) {
-      await sweepWorkspace(pass, store, workspaceId, found, deletable);
+      await sweepWorkspace(pass, workspaceId, found);
     }
     cursor = page.cursor ?? undefined;
   } while (cursor !== undefined);
@@ -338,7 +251,6 @@ export async function runCleanupPass(deps: CleanupDependencies): Promise<Cleanup
     mode: deps.mode,
     scanned: 0,
     orphans: 0,
-    legacyOrphans: 0,
     stalePendingReady: 0,
     stalePendingDeleted: 0,
     deletingFinished: 0,
@@ -355,41 +267,10 @@ export async function runCleanupPass(deps: CleanupDependencies): Promise<Cleanup
       const catalog = await deps.catalogs(workspaceId);
       await finishDeletes(pass, workspaceId, catalog);
       await settleStalePending(pass, workspaceId, catalog);
+      await settleSessionState(pass, workspaceId);
     });
   }
-  await sweepListing(
-    pass,
-    deps.objects,
-    'workspaces',
-    (key) => {
-      const parsed = parseStorageObjectName(key);
-      return parsed === null
-        ? null
-        : {
-            area: parsed.area,
-            workspaceId: parsed.workspaceId,
-            objectId: parsed.objectId,
-            path: null,
-          };
-    },
-    true,
-  );
-  if (deps.legacy !== null) {
-    const { objects, prefix } = deps.legacy;
-    // storage-bridge(#1699): objects still in the old naming are reported, never deleted
-    await sweepListing(
-      pass,
-      objects,
-      prefix,
-      (key) => {
-        const parsed = parseLegacyKey(prefix, key);
-        return parsed === null
-          ? null
-          : { area: 'files', workspaceId: parsed.workspaceId, objectId: null, path: parsed.path };
-      },
-      false,
-    );
-  }
+  await sweepListing(pass);
   deps.log.info('storage cleanup', { ...counts });
   return counts;
 }

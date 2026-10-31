@@ -12,11 +12,14 @@ import {
   createInMemoryWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import { createInMemorySecretsService } from '@agent-workspace/core/secrets';
-import type {
-  ConnectionStoreOptions,
-  ListPageOptions,
-  ObjectPage,
-  ObjectStore,
+import {
+  FolderPathError,
+  FolderStoreError,
+  FolderWalkLimitError,
+  type ConnectionStoreOptions,
+  type ListPageOptions,
+  type ObjectPage,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 
 import { PROBE_TIMEOUT_MS } from '../models/probe';
@@ -153,6 +156,61 @@ describe('browse and test over a stub store', () => {
       warn.mockRestore();
     }
   });
+
+  // #1835: a `file://` connection's own failures were logged whole as "unclassified" (the message
+  // names the customer's key) and every one answered unreachable.
+  // @story US-STO-12
+  it.each([
+    [
+      new FolderStoreError('reports/q3-secret-plan.txt', 'EIO'),
+      502,
+      'storage_connection_unreachable',
+      'EIO',
+      'unreachable',
+    ],
+    [
+      new FolderWalkLimitError(200_000),
+      502,
+      'storage_connection_unreachable',
+      'walk_limit',
+      'unreachable',
+    ],
+    [
+      new FolderPathError(),
+      422,
+      'storage_connection_endpoint_forbidden',
+      'outside_root',
+      'forbidden',
+    ],
+  ] as const)(
+    '[US-STO-12][api][sdk] a folder failure (%s) has its own browse and test answer, logged by code',
+    async (failure, status, code, reason, testCode) => {
+      const warn = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
+      const error = vi.spyOn(log, 'error').mockImplementation(() => undefined);
+      stubStore(() => Promise.reject(failure));
+      try {
+        const browsed = await browseStorageConnection(
+          runtime,
+          principal,
+          connectionId,
+          browseUrl('?prefix=reports'),
+        );
+        expect(browsed.status).toBe(status);
+        expect(JSON.stringify(browsed.body)).toContain(code);
+        const tested = await testStorageConnection(runtime, principal, connectionId);
+        expect(tested.body).toEqual({ ok: false, code: testCode });
+
+        expect(error).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(expect.any(String), { connectionId, reason });
+        expect(JSON.stringify([...warn.mock.calls, ...error.mock.calls])).not.toContain(
+          'q3-secret',
+        );
+      } finally {
+        warn.mockRestore();
+        error.mockRestore();
+      }
+    },
+  );
 
   // @story US-STO-12
   it.each(['browse', 'test'] as const)(

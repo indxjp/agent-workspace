@@ -11206,6 +11206,372 @@
     "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
     "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input": {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
    "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/workspaces", "method": "GET"},
    "id": "scope/owner/GET /api/workspaces [run:row-a]",
    "expected":
@@ -23530,6 +23896,390 @@
    "input":
    {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/users/row-a", "method": "OPTIONS"},
    "id": "scope/owner/OPTIONS /api/users/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "scope/owner/GET /api/webhooks/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "scope/owner/HEAD /api/webhooks/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "scope/owner/POST /api/webhooks/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input": {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "scope/owner/PUT /api/webhooks/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input":
+   {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input":
+   {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "scope/owner/PATCH /api/webhooks/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input":
+   {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input":
+   {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.out_of_grammar_is_token_out_of_scope",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.scope_only_narrows",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.deny_code_is_token_out_of_scope_exactly_on_a_scope_objection",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "scope/owner/DELETE /api/webhooks/row-a [session:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": "token_out_of_scope",
+     "because": "may only reach"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input":
+   {"scope": {"kind": "run", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks/row-a [run:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.run_scoped_token_reaches_only_reads_of_its_run"],
+   "input":
+   {"scope": {"kind": "run", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks/row-a [run:row-b]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-a"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks/row-a [session:row-a]",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step",
+    "AgentWorkspace.Theorems.Adversarial.AuthzDecide.session_scoped_token_reaches_only_run_reads_and_agent_runs"],
+   "input":
+   {"scope": {"kind": "session", "id": "row-b"}, "role": "owner", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "scope/owner/OPTIONS /api/webhooks/row-a [session:row-b]",
    "expected":
    {"outcomes":
     {"facts": null,

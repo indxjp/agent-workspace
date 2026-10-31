@@ -427,6 +427,13 @@ export function routeShape(routePathValue: string, printedInSpec: boolean): Shap
   ) {
     return { ok: true };
   }
+  // ADR-0161 D3: an app backend's ID-token exchange (issue #1499) is one more fixed sign-in step
+  // beside the four above — it names no collection and no id, since the caller is an endpoint
+  // client trading a proof of a person. The same named, narrow exception; it generalises to no
+  // other route.
+  if (routePathValue === '/api/auth/token-exchange') {
+    return { ok: true };
+  }
   // ADR-0120 clause 7, ADR-0144 D5 and issue #1674: the three fixed paths the platform cron calls,
   // naming no collection and no id. The same named, narrow exception as the sign-in steps above; it
   // generalises to no other route.

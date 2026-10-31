@@ -15,6 +15,7 @@ import { createDatabaseSessionRepositoryProvider } from './runs.js';
 import { createDatabaseShareRepositoryProvider } from './shares.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = (process.env['TEST_DATABASE_URL'] ?? '').trim() !== '';
 
@@ -101,10 +102,9 @@ describe.skipIf(!hasDatabase)('principal-owned repository writes', () => {
     expect(createdAgent.agent).toMatchObject({ ownerPrincipalId: principalId, createdBy: null });
 
     const catalog = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scope);
-    const file = await catalog.putFile({
+    const file = await seedCatalogFile(catalog, {
       path: 'machine.txt',
       kind: 'file',
-      storageKey: 'machine.txt',
       sizeBytes: 7,
       contentType: 'text/plain',
       ownerPrincipalId: principalId,

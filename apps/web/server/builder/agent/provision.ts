@@ -20,13 +20,13 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { ApiProblemSchema } from '@indx-workspace/contracts';
-import { AW_CONTROL_SERVER } from '@indx-workspace/contracts/builder';
 import {
   AGENT_VERSION_PROBLEM_CODES,
   AgentVersionBodySchema,
   AgentVersionResourceSchema,
   type AgentVersionBodyInput,
 } from '@indx-workspace/contracts/agent-versions';
+import { isReservedConnectorName } from '@indx-workspace/contracts/tool-connectors';
 
 import {
   createAgentFromVersion,
@@ -82,7 +82,7 @@ const MAX_SAVE_ATTEMPTS = 3;
 function storableBody(body: AgentVersionBodyInput): AgentVersionBodyInput {
   const parsed = AgentVersionBodySchema.parse(body);
   const { resources } = parsed.definition;
-  const connectors = resources.connectors.filter((name) => name !== AW_CONTROL_SERVER);
+  const connectors = resources.connectors.filter((name) => !isReservedConnectorName(name));
   return {
     ...parsed,
     definition: { ...parsed.definition, resources: { ...resources, connectors } },

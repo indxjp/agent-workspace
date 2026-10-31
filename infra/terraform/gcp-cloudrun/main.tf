@@ -660,6 +660,15 @@ resource "google_cloud_run_v2_service" "web" {
         value = var.deployment_policy
       }
       dynamic "env" {
+        # ADR-0160 D5: the features this deployment installs. Absent when unset, so an existing
+        # service gets no new revision and installs every feature.
+        for_each = var.deployment_features == "" ? [] : [var.deployment_features]
+        content {
+          name  = "AW_DEPLOYMENT_FEATURES"
+          value = env.value
+        }
+      }
+      dynamic "env" {
         # ADR-0135: the origin A2A agent cards advertise. Absent when unset, so an existing service
         # gets no new revision.
         for_each = var.public_url == "" ? [] : [var.public_url]

@@ -1,7 +1,1 @@
-{
-  "apps/web/app/api/agents/[id]/policy/policy.test.ts": 1,
-  "apps/web/server/agents/policy-update.test.ts": 1,
-  "apps/web/server/agents/policy.test.ts": 1,
-  "apps/web/server/policy-ceiling/write-paths.test.ts": 1,
-  "apps/web/server/sdk-conformance.test.ts": 1
-}
+{}

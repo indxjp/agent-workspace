@@ -158,9 +158,26 @@ describe('opening a granted storage connection for a run', () => {
     expect(openConnectionStore).not.toHaveBeenCalled();
   });
 
-  it('[US-STO-12][unit][run] opens a writable store for a connection that allows writes', async () => {
-    await connections({ writeAllowed: true }).openWritable(WORKSPACE, CONNECTION);
-    expect(vi.mocked(openConnectionStore).mock.calls[0]?.[2]).toMatchObject({ writable: true });
+  it('[US-STO-12][unit][run] opens a writable store for a connection that allows writes, with the save signal', async () => {
+    const saving = new AbortController().signal;
+    await connections({ writeAllowed: true }).openWritable(WORKSPACE, CONNECTION, saving);
+    expect(vi.mocked(openConnectionStore).mock.calls[0]?.[2]).toMatchObject({
+      writable: true,
+      signal: saving,
+    });
+  });
+
+  it('[US-STO-12][unit][run] opens the store with the outbound proxy the environment names', async () => {
+    vi.stubEnv('HTTPS_PROXY', 'http://proxy.internal:3128');
+    vi.stubEnv('NO_PROXY', '.corp.example');
+    try {
+      await connections({}).open(WORKSPACE, CONNECTION);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(vi.mocked(openConnectionStore).mock.calls[0]?.[2]).toMatchObject({
+      proxy: { httpsProxy: 'http://proxy.internal:3128', noProxy: ['.corp.example'] },
+    });
   });
 });
 

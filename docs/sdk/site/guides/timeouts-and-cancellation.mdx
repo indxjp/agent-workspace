@@ -23,6 +23,7 @@ what ends a call or a stream at any later point.
 - [Put a deadline on a whole call](#put-a-deadline-on-a-whole-call)
 - [Stop a follow loop from outside](#stop-a-follow-loop-from-outside)
 - [Tell a timeout from a cancellation](#a-timeout-surfaces-as-transporterror)
+- [Stop the run itself, not just your stream](#stop-the-run-itself)
 
 ## `timeoutMs` covers response headers only
 
@@ -81,8 +82,8 @@ connection outside the SDK entirely.
 A `timeoutMs` deadline expiring mid-follow (most likely on a **reconnect** attempt, since the
 initial connection's headers usually arrive quickly) produces exactly the same `TransportError`
 shape as a network drop, and `follow` treats it the same way: as a dropped connection to reconnect
-from with `Last-Event-ID`, up to `maxReconnects` (default 5) with `reconnectDelayMs` (default 3000)
-between attempts. The only thing that stops `follow` for good is **your own** `options.signal`
+from with `Last-Event-ID`, up to `maxReconnects` (default 5) with the backoff described in
+[Reconnection](/guides/streaming#reconnection) between attempts. The only thing that stops `follow` for good is **your own** `options.signal`
 having aborted. `follow` checks `options.signal?.aborted !== true`, not the failure's `aborted`
 field, specifically so a `timeoutMs`-driven drop is retried like any other:
 
@@ -174,6 +175,22 @@ yourself to merge two of your own signals is the same idea one level up.
 </Accordion>
 
 </AccordionGroup>
+
+## Stop the run itself
+
+Aborting a call or a `follow` loop stops **your** request; the run keeps going on the server. To
+stop the run, call `aw.runs.interrupt(runId)`:
+
+```ts title="illustrative" claim="illustrative"
+await aw.runs.interrupt(run.id);
+```
+
+When it resolves, the run is `cancelled` and its gateway credential is already revoked, so the
+agent can make no further model or tool call. The runtime process stops within about two seconds
+(plus up to five seconds for the signal to reach it), whichever server replica answered your call:
+the replica that holds the run's stream notices the cancelled status and stops its runtime. A
+`follow` loop on the run ends with the `cancelled` status frame. A run that has already ended
+answers `409 run_not_interruptible`.
 
 ## See also
 

@@ -86,8 +86,8 @@ refactoring programme's rule for a dangerous change: add → backfill → switch
     other item configures ([The deployment profile](/concepts/data-plane#the-deployment-profile)).
     Then D-2 and D-3 (native object storage and secret backends) and D-4 (a verified sandbox driver)
     one cloud at a time — a cell of the [data-plane table](/concepts/data-plane#the-contract) is
-    filled only by a live proof. N-2 and N-3 land as ordinary contract-first routes once the
-    specification takes them.
+    filled only by a live proof. N-2 lands as an ordinary contract-first route once the
+    specification takes it.
   </Step>
 </Steps>
 
@@ -282,25 +282,6 @@ OAuth per end user is not part of it.
 
 ## Runs and sessions
 
-### S-6 Idempotency keys
-
-**Today:** `runs.start` takes an `idempotencyKey`, sent as the `Idempotency-Key` header: a retry
-with the same key and input returns the run the first start queued
-([Retries and idempotency](/guides/retries-and-idempotency)). The input is compared in a canonical
-form, so a retry that reorders the keys of a JSON object in it (such as `outputSchema`) still
-replays.
-
-**Target:** the key honoured with the run leases of [RF-301](#rf-301-run-leases-and-attempts).
-
-### N-3 Webhooks for run outcomes
-
-**Today:** a backend learns that a run finished by following its stream or polling
-`runs.get`; there is no callback ([Integrate a backend](/building/backend)).
-
-**Target:** a workspace registers an endpoint and receives signed `run.completed`,
-`run.failed` and `run.cancelled` events with the run's status, usage and cost, retried with
-backoff and deduplicated by run id.
-
 ### N-7 Neutral `agent.*` frames
 
 **Done:** the stream carries the neutral `agent.*` vocabulary and `toAgentEvent` parses it
@@ -310,19 +291,13 @@ resolving. Frames recorded under the old names are upgraded on read, so durable 
 ### RF-301 Run leases and attempts
 
 **Today:** a queued run is launched by a callback in the web process; if that process dies
-between persisting and launching, the run can strand in `queued`.
+between persisting and launching, the run can strand in `queued` until the stale-run sweep fails
+it. An interrupt served by any replica stops the run's runtime: the replica holding the launch
+watches the run's committed status and signals the runtime itself (ADR-0151-FU-1440).
 
-**Target:** a database-enforced state machine, a renewable lease, `RunAttempt` records, and a
-reconciler that recovers stale runs. Invisible to the SDK's types; visible in the promise that
+**Target:** a database-enforced state machine, the renewable lease that record designs,
+`RunAttempt` records, and a reconciler that recovers stale runs. Invisible to the SDK's types; visible in the promise that
 a run always reaches a terminal status.
-
-### K-3 Backoff and retry hints in follow
-
-**Today:** `runs.follow` reconnects after a fixed `reconnectDelayMs` (default 3000, matching
-the server's pinned `retry:`) at most `maxReconnects` times (default 5), and ignores the
-`retry:` field of the stream.
-
-**Target:** the follower observes `retry:` and backs off exponentially between attempts.
 
 ## Runtimes, models, secrets, and files
 

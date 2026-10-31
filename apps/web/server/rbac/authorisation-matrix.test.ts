@@ -146,6 +146,9 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/cli-device',
   'GET /api/auth/cli-verify',
   'POST /api/auth/cli-token',
+  // ADR-0161 D3: an app backend exchanges an ID token, authenticating its endpoint client by its
+  // secret; the token it gets acts as the person, and decide() gates every route it then reaches.
+  'POST /api/auth/token-exchange',
   // ADR-0120 clause 7: called by Vercel Cron with `CRON_SECRET` as the bearer, never by a person.
   'GET /api/cron/retention',
   // ADR-0144 D5: the schedule pass, called by the platform cron with the same `CRON_SECRET` bearer.
@@ -234,7 +237,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
     expect(new Set(allRoutes.map(key)).size).toBe(allRoutes.length);
   });
 
-  it('keeps the pre-authentication surface to exactly these nineteen method/path pairs', () => {
+  it('keeps the pre-authentication surface to exactly these twenty method/path pairs', () => {
     const expected = [
       'GET /.well-known/oauth-authorization-server',
       'GET /.well-known/oauth-protected-resource/mcp/projects/:name',
@@ -250,6 +253,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
       'POST /api/auth/cli-device',
       'GET /api/auth/cli-verify',
       'POST /api/auth/cli-token',
+      'POST /api/auth/token-exchange',
       'GET /api/cron/retention',
       'GET /api/cron/triggers',
       'GET /api/cron/storage-cleanup',

@@ -1,4 +1,4 @@
-import { loadEgressPolicyFromEnv } from '@agent-workspace/core';
+import { loadEgressPolicyFromEnv, loadOutboundProxyFromEnv } from '@agent-workspace/core';
 import type {
   DatabaseRoot,
   SessionRecord,
@@ -49,7 +49,14 @@ export function createRunStorageConnections({
   };
   readonly scopes: Pick<WorkspaceScopeResolver, 'forWorkspaceId'>;
 }): RunStorageConnections {
-  const openStore = async (workspaceId: string, connectionId: string, writable: boolean) => {
+  // Read once: a proxy variable that is not a URL fails the wiring, not every run.
+  const proxy = loadOutboundProxyFromEnv(process.env);
+  const openStore = async (
+    workspaceId: string,
+    connectionId: string,
+    writable: boolean,
+    signal?: AbortSignal,
+  ) => {
     const store = storage.store.forWorkspace(workspaceId);
     const connection = await store.get(connectionId);
     const scope = await scopes.forWorkspaceId(workspaceId);
@@ -77,6 +84,8 @@ export function createRunStorageConnections({
         writable,
         fileRoots: storage.fileRoots,
         egress: loadEgressPolicyFromEnv(),
+        ...(signal === undefined ? {} : { signal }),
+        proxy,
         // Counts and the id only: a name or path could carry the target of a link.
         onSkipped: (counts) =>
           log.warn('[runs] a storage connection listing skipped entries', {
@@ -94,7 +103,8 @@ export function createRunStorageConnections({
   return {
     get: (workspaceId, connectionId) => storage.store.forWorkspace(workspaceId).get(connectionId),
     open: (workspaceId, connectionId) => openStore(workspaceId, connectionId, false),
-    openWritable: (workspaceId, connectionId) => openStore(workspaceId, connectionId, true),
+    openWritable: (workspaceId, connectionId, signal) =>
+      openStore(workspaceId, connectionId, true, signal),
   };
 }
 

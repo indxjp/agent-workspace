@@ -10,6 +10,8 @@ import {
 } from '@agent-workspace/core/db';
 import {
   createIsolatedTestDatabase,
+  endpointClientApiKeys,
+  endpointClients,
   memberships,
   projects,
   type IsolatedTestDatabase,
@@ -101,6 +103,37 @@ describe.skipIf(!hasDatabase)('PostgreSQL RBAC directory', () => {
 
     await directory.forWorkspace(workspace.id).revokeApiKey(createdKey.key.id);
     await expect(directory.authenticateApiKey(presented, new Date())).resolves.toBeNull();
+  });
+
+  it('lists keys, and refuses to authenticate one, bound to a builder endpoint client (SEC-11)', async () => {
+    const directory = createPostgresDirectory(root.directory);
+    const scoped = directory.forWorkspace(workspace.id);
+    const created = await scoped.createApiKey({
+      name: 'bound-to-builder',
+      role: conferredBy('owner', 'viewer', 'test'),
+      expiresAt: null,
+    });
+    if (created.kind !== 'created') throw new Error(created.kind);
+    // A builder client is reached by an OAuth token only, but nothing in the schema stops a row
+    // binding a key to one; the directory must then fail closed, not fail the whole key list.
+    const [client] = await isolated.db
+      .insert(endpointClients)
+      .values({
+        workspaceId: workspace.id,
+        name: 'builder-door',
+        kind: 'builder',
+        actsForPrincipalId: ownerPrincipalId,
+        createdByPrincipalId: ownerPrincipalId,
+      })
+      .returning({ id: endpointClients.id });
+    if (client === undefined) throw new Error('the builder client was not inserted');
+    await isolated.db
+      .insert(endpointClientApiKeys)
+      .values({ apiKeyId: created.key.id, clientId: client.id, workspaceId: workspace.id });
+
+    const listed = await scoped.listApiKeys();
+    expect(listed.map((row) => row.name)).toContain('bound-to-builder');
+    await expect(directory.authenticateApiKey(created.presented, new Date())).resolves.toBeNull();
   });
 
   it('refuses to remove the last owner', async () => {

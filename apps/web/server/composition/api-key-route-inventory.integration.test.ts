@@ -44,6 +44,7 @@ import {
   runs as runRows,
   sessions as sessionRows,
   triggers,
+  webhooks,
   workspacePrincipals,
   workspaces,
   type IsolatedTestDatabase,
@@ -406,6 +407,16 @@ describe.skipIf(!hasDatabase)(
         secretHash: '0'.repeat(64),
       });
       seeded.set('/api/triggers', triggerId);
+      // A webhook is inserted directly too, so the Viewer's DELETE probe addresses a real row and
+      // its 403 cannot be a 404 standing in for the refusal (N-3, issue #250).
+      const webhookId = crypto.randomUUID();
+      await isolated.db.insert(webhooks).values({
+        id: webhookId,
+        workspaceId,
+        url: 'https://hooks.example.com/inventory',
+        events: ['run.completed'],
+      });
+      seeded.set('/api/webhooks', webhookId);
       const sessionId = crypto.randomUUID();
       await isolated.db.insert(sessionRows).values({
         id: sessionId,

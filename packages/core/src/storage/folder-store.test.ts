@@ -15,6 +15,7 @@ import {
   rm,
   stat,
   symlink,
+  utimes,
   writeFile,
 } from 'node:fs/promises';
 import os from 'node:os';
@@ -28,13 +29,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { keysOf, textAt } from './contract.js';
 import {
   createFolderObjectStore,
+  FOLDER_WALK_MAX_ENTRIES,
   FolderPathError,
   FolderStoreError,
+  FolderWalkLimitError,
   type FolderSkipCounts,
   type FolderStoreOptions,
 } from './folder-store.js';
 import { UnsafeObjectKeyError } from './key-safety.js';
-import type { ObjectStore } from './object-store.js';
+import { ObjectConflictError, type ObjectStore } from './object-store.js';
 import { streamToBytes } from './streams.js';
 
 const text = (bytes: Uint8Array | undefined): string => new TextDecoder().decode(bytes);
@@ -277,12 +280,38 @@ describe('folder store', () => {
     expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
   });
 
-  it('[US-STO-12][unit][sdk] a directory symlink inside the folder is not descended into when listing', async () => {
+  // #1835: a folder linked from inside the root to inside the root is part of the folder: listed,
+  // read and written through like the folder it names. Only what was opened decides (Linux).
+  it('[US-STO-12][unit][sdk] a directory symlink that stays inside the folder is listed, read and written through', async () => {
     await symlink(path.join(root, 'reports'), path.join(root, 'again'));
     const store = openStore();
 
-    expect(await keysOf(store, '')).toEqual(['reports']);
+    expect(await keysOf(store, '')).toEqual(['again', 'reports']);
+    expect(await keysOf(store, 'again')).toEqual(['again/2026', 'again/a.txt']);
+    expect(await keysOf(store, '', true)).toEqual([
+      'again/2026/b.csv',
+      'again/a.txt',
+      'reports/2026/b.csv',
+      'reports/a.txt',
+    ]);
+    expect(await textAt(store, 'again/a.txt')).toBe('alpha');
+    await store.write('again/new.txt', utf8('through'), {});
+    expect(await readFile(path.join(root, 'reports', 'new.txt'), 'utf8')).toBe('through');
+    await store.delete('again/new.txt');
+    expect(await readdir(path.join(root, 'reports'))).not.toContain('new.txt');
+    expect(skipped).toEqual([]);
+  });
+
+  it('[US-STO-12][unit][sdk] a directory symlink back to a folder it is inside is counted, not walked again', async () => {
+    await symlink(path.join(root, 'reports'), path.join(root, 'reports', '2026', 'up'));
+    await symlink(root, path.join(root, 'top'));
+    const store = openStore();
+
     expect(await keysOf(store, '', true)).toEqual(['reports/2026/b.csv', 'reports/a.txt']);
+    expect(skipped).toEqual([{ links: 2, unreadable: 0 }]);
+    skipped = [];
+    expect(await keysOf(store, 'reports/2026')).toEqual(['reports/2026/b.csv']);
+    expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
   });
 
   it('[US-STO-12][unit][sdk] an unsafe key is refused by every member and never decoded', async () => {
@@ -337,6 +366,78 @@ describe('folder store', () => {
         // No reader is blocked: the pipe has nobody to release.
       }
     }
+  });
+
+  // #1835: the precondition used to re-resolve the key from the root, so a folder renamed inside the
+  // root after the write opened it had its etag compared against another folder's file.
+  it('[US-STO-12][unit][sdk] ifMatch is checked against the file in the folder the write opened, not the path', async () => {
+    await mkdir(path.join(root, 'impostor'));
+    await writeFile(path.join(root, 'impostor', 'a.txt'), 'impostor');
+    const store = openStore({
+      beforeCommit: async () => {
+        await rename(path.join(root, 'reports'), path.join(root, 'opened'));
+        await rename(path.join(root, 'impostor'), path.join(root, 'reports'));
+      },
+    });
+    const impostorEtag = (await store.head('impostor/a.txt'))?.etag ?? '';
+
+    await expect(
+      store.write('reports/a.txt', utf8('mine'), { ifMatch: impostorEtag }),
+    ).rejects.toBeInstanceOf(ObjectConflictError);
+    expect(await readFile(path.join(root, 'opened', 'a.txt'), 'utf8')).toBe('alpha');
+    expect(await readFile(path.join(root, 'reports', 'a.txt'), 'utf8')).toBe('impostor');
+  });
+
+  // #1835: the precondition and the rename were serialised by an in-process lock only, so another
+  // process (here: a second copy of the module, with its own lock table) could write in between.
+  it('[US-STO-12][unit][sdk] a write in another process waits for a commit in progress, then sees its etag', async () => {
+    vi.resetModules();
+    const otherProcess: typeof import('./folder-store.js') = await import('./folder-store.js');
+    const other = otherProcess.createFolderObjectStore(root);
+    const original = (await openStore().head('reports/a.txt'))?.etag ?? '';
+    let theirs: Promise<unknown> | undefined;
+    let settledDuringOurs = false;
+    const ours = openStore({
+      beforeCommit: async () => {
+        theirs = other.write('reports/a.txt', utf8('theirs'), { ifMatch: original });
+        settledDuringOurs = await Promise.race([
+          theirs.then(
+            () => true,
+            () => true,
+          ),
+          new Promise<false>((resolve) => setTimeout(() => resolve(false), 300)),
+        ]);
+      },
+    });
+
+    await ours.write('reports/a.txt', utf8('ours'), { ifMatch: original });
+    expect(settledDuringOurs).toBe(false);
+    // The other copy's class: the name is what both copies share.
+    await expect(theirs).rejects.toMatchObject({ name: 'ObjectConflictError' });
+    expect(await readFile(path.join(root, 'reports', 'a.txt'), 'utf8')).toBe('ours');
+    expect((await readdir(path.join(root, 'reports'))).sort()).toEqual(['2026', 'a.txt']);
+  });
+
+  it('[US-STO-12][unit][sdk] a commit lock left by a process that died is broken once it is stale', async () => {
+    const store = openStore();
+    let lock: string | undefined;
+    const spy = openStore({
+      beforeCommit: async () => {
+        lock = (await readdir(path.join(root, 'reports'))).find((name) =>
+          name.startsWith('.%aw-lock-'),
+        );
+      },
+    });
+    await spy.write('reports/a.txt', utf8('second'), {});
+    expect(lock).toBeDefined();
+    const left = path.join(root, 'reports', lock ?? '');
+    await writeFile(left, '');
+    const stale = new Date(Date.now() - 60_000);
+    await utimes(left, stale, stale);
+
+    await store.write('reports/a.txt', utf8('third'), {});
+    expect(await readFile(path.join(root, 'reports', 'a.txt'), 'utf8')).toBe('third');
+    expect((await readdir(path.join(root, 'reports'))).sort()).toEqual(['2026', 'a.txt']);
   });
 
   it('[US-STO-12][unit][sdk] a write is atomic: no temp file is listed and a failed body keeps the old file', async () => {
@@ -436,6 +537,77 @@ describe('folder store', () => {
       cursor = page.cursor ?? undefined;
     } while (cursor !== undefined);
     expect(keys).toEqual(['Q3 reports/n 1.txt', 'Q3 reports/n 2.txt']);
+  });
+
+  // #1835: a run's delivery pages through a granted folder. Each page used to walk the folder again
+  // from the start of its current directory and warn about the same skipped entries once per page.
+  it('[US-STO-12][unit][sdk] a recursive listing read page by page reads each folder once and reports its skips once', async () => {
+    await mkdir(path.join(root, 'p'));
+    for (const name of ['a', 'b', 'c', 'd', 'e']) {
+      await writeFile(path.join(root, 'p', `${name}.txt`), name);
+    }
+    await symlink(path.join(outside, 'secret.txt'), path.join(root, 'p', 'leak.txt'));
+    let readdirs = 0;
+    const store = openStore({
+      beforeReaddir: () => {
+        readdirs += 1;
+        return Promise.resolve();
+      },
+    });
+
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await store.listPage('p', {
+        recursive: true,
+        limit: 1,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      keys.push(...page.entries.map((entry) => entry.key));
+      cursor = page.cursor ?? undefined;
+    } while (cursor !== undefined);
+
+    expect(keys).toEqual(['p/a.txt', 'p/b.txt', 'p/c.txt', 'p/d.txt', 'p/e.txt']);
+    expect(readdirs).toBe(1);
+    expect(skipped).toEqual([{ links: 1, unreadable: 0 }]);
+  });
+
+  it('[US-STO-12][unit][sdk] a cursor from another store, or one whose walk has ended, still resumes in the right place', async () => {
+    const first = await openStore().listPage('reports', { recursive: true, limit: 1 });
+    expect(first.entries.map((entry) => entry.key)).toEqual(['reports/2026/b.csv']);
+    const resumed = await openStore().listPage('reports', {
+      recursive: true,
+      limit: 1,
+      cursor: first.cursor ?? '',
+    });
+    expect(resumed).toMatchObject({ entries: [{ key: 'reports/a.txt' }], cursor: null });
+  });
+
+  // #1835: a walk that examines more directory entries than the cap stops with a typed error rather
+  // than reading a folder of millions of names, or a tree of empty folders, to the end.
+  it('[US-STO-12][unit][sdk] a walk that examines more entries than the cap fails with a typed error', async () => {
+    expect(FOLDER_WALK_MAX_ENTRIES).toBe(200_000);
+    await mkdir(path.join(root, 'many'));
+    for (let n = 0; n < 6; n += 1) await writeFile(path.join(root, 'many', `f${String(n)}`), 'x');
+    const store = openStore({ walkMaxEntries: 5 });
+
+    await expect(store.listPage('many', { recursive: true })).rejects.toBeInstanceOf(
+      FolderWalkLimitError,
+    );
+    await expect(store.listPage('many')).rejects.toBeInstanceOf(FolderWalkLimitError);
+    // The count is one walk's, carried from page to page: `many` (7 names) fits, `many/zz` does not.
+    await mkdir(path.join(root, 'many', 'zz'));
+    await writeFile(path.join(root, 'many', 'zz', 'g'), 'x');
+    const paged = openStore({ walkMaxEntries: 7 });
+    const first = await paged.listPage('many', { recursive: true, limit: 2 });
+    expect(first.entries).toHaveLength(2);
+    let cursor = first.cursor;
+    const walkRest = async (): Promise<void> => {
+      while (cursor !== null) {
+        cursor = (await paged.listPage('many', { recursive: true, limit: 2, cursor })).cursor;
+      }
+    };
+    await expect(walkRest()).rejects.toBeInstanceOf(FolderWalkLimitError);
   });
 
   it('[US-STO-12][unit][sdk] hidden files are listed like any other, and names the key guard refuses are not', async () => {

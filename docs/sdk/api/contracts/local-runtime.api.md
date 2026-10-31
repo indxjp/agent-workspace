@@ -90,6 +90,19 @@ export const LocalRuntimeEnvironmentSchema: z.ZodReadonly<z.ZodObject<{
         network: z.ZodOptional<z.ZodNever>;
         approval: z.ZodOptional<z.ZodNever>;
     }, z.core.$strict>>>;
+    features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+        skills: "skills";
+        files: "files";
+        builder: "builder";
+        runs: "runs";
+        connectors: "connectors";
+        chat: "chat";
+        projects: "projects";
+        sharing: "sharing";
+        surfaces: "surfaces";
+        triggers: "triggers";
+        evaluations: "evaluations";
+    }>>>>;
     withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
 }, z.core.$strict>>;
@@ -150,6 +163,19 @@ export const LocalRuntimeMessageSchema: z.ZodDiscriminatedUnion<[z.ZodReadonly<z
             network: z.ZodOptional<z.ZodNever>;
             approval: z.ZodOptional<z.ZodNever>;
         }, z.core.$strict>>>;
+        features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>>>;
         withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     }, z.core.$strict>>;
@@ -218,6 +244,19 @@ export const LocalRuntimeParentMessageSchema: z.ZodDiscriminatedUnion<[z.ZodRead
             network: z.ZodOptional<z.ZodNever>;
             approval: z.ZodOptional<z.ZodNever>;
         }, z.core.$strict>>>;
+        features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>>>;
         withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     }, z.core.$strict>>;
@@ -280,6 +319,19 @@ export const LocalRuntimeStartMessageSchema: z.ZodReadonly<z.ZodObject<{
             network: z.ZodOptional<z.ZodNever>;
             approval: z.ZodOptional<z.ZodNever>;
         }, z.core.$strict>>>;
+        features: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
+            skills: "skills";
+            files: "files";
+            builder: "builder";
+            runs: "runs";
+            connectors: "connectors";
+            chat: "chat";
+            projects: "projects";
+            sharing: "sharing";
+            surfaces: "surfaces";
+            triggers: "triggers";
+            evaluations: "evaluations";
+        }>>>>;
         withheld: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         modelSecrets: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     }, z.core.$strict>>;

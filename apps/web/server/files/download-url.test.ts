@@ -174,11 +174,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
         objects: signing(createInMemoryObjectStore(), STORAGE_ORIGIN),
-        legacy: {
-          files: {
-            forWorkspace: (workspaceId) => signing(legacy.forWorkspace(workspaceId), LEGACY_ORIGIN),
-          },
-        },
         log: noLog,
       });
       // `viewer` is a member of `a`'s workspace whose role holds no `files` grant.
@@ -257,23 +252,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       return saved.row;
     }
 
-    /** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
-    async function saveLegacy(path: string, text: string) {
-      await legacy.forWorkspace(world.a.workspaceId).write(path, bytesOf(text), {});
-      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      const reserved = await catalog.reserve(path, {
-        ownerPrincipalId: world.a.principalId,
-        sizeBytes: bytesOf(text).byteLength,
-        contentType: 'text/plain',
-      });
-      const confirmed = await catalog.confirm(reserved.row, {
-        sizeBytes: bytesOf(text).byteLength,
-        contentType: 'text/plain',
-      });
-      if (confirmed === null) throw new Error('the legacy row did not confirm');
-      return confirmed.row;
-    }
-
     const mint = (actor: Actor, path: string, body: unknown = {}) =>
       downloadUrlRoute(
         new Request(`${APP_ORIGIN}/api/files/${encodeFileId(path)}/download-urls`, {
@@ -307,19 +285,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       expect(call?.request.responseDisposition).toMatch(/^attachment;/u);
       expect(call?.request.responseDisposition).toContain('q3.txt');
       expect(call?.request.responseContentType).toBe('text/plain');
-    });
-
-    // @story US-STO-05
-    it('[US-STO-05][api][sdk] a legacy row signs its legacy key on the legacy area store', async () => {
-      const row = await saveLegacy('old/report.txt', 'old bytes');
-      expect(row.objectId ?? null).toBeNull();
-
-      const link = await minted('old/report.txt');
-
-      expect(new URL(link.url).origin).toBe(LEGACY_ORIGIN);
-      expect(signed).toHaveLength(1);
-      expect(signed[0]?.key).toBe(row.storageKey);
-      expect(signed[0]?.request.responseDisposition).toMatch(/^attachment;/u);
     });
 
     // @story US-STO-05

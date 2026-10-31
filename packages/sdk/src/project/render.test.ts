@@ -702,7 +702,8 @@ describe('renderProjectShell', () => {
     "@modelcontextprotocol/client@>=2.0.0 <2.3.0": "^2.3.0",
     "@modelcontextprotocol/core@>=2.0.0 <2.3.0": "^2.3.0",
     "@modelcontextprotocol/node@>=2.0.0 <2.1.0": "2.1.1",
-    "@hono/node-server@>=1.19.10 <2.1.3": "^2.1.3"
+    "@hono/node-server@>=1.19.10 <2.1.3": "^2.1.3",
+    "minimatch@>=10.0.0 <11.0.1": "^11.0.3"
   }
 }
 `,
@@ -734,6 +735,7 @@ overrides:
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': '^2.3.0'
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': '2.1.1'
   '@hono/node-server@>=1.19.10 <2.1.3': '^2.1.3'
+  'minimatch@>=10.0.0 <11.0.1': '^11.0.3'
 `,
     );
     expect(contentsOf(files, '.gitignore')).toBe('node_modules/\n.agent-workspace/\n.aw/\n.env\n');

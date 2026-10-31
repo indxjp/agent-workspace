@@ -93,7 +93,7 @@ then the guides, then the resource-by-resource detail.
 - [Build a frontend](docs/sdk/site/building/frontend.mdx): Which credential a browser page can actually use, showing a surface's chat in React, rendering a live run, and listing sessions and runs for a UI.
 - [Embed an agent in your product](docs/sdk/site/building/embedding.mdx): Put an Agent Workspace agent inside your own application: a one-tag widget or a React chat, a backend that starts runs and relays their stream, a chat panel, a canvas, agent switching, and a browser token in place of the relay.
 - [Your own React](docs/sdk/site/building/react.mdx): Put the surface chat in your own React app: render the Chat component against the project running under aw dev, replace a part such as the composer, or draw everything yourself with useConversation.
-- [Integrate a backend](docs/sdk/site/building/backend.mdx): Run agents from your own server or CI job: which role to mint an API key with, start-and-wait vs. streaming, polling instead of webhooks, stopping a run, and mapping SDK errors onto your own API.
+- [Integrate a backend](docs/sdk/site/building/backend.mdx): Run agents from your own server or CI job: which role to mint an API key with, start-and-wait vs. streaming, receiving run outcomes with a signed webhook, stopping a run, and mapping SDK errors onto your own API.
 - [Call the API without the SDK](docs/sdk/site/building/http-api.mdx): Call /api/** from Python, Go, a shell script or any HTTP stack: authenticate, read responses and errors, stream a run, move files, and generate a typed client from the OpenAPI document.
 - [Streaming](docs/sdk/site/guides/streaming.mdx): Watch a run live: follow its events and print the agent's answer, survive dropped connections, resume from a saved cursor, parse a stream you already hold, and render tool calls and usage from the neutral agent.* events.
 - [Get typed data back from a run](docs/sdk/site/guides/structured-output.mdx): Ask a run for a value of your own shape instead of parsing its text: pass a Zod schema from code or a JSON Schema file from the CLI, and read the result typed.
@@ -169,6 +169,7 @@ then the guides, then the resource-by-resource detail.
 - [Models](docs/sdk/site/resources/models.mdx): Store model-provider credentials as connections, and discover the models each one offers.
 - [Runtimes](docs/sdk/site/resources/runtimes.mdx): Define where an agent executes — the driver, its sizing, and its network and filesystem policy.
 - [Triggers](docs/sdk/site/resources/triggers.mdx): Start a run of one agent from a webhook URL, without a person at the keyboard.
+- [Webhooks](docs/sdk/site/resources/webhooks.mdx): Register an endpoint and receive a signed event when a run completes, fails or is cancelled, instead of polling.
 
 ## Docs site: CLI
 
@@ -231,6 +232,7 @@ then the guides, then the resource-by-resource detail.
 - [SecretsClient](docs/sdk/site/reference/sdk/secrets.mdx): Every method of SecretsClient, its parameters, return type, and route.
 - [StorageClient](docs/sdk/site/reference/sdk/storage.mdx): Every method of StorageClient, its parameters, return type, and route.
 - [TriggersClient](docs/sdk/site/reference/sdk/triggers.mdx): Every method of TriggersClient, its parameters, return type, and route.
+- [WebhooksClient](docs/sdk/site/reference/sdk/webhooks.mdx): Every method of WebhooksClient, its parameters, return type, and route.
 - [contracts](docs/sdk/site/reference/contracts/index.mdx): The @indx-workspace/contracts root entry: identifiers and the error envelope.
 - [a2a](docs/sdk/site/reference/contracts/a2a.mdx): The @indx-workspace/contracts/a2a exports, sorted alphabetically.
 - [agent-versions](docs/sdk/site/reference/contracts/agent-versions.mdx): The @indx-workspace/contracts/agent-versions exports, sorted alphabetically.
@@ -270,9 +272,11 @@ then the guides, then the resource-by-resource detail.
 - [storage-url](docs/sdk/site/reference/contracts/storage-url.mdx): The @indx-workspace/contracts/storage-url exports, sorted alphabetically.
 - [surfaces](docs/sdk/site/reference/contracts/surfaces.mdx): The @indx-workspace/contracts/surfaces exports, sorted alphabetically.
 - [team](docs/sdk/site/reference/contracts/team.mdx): The @indx-workspace/contracts/team exports, sorted alphabetically.
+- [token-exchange](docs/sdk/site/reference/contracts/token-exchange.mdx): The @indx-workspace/contracts/token-exchange exports, sorted alphabetically.
 - [tokens](docs/sdk/site/reference/contracts/tokens.mdx): The @indx-workspace/contracts/tokens exports, sorted alphabetically.
 - [tool-connectors](docs/sdk/site/reference/contracts/tool-connectors.mdx): The @indx-workspace/contracts/tool-connectors exports, sorted alphabetically.
 - [triggers](docs/sdk/site/reference/contracts/triggers.mdx): The @indx-workspace/contracts/triggers exports, sorted alphabetically.
+- [webhooks](docs/sdk/site/reference/contracts/webhooks.mdx): The @indx-workspace/contracts/webhooks exports, sorted alphabetically.
 - [workspaces](docs/sdk/site/reference/contracts/workspaces.mdx): The @indx-workspace/contracts/workspaces exports, sorted alphabetically.
 - [CLI commands](docs/sdk/site/reference/cli/commands.mdx): Every `aw` command, its usage and summary, plus the global flags and exit codes.
 - [Agent Workspace API (OpenAPI 3.1)](docs/sdk/site/openapi.json): Every public /api/** route as one OpenAPI 3.1 document, generated from the contracts; generate a client in any language from it.

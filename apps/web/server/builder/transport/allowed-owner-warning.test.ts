@@ -10,19 +10,21 @@ function setup(roles: Readonly<Record<string, Role>>, failing = false) {
   const warn = vi.fn();
   const clock = { at: 0 };
   const current = { roles: { ...roles } as Record<string, Role> };
-  const listMemberships = vi.fn(() =>
-    failing
-      ? Promise.reject(new Error('directory down'))
-      : Promise.resolve(
-          Object.entries(current.roles).map(([principalId, role]) => ({ principalId, role })),
-        ),
-  );
+  // The warning asks for the one owner it needs; the member list is never read.
+  const findMembershipByPrincipal = vi.fn((principalId: string) => {
+    if (failing) return Promise.reject(new Error('directory down'));
+    const role = current.roles[principalId];
+    return Promise.resolve(role === undefined ? null : { principalId, role });
+  });
   const directory = {
-    forWorkspace: () => ({ listMemberships }),
+    forWorkspace: () => ({
+      findMembershipByPrincipal,
+      listMemberships: () => Promise.reject(new Error('the member list must not be scanned')),
+    }),
   } as unknown as Pick<DirectoryRoot, 'forWorkspace'>;
   return {
     warn,
-    listMemberships,
+    findMembershipByPrincipal,
     clock,
     current,
     warning: createAllowedOwnerWarning({ directory, warn, now: () => clock.at }),
@@ -57,11 +59,13 @@ describe('the warning for an allow-listed agent whose owner is not an Owner or A
   });
 
   it('looks at an owner found fine only once per window, and warns when the role is lowered after it', async () => {
-    const { warn, listMemberships, clock, current, warning } = setup({ 'principal-1': 'admin' });
+    const { warn, findMembershipByPrincipal, clock, current, warning } = setup({
+      'principal-1': 'admin',
+    });
     const run = () => warning(WORKSPACE, { id: 'agent-1', ownerPrincipalId: 'principal-1' });
     await run();
     await run();
-    expect(listMemberships).toHaveBeenCalledTimes(1);
+    expect(findMembershipByPrincipal).toHaveBeenCalledTimes(1);
     current.roles['principal-1'] = 'builder';
     clock.at = OWNER_OK_TTL_MS - 1;
     await run();
@@ -87,12 +91,12 @@ describe('the warning for an allow-listed agent whose owner is not an Owner or A
   });
 
   it('never throws, and looks at the agent again after a directory failure', async () => {
-    const { warn, listMemberships, warning } = setup({}, true);
+    const { warn, findMembershipByPrincipal, warning } = setup({}, true);
     await expect(
       warning(WORKSPACE, { id: 'agent-1', ownerPrincipalId: 'principal-1' }),
     ).resolves.toBeUndefined();
     await warning(WORKSPACE, { id: 'agent-1', ownerPrincipalId: 'principal-1' });
-    expect(listMemberships).toHaveBeenCalledTimes(2);
+    expect(findMembershipByPrincipal).toHaveBeenCalledTimes(2);
     expect(warn).not.toHaveBeenCalled();
   });
 });

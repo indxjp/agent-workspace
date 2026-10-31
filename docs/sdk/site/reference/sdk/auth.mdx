@@ -15,6 +15,12 @@ have no use for it. The token `pollToken` returns is what a `{ kind: 'user-token
 client presents afterwards; `revoke` must be called on such a client. Every request, these
 included, states the contracts version it was built against (ADR-0078).
 
+`exchange` (ADR-0161) is the app-backend half: a backend trades the signed-in person's ID token
+for a short-lived `awo_live_` access token, which a `{ kind: 'access-token', token }` client then
+presents. It too belongs on a `{ kind: 'session' }` client, since it authenticates with the
+endpoint client's own pair, and it runs only on a server: the client secret never reaches a
+browser.
+
 ## startDevice
 
 Start a sign-in: a device code to poll with, and a user code for the person to approve.
@@ -50,6 +56,33 @@ pollToken(deviceCode: string, options?: RequestOptions): Promise<CliTokenRespons
 
 **Route:** `POST /api/auth/cli-token`
 
+## exchange
+
+Exchange the signed-in person's OIDC ID token for an access token of an `app-backend` endpoint
+client (ADR-0161): `POST /api/auth/token-exchange` with RFC 8693's fields as JSON and the client
+pair as `Authorization: Basic`, never in the body. The token lasts at most
+`TOKEN_EXCHANGE_TTL_SECONDS` (300 s) and has no refresh token; cache one per person for its
+`expires_in` and exchange again with a fresh ID token after. It acts as that person within the
+client's binding: start runs on the client's bound agents the person may run, read and
+interrupt the runs the person can see, and read `me`.
+
+A refusal throws an `ApiProblemError` whose `code` is one of `TOKEN_EXCHANGE_PROBLEM_CODES`
+(`invalid_client`, `subject_token_invalid`, `subject_not_member`, …). Neither the ID token nor
+the secret is ever put in an error message.
+
+```ts
+exchange(input: TokenExchangeInput, options?: RequestOptions): Promise<TokenExchangeResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `TokenExchangeInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<TokenExchangeResponse>`
+
+**Route:** `POST /api/auth/token-exchange`
+
 ## revoke
 
 Sign out: revoke this client's own user token on the server.
@@ -65,3 +98,13 @@ async revoke(options?: RequestOptions): Promise<void>
 **Returns:** `Promise<void>`
 
 **Route:** `DELETE /api/auth/cli-token`
+
+## TokenExchangeInput
+
+What `aw.auth.exchange` trades: an `app-backend` endpoint client's pair and a person's ID token.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `clientId` | `string` | Yes | The `app-backend` endpoint client's id. |
+| `clientSecret` | `string` | Yes | That client's confidential secret (`POST /api/endpoint-clients/:id/secret`). |
+| `idToken` | `string` | Yes | The signed-in person's OIDC ID token, issued by the deployment's own `OIDC_ISSUER_URL`. |

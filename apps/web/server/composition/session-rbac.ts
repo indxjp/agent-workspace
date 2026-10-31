@@ -15,6 +15,7 @@ import type { StorageService } from '../storage/service';
 import type { WorkspacesRuntime } from '../workspaces/runtime';
 import { configuredPath } from './config';
 import { isAgentEndpointRoute } from '../auth/agent-endpoint-routes';
+import { isAppBackendRoute } from '../auth/app-backend-routes';
 import { readBearerOAuthAccessAttempt } from '../oauth/tokens';
 import { sessionCookieValue } from './identity';
 import type { Principal } from '../rbac/principal';
@@ -103,13 +104,10 @@ export async function installSessionTranscripts(
   // ENG-06 (#305): the engine-scoped store, installed beside the Claude-shaped one rather than
   // instead of it. Migration 0027 copied every existing transcript across and left the old tables
   // in place, so both halves serve until the contract step of the expand/contract lands (ADR-0071).
-  const { sessionStateBlobStore } = await import('./storage');
-  const blobs = await sessionStateBlobStore();
   const stateStore = new DatabaseSessionStateStore({
     repositories: database.sessionState,
     scopes: database.scopes,
     ...(storage === undefined ? {} : { storage }),
-    ...(blobs === null ? {} : { blobs }),
   });
   const environment: Omit<SessionApiEnvironment, 'retention'> = {
     authenticate: authenticateSessionRequest,
@@ -217,7 +215,7 @@ export async function installSessionTranscripts(
  * fails the build, and an `a2a-agent` client with no agent fails closed rather than widening.
  */
 function oauthTokenScope(
-  row: Pick<ActiveOAuthAccessToken, 'clientKind' | 'clientId' | 'agentId'>,
+  row: Pick<ActiveOAuthAccessToken, 'clientKind' | 'clientId' | 'agentId' | 'agentIds'>,
 ): TokenScope | null {
   switch (row.clientKind) {
     case 'a2a-agent':
@@ -226,6 +224,10 @@ function oauthTokenScope(
       return { kind: 'mcp-project', id: row.clientId };
     case 'builder':
       return { kind: 'builder', id: row.clientId };
+    case 'app-backend':
+      return row.agentIds.length === 0
+        ? null
+        : { kind: 'app-backend', id: row.clientId, agentIds: Object.freeze([...row.agentIds]) };
     default: {
       const unreachable: never = row.clientKind;
       throw new Error(`unhandled endpoint client kind ${String(unreachable)}`);
@@ -348,13 +350,21 @@ export async function installRbacApi(
    * revoked-client token and an `a2a-agent` client with no agent), then the consenting member is
    * re-read exactly as a session's is, so a removed member or a changed role bites at once.
    */
-  const resolveOAuthActor = async (secret: string): Promise<PrincipalResolution> => {
+  const resolveOAuthActor = async (
+    secret: string,
+    route: 'agent-endpoint' | 'app-backend',
+  ): Promise<PrincipalResolution> => {
     const invalid: PrincipalResolution = {
       kind: 'unauthenticated',
       reason: 'The bearer credential is invalid.',
     };
     const row = await root.findOAuthAccessTokenByHash(await keyModule.hashApiKeySecret(secret));
     if (row === null) return invalid;
+    // ADR-0161 D9: on an app-backend route only an app-backend client's token resolves, so an
+    // a2a-agent token cannot use `POST /api/agents/:id/runs` as a second way in. On an
+    // agent-endpoint route an app-backend token resolves and the endpoint's audience check refuses
+    // it, because its resource is never an endpoint URL.
+    if (route === 'app-backend' && row.clientKind !== 'app-backend') return invalid;
     const subject = await root.directory.principalById(row.workspaceId, row.subjectPrincipalId);
     if (subject === null || subject.kind !== 'membership') return invalid;
     const member = principalModule.Principal.fromDirectoryRecord({
@@ -380,21 +390,25 @@ export async function installRbacApi(
   const resolveActor = async (request: Request): Promise<PrincipalResolution> => {
     const authorization = request.headers.get('authorization');
     // Tried before the other bearers for the same reason as the browser token below. Admitted only
-    // on an agent-endpoint route: the `a2a-agent` scope grammar also allows `POST /api/agents/:id/runs`,
-    // which this token must not reach.
+    // on an agent-endpoint route, and on an app-backend route for an app-backend client's token
+    // (ADR-0161 D9): the `a2a-agent` scope grammar also allows `POST /api/agents/:id/runs`, which an
+    // endpoint's token must not reach.
     const oauthAttempt = readBearerOAuthAccessAttempt(authorization);
     if (oauthAttempt.kind === 'invalid') {
       return { kind: 'unauthenticated', reason: 'The bearer credential is invalid.' };
     }
     if (oauthAttempt.kind === 'presented') {
       const { pathname } = new URL(request.url);
-      if (!isAgentEndpointRoute(request.method, pathname)) {
-        return {
-          kind: 'unauthenticated',
-          reason: 'An OAuth access token is not accepted on this route.',
-        };
+      if (isAgentEndpointRoute(request.method, pathname)) {
+        return resolveOAuthActor(oauthAttempt.secret, 'agent-endpoint');
       }
-      return resolveOAuthActor(oauthAttempt.secret);
+      if (isAppBackendRoute(request.method, pathname)) {
+        return resolveOAuthActor(oauthAttempt.secret, 'app-backend');
+      }
+      return {
+        kind: 'unauthenticated',
+        reason: 'An OAuth access token is not accepted on this route.',
+      };
     }
     // Tried first: `readBearerApiKeyAttempt` below classifies ANY well-formed "Bearer <token>"
     // that is not `ak_live_`-shaped as `invalid` and answers 401 without ever reaching the session

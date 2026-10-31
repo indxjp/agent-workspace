@@ -227,6 +227,8 @@ export async function promptLine(
   question: string,
   signal?: AbortSignal,
 ): Promise<string> {
+  // question() never settles on an input that has already ended, and no 'close' follows.
+  if (!input.readable) throw new InterruptedError();
   const terminal = createInterface({ input, output });
   // question() never settles once the input ends (Ctrl-D, a closed pipe): the close is the answer.
   let onClose = (): void => undefined;
@@ -249,4 +251,47 @@ export async function promptLine(
     terminal.off('close', onClose);
     terminal.close();
   }
+}
+
+/** The terminal input {@link discardTypedAhead} reads; `process.stdin` when attached to a terminal. */
+export interface TypedAheadInput {
+  readonly isTTY?: boolean | undefined;
+  readonly setRawMode: (raw: boolean) => unknown;
+  readonly on: (event: 'data', listener: (chunk: Buffer | string) => void) => unknown;
+  readonly off: (event: 'data', listener: (chunk: Buffer | string) => void) => unknown;
+  readonly resume: () => unknown;
+  readonly pause: () => unknown;
+}
+
+/** The byte a terminal in raw mode delivers for Ctrl-C, which is then not a SIGINT. */
+const CTRL_C = '\x03';
+
+/**
+ * Read and drop what is waiting on the terminal for `windowMs`, in raw mode so a half-typed line
+ * counts too. Raw mode turns Ctrl-C into this byte instead of SIGINT, so one that arrives in the
+ * window is the person interrupting, not typed-ahead text to drop. The terminal is restored first.
+ *
+ * @throws {InterruptedError} when Ctrl-C was typed during the window.
+ */
+export async function discardTypedAhead(
+  stdin: TypedAheadInput,
+  windowMs: number,
+  wait: (milliseconds: number) => Promise<void>,
+): Promise<void> {
+  if (stdin.isTTY !== true) return;
+  let interrupted = false;
+  const drop = (chunk: Buffer | string): void => {
+    if (chunk.toString().includes(CTRL_C)) interrupted = true;
+  };
+  stdin.setRawMode(true);
+  stdin.on('data', drop);
+  stdin.resume();
+  try {
+    await wait(windowMs);
+  } finally {
+    stdin.off('data', drop);
+    stdin.pause();
+    stdin.setRawMode(false);
+  }
+  if (interrupted) throw new InterruptedError();
 }

@@ -20,7 +20,6 @@ const REPORT: CleanupReport = {
   mode: 'report',
   scanned: 3,
   orphans: 1,
-  legacyOrphans: 0,
   stalePendingReady: 0,
   stalePendingDeleted: 0,
   deletingFinished: 0,

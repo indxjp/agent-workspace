@@ -130,6 +130,10 @@ write-like routes) would be two rules.
   (`apps/web/server/runs/launcher.ts`'s `maxRunDurationMs`). Compute is spent; nothing insecure
   happens. The durable fix (a poll-based cancellation request or RF-301's run leases) is a
   follow-up issue in tracker #232, inserted after this unit.
+  Amended by
+  [ADR-0151-FU-1440](ADR-0151-FU-1440-a-cancelled-run-is-stopped-by-its-holder-and-the-lease-renews-on-the-same-watch.md)
+  (proposed, issue #261): the replica holding the launch watches the run's committed status and
+  stops the runtime itself.
 - **`RunStore.markRunning` returns `boolean` instead of `void`.** A port change, and the reason it
   is worth one: the launcher's decision to start a runtime now rests on a positive assertion that
   *it* moved the run out of `queued`, rather than on the absence of a signal. Both adapters already

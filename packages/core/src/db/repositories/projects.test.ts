@@ -37,6 +37,7 @@ import { createDatabaseResourceCatalogRepositoryProvider } from './resource-cata
 import { createDatabaseRunRepositoryProvider } from './runs.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 if (!hasDatabase) {
@@ -391,6 +392,7 @@ describe.skipIf(!hasDatabase)('ProjectRepository archive lifecycle', () => {
         path: `docs/${plainId}.pdf`,
         kind: 'file',
         storageKey: `docs/${plainId}.pdf`,
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: principalId,
         createdBy: userId,
       },
@@ -400,6 +402,7 @@ describe.skipIf(!hasDatabase)('ProjectRepository archive lifecycle', () => {
         path: `.attachments/s/${uploadId}/a.pdf`,
         kind: 'file',
         storageKey: `.attachments/s/${uploadId}/a.pdf`,
+        objectId: crypto.randomUUID(),
         ownerPrincipalId: principalId,
         createdBy: userId,
       },
@@ -440,6 +443,7 @@ describe.skipIf(!hasDatabase)('ProjectRepository archive lifecycle', () => {
       path: `bind/${id}.pdf`,
       kind: 'file' as const,
       storageKey: `bind/${id}.pdf`,
+      objectId: crypto.randomUUID(),
       status,
       ownerPrincipalId: principalId,
       createdBy: userId,
@@ -476,10 +480,9 @@ describe.skipIf(!hasDatabase)('ProjectRepository archive lifecycle', () => {
     if (scope === null) throw new Error('fixture workspace did not resolve');
     const catalog = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scope);
     const bindings = createDatabaseProjectFileRepositoryProvider(isolated.db).forScope(scope);
-    const old = await catalog.putFile({
+    const old = await seedCatalogFile(catalog, {
       path: 'swap/report.pdf',
       kind: 'file',
-      storageKey: 'swap/report.pdf',
       sizeBytes: 1,
       contentType: null,
       ownerPrincipalId: principalId,

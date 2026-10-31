@@ -61,9 +61,9 @@ function fieldPath(read: ProjectRead, field: string): string {
 /**
  * The `start` message for the project in `cwd`: the local environment's port, runtime driver and
  * bootstrap Owner, validated against the contract before anything is forked. An environment the
- * local runtime cannot honour is refused by its field path. The project file's `policy` (C13) and
- * the `withheld` secret names (SD17) are sent only when there are any, so a slice-1 project's
- * `start` is unchanged.
+ * local runtime cannot honour is refused by its field path. The project file's `policy` (C13), its
+ * `features` (ADR-0160 D5) and the `withheld` secret names (SD17) are sent only when there are any,
+ * so a slice-1 project's `start` is unchanged.
  */
 export function localStartMessage(
   read: ProjectRead,
@@ -102,6 +102,9 @@ export function localStartMessage(
       ...(driver === undefined ? {} : { runtimeDriver: driver }),
       bootstrapAdmin: local.identity.bootstrapAdmin,
       ...(read.lifted || read.project.policy === undefined ? {} : { policy: read.project.policy }),
+      ...(read.lifted || read.project.features === undefined
+        ? {}
+        : { features: read.project.features }),
       ...(withheld.length === 0 ? {} : { withheld }),
       modelSecrets: modelSecretNames(read),
     },

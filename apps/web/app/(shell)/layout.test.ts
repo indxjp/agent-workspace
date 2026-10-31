@@ -1,16 +1,21 @@
 /**
  * `resolveIdentity` — issue #118's "the shell shows database workspace/user names and the actual
  * role, not the session claim". `ShellLayout` itself is a Server Component this suite does not
- * render; `resolveIdentity` is the one function in the file that decides what it shows, and it is
- * exported for exactly this test.
+ * render; `resolveIdentity` (now in `server/features/console.ts`, so feature pages ask the same
+ * lookup) and `currentWorkspaceFeatures` are what decide what it shows.
  */
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
+
+import { Sidebar } from '../../components/shell/sidebar';
 
 import { mintSessionToken, newSessionClaims, verifySessionToken } from '../../server/auth';
 import { conferredBy } from '../../server/rbac/conferral';
 import { createMemoryDirectory } from '../../server/rbac/memory-directory';
 
-import { resolveIdentity } from './layout';
+import { currentWorkspaceFeatures, resolveIdentity } from '../../server/features/console';
 import { clearApplicationContext } from '../../server/application-context';
 import { installTestDomains } from '../../server/application-context-fixtures';
 
@@ -39,7 +44,12 @@ describe('resolveIdentity', () => {
     expect(session.role).toBe('owner'); // the vestigial claim every session mints (issue #118)
 
     const resolved = await resolveIdentity(session);
-    expect(resolved).toEqual({ userName: 'Aya Ito', workspaceName: 'Acme Corp', role: 'builder' });
+    expect(resolved).toEqual({
+      userName: 'Aya Ito',
+      workspaceId: 'ws-a',
+      workspaceName: 'Acme Corp',
+      role: 'builder',
+    });
 
     // BREAK-IT CHECK (done by hand while writing this test, reverted before commit): changing
     // `resolveIdentity` to return `{ ..., role: session.role }` instead of `current.role` makes
@@ -87,5 +97,41 @@ describe('resolveIdentity', () => {
   it('resolves nothing when the RBAC runtime is not wired — a declared gap, not a crash', async () => {
     const session = await verifiedSessionFor('aya@example.test', 'acme');
     expect(await resolveIdentity(session)).toBeNull();
+  });
+});
+
+describe('the shell sidebar with no feature switched off', () => {
+  afterEach(() => {
+    clearApplicationContext();
+  });
+
+  const props = {
+    workspace: { name: 'Acme Corp', detail: 'Self-hosted', slug: 'acme' },
+    user: { name: 'Aya Ito', role: 'Owner', initials: 'AI' },
+    managers: true,
+  };
+
+  it('renders byte-identically to the sidebar before features, with no session', async () => {
+    const features = await currentWorkspaceFeatures(null);
+    expect(features).toEqual(FEATURE_IDS);
+    expect(renderToStaticMarkup(createElement(Sidebar, { ...props, features }))).toBe(
+      renderToStaticMarkup(createElement(Sidebar, props)),
+    );
+  });
+
+  it('renders byte-identically for a resolved workspace when no switch is wired', async () => {
+    const directory = createMemoryDirectory({
+      workspaces: [{ id: 'ws-a', slug: 'acme', name: 'Acme Corp' }],
+      users: [{ email: 'aya@example.test', name: 'Aya Ito', workspaceId: 'ws-a', role: 'owner' }],
+    });
+    installTestDomains({ rbac: { directory, identify: () => Promise.resolve(null) } });
+    const resolved = await resolveIdentity(await verifiedSessionFor('aya@example.test', 'acme'));
+    expect(resolved?.workspaceId).toBe('ws-a');
+
+    const features = await currentWorkspaceFeatures(resolved);
+    expect(features).toEqual(FEATURE_IDS);
+    expect(renderToStaticMarkup(createElement(Sidebar, { ...props, features }))).toBe(
+      renderToStaticMarkup(createElement(Sidebar, props)),
+    );
   });
 });

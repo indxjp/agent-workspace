@@ -910,6 +910,27 @@ describe('portableFromAgentVersionBody: tools', () => {
     expect(none.value.tools[0]).not.toHaveProperty('auth');
   });
 
+  it('openapi: an identity assertion is not carried, and is reported at the tool', () => {
+    const agent = defineAgent({
+      ...MINIMAL,
+      tools: [
+        openapiTool({
+          name: 'signed-api',
+          spec: 'openapi/signed.json',
+          allow: ['GET /s'],
+          identity: secret('SIGNED_API_IDENTITY'),
+        }),
+      ],
+    });
+    const { value, dropped } = toPortableAgent(agent);
+    expect(value.tools).toEqual([
+      { kind: 'openapi', name: 'signed-api', specRef: 'openapi/signed.json', allow: ['GET /s'] },
+    ]);
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]?.path).toBe('definition.resources.connectors.0.identity');
+    expect(dropped[0]?.reason).toContain('SIGNED_API_IDENTITY');
+  });
+
   it('openapi: a credentialed tool whose secret is not named is dropped', () => {
     const body = toAgentVersionBody(defineAgent({ ...MINIMAL, tools: [ordersApi] }));
     const { credential, ...withoutSecret } = ORDERS_DEFINITION;
@@ -977,6 +998,35 @@ describe('portableFromAgentVersionBody: tools', () => {
         auth: { scheme: 'api-key', secretRef: 'KEYED_TOKEN' },
       },
     ]);
+  });
+
+  it('mcp: a connector identity assertion is not carried, and is reported at the tool', () => {
+    const project = ProjectDocumentSchema.parse({
+      ...PROJECT,
+      connectors: {
+        signed: {
+          url: 'https://signed.example.com/mcp',
+          identity: { secret: 'SIGNED_MCP_IDENTITY' },
+        },
+      },
+    });
+    const { value, dropped } = toPortableAgent(
+      defineAgent({ ...MINIMAL, tools: [mcp('signed')] }),
+      {
+        project,
+      },
+    );
+    expect(value.tools).toEqual([
+      {
+        kind: 'mcp',
+        name: 'signed',
+        transport: 'streamable-http',
+        url: 'https://signed.example.com/mcp',
+      },
+    ]);
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]?.path).toBe('definition.resources.connectors.0.identity');
+    expect(dropped[0]?.reason).toContain('SIGNED_MCP_IDENTITY');
   });
 
   it('mcp: a connector the project does not declare is dropped', () => {

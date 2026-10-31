@@ -139,12 +139,10 @@ export async function wireSubsystems({
     scopes,
     resourceCatalog,
     root.fileTexts,
-    root.workspaces,
     root.sessionState,
     {
       lock: (name, work) => root.withNamedLock(name, work),
       workspaceIds: () => root.listWorkspaceIds(),
-      migrationRuns: root.storageMigrationRuns,
       audit: (event) => root.recordAuditEvent(event),
       stopOnClose,
     },

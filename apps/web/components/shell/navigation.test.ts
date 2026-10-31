@@ -11,9 +11,11 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { FEATURE_IDS, ROUTE_FEATURES } from '@indx-workspace/contracts/features';
+import { API_ROUTES } from '@indx-workspace/contracts/routes';
 import { describe, expect, it } from 'vitest';
 
-import { NAVIGATION, activeNavId, crumbsFor } from './navigation';
+import { NAVIGATION, activeNavId, crumbsFor, visibleNavigation } from './navigation';
 
 /** docs/spec.md §44, in order, both groups flattened. */
 const SPEC_44_ORDER = [
@@ -90,6 +92,89 @@ describe('the entries only managers see', () => {
     expect(items.filter((item) => item.managersOnly === true).map((item) => item.id)).toEqual([
       'storage',
     ]);
+  });
+});
+
+describe('each entry’s feature (ADR-0160 D4)', () => {
+  it('tags every entry with a feature the switch knows, or core', () => {
+    const known: readonly string[] = ROUTE_FEATURES;
+    expect(items.filter((item) => !known.includes(item.feature))).toEqual([]);
+  });
+
+  it('tags each entry as ADR-0160 D4 assigns it', () => {
+    expect(items.map((item) => [item.id, item.feature])).toEqual([
+      ['home', 'chat'],
+      ['projects', 'projects'],
+      ['agents', 'core'],
+      ['files', 'files'],
+      ['skills', 'skills'],
+      ['connectors', 'connectors'],
+      ['runs', 'runs'],
+      ['models', 'core'],
+      ['storage', 'core'],
+      ['users', 'core'],
+      ['apikeys', 'core'],
+      ['runtimes', 'core'],
+      ['shares', 'sharing'],
+      ['settings', 'core'],
+    ]);
+  });
+
+  // The screen's own listing route: the API the page reads first. An entry's feature must be the
+  // feature of that route, so switching the feature off hides the entry and refuses its API alike.
+  const SCREEN_ROUTE: Readonly<Record<string, string>> = {
+    home: 'GET /api/sessions',
+    projects: 'GET /api/projects',
+    agents: 'GET /api/agents',
+    files: 'GET /api/files',
+    skills: 'GET /api/skills',
+    connectors: 'GET /api/connectors',
+    runs: 'GET /api/runs',
+    models: 'GET /api/models',
+    storage: 'GET /api/storage-connections',
+    users: 'GET /api/users',
+    apikeys: 'GET /api/api-keys',
+    runtimes: 'GET /api/runtime-profiles',
+    shares: 'GET /api/shares',
+    settings: 'GET /api/workspaces/:id',
+  };
+
+  it('gives every entry the feature of the route its screen reads', () => {
+    const featureOf = new Map(
+      API_ROUTES.map((route) => [`${route.method} ${route.path}`, route.feature]),
+    );
+    expect(items.map((item) => [item.id, featureOf.get(SCREEN_ROUTE[item.id] ?? '')])).toEqual(
+      items.map((item) => [item.id, item.feature]),
+    );
+  });
+});
+
+describe('visibleNavigation', () => {
+  it('is the whole navigation when every feature is on, and by default', () => {
+    expect(visibleNavigation(FEATURE_IDS)).toEqual(NAVIGATION);
+    expect(visibleNavigation()).toEqual(NAVIGATION);
+  });
+
+  it('keeps core entries and the listed features’ entries only', () => {
+    const ids = visibleNavigation(['chat', 'files']).map((group) => [
+      group.label,
+      group.items.map((item) => item.id),
+    ]);
+    expect(ids).toEqual([
+      [null, ['home', 'agents', 'files']],
+      ['Administration', ['models', 'storage', 'users', 'apikeys', 'runtimes', 'settings']],
+    ]);
+  });
+
+  // Each group holds a core entry (Agents, Models), so neither empties today; the rule that drops
+  // an empty group guards a future group of feature-only entries.
+  it('keeps the core entries, and so both groups, with every feature off', () => {
+    const onlyCore = NAVIGATION.map((group) => ({
+      label: group.label,
+      items: group.items.filter((item) => item.feature === 'core'),
+    }));
+    expect(visibleNavigation([]).map((group) => group.label)).toEqual([null, 'Administration']);
+    expect(visibleNavigation([])).toEqual(onlyCore);
   });
 });
 

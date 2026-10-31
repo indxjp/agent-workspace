@@ -3,8 +3,6 @@
  * under a new object ID in the `session-state` area, the row is confirmed after the write, and the
  * replaced blob's object is deleted last. Run on an in-memory repository and on PostgreSQL.
  */
-import { createHash } from 'node:crypto';
-
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -20,12 +18,12 @@ import {
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
 import {
+  createInMemorySessionStateBlobs,
   createInMemoryWorkspaceScopeResolver,
   type SessionRecord,
   type SessionRepositoryProvider,
   type SessionStateRepository,
   type SessionStateRepositoryProvider,
-  type StoredSessionStateBlob,
   type WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import {
@@ -36,6 +34,14 @@ import {
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
 
+import {
+  generatedBody,
+  MiB,
+  NEW_SPACE_CREDIT_BOUND,
+  peakRssGrowth,
+  warmHttpTransport,
+} from '../../../../tests/load/flat-memory';
+
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { createStorageService } from '../storage/service';
@@ -44,7 +50,7 @@ import { InMemoryTranscriptStore } from './memory-store';
 import { getSessionStateBlob, putSessionStateBlob } from './state-api';
 import { createRepositorySessionsStoreProvider, DatabaseSessionStateStore } from './store';
 
-const ENGINE = 'claude-agent-sdk';
+const ENGINE = 'claude-agent-sdk' as const;
 const BLOB_KEY = 'state.tar';
 
 interface Fixture {
@@ -55,52 +61,20 @@ interface Fixture {
   readonly scopes: WorkspaceScopeResolver;
 }
 
-/** The blob half of the repository, in memory; the stream half is not used here. */
+/** The blob rows in memory (held to the database's contract); the stream half is not used here. */
 function memoryFixture(): Promise<Fixture> {
   const workspaceId = crypto.randomUUID();
-  const rows = new Map<string, StoredSessionStateBlob>();
   const unreachable = (): never => {
     throw new Error('this suite drives only the blob half of the session-state repository');
   };
   const repository: SessionStateRepository = {
+    ...createInMemorySessionStateBlobs().forWorkspace(workspaceId),
     append: unreachable,
     list: unreachable,
     deleteLast: unreachable,
     replaceAll: unreachable,
     deleteStream: unreachable,
     listStreams: unreachable,
-    putBlob: (sessionId, blob) => {
-      const id = `${sessionId}/${blob.engine}/${blob.blobKey}`;
-      const previous = rows.get(id);
-      rows.set(id, {
-        blobKey: blob.blobKey,
-        objectId: blob.objectId ?? null,
-        storageKey: blob.storageKey,
-        sizeBytes: blob.sizeBytes,
-        sha256: blob.sha256,
-      });
-      return Promise.resolve({
-        replaced:
-          previous === undefined
-            ? null
-            : { objectId: previous.objectId, storageKey: previous.storageKey },
-      });
-    },
-    getBlob: (sessionId, engine, blobKey) =>
-      Promise.resolve(rows.get(`${sessionId}/${engine}/${blobKey}`) ?? null),
-    listBlobs: () => Promise.resolve([...rows.values()]),
-    listLegacyBlobs: unreachable,
-    countLegacyBlobs: unreachable,
-    listObjectBlobs: unreachable,
-    legacyBlobKeysHeld: unreachable,
-    switchBlobObject: unreachable,
-    referencedObjectIds: (ids) =>
-      Promise.resolve(ids.filter((id) => [...rows.values()].some((row) => row.objectId === id))),
-    purgeBefore: () => {
-      const blobs = [...rows.values()];
-      rows.clear();
-      return Promise.resolve({ streams: 0, entries: 0, blobs, sessionIds: [] });
-    },
   };
   return Promise.resolve({
     workspaceId,
@@ -190,23 +164,40 @@ afterEach(() => {
 
 function defineSuite(name: string, setup: () => Promise<Fixture>) {
   describe(`session state blobs on the ${name}`, () => {
-    async function harness() {
+    async function harness(options: { readonly objects?: ObjectStore } = {}) {
       const f = await setup();
       let confirmFails = false;
       let afterNextRowRead: (() => Promise<unknown>) | undefined;
-      const objects = createInMemoryObjectStore();
+      let beforeNextWrite: ((name: string) => Promise<unknown>) | undefined;
+      let beforeDelete: ((name: string) => Promise<unknown>) | undefined;
+      let deletesFail = false;
+      const store = options.objects ?? createInMemoryObjectStore();
+      const objects: ObjectStore = {
+        ...store,
+        write: async (name, body, writeOptions) => {
+          const hook = beforeNextWrite;
+          beforeNextWrite = undefined;
+          if (hook !== undefined) await hook(name);
+          return store.write(name, body, writeOptions);
+        },
+        delete: async (name) => {
+          if (beforeDelete !== undefined) await beforeDelete(name);
+          if (deletesFail) throw new Error('the object store refused the delete');
+          return store.delete(name);
+        },
+      };
       const legacy = createInMemoryObjectStoreProvider();
       const scope = await f.scopes.forWorkspaceId(f.workspaceId);
       if (scope === null) throw new Error('the workspace did not resolve');
       const real = f.repositories.forScope(scope);
       const repository: SessionStateRepository = {
         ...real,
-        putBlob: (sessionId, blob) => {
+        confirmBlob: (pending, confirmation) => {
           if (confirmFails) {
             confirmFails = false;
             return Promise.reject(new Error('the confirm was lost'));
           }
-          return real.putBlob(sessionId, blob);
+          return real.confirmBlob(pending, confirmation);
         },
         getBlob: async (sessionId, engine, blobKey) => {
           const found = await real.getBlob(sessionId, engine, blobKey);
@@ -219,7 +210,6 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const storage = createStorageService({
         catalog: () => Promise.reject(new Error('the files catalog is not used here')),
         objects,
-        legacy: { 'session-state': legacy },
         sessionState: () => Promise.resolve(repository),
         log,
       });
@@ -291,6 +281,12 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
               new Request(url, { method: 'PUT', body: bytes.slice() }),
               f.sessionId,
             ),
+          /** A streamed body with no Content-Length, as a chunked upload sends it. */
+          putStream: (body: ReadableStream<Uint8Array>) => {
+            // A variable, not a literal: the DOM `RequestInit` has no `duplex`.
+            const init = { method: 'PUT', body, duplex: 'half' as const };
+            return putSessionStateBlob(new Request(url, init), f.sessionId);
+          },
           get: () => getSessionStateBlob(new Request(url), f.sessionId),
         };
       };
@@ -306,6 +302,19 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const raceNextRowRead = (hook: () => Promise<unknown>) => {
         afterNextRowRead = hook;
       };
+      /** Runs `hook` before the next object write starts. */
+      const raceNextWrite = (hook: (name: string) => Promise<unknown>) => {
+        beforeNextWrite = hook;
+      };
+      /** Runs `hook` before every object delete. */
+      const onDelete = (hook: (name: string) => Promise<unknown>) => {
+        beforeDelete = hook;
+      };
+      const failDeletes = () => {
+        deletesFail = true;
+      };
+      /** Rows a crash or a failed delete left: deleting rows, and every pending row. */
+      const unsettled = () => repository.unsettledBlobs(new Date(Date.now() + 60_000));
       return {
         f,
         objects,
@@ -320,6 +329,10 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         objectNames,
         failNextConfirm,
         raceNextRowRead,
+        raceNextWrite,
+        onDelete,
+        failDeletes,
+        unsettled,
       };
     }
 
@@ -370,28 +383,37 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
     });
 
     // @story US-STO-09
-    it('[US-STO-09][api][sdk] a blob row without an object ID still resumes, and a save moves it', async () => {
+    it('[US-STO-09][api][sdk] a blob that was never written answers absent, not an error', async () => {
       const h = await harness();
-      const oldKey = `session-state/${h.f.sessionId}/${ENGINE}/${BLOB_KEY}`;
-      const bytes = new Uint8Array([5, 5, 5]);
-      await h.legacy
-        .forWorkspace(h.f.workspaceId)
-        .write(oldKey, streamOf(bytes), { contentType: 'application/octet-stream' });
-      await h.repository.putBlob(h.f.sessionId, {
-        engine: ENGINE,
-        blobKey: BLOB_KEY,
-        storageKey: oldKey,
-        sizeBytes: bytes.byteLength,
-        sha256: createHash('sha256').update(bytes).digest('hex'),
-      });
+      await expect(
+        h.stateStore.getBlob({
+          workspaceId: h.f.workspaceId,
+          sessionId: h.f.sessionId,
+          engine: ENGINE,
+          blobKey: BLOB_KEY,
+        }),
+      ).resolves.toEqual({ ok: true, content: null });
+    });
+
+    // @story US-STO-09
+    it('[US-STO-09][api][sdk] a resume refuses bytes that are not the ones it recorded', async () => {
+      const h = await harness();
       const api = h.as(h.user);
+      expect((await api.put(new Uint8Array([1, 2, 3]))).status).toBe(204);
+      const [name] = await h.objectNames();
+      // Somebody else wrote over the object: a recorded digest only proves something if it is checked.
+      await h.objects.write(name ?? '', streamOf(new Uint8Array([9, 9, 9])), {
+        contentType: 'application/octet-stream',
+      });
 
-      expect(new Uint8Array(await (await api.get()).arrayBuffer())).toEqual(bytes);
-
-      await api.put(new Uint8Array([6]));
-      await expect(h.legacy.forWorkspace(h.f.workspaceId).head(oldKey)).resolves.toBeNull();
-      expect((await h.stored())?.objectId).not.toBeNull();
-      expect(new Uint8Array(await (await api.get()).arrayBuffer())).toEqual(new Uint8Array([6]));
+      await expect(
+        h.stateStore.getBlob({
+          workspaceId: h.f.workspaceId,
+          sessionId: h.f.sessionId,
+          engine: ENGINE,
+          blobKey: BLOB_KEY,
+        }),
+      ).rejects.toThrow(/Refusing to replay a snapshot/u);
     });
 
     // @story US-STO-09
@@ -417,14 +439,15 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
 
       // The next confirm fails: the old object is not deleted, the old row still serves.
       h.failNextConfirm();
-      await expect(h.stateStore.putBlob(ref(h.f), new Uint8Array([2]))).rejects.toThrow(
+      await expect(h.stateStore.putBlob(ref(h.f), streamOf(new Uint8Array([2])))).rejects.toThrow(
         'the confirm was lost',
       );
 
       expect((await h.stored())?.objectId).toBe(kept?.objectId);
       expect(new Uint8Array(await (await api.get()).arrayBuffer())).toEqual(new Uint8Array([1, 1]));
-      const names = await h.objectNames();
-      expect(names).toContain(kept?.storageKey);
+      // The confirm never committed: its reservation and the object it wrote are gone with it.
+      await expect(h.objectNames()).resolves.toEqual([kept?.storageKey]);
+      await expect(h.unsettled()).resolves.toEqual([]);
     });
 
     // @story US-STO-09
@@ -450,7 +473,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await api.put(new Uint8Array([1]));
 
       // The save confirms after the read has the old row, so the object that row names is gone.
-      h.raceNextRowRead(() => h.stateStore.putBlob(ref(h.f), new Uint8Array([2, 2])));
+      h.raceNextRowRead(() => h.stateStore.putBlob(ref(h.f), streamOf(new Uint8Array([2, 2]))));
       const read = await h.stateStore.getBlob(ref(h.f));
 
       if (!read.ok || read.content === null) throw new Error('the racing read found no blob');
@@ -467,7 +490,142 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
 
       await expect(h.stored()).resolves.toBeNull();
       await expect(h.objectNames()).resolves.toEqual([]);
+      await expect(h.unsettled()).resolves.toEqual([]);
     });
+
+    // @story US-STO-09
+    it('[US-STO-09][contract][sdk] a save writes its pending row before the first byte', async () => {
+      const h = await harness();
+      let seen: { held: readonly string[]; served: unknown; objectId: string } | undefined;
+      h.raceNextWrite(async (name) => {
+        const objectId = name.split('/').at(-1) ?? '';
+        const held = await h.repository.referencedObjectIds([objectId]);
+        seen = { held, served: await h.stored(), objectId };
+      });
+
+      expect((await h.as(h.user).put(new Uint8Array([4, 2]))).status).toBe(204);
+
+      // The object was held by a row before it was written, and that row was not served yet.
+      expect(seen?.held).toEqual([seen?.objectId]);
+      expect(seen?.served).toBeNull();
+      expect((await h.stored())?.objectId).toBe(seen?.objectId);
+      await expect(h.unsettled()).resolves.toEqual([]);
+    });
+
+    // @story US-STO-09
+    it('[US-STO-09][contract][run] a reservation purged during the write is not confirmed and leaves nothing', async () => {
+      const h = await harness();
+      h.raceNextWrite(() =>
+        h.stateStore.purgeBefore(h.f.workspaceId, new Date(Date.now() + 60_000)),
+      );
+
+      await expect(h.stateStore.putBlob(ref(h.f), streamOf(new Uint8Array([7])))).rejects.toThrow(
+        /reservation/u,
+      );
+
+      await expect(h.stored()).resolves.toBeNull();
+      await expect(h.objectNames()).resolves.toEqual([]);
+      await expect(h.unsettled()).resolves.toEqual([]);
+    });
+
+    // @story US-STO-09
+    it('[US-STO-09][api][run] retention marks a blob deleting before its bytes go', async () => {
+      const h = await harness();
+      await h.as(h.user).put(new Uint8Array([1]));
+      const saved = await h.stored();
+      const atDelete: { served: unknown; unsettled: unknown }[] = [];
+      h.onDelete(async () => {
+        atDelete.push({ served: await h.stored(), unsettled: await h.unsettled() });
+      });
+
+      await h.stateStore.purgeBefore(h.f.workspaceId, new Date(Date.now() + 60_000));
+
+      expect(atDelete).toEqual([
+        {
+          served: null,
+          unsettled: [expect.objectContaining({ status: 'deleting', objectId: saved?.objectId })],
+        },
+      ]);
+      await expect(h.unsettled()).resolves.toEqual([]);
+    });
+
+    // @story US-STO-09
+    it('[US-STO-09][api][run] a failed delete during retention keeps the row deleting for the cleanup job', async () => {
+      const h = await harness();
+      await h.as(h.user).put(new Uint8Array([1]));
+      const saved = await h.stored();
+      h.failDeletes();
+
+      await h.stateStore.purgeBefore(h.f.workspaceId, new Date(Date.now() + 60_000));
+
+      await expect(h.stored()).resolves.toBeNull();
+      await expect(h.unsettled()).resolves.toEqual([
+        expect.objectContaining({ status: 'deleting', objectId: saved?.objectId }),
+      ]);
+      await expect(h.objectNames()).resolves.toEqual([saved?.storageKey]);
+    });
+
+    // @story US-STO-09
+    it('[US-STO-09][load][sdk] a PUT at the cap streams to the store and keeps memory growth under 16 MiB', async () => {
+      const size = SESSION_STATE_BLOB_MAX_BYTES;
+      const inner = createInMemoryObjectStore();
+      let sample: () => void = () => undefined;
+      // Drains the body instead of keeping it, so what the window reads is the route, the store
+      // and the service, not the test's own object store.
+      const h = await harness({
+        objects: {
+          ...inner,
+          write: async (_key, body) => {
+            let seen = 0;
+            if (body instanceof Uint8Array) {
+              seen = body.byteLength;
+            } else {
+              for await (const chunk of body) {
+                const before = seen;
+                seen += chunk.byteLength;
+                if (Math.floor(seen / (4 * MiB)) > Math.floor(before / (4 * MiB))) sample();
+              }
+            }
+            return {
+              sizeBytes: seen,
+              contentType: null,
+              etag: 'drained',
+              lastModified: new Date(),
+            };
+          },
+        },
+      });
+      const api = h.as(h.user);
+
+      // Built before each baseline: the generator's 16 MiB ring is the source, not the route.
+      let source = generatedBody(size);
+      await warmHttpTransport();
+      const streamed = await peakRssGrowth(async (sampled) => {
+        sample = sampled;
+        const response = await api.putStream(source.body);
+        expect(response.status, await response.clone().text()).toBe(204);
+      });
+      expect(streamed).toBeLessThan(16 * MiB);
+      expect(await h.stored()).toMatchObject({ sizeBytes: size, sha256: await source.sha256 });
+
+      // One byte over the cap, with no Content-Length to refuse it early: 413, and nothing kept.
+      const over = await api.putStream(generatedBody(size + 1).body);
+      expect(over.status).toBe(413);
+      expect(await h.stored()).toMatchObject({ sizeBytes: size });
+      await expect(h.unsettled()).resolves.toEqual([]);
+
+      // Negative control: buffering a body whole, as the route did, must read high. It is larger
+      // than the blob by NEW_SPACE_CREDIT_BOUND, the RSS a reading may credit.
+      const controlSize = size + NEW_SPACE_CREDIT_BOUND;
+      source = generatedBody(controlSize);
+      const buffered = await peakRssGrowth(async (sampled) => {
+        const init = { method: 'PUT', body: source.body, duplex: 'half' as const };
+        const read = await new Request('https://example.invalid/state-blobs', init).arrayBuffer();
+        sampled();
+        expect(read.byteLength).toBe(controlSize);
+      });
+      expect(buffered).toBeGreaterThanOrEqual(16 * MiB);
+    }, 120_000);
   });
 }
 

@@ -27,7 +27,7 @@ import {
   TransportError,
 } from '../errors.js';
 import { classifyRunEventFrame, type RunEventFrame } from '../events/run-events.js';
-import { readSseFrames } from '../events/sse.js';
+import { readSseStream } from '../events/sse.js';
 import { segment, type HttpClient, type RequestOptions } from '../http.js';
 
 /**
@@ -142,8 +142,21 @@ export interface FollowRunOptions extends RunEventsOptions {
    * connection that delivers one resets the count. Default 5.
    */
   readonly maxReconnects?: number;
-  /** Pause between reconnects, in milliseconds. Default 3000, the server's own `retry:` value. */
+  /**
+   * The base pause before a reconnect, in milliseconds, until the stream sends a `retry:` value;
+   * from then on that value is the base (issue #250, K-3). Default 3000, the server's own `retry:`.
+   * The n-th reconnect in a row waits a uniform random time between half and all of
+   * `min(maxReconnectDelayMs, base × 2^(n−1))`. A non-negative finite number no larger than
+   * `maxReconnectDelayMs`; anything else throws a `TypeError` before the first request.
+   */
   readonly reconnectDelayMs?: number;
+  /**
+   * The ceiling of the reconnect backoff, in milliseconds; a `retry:` above it is capped. Default
+   * 30000. A non-negative finite number at least `reconnectDelayMs`, so a ceiling under 3000 needs
+   * a `reconnectDelayMs` too; anything else throws a `TypeError` before the first request. A
+   * `429` or `5xx` that names `Retry-After` is waited exactly, past this ceiling.
+   */
+  readonly maxReconnectDelayMs?: number;
 }
 
 /** How a followed stream ended, with the last cursor seen so a caller can continue on its own. */
@@ -178,6 +191,55 @@ function abortedWhileWaiting(signal: AbortSignal): TransportError {
 function isDrop(error: unknown): boolean {
   if (error instanceof TransportError) return true;
   return error instanceof ApiProblemError && (error.status >= 500 || error.status === 429);
+}
+
+const DEFAULT_RECONNECT_DELAY_MS = 3000;
+const DEFAULT_MAX_RECONNECT_DELAY_MS = 30_000;
+
+/** The reconnect schedule's two bounds, checked before `follow` sends anything (§5.12, K-3). */
+function reconnectBounds(options: FollowRunOptions): {
+  readonly base: number;
+  readonly cap: number;
+} {
+  const base = options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS;
+  const cap = options.maxReconnectDelayMs ?? DEFAULT_MAX_RECONNECT_DELAY_MS;
+  for (const [name, ms] of [
+    ['reconnectDelayMs', base],
+    ['maxReconnectDelayMs', cap],
+  ] as const) {
+    if (!Number.isFinite(ms) || ms < 0) {
+      throw new TypeError(
+        `follow ${name} must be a non-negative finite number (got ${String(ms)})`,
+      );
+    }
+  }
+  if (base > cap) {
+    throw new TypeError(
+      `follow reconnectDelayMs (${String(base)}) must not exceed maxReconnectDelayMs (${String(cap)})`,
+    );
+  }
+  return { base, cap };
+}
+
+/**
+ * The pause before the `attempt`-th consecutive reconnect (§5.12, K-3): `d = min(cap, base ×
+ * 2^(attempt−1))`, then uniform in `[d / 2, d]` so followers dropped together do not return
+ * together.
+ */
+function backoffPause(base: number, cap: number, attempt: number): number {
+  const ceiling = Math.min(cap, base * 2 ** (attempt - 1));
+  return ceiling / 2 + Math.random() * (ceiling / 2);
+}
+
+/** The resume cursor a frame moves to, or `undefined` for a frame that does not move it. */
+function cursorOf(frame: RunEventFrame): string | null | undefined {
+  if (
+    (frame.kind === 'run-status' || frame.kind === 'run-warning' || frame.kind === 'runtime') &&
+    frame.id !== null
+  ) {
+    return frame.id === '' ? null : frame.id;
+  }
+  return undefined;
 }
 
 function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
@@ -446,6 +508,15 @@ export class RunsClient {
     runId: string,
     options: RunEventsOptions = {},
   ): AsyncGenerator<RunEventFrame, RunStreamEnd, void> {
+    return yield* this.#events(runId, options, undefined);
+  }
+
+  /** {@link events}, reporting each `retry:` the stream sends to `onRetry` (K-3, for follow). */
+  async *#events(
+    runId: string,
+    options: RunEventsOptions,
+    onRetry: ((ms: number) => void) | undefined,
+  ): AsyncGenerator<RunEventFrame, RunStreamEnd, void> {
     const response = await this.#http.send({
       operation: 'runs.events',
       method: 'GET',
@@ -473,17 +544,11 @@ export class RunsClient {
     }
     let lastEventId: string | null = options.after ?? null;
     try {
-      for await (const raw of readSseFrames(response.body, options.signal)) {
+      for await (const raw of readSseStream(response.body, options.signal, onRetry)) {
         const frame = classifyRunEventFrame(raw);
         if (frame.kind === 'done') return { lastEventId };
-        if (
-          (frame.kind === 'run-status' ||
-            frame.kind === 'run-warning' ||
-            frame.kind === 'runtime') &&
-          frame.id !== null
-        ) {
-          lastEventId = frame.id === '' ? null : frame.id;
-        }
+        const cursor = cursorOf(frame);
+        if (cursor !== undefined) lastEventId = cursor;
         yield frame;
       }
     } catch (cause) {
@@ -514,32 +579,35 @@ export class RunsClient {
    * that renders a transcript must discard what it has. Aborting `signal` ends the stream with a
    * {@link TransportError} whose `aborted` is `true`, like every other operation; catch it, or
    * return early yourself — stopping iteration early closes the connection either way.
+   *
+   * Reconnects back off (issue #250, K-3): the base is the last `retry:` the stream sent, else
+   * `reconnectDelayMs`; the n-th failed reconnect in a row waits between half and all of
+   * `min(maxReconnectDelayMs, base × 2^(n−1))`; a connection that delivers a new event starts the
+   * count again; a `429` or `5xx` naming `Retry-After` is waited exactly that long.
    */
   public async *follow(
     runId: string,
     options: FollowRunOptions = {},
   ): AsyncGenerator<RunEventFrame, RunStreamEnd, void> {
     const maxReconnects = options.maxReconnects ?? 5;
-    const reconnectDelayMs = options.reconnectDelayMs ?? 3000;
+    const { base, cap } = reconnectBounds(options);
+    let retryHint: number | null = null;
+    const onRetry = (ms: number): void => {
+      retryHint = ms;
+    };
     let after = options.after ?? null;
     let reconnects = 0;
     for (;;) {
       let lastSeen = after;
       try {
-        const stream = this.events(runId, { ...options, after });
+        const stream = this.#events(runId, { ...options, after }, onRetry);
         try {
           for (;;) {
             const next = await stream.next();
             if (next.done) return next.value;
             const frame = next.value;
-            if (
-              (frame.kind === 'run-status' ||
-                frame.kind === 'run-warning' ||
-                frame.kind === 'runtime') &&
-              frame.id !== null
-            ) {
-              lastSeen = frame.id === '' ? null : frame.id;
-            }
+            const cursor = cursorOf(frame);
+            if (cursor !== undefined) lastSeen = cursor;
             yield frame;
           }
         } finally {
@@ -554,9 +622,12 @@ export class RunsClient {
         if (reconnects >= maxReconnects) throw error;
         reconnects += 1;
         after = lastSeen;
+        // The server's instruction wins over the client's schedule: exact, uncapped, unjittered.
         const retryAfterSeconds = error instanceof ApiProblemError ? error.retryAfterSeconds : null;
         await delay(
-          retryAfterSeconds === null ? reconnectDelayMs : retryAfterSeconds * 1000,
+          retryAfterSeconds === null
+            ? backoffPause(retryHint ?? base, cap, reconnects)
+            : retryAfterSeconds * 1000,
           options.signal,
         );
       }

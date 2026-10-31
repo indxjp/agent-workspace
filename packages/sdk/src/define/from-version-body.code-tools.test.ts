@@ -11,6 +11,7 @@ import {
   defineTool,
   mcp,
   openapiTool,
+  pinnedOf,
   toAgentVersionBody,
   toolModulesOf,
   z,
@@ -36,12 +37,8 @@ const bodyOf = (tools: DefineAgentInput['tools']) =>
     toAgentVersionBody(defineAgent({ name: 'helper', instructions: 'Help.', tools })),
   );
 
-/** The pinned declaration aw writes for a code tool (`pinnedOf` in packages/aw). */
-const pinned = (code: ReturnType<typeof tool>) => ({
-  description: code.description,
-  inputSchema: code.inputSchema,
-  timeoutMs: code.limits.timeoutMs,
-});
+/** The pinned declaration aw writes for a code tool. */
+const pinned = pinnedOf;
 
 const withBundles = (body: AgentVersionBody, toolBundles: AgentVersionBody['toolBundles']) =>
   AgentVersionBodySchema.parse({ ...body, toolBundles });
@@ -221,7 +218,7 @@ describe('agentFromVersionBody code tools', () => {
     expect(value.agent.tools).toStrictEqual([mcp('a'), y]);
   });
 
-  it('lets the first module of a code tool name win, in path order', () => {
+  it('lets the first module of a code tool name win, in path order, and reports the other', () => {
     const other = tool('x', 'Another x');
     const { value, dropped } = agentFromVersionBody({
       body: bodyOf([x]),
@@ -231,10 +228,46 @@ describe('agentFromVersionBody code tools', () => {
       ]),
       codeToolNames: ['x'],
     });
-    expect(dropped).toStrictEqual([]);
+    expect(dropped).toStrictEqual([
+      {
+        path: 'toolModules.1',
+        reason:
+          'x: tools/b.ts#x repeats the name of tools/a.ts#x, which is used; rename one of them',
+      },
+    ]);
     expect(value.imports).toStrictEqual([
       { kind: 'code', name: 'x', module: 'tools/a.ts', exportName: 'x' },
     ]);
     expect(value.agent.tools).toStrictEqual([x]);
+  });
+});
+
+describe('pinnedOf', () => {
+  it('pins the fields a hosted sandbox serves, leaving an absent optional field absent', () => {
+    expect(pinnedOf(x)).toStrictEqual({
+      description: x.description,
+      inputSchema: x.inputSchema,
+      timeoutMs: x.limits.timeoutMs,
+    });
+  });
+
+  it('carries the output schema, secrets and allowed domains when the tool declares them', () => {
+    expect(
+      pinnedOf({
+        description: 'Fetch',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'object' },
+        limits: { timeoutMs: 5000 },
+        secrets: ['TOKEN'],
+        allowedDomains: ['api.example.test'],
+      }),
+    ).toStrictEqual({
+      description: 'Fetch',
+      inputSchema: { type: 'object' },
+      outputSchema: { type: 'object' },
+      timeoutMs: 5000,
+      secrets: ['TOKEN'],
+      allowedDomains: ['api.example.test'],
+    });
   });
 });

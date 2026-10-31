@@ -51,6 +51,7 @@ import {
 import { createStorageService, type StorageContext, type StorageService } from '../storage/service';
 import { encodeFileId } from './file-id';
 import { createRepositoryObjectStoreProvider } from './store';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const ACTOR_HEADER = 'x-test-actor';
 const FOLDER_FILES = 10_000;
@@ -227,7 +228,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
           };
         },
         objects,
-        legacy: { files: legacy },
         log: noLog,
       });
       const principalFor = (actor: Actor): Principal =>
@@ -283,23 +283,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       });
       if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
       return saved.row;
-    }
-
-    /** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
-    async function saveLegacy(path: string, text: string) {
-      await rawLegacy.forWorkspace(world.a.workspaceId).write(path, bytesOf(text), {});
-      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      const reserved = await catalog.reserve(path, {
-        ownerPrincipalId: world.a.principalId,
-        sizeBytes: bytesOf(text).byteLength,
-        contentType: 'text/plain',
-      });
-      const confirmed = await catalog.confirm(reserved.row, {
-        sizeBytes: bytesOf(text).byteLength,
-        contentType: 'text/plain',
-      });
-      if (confirmed === null) throw new Error('the legacy row did not confirm');
-      return confirmed.row;
     }
 
     const params = (path: string) => ({ params: Promise.resolve({ id: encodeFileId(path) }) });
@@ -453,20 +436,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       expect(await (await download('docs/a.txt')).text()).toBe('alpha');
     });
 
-    // @story US-STO-03
-    it('[US-STO-03][api][sdk] a renamed legacy row still downloads and its old key is gone', async () => {
-      await saveLegacy('old/report.txt', 'old bytes');
-
-      const response = await move('old/report.txt', 'new/report.txt');
-
-      expect(response.status, await response.clone().text()).toBe(200);
-      const download2 = await download('new/report.txt');
-      expect(download2.status).toBe(200);
-      expect(await download2.text()).toBe('old bytes');
-      expect((await download('old/report.txt')).status).toBe(404);
-      expect(await rawLegacy.forWorkspace(world.a.workspaceId).head('old/report.txt')).toBeNull();
-    });
-
     /**
      * Independent races run side by side, each in its own folder: one pair of requests alone often
      * finishes its first transaction before the second starts, and then races nothing.
@@ -503,13 +472,9 @@ function defineSuite(name: string, setup: () => Promise<World>) {
           expect(await response.text()).toBe(file.text);
         }
       }
-      const rows = await (await world.catalogs.forWorkspace(world.a.workspaceId)).listFiles();
+      const rows = await listCatalogFiles(await world.catalogs.forWorkspace(world.a.workspaceId));
       expect(rows.filter((row) => row.kind === 'file')).toHaveLength(races.length * 2);
     }
-
-    // @story US-STO-03
-    it('[US-STO-03][api][sdk] two concurrent renames of legacy-naming rows onto one destination: one 200, one 409, both files still download', () =>
-      expectRenameRacesSettle(saveLegacy));
 
     // @story US-STO-03
     it('[US-STO-03][api][sdk] two concurrent renames onto one destination: one 200, one 409, both files still download', () =>
@@ -559,7 +524,7 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       }
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
       expect(await catalog.countPending()).toBe(0);
-      const rows = (await catalog.listFiles()).filter((row) => row.kind === 'file');
+      const rows = (await listCatalogFiles(catalog)).filter((row) => row.kind === 'file');
       expect(rows.map((row) => row.path).sort()).toEqual(expectedPaths.sort());
     });
 

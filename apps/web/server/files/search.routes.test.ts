@@ -14,6 +14,7 @@ import { createCatalogFilesWorld } from './catalog-runtime-fixtures';
 import type { FileTextStore } from './store';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
@@ -56,10 +57,9 @@ async function seedCatalogs() {
   for (const workspaceId of [WORKSPACE_A, WORKSPACE_B]) {
     const catalog = catalogs.forWorkspaceSync(workspaceId);
     const put = (path: string) =>
-      catalog.putFile({
+      seedCatalogFile(catalog, {
         path,
         kind: 'file',
-        storageKey: path,
         sizeBytes: 1,
         contentType: 'text/plain',
         ownerPrincipalId: crypto.randomUUID(),

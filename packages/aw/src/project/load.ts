@@ -7,7 +7,6 @@ import {
   AgentVersionBodySchema,
   type AgentVersionBody,
 } from '@indx-workspace/contracts/agent-versions';
-import type { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-versions';
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import type { EvalCaseFile } from '@indx-workspace/contracts/evaluations';
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
@@ -92,9 +91,6 @@ export interface LoadedTool {
   readonly definition: define.ToolDefinition;
 }
 
-/** A code tool's declaration as a version's `toolBundles` entry holds it. */
-type PinnedDeclaration = Omit<AgentVersionToolBundle, 'tool' | 'digest'>;
-
 /** One code tool of the project (`defineTool()`, ADR-0115): served by the tool host, not stored. */
 export interface LoadedCodeTool {
   readonly file: string;
@@ -102,7 +98,7 @@ export interface LoadedCodeTool {
   /** The project-relative run file the tool declares; `aw push` bundles it (ADR-0118 TS1). */
   readonly run: string;
   /** What `aw push` pins beside the bundle's digest for a hosted tool sandbox (ADR-0118 TS4). */
-  readonly pinned?: PinnedDeclaration;
+  readonly pinned?: define.PinnedToolDeclaration;
 }
 
 /** What the loader found: the agents that loaded cleanly, and every problem. */
@@ -335,25 +331,6 @@ function bodyProblems(agent: LoadedAgent, error: z.ZodError): readonly ProjectPr
   }));
 }
 
-/** The declaration of a code tool, in the shape a version's `toolBundles` entry holds it. */
-function pinnedOf(tool: {
-  readonly description: string;
-  readonly inputSchema: Readonly<Record<string, unknown>>;
-  readonly outputSchema?: Readonly<Record<string, unknown>> | undefined;
-  readonly limits: { readonly timeoutMs: number };
-  readonly secrets?: readonly string[] | undefined;
-  readonly allowedDomains?: readonly string[] | undefined;
-}): PinnedDeclaration {
-  return {
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-    ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-    timeoutMs: tool.limits.timeoutMs,
-    ...(tool.secrets === undefined ? {} : { secrets: tool.secrets }),
-    ...(tool.allowedDomains === undefined ? {} : { allowedDomains: tool.allowedDomains }),
-  };
-}
-
 type LoadedAgentEntry = Extract<LoadedMessage['files'][number], { readonly tools: unknown }>;
 
 /**
@@ -424,7 +401,7 @@ function assemble(reply: LoadedMessage, agentRefused: boolean): ProjectLoad {
                   file: wire.file,
                   name: wire.tool.name,
                   run: wire.tool.run,
-                  pinned: pinnedOf(wire.tool),
+                  pinned: define.pinnedOf(wire.tool),
                 },
               ]
             : [],

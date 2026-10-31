@@ -28,7 +28,7 @@ interface AgentVersionSource {
     // (undocumented)
     readonly body: AgentVersionBody;
     readonly codeToolNames?: readonly string[] | undefined;
-    readonly project?: Pick<ProjectDocument, 'engine' | 'connectors' | 'models'> | undefined;
+    readonly project?: Pick<ProjectDocument, 'engine' | 'connectors'> | undefined;
     // Warning: (ae-forgotten-export) The symbol "DefinedSurface" needs to be exported by the entry point index.d.ts
     readonly surfaces?: readonly DefinedSurface[] | undefined;
     // Warning: (ae-forgotten-export) The symbol "ToolModuleExport" needs to be exported by the entry point index.d.ts
@@ -442,12 +442,18 @@ export interface PrintOptions {
 }
 
 // @public
+export function revealInvisible(text: string): string;
+
+// @public
 interface SkillReference extends Branded<'skill'> {
     // (undocumented)
     readonly name: string;
     // (undocumented)
     readonly revision?: number | undefined;
 }
+
+// @public
+export function stripControlSequences(text: string): string;
 
 // @public
 interface ToAgentVersionBodyOptions {

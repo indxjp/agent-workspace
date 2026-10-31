@@ -183,6 +183,10 @@
       "types": "./src/team.ts",
       "default": "./dist/team.js"
     },
+    "./token-exchange": {
+      "types": "./src/token-exchange.ts",
+      "default": "./dist/token-exchange.js"
+    },
     "./tokens": {
       "types": "./src/tokens.ts",
       "default": "./dist/tokens.js"
@@ -194,6 +198,10 @@
     "./triggers": {
       "types": "./src/triggers.ts",
       "default": "./dist/triggers.js"
+    },
+    "./webhooks": {
+      "types": "./src/webhooks.ts",
+      "default": "./dist/webhooks.js"
     },
     "./workspaces": {
       "types": "./src/workspaces.ts",
@@ -365,6 +373,10 @@
         "types": "./dist/team.d.ts",
         "default": "./dist/team.js"
       },
+      "./token-exchange": {
+        "types": "./dist/token-exchange.d.ts",
+        "default": "./dist/token-exchange.js"
+      },
       "./tokens": {
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.js"
@@ -376,6 +388,10 @@
       "./triggers": {
         "types": "./dist/triggers.d.ts",
         "default": "./dist/triggers.js"
+      },
+      "./webhooks": {
+        "types": "./dist/webhooks.d.ts",
+        "default": "./dist/webhooks.js"
       },
       "./workspaces": {
         "types": "./dist/workspaces.d.ts",

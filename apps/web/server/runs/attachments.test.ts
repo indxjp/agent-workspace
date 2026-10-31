@@ -6,6 +6,7 @@ import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import type { RunPrincipal } from './environment';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const ME = '77777777-7777-4777-8777-777777777777';
@@ -34,6 +35,7 @@ const SESSION = 'b0000000-0000-4000-8000-000000000001';
 /** A ready row of area `skills`, as saving a skill writes it. */
 async function skillRow(catalog: ResourceCatalogRepository, path: string) {
   const reserved = await catalog.reserve(path, {
+    objectId: crypto.randomUUID(),
     ownerPrincipalId: ME,
     sizeBytes: 3,
     contentType: 'text/plain',
@@ -48,31 +50,32 @@ async function skillRow(catalog: ResourceCatalogRepository, path: string) {
 }
 
 const seed = async (catalog: ResourceCatalogRepository) => ({
-  MINE: await catalog.putFile(row('notes/brief.md')),
-  THEIRS: await catalog.putFile(row('notes/theirs.md', SOMEONE_ELSE)),
-  RESERVED: await catalog.putFile(row('.Attachments/s1/scan.pdf')),
+  MINE: await seedCatalogFile(catalog, row('notes/brief.md')),
+  THEIRS: await seedCatalogFile(catalog, row('notes/theirs.md', SOMEONE_ELSE)),
+  RESERVED: await seedCatalogFile(catalog, row('.Attachments/s1/scan.pdf')),
   SKILL_ROW: await skillRow(catalog, '.skills/demo/SKILL.md'),
-  BESIDE_SKILLS: await catalog.putFile(row('.skills/notes.txt')),
-  UPLOADED: await catalog.putFile(
+  BESIDE_SKILLS: await seedCatalogFile(catalog, row('.skills/notes.txt')),
+  UPLOADED: await seedCatalogFile(
+    catalog,
     row(`.attachments/${SESSION}/c0000000-0000-4000-8000-000000000001/scan.pdf`),
   ),
-  FOREIGN_UPLOAD: await catalog.putFile(
+  FOREIGN_UPLOAD: await seedCatalogFile(
+    catalog,
     row(
       '.attachments/b0000000-0000-4000-8000-000000000002/c0000000-0000-4000-8000-000000000002/scan.pdf',
     ),
   ),
-  BIG: await catalog.putFile(row('big.bin', ME, 10 * MIB + 1)),
-  NINE_A: await catalog.putFile(row('nine-a.bin', ME, 9 * MIB)),
-  NINE_B: await catalog.putFile(row('nine-b.bin', ME, 9 * MIB)),
-  NINE_C: await catalog.putFile(row('nine-c.bin', ME, 9 * MIB)),
-  FOLDER: await catalog.putFile({
+  BIG: await seedCatalogFile(catalog, row('big.bin', ME, 10 * MIB + 1)),
+  NINE_A: await seedCatalogFile(catalog, row('nine-a.bin', ME, 9 * MIB)),
+  NINE_B: await seedCatalogFile(catalog, row('nine-b.bin', ME, 9 * MIB)),
+  NINE_C: await seedCatalogFile(catalog, row('nine-c.bin', ME, 9 * MIB)),
+  FOLDER: await seedCatalogFile(catalog, {
     ...row('docs'),
     kind: 'folder',
-    storageKey: null,
     sizeBytes: 0,
     contentType: null,
   }),
-  IN_FOLDER: await catalog.putFile(row('docs/a.md')),
+  IN_FOLDER: await seedCatalogFile(catalog, row('docs/a.md')),
 });
 
 let seeded: Awaited<ReturnType<typeof seed>>;
@@ -192,7 +195,8 @@ async function sessionUploads(count: number, sizeBytes: number, tag = 'u') {
   const made = [];
   for (let index = 0; index < count; index += 1) {
     made.push(
-      await workspaceCatalog.putFile(
+      await seedCatalogFile(
+        workspaceCatalog,
         row(`${UPLOAD_ROOT}/${tag}${String(index)}/f.bin`, ME, sizeBytes),
       ),
     );
@@ -204,7 +208,9 @@ async function sessionUploads(count: number, sizeBytes: number, tag = 'u') {
 async function plainFiles(count: number, sizeBytes: number) {
   const made = [];
   for (let index = 0; index < count; index += 1) {
-    made.push(await workspaceCatalog.putFile(row(`plain/${String(index)}.bin`, ME, sizeBytes)));
+    made.push(
+      await seedCatalogFile(workspaceCatalog, row(`plain/${String(index)}.bin`, ME, sizeBytes)),
+    );
   }
   return made;
 }
@@ -239,19 +245,18 @@ describe('attachment limits: 20 files, 10 MiB each, 50 MiB per session (storage 
   it('[US-STO-11][api][run] 50 MiB + 1 byte in one session (6 files, under the file cap) is refused by the total', async () => {
     // The seeded upload holds 3 bytes of this session: 3 + 4 x 10 MiB + (10 MiB - 2) = 50 MiB + 1.
     const stored = await sessionUploads(4, 10 * MIB);
-    await workspaceCatalog.putFile(row(`${UPLOAD_ROOT}/last/f.bin`, ME, 10 * MIB - 2));
+    await seedCatalogFile(workspaceCatalog, row(`${UPLOAD_ROOT}/last/f.bin`, ME, 10 * MIB - 2));
     const message = await tooLargeBody(VISITOR, [stored[0]?.id ?? '']);
     expect(message).toContain('the attachments total over 50 MiB');
   });
 
   it('counts a folder as one attachment: a folder of 21 one-byte files is accepted', async () => {
     for (let index = 0; index < 21; index += 1) {
-      await workspaceCatalog.putFile(row(`bulk/${String(index)}.md`, ME, 1));
+      await seedCatalogFile(workspaceCatalog, row(`bulk/${String(index)}.md`, ME, 1));
     }
-    const folder = await workspaceCatalog.putFile({
+    const folder = await seedCatalogFile(workspaceCatalog, {
       ...row('bulk'),
       kind: 'folder',
-      storageKey: null,
       sizeBytes: 0,
       contentType: null,
     });
@@ -265,7 +270,7 @@ describe('attachment limits: 20 files, 10 MiB each, 50 MiB per session (storage 
       twenty.map((r) => ({ fileId: r.id })),
     );
     expect(ok.kind).toBe('ok');
-    const more = await workspaceCatalog.putFile(row('one-more.bin'));
+    const more = await seedCatalogFile(workspaceCatalog, row('one-more.bin'));
     const message = await tooLargeBody(PRINCIPAL, [...twenty.map((r) => r.id), more.id]);
     expect(message).toContain('20 attachments');
   });
@@ -273,7 +278,9 @@ describe('attachment limits: 20 files, 10 MiB each, 50 MiB per session (storage 
   it('accepts five 10 MiB files (50 MiB) and refuses one byte more', async () => {
     const five = [];
     for (let index = 0; index < 5; index += 1) {
-      five.push(await workspaceCatalog.putFile(row(`ten-${String(index)}.bin`, ME, 10 * MIB)));
+      five.push(
+        await seedCatalogFile(workspaceCatalog, row(`ten-${String(index)}.bin`, ME, 10 * MIB)),
+      );
     }
     expect(
       (
@@ -283,13 +290,13 @@ describe('attachment limits: 20 files, 10 MiB each, 50 MiB per session (storage 
         )
       ).kind,
     ).toBe('ok');
-    const one = await workspaceCatalog.putFile(row('one.bin', ME, 1));
+    const one = await seedCatalogFile(workspaceCatalog, row('one.bin', ME, 1));
     const message = await tooLargeBody(PRINCIPAL, [...five.map((r) => r.id), one.id]);
     expect(message).toContain('50 MiB');
   });
 
   it('refuses a file of 10 MiB + 1 byte and accepts one of exactly 10 MiB', async () => {
-    const exact = await workspaceCatalog.putFile(row('exact.bin', ME, 10 * MIB));
+    const exact = await seedCatalogFile(workspaceCatalog, row('exact.bin', ME, 10 * MIB));
     expect((await resolveRunAttachments(PRINCIPAL, [{ fileId: exact.id }])).kind).toBe('ok');
     expect(await tooLargeBody(PRINCIPAL, [seeded.BIG.id])).toContain('10 MiB');
   });
@@ -297,7 +304,7 @@ describe('attachment limits: 20 files, 10 MiB each, 50 MiB per session (storage 
   it('counts what the session already stored: a later request that crosses 50 MiB is refused', async () => {
     // The seeded upload holds 3 bytes of this session, so the last file is 3 bytes short of 10 MiB.
     const stored = await sessionUploads(4, 10 * MIB);
-    await workspaceCatalog.putFile(row(`${UPLOAD_ROOT}/last/f.bin`, ME, 10 * MIB - 3));
+    await seedCatalogFile(workspaceCatalog, row(`${UPLOAD_ROOT}/last/f.bin`, ME, 10 * MIB - 3));
     const first = stored[0];
     if (first === undefined) throw new Error('no upload');
     // Exactly 50 MiB stored: attaching one of them is within the limit.
@@ -308,7 +315,8 @@ describe('attachment limits: 20 files, 10 MiB each, 50 MiB per session (storage 
   });
 
   it('does not count another session uploads', async () => {
-    await workspaceCatalog.putFile(
+    await seedCatalogFile(
+      workspaceCatalog,
       row('.attachments/b0000000-0000-4000-8000-000000000002/x/big.bin', ME, 10 * MIB),
     );
     const mine = await sessionUploads(1, 10 * MIB);

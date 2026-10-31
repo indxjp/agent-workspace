@@ -127,6 +127,9 @@ const SPEC_34_SUB_RESOURCES: Readonly<Record<Resource, readonly string[]>> = {
   // task's own to declare, in `declarations/PT-TRIGGERS-1293.ts`.
   triggers: [],
   users: [],
+  // Issue #250 (N-3). `/api/webhooks/:id` has no sub-resource: there is no update, no rotate and
+  // no deliveries route yet (ADR-SDK-18-N3-250 D8 and its declared gaps).
+  webhooks: [],
   workspaces: [],
 };
 
@@ -259,6 +262,10 @@ const POLICY: Readonly<Record<Role, RolePolicy>> = {
       // `EVERYTHING` rather than `MANAGE` because Builder holds `run: own` and roles are monotonic
       // (ADR-0152).
       triggers: EVERYTHING,
+      // Issue #250 (ADR-SDK-18-N3-250 D6): where the workspace's run outcomes are sent is the same
+      // kind of authority as its API keys; no webhook route classifies as `run`, and Builder holds
+      // nothing here, so `MANAGE` keeps roles monotonic (ADR-0152).
+      webhooks: MANAGE,
       // "Users" is the capability; a membership is how a user is attached to a workspace with a
       // role. Managing users without managing their membership is not a capability §21 could
       // have meant, because §21's user model has no other way to say who belongs where.

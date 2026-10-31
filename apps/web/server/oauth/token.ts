@@ -105,6 +105,14 @@ export async function token(request: Request): Promise<Response> {
   const auth = await authenticateClient(request);
   if (!auth.ok) return auth.response;
   const { client, form, runtime } = auth;
+  // ADR-0161 D4: an app-backend client's tokens come from the ID-token exchange alone; a grant here
+  // would act for the client's creator, and it has no resource URL.
+  if (client.kind === 'app-backend') {
+    return refusal(
+      'unauthorized_client',
+      'An app-backend client exchanges ID tokens at /api/auth/token-exchange.',
+    );
+  }
 
   const scope = form.get('scope');
   if (scope !== null && scope.trim() !== OAUTH_SCOPE) {

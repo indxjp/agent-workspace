@@ -109,6 +109,8 @@ export function installEmptyDeployment(): void {
       agentNames: () => Promise.resolve(null),
       tokens: unreachableWrite,
       audit: () => Promise.resolve(),
+      findMember: () => Promise.resolve(null),
+      issueExchanged: unreachableWrite,
     },
     projects: {
       resolveActor: actorOf,

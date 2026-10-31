@@ -434,25 +434,28 @@ export async function listSessionStateStreams(request: Request, pathId: string):
   return json({ streams }, 200);
 }
 
+/** 413 `session_state_too_large`: nothing was stored. */
+function blobTooLarge(): Response {
+  return apiError(
+    413,
+    'session_state_too_large',
+    `a session-state blob may be at most ${String(SESSION_STATE_BLOB_MAX_BYTES)} bytes, and nothing was stored.`,
+  );
+}
+
 /**
- * Read a request body as raw bytes, refusing over the cap **while streaming**.
+ * The request body as a stream, after a declared length is checked.
  *
- * The limit is enforced on bytes seen, not on `Content-Length`: a header is a claim, and a check
- * that relies on it does nothing at all when the header is absent. A declared length over the cap is
- * still refused first, because reading 40 MiB to reject it is work nobody asked for.
+ * The limit is enforced on bytes seen, by the storage service as the body streams to the object
+ * store: a header is a claim, and a check that relies on it does nothing at all when the header is
+ * absent. A declared length over the cap is still refused first, because reading 40 MiB to reject
+ * it is work nobody asked for. The body is never held whole here.
  */
-async function readBlobBytes(
+function blobBody(
   request: Request,
-): Promise<
-  | { readonly ok: true; readonly bytes: Uint8Array }
-  | { readonly ok: false; readonly response: Response }
-> {
-  const tooLarge = (): Response =>
-    apiError(
-      413,
-      'session_state_too_large',
-      `a session-state blob may be at most ${String(SESSION_STATE_BLOB_MAX_BYTES)} bytes, and nothing was stored.`,
-    );
+):
+  | { readonly ok: true; readonly body: ReadableStream<Uint8Array> }
+  | { readonly ok: false; readonly response: Response } {
   const declared = request.headers.get('content-length');
   if (declared !== null) {
     const length = Number(declared);
@@ -466,32 +469,9 @@ async function readBlobBytes(
         ),
       };
     }
-    if (length > SESSION_STATE_BLOB_MAX_BYTES) return { ok: false, response: tooLarge() };
+    if (length > SESSION_STATE_BLOB_MAX_BYTES) return { ok: false, response: blobTooLarge() };
   }
-  const body = request.body;
-  if (body === null) return { ok: true, bytes: new Uint8Array(0) };
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let seen = 0;
-  try {
-    for (;;) {
-      const next = await reader.read();
-      if (next.done) break;
-      const chunk = next.value;
-      seen += chunk.byteLength;
-      if (seen > SESSION_STATE_BLOB_MAX_BYTES) return { ok: false, response: tooLarge() };
-      chunks.push(chunk);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(seen);
-  let at = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, at);
-    at += chunk.byteLength;
-  }
-  return { ok: true, bytes };
+  return { ok: true, body: request.body ?? new Blob([]).stream() };
 }
 
 async function blobContext(
@@ -534,9 +514,11 @@ async function blobContext(
 /**
  * `PUT /api/sessions/:id/state-blobs?engine=&blobKey=` — store one snapshot.
  *
- * 413 `session_state_too_large` over the cap, and **nothing is stored**: the bytes are read to the
- * cap and abandoned, so a refused upload leaves neither an object nor a row. A truncated snapshot
- * would replay into an agent as a state directory its own code never wrote.
+ * The body streams to the object store (the storage design, §04 "Saving a file"); it is never held
+ * whole. 413 `session_state_too_large` over the cap, and **nothing is stored**: the save stops at
+ * the cap and removes its reservation and object, so a refused upload leaves neither an object nor
+ * a row. A truncated snapshot would replay into an agent as a state directory its own code never
+ * wrote.
  */
 export async function putSessionStateBlob(request: Request, pathId: string): Promise<Response> {
   const state = await ready(request);
@@ -545,11 +527,12 @@ export async function putSessionStateBlob(request: Request, pathId: string): Pro
   if (!context.ok) return context.response;
   const refused = archived(context.session);
   if (refused !== null) return refused;
-  const body = await readBlobBytes(request);
+  const body = blobBody(request);
   if (!body.ok) return body.response;
-  const stored = await context.store.putBlob(context.ref, body.bytes);
-  if (!stored.ok) return blobsUnavailable(stored.reason);
-  return noContent();
+  const stored = await context.store.putBlob(context.ref, body.body);
+  if (stored.ok) return noContent();
+  if ('code' in stored) return blobTooLarge();
+  return blobsUnavailable(stored.reason);
 }
 
 /** `GET /api/sessions/:id/state-blobs?engine=&blobKey=` — read one snapshot back. */

@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -13,7 +14,7 @@ import {
   workspaces,
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
-import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
+import { openDatabaseRoot, type ResourceCatalogRepository } from '@agent-workspace/core/db';
 import {
   bytesToStream,
   createInMemoryObjectStore,
@@ -79,6 +80,7 @@ function postgresFixture(): Promise<Fixture> {
 }
 
 const noLog: Logger = { info() {}, warn() {}, error() {}, child: () => noLog };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const bytesOf = (text: string) => new TextEncoder().encode(text);
 /** Built at run time: a signature-shaped value that no source file spells out. */
 const sentinel = () => crypto.randomUUID().replaceAll('-', '');
@@ -90,6 +92,8 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const ws = await f.workspace();
       const signature = sentinel();
       const events: StorageAuditEvent[] = [];
+      /** Fail the next `n` audit writes; `landed`: the row is written and only the reply is lost. */
+      const failing = { next: 0, landed: false };
       const inner = createInMemoryObjectStore();
       const objects: ObjectStore = {
         ...inner,
@@ -104,9 +108,15 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         catalog: f.catalog,
         objects,
         log: noLog,
+        // Keyed by the event id, as the audit table's primary key keeps it: a key written again is
+        // not a second row.
         audit: (event) => {
-          events.push(event);
-          return Promise.resolve();
+          const lost = failing.next > 0;
+          if (lost) failing.next -= 1;
+          if ((!lost || failing.landed) && !events.some((seen) => seen.id === event.id)) {
+            events.push(event);
+          }
+          return lost ? Promise.reject(new Error('audit down')) : Promise.resolve();
         },
       });
       const actor = { principalId: ws.principalId, userId: null, label: 'Ito' };
@@ -128,10 +138,11 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
         return saved.row;
       };
-      return { ws, ctx, actor, catalog, objects, storage, events, signature, save };
+      return { ws, ctx, actor, catalog, objects, storage, events, failing, signature, save };
     }
 
     const eventOf = (h: { ws: { id: string }; actor: { principalId: string } }, rest: object) => ({
+      id: expect.stringMatching(UUID) as unknown,
       workspaceId: h.ws.id,
       actorPrincipalId: h.actor.principalId,
       actorUserId: null,
@@ -204,6 +215,31 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       ]);
     });
 
+    // @story US-STO-05
+    it('[US-STO-05][api][sdk] every ranged read is its own download row, so no read goes unaudited', async () => {
+      const h = await harness();
+      const row = await h.save('a.txt', 'abcdef');
+      h.events.length = 0;
+
+      // Intended (#1772): one row per download request, a Range request included. Two reads of
+      // the same range are two reads.
+      for (const range of [
+        { start: 0, end: 2 },
+        { start: 3, end: 5 },
+        { start: 3, end: 5 },
+      ]) {
+        const read = await h.storage.open(h.ctx, row, range);
+        await read?.body.cancel();
+      }
+
+      expect(h.events).toEqual([
+        eventOf(h, { action: 'file-downloaded', subjectId: row.id, subjectLabel: 'a.txt' }),
+        eventOf(h, { action: 'file-downloaded', subjectId: row.id, subjectLabel: 'a.txt' }),
+        eventOf(h, { action: 'file-downloaded', subjectId: row.id, subjectLabel: 'a.txt' }),
+      ]);
+      expect(new Set(h.events.map((event) => event.id)).size).toBe(3);
+    });
+
     // @story US-STO-03
     it('[US-STO-03][api][sdk] move is audited', async () => {
       const h = await harness();
@@ -254,6 +290,62 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       expect(JSON.stringify(h.events)).not.toContain('store.invalid');
     });
 
+    // @story US-STO-02
+    it('[US-STO-02][api][sdk] a retried upload complete re-audits a failed audit write, under the same key', async () => {
+      const h = await harness();
+      expect((await h.storage.reserveUpload(h.ctx, mintRequest('b.txt'))).ok).toBe(true);
+      const pending = await h.catalog.pending('b.txt');
+      if (pending === null) throw new Error('no pending row');
+      await h.objects.write(
+        storageObjectName(h.ws.id, 'files', pending.objectId ?? ''),
+        bytesOf('xyz'),
+        {
+          contentType: null,
+        },
+      );
+      const done = { path: 'b.txt', maxBytes: 1024 };
+      h.events.length = 0;
+      // Down for the write and its one in-process retry: the upload commits, the caller sees the error.
+      h.failing.next = 2;
+      await expect(h.storage.completeUpload(h.ctx, done)).rejects.toThrow('audit down');
+      expect(h.events).toEqual([]);
+
+      // The caller's retry finds the upload done and records it now.
+      await expect(h.storage.completeUpload(h.ctx, done)).resolves.toMatchObject({ ok: true });
+      expect(h.events).toEqual([
+        eventOf(h, { action: 'file-uploaded', subjectId: pending.id, subjectLabel: 'b.txt' }),
+      ]);
+      // A further retry writes the same key again, which the trail keeps once.
+      await h.storage.completeUpload(h.ctx, done);
+      expect(h.events).toHaveLength(1);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][api][sdk] an audit write whose reply is lost is retried under the same key and kept once', async () => {
+      const h = await harness();
+      const row = await h.save('docs/a.txt', 'abc');
+      h.events.length = 0;
+      h.failing.next = 1;
+      h.failing.landed = true;
+
+      await expect(
+        h.storage.remove(h.ctx, 'files', 'docs/a.txt', { recursive: false }),
+      ).resolves.toMatchObject({ ok: true });
+
+      expect(h.events).toEqual([
+        eventOf(h, { action: 'file-deleted', subjectId: row.id, subjectLabel: 'docs/a.txt' }),
+      ]);
+    });
+
+    // @story US-STO-04
+    it('[US-STO-04][api][sdk] two uploads to one path are two audit rows, each under its own key', async () => {
+      const h = await harness();
+      await h.save('a.txt', 'one');
+      await h.save('a.txt', 'two');
+      expect(h.events.map((event) => event.action)).toEqual(['file-uploaded', 'file-uploaded']);
+      expect(new Set(h.events.map((event) => event.id)).size).toBe(2);
+    });
+
     // @story US-STO-04
     it('[US-STO-04][api][sdk] a failed audit write keeps the action and reaches the caller', async () => {
       const f = await setup();
@@ -293,15 +385,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         h.storage.remove(h.ctx, 'files', 'docs/a.txt', { recursive: false }),
       ).resolves.toMatchObject({ ok: true });
       expect(h.events).toEqual([
-        {
-          workspaceId: h.ws.id,
-          actorPrincipalId: h.actor.principalId,
-          actorUserId: null,
-          actorLabel: 'Ito',
-          action: 'file-deleted',
-          subjectId: row.id,
-          subjectLabel: 'docs/a.txt',
-        },
+        eventOf(h, { action: 'file-deleted', subjectId: row.id, subjectLabel: 'docs/a.txt' }),
       ]);
     });
 
@@ -337,6 +421,38 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
 
 defineSuite('in-memory catalog', memoryFixture);
 defineSuite('PostgreSQL catalog', postgresFixture);
+
+describe('the audit table keeps one row per audit key', () => {
+  // @story US-STO-04
+  it('[US-STO-04][api][sdk] recording the same key twice writes one row', async () => {
+    if (isolated === undefined) throw new Error('the test database did not start');
+    const root = await openDatabaseRoot({ DATABASE_URL: isolated.url });
+    try {
+      const workspaceId = crypto.randomUUID();
+      await isolated.db
+        .insert(workspaces)
+        .values({ id: workspaceId, slug: `s-${workspaceId}`, name: 'audit key' });
+      const event = {
+        id: crypto.randomUUID(),
+        workspaceId,
+        actorPrincipalId: null,
+        actorLabel: 'Ito',
+        action: 'file-deleted' as const,
+        subjectId: crypto.randomUUID(),
+        subjectLabel: 'a.txt',
+      };
+      await root.recordAuditEvent(event);
+      await root.recordAuditEvent(event);
+      const rows = await isolated.db
+        .select()
+        .from(auditEvents)
+        .where(eq(auditEvents.workspaceId, workspaceId));
+      expect(rows.map((row) => row.id)).toEqual([event.id]);
+    } finally {
+      await root.close();
+    }
+  });
+});
 
 describe('the audit table accepts every file action', () => {
   // @story US-STO-04

@@ -136,7 +136,7 @@ export interface Door {
     name: string,
     args: unknown,
     headers?: Readonly<Record<string, string>>,
-    /** The engine's tool-use id; the door mints one without it. */
+    /** The engine's tool-use id; the engine always sets one, so the harness mints one without it. */
     callId?: string,
   ): Promise<ToolAnswer>;
   /**
@@ -505,7 +505,7 @@ export function builderDoor(options: {
     name: string,
     args: unknown,
     headers: Readonly<Record<string, string>> = {},
-    callId?: string,
+    callId: string = randomUUID(),
   ): Promise<ToolAnswer> {
     const response = await serveBuilderMcp(
       new Request('http://web.test/api/builder/mcp', {
@@ -522,7 +522,7 @@ export function builderDoor(options: {
           params: {
             name,
             arguments: args,
-            ...(callId === undefined ? {} : { _meta: { 'claudecode/toolUseId': callId } }),
+            _meta: { 'claudecode/toolUseId': callId },
           },
         }),
       }),

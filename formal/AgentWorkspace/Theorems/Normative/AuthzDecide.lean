@@ -3,7 +3,7 @@ import AgentWorkspace.Authz.Decide
 /-!
 T1 — the documented authorisation rules, one theorem per rule:
 
-- one theorem per cell of the role table (4 roles × 31 resources), each pinning the grant
+- one theorem per cell of the role table (4 roles × 32 resources), each pinning the grant
   `permissions.ts` computes against this file's own transcription **and** against the independent
   transcription of `docs/sdk/04-api-specification.md` §3.3 (`documentedGrants`): the cell agrees on
   every reachable operation, disagrees, or the document is silent;
@@ -143,6 +143,7 @@ aw_role_table_cell owner toolBundles any any any silent
 aw_role_table_cell owner tokens any any any agrees
 aw_role_table_cell owner triggers any any any silent
 aw_role_table_cell owner users any any any agrees
+aw_role_table_cell owner webhooks any any any agrees
 aw_role_table_cell owner workspaces own own none agrees
 
 aw_role_table_cell admin agents any any any agrees
@@ -175,6 +176,7 @@ aw_role_table_cell admin toolBundles any any none silent
 aw_role_table_cell admin tokens none any none agrees
 aw_role_table_cell admin triggers any any any silent
 aw_role_table_cell admin users any any none agrees
+aw_role_table_cell admin webhooks any any none agrees
 aw_role_table_cell admin workspaces own own none agrees
 
 aw_role_table_cell builder agents any own permitted agrees
@@ -207,6 +209,7 @@ aw_role_table_cell builder toolBundles any any none silent
 aw_role_table_cell builder tokens none own none agrees
 aw_role_table_cell builder triggers any own own silent
 aw_role_table_cell builder users none none none agrees
+aw_role_table_cell builder webhooks none none none agrees
 aw_role_table_cell builder workspaces own own none agrees
 
 aw_role_table_cell viewer agents any none permitted agrees
@@ -239,6 +242,7 @@ aw_role_table_cell viewer toolBundles none none none silent
 aw_role_table_cell viewer tokens none none none agrees
 aw_role_table_cell viewer triggers none none none silent
 aw_role_table_cell viewer users none none none agrees
+aw_role_table_cell viewer webhooks none none none agrees
 aw_role_table_cell viewer workspaces own own none agrees
 
 /-- §21's "Owner — Everything." and the permission file's header: Owner is the only role whose

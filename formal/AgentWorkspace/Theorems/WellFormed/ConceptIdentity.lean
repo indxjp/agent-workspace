@@ -7,7 +7,7 @@ T0 — the identity cluster's definitions are coherent.
 * The closed unions (roles, principal kinds in both spellings, scope kinds, verifiers, invitation
   states, multiplicities) have the spellings of their TypeScript lists, and the database checks
   hold the role, principal-kind and scope-kind columns to exactly those spellings.
-* The 36 refined checks cover exactly the checks `catalogue` records without a meaning. The
+* The 37 refined checks cover exactly the checks `catalogue` records without a meaning. The
   `aw_identity_check_theorems` elaborator generates, per check, `<check>_renders_as_snapshot`
   (its `render` is the body the latest snapshot (`Er.Snapshot.file`) records, read while this file
   elaborates) and `<check>_separates_its_samples` (its three-valued `eval` accepts and refuses the
@@ -116,14 +116,14 @@ theorem invitation_state_wires :
 
 /-! ## The refined checks -/
 
-/-- The 36 refined checks cover exactly the checks `catalogue` records without a meaning on the
+/-- The 37 refined checks cover exactly the checks `catalogue` records without a meaning on the
 fourteen identity tables, in the same order, and no check is refined twice. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem refined_checks_cover_the_cluster :
     tables.all (fun t => (checksOf t).map (·.1) == otherCheckNames t) = true ∧
       checks.all (fun c => tables.contains c.1) = true ∧ (checks.map (·.2.1)).Nodup ∧
-      checks.length = 36 := by decide +kernel
+      checks.length = 37 := by decide +kernel
 
 section Generator
 

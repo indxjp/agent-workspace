@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { parse, stringify } from 'yaml';
+import type { FeatureId } from '@indx-workspace/contracts/features';
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import type {
   ProductionEnvironment,
@@ -331,6 +332,22 @@ function withDeploymentPolicy(env: string, policy: ProjectPolicy | undefined): s
   return `${rest.trimEnd()}\nAW_DEPLOYMENT_POLICY='${json}'\n`;
 }
 
+const FEATURES_LINE = /^AW_DEPLOYMENT_FEATURES=/u;
+
+/**
+ * `.env` with `AW_DEPLOYMENT_FEATURES` set to the project's features as a comma-separated list, or
+ * without the line when the project has none (ADR-0160 D5): the project file owns which features
+ * the deployment installs, as it owns its ceiling. Feature ids are `[a-z]`, so no quoting is needed.
+ */
+function withDeploymentFeatures(env: string, features: readonly FeatureId[] | undefined): string {
+  const rest = env
+    .split('\n')
+    .filter((line) => !FEATURES_LINE.test(line))
+    .join('\n');
+  if (features === undefined) return rest;
+  return `${rest.trimEnd()}\nAW_DEPLOYMENT_FEATURES=${features.join(',')}\n`;
+}
+
 const PUBLIC_URL_LINE = /^AW_PUBLIC_URL=/u;
 const PUBLIC_URL_COMMENT =
   '# Public https origin of this deployment (no path). A2A agent cards (ADR-0135) and the OAuth issuer (ADR-0134) use it; empty keeps them off.';
@@ -468,6 +485,7 @@ function helmOverlay(
     },
     ...(cidr === undefined ? {} : { database: { cidr } }),
     ...(project.policy === undefined ? {} : { deploymentPolicy: canonicalJson(project.policy) }),
+    ...(project.features === undefined ? {} : { deploymentFeatures: project.features.join(',') }),
     publicUrl: origin,
   });
 }
@@ -692,9 +710,10 @@ export async function deployProjectEnvironment(
   // replaced through a file opened `0600`, so the secrets are never readable by anyone else.
   const current = await readFile(envFile, 'utf8');
   let next = recipe.hardenEnv(withBootstrapAdmin(current, profile.identity.bootstrapAdmin));
-  // Compose forwards the line to single-vm's web; `render` gives it to Cloud Run's web as the
-  // gcp-cloudrun module's `deployment_policy`.
+  // Compose forwards these lines to single-vm's web; `render` gives them to Cloud Run's web as the
+  // gcp-cloudrun module's `deployment_policy` and `deployment_features`.
   next = withDeploymentPolicy(next, project.policy);
+  next = withDeploymentFeatures(next, project.features);
   next = withPublicUrl(next, deployed.url);
   if (next !== current) await writeFileAtomically(envFile, next, 0o600);
 

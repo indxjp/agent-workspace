@@ -23,12 +23,13 @@
  *
  * A session token stays cryptographically valid — `getSession()` only checks its signature and
  * expiry — long after the membership it names has been deleted, or the workspace itself archived
- * out from under it. `resolveIdentity` already re-reads the directory on every request rather than
- * trusting the token, so it already notices; the only piece this task adds is acting on a `null`
- * it returns for the right reason. `shouldRecoverSession` (`components/shell/session-recovery.ts`)
- * is that positive check (ADR-0015): it tells "the caller's own membership is genuinely gone" apart
- * from "the RBAC runtime is not wired at all" (`server/rbac/runtime.ts`'s own declared gap, a
- * different task's), so this redirect fires for the first and never loops on the second.
+ * out from under it. `resolveIdentity` (`server/features/console.ts`) already re-reads the
+ * directory on every request rather than trusting the token, so it already notices; the only piece
+ * this task adds is acting on a `null` it returns for the right reason. `shouldRecoverSession`
+ * (`components/shell/session-recovery.ts`) is that positive check (ADR-0015): it tells "the
+ * caller's own membership is genuinely gone" apart from "the RBAC runtime is not wired at all"
+ * (`server/rbac/runtime.ts`'s own declared gap, a different task's), so this redirect fires for the
+ * first and never loops on the second.
  */
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -44,8 +45,9 @@ import {
   DeploymentDriverBanner,
   LOCAL_ISOLATION_REASON,
 } from '../../components/shell/driver-banner';
-import { getSession, type VerifiedSessionClaims } from '../../server/auth';
+import { getSession } from '../../server/auth';
 import { applicationContext } from '../../server/application-context';
+import { currentWorkspaceFeatures, resolveIdentity } from '../../server/features/console';
 
 import { roleManagesStorage } from './admin/storage/manages-storage';
 
@@ -80,42 +82,12 @@ function runtimeChip(): RuntimeChip {
     : { label: 'not configured', warn: true, href: '/admin/runtimes' };
 }
 
-/**
- * The database name, the database role, and who they are — read fresh on every request, never
- * from the session token. Issue #118: the session's `role` claim is `'owner'` on every session
- * this build mints (`apps/web/server/auth/session.ts`'s deliberate non-widening — the runtime has
- * always re-read the role per request, e.g. `apps/web/server/rbac/principal.ts`'s
- * `Principal.fromSession`; only the shell had not caught up), so showing it here would show the
- * same word for every signed-in caller regardless of what `memberships.role` actually says.
- *
- * `null` when the RBAC runtime is not wired (a declared gap of a different task, per
- * `apps/web/server/rbac/runtime.ts`) or when the row this session named is gone — a membership
- * removed since the session was minted is exactly issue #118's "takes effect on the next
- * request", and the honest thing for the shell to do with a session that no longer resolves to
- * anything is to say less, not to keep repeating a claim from before.
- */
-export interface ResolvedIdentity {
-  readonly userName: string;
-  readonly workspaceName: string;
-  readonly role: string;
-}
-
-export async function resolveIdentity(
-  session: VerifiedSessionClaims,
-): Promise<ResolvedIdentity | null> {
-  const runtime = applicationContext()?.rbac ?? null;
-  if (runtime === null) return null;
-  const user = await runtime.directory.findUserByEmail(session.sub);
-  if (user === null) return null;
-  const memberships = await runtime.directory.membershipsForUser(user.id);
-  const current = memberships.find((membership) => membership.workspaceSlug === session.ws);
-  if (current === undefined) return null;
-  return { userName: user.name, workspaceName: current.workspaceName, role: current.role };
-}
-
 export default async function ShellLayout({ children }: { children: ReactNode }) {
   const session = await getSession();
   const resolved = session === null ? null : await resolveIdentity(session);
+  // ADR-0160 D8: the sidebar hides a switched-off feature's entry. No session, no runtime and no
+  // switch all answer every feature, so the markup is then the one it always was.
+  const features = await currentWorkspaceFeatures(resolved);
 
   if (
     shouldRecoverSession({
@@ -147,7 +119,12 @@ export default async function ShellLayout({ children }: { children: ReactNode })
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar workspace={workspace} user={user} managers={roleManagesStorage(resolved?.role)} />
+      <Sidebar
+        workspace={workspace}
+        user={user}
+        managers={roleManagesStorage(resolved?.role)}
+        features={features}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar runtime={runtimeChip()} />
         <DeploymentDriverBanner />

@@ -93,6 +93,8 @@ import {
   type RunTargetDescriptions,
 } from '../../server/runs/environment';
 
+import { switchedOffPanel } from './feature-gate';
+
 // W1-UI-04: without this, Next prerenders this route once at BUILD TIME — before
 // the application context is installed — and serves that one render to every request forever
 // (measured: `x-nextjs-cache: HIT`, an identical `ETag` across requests, no matter what
@@ -319,6 +321,8 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ agent?: string | string[]; version?: string | string[] }>;
 }) {
+  const off = await switchedOffPanel('chat');
+  if (off !== null) return off;
   const [agents, user, modelConnections, pinned] = await Promise.all([
     composerAgents(),
     composerUser(),

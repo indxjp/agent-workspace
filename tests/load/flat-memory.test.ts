@@ -1,5 +1,6 @@
 /** Self-test: the flat-memory harness reports a streaming pipe as flat and can fail on a buffer. */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -7,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   generatedBody,
+  heldMemory,
   LOAD_BYTES,
   measureRssGrowth,
   MiB,
@@ -115,5 +117,23 @@ describe('flat-memory harness', () => {
     });
     expect(reading.newSpaceGrowth).toBeGreaterThanOrEqual(0);
     expect(reading.newSpaceGrowth).toBeLessThanOrEqual(NEW_SPACE_CREDIT_BOUND);
+  });
+
+  it('reads held memory as anonymous and shared pages, resident or swapped', () => {
+    const held = heldMemory();
+    if (process.platform !== 'linux') {
+      expect(held).toBeGreaterThan(0);
+      return;
+    }
+    // A swapped page is still held: plain RSS dropped it, so a full-suite run under memory
+    // pressure read the 64 MiB formData() negative control as 20 MiB.
+    const status = readFileSync('/proc/self/status', 'utf8');
+    const field = (name: string): number =>
+      Number(new RegExp(`^${name}:\\s+(\\d+) kB$`, 'mu').exec(status)?.[1]) * 1024;
+    const expected = field('RssAnon') + field('RssShmem') + field('VmSwap');
+    expect(Number.isFinite(expected)).toBe(true);
+    // Read a moment apart, so a little allocation between the two readings is allowed.
+    expect(Math.abs(held - expected)).toBeLessThan(16 * MiB);
+    expect(held).toBeLessThan(process.memoryUsage().rss + field('VmSwap'));
   });
 });

@@ -77,7 +77,9 @@ export async function handleToolCall(
   let result: ToolResult;
   try {
     const replayed = await replayOf(tool, callId, ctx, ports);
-    if (replayed !== null) return replayed;
+    // A workspace that switched the Builder off mid-run is told so, not handed the stored result
+    // of an earlier write: the switch is the first rule (`featureOff`) and a replay is no exception.
+    if (replayed !== null && (await ports.feature.enabled(ctx))) return replayed;
     const facts = await gatherFacts(parsed, envelope.data.arguments, ctx, ports, signal);
     if ('unresolved' in facts) {
       // The door names no caller the deployment can resolve: refused, never run as the Builder. A

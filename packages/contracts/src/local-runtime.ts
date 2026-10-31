@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { API_KEY_PATTERN } from './api-keys.js';
+import { FeatureListSchema } from './features.js';
 import { IsoDateTimeSchema, UuidSchema } from './identifiers.js';
 import { ProjectPolicySchema } from './policy-ceiling.js';
 import {
@@ -96,6 +97,12 @@ export const LocalRuntimeEnvironmentSchema = z
      * runtime older than this key refuses it as an unknown key rather than running unbounded.
      */
     policy: ProjectPolicySchema.optional(),
+    /**
+     * The project file's features (ADR-0160 D5, issue #1495). `aw` sends it only when the file has
+     * a `features` list, so a `start` message from a file without one is unchanged; a runtime older
+     * than this key refuses it as an unknown key rather than install every feature.
+     */
+    features: FeatureListSchema.optional(),
     /**
      * The names, never the values, of the secrets the project references (C10, SD17; ADR-0109
      * slice-2 amendment, issue #564): each a {@link SecretNameSchema}, so a reserved name such as

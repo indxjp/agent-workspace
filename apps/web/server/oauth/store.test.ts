@@ -6,6 +6,8 @@ import {
   createInMemoryWorkspaceScopeResolver,
   type AgentRecord,
   type EndpointClientRecord,
+  type ExchangedTokenAudit,
+  type IssueOAuthTokenInput,
 } from '@agent-workspace/core/db';
 import type { EndpointClientKind } from '@indx-workspace/contracts/endpoint-clients';
 import { describe, expect, it } from 'vitest';
@@ -18,6 +20,9 @@ const WORKSPACE = crypto.randomUUID();
 const PRINCIPAL = crypto.randomUUID();
 /** Differs from the creator so the consent label cannot come from the acts-for principal. */
 const ACTS_FOR = crypto.randomUUID();
+const ISSUER = 'https://idp.example';
+const PERSON = crypto.randomUUID();
+const OTHER_WORKSPACE = crypto.randomUUID();
 
 const agent = (name: string): AgentRecord => ({
   id: crypto.randomUUID(),
@@ -43,7 +48,8 @@ const agent = (name: string): AgentRecord => ({
 const first = agent('first <b>');
 const second = agent('second');
 
-function setup(kind: EndpointClientKind) {
+function setup(kind: EndpointClientKind, memberWorkspace: string = WORKSPACE) {
+  const memberOf = PRINCIPAL;
   const known = new Map([first, second].map((a) => [a.id, a]));
   const clientId = crypto.randomUUID();
   const bound: EndpointClientRecord = {
@@ -54,6 +60,7 @@ function setup(kind: EndpointClientKind) {
     agentIds: kind === 'builder' ? [] : [first.id],
     toolNames: null,
     redirectUris: [],
+    oidcAudience: kind === 'app-backend' ? 'portal-web' : null,
     hasClientSecret: false,
     actsForPrincipalId: ACTS_FOR,
     createdByPrincipalId: PRINCIPAL,
@@ -65,6 +72,7 @@ function setup(kind: EndpointClientKind) {
   const unused = () => {
     throw new Error('not used by this test');
   };
+  const exchanged: { input: IssueOAuthTokenInput; audit: ExchangedTokenAudit }[] = [];
   const runtime = createRepositoryOAuthRuntime({
     scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
     agents: { forScope: () => ({ get: (id) => Promise.resolve(known.get(id) ?? null) }) },
@@ -81,12 +89,44 @@ function setup(kind: EndpointClientKind) {
               actsForPrincipalId: ACTS_FOR,
               clientSecretHash: null,
               redirectUris: [],
+              oidcAudience: bound.oidcAudience,
             }
           : null,
       ),
-    oauthTokens: { forScope: unused },
+    oauthTokens: {
+      forScope: () => ({
+        issue: unused,
+        consume: unused,
+        revokeFamily: unused,
+        revoke: unused,
+        issueExchanged: (input, audit) => {
+          exchanged.push({ input, audit });
+          return Promise.resolve();
+        },
+      }),
+    },
     auditEventRepository: { forScope: unused },
     directory: {
+      findIdentity: (issuer, subject) =>
+        Promise.resolve(
+          issuer === ISSUER && subject === 'person-sub'
+            ? { userId: PERSON, email: 'p@x.test' }
+            : null,
+        ),
+      membershipsForUser: (userId) =>
+        Promise.resolve(
+          userId === PERSON
+            ? [
+                {
+                  principalId: memberOf,
+                  workspaceId: memberWorkspace,
+                  workspaceSlug: 'acme',
+                  workspaceName: 'Acme',
+                  role: 'builder' as const,
+                },
+              ]
+            : [],
+        ),
       principalById: (_workspaceId, principalId) =>
         Promise.resolve(
           principalId === PRINCIPAL
@@ -103,8 +143,69 @@ function setup(kind: EndpointClientKind) {
         ),
     },
   });
-  return { clientId, runtime };
+  return { clientId, runtime, exchanged };
 }
+
+describe('createRepositoryOAuthRuntime: the token exchange (ADR-0161)', () => {
+  it('finds a member of the client workspace by (issuer, subject), with the label', async () => {
+    const { runtime } = setup('app-backend');
+    expect(await runtime.findMember(WORKSPACE, ISSUER, 'person-sub')).toEqual({
+      userId: PERSON,
+      principalId: PRINCIPAL,
+      label: 'Ada Lovelace',
+    });
+  });
+
+  it('answers null alike for an unknown pair, another issuer and a member of another workspace', async () => {
+    const { runtime } = setup('app-backend');
+    expect(await runtime.findMember(WORKSPACE, ISSUER, 'nobody')).toBeNull();
+    expect(await runtime.findMember(WORKSPACE, 'https://evil.example', 'person-sub')).toBeNull();
+    const elsewhere = setup('app-backend', OTHER_WORKSPACE);
+    expect(await elsewhere.runtime.findMember(WORKSPACE, ISSUER, 'person-sub')).toBeNull();
+  });
+
+  it('carries the oidcAudience and no resource path for an app-backend client', async () => {
+    const { runtime, clientId } = setup('app-backend');
+    expect(await runtime.findClient(clientId)).toMatchObject({
+      kind: 'app-backend',
+      oidcAudience: 'portal-web',
+      resourcePath: null,
+    });
+  });
+
+  it('writes the token and its audit row in one call, the person acting on the client', async () => {
+    const { runtime, clientId, exchanged } = setup('app-backend');
+    const client = await runtime.findClient(clientId);
+    if (client === null) throw new Error('fixture client missing');
+    const expiresAt = new Date(1_000_000);
+    await runtime.issueExchanged(
+      client,
+      { userId: PERSON, principalId: PRINCIPAL, label: 'Ada Lovelace' },
+      { id: 'row', tokenHash: 'hash', familyId: 'family', resource: 'urn:x', expiresAt },
+    );
+    expect(exchanged).toEqual([
+      {
+        input: {
+          id: 'row',
+          clientId,
+          kind: 'access',
+          tokenHash: 'hash',
+          subjectPrincipalId: PRINCIPAL,
+          resource: 'urn:x',
+          familyId: 'family',
+          expiresAt,
+        },
+        audit: {
+          actorPrincipalId: PRINCIPAL,
+          actorUserId: PERSON,
+          actorLabel: 'Ada Lovelace',
+          clientId,
+          clientName: 'client name',
+        },
+      },
+    ]);
+  });
+});
 
 describe('createRepositoryOAuthRuntime', () => {
   it('names the agents in the order asked, without the agents runtime', async () => {
@@ -204,7 +305,7 @@ describe('canRunAll without the agents runtime', () => {
       findOAuthClient: unused,
       oauthTokens: { forScope: unused },
       auditEventRepository: { forScope: unused },
-      directory: { principalById: unused },
+      directory: { principalById: unused, findIdentity: unused, membershipsForUser: unused },
     });
     return { runtime, scopesRead };
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApiProblemSchema } from '@indx-workspace/contracts';
+import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
 
 import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
 import type { AgentStoreProvider } from '../../agents/store';
@@ -54,5 +55,36 @@ describe('ensureBuilderAgent', () => {
     expect(ApiProblemSchema.parse(outcome.result.body).error.code).toBe(
       'agent_version_number_taken',
     );
+  });
+
+  it('stores the shipped body without aw-control however the name is spelled', async () => {
+    const memoryAgents = createInMemoryAgentStoreProvider();
+    const memory = createInMemoryAgentVersionStoreProvider({ agents: memoryAgents });
+    const agents: AgentStoreProvider = {
+      forWorkspace: (id) => {
+        const store = memoryAgents.forWorkspace(id);
+        return {
+          ...store,
+          list: async () => (await store.list()).map((r) => ({ ...r, builtin: 'builder' })),
+        };
+      },
+    };
+    const outcome = await ensureBuilderAgent(WORKSPACE, {
+      shippedBody: versionRequest({
+        name: 'builder',
+        resources: { connectors: ['aw-control', ' AW-Control '] },
+      }).body,
+      owner: OWNER,
+      agents,
+      versions: memory,
+    });
+
+    if (outcome.kind !== 'created') {
+      throw new Error(`expected created, got ${JSON.stringify(outcome)}`);
+    }
+    const store = await memory.forWorkspace(WORKSPACE);
+    const stored = await store?.find(outcome.agentId, outcome.version);
+    const body = AgentVersionBodySchema.parse(stored?.body);
+    expect(body.definition.resources.connectors).toEqual([]);
   });
 });

@@ -114,6 +114,11 @@ export interface DatabaseWorkspaceDirectory {
     | { kind: 'email-taken'; email: string }
   >;
   listMemberships(): Promise<readonly DirectoryMembershipRecord[]>;
+  /**
+   * The workspace's membership whose live principal is `principalId`, or `null` when there is none:
+   * the id names another workspace's principal, an API key, a revoked principal or nothing at all.
+   */
+  findMembershipByPrincipal(principalId: string): Promise<DirectoryMembershipRecord | null>;
   createMembership(input: {
     email: string;
     role: MembershipRole;

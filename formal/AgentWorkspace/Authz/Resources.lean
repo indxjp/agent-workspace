@@ -27,14 +27,14 @@ instance decidableForallWireEnum {α : Type} [WireEnum α] (p : α → Prop) [De
   decidable_of_iff (∀ a ∈ (WireEnum.all : List α), p a)
     ⟨fun h a => h a (WireEnum.complete a), fun h a _ => h a⟩
 
-/-- `RESOURCES`: the 31 top-level resources, in the `as const` order of `resources.ts`. -/
+/-- `RESOURCES`: the 32 top-level resources, in the `as const` order of `resources.ts`. -/
 @[aw_spec (ts := "apps/web/server/rbac/resources.ts#RESOURCES")
   (doc := "docs/sdk/04-api-specification.md#33-roles")]
 inductive Resource where
   | agents | apiKeys | auditEvents | connectors | endpointClients | engines | files | invitations
   | me | memberships | metrics | modelConnections | models | platforms | projects | runs
   | runtimeConnections | runtimeProfiles | runtimes | secrets | sessions | shares | sharingPolicies | skills | setup
-  | storageConnections | toolBundles | tokens | triggers | users | workspaces
+  | storageConnections | toolBundles | tokens | triggers | users | webhooks | workspaces
   deriving DecidableEq, Repr, Inhabited
 
 /-- The path segment of a resource. -/
@@ -51,14 +51,15 @@ def Resource.toWire : Resource → String
   | .sessions => "sessions" | .shares => "shares" | .sharingPolicies => "sharing-policies"
   | .skills => "skills" | .setup => "setup" | .storageConnections => "storage-connections"
   | .toolBundles => "tool-bundles" | .tokens => "tokens"
-  | .triggers => "triggers" | .users => "users" | .workspaces => "workspaces"
+  | .triggers => "triggers" | .users => "users" | .webhooks => "webhooks"
+  | .workspaces => "workspaces"
 
 /-- Every resource, in `RESOURCES` order. -/
 def Resource.all : List Resource :=
   [.agents, .apiKeys, .auditEvents, .connectors, .endpointClients, .engines, .files, .invitations,
     .me, .memberships, .metrics, .modelConnections, .models, .platforms, .projects, .runs,
     .runtimeConnections, .runtimeProfiles, .runtimes, .secrets, .sessions, .shares, .sharingPolicies, .skills, .setup,
-    .storageConnections, .toolBundles, .tokens, .triggers, .users, .workspaces]
+    .storageConnections, .toolBundles, .tokens, .triggers, .users, .webhooks, .workspaces]
 
 instance : WireEnum Resource where
   all := Resource.all

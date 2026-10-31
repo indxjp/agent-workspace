@@ -96,6 +96,7 @@ function client(overrides: Partial<EndpointClientResource> = {}): EndpointClient
     actsForPrincipalId: '77777777-7777-4777-8777-777777777777',
     apiKeyIds: [KEY_ID],
     redirectUris: [],
+    oidcAudience: null,
     hasClientSecret: false,
     revokedAt: null,
     createdAt: '2026-01-01T00:00:00.000Z',

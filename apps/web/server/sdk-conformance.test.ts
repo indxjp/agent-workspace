@@ -31,6 +31,8 @@ import {
   ApiProblemError,
   ContractsVersionUnsupportedError,
   createClient,
+  verifyWebhookSignature,
+  WebhookVerificationError,
 } from '@indx-workspace/sdk';
 import {
   AgentGrantsSchema,
@@ -127,6 +129,7 @@ import {
   RevokeRunTokensResponseSchema,
   RUN_APPROVAL_COMMENT_MAX_LENGTH,
   RUN_APPROVAL_PROBLEM_CODES,
+  RUN_IDEMPOTENCY_PROBLEM_CODES,
   RUN_LIST_MAX_LIMIT,
   RUN_STATUSES,
   RUN_START_PROBLEM_CODES,
@@ -187,6 +190,15 @@ import {
 } from '@indx-workspace/contracts/skills';
 import { FEATURE_IDS, WorkspaceFeaturesSchema } from '@indx-workspace/contracts/features';
 import {
+  CreateWebhookResponseSchema,
+  WEBHOOK_EVENT_TYPES,
+  WEBHOOK_MAX_PER_WORKSPACE,
+  WEBHOOK_PROBLEM_CODES,
+  webhookEventTypeOf,
+  WebhookEventSchema,
+  WebhookListResponseSchema,
+} from '@indx-workspace/contracts/webhooks';
+import {
   CreatedUserResponseSchema,
   MEMBERSHIP_ROLES,
   MembershipListResponseSchema,
@@ -209,6 +221,12 @@ import {
   MintTokenRequestSchema,
   MintTokenResponseSchema,
 } from '@indx-workspace/contracts/tokens';
+import {
+  OAUTH_ACCESS_TOKEN_PATTERN,
+  TOKEN_EXCHANGE_PROBLEM_CODES,
+  TOKEN_EXCHANGE_TTL_SECONDS,
+} from '@indx-workspace/contracts/token-exchange';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   SharingPolicySchema,
   WorkspaceSwitchResponseSchema,
@@ -270,6 +288,8 @@ import { createRepositoryStorageConnectionsStoreProvider } from './storage-conne
 import { GET as getAuditEvents } from '../app/api/audit-events/route';
 import { GET as getMetrics } from '../app/api/metrics/route';
 import { POST as postProjectSession } from '../app/api/projects/[id]/sessions/route';
+import { DELETE as removeWebhookRoute } from '../app/api/webhooks/[id]/route';
+import { GET as listWebhooksRoute, POST as createWebhookRoute } from '../app/api/webhooks/route';
 import { POST as switchWorkspaceRoute } from '../app/api/auth/workspace/route';
 import { POST as mintTokenRoute } from '../app/api/tokens/route';
 import { toShareResource } from './shares/core/resource';
@@ -373,12 +393,16 @@ import {
   type WirePrincipalKind,
 } from './rbac/handlers';
 import { mintBrowserToken } from './rbac/browser-token';
-import { problem as rbacProblem } from './rbac/http';
+import { problem as rbacProblem, toResponse as toRbacResponse } from './rbac/http';
+import { exchangeToken } from './auth/token-exchange';
+import type { OAuthClient } from './oauth/runtime';
+import { mintClientSecret } from './oauth/tokens';
+import { resetOAuthLimits } from './oauth/limits';
 import { createMemoryDirectory } from './rbac/memory-directory';
 import { Principal, PRINCIPAL_KINDS as SERVER_PRINCIPAL_KINDS } from './rbac/principal';
 import { ROLES } from './rbac/roles';
 import type { WorkspaceRepositoryPort } from './workspaces/runtime';
-import { installRbacHarness, TEST_WORKSPACE_ID } from './rbac/testing';
+import { callerHeaders, installRbacHarness, TEST_WORKSPACE_ID } from './rbac/testing';
 import { parseStartRunBody, renderRun, startRun } from './runs/api';
 import { MAX_PROMPT_CHARS as SERVER_MAX_PROMPT_CHARS } from './runs/service';
 import { decideRunApproval } from './runs/approval';
@@ -474,6 +498,15 @@ import {
   resetTestRunApi,
 } from './application-context-fixtures';
 import { listWorkspaceFeatures } from './workspaces/features';
+import { fixedClock } from './clock';
+import { createWebhookDeliveryPass } from './webhooks/delivery';
+import type {
+  ClaimedWebhookDelivery,
+  WebhookDeliveryOutbox,
+  WebhookRecord,
+  WebhooksRuntime,
+} from './webhooks/runtime';
+import { finishedRun } from './webhooks/testing';
 
 const WORKSPACE = '44444444-4444-4444-8444-444444444444';
 const AGENT = '11111111-1111-4111-8111-111111111111';
@@ -739,6 +772,80 @@ describe('runs', () => {
           .success,
       ).toBe(true);
     }
+  });
+
+  describe('idempotent start (issue #250, S-6, ADR-0151)', () => {
+    afterEach(() => {
+      resetTestRunApi();
+    });
+
+    it('answers an SDK start retried with its key with the same run, and another input with 409', async () => {
+      const store = new InMemoryRunStore();
+      const launched: string[] = [];
+      installTestRunApi({
+        authenticate: () =>
+          Promise.resolve({
+            principalId: '77777777-7777-4777-8777-777777777777',
+            ownerPrincipalId: '77777777-7777-4777-8777-777777777777',
+            userId: '66666666-6666-4666-8666-666666666666',
+            workspaceId: WORKSPACE,
+            role: 'owner' as const,
+            scope: null,
+          }),
+        findAgent: (principal, agentId) =>
+          Promise.resolve(
+            agentId === AGENT
+              ? { id: AGENT, workspaceId: principal.workspaceId, engine: 'claude-agent-sdk' }
+              : null,
+          ),
+        openSession: () => Promise.resolve({ id: SESSION, agentId: AGENT, engine: null }),
+        ownsRun: () => Promise.resolve(true),
+        store,
+        launch: (context) => {
+          launched.push(context.run.id);
+        },
+      });
+      // The SDK's own request, header and body as it sends them, answered by the real route handler.
+      const client = createClient({
+        baseUrl: 'https://aw.example.com',
+        auth: { kind: 'api-key', apiKey: 'ak_live_k' },
+        fetch: (input, init) => startRun(new Request(input, init), AGENT),
+      });
+      const outputSchema = { type: 'object', properties: { a: { type: 'string' } } };
+
+      const first = await client.runs.start(AGENT, {
+        prompt: 'hi',
+        outputSchema,
+        idempotencyKey: 'order-42',
+      });
+      const retried = await client.runs.start(AGENT, {
+        prompt: 'hi',
+        outputSchema,
+        idempotencyKey: 'order-42',
+      });
+      expect(retried.run.id).toBe(first.run.id);
+      expect(retried.events).toBe(first.events);
+
+      const conflict = await client.runs
+        .start(AGENT, { prompt: 'something else', idempotencyKey: 'order-42' })
+        .catch((error: unknown) => error);
+      expect(conflict).toBeInstanceOf(ApiProblemError);
+      expect((conflict as ApiProblemError).status).toBe(
+        RUN_IDEMPOTENCY_PROBLEM_CODES.run_idempotency_conflict,
+      );
+      expect((conflict as ApiProblemError).code).toBe('run_idempotency_conflict');
+
+      const blank = await client.runs
+        .start(AGENT, { prompt: 'hi', idempotencyKey: '   ' })
+        .catch((error: unknown) => error);
+      expect((blank as ApiProblemError).status).toBe(
+        RUN_IDEMPOTENCY_PROBLEM_CODES.invalid_idempotency_key,
+      );
+      expect((blank as ApiProblemError).code).toBe('invalid_idempotency_key');
+
+      expect((await store.listRuns(WORKSPACE, { limit: 10 })).items).toHaveLength(1);
+      expect(launched).toEqual([first.run.id]);
+    });
   });
 
   it('accepts a start-run body as the SDK sends it, and rejects what the SDK rejects', () => {
@@ -1866,26 +1973,10 @@ describe('skills', () => {
   const patchSkill = (store: SkillObjects, name: string, body: unknown) =>
     patchSkillIn(store, name, body, skillRows);
   /**
-   * The one piece of `apps/web/app/api/skills/route.ts`'s `GET` this suite composes by hand: an
-   * in-memory stand-in for the catalog's `putSkill`, at the same fidelity `skillsStore()` above
-   * already gives the object store for this describe block. Real upsert semantics (same name,
-   * same id) — not a fixed string.
+   * The one piece of `apps/web/app/api/skills/route.ts`'s `GET` this suite composes by hand: the
+   * catalog row's id, from the shared in-memory catalog's `putSkill` (same name, same id).
    */
-  const skillCatalogRows = new Map<string, string>();
-  let nextSkillCatalogId = 0;
-  const catalog = {
-    putSkill: (input: {
-      name: string;
-      skillMd: string;
-      enabled: boolean;
-      ownerPrincipalId: string;
-      createdBy: string | null;
-    }): Promise<{ id: string }> => {
-      const id = skillCatalogRows.get(input.name) ?? `catalog-${String((nextSkillCatalogId += 1))}`;
-      skillCatalogRows.set(input.name, id);
-      return Promise.resolve({ id });
-    },
-  };
+  const catalog = createInMemoryCatalog().forWorkspace(SKILLS_WORKSPACE);
   /**
    * The composition every route under `apps/web/app/api/skills/**` performs: the handler body
    * plus the catalog row's id (K-4, issue #234). `source` is `null` only for a skill whose
@@ -3491,6 +3582,128 @@ describe('tokens (issue #236, SDK-04, S-1)', () => {
   });
 });
 
+describe('auth.exchange (ADR-0161)', () => {
+  const ISSUER = 'https://idp.example';
+  const AUDIENCE = 'portal-web';
+  const ENV = {
+    OIDC_ISSUER_URL: ISSUER,
+    OIDC_CLIENT_ID: 'platform-browser',
+    OIDC_CLIENT_SECRET: 'browser-secret',
+    OIDC_REDIRECT_URI: 'https://aw.example.com/api/auth/callback',
+  };
+  const CLIENT_ID = 'c1c1c1c1-c1c1-4c1c-8c1c-c1c1c1c1c1c1';
+
+  /**
+   * The SDK's `aw.auth.exchange` driven against the real handler: the Basic header the SDK builds
+   * is what `client-auth.ts` reads, and the body the handler renders is what the SDK validates. The
+   * issuer is a local `jose` key pair; nothing reaches the network.
+   */
+  async function exchangeWorld(): Promise<{
+    readonly aw: ReturnType<typeof createClient>;
+    readonly secret: string;
+    readonly idToken: (subject: string) => Promise<string>;
+  }> {
+    resetOAuthLimits();
+    const pair = await generateKeyPair('RS256', { extractable: true });
+    const jwks = { keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'k1', alg: 'RS256' }] };
+    const minted = await mintClientSecret();
+    const client: OAuthClient = {
+      id: CLIENT_ID,
+      workspaceId: TEST_WORKSPACE_ID,
+      name: 'portal',
+      kind: 'app-backend',
+      actsForPrincipalId: 'creator',
+      clientSecretHash: minted.secretHash,
+      redirectUris: [],
+      oidcAudience: AUDIENCE,
+      agentIds: [AGENT],
+      resourcePath: null,
+    };
+    installTestDomains({
+      oauth: {
+        findClient: (id) => Promise.resolve(id === client.id ? client : null),
+        canRunAll: () => Promise.resolve(false),
+        agentNames: () => Promise.resolve(null),
+        tokens: () => Promise.reject(new Error('the exchange writes through issueExchanged')),
+        audit: () => Promise.reject(new Error('the exchange writes through issueExchanged')),
+        findMember: (workspaceId, issuer, subject) =>
+          Promise.resolve(
+            workspaceId === TEST_WORKSPACE_ID && issuer === ISSUER && subject === 'member-sub'
+              ? { userId: 'user-1', principalId: 'pr-1', label: 'Ada' }
+              : null,
+          ),
+        issueExchanged: () => Promise.resolve(),
+      },
+    });
+    const aw = createClient({
+      baseUrl: 'https://aw.example.com',
+      auth: { kind: 'session' },
+      fetch: async (input, init) => {
+        const response = toRbacResponse(
+          await exchangeToken(new Request(input, init), {
+            env: ENV,
+            loadKeySource: () =>
+              Promise.resolve({
+                issuer: ISSUER,
+                algorithms: ['RS256'],
+                keys: createLocalJWKSet(jwks),
+              }),
+          }),
+        );
+        for (const [name, value] of Object.entries(servedContractsHeaders())) {
+          response.headers.set(name, value);
+        }
+        return response;
+      },
+    });
+    const now = Math.floor(Date.now() / 1000);
+    const idToken = (subject: string) =>
+      new SignJWT({
+        iss: ISSUER,
+        sub: subject,
+        aud: AUDIENCE,
+        iat: now - 10,
+        exp: now + 600,
+        email: 'ada@example.com',
+        email_verified: true,
+      })
+        .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+        .sign(pair.privateKey);
+    return { aw, secret: minted.presented, idToken };
+  }
+
+  afterEach(() => {
+    clearApplicationContext();
+  });
+
+  it('the real handler accepts the SDK request and renders a body the SDK accepts', async () => {
+    const { aw, secret, idToken } = await exchangeWorld();
+    const exchanged = await aw.auth.exchange({
+      clientId: CLIENT_ID,
+      clientSecret: secret,
+      idToken: await idToken('member-sub'),
+    });
+    expect(exchanged.access_token).toMatch(OAUTH_ACCESS_TOKEN_PATTERN);
+    expect(exchanged.expires_in).toBe(TOKEN_EXCHANGE_TTL_SECONDS);
+  });
+
+  it('surfaces each handler refusal as the typed error under the contract status', async () => {
+    const { aw, secret, idToken } = await exchangeWorld();
+    const cases: readonly [string, string, keyof typeof TOKEN_EXCHANGE_PROBLEM_CODES][] = [
+      [secret, 'stranger-sub', 'subject_not_member'],
+      [`${secret}x`, 'member-sub', 'invalid_client'],
+    ];
+    for (const [clientSecret, subject, code] of cases) {
+      const failure: unknown = await aw.auth
+        .exchange({ clientId: CLIENT_ID, clientSecret, idToken: await idToken(subject) })
+        .catch((error: unknown) => error);
+      expect(failure, code).toBeInstanceOf(ApiProblemError);
+      expect((failure as ApiProblemError).code).toBe(code);
+      expect((failure as ApiProblemError).status).toBe(TOKEN_EXCHANGE_PROBLEM_CODES[code]);
+    }
+  });
+});
+
 describe('workspace switch, JSON branch (issue #236, SDK-04, S-2)', () => {
   const SWITCH_SECRET = 'workspace-switch-conformance-session-secret-32';
   const SWITCH_EMAIL = 'switch-conformance@example.test';
@@ -4182,5 +4395,291 @@ describe('storage connections (issue #1691)', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('webhooks (issue #250, N-3, ADR-SDK-18-N3-250)', () => {
+  const HOOK_WORKSPACE = '12121212-1212-4212-8212-121212121212';
+  const RECEIVER_URL = 'http://127.0.0.1:8789/agent-workspace/hooks';
+  const owner = { email: 'owner@example.com' };
+  const builder = { email: 'builder@example.com' };
+  const viewer = { email: 'viewer@example.com' };
+
+  let rows: WebhookRecord[];
+  let signingSecrets: Map<string, string>;
+
+  /**
+   * The routes' runtime in memory: the repository keeps the cap, the secrets port keeps what the
+   * create handler stored, and the egress check allows the loopback receiver. Their PostgreSQL and
+   * secrets-service halves are pinned by core's `webhooks.test.ts` and the composition's
+   * `run-outcome-webhook.integration.test.ts`.
+   */
+  function memoryWebhooksRuntime(): WebhooksRuntime {
+    return {
+      repository: (workspaceId) => {
+        const mine = () => rows.filter((row) => row.workspaceId === workspaceId);
+        return Promise.resolve({
+          list: () => Promise.resolve(mine()),
+          get: (id) => Promise.resolve(mine().find((row) => row.id === id) ?? null),
+          create: (input) => {
+            if (mine().length >= WEBHOOK_MAX_PER_WORKSPACE) {
+              return Promise.resolve({ kind: 'limit-reached', limit: WEBHOOK_MAX_PER_WORKSPACE });
+            }
+            const webhook = {
+              id: crypto.randomUUID(),
+              workspaceId,
+              url: input.url,
+              events: [...input.events],
+              createdAt: new Date('2026-10-31T00:00:00.000Z'),
+            };
+            rows.push(webhook);
+            return Promise.resolve({ kind: 'created', webhook });
+          },
+          remove: (id) => {
+            const before = rows.length;
+            rows = rows.filter((row) => row.workspaceId !== workspaceId || row.id !== id);
+            return Promise.resolve(rows.length < before);
+          },
+        });
+      },
+      secrets: {
+        store: (_workspaceId, webhookId, secret) => {
+          signingSecrets.set(webhookId, secret);
+          return Promise.resolve();
+        },
+        remove: (_workspaceId, webhookId) => {
+          signingSecrets.delete(webhookId);
+          return Promise.resolve();
+        },
+        read: (_workspaceId, webhookId) => Promise.resolve(signingSecrets.get(webhookId) ?? null),
+      },
+      checkUrl: () => Promise.resolve({ ok: true }),
+    };
+  }
+
+  beforeEach(() => {
+    rows = [];
+    signingSecrets = new Map();
+    installRbacHarness(
+      [
+        { email: owner.email, name: 'Owner', workspaceId: HOOK_WORKSPACE, role: 'owner' },
+        { email: builder.email, name: 'Builder', workspaceId: HOOK_WORKSPACE, role: 'builder' },
+        { email: viewer.email, name: 'Viewer', workspaceId: HOOK_WORKSPACE, role: 'viewer' },
+      ],
+      { workspaceId: HOOK_WORKSPACE },
+    );
+    installTestDomains({ webhooks: { kind: 'serving', runtime: memoryWebhooksRuntime() } });
+  });
+
+  afterEach(() => {
+    clearApplicationContext();
+  });
+
+  /** The published client, its every request answered by the real route modules as `caller`. */
+  function clientAs(caller: { readonly email: string }) {
+    return createClient({
+      baseUrl: 'https://control-plane.test',
+      auth: { kind: 'api-key', apiKey: 'ak_live_conformance' },
+      fetch: (input, init) => {
+        // The harness identifies the caller by its own header, so the key the SDK sends is dropped.
+        const headers = new Headers(init?.headers);
+        headers.delete('authorization');
+        for (const [name, value] of Object.entries(callerHeaders(caller))) headers.set(name, value);
+        const request = new Request(input, { ...init, headers });
+        const { pathname } = new URL(request.url);
+        const id = /^\/api\/webhooks\/([^/]+)$/u.exec(pathname)?.[1];
+        const context = { params: Promise.resolve({ id: id ?? '' }) };
+        if (id !== undefined && request.method === 'DELETE') {
+          return removeWebhookRoute(request, context);
+        }
+        if (pathname === '/api/webhooks' && request.method === 'GET') {
+          return listWebhooksRoute(request);
+        }
+        if (pathname === '/api/webhooks' && request.method === 'POST') {
+          return createWebhookRoute(request);
+        }
+        throw new Error(`no webhook route for ${request.method} ${pathname}`);
+      },
+    });
+  }
+
+  async function refusalOf(call: () => Promise<unknown>): Promise<ApiProblemError> {
+    const outcome = await call().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    if (!(outcome instanceof ApiProblemError)) {
+      throw new Error(`expected an ApiProblemError, got ${String(outcome)}`);
+    }
+    return outcome;
+  }
+
+  it('round-trips an Owner create, list and remove through the SDK in the published shapes', async () => {
+    const aw = clientAs(owner);
+
+    const created = await aw.webhooks.create({ url: RECEIVER_URL, events: ['run.completed'] });
+    expect(CreateWebhookResponseSchema.parse(created)).toEqual(created);
+    expect(created.webhook).toMatchObject({
+      workspaceId: HOOK_WORKSPACE,
+      url: RECEIVER_URL,
+      events: ['run.completed'],
+    });
+    expect(signingSecrets.get(created.webhook.id)).toBe(created.secret);
+
+    const everyEvent = await aw.webhooks.create({ url: RECEIVER_URL });
+    expect(everyEvent.webhook.events).toEqual([...WEBHOOK_EVENT_TYPES]);
+
+    const listed = await aw.webhooks.list();
+    expect(WebhookListResponseSchema.parse({ webhooks: listed }).webhooks).toEqual([
+      created.webhook,
+      everyEvent.webhook,
+    ]);
+    // The secret is in the create answer and nowhere else.
+    expect(JSON.stringify(listed)).not.toContain(created.secret);
+
+    await aw.webhooks.remove(created.webhook.id);
+    expect((await aw.webhooks.list()).map((webhook) => webhook.id)).toEqual([
+      everyEvent.webhook.id,
+    ]);
+    expect(signingSecrets.has(created.webhook.id)).toBe(false);
+
+    const missing = await refusalOf(() => aw.webhooks.remove(created.webhook.id));
+    expect([missing.status, missing.code]).toEqual([
+      WEBHOOK_PROBLEM_CODES.webhook_not_found,
+      'webhook_not_found',
+    ]);
+    const badId = await refusalOf(() => aw.webhooks.remove('not-a-uuid'));
+    expect([badId.status, badId.code]).toEqual([
+      WEBHOOK_PROBLEM_CODES.invalid_webhook_id,
+      'invalid_webhook_id',
+    ]);
+  });
+
+  it('refuses a Builder and a Viewer every webhook route with 403, and writes nothing', async () => {
+    const { webhook } = await clientAs(owner).webhooks.create({ url: RECEIVER_URL });
+    for (const caller of [builder, viewer]) {
+      const aw = clientAs(caller);
+      for (const call of [
+        () => aw.webhooks.list(),
+        () => aw.webhooks.create({ url: RECEIVER_URL }),
+        () => aw.webhooks.remove(webhook.id),
+      ]) {
+        const refused = await refusalOf(call);
+        expect([caller.email, refused.status, refused.code]).toEqual([
+          caller.email,
+          403,
+          'forbidden',
+        ]);
+      }
+    }
+    expect(rows.map((row) => row.id)).toEqual([webhook.id]);
+  });
+
+  it('delivers a terminal run to its registered endpoint once, signed so the SDK helper verifies it', async () => {
+    const aw = clientAs(owner);
+    const { webhook, secret } = await aw.webhooks.create({ url: RECEIVER_URL });
+    const failuresOnly = await aw.webhooks.create({ url: RECEIVER_URL, events: ['run.failed'] });
+    const clock = fixedClock('2026-10-31T00:00:10.000Z');
+    const run = finishedRun({ workspaceId: HOOK_WORKSPACE });
+
+    // What `stopIn` writes in the stop's own transaction: one pending row per webhook whose
+    // `events` names the run's terminal status. Its SQL is pinned by core's
+    // `webhook-deliveries.test.ts`, and the whole path by `run-outcome-webhook.integration.test.ts`.
+    const eventType = webhookEventTypeOf(run.status);
+    if (eventType === null) throw new Error('a completed run is terminal');
+    const pending = (await aw.webhooks.list())
+      .filter((endpoint) => endpoint.events.includes(eventType))
+      .map((endpoint) => ({
+        delivery: {
+          id: crypto.randomUUID(),
+          workspaceId: HOOK_WORKSPACE,
+          webhookId: endpoint.id,
+          runId: run.id,
+          eventType,
+          url: endpoint.url,
+          createdAt: clock.now(),
+        },
+        attempts: 0,
+        settled: false,
+      }));
+    expect(pending.map((row) => row.delivery.webhookId)).toEqual([webhook.id]);
+
+    const settle = (id: string, attempt: number): Promise<boolean> => {
+      const row = pending.find(
+        (candidate) =>
+          candidate.delivery.id === id && !candidate.settled && candidate.attempts === attempt,
+      );
+      if (row === undefined) return Promise.resolve(false);
+      row.settled = true;
+      return Promise.resolve(true);
+    };
+    const outbox: WebhookDeliveryOutbox = {
+      claimDue: () => {
+        const due = pending.filter((row) => !row.settled);
+        for (const row of due) row.attempts += 1;
+        return Promise.resolve(
+          due.map((row): ClaimedWebhookDelivery => ({ ...row.delivery, attempt: row.attempts })),
+        );
+      },
+      markDelivered: settle,
+      scheduleRetry: () => Promise.resolve(false),
+      markFailed: settle,
+      deferClaim: () => Promise.resolve(false),
+      pruneSettled: () => Promise.resolve(0),
+    };
+
+    // The fake receiver keeps the request as it arrived and answers a fast 2xx.
+    const received: { readonly headers: Headers; readonly body: string }[] = [];
+    const receiver = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init);
+      received.push({ headers: request.headers, body: await request.text() });
+      return new Response(null, { status: 204 });
+    };
+    const pass = createWebhookDeliveryPass({
+      outbox,
+      readRun: (workspaceId, runId) =>
+        Promise.resolve(workspaceId === run.workspaceId && runId === run.id ? run : null),
+      secrets: {
+        read: (_workspaceId, webhookId) => Promise.resolve(signingSecrets.get(webhookId) ?? null),
+      },
+      lease: { tryAcquire: () => Promise.resolve({ release: () => Promise.resolve() }) },
+      clock,
+      random: () => 0.5,
+      egressPolicy: () => ({ production: false, allowHosts: [] }),
+      transport: receiver,
+    });
+
+    expect(await pass()).toMatchObject({ claimed: 1, delivered: 1 });
+    expect(await pass()).toMatchObject({ claimed: 0 });
+    expect(received).toHaveLength(1);
+    const [delivery] = received;
+    if (delivery === undefined) throw new Error('the receiver got the delivery');
+
+    // The receiver verifies with the SDK's helper, as a customer backend would.
+    const event = await verifyWebhookSignature({
+      secret,
+      headers: delivery.headers,
+      body: delivery.body,
+      now: clock.now(),
+    });
+    expect(WebhookEventSchema.parse(event)).toEqual(event);
+    expect(event).toMatchObject({
+      id: pending[0]?.delivery.id,
+      type: 'run.completed',
+      workspaceId: HOOK_WORKSPACE,
+      data: { run: { id: run.id, status: 'completed', usage: run.usage, cost: run.cost } },
+    });
+    expect(delivery.headers.get('webhook-id')).toBe(event.id);
+    // The payload carries the outcome, never the run's output.
+    expect(delivery.body).not.toContain(run.output?.text ?? 'output');
+
+    const forged: unknown = await verifyWebhookSignature({
+      secret: failuresOnly.secret,
+      headers: delivery.headers,
+      body: delivery.body,
+      now: clock.now(),
+    }).catch((error: unknown) => error);
+    expect(forged).toBeInstanceOf(WebhookVerificationError);
+    expect((forged as WebhookVerificationError).code).toBe('signature_mismatch');
   });
 });

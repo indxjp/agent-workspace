@@ -1,3 +1,4 @@
+import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { GET as getRoute, PUT as putRoute } from './route';
@@ -41,7 +42,16 @@ import type { ResourceCatalogStoreProvider } from '../../../../../server/resourc
 const WORKSPACE_A = '66666666-6666-4666-8666-666666666666';
 const WORKSPACE_HEADER = 'x-test-workspace';
 const ACTOR_HEADER = 'x-test-actor';
-const SKILL_ID = '77777777-7777-4777-8777-777777777777';
+/** The shared in-memory catalog with one skill, `triage`, that every workspace's lookup sees. */
+const skillCatalogRows = createInMemoryCatalog().forWorkspace(WORKSPACE_A);
+const SKILL_ID = (
+  await skillCatalogRows.putSkill({
+    name: 'triage',
+    skillMd: '# Triage',
+    enabled: true,
+    ownerPrincipalId: 'owner',
+  })
+).id;
 const CONNECTOR_ID = '88888888-8888-4888-8888-888888888888';
 
 const CREATE_BODY = JSON.stringify({
@@ -77,24 +87,8 @@ afterEach(() => {
   clearApplicationContext();
 });
 
-/** Only `listSkills` — the one member the policy routes call — is real; the rest is unused. */
-function fakeSkillCatalog(): ResourceCatalogStoreProvider {
-  return {
-    forWorkspace: () =>
-      Promise.resolve({
-        listSkills: () =>
-          Promise.resolve([
-            {
-              id: SKILL_ID,
-              name: 'triage',
-              skillMd: '# Triage',
-              enabled: true,
-              createdBy: null,
-              ownerPrincipalId: 'owner',
-            },
-          ]),
-      } as unknown as Awaited<ReturnType<ResourceCatalogStoreProvider['forWorkspace']>>),
-  };
+function skillCatalog(): ResourceCatalogStoreProvider {
+  return { forWorkspace: () => Promise.resolve(skillCatalogRows) };
 }
 
 /** `skillsConfigured: false` leaves `skillCatalog` unwired, for the 503 test. */
@@ -131,7 +125,7 @@ function useMemoryRuntime(
     agents: {
       agents,
       agentResources,
-      ...(skillsConfigured ? { skillCatalog: fakeSkillCatalog() } : {}),
+      ...(skillsConfigured ? { skillCatalog: skillCatalog() } : {}),
       resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
         const workspaceId = request.headers.get(WORKSPACE_HEADER);
         return Promise.resolve(

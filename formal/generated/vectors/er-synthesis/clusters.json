@@ -322,6 +322,7 @@
     "otherChecks":
     [{"name": "endpoint_clients_tool_names_mcp_only", "clusters": ["identity"]},
      {"name": "endpoint_clients_redirect_uris_max", "clusters": ["identity"]},
+     {"name": "endpoint_clients_oidc_audience_app_backend", "clusters": ["identity"]},
      {"name": "endpoint_clients_revoked_after_created", "clusters": ["identity"]}],
     "cluster": "identity",
     "closedSets": ["endpoint_clients_kind_valid"]}},
@@ -366,6 +367,7 @@
      {"name": "files_path_no_dot_segments", "clusters": ["catalog"]},
      {"name": "files_storage_key_iff_file", "clusters": ["catalog"]},
      {"name": "files_storage_key_not_blank", "clusters": ["catalog"]},
+     {"name": "files_file_has_object_id", "clusters": ["catalog"]},
      {"name": "files_size_non_negative", "clusters": ["catalog"]},
      {"name": "files_folder_has_no_content", "clusters": ["catalog"]}],
     "cluster": "catalog",
@@ -1027,6 +1029,41 @@
     "rootKey": "workspace_features_workspace_id_workspaces_id_fk",
     "otherChecks": [],
     "cluster": "work",
-    "closedSets": ["workspace_features_feature_valid"]}}],
+    "closedSets": ["workspace_features_feature_valid"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ErSynthesis.clusters_partition_the_tables",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.cluster_wires",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.every_other_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.only_the_default_model_pairs_are_refined_twice",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.check_semantics_follow_the_owning_cluster",
+    "AgentWorkspace.Theorems.Invariants.ErSynthesis.tenant_row_has_exactly_one_workspace"],
+   "input": {"table": "webhooks"},
+   "id": "cluster/webhooks",
+   "expected":
+   {"workspaceIdNotNull": true,
+    "tenancy": "scoped",
+    "rootKey": "webhooks_workspace_id_workspaces_id_fk",
+    "otherChecks":
+    [{"name": "webhooks_url_length", "clusters": ["work"]}, {"name": "webhooks_events_valid", "clusters": ["work"]}],
+    "cluster": "work",
+    "closedSets": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ErSynthesis.clusters_partition_the_tables",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.cluster_wires",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.every_other_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.only_the_default_model_pairs_are_refined_twice",
+    "AgentWorkspace.Theorems.WellFormed.ErSynthesis.check_semantics_follow_the_owning_cluster",
+    "AgentWorkspace.Theorems.Invariants.ErSynthesis.tenant_row_has_exactly_one_workspace"],
+   "input": {"table": "webhook_deliveries"},
+   "id": "cluster/webhook_deliveries",
+   "expected":
+   {"workspaceIdNotNull": true,
+    "tenancy": "scoped",
+    "rootKey": "webhook_deliveries_workspace_id_workspaces_id_fk",
+    "otherChecks":
+    [{"name": "webhook_deliveries_event_type_valid", "clusters": ["work"]},
+     {"name": "webhook_deliveries_delivered_shape", "clusters": ["work"]}],
+    "cluster": "work",
+    "closedSets": ["webhook_deliveries_state_valid"]}}],
  "family": "er-synthesis",
  "description": "Every table's cluster, tenancy, root key and check ownership, replayed against Drizzle."}

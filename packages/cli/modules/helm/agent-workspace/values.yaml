@@ -121,6 +121,8 @@ ingress:
     clusterIssuer: ''
 # The canonical deployment-policy JSON (AW_DEPLOYMENT_POLICY) web enforces; empty sets none.
 deploymentPolicy: ''
+# Comma-separated feature ids (ADR-0160 D5, AW_DEPLOYMENT_FEATURES); empty installs every feature.
+deploymentFeatures: ''
 # The https origin (no path) of this deployment (AW_PUBLIC_URL, ADR-0135): web's A2A agent cards use
 # it; empty leaves it unset.
 publicUrl: ''

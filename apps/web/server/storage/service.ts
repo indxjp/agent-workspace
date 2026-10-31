@@ -4,10 +4,11 @@
  * replaced. Web uploads, API uploads, chat attachments, skill imports and run outputs all save
  * through it, and a signed-link upload takes the same steps split in two: `reserveUpload` signs a
  * `PUT` on the new object, `completeUpload` verifies and confirms it. `list`, `get`, `open` and
- * `signDownload` read by catalog row, `rename` changes the row alone (a legacy row's object moves
- * with it), and `remove` deletes the object, not just the row (the storage design, §04 "File
- * states", §05).
+ * `signDownload` read by catalog row, `rename` changes the row alone, and `remove` deletes the
+ * object, not just the row (the storage design, §04 "File states", §05).
  */
+import { createHash, randomUUID } from 'node:crypto';
+
 import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import type { AuditAction } from '@indx-workspace/contracts/observability';
@@ -20,7 +21,6 @@ import {
   toObjectKey,
   UnsafeObjectKeyError,
   type ByteRange,
-  type ObjectStoreProvider,
   type ObjectStore,
   type ObjectStream,
   type SignedUrl,
@@ -40,9 +40,10 @@ import { promoteUpload } from './promote-upload';
 import {
   isPathPending,
   isPathTaken,
-  renamedKey,
   type CatalogFile,
   type CatalogPort,
+  type SessionStateBlobCatalog,
+  type SessionStateBlobClaim,
 } from './store';
 
 /** Who acted, for the audit row: the signed-in principal, never a request field. */
@@ -52,8 +53,25 @@ interface StorageActor {
   readonly label: string;
 }
 
-/** One row of the audit trail for a file action (the storage design, §05). No URL, ever. */
+/**
+ * One row of the audit trail for a file action (the storage design, §05). No URL, ever.
+ *
+ * `id` is the row's audit key: the trail keeps one row per key (its primary key, written with
+ * `on conflict do nothing`), so a retried write is idempotent. It is a name-based UUID of the
+ * workspace, the action, the file row and the occurrence of the action:
+ *
+ * - `file-uploaded`: the object id the upload confirmed. One object id is confirmed once, so a
+ *   retried complete of the same upload writes the same key, and a second upload to the same path
+ *   (a new object id) is a second row.
+ * - `file-deleted`: the removed row's id. A row is removed once.
+ * - `file-downloaded`, `file-link-created`, `file-moved`: one per request. Each read, link and
+ *   move is its own event, so the key is minted once per call and reused only by that call's retry.
+ *   A ranged read is a read: every `Range` request is one `file-downloaded` row, so no read of a
+ *   file goes unaudited.
+ */
 export interface StorageAuditEvent {
+  /** The audit key; see above. */
+  readonly id: string;
   readonly workspaceId: string;
   readonly actorPrincipalId: string;
   readonly actorUserId: string | null;
@@ -81,22 +99,7 @@ export interface StorageContext {
   readonly actor?: StorageActor;
 }
 
-/** A session-state blob's catalog row (`session_state_blobs`), as far as a save needs it. */
-export interface SessionStateBlobCatalog {
-  putBlob(
-    sessionId: string,
-    blob: {
-      readonly engine: EngineId;
-      readonly blobKey: string;
-      readonly objectId: string;
-      readonly storageKey: string;
-      readonly sizeBytes: number;
-      readonly sha256: string;
-    },
-  ): Promise<{
-    readonly replaced: { readonly objectId: string | null; readonly storageKey: string } | null;
-  }>;
-}
+export type { SessionStateBlobCatalog };
 
 /** The object a row names: enough to find its bytes, new naming or old. */
 type ObjectRow = Pick<CatalogFile, 'area' | 'objectId' | 'storageKey'>;
@@ -271,16 +274,19 @@ export interface StorageService {
   ): Promise<{ readonly rows: readonly CatalogFile[]; readonly cursor: string | null }>;
   /** A ready file only: never a pending upload or a removed row. */
   get(ctx: StorageContext, area: StorageArea, path: string): Promise<CatalogFile | null>;
-  /** The row's object, or `null` when it has none (or no store for its old naming is configured). */
+  /** The row's object, or `null` when it has none (a folder). */
   open(
     ctx: Pick<StorageContext, 'workspaceId' | 'actor'>,
     row: ObjectRow & { readonly id?: string; readonly path?: string },
     range?: ByteRange,
   ): Promise<ObjectStream | null>;
   /**
-   * Saves one session-state blob the same four steps: the bytes go to a new object under
-   * `session-state`, the blob row is confirmed in one transaction after the write, and the replaced
-   * blob's object is deleted last. Over {@link SESSION_STATE_BLOB_MAX_BYTES} nothing is left behind.
+   * Saves one session-state blob the same four steps as a file: a `pending` row under a new object
+   * id first, then the body streamed to that object through {@link measure}, then one transaction
+   * that confirms the row against its reservation token and moves the replaced row aside as
+   * `deleting`, and last the replaced object and row. Over {@link SESSION_STATE_BLOB_MAX_BYTES}
+   * nothing is left behind. `reservation_lost`: the pending row was purged, claimed or cascaded away
+   * while the bytes were written, so nothing was saved and the object is gone.
    */
   saveSessionState(
     ctx: Pick<StorageContext, 'workspaceId'>,
@@ -288,14 +294,19 @@ export interface StorageService {
     body: ReadableStream<Uint8Array>,
   ): Promise<
     | { readonly ok: true; readonly sizeBytes: number; readonly sha256: string }
-    | { readonly ok: false; readonly code: 'too_large' }
+    | { readonly ok: false; readonly code: 'too_large' | 'reservation_lost' }
   >;
-  /** Deletes the row's object, new naming or old; a failure is logged and left to the cleanup job. */
-  deleteObject(ctx: Pick<StorageContext, 'workspaceId'>, row: ObjectRow): Promise<void>;
   /**
-   * A short-lived `GET` link on the row's own object, signed by the store that holds it (new or
-   * legacy naming, as `open`), so it points at the storage domain and not at this app. `null` only
-   * when no store locates the row (no object id, or no store for its old naming is configured);
+   * Deletes a `deleting` session-state row's object, then forgets the row. A failed delete is
+   * logged and leaves the row `deleting` for the cleanup job.
+   */
+  discardSessionState(
+    ctx: Pick<StorageContext, 'workspaceId'>,
+    row: SessionStateBlobClaim,
+  ): Promise<void>;
+  /**
+   * A short-lived `GET` link on the row's own object, signed by the root store, so it points at the
+   * storage domain and not at this app. `null` only for a row with no object id (a folder);
    * whether the object itself still exists is not checked, signing is offline. Throws {@link SignedUrlUnsupportedError} when that store cannot sign or
    * the lifetime is outside the contract's bounds. The link is returned, never logged.
    */
@@ -305,9 +316,7 @@ export interface StorageService {
     request: SignDownloadRequest,
   ): Promise<SignedUrl | null>;
   /**
-   * Row update only for rows with an object id: no object is read, written or copied. A legacy
-   * row's object is copied to its new key first, and its old key deleted after. A folder moves
-   * every row under it.
+   * Row update only: no object is read, written or copied. A folder moves every row under it.
    */
   rename(ctx: StorageContext, area: StorageArea, from: string, to: string): Promise<RenameResult>;
   /** Marks the rows `deleting`, deletes each object, then drops the row; a failed delete keeps it. */
@@ -318,6 +327,22 @@ export interface StorageService {
     opts: { readonly recursive: boolean },
   ): Promise<RemoveResult>;
 }
+
+/**
+ * A name-based UUID (RFC 9562 version 8, from SHA-256 of `parts`): the same parts give the same
+ * id, so an audit write retried under it is the same row.
+ */
+function auditKey(parts: readonly string[]): string {
+  const hash = createHash('sha256').update(JSON.stringify(parts)).digest().subarray(0, 16);
+  hash.writeUInt8((hash.readUInt8(6) & 0x0f) | 0x80, 6);
+  hash.writeUInt8((hash.readUInt8(8) & 0x3f) | 0x80, 8);
+  const hex = hash.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** What makes an upload one event: the object id it confirmed (a row with none: its id). */
+const uploadOccurrence = (row: Pick<CatalogFile, 'id' | 'objectId'>): string =>
+  row.objectId ?? row.id;
 
 /** The lifetime a link is signed for, or `null` when it is outside the contract's bounds. */
 function linkLifetime(ttlSeconds: number | undefined): number | null {
@@ -354,35 +379,40 @@ export function createStorageService(deps: {
   readonly catalog: (workspaceId: string) => Promise<CatalogPort>;
   /** Unscoped, rooted at the `AW_STORAGE_URL` prefix. */
   readonly objects: ObjectStore;
-  /** The area stores of the old naming, for rows without an object id. */
-  readonly legacy?: Partial<Readonly<Record<StorageArea, ObjectStoreProvider>>>;
   /** The session-state blob catalog of a workspace; absent where no database holds one. */
   readonly sessionState?: (workspaceId: string) => Promise<SessionStateBlobCatalog>;
   /**
-   * Appends one audit row. Awaited after the action committed, and a rejection reaches the caller:
-   * what was done is never rolled back or deleted, but a download or a link is not handed out
-   * unaudited, and an upload, move or delete answers an error the caller can see and retry. This
-   * is how the other domains behave (`composition/services.ts`). Honest limit: a retry after a
-   * failed audit write does not re-audit an upload complete, a move or a delete that already
-   * committed (the retry finds nothing left to do), so such an action can stay unaudited; the
-   * caller sees the error, nothing more. Absent where no database holds a trail (tests of other
-   * features).
+   * Appends one audit row, idempotently by `event.id` (the audit key, {@link StorageAuditEvent}).
+   * Awaited after the action committed and tried twice under the same key, so a transient failure
+   * or a lost reply still records the action once. A second failure reaches the caller: what was
+   * done is never rolled back or deleted, but a download or a link is not handed out unaudited,
+   * and an upload, move or delete answers an error the caller can see and retry. This is how the
+   * other domains behave (`composition/services.ts`). A retried upload complete re-audits under
+   * the same key. Honest limit: a retried move or delete finds nothing left to do and does not
+   * re-audit, so such an action can stay unaudited after two failed writes; the caller sees the
+   * error. Absent where no database holds a trail (tests of other features).
    */
   readonly audit?: (event: StorageAuditEvent) => Promise<void>;
   readonly log: Logger;
 }): StorageService {
   const { objects, log } = deps;
 
-  /** Record `action` on `row` for the acting principal, if the caller named one. */
+  /**
+   * Record `action` on `row` for the acting principal, if the caller named one, under the audit key
+   * of `occurrence` (`null`: this request). Written twice at most, under the same key.
+   */
   async function audit(
     ctx: Pick<StorageContext, 'workspaceId' | 'actor'>,
     action: StorageAuditEvent['action'],
     row: Pick<CatalogFile, 'id' | 'path'>,
+    occurrence: string | null,
     label: string = row.path,
   ): Promise<void> {
     const { actor } = ctx;
-    if (deps.audit === undefined || actor === undefined) return;
-    await deps.audit({
+    const write = deps.audit;
+    if (write === undefined || actor === undefined) return;
+    const event: StorageAuditEvent = {
+      id: auditKey([ctx.workspaceId, action, row.id, occurrence ?? randomUUID()]),
       workspaceId: ctx.workspaceId,
       actorPrincipalId: actor.principalId,
       actorUserId: actor.userId,
@@ -390,7 +420,8 @@ export function createStorageService(deps: {
       action,
       subjectId: row.id,
       subjectLabel: label,
-    });
+    };
+    await write(event).catch(() => write(event));
   }
 
   const deleteObject = (name: string, store: ObjectStore = objects): Promise<boolean> =>
@@ -405,80 +436,76 @@ export function createStorageService(deps: {
       },
     );
 
-  /** Where a row's bytes are: the root store by object id, or the old area store by storage key. */
+  /** Where a row's bytes are: the root store, by object id. `null` for a row with none (a folder). */
   function locate(workspaceId: string, row: ObjectRow) {
-    const area = row.area ?? 'files';
     const objectId = row.objectId ?? null;
-    if (objectId !== null) {
-      return { store: objects, name: storageObjectName(workspaceId, area, objectId) };
-    }
-    // storage-bridge(#1699): dual read of rows still in the old naming
-    const legacy = deps.legacy?.[area];
-    if (legacy === undefined || row.storageKey === null) return null;
-    return { store: legacy.forWorkspace(workspaceId), name: row.storageKey };
+    if (objectId === null) return null;
+    return { store: objects, name: storageObjectName(workspaceId, row.area ?? 'files', objectId) };
   }
 
-  // storage-bridge(#1699): legacy rows still carry their path in the object key
-  /** The legacy objects a rename of `from` to `to` moves: old and new key, on the row's area store. */
-  async function legacyMoves(catalog: CatalogPort, workspaceId: string, from: string, to: string) {
-    const moves: { store: ObjectStore; from: string; to: string }[] = [];
-    let cursor: string | undefined;
-    do {
-      const page = await catalog.list(from, cursor === undefined ? undefined : { cursor });
-      for (const row of page.rows) {
-        if (row.kind !== 'file' || (row.objectId ?? null) !== null) continue;
-        const object = locate(workspaceId, row);
-        if (object === null) continue;
-        moves.push({ ...object, from: object.name, to: renamedKey(object.name, from, to) });
-      }
-      cursor = page.cursor ?? undefined;
-    } while (cursor !== undefined);
-    return moves;
-  }
-
-  // storage-bridge(#1699): a row the copy stage switched keeps its old key and its old object
-  /**
-   * The old object of a file row that was switched to the new naming, if one may still be there.
-   * It goes with the row: a row-less old file would be adopted again and bring a removed file back.
-   * A legacy row that now holds that key (a one-step write at the old path after a rename) owns
-   * those bytes, so the twin is then `null`, as it is when that lookup fails.
-   */
-  async function oldTwin(workspaceId: string, row: ObjectRow) {
-    const objectId = row.objectId ?? null;
-    const area = row.area ?? 'files';
-    const legacy = deps.legacy?.[area];
-    if (objectId === null || area !== 'files' || row.storageKey === null || legacy === undefined) {
-      return null;
-    }
-    const name = row.storageKey;
-    if (name === `${area}/${objectId}`) return null;
-    const held = await deps
-      .catalog(workspaceId)
-      .then((catalog) => catalog.referencing({ objectIds: [], storageKeys: [name] }))
-      .then(
-        (rows) => rows.length > 0,
-        (error: unknown) => {
-          log.warn('[storage] could not check an old-naming object; it is left in place', {
-            error,
-          });
-          return true;
-        },
-      );
-    return held ? null : { store: legacy.forWorkspace(workspaceId), name };
-  }
-
-  /** Delete a row's object, new naming or old; a failure is logged and left to the cleanup job. */
-  async function deleteRowObject(workspaceId: string, row: ObjectRow) {
+  /** Delete a row's object; `false` when it is left (a failure is logged and left to the cleanup job). */
+  async function deleteRowObject(workspaceId: string, row: ObjectRow): Promise<boolean> {
     const object = locate(workspaceId, row);
     if (object === null) {
-      log.warn(
-        "[storage] no store for a replaced or purged row's old-naming object; it is left in place",
-      );
-      return;
+      log.warn('[storage] a replaced or purged row names no object; nothing is deleted');
+      return false;
     }
-    await deleteObject(object.name, object.store);
-    const twin = await oldTwin(workspaceId, row);
-    if (twin !== null) await deleteObject(twin.name, twin.store);
+    return deleteObject(object.name, object.store);
+  }
+
+  /** The session-state blob rows of a workspace. */
+  async function sessionStateRows(workspaceId: string): Promise<SessionStateBlobCatalog> {
+    if (deps.sessionState === undefined) {
+      throw new Error('the storage service has no session-state catalog');
+    }
+    return deps.sessionState(workspaceId);
+  }
+
+  /**
+   * Remove the reservation of a session-state save that did not confirm, then the object `name` it
+   * wrote, as {@link abandon} does for a file: only the reservation `pending` names is forgotten,
+   * and the object goes unless the blob's ready row names it (a confirm that committed with its
+   * reply lost). A row that moved it aside as `deleting` deletes it anyway. A failed lookup keeps
+   * the object for the cleanup job.
+   */
+  async function abandonBlob(
+    rows: SessionStateBlobCatalog,
+    pending: SessionStateBlobClaim,
+    blobKey: string,
+    name: string | null,
+  ) {
+    await rows.forgetBlob(pending).catch((error: unknown) => {
+      log.warn('[storage] could not forget a session-state reservation; the cleanup job will', {
+        error,
+      });
+    });
+    const objectId = pending.objectId;
+    if (name === null) return;
+    const held = await rows.getBlob(pending.sessionId, pending.engine, blobKey).then(
+      (ready) => ready?.objectId === objectId,
+      (error: unknown) => {
+        log.warn('[storage] could not check a saved session-state object; the cleanup job will', {
+          error,
+        });
+        return true;
+      },
+    );
+    if (!held) await deleteObject(name);
+  }
+
+  /** Delete a `deleting` session-state row's object, then forget the row; a failure keeps it. */
+  async function discardBlob(
+    workspaceId: string,
+    rows: SessionStateBlobCatalog,
+    row: SessionStateBlobClaim,
+  ) {
+    const object = { area: 'session-state' as const, ...row };
+    if (!(await deleteRowObject(workspaceId, object))) return;
+    await rows.forgetBlob(row).catch((error: unknown) => {
+      log.warn('[storage] could not forget a deleted session-state row; the cleanup job will', {
+        error,
+      });
+    });
   }
 
   /**
@@ -518,7 +545,7 @@ export function createStorageService(deps: {
     // Nothing claimed: the upload completed, or another delete took it, since it was read.
     if (claimed.length === 0) return { ok: false, code: 'not_found' };
     for (const r of claimed) await discard(catalog, ctx.workspaceId, r);
-    if (area === 'files') await audit(ctx, 'file-deleted', pending, path);
+    if (area === 'files') await audit(ctx, 'file-deleted', pending, pending.id, path);
     return { ok: true, removed: claimed.length, files: [path] };
   }
 
@@ -529,7 +556,7 @@ export function createStorageService(deps: {
   async function discard(catalog: CatalogPort, workspaceId: string, row: CatalogFile) {
     const object = locate(workspaceId, row);
     if (object === null) {
-      log.warn("[storage] no store for a removed row's object; the cleanup job will", {
+      log.warn('[storage] a removed row names no object; the cleanup job will', {
         rowId: row.id,
       });
       return;
@@ -537,8 +564,6 @@ export function createStorageService(deps: {
     const doomed = row.status === 'pending' ? await claimPending(catalog, row) : row;
     if (doomed === null) return;
     if (!(await deleteObject(object.name, object.store))) return;
-    const twin = await oldTwin(workspaceId, doomed);
-    if (twin !== null && !(await deleteObject(twin.name, twin.store))) return;
     await catalog.forget(doomed).catch((error: unknown) => {
       log.warn('[storage] could not forget a removed row; the cleanup job will', {
         rowId: row.id,
@@ -563,7 +588,7 @@ export function createStorageService(deps: {
     });
     const objectId = row.objectId ?? null;
     if (name === null || objectId === null) return;
-    const held = await catalog.referencing({ objectIds: [objectId], storageKeys: [] }).then(
+    const held = await catalog.referencing({ objectIds: [objectId] }).then(
       (rows) => rows.some((other) => other.status !== 'deleting'),
       (error: unknown) => {
         log.warn('[storage] could not check a saved object; the cleanup job will', { error });
@@ -669,7 +694,7 @@ export function createStorageService(deps: {
         return { ok: false, code: 'sign_failed' };
       }
       // The storage design, §05: the row names the file, never the link or its signature.
-      await audit(ctx, 'file-link-created', { id: row.id, path });
+      await audit(ctx, 'file-link-created', { id: row.id, path }, null);
       return { ok: true, url, expiresAt: new Date(now.getTime() + expiresInSeconds * 1000) };
     },
 
@@ -691,9 +716,13 @@ export function createStorageService(deps: {
         if (ready === null || ready.kind !== 'file') return { ok: false, code: 'not_found' };
         const held = locate(ctx.workspaceId, ready);
         const meta = held === null ? null : await held.store.head(held.name);
-        return meta !== null && meta.sizeBytes === ready.sizeBytes
-          ? { ok: true, row: ready }
-          : { ok: false, code: 'not_verified' };
+        if (meta === null || meta.sizeBytes !== ready.sizeBytes) {
+          return { ok: false, code: 'not_verified' };
+        }
+        // A retry after a failed audit write records the upload now, under the key the first
+        // complete used, so an upload whose row was written is still one row.
+        await audit(ctx, 'file-uploaded', ready, uploadOccurrence(ready));
+        return { ok: true, row: ready };
       }
 
       // A relay row has no declared size until its save confirms, and the save owns its object:
@@ -736,7 +765,7 @@ export function createStorageService(deps: {
       if (confirmed.replaced !== undefined) {
         await discard(catalog, ctx.workspaceId, confirmed.replaced);
       }
-      await audit(ctx, 'file-uploaded', confirmed.row);
+      await audit(ctx, 'file-uploaded', confirmed.row, uploadOccurrence(confirmed.row));
       return { ok: true, row: confirmed.row };
     },
 
@@ -835,7 +864,7 @@ export function createStorageService(deps: {
       }
 
       // 4. Clean up the replaced file. A failure is logged, not returned: the cleanup job finishes
-      // it, and so it does for a legacy row that has no object id to name.
+      // it.
       const { replaced } = confirmed;
       const replacedObjectId = replaced?.objectId ?? null;
       if (replaced !== undefined && replacedObjectId !== null) {
@@ -844,12 +873,7 @@ export function createStorageService(deps: {
           replaced.area ?? input.area,
           replacedObjectId,
         );
-        // The old twin goes too: a row-less old object would be adopted again as a live file.
-        const twin = await oldTwin(ctx.workspaceId, replaced);
-        if (
-          (await deleteObject(old)) &&
-          (twin === null || (await deleteObject(twin.name, twin.store)))
-        ) {
+        if (await deleteObject(old)) {
           await catalog.forget(replaced).catch((error: unknown) => {
             log.warn('[storage] could not forget a replaced row; the cleanup job will', {
               rowId: replaced.id,
@@ -859,7 +883,9 @@ export function createStorageService(deps: {
         }
       }
       // Run outputs (area `artifacts`) and skill files are not user files.
-      if (input.area === 'files') await audit(ctx, 'file-uploaded', confirmed.row);
+      if (input.area === 'files') {
+        await audit(ctx, 'file-uploaded', confirmed.row, uploadOccurrence(confirmed.row));
+      }
       return { ok: true, row: confirmed.row };
     },
 
@@ -941,14 +967,24 @@ export function createStorageService(deps: {
 
     // @story US-STO-09
     async saveSessionState(ctx, ref, body) {
-      if (deps.sessionState === undefined) {
-        throw new Error('the storage service has no session-state catalog');
-      }
-      const catalog = await deps.sessionState(ctx.workspaceId);
-      // Nothing references this id until the confirm below, so an interrupted write is an orphan
-      // the cleanup job reclaims once it is old enough.
+      let rows: SessionStateBlobCatalog;
+      let pending: SessionStateBlobClaim;
       const objectId = newObjectId();
       const name = storageObjectName(ctx.workspaceId, 'session-state', objectId);
+      // 1. Reserve: the row holds the object before its first byte, against the cleanup job.
+      try {
+        rows = await sessionStateRows(ctx.workspaceId);
+        pending = await rows.reserveBlob(ref.sessionId, {
+          engine: ref.engine,
+          objectId,
+          storageKey: name,
+        });
+      } catch (error) {
+        await body.cancel().catch(() => undefined);
+        throw error;
+      }
+
+      // 2. Write, measuring in the stream: no byte of the body is held whole.
       const measured = measure(SESSION_STATE_BLOB_MAX_BYTES);
       try {
         await objects.write(name, body.pipeThrough(measured.stream), {
@@ -957,28 +993,42 @@ export function createStorageService(deps: {
         });
       } catch (error) {
         // An object that was already there is not ours to delete.
-        if (!(error instanceof ObjectConflictError)) await deleteObject(name);
+        await abandonBlob(
+          rows,
+          pending,
+          ref.blobKey,
+          error instanceof ObjectConflictError ? null : name,
+        );
         if (error instanceof BodyTooLargeError) return { ok: false, code: 'too_large' };
         throw error;
       }
+
+      // 3. Confirm against the reservation, swapping the rows in one transaction.
       const { sizeBytes, sha256 } = measured.result();
-      // ponytail: a failed confirm leaves the new object to the cleanup job, since the commit may
-      // have happened with its reply lost and the row would then name a deleted object.
-      const { replaced } = await catalog.putBlob(ref.sessionId, {
-        engine: ref.engine,
-        blobKey: ref.blobKey,
-        objectId,
-        storageKey: name,
-        sizeBytes,
-        sha256,
-      });
-      if (replaced !== null) {
-        await deleteRowObject(ctx.workspaceId, { ...replaced, area: 'session-state' });
+      let confirmed;
+      try {
+        confirmed = await rows.confirmBlob(pending, { blobKey: ref.blobKey, sizeBytes, sha256 });
+      } catch (error) {
+        // The commit may have happened with its reply lost: `abandonBlob` keeps an object the
+        // blob's ready row names.
+        await abandonBlob(rows, pending, ref.blobKey, name);
+        throw error;
+      }
+      if (confirmed === null) {
+        await abandonBlob(rows, pending, ref.blobKey, name);
+        return { ok: false, code: 'reservation_lost' };
+      }
+
+      // 4. Clean up the replaced blob: object first, then its `deleting` row.
+      if (confirmed.replaced !== null) {
+        await discardBlob(ctx.workspaceId, rows, confirmed.replaced);
       }
       return { ok: true, sizeBytes, sha256 };
     },
 
-    deleteObject: (ctx, row) => deleteRowObject(ctx.workspaceId, row),
+    async discardSessionState(ctx, row) {
+      await discardBlob(ctx.workspaceId, await sessionStateRows(ctx.workspaceId), row);
+    },
 
     // @story US-STO-05
     // A download is audited when the caller names an actor (the relay route); the agent's own
@@ -995,7 +1045,7 @@ export function createStorageService(deps: {
       if (stream === null || ctx.actor === undefined || !owned) return stream;
       if (id === undefined || path === undefined) return stream;
       try {
-        await audit(ctx, 'file-downloaded', { id, path });
+        await audit(ctx, 'file-downloaded', { id, path }, null);
       } catch (error) {
         await stream.body.cancel().catch(() => undefined);
         throw error;
@@ -1023,7 +1073,7 @@ export function createStorageService(deps: {
         responseDisposition: request.responseDisposition,
         ...(request.now === undefined ? {} : { now: request.now }),
       });
-      await audit(ctx, 'file-link-created', row);
+      await audit(ctx, 'file-link-created', row, null);
       return url;
     },
 
@@ -1043,60 +1093,17 @@ export function createStorageService(deps: {
       if (row !== null && row.kind === 'file' && !listedIn(row, area)) {
         return { ok: false, code: 'not_found' };
       }
-      // storage-bridge(#1699): legacy rows still carry their path in the object key
-      // storage-bridge(#1699): a legacy row created under the folder during the rename is not
-      // copied; old write paths retire in #1662…#1665
-      const moves = await legacyMoves(catalog, ctx.workspaceId, source, target);
-      // Only the keys this call created, so undoing never deletes another file's bytes.
-      const copied: typeof moves = [];
-      // storage-bridge(#1699): the adopt stage can give a copy a row before the catalog rename;
-      // that copy is then the row's bytes and stays. A failed lookup keeps every copy.
-      const undo = async () => {
-        if (copied.length === 0) return;
-        const held = await catalog
-          .referencing({ objectIds: [], storageKeys: copied.map((m) => m.to) })
-          .then(
-            (rows) => new Set(rows.map((other) => other.storageKey)),
-            (error: unknown) => {
-              log.warn('[storage] could not check renamed copies; they are left in place', {
-                error,
-              });
-              return null;
-            },
-          );
-        if (held === null) return;
-        for (const m of copied) if (!held.has(m.to)) await deleteObject(m.to, m.store);
-      };
       let moved: Awaited<ReturnType<CatalogPort['rename']>>;
       try {
-        for (const m of moves) {
-          const object = await m.store.read(m.from);
-          if (object === null) continue;
-          // A create, not an overwrite: an occupied key (another row's, a `deleting` row's awaiting
-          // the cleanup job, or a concurrent rename's copy) refuses the rename. Every backend
-          // declares `conditionalPut`, so no lock is needed around the copy.
-          await m.store.write(m.to, object.body, {
-            ifNoneMatch: '*',
-            contentType: object.meta.contentType,
-          });
-          copied.push(m);
-        }
         moved = await catalog.rename(source, target);
       } catch (error) {
-        await undo();
-        if (error instanceof ObjectConflictError) return { ok: false, code: 'path_taken' };
         if (isPathPending(error)) return { ok: false, code: 'upload_in_progress' };
         if (isPathTaken(error)) return { ok: false, code: 'path_taken' };
         throw error;
       }
-      if (moved.rows === 0) {
-        await undo();
-        return { ok: false, code: 'not_found' };
-      }
-      // A failed delete is logged and left for the cleanup job (#1673).
-      for (const m of moves) await deleteObject(m.from, m.store);
+      if (moved.rows === 0) return { ok: false, code: 'not_found' };
       if (row !== null && area === 'files') {
-        await audit(ctx, 'file-moved', row, `${source} -> ${target}`);
+        await audit(ctx, 'file-moved', row, null, `${source} -> ${target}`);
       }
       return { ok: true, moved: moved.files };
     },
@@ -1126,7 +1133,9 @@ export function createStorageService(deps: {
         );
       }
       // Nothing marked: a concurrent delete won the race, and it audits its own delete.
-      if (area === 'files' && marked.length > 0) await audit(ctx, 'file-deleted', row, target);
+      if (area === 'files' && marked.length > 0) {
+        await audit(ctx, 'file-deleted', row, row.id, target);
+      }
       const removedFiles = marked
         .filter((r) => r.kind === 'file')
         .map((r) => r.targetPath ?? r.path)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseSseFrame, readSseFrames, splitSseFrames } from './sse.js';
+import { parseSseFrame, readSseFrames, readSseStream, splitSseFrames } from './sse.js';
 
 /** A body that delivers the given chunks, then ends. */
 function bodyOf(chunks: readonly string[]): ReadableStream<Uint8Array> {
@@ -104,5 +104,47 @@ describe('readSseFrames', () => {
       break;
     }
     expect(cancelled).toBe(true);
+  });
+});
+
+describe('readSseStream (issue #250, K-3)', () => {
+  async function read(text: string): Promise<{ hints: number[]; frames: unknown[] }> {
+    const hints: number[] = [];
+    const frames: unknown[] = [];
+    for await (const frame of readSseStream(bodyOf([text]), undefined, (ms) => hints.push(ms))) {
+      frames.push(frame);
+    }
+    return { hints, frames };
+  }
+
+  it('surfaces a retry: of ASCII digits, sent in a block of its own, as milliseconds', async () => {
+    const { hints, frames } = await read(
+      'retry: 10000\n\nevent: run.status\nid: 1\ndata: {"status":"running"}\n\n',
+    );
+    expect(hints).toEqual([10000]);
+    expect(frames).toEqual([{ event: 'run.status', id: '1', data: { status: 'running' } }]);
+  });
+
+  it('ignores a retry: that is not ASCII digits only, as HTML §9.2 requires', async () => {
+    const { hints } = await read(
+      'retry: 1e4\n\nretry: -1\n\nretry:\n\nretry: 10 \n\nretry: ١٠\n\nevent: done\n\n',
+    );
+    expect(hints).toEqual([]);
+  });
+
+  it('reads retry: inside a named frame without changing its other fields, the last valid one winning', async () => {
+    const { hints, frames } = await read(
+      'event: x\nretry: 500\nid: 7\nretry: 2000\nretry: soon\ndata: 1\n\n',
+    );
+    expect(hints).toEqual([2000]);
+    expect(frames).toEqual([{ event: 'x', id: '7', data: 1 }]);
+  });
+
+  it('keeps readSseFrames itself silent about retry:', async () => {
+    const frames = [];
+    for await (const frame of readSseFrames(bodyOf(['retry: 10000\n\nevent: done\n\n']))) {
+      frames.push(frame);
+    }
+    expect(frames).toEqual([{ event: 'done', id: null, data: null }]);
   });
 });

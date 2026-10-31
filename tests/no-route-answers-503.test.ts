@@ -218,6 +218,10 @@ const SESSION_REFUSED_BY_HANDLER: Readonly<Record<string, string>> = {
     'docs/adr/0083-the-cli-signs-a-person-in-with-a-device-flow-and-a-short-lived-user-token.md',
   'POST /api/auth/cli-workspace':
     'docs/adr/0083-the-cli-signs-a-person-in-with-a-device-flow-and-a-short-lived-user-token.md',
+  // ADR-0161 D3 and D7: the exchange authenticates an endpoint client by `client_secret_basic`
+  // alone, so a browser session presents no client and is `401 invalid_client`.
+  'POST /api/auth/token-exchange':
+    'docs/adr/0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md',
 };
 
 const STARTUP_TIMEOUT_MS = 180_000;

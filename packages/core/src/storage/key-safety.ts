@@ -158,6 +158,8 @@ export type ObjectKeyRejectionRule =
   | 'empty-segment'
   | 'dot-segment'
   | 'reserved-name'
+  /** Refused only by a store over an NTFS folder: Win32 reads it as another name or a device. */
+  | 'windows-name'
   | 'non-canonical';
 
 /**

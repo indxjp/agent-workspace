@@ -146,8 +146,9 @@ browser session, ADR-0134 part 3), `POST /api/triggers/:id/fire/:secret` (a path
 `POST /api/invitations/:id/accept` (an unclassified sub-resource) and `POST /api/builder/mcp`
 (an unclassified resource; the route verifies a run token itself, issue #1846), `POST /mcp/builder` and
 its protected-resource metadata route (paths outside `/api`, read as pages; the door admits only an OAuth
-token of the `builder` client kind, issue #1846) — twenty-nine of the
-thirty routes the matrix exempts by name; the thirtieth,
+token of the `builder` client kind, issue #1846) and `POST /api/auth/token-exchange` (an app
+backend's ID-token exchange, which authenticates its endpoint client itself, ADR-0161) — thirty of
+the thirty-one routes the matrix exempts by name; the thirty-first,
 `GET /api/setup/runtime-detect`, parses as a `setup` row and is decided. -/
 @[aw_spec (tier := T5) (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#PUBLIC_ROUTES")
   (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#IDENTITY_ONLY_ROUTES")]
@@ -155,7 +156,7 @@ theorem refused_declared_routes_are_the_auth_routes_and_accept :
     ((declaredRoutes.filter fun r =>
         (decideAuth ⟨"owner", r.method, r.path, .own, none⟩).effect == .refuse).map
         fun r => (r.method, r.path)) =
-      [("POST", "/api/builder/mcp"), ("POST", "/mcp/builder"),
+      [("POST", "/api/auth/token-exchange"), ("POST", "/api/builder/mcp"), ("POST", "/mcp/builder"),
         ("GET", "/.well-known/oauth-protected-resource/mcp/builder"), ("GET", "/api/cron/retention"),
         ("GET", "/api/readyz"),
         ("POST", "/api/a2a/agents/:agentName"),

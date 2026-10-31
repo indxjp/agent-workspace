@@ -135,6 +135,8 @@ function passesWithoutAKey(route: ApiRoute): boolean {
     route.path === '/api/triggers/:id/fire/:secret' ||
     route.path === '/api/auth/cli-device' ||
     (route.method === 'POST' && route.path === '/api/auth/cli-token') ||
+    // ADR-0161 D3: the exchange authenticates the endpoint client itself.
+    route.path === '/api/auth/token-exchange' ||
     (route.method === 'POST' && route.path === '/api/auth/workspace')
   );
 }
@@ -815,6 +817,56 @@ describe('the paths apps/web/proxy.ts admits for the OAuth server (ADR-0134 part
     ] as const) {
       const response = await send(method, pathname, { authorization: API_KEY_HEADER });
       expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+    }
+  });
+});
+
+// ADR-0161 D3 and D9.
+describe('the paths apps/web/proxy.ts admits for the ID-token exchange and its access token', () => {
+  const ACCESS_TOKEN_HEADER = `Bearer awo_live_${'A'.repeat(22)}_${'S'.repeat(43)}`;
+  const previousSecret = process.env['SESSION_SECRET'];
+  beforeAll(() => {
+    process.env['SESSION_SECRET'] = 'k'.repeat(MIN_SESSION_SECRET_LENGTH);
+  });
+  afterAll(() => {
+    if (previousSecret === undefined) delete process.env['SESSION_SECRET'];
+    else process.env['SESSION_SECRET'] = previousSecret;
+  });
+  const send = (method: string, pathname: string, headers: Record<string, string> = {}) =>
+    proxy(new NextRequest(new URL(pathname, 'http://127.0.0.1:3000'), { method, headers }));
+
+  it('passes the exchange through with no session, and only its POST', async () => {
+    const response = await send('POST', '/api/auth/token-exchange');
+    expect(response.headers.get(PASSED_THROUGH)).toBe('1');
+    const other = await send('GET', '/api/auth/token-exchange');
+    expect(other.headers.get(PASSED_THROUGH)).toBeNull();
+  });
+
+  it('admits an awo_live_ bearer on exactly the app-backend routes', async () => {
+    for (const [method, pathname] of [
+      ['POST', `/api/agents/${SAMPLE_ID}/runs`],
+      ['GET', `/api/runs/${SAMPLE_ID}`],
+      ['GET', `/api/runs/${SAMPLE_ID}/events`],
+      ['POST', `/api/runs/${SAMPLE_ID}/interrupt`],
+      ['GET', '/api/me'],
+    ] as const) {
+      const response = await send(method, pathname, { authorization: ACCESS_TOKEN_HEADER });
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBe('1');
+    }
+  });
+
+  it('keeps every other route behind the session gate for an awo_live_ bearer', async () => {
+    for (const [method, pathname] of [
+      ['GET', '/api/workspaces'],
+      ['POST', '/api/files'],
+      ['GET', '/api/runs'],
+      ['POST', `/api/runs/${SAMPLE_ID}/feedback`],
+      ['GET', `/api/agents/${SAMPLE_ID}`],
+      ['POST', '/api/endpoint-clients'],
+    ] as const) {
+      const response = await send(method, pathname, { authorization: ACCESS_TOKEN_HEADER });
+      expect(response.headers.get(PASSED_THROUGH), `${method} ${pathname}`).toBeNull();
+      expect(response.status, `${method} ${pathname}`).toBe(401);
     }
   });
 });

@@ -536,6 +536,30 @@ Rotate the webhook secret; it is shown once and the old URL stops working
 aw triggers secret rotate <id>
 ```
 
+## aw webhooks list
+
+Every webhook of the workspace; no secret is shown
+
+```
+aw webhooks list
+```
+
+## aw webhooks create
+
+Register an endpoint for run outcomes; the signing secret is shown once
+
+```
+aw webhooks create [--file <json>] [--webhook-url <url>] [--event <type> …]
+```
+
+## aw webhooks remove
+
+Delete a webhook and its signing secret; nothing more is sent to it
+
+```
+aw webhooks remove <id>
+```
+
 ## aw models connections list
 
 Every model connection
@@ -1213,7 +1237,7 @@ aw sessions subkeys <provider-session-id> [--project-key <key>]
 Queue a run, and optionally wait for or follow it
 
 ```
-aw runs start <agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait|--follow] [--fail-on-error]
+aw runs start <agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--idempotency-key <key>] [--wait|--follow] [--fail-on-error]
 ```
 
 ## aw runs get

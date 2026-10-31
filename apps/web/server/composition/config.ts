@@ -13,7 +13,6 @@ import { defaultRuntimeNetworkPolicy, type RuntimeNetworkPolicy } from '../../co
 // The storage settings are resolved by contracts, so `agent-workspace doctor` decides the same way.
 export {
   STORAGE_URL_ENV,
-  legacyAreaPrefixes,
   storageAreaPlace,
   type StorageArea,
   type StorageAreaPlace,

@@ -5,6 +5,7 @@ import type { RunTokenCodec } from '@agent-workspace/gateway/tokens';
 
 import type { AgentRecord } from '../../agents/contract';
 import { featureRefusalResponse } from '../../features/guard';
+import { log } from '../../telemetry/logger';
 import type { AllowedAgent } from './allowed-owner-warning';
 import { isBuilderAgent } from '../agent/is-builder-agent';
 import { awControlAllowed } from '../agent/aw-control-allowed';
@@ -129,10 +130,10 @@ export async function verifyRunCaller<Scope>(
     // ponytail: api-key callers stay read-only until the token names the key that started the run.
     if (caller.principalKind === 'api-key') return readsOnly;
     if (caller.principalKind !== 'membership') return refuse('no_caller');
-    // ponytail: scans the member list; swap for a by-principal lookup if the port grows one.
-    const members = await deps.directory.forWorkspace(claims.workspaceId).listMemberships();
-    const member = members.find((candidate) => candidate.principalId === caller.sub);
-    if (member === undefined) return refuse('no_caller');
+    const member = await deps.directory
+      .forWorkspace(claims.workspaceId)
+      .findMembershipByPrincipal(caller.sub);
+    if (member === null) return refuse('no_caller');
     return {
       ok: true,
       caller: {
@@ -143,7 +144,14 @@ export async function verifyRunCaller<Scope>(
         role: member.role,
       },
     };
-  } catch {
+  } catch (cause) {
+    // Fail closed, but not silently: a directory, database or agent-store outage must reach an
+    // operator. The error's class name is the whole signal; its message may carry the token, a
+    // claim or SQL, so it is never logged.
+    log.error('builder run caller verification failed', {
+      op: 'builder.transport',
+      errorName: cause instanceof Error ? cause.name : typeof cause,
+    });
     return refuse('not_permitted');
   }
 }

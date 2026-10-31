@@ -87,6 +87,7 @@ function fakeDirectory(seed: readonly DirectoryApiKeyRecord[] = []): FakeDirecto
         })),
       );
     },
+    findMembershipByPrincipal: unused,
     createMembership: unused,
     changeMembershipRole: unused,
     deleteMembership: unused,

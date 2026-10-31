@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { agents } from '../schema/agents.js';
+import { agents, type EngineId } from '../schema/agents.js';
 import { memberships } from '../schema/memberships.js';
 import { sessions } from '../schema/sessions.js';
 import { sessionStateBlobs } from '../schema/session-state-blobs.js';
@@ -15,6 +15,8 @@ import { workspaces } from '../schema/workspaces.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import {
   createDatabaseSessionStateRepositoryProvider,
+  type SessionStateBlobClaim,
+  type SessionStateRepository,
   type SessionStateStreamKey,
 } from './session-state.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
@@ -26,6 +28,33 @@ import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing
  * database rather than against a fake: idempotency by `entry_key`, delete-last, replace-all, the
  * tenant boundary, and the cascade from a deleted session.
  */
+/** A blob saved the way every save is: a reservation, then its confirm. */
+async function saveBlob(
+  store: SessionStateRepository,
+  sessionId: string,
+  blob: {
+    readonly engine: EngineId;
+    readonly blobKey: string;
+    readonly objectId: string;
+    readonly storageKey: string;
+    readonly sizeBytes: number;
+    readonly sha256: string;
+  },
+): Promise<{ readonly replaced: SessionStateBlobClaim | null }> {
+  const pending = await store.reserveBlob(sessionId, {
+    engine: blob.engine,
+    objectId: blob.objectId,
+    storageKey: blob.storageKey,
+  });
+  const confirmed = await store.confirmBlob(pending, {
+    blobKey: blob.blobKey,
+    sizeBytes: blob.sizeBytes,
+    sha256: blob.sha256,
+  });
+  if (confirmed === null) throw new Error('the session-state reservation was lost');
+  return confirmed;
+}
+
 describe('SessionStateRepository', () => {
   let isolated: IsolatedTestDatabase;
   const workspaceId = crypto.randomUUID();
@@ -224,14 +253,17 @@ describe('SessionStateRepository', () => {
 
   it('records a blob and reads its location and digest back', async () => {
     const store = await repository();
-    await store.putBlob(sessionId, {
+    await saveBlob(store, sessionId, {
+      objectId: crypto.randomUUID(),
       engine: 'claude-agent-sdk',
       blobKey: 'state.tar',
       storageKey: `session-state/${sessionId}/claude-agent-sdk/state.tar`,
       sizeBytes: 3,
       sha256: 'a'.repeat(64),
     });
-    await store.putBlob(sessionId, {
+    const objectId = crypto.randomUUID();
+    await saveBlob(store, sessionId, {
+      objectId,
       engine: 'claude-agent-sdk',
       blobKey: 'state.tar',
       storageKey: `session-state/${sessionId}/claude-agent-sdk/state.tar`,
@@ -240,7 +272,7 @@ describe('SessionStateRepository', () => {
     });
     await expect(store.getBlob(sessionId, 'claude-agent-sdk', 'state.tar')).resolves.toEqual({
       blobKey: 'state.tar',
-      objectId: null,
+      objectId,
       storageKey: `session-state/${sessionId}/claude-agent-sdk/state.tar`,
       sizeBytes: 4,
       sha256: 'b'.repeat(64),
@@ -249,7 +281,7 @@ describe('SessionStateRepository', () => {
   });
 
   // @story US-STO-09
-  it('[US-STO-09][unit][run] a replacing put returns the previous location, and a non-ready row is never served', async () => {
+  it('[US-STO-09][unit][run] a replacing confirm returns the previous location, and a non-ready row is never served', async () => {
     const store = await repository();
     const first = crypto.randomUUID();
     const second = crypto.randomUUID();
@@ -261,10 +293,15 @@ describe('SessionStateRepository', () => {
       sizeBytes: 1,
       sha256: 'e'.repeat(64),
     });
-    await expect(store.putBlob(sessionId, blob(first))).resolves.toEqual({ replaced: null });
-    await expect(store.putBlob(sessionId, blob(second))).resolves.toEqual({
-      replaced: { objectId: first, storageKey: blob(first).storageKey },
+    await expect(saveBlob(store, sessionId, blob(first))).resolves.toEqual({ replaced: null });
+    const { replaced } = await saveBlob(store, sessionId, blob(second));
+    expect(replaced).toMatchObject({
+      status: 'deleting',
+      objectId: first,
+      storageKey: blob(first).storageKey,
     });
+    // The caller deletes the replaced object, then forgets its row.
+    if (replaced !== null) await expect(store.forgetBlob(replaced)).resolves.toBe(true);
     await expect(
       store.getBlob(sessionId, 'claude-agent-sdk', 'replaced.tar'),
     ).resolves.toMatchObject({ objectId: second });
@@ -299,7 +336,9 @@ describe('SessionStateRepository', () => {
       { entryKey: 'e1', entry: { type: 'user' } },
       { entryKey: 'e2', entry: { type: 'assistant' } },
     ]);
-    await store.putBlob(sessionId, {
+    const expiredObject = crypto.randomUUID();
+    await saveBlob(store, sessionId, {
+      objectId: expiredObject,
       engine: 'claude-agent-sdk',
       blobKey: 'expired.tar',
       storageKey: `session-state/${sessionId}/claude-agent-sdk/expired.tar`,
@@ -330,13 +369,16 @@ describe('SessionStateRepository', () => {
     expect(purged).toEqual({
       streams: 1,
       entries: 2,
+      // Marked `deleting` and moved off its key; the caller deletes the bytes, then the row.
       blobs: [
         {
-          blobKey: 'expired.tar',
-          objectId: null,
+          sessionId,
+          engine: 'claude-agent-sdk',
+          rowKey: expect.stringMatching(/^%aside\//u) as unknown,
+          status: 'deleting',
+          objectId: expiredObject,
           storageKey: `session-state/${sessionId}/claude-agent-sdk/expired.tar`,
-          sizeBytes: 1,
-          sha256: 'd'.repeat(64),
+          reservationToken: null,
         },
       ],
       // The session keeps its `retained/` stream, so its conversation is not purged.
@@ -353,7 +395,8 @@ describe('SessionStateRepository', () => {
     await store.append(key('cascade/', deletableSessionId), [
       { entryKey: 'c', entry: { type: 'user' } },
     ]);
-    await store.putBlob(deletableSessionId, {
+    await saveBlob(store, deletableSessionId, {
+      objectId: crypto.randomUUID(),
       engine: 'claude-agent-sdk',
       blobKey: 'state.tar',
       storageKey: 'session-state/x',

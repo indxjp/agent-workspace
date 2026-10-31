@@ -124,7 +124,6 @@ export async function handleStorageCleanupCron(
       mode: report.mode,
       scanned: report.scanned,
       orphans: report.orphans,
-      legacyOrphans: report.legacyOrphans,
       stalePendingReady: report.stalePendingReady,
       stalePendingDeleted: report.stalePendingDeleted,
       deletingFinished: report.deletingFinished,

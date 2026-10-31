@@ -7,7 +7,12 @@ import {
   type BuilderToolInputs,
 } from '@indx-workspace/contracts/builder';
 import type { AgentEvent } from '@indx-workspace/sdk/events';
-import { diffBodies, uncoveredKeys, type DefinitionChange } from '@indx-workspace/sdk/portable';
+import {
+  diffBodies,
+  revealInvisible,
+  uncoveredKeys,
+  type DefinitionChange,
+} from '@indx-workspace/sdk/portable';
 
 import { browserClient } from '../../lib/browser-client';
 import { BTN, BTN_DEFAULT, CARD } from './agent-form';
@@ -68,12 +73,18 @@ type View =
       readonly kind: 'evals';
       readonly name: string;
       readonly version: number;
-      readonly cases: readonly string[];
+      readonly cases: readonly {
+        readonly name: string;
+        readonly input: string;
+        readonly expect: string;
+      }[];
     };
 
-/** Bidirectional and zero-width controls, which could reorder or hide the text around them. */
-const HIDDEN = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu;
-const plain = (text: string): string => text.replace(HIDDEN, '');
+/**
+ * Model-written text with every character that draws nothing or reorders the text around it shown
+ * as its code point, so it is seen and two strings that differ only by one never look equal.
+ */
+const plain = revealInvisible;
 
 const UNREADABLE: View = { kind: 'unreadable' };
 const CAP = `$${BUILDER_DEFAULT_LIMITS.trialBudgetUsd.toFixed(2)}`;
@@ -112,9 +123,15 @@ async function viewOf(call: ApprovalCall | null): Promise<View> {
     const { agentId, version } = call.input;
     const name = (await versionOf(agentId, version))?.definition.agent.name;
     if (name === undefined) return UNREADABLE;
-    return call.tool === 'trial_run'
-      ? { kind: 'trial', name, version, input: plain(call.input.input) }
-      : { kind: 'evals', name, version, cases: call.input.cases.map((item) => plain(item.name)) };
+    if (call.tool === 'trial_run') {
+      return { kind: 'trial', name: plain(name), version, input: plain(call.input.input) };
+    }
+    const cases = call.input.cases.map((item) => ({
+      name: plain(item.name),
+      input: plain(item.input),
+      expect: plain(JSON.stringify(item.expect)),
+    }));
+    return { kind: 'evals', name: plain(name), version, cases };
   } catch {
     // Fail closed: a card that cannot be built offers Reject only.
     return UNREADABLE;
@@ -216,8 +233,16 @@ function Body({ view }: Readonly<{ view: View }>) {
             <Detail label="Checks">{String(view.cases.length)}</Detail>
           </dl>
           <ul className="mt-1 list-disc pl-5">
-            {view.cases.map((name, index) => (
-              <li key={`${String(index)}:${name}`}>{name}</li>
+            {view.cases.map(({ name, input, expect }, index) => (
+              <li key={`${String(index)}:${name}`} className="[overflow-wrap:anywhere]">
+                {name}
+                <br />
+                <span className="text-muted">Input: </span>
+                <span className="whitespace-pre-wrap">{input}</span>
+                <br />
+                <span className="text-muted">Expect: </span>
+                {expect}
+              </li>
             ))}
           </ul>
           <p className="mt-2">{EVALS_CAP}</p>

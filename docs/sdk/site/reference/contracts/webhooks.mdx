@@ -1,0 +1,228 @@
+---
+title: "webhooks"
+description: "The @indx-workspace/contracts/webhooks exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/webhooks.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## CreateWebhookRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `events` | `undefined \| ("run.completed" \| "run.failed" \| "run.cancelled")[]` | No |  |
+
+## CreateWebhookRequestSchema
+
+`POST /api/webhooks`. `events` defaults to all three when omitted (ADR D1).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `url` | `string` | Yes |  |
+| `events` | `undefined \| ("run.completed" \| "run.failed" \| "run.cancelled")[]` | No |  |
+
+## CreateWebhookResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `webhook` | `WebhookEndpoint` | Yes |  |
+| `secret` | `string` | Yes |  |
+
+## CreateWebhookResponseSchema
+
+The `201` of `POST /api/webhooks`: the only answer that ever carries the secret (ADR D1).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `webhook` | `WebhookEndpoint` | Yes |  |
+| `secret` | `string` | Yes |  |
+
+## WEBHOOK_EVENT_TYPES
+
+The events a webhook can subscribe to: one per terminal run status (ADR D1, D3).
+
+- `'run.completed'`
+- `'run.failed'`
+- `'run.cancelled'`
+
+## WEBHOOK_MAX_PER_WORKSPACE
+
+The most webhooks one workspace holds (ADR D1), which is why the list is unpaginated.
+
+Value: `10`
+
+## WEBHOOK_PROBLEM_CODES
+
+Domain problem codes of the webhook routes, with the status each travels under (ADR D9). A
+malformed body is the common `invalid_body`, and another workspace's id is `webhook_not_found`.
+
+| Key | Value |
+| --- | --- |
+| `invalid_webhook_url` | `400` |
+| `webhook_url_refused` | `400` |
+| `invalid_webhook_id` | `400` |
+| `webhook_not_found` | `404` |
+| `webhook_limit_reached` | `409` |
+| `webhook_api_not_configured` | `503` |
+
+## WEBHOOK_SECRET_PREFIX
+
+The prefix of a signing secret; the rest is the base64 of 32 random bytes (ADR D1).
+
+Value: `'whsec_'`
+
+## WEBHOOK_SIGNATURE_HEADERS
+
+The Standard Webhooks v1 headers every delivery carries (ADR D2).
+
+| Key | Value |
+| --- | --- |
+| `id` | `'webhook-id'` |
+| `timestamp` | `'webhook-timestamp'` |
+| `signature` | `'webhook-signature'` |
+
+## WEBHOOK_SIGNATURE_VERSION
+
+The version tag of one entry of `webhook-signature`: `v1,<base64 HMAC-SHA256>` (ADR D2).
+
+Value: `'v1'`
+
+## WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
+
+How far a delivery's `webhook-timestamp` may be from the receiver's clock (ADR D2).
+
+Value: `300`
+
+## WEBHOOK_URL_MAX_LENGTH
+
+The longest webhook URL, in characters (ADR D5).
+
+Value: `2048`
+
+## WebhookEndpoint
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `events` | `("run.completed" \| "run.failed" \| "run.cancelled")[]` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## WebhookEndpointSchema
+
+One webhook as the list and the create answer render it. The secret is never part of it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `url` | `string` | Yes |  |
+| `events` | `("run.completed" \| "run.failed" \| "run.cancelled")[]` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## WebhookEvent
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `type` | `"run.completed" \| "run.failed" \| "run.cancelled"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `data` | `Readonly<{ run: Readonly<{ error: string \| null; id: string; status: "completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"; agentId: string; sessionId: string; usage: Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; totalTokens: number; toolCalls: number; }>; cost: Readonly<{ amount: string; currency: string; priceTableVersion: string \| null; }>; endedAt: string \| null; accountingState: "failed" \| "pending" \| "partial" \| "unavailable" \| "complete"; }>; }>` | Yes |  |
+
+## WebhookEventRunSchema
+
+The run a `WebhookEvent` reports: a projection of the run read, so the two cannot drift.
+The payload carries no prompt, output or transcript (ADR Consequences).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
+| `id` | `string` | Yes |  |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `sessionId` | `string` | Yes |  |
+| `usage` | `Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; totalTokens: number; toolCalls: number; }>` | Yes |  |
+| `cost` | `Readonly<{ amount: string; currency: string; priceTableVersion: string \| null; }>` | Yes |  |
+| `endedAt` | `null \| string` | Yes |  |
+| `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
+
+## WebhookEventSchema
+
+The signed envelope of one delivery (ADR D3). `id` is the delivery id, stable across retries and
+equal to `webhook-id`; `createdAt` is when the run stopped. `data.run.status` is the terminal
+status the `type` names.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `type` | `"run.completed" \| "run.failed" \| "run.cancelled"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `data` | `Readonly<{ run: Readonly<{ error: string \| null; id: string; status: "completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"; agentId: string; sessionId: string; usage: Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; totalTokens: number; toolCalls: number; }>; cost: Readonly<{ amount: string; currency: string; priceTableVersion: string \| null; }>; endedAt: string \| null; accountingState: "failed" \| "pending" \| "partial" \| "unavailable" \| "complete"; }>; }>` | Yes |  |
+
+## WebhookEventType
+
+- `"run.completed"`
+- `"run.failed"`
+- `"run.cancelled"`
+
+## webhookEventTypeOf
+
+The event a run's move to `status` emits: one per terminal status, and `null` for every other,
+`awaiting_approval` included, because a paused run is stopped but not final (ADR D3).
+
+```ts
+webhookEventTypeOf(status: RunStatus): WebhookEventType | null
+```
+
+## WebhookListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `webhooks` | `WebhookEndpoint[]` | Yes |  |
+
+## WebhookListResponseSchema
+
+`GET /api/webhooks`: unpaginated, because a workspace holds at most ten (spec §5.17).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `webhooks` | `WebhookEndpoint[]` | Yes |  |
+
+## WebhookProblemCode
+
+- `"invalid_webhook_url"`
+- `"webhook_url_refused"`
+- `"invalid_webhook_id"`
+- `"webhook_not_found"`
+- `"webhook_limit_reached"`
+- `"webhook_api_not_configured"`
+
+## WebhookSecretSchema
+
+A signing secret: `whsec_` and the base64 of exactly 32 bytes.
+
+`string`
+
+## webhookSignedContent
+
+The exact bytes a delivery's signature covers: `<webhook-id>.<webhook-timestamp>.<body>`, where
+`body` is the request body as sent, never re-serialised (ADR D2).
+
+```ts
+webhookSignedContent(id: string, timestamp: number | string, body: string): string
+```
+
+## webhookUrlViolation
+
+Why `raw` is not an acceptable webhook URL, or `null`. An absolute `https:` URL of at most
+`WEBHOOK_URL_MAX_LENGTH` characters with no userinfo and no fragment. An `http:` URL is
+accepted here only for a loopback host, and the server's egress policy (W9-PROV-127) admits even
+that only outside production (ADR D5). Whether the host is reachable is the egress policy's
+question, not this one.
+
+```ts
+webhookUrlViolation(raw: string): string | null
+```

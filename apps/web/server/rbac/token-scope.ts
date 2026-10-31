@@ -10,11 +10,12 @@ export const TOKEN_SCOPE_KINDS = ['run', 'session'] as const;
 
 /**
  * The shapes an endpoint-scoped credential is bound to (ADR-0134): one agent's A2A endpoint, one
- * MCP project endpoint, or the Builder's (issue #1846, no row of its own: `id` is the client). A
- * browser token never carries one of these, so they are not part of
- * {@link TOKEN_SCOPE_KINDS}, which mirrors the `browser_tokens` column.
+ * MCP project endpoint, the Builder's (issue #1846, no row of its own: `id` is the client), or an
+ * app backend acting as a signed-in person (ADR-0161, `id` is the client). A browser token never
+ * carries one of these, so they are not part of {@link TOKEN_SCOPE_KINDS}, which mirrors the
+ * `browser_tokens` column.
  */
-export const ENDPOINT_SCOPE_KINDS = ['a2a-agent', 'mcp-project', 'builder'] as const;
+export const ENDPOINT_SCOPE_KINDS = ['a2a-agent', 'mcp-project', 'builder', 'app-backend'] as const;
 
 /** One of {@link TOKEN_SCOPE_KINDS} or {@link ENDPOINT_SCOPE_KINDS}. */
 export type TokenScopeKind =
@@ -28,7 +29,9 @@ export interface BrowserTokenScope {
 
 /** Whether `kind` is one an endpoint-scoped API key carries. */
 export function isEndpointScope(kind: TokenScopeKind): boolean {
-  return kind === 'a2a-agent' || kind === 'mcp-project' || kind === 'builder';
+  return (
+    kind === 'a2a-agent' || kind === 'mcp-project' || kind === 'builder' || kind === 'app-backend'
+  );
 }
 
 /**
@@ -40,4 +43,10 @@ export function isEndpointScope(kind: TokenScopeKind): boolean {
 export interface TokenScope {
   readonly kind: TokenScopeKind;
   readonly id: string;
+  /**
+   * The agents an `app-backend` client binds (ADR-0161 D8), read with the client on every request:
+   * `decide()` is pure and cannot look them up. Present and non-empty exactly when `kind` is
+   * `app-backend`.
+   */
+  readonly agentIds?: readonly string[];
 }

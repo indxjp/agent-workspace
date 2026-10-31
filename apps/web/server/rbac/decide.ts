@@ -382,7 +382,25 @@ const TOKEN_SCOPE_GRAMMAR: Readonly<Record<TokenScopeKind, readonly ScopeGrammar
   'mcp-project': [],
   // The Builder's MCP door is outside `/api/` too, and is a later slice's (#1846 5b).
   builder: [],
+  // ADR-0161 D8: an app backend acting as the signed-in person starts a run on a bound agent,
+  // reads and stops one run by id, and reads who it is acting as. The bound-agent check is below.
+  'app-backend': [
+    { resource: 'agents', operation: 'run' },
+    { resource: 'runs', operation: 'read' },
+    { resource: 'runs', operation: 'run', sub: 'interrupt' },
+    { resource: 'me', operation: 'read' },
+  ],
 };
+
+/** Whether `pathId` is one of the agents an `app-backend` scope binds, UUIDs compared case-blind. */
+function isBoundAgent(scope: TokenScope, pathId: string | null): boolean {
+  if (pathId === null) return false;
+  return (scope.agentIds ?? []).some(
+    (agentId) =>
+      agentId === pathId ||
+      (isUuid(agentId) && isUuid(pathId) && agentId.toLowerCase() === pathId.toLowerCase()),
+  );
+}
 
 /**
  * The scope half of `decide()`: does this route *shape* fall inside `scope`'s grammar, and — for a
@@ -463,6 +481,16 @@ function checkTokenScope(
       because:
         `this session-scoped browser token is scoped to session ${scope.id}, and the ":id" segment ` +
         `of this request names a different row.`,
+    };
+  }
+  if (scope.kind === 'app-backend' && resource === 'agents' && !isBoundAgent(scope, pathId)) {
+    return {
+      effect: 'deny',
+      code: 'token_out_of_scope',
+      facts: null,
+      because:
+        `this app-backend-scoped credential reaches only the agents its endpoint client ${scope.id} ` +
+        `binds, and the ":id" segment of this request names another.`,
     };
   }
   if (scope.kind === 'a2a-agent' && resource === 'agents' && !sameRow) {

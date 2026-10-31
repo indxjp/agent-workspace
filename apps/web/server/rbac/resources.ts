@@ -46,6 +46,9 @@ export const RESOURCES = [
   // owner. Managed like an endpoint client: credential-bearing configuration.
   'triggers',
   'users',
+  // Issue #250 (N-3, ADR-SDK-18-N3-250 D6): the endpoints a workspace's run outcomes are posted
+  // to. Deciding where run data goes is configuration like API keys, so Owner and Admin manage it.
+  'webhooks',
   'workspaces',
 ] as const;
 

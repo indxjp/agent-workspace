@@ -26,6 +26,7 @@ import { encodeFileId } from './file-id';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const SESSION = '33333333-3333-4333-8333-333333333333';
@@ -218,10 +219,9 @@ describe('POST /api/files/:id/upload-urls', () => {
       ['theirs.txt', SOMEONE_ELSE],
       ['mine.txt', ME],
     ] as const) {
-      await catalogs.forWorkspaceSync(WORKSPACE).putFile({
+      await seedCatalogFile(catalogs.forWorkspaceSync(WORKSPACE), {
         path: filePath,
         kind: 'file',
-        storageKey: filePath,
         sizeBytes: 1,
         contentType: 'text/plain',
         ownerPrincipalId,

@@ -321,12 +321,12 @@ jobs:
       - name: Generated SDK reference and llms.txt are current
         run: pnpm docs:check
 
-      # Design §07: gaps print, a malformed story tag fails, and a cell covered at the base that is
-      # uncovered here fails. #1703 will require zero gaps.
+      # Design §07: a malformed story tag fails, a cell covered at the base that is uncovered here
+      # fails, and so does any gap of a storage story (#1703). A Builder gap prints until its issue.
       - name: Storage story coverage
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: pnpm stories:check --base "${BASE_SHA:-origin/main}"
+        run: pnpm stories:check --base "${BASE_SHA:-origin/main}" --require-complete
 
       - name: Licence gate
         run: |

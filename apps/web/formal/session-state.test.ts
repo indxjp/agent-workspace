@@ -68,10 +68,7 @@ import { sql } from 'drizzle-orm';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors.js';
-import {
-  createInMemoryObjectStore,
-  createInMemoryObjectStoreProvider,
-} from '@agent-workspace/core/storage';
+import { createInMemoryObjectStore } from '@agent-workspace/core/storage';
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { loadTranscript } from '../server/sessions/api';
 import type { SessionApiPrincipal } from '../server/sessions/environment';
@@ -281,7 +278,6 @@ function postgresBackend(): Backend & {
       const storage = createStorageService({
         catalog: () => Promise.reject(new Error('the files catalog is not used here')),
         objects: createInMemoryObjectStore(),
-        legacy: { 'session-state': createInMemoryObjectStoreProvider() },
         sessionState: async (workspaceId) => {
           const scope = await scopes.forWorkspaceId(workspaceId);
           if (scope === null) throw new Error('the workspace did not resolve');

@@ -61,7 +61,7 @@ import {
 } from './keys';
 import { extractSkillInstructions, parseSkillFrontmatter } from './frontmatter';
 import { UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
-import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
+import { listAll, readWhole } from '../storage/objects';
 import type { SkillObjects } from '../storage/store';
 import type { ApiResult } from '../http/result';
 import { json, problem } from './result';

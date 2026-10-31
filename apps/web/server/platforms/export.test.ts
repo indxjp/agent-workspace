@@ -648,6 +648,7 @@ const CLIENT: EndpointClientResource = {
   agentIds: [],
   toolNames: null,
   redirectUris: [],
+  oidcAudience: null,
   hasClientSecret: false,
   actsForPrincipalId: PRINCIPAL,
   apiKeyIds: [],

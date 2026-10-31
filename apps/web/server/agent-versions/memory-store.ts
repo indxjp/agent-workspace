@@ -573,6 +573,7 @@ export function createInMemoryAgentVersionStoreProvider(
       async applyAndPoint(agentId, input): Promise<ApplyAndPointOutcome> {
         const current = await agents.get(agentId);
         if (current === null) return { kind: 'not-found' };
+        if (current.archivedAt !== undefined) return { kind: 'agent-archived' };
         if (input.expectedVersion !== undefined) {
           const pointed =
             pointers.find(

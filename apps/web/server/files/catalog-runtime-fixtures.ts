@@ -2,17 +2,13 @@
  * A files runtime over the catalog service, on in-memory stores, for the tests that drive the
  * `/api/files` routes: every route answers `503 files_runtime_not_configured` without a `storage`.
  *
- * `legacy` is the old per-area store the runtime's `store` reads; it is where a test puts an
- * object that has no catalog row (what the ownership check calls "row-less").
+ * `legacy` is the per-area files store the runtime's `store` hands out; the catalog service never
+ * reads it.
  */
-import {
-  createInMemoryObjectStore,
-  createInMemoryObjectStoreProvider,
-  type ObjectStore,
-} from '@agent-workspace/core/storage';
-
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
+import type { ObjectStore } from '../storage/objects';
 import { createStorageService, type StorageService } from '../storage/service';
+import { createInMemoryObjectStore, createInMemoryObjectStoreProvider } from '../storage/testing';
 import type { FilesRuntime } from './runtime';
 import { createRepositoryObjectStoreProvider } from './store';
 
@@ -46,7 +42,6 @@ export function createCatalogFilesWorld(options: {
   const storage = createStorageService({
     catalog: (workspaceId) => catalogs.forWorkspace(workspaceId),
     objects,
-    legacy: { files: legacy },
     log: options.log ?? noLog,
   });
   const runtime: FilesRuntime = {

@@ -1,3 +1,4 @@
+import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { claudeBaseToolPolicyFor } from '../../contracts/agents';
@@ -117,23 +118,17 @@ function fakeAssignments(
   };
 }
 
-function fakeCatalog(
-  skills: readonly { id: string; name: string; enabled: boolean }[],
-): ResourceCatalogStoreProvider {
-  return {
-    forWorkspace: () =>
-      Promise.resolve({
-        listSkills: () =>
-          Promise.resolve(
-            skills.map((skill) => ({
-              ...skill,
-              skillMd: '# Skill',
-              createdBy: null,
-              ownerPrincipalId: 'owner',
-            })),
-          ),
-      } as unknown as Awaited<ReturnType<ResourceCatalogStoreProvider['forWorkspace']>>),
-  };
+/** The shared in-memory catalog holding `skills`, and the ids it gave them, in order. */
+async function catalogWith(
+  skills: readonly { name: string; enabled: boolean }[],
+): Promise<{ catalog: ResourceCatalogStoreProvider; ids: string[] }> {
+  const rows = createInMemoryCatalog().forWorkspace('w');
+  const ids: string[] = [];
+  for (const skill of skills) {
+    const row = await rows.putSkill({ ...skill, skillMd: '# Skill', ownerPrincipalId: 'owner' });
+    ids.push(row.id);
+  }
+  return { catalog: { forWorkspace: () => Promise.resolve(rows) }, ids };
 }
 
 describe('assignedSkillNames / assignedEnabledSkillNames', () => {
@@ -141,11 +136,11 @@ describe('assignedSkillNames / assignedEnabledSkillNames', () => {
   const agentId = 'a';
 
   it('resolves ids to names through the catalog', async () => {
-    const assignments = fakeAssignments({ 'w:a': ['s1', 's2'] });
-    const catalog = fakeCatalog([
-      { id: 's1', name: 'triage', enabled: true },
-      { id: 's2', name: 'refunds', enabled: false },
+    const { catalog, ids } = await catalogWith([
+      { name: 'triage', enabled: true },
+      { name: 'refunds', enabled: false },
     ]);
+    const assignments = fakeAssignments({ 'w:a': ids });
     const row = await assignments.forWorkspace(workspaceId).get(agentId);
     expect([...(await assignedSkillNames(workspaceId, row, catalog))].sort()).toEqual([
       'refunds',
@@ -154,11 +149,11 @@ describe('assignedSkillNames / assignedEnabledSkillNames', () => {
   });
 
   it('assignedEnabledSkillNames excludes a disabled skill, unlike assignedSkillNames', async () => {
-    const assignments = fakeAssignments({ 'w:a': ['s1', 's2'] });
-    const catalog = fakeCatalog([
-      { id: 's1', name: 'triage', enabled: true },
-      { id: 's2', name: 'refunds', enabled: false },
+    const { catalog, ids } = await catalogWith([
+      { name: 'triage', enabled: true },
+      { name: 'refunds', enabled: false },
     ]);
+    const assignments = fakeAssignments({ 'w:a': ids });
     expect(await assignedEnabledSkillNames(workspaceId, agentId, assignments, catalog)).toEqual([
       'triage',
     ]);
@@ -166,7 +161,7 @@ describe('assignedSkillNames / assignedEnabledSkillNames', () => {
 
   it('answers empty for an agent with no assignments', async () => {
     const assignments = fakeAssignments({});
-    const catalog = fakeCatalog([]);
+    const { catalog } = await catalogWith([]);
     const row = await assignments.forWorkspace(workspaceId).get(agentId);
     expect((await assignedSkillNames(workspaceId, row, catalog)).size).toBe(0);
     expect((await assignedSkillNames(workspaceId, null, catalog)).size).toBe(0);

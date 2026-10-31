@@ -13,6 +13,7 @@ import { createDatabaseFileTextRepositoryProvider } from './file-texts.js';
 import { createDatabaseResourceCatalogRepositoryProvider } from './resource-catalogs.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -44,10 +45,9 @@ describe.skipIf(!hasDatabase)('FileTextRepository', () => {
       await scope(tenant.workspaceId),
     );
   const put = async (tenant: typeof a, path: string, sizeBytes = 10) =>
-    (await catalog(tenant)).putFile({
+    seedCatalogFile(await catalog(tenant), {
       path,
       kind: 'file',
-      storageKey: `k/${crypto.randomUUID()}`,
       sizeBytes,
       contentType: 'application/pdf',
       ownerPrincipalId: tenant.principalId,
@@ -136,8 +136,9 @@ describe.skipIf(!hasDatabase)('FileTextRepository', () => {
     const source = (await repo.listStale()).find((entry) => entry.id === file.id);
     if (source === undefined) throw new Error('expected a stale file');
     await repo.replace(file.id, source, [{ page: null, text: 'old', terms: 'old' }]);
-    await put(a, 'versioned.pdf', 10);
-    expect((await repo.listStale()).map((entry) => entry.id)).toContain(file.id);
+    // An overwrite is a replacement: the new row at the path has no cached text yet.
+    const replacement = await put(a, 'versioned.pdf', 10);
+    expect((await repo.listStale()).map((entry) => entry.id)).toContain(replacement.id);
   });
 
   it('never caches a pending upload, and finds it once confirmed', async () => {
@@ -145,6 +146,7 @@ describe.skipIf(!hasDatabase)('FileTextRepository', () => {
     const reserved = await (
       await catalog(a)
     ).reserve('inbox/pending.pdf', {
+      objectId: crypto.randomUUID(),
       ownerPrincipalId: a.principalId,
       sizeBytes: 10,
       contentType: 'application/pdf',
@@ -174,15 +176,7 @@ describe.skipIf(!hasDatabase)('FileTextRepository', () => {
     const source = (await repo.listStale()).find((entry) => entry.id === file.id);
     if (source === undefined) throw new Error('expected a stale file');
     await repo.replace(file.id, source, [{ page: null, text: 'renamed', terms: 'renamedterm' }]);
-    await (
-      await catalog(a)
-    ).renameFile('before.pdf', {
-      path: 'after.pdf',
-      kind: 'file',
-      storageKey: file.storageKey,
-      sizeBytes: file.sizeBytes,
-      contentType: file.contentType,
-    });
+    await (await catalog(a)).rename('before.pdf', 'after.pdf');
     const hits = await repo.search("'renamedterm'", 10, null);
     expect(hits.map((hit) => hit.path)).toEqual(['after.pdf']);
   });
@@ -238,7 +232,8 @@ describe.skipIf(!hasDatabase)('FileTextRepository', () => {
     const source = (await repo.listStale()).find((entry) => entry.id === file.id);
     if (source === undefined) throw new Error('expected a stale file');
     await repo.replace(file.id, source, [{ page: null, text: 'x', terms: 'goneword' }]);
-    await (await catalog(a)).deleteFile('gone.pdf');
+    const files = await catalog(a);
+    for (const removed of await files.remove('gone.pdf')) await files.forget(removed);
     expect(await isolated.db.select().from(fileTexts).where(eq(fileTexts.fileId, file.id))).toEqual(
       [],
     );

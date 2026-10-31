@@ -212,6 +212,7 @@
       }
     },
     "deploymentPolicy": { "type": "string" },
+    "deploymentFeatures": { "type": "string", "pattern": "^([a-z]+(,[a-z]+)*)?$" },
     "publicUrl": { "type": "string" },
     "serviceAccount": {
       "type": "object",

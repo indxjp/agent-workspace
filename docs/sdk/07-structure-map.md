@@ -296,6 +296,9 @@ erDiagram
   workspace_principals ||--o{ browser_tokens : "minted_by_principal_id"
   runs |o--o{ browser_tokens : "run_id"
   sessions |o--o{ browser_tokens : "session_id"
+  workspaces ||--o{ webhooks : "workspace_id"
+  webhooks ||--o{ webhook_deliveries : "(workspace_id, webhook_id)"
+  runs ||--o{ webhook_deliveries : "(run_id, workspace_id)"
 
   workspaces {
     uuid id PK
@@ -517,6 +520,25 @@ erDiagram
     timestamptz expires_at
     timestamptz revoked_at
   }
+  webhooks {
+    uuid id PK
+    uuid workspace_id FK
+    text url
+    text_array events "run.completed | run.failed | run.cancelled"
+  }
+  webhook_deliveries {
+    uuid id PK "sent as webhook-id"
+    uuid workspace_id FK
+    uuid webhook_id FK
+    uuid run_id FK
+    text event_type
+    text state "pending | delivered | failed"
+    smallint attempts
+    timestamptz next_attempt_at
+    integer last_status_code
+    text last_error
+    timestamptz delivered_at
+  }
   shares {
     uuid id PK
     uuid workspace_id FK
@@ -572,6 +594,7 @@ SDK client is `packages/sdk/src/resources/<family>.ts`; the commands are
 | Team               | `team`, `invitations`, `api-keys` | `/memberships[/:id]`, `/users`, `/invitations[/:id]`, `/invitations/:id/resend\|accept`, `/api-keys[/:id]`                                                                                                                       | `team.members.*`, `team.users.*`, `team.invitations.*`, `team.apiKeys.*`                                                                                                                 | `aw team members\|users\|api-keys …` [^s22]                                                                                                               | `memberships`, `users`, `invitations`, `api_keys`, `workspace_principals`                                    |
 | Endpoint clients   | `endpoint-clients`                | `GET/POST /endpoint-clients`, `GET/PATCH/DELETE /endpoint-clients/:id`, `POST /endpoint-clients/:id/keys`, `POST /endpoint-clients/:id/secret`                                                                                   | `endpointClients.list/get/create/update/revoke/mintKey/rotateSecret`                                                                                                                     | `aw endpoint-clients list\|get\|create\|update\|revoke`, `aw endpoint-clients keys create`, `aw endpoint-clients secret rotate`                           | `endpoint_clients`, `endpoint_client_agents`, `endpoint_client_api_keys`                                     |
 | Triggers           | `triggers`                        | `GET/POST /triggers`, `GET/PATCH/DELETE /triggers/:id`, `POST /triggers/:id/secret`, `POST /triggers/:id/fire/:secret` (public, sender-facing) [^fire]                                                                           | `triggers.list/get/create/update/remove/rotateSecret`                                                                                                                                    | `aw triggers list\|get\|create\|update\|remove`, `aw triggers secret rotate`                                                                              | `triggers`, `trigger_deliveries`                                                                             |
+| Webhooks           | `webhooks`                        | `GET/POST /webhooks`, `DELETE /webhooks/:id` (`204`) [^webhooks]                                                                                                                                                                 | `webhooks.list/create/remove`; `verifyWebhookSignature` (a free function, no route)                                                                                                      | `aw webhooks list\|create\|remove` | `webhooks`, `webhook_deliveries` |
 | Tokens             | `tokens`                          | `POST /tokens`                                                                                                                                                                                                                   | `tokens.mint`                                                                                                                                                                            | `aw tokens mint`                                                                                                                                          | `browser_tokens`                                                                                             |
 | Models             | `models`                          | `GET /models`, `/model-connections[/:id]`, `/model-connections/:id/credential\|test`                                                                                                                                             | `models.discover`, `models.connections.list/get/create/update/remove/rotateCredential/test`                                                                                              | `aw models discover`, `aw models connections …`                                                                                                           | `model_connections`                                                                                          |
 | Runtimes           | `runtimes`                        | `/runtime-profiles[/:id]`, `/runtime-connections`                                                                                                                                                                                | `runtimes.profiles.list/get/create/update/remove`, `runtimes.connections.list/create`                                                                                                    | `aw runtimes profiles …`, `aw runtimes connections …` [^runtimes]                                                                                         | `runtime_profiles`, `secrets` (a connection is a secret)                                                     |
@@ -613,6 +636,15 @@ Routes not in the table are outside the SDK's scope by 04 §1 (`/api/setup`, `/a
     (Microsoft Graph, Zoom, a mail rule) that holds no API key; the URL secret that `triggers.create`
     and `triggers.rotateSecret` return once is its only authentication. `trigger_deliveries` holds
     the dedupe and rate records of firings and is never on the wire.
+
+[^webhooks]:
+    Run-outcome webhooks (N-3, #250, ADR-SDK-18-N3-250) are Owner/Admin `MANAGE` and belong to the
+    `runs` feature. The signing secret is returned once by `webhooks.create` and kept in
+    `SecretsService` under `WEBHOOK_<ID>_SIGNING_SECRET`, never in a row. `webhook_deliveries` is
+    the outbox the run's stop writes in its own transaction (one row per subscribed webhook,
+    unique on `(workspace_id, webhook_id, run_id)`), which the in-process delivery worker claims
+    with `FOR UPDATE SKIP LOCKED`; it is never on the wire. The receiver side is
+    `verifyWebhookSignature`, which makes no request.
 
 [^features]:
     `GET` answers one row per feature (`installed`, `enabled`) to any member; `PUT` replaces the

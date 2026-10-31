@@ -499,6 +499,56 @@ test('the browser shows a refused start for an agent with no runtime profile, an
   expect(/** @type {{ runs: unknown[] }} */ (runs.json).runs).toEqual([]);
 });
 
+test('a deployment installing chat, files and runs answers 404 feature_disabled on /api/skills', async () => {
+  // ADR-0160 D5 (#1495): `aw deploy` writes the project file's `features:` into `.env` as this
+  // line, and the Compose template forwards it to web. `create --cloud local` (the Compose flow
+  // this file runs) refuses `--features`, which belongs to the v2 project, so the line is written
+  // here as `aw deploy` writes it. Web is recreated with it; nothing else is.
+  // shortcut: this test plants the `.env` line, so neither `npm create … --features` nor `aw
+  // deploy`'s rendering of it (unit-tested in packages/cli/src/deploy/project.test.ts) is on this
+  // path; upgrade when the Compose create flow accepts `--features`.
+  test.setTimeout(5 * 60_000);
+  const envFile = path.join(PROJECT, '.env');
+  const contents = readFileSync(envFile, 'utf8');
+  expect(contents).not.toMatch(/^AW_DEPLOYMENT_FEATURES=/mu);
+  writeFileSync(envFile, `${contents.trimEnd()}\nAW_DEPLOYMENT_FEATURES=chat,files,runs\n`);
+  run('docker', ['compose', 'up', '--detach', '--wait', '--no-deps', 'web'], {
+    cwd: PROJECT,
+    timeoutMs: 240_000,
+  });
+
+  const skills = await client().request('/api/skills');
+  expect(skills.status, skills.text).toBe(404);
+  expect(/** @type {{ error: { code: string } }} */ (skills.json).error.code).toBe(
+    'feature_disabled',
+  );
+  // A feature the line lists still answers: the gate refuses only what is not installed.
+  const runs = await client().request(`/api/runs?agent=${state.agentId}`);
+  expect(runs.status, runs.text).toBe(200);
+});
+
+test('the console of a deployment installing chat, files and runs shows only their entries', async ({
+  page,
+}) => {
+  // ADR-0160 D8 (#1497): the sidebar hides what the deployment does not install, as the previous
+  // test's `AW_DEPLOYMENT_FEATURES=chat,files,runs` leaves web running.
+  await signIn(page);
+  const sidebar = page.locator('aside');
+  for (const label of ['New chat', 'Agents', 'Files', 'Runs', 'Models', 'Users', 'Settings']) {
+    await expect(sidebar.getByRole('link', { name: label, exact: true })).toBeVisible();
+  }
+  for (const label of ['Projects', 'Skills', 'Connectors', 'Shared links']) {
+    await expect(sidebar.getByRole('link', { name: label, exact: true })).toHaveCount(0);
+  }
+  // A deep link to a feature the deployment does not install explains instead of a bare 404, and
+  // names the operator: no Owner can switch on what the deployment does not install.
+  await page.goto(`${state.baseUrl}/skills`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    'Skills is not installed in this deployment.',
+  );
+  await expect(page.getByRole('link', { name: 'Settings → Features' })).toHaveCount(0);
+});
+
 test('pnpm stop leaves no container, sandbox or network of the project behind', () => {
   // The runs above started runtime sandboxes, which carry no Compose label: `agent-workspace stop`
   // (#394, #406) reaps them with the services, which `docker compose down` alone did not.

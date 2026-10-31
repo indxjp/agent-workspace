@@ -19,8 +19,8 @@
  *     two identifiers are allowed to diverge, and only this column knows the mapping.
  *
  * The storage design, §04 adds three more columns. `object_id` is the permanent ID the object is
- * stored under; NULL marks a legacy row whose `storage_key` is still the path. `area` says where
- * the object lives, and `sha256` is its checksum (NULL until a writer records one).
+ * stored under; every file has one and a folder has none. `area` says where the object lives, and
+ * `sha256` is its checksum (NULL until a writer records one).
  */
 import {
   bigint,
@@ -95,7 +95,7 @@ export const files = pgTable(
     createdBy: uuid('created_by'),
     /** Defaults to `ready`, so every row written by a one-step write is immediately visible. */
     status: text('status', { enum: fileStatuses }).notNull().default('ready'),
-    /** The permanent ID the object is stored under. NULL for a folder and for a legacy file. */
+    /** The permanent ID the object is stored under. NULL exactly for a folder, which has no object. */
     objectId: uuid('object_id'),
     /**
      * The real path a side-path row stands for (see `side-paths.ts`): set exactly when `path` is a
@@ -126,6 +126,11 @@ export const files = pgTable(
     // table CONSTRAINT and not a unique INDEX.
     unique('files_id_workspace_key').on(table.id, table.workspaceId),
     index('files_workspace_owner_principal_idx').on(table.workspaceId, table.ownerPrincipalId),
+    // Every reserve counts the workspace's pending uploads (`countPending`, newest first by
+    // `updated_at`); a pending row is short-lived, so the index stays small.
+    index('files_workspace_pending_updated_idx')
+      .on(table.workspaceId, table.updatedAt)
+      .where(sql`${table.status} = 'pending'`),
     foreignKey({
       columns: [table.workspaceId, table.createdBy],
       foreignColumns: [memberships.workspaceId, memberships.userId],
@@ -167,6 +172,12 @@ export const files = pgTable(
     check(
       'files_storage_key_not_blank',
       sql`${table.storageKey} is null or length(btrim(${table.storageKey})) > 0`,
+    ),
+    // The storage design, §06: the upgrade guard proved the move off the old naming, so a file is
+    // read only by its object id.
+    check(
+      'files_file_has_object_id',
+      sql`${table.kind} <> 'file' or ${table.objectId} is not null`,
     ),
     check('files_size_non_negative', sql`${table.sizeBytes} >= 0`),
     // A folder occupies no bytes and has no MIME type. Without this a folder row could carry

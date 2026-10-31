@@ -214,6 +214,19 @@ describe('the emitted document', () => {
     >;
     expect(Object.keys(events['200']?.['content'] ?? {})).toEqual(['text/event-stream']);
   });
+
+  it('emits a route’s declared request headers as header parameters (S-6, #250)', async () => {
+    const built = await buildOpenApiDocument(repoRoot);
+    const paths = built['paths'] as Record<string, Record<string, Record<string, unknown>>>;
+    const start = paths['/api/agents/{id}/runs']?.['post']?.['parameters'] as readonly Record<
+      string,
+      unknown
+    >[];
+    const headers = start.filter((parameter) => parameter['in'] === 'header');
+    expect(headers.map(({ name, required }) => ({ name, required }))).toEqual([
+      { name: 'Idempotency-Key', required: false },
+    ]);
+  });
 });
 
 /** The quoted `METHOD /path` entries of one `new Set([...])` in the authorisation matrix. */

@@ -53,6 +53,7 @@ import { resolveRunAttachments } from '../../runs/attachments';
 import { createStorageService, type StorageService } from '../../storage/service';
 import { purgeSessionAttachments } from './attachments';
 import { resetSurfaceLimits, SURFACE_RATE_LIMITS } from './limits';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const SESSION = '33333333-3333-4333-8333-333333333333';
 const OTHER_SESSION = '44444444-4444-4444-8444-444444444444';
@@ -168,7 +169,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
         objects: root,
-        legacy: { files: legacy },
         log: noLog,
       });
       const base = Principal.fromApiKey({
@@ -323,7 +323,7 @@ function defineSuite(name: string, setup: () => Promise<World>) {
         await listAll(legacy.forWorkspace(world.workspaceId), '.attachments', { recursive: true })
       ).map((entry) => entry.key);
     const readyFiles = async () =>
-      (await (await catalog()).listFiles()).filter((row) => row.kind === 'file');
+      (await listCatalogFiles(await catalog())).filter((row) => row.kind === 'file');
     /** What a refusal must leave unchanged: the ready rows, nothing pending or half-removed, the objects. */
     async function stored() {
       const rows = await catalog();
@@ -616,20 +616,9 @@ function defineSuite(name: string, setup: () => Promise<World>) {
     });
 
     // @story US-STO-11
-    it('[US-STO-11][api][chat] purge removes service rows, legacy rows and their objects, and a second purge is a no-op', async () => {
+    it('[US-STO-11][api][chat] purge removes the rows and their objects, and a second purge is a no-op', async () => {
       expect((await upload('a.txt')).status).toBe(201);
-      const legacyPath = `.attachments/${SESSION}/${crypto.randomUUID()}/old.txt`;
-      await legacy.forWorkspace(world.workspaceId).write(legacyPath, Buffer.from('old'), {});
-      await (
-        await catalog()
-      ).putFile({
-        path: legacyPath,
-        kind: 'file',
-        storageKey: legacyPath,
-        sizeBytes: 3,
-        contentType: null,
-        ownerPrincipalId: world.principalId,
-      });
+      expect((await upload('b.txt')).status).toBe(201);
       await seed(OTHER_SESSION, 1);
       const kept = await storage.save(ctx(), {
         area: 'files',
@@ -649,29 +638,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       expect(await legacyObjects()).toEqual([]);
       expect(await rootObjects()).toHaveLength(2);
       expect((await upload('after.txt')).status).toBe(201);
-    });
-
-    // @story US-STO-11
-    it('[US-STO-11][api][chat] purge removes a session that holds only legacy rows', async () => {
-      const legacyPath = `.attachments/${SESSION}/${crypto.randomUUID()}/old.txt`;
-      await legacy.forWorkspace(world.workspaceId).write(legacyPath, Buffer.from('old'), {});
-      await (
-        await catalog()
-      ).putFile({
-        path: legacyPath,
-        kind: 'file',
-        storageKey: legacyPath,
-        sizeBytes: 3,
-        contentType: null,
-        ownerPrincipalId: world.principalId,
-      });
-
-      await expect(purgeSessionAttachments(world.workspaceId, [SESSION])).resolves.toBe(1);
-      expect(await legacyObjects()).toEqual([]);
-      expect(
-        (await readyFiles()).filter((row) => row.path.startsWith(`.attachments/${SESSION}/`)),
-      ).toEqual([]);
-      await expect(purgeSessionAttachments(world.workspaceId, [SESSION])).resolves.toBe(0);
     });
 
     // @story US-STO-11

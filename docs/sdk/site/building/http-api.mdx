@@ -310,11 +310,12 @@ document's schema.
   `POST /api/agents/:id/runs` and reuse it when you retry: the same key and body answer `202` with
   the original run, and a different body under the key is `409 run_idempotency_conflict`. Every
   other write is not idempotent; see [Retries and idempotency](/guides/retries-and-idempotency).
-  Tracked as [S-6](/concepts/roadmap#s-6-idempotency-keys).
-- **Webhooks:** nothing calls back into your service when a run finishes — poll `GET
-/api/runs/:id`, or keep a connection open on `GET /api/runs/:id/events`. See [Integrate a
-  backend](/building/backend). Tracked as
-  [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes).
+  `aw runs start --idempotency-key <key>` sends the header from the CLI.
+- **Webhooks:** `POST /api/webhooks` registers an endpoint (Owner or Admin), and the platform
+  posts a signed `run.completed`, `run.failed` or `run.cancelled` to it when a run stops. The
+  signature is [Standard Webhooks](https://www.standardwebhooks.com/) v1, so a library in your
+  language verifies it with the `whsec_` secret the create answer returns once. See
+  [Webhooks](/resources/webhooks#verify-a-delivery).
 - **Versioning:** send `X-Agent-Workspace-Contracts: <version>` — the `@indx-workspace/contracts`
   version your client was built against — on every request. Every `/api/**` answer carries the
   served range in `X-Agent-Workspace-Contracts` (current) and `X-Agent-Workspace-Contracts-Minimum`.

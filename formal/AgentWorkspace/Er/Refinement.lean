@@ -347,7 +347,7 @@ def load : List Current.Stmt :=
     .projectMcpServers, .sessions, .surfaceSessionKeys, .sessionTranscripts, .sessionMessages, .sessionStateStreams, .sessionStateEntries, .sessionStateBlobs, .runs,
     .runEvents, .runFeedback, .runUsageRecords, .runTokens, .browserTokens, .builderToolCalls, .auditEvents, .shares, .shareViews,
     .shareRunCharges, .triggers, .triggerDeliveries, .storageMigrationRuns,
-    .workspaceFeatures].flatMap fun t =>
+    .workspaceFeatures, .webhooks, .webhookDeliveries].flatMap fun t =>
       (base t).map (.insert t)
 
 end TargetCells

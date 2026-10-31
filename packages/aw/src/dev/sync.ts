@@ -128,8 +128,9 @@ function namedLateLine(name: string): string {
 
 /**
  * Issue #695: the keys of `agent-workspace.yaml` only a new runtime takes, as one line each: the
- * port, the runtime driver, the default engine and the policy, which the runtime reads when it
- * starts. Compared with the file as `aw dev` started, so a pending change is said once.
+ * port, the runtime driver, the default engine, the policy and the features (#1495), which the
+ * runtime reads when it starts. Compared with the file as `aw dev` started, so a pending change is
+ * said once.
  */
 function restartLines(before: ProjectRead, after: ProjectRead): readonly string[] {
   if (before.lifted || after.lifted) return [];
@@ -138,6 +139,7 @@ function restartLines(before: ProjectRead, after: ProjectRead): readonly string[
     'environments.local.runtime': read.project.environments.local?.runtime,
     engine: read.project.engine,
     policy: read.project.policy,
+    features: read.project.features,
   });
   const was = keys(before);
   const now = keys(after);

@@ -121,17 +121,19 @@ flowchart LR
 
 ### Ports
 
-| Port                    | Defined in                                               | Adapters                                                                 | Used by                                               | Held to it by                                                |
-| ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------ |
-| `AgentEngine`           | `packages/engine/src/port.ts`                            | one per `packages/engine-*`                                              | the runner, only through `apps/runner/src/engines.ts` | the conformance kit in `@agent-workspace/engine/testing`     |
-| `RuntimeDriver`         | `packages/runtime/src/driver.ts`                         | one per `./driver/*` subpath                                             | the runner                                            | each driver's tests                                          |
-| `PlatformTarget`        | `packages/platforms/src/port.ts`                         | `packages/platforms/src/targets/`, listed in `registry.ts`               | `aw`, the control plane and the CLI                   | the platform conformance kit (ADR-0133)                      |
-| `ObjectStore`           | `packages/core/src/storage/object-store.ts`              | local, S3, GCS, Azure, and memory for tests                              | the storage catalog service                           | one contract suite, `packages/core/src/storage/contract.ts`  |
-| `CatalogPort` (storage) | `packages/core/src/db/repositories/resource-catalogs.ts` | PostgreSQL, and `memory-catalog.ts` for tests                            | the storage catalog service and the files domain      | `resource-catalogs.contract.ts`, run against both            |
-| `SecretsService`        | `packages/core/src/secrets/service.ts`                   | the database, and in memory for tests                                    | the control plane and the gateway                     | `packages/core/src/secrets/service.test.ts`                  |
-| `Logger`                | `packages/core/src/telemetry/logger.ts`                  | JSON lines                                                               | web, runner and gateway                               | `packages/core/src/telemetry/telemetry.test.ts`              |
-| The Builder's ports     | `apps/web/server/builder/ports.ts`                       | a production and a memory adapter each, under `builder/adapters/<port>/` | the Builder's use cases                               | one `<port>.contract.ts` per port, run against both adapters |
-| `<Domain>StoreProvider` | `apps/web/server/<domain>/store.ts`                      | PostgreSQL, and in memory for tests                                      | that domain                                           | `tests/store-conformance.test.ts`                            |
+| Port                         | Defined in                                               | Adapters                                                                         | Used by                                                             | Held to it by                                                |
+| ---------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `AgentEngine`                | `packages/engine/src/port.ts`                            | one per `packages/engine-*`                                                      | the runner, only through `apps/runner/src/engines.ts`               | the conformance kit in `@agent-workspace/engine/testing`     |
+| `RuntimeDriver`              | `packages/runtime/src/driver.ts`                         | one per `./driver/*` subpath                                                     | the runner                                                          | each driver's tests                                          |
+| `PlatformTarget`             | `packages/platforms/src/port.ts`                         | `packages/platforms/src/targets/`, listed in `registry.ts`                       | `aw`, the control plane and the CLI                                 | the platform conformance kit (ADR-0133)                      |
+| `ObjectStore`                | `packages/core/src/storage/object-store.ts`              | local, S3, GCS, Azure, and memory for tests                                      | the storage catalog service                                         | one contract suite, `packages/core/src/storage/contract.ts`  |
+| `CatalogPort` (storage)      | `packages/core/src/db/repositories/resource-catalogs.ts` | PostgreSQL, and `memory-catalog.ts` for tests                                    | the storage catalog service and the files domain                    | `resource-catalogs.contract.ts`, run against both            |
+| `SessionStateBlobRepository` | `packages/core/src/db/repositories/session-state.ts`     | PostgreSQL, and `memory-session-state-blobs.ts` for tests                        | the storage catalog service, the sessions store and the cleanup job | `session-state-blobs.contract.ts`, run against both          |
+| `SecretsService`             | `packages/core/src/secrets/service.ts`                   | the database, and in memory for tests                                            | the control plane and the gateway                                   | `packages/core/src/secrets/service.test.ts`                  |
+| `Logger`                     | `packages/core/src/telemetry/logger.ts`                  | JSON lines                                                                       | web, runner and gateway                                             | `packages/core/src/telemetry/telemetry.test.ts`              |
+| The Builder's ports          | `apps/web/server/builder/ports.ts`                       | a production and a memory adapter each, under `builder/adapters/<port>/`         | the Builder's use cases                                             | one `<port>.contract.ts` per port, run against both adapters |
+| `<Domain>StoreProvider`      | `apps/web/server/<domain>/store.ts`                      | PostgreSQL, and in memory for tests                                              | that domain                                                         | `tests/store-conformance.test.ts`                            |
+| `IdTokenKeySource`           | `apps/web/server/auth/token-exchange.ts`                 | discovery of `OIDC_ISSUER_URL` and its `jwks_uri`, and a local key set for tests | `POST /api/auth/token-exchange` (ADR-0161)                          | `apps/web/server/auth/token-exchange.test.ts`                |
 
 The Builder's ports are `ApprovalPort`, `AuthorizationPort`, `PolicyPort`, `AuditPort`,
 `CheckerPort`, `RunnerPort`, `CatalogPort` and `AgentStorePort`. Its `CatalogPort` (the names and
@@ -142,21 +144,22 @@ ids the Builder may offer) is not the storage `CatalogPort`; the two share a nam
 Every line is HTTP or a port call, and each carries a typed contract. A value that arrives over
 one of them is `unknown` until a schema checks it ([Runtime and trust boundaries](#runtime-and-trust-boundaries)).
 
-| From                 | To              | How, and what it carries                                                                                           |
-| -------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Browser              | control plane   | HTTPS `/api/**` through the SDK with the session cookie; every answer is validated against the contracts           |
-| `aw`, SDK users, CLI | control plane   | the same SDK over HTTPS, with a token                                                                              |
-| Browser              | object storage  | a file above `MAX_UPLOAD_BYTES` (64 MiB): a signed upload link, then an `upload-complete` call                     |
-| Control plane        | PostgreSQL      | `packages/core` repositories, through a domain's `store.ts` (older imports elsewhere are a baseline)               |
-| Control plane        | object storage  | `ObjectStore`, streamed, through the storage catalog service; no rule yet makes it the only way in                 |
-| Control plane        | runner          | `POST /run` with a `RunRequest`, a bearer token when one is set, and `traceparent`                                 |
-| Runner               | control plane   | the `agent.*` frames, as server-sent events on the same response; each frame's `id` is the resume cursor           |
-| Runner               | sandbox         | one `RuntimeDriver`                                                                                                |
-| Engine adapter       | gateway         | model calls with the short-lived run identity and `traceparent`                                                    |
-| Agent tools          | gateway         | `POST /v1/tools/:connectorId/mcp` and `POST /v1/tool-sandbox/mcp`                                                  |
-| Gateway              | control plane   | `POST /v1/tools/aw-control/mcp`, forwarded to `/api/builder/mcp` with only the run token, the body capped at 4 MiB |
-| Gateway              | model providers | provider HTTP with the stored credential                                                                           |
-| Every server process | logs and traces | one JSON line per event through the `Logger` port; W3C `traceparent` joins web, runner and gateway                 |
+| From                 | To              | How, and what it carries                                                                                                                 |
+| -------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Browser              | control plane   | HTTPS `/api/**` through the SDK with the session cookie; every answer is validated against the contracts                                 |
+| `aw`, SDK users, CLI | control plane   | the same SDK over HTTPS, with a token                                                                                                    |
+| Browser              | object storage  | a file above `MAX_UPLOAD_BYTES` (64 MiB): a signed upload link, then an `upload-complete` call                                           |
+| Control plane        | PostgreSQL      | `packages/core` repositories, through a domain's `store.ts` (older imports elsewhere are a baseline)                                     |
+| Control plane        | object storage  | `ObjectStore`, streamed, through the storage catalog service, the only way in (a dependency rule)                                        |
+| Control plane        | runner          | `POST /run` with a `RunRequest`, a bearer token when one is set, and `traceparent`                                                       |
+| Runner               | control plane   | the `agent.*` frames, as server-sent events on the same response; each frame's `id` is the resume cursor                                 |
+| Runner               | sandbox         | one `RuntimeDriver`                                                                                                                      |
+| Engine adapter       | gateway         | model calls with the short-lived run identity and `traceparent`                                                                          |
+| Agent tools          | gateway         | `POST /v1/tools/:connectorId/mcp` and `POST /v1/tool-sandbox/mcp`                                                                        |
+| Gateway              | control plane   | `POST /v1/tools/aw-control/mcp`, forwarded to `/api/builder/mcp` with only the run token, the body capped at 4 MiB                       |
+| Gateway              | model providers | provider HTTP with the stored credential                                                                                                 |
+| Control plane        | OIDC issuer     | discovery and the `jwks_uri` of the one configured `OIDC_ISSUER_URL`, to verify an app's ID token (ADR-0161); never a URL from the token |
+| Every server process | logs and traces | one JSON line per event through the `Logger` port; W3C `traceparent` joins web, runner and gateway                                       |
 
 ### Where the code does not match yet
 
@@ -244,6 +247,9 @@ one transaction confirms the row as `ready` with the size and checksum measured 
 replaced or removed row becomes `deleting` until its object is gone; the cleanup job reports what a
 crash left, and in `delete` mode removes it. Only a `ready` row is listed, searched or granted, and a rename changes the row alone.
 A signed-link upload takes the same steps, with `upload-complete` as the confirm.
+A session-state blob keeps its own row (`session_state_blobs`) and takes the same steps: the row
+waits under a side key while it is `pending` or `deleting`, and its confirm checks the same
+reservation token.
 
 A run receives references, not bytes: the `RunRequest` lists each granted file's path, mode, size
 and checksum, the control plane streams the files to the runner as one archive, and the runner
@@ -289,6 +295,7 @@ rule in [`dependency-cruiser.config.mjs`](../dependency-cruiser.config.mjs), che
 | `storage-backends-are-for-tests`                                                                                              | only tests import `@agent-workspace/core/storage/backends`, which loads the Azure and Google Cloud libraries; production opens a store with `openObjectStore`                                                                                                                                                                           |
 | `memory-catalog-store-is-for-tests`                                                                                           | only tests import `resources/catalog-store.memory.ts`; production wires the PostgreSQL catalog store (the storage design, §07 rule 4)                                                                                                                                                                                                   |
 | `app-does-not-import-storage-adapters`                                                                                        | `app/**` never value-imports a domain `store.ts` or `composition/storage.ts`; type-only imports are allowed; baseline 0 (the storage design, §07 rule 2)                                                                                                                                                                                |
+| `only-the-catalog-service-reaches-object-storage`                                                                             | a domain reaches object storage through `apps/web/server/storage/`, never `core/src/storage`, even type-only; the pure helpers (content type, key safety, object name), the composition root and tests may; `tool-bundles/` is a named exception (not workspace files); baseline 0 (the storage design, §07 rule 3)                     |
 | `domain-does-not-import-persistence`                                                                                          | only a domain's `store.ts` names `core/db`; baseline 46, 18 of them in the composition root                                                                                                                                                                                                                                             |
 | `production-does-not-import-tests`, `no-unresolved-imports`                                                                   | production code never imports a test module; every internal import resolves                                                                                                                                                                                                                                                             |
 | `no-circular-dependencies` and the two schema-cycle rules                                                                     | no cycles except two Drizzle foreign-key cycles, each limited to its two schema modules: `workspaces.ts` ↔ `model-connections.ts` and `agents.ts` ↔ `agent-versions.ts`                                                                                                                                                                 |
@@ -298,7 +305,8 @@ rule in [`dependency-cruiser.config.mjs`](../dependency-cruiser.config.mjs), che
 
 The three baseline rules ignore exactly the entries in `.dependency-cruiser-known-violations.json`,
 and `tests/architecture-rules.test.ts` holds a ceiling per rule: a new violation fails, and a fixed
-one must be removed from the file and the ceiling lowered.
+one must be removed from the file and the ceiling lowered. The same test holds
+`only-the-catalog-service-reaches-object-storage` at a ceiling of 0, so it can never gain an entry.
 
 ## Browser boundary
 

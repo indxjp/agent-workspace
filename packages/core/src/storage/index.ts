@@ -72,6 +72,7 @@ export {
 export { openObjectStore, openRootObjectStore, type OpenObjectStoreOptions } from './open.js';
 export {
   ConnectionStoreError,
+  folderFailure,
   openConnectionStore,
   resolveFileRoot,
   ReadOnlyStoreError,
@@ -80,7 +81,9 @@ export {
   type ConnectionCredential,
   type StorageRefusalClass,
   type ConnectionStoreOptions,
+  type FolderFailure,
 } from './connection-store.js';
+export { FolderPathError, FolderStoreError, FolderWalkLimitError } from './folder-store.js';
 export {
   newObjectId,
   parseStorageObjectName,

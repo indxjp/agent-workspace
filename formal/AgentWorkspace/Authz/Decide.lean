@@ -301,12 +301,13 @@ structure DeclaredRoute where
   path : String
   deriving DecidableEq, Repr
 
-/-- The declared route union (187 routes). -/
+/-- The declared route union (191 routes). -/
 @[aw_spec (ts := "tests/inventory-support.ts#readDeclarationFiles")
   (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#declaredRoutes")]
 def declaredRoutes : List DeclaredRoute :=
   [ ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", "GET", "/api/workspaces/:id/features"⟩,
     ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", "PUT", "/api/workspaces/:id/features"⟩,
+    ⟨"AP-U2-5B-TOKEN-EXCHANGE-1499", "POST", "/api/auth/token-exchange"⟩,
     ⟨"BLD-3-BUILDER-MCP-1846", "POST", "/api/builder/mcp"⟩,
     ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "POST", "/mcp/builder"⟩,
     ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "GET", "/.well-known/oauth-protected-resource/mcp/builder"⟩,
@@ -385,6 +386,9 @@ def declaredRoutes : List DeclaredRoute :=
     ⟨"SDK-10-CLI-AUTH-242", "POST", "/api/auth/cli-token"⟩,
     ⟨"SDK-10-CLI-AUTH-242", "DELETE", "/api/auth/cli-token"⟩,
     ⟨"SDK-10-CLI-AUTH-242", "POST", "/api/auth/cli-workspace"⟩,
+    ⟨"SDK-18-WEBHOOKS-250", "GET", "/api/webhooks"⟩,
+    ⟨"SDK-18-WEBHOOKS-250", "POST", "/api/webhooks"⟩,
+    ⟨"SDK-18-WEBHOOKS-250", "DELETE", "/api/webhooks/:id"⟩,
     ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/upload-urls"⟩,
     ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/upload-complete"⟩,
     ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/download-urls"⟩,
@@ -499,7 +503,7 @@ def matrixPublicRoutes : List (String × String) :=
   [("GET", "/api/setup/runtime-detect"), ("GET", "/api/auth/login"), ("POST", "/api/auth/callback"),
     ("GET", "/api/auth/workspace"), ("POST", "/api/auth/workspace"),
     ("POST", "/api/auth/cli-device"), ("GET", "/api/auth/cli-verify"), ("POST", "/api/auth/cli-token"),
-    ("GET", "/api/cron/retention"), ("GET", "/.well-known/oauth-authorization-server"),
+    ("POST", "/api/auth/token-exchange"), ("GET", "/api/cron/retention"), ("GET", "/.well-known/oauth-authorization-server"),
     ("GET", "/.well-known/oauth-protected-resource/mcp/projects/:name"),
     ("GET", "/.well-known/oauth-protected-resource/mcp/builder"),
     ("GET", "/.well-known/oauth-protected-resource/api/a2a/agents/:agentName"),

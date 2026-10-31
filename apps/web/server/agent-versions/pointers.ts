@@ -82,6 +82,7 @@ import { materialise } from './materialise';
 import { definitionReferences, validateAgentVersion } from './pipeline';
 import type { StorageConnectionLookup } from './storage-grants';
 import {
+  agentArchived,
   agentArchivedRefusal,
   agentNameConflict,
   agentVersionNotFound,
@@ -266,6 +267,8 @@ async function pointAt(
       return outcome;
     case 'not-found':
       return { kind: 'refused', result: agentNotFound() };
+    case 'agent-archived':
+      return { kind: 'refused', result: agentArchived() };
     case 'version-not-found':
       return { kind: 'refused', result: agentVersionNotFound(number) };
     case 'name-conflict':

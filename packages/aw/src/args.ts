@@ -42,6 +42,8 @@ const VALUE_FLAGS = [
   'download',
   // `aw runs start <agent> --output-schema <path>`: a JSON Schema file for the run's structured output
   'output-schema',
+  // issue #250 (S-6): `aw runs start <agent> --idempotency-key <key>`, sent as Idempotency-Key
+  'idempotency-key',
   // issue #236 (SDK-04, S-1): `aw tokens mint --scope run|session --id <id> [--ttl <seconds>]`
   'scope',
   'id',
@@ -100,6 +102,9 @@ const VALUE_FLAGS = [
   'credential-file',
   // issue #1850: `aw agents export <id> --format json|ts`
   'format',
+  // issue #250 (N-3): `aw webhooks create --webhook-url <url>`; `--url` is the control plane's,
+  // as for `--storage-url`
+  'webhook-url',
 ] as const;
 
 const SWITCH_FLAGS = [
@@ -170,6 +175,8 @@ const REPEATABLE_VALUE_FLAGS = [
   'redirect-uri',
   // issue #1692: `aw storage connections create --allow <prefix> [--allow …]`
   'allow',
+  // issue #250 (N-3): `aw webhooks create --webhook-url <url> --event <type> [--event …]`
+  'event',
 ] as const;
 
 export type ValueFlag = (typeof VALUE_FLAGS)[number];

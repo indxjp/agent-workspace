@@ -460,6 +460,7 @@ theorem every_id_kind_names_a_table (k : IdKind) : ∃ t, TableName.idKind? t = 
     | exact ⟨.triggers, rfl⟩ | exact ⟨.triggerDeliveries, rfl⟩
     | exact ⟨.builderToolCalls, rfl⟩ | exact ⟨.storageConnections, rfl⟩ | exact ⟨.storageMigrationRuns, rfl⟩
     | exact ⟨.workspaceFeatures, rfl⟩
+    | exact ⟨.webhooks, rfl⟩ | exact ⟨.webhookDeliveries, rfl⟩
 
 /-- Every closed-set check constrains a `text` column. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]

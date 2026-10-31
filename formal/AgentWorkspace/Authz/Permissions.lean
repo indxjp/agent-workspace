@@ -10,7 +10,7 @@ fallback plus an override per named resource. Owner's fallback is `EVERYTHING` (
 `workspaces` override); every other role's fallback is `NOTHING`.
 
 The model transcribes `POLICY` **literally**, as the same fallback-plus-override shape with the
-same named constants, so each of the 4 × 31 × 3 = 372 cells is computed the way `grantsFor`
+same named constants, so each of the 4 × 32 × 3 = 384 cells is computed the way `grantsFor`
 computes it. The per-cell theorems (`Theorems.Normative.AuthzDecide`) pin every cell against an
 independent transcription of the document table in `docs/sdk/04-api-specification.md` §3.3.
 -/
@@ -122,6 +122,8 @@ def policy : Role → RolePolicy
         (.modelConnections, MANAGE),
         -- Issue #1690 (storage design Q-22): Owner and Admin connect and change a bucket.
         (.storageConnections, MANAGE),
+        -- Issue #250 (ADR-SDK-18-N3-250 D6): Owner and Admin decide where run outcomes are sent.
+        (.webhooks, MANAGE),
         (.models, MANAGE),
         (.runtimeProfiles, MANAGE),
         (.runtimes, MANAGE),
@@ -275,7 +277,7 @@ def docRow : Resource → Option (DocPhrase × DocPhrase × DocPhrase × DocPhra
   | .projects => some (.all, .manage, .own, .none)
   | .sessions => some (.all, .own, .own, .sessionsOwnRead)
   | .runs => some (.all, .readRunAny, .readRunOwn, .readRunOwn)
-  | .memberships | .users | .invitations | .apiKeys => some (.all, .manage, .none, .none)
+  | .memberships | .users | .invitations | .apiKeys | .webhooks => some (.all, .manage, .none, .none)
   | .tokens => some (.all, .writeAny, .writeOwn, .none)
   | .shares => some (.all, .manage, .own, .own)
   | .sharingPolicies => some (.all, .read, .read, .read)

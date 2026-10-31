@@ -226,8 +226,6 @@ async *events(runId: string, options?: RunEventsOptions): AsyncGenerator<RunEven
 
 **Returns:** `AsyncGenerator<RunEventFrame, RunStreamEnd, void>`
 
-**Route:** `GET /api/runs/:runId/events`
-
 ## follow
 
 `events`, resuming with `Last-Event-ID` when a connection drops before `done`. A
@@ -235,6 +233,11 @@ async *events(runId: string, options?: RunEventsOptions): AsyncGenerator<RunEven
 that renders a transcript must discard what it has. Aborting `signal` ends the stream with a
 `TransportError` whose `aborted` is `true`, like every other operation; catch it, or
 return early yourself — stopping iteration early closes the connection either way.
+
+Reconnects back off (issue #250, K-3): the base is the last `retry:` the stream sent, else
+`reconnectDelayMs`; the n-th failed reconnect in a row waits between half and all of
+`min(maxReconnectDelayMs, base × 2^(n−1))`; a connection that delivers a new event starts the
+count again; a `429` or `5xx` naming `Retry-After` is waited exactly that long.
 
 ```ts
 async *follow(runId: string, options?: FollowRunOptions): AsyncGenerator<RunEventFrame, RunStreamEnd, void>
@@ -313,7 +316,8 @@ async result(runId: string, options?: RunResultOptions<z.ZodType | undefined>): 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `maxReconnects` | `undefined \| number` | No | How many reconnects in a row may fail to deliver a new event before `follow` gives up; a connection that delivers one resets the count. Default 5. |
-| `reconnectDelayMs` | `undefined \| number` | No | Pause between reconnects, in milliseconds. Default 3000, the server's own `retry:` value. |
+| `reconnectDelayMs` | `undefined \| number` | No | The base pause before a reconnect, in milliseconds, until the stream sends a `retry:` value; from then on that value is the base (issue #250, K-3). Default 3000, the server's own `retry:`. The n-th reconnect in a row waits a uniform random time between half and all of `min(maxReconnectDelayMs, base × 2^(n−1))`. A non-negative finite number no larger than `maxReconnectDelayMs`; anything else throws a `TypeError` before the first request. |
+| `maxReconnectDelayMs` | `undefined \| number` | No | The ceiling of the reconnect backoff, in milliseconds; a `retry:` above it is capped. Default 30000. A non-negative finite number at least `reconnectDelayMs`, so a ceiling under 3000 needs a `reconnectDelayMs` too; anything else throws a `TypeError` before the first request. A `429` or `5xx` that names `Retry-After` is waited exactly, past this ceiling. |
 | `after` | `undefined \| null \| string` | No | Resume after this event id (`Last-Event-ID`); omit to replay from the beginning. |
 | `signal` | `undefined \| AbortSignal` | No |  |
 
@@ -346,7 +350,8 @@ What `RunsClient.result` returns: the settled run, its prose and its structured 
 | --- | --- | --- | --- |
 | `schema` | `undefined \| Schema` | No | Validate the structured answer against this and return it typed. |
 | `maxReconnects` | `undefined \| number` | No | How many reconnects in a row may fail to deliver a new event before `follow` gives up; a connection that delivers one resets the count. Default 5. |
-| `reconnectDelayMs` | `undefined \| number` | No | Pause between reconnects, in milliseconds. Default 3000, the server's own `retry:` value. |
+| `reconnectDelayMs` | `undefined \| number` | No | The base pause before a reconnect, in milliseconds, until the stream sends a `retry:` value; from then on that value is the base (issue #250, K-3). Default 3000, the server's own `retry:`. The n-th reconnect in a row waits a uniform random time between half and all of `min(maxReconnectDelayMs, base × 2^(n−1))`. A non-negative finite number no larger than `maxReconnectDelayMs`; anything else throws a `TypeError` before the first request. |
+| `maxReconnectDelayMs` | `undefined \| number` | No | The ceiling of the reconnect backoff, in milliseconds; a `retry:` above it is capped. Default 30000. A non-negative finite number at least `reconnectDelayMs`, so a ceiling under 3000 needs a `reconnectDelayMs` too; anything else throws a `TypeError` before the first request. A `429` or `5xx` that names `Retry-After` is waited exactly, past this ceiling. |
 | `after` | `undefined \| null \| string` | No | Resume after this event id (`Last-Event-ID`); omit to replay from the beginning. |
 | `signal` | `undefined \| AbortSignal` | No |  |
 

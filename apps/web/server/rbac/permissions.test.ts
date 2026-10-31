@@ -99,10 +99,13 @@ const SEGMENT_TERMINATORS = new Set([
  * `/api/<segment>` prefixes §34 prints that are a protocol's name, not a resource. A2A v0.3 fixes
  * where a client finds an agent and its card, so `/api/a2a/…` is a literal pair of routes
  * (ADR-0135) that authorise as `POST /api/agents/:id/runs`; `tests/route-inventory.test.ts` names
- * the same exception. The tests below require each prefix to be printed and to stay out of
- * `RESOURCES`, so this list can neither go stale nor hide a real resource.
+ * the same exception. `/api/auth/…` is the sign-in protocol's prefix: its routes are public or
+ * identity-only and authenticate a client or the presented credential itself, never through a
+ * §21 row (ADR-0083 D8; ADR-0161 D3 prints `POST /api/auth/token-exchange` in §34). The tests
+ * below require each prefix to be printed and to stay out of `RESOURCES`, so this list can
+ * neither go stale nor hide a real resource.
  */
-const PROTOCOL_PREFIXES: ReadonlySet<string> = new Set(['a2a']);
+const PROTOCOL_PREFIXES: ReadonlySet<string> = new Set(['a2a', 'auth']);
 
 const SEGMENT_SHAPE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
@@ -277,15 +280,17 @@ describe('the §34 scan decides positively, not from the absence of a match', ()
   /** The pattern `specResources()` used in round 1, copied from the verifier's finding. */
   const ROUND_1 = /(?:^|\s)\/api\/([a-z0-9]+(?:-[a-z0-9]+)*)/gmu;
 
-  const BACKTICKED = 'Workspace webhooks are managed at `/api/webhooks`; see below.\n';
+  // The verifier's sample named `/api/webhooks`, which issue #250 has since made a real resource;
+  // the same sentence about a resource that still does not exist keeps the counter-example.
+  const BACKTICKED = 'Workspace doorbells are managed at `/api/doorbells`; see below.\n';
   const PARENTHESISED = 'Model routing uses (/api/model_connections).\n';
 
   it('finds a resource §34 names in backticks, which the round-1 regex could not match', () => {
     expect([...BACKTICKED.matchAll(ROUND_1)].map((match) => match[1])).toEqual([]);
     const scan = scanSpecResources(BACKTICKED);
-    expect([...scan.resources]).toEqual(['webhooks']);
+    expect([...scan.resources]).toEqual(['doorbells']);
     // And such a resource is now visible to the gate that classifies them.
-    expect(parseResource('webhooks')).toBeNull();
+    expect(parseResource('doorbells')).toBeNull();
   });
 
   it('refuses an occurrence whose segment it cannot read, rather than skipping it', () => {
@@ -413,6 +418,19 @@ describe('the grants are the ones §21’s sentences require', () => {
     }
     expect(grantsFor('builder', 'users').write).toBe('none');
     expect(grantsFor('builder', 'api-keys').write).toBe('none');
+  });
+
+  it('lets Owner and Admin manage webhooks and Builder and Viewer nothing — issue #250 (N-3)', () => {
+    const manage = { read: 'any', write: 'any', run: 'none' };
+    expect(grantsFor('owner', 'webhooks')).toEqual({ read: 'any', write: 'any', run: 'any' });
+    expect(grantsFor('admin', 'webhooks')).toEqual(manage);
+    for (const role of ['builder', 'viewer'] as const) {
+      expect(grantsFor(role, 'webhooks'), role).toEqual({
+        read: 'none',
+        write: 'none',
+        run: 'none',
+      });
+    }
   });
 
   it('lets Owner, Admin and Builder upload and read tool bundles and Viewer neither — issue #790', () => {

@@ -210,6 +210,13 @@
    "id": "policy/owner/users",
    "expected": {"write": "any", "run": "any", "read": "any"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "owner", "resource": "webhooks"},
+   "id": "policy/owner/webhooks",
+   "expected": {"write": "any", "run": "any", "read": "any"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_workspaces",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
@@ -425,6 +432,13 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "admin", "resource": "users"},
    "id": "policy/admin/users",
+   "expected": {"write": "any", "run": "none", "read": "any"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "admin", "resource": "webhooks"},
+   "id": "policy/admin/webhooks",
    "expected": {"write": "any", "run": "none", "read": "any"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_workspaces",
@@ -644,6 +658,13 @@
    "id": "policy/builder/users",
    "expected": {"write": "none", "run": "none", "read": "none"}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "builder", "resource": "webhooks"},
+   "id": "policy/builder/webhooks",
+   "expected": {"write": "none", "run": "none", "read": "none"}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_workspaces",
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
@@ -859,6 +880,13 @@
     "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
    "input": {"role": "viewer", "resource": "users"},
    "id": "policy/viewer/users",
+   "expected": {"write": "none", "run": "none", "read": "none"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_role_policy_names_each_resource_once",
+    "AgentWorkspace.Theorems.Meta.AuthzDecide.owner_dominates_every_role"],
+   "input": {"role": "viewer", "resource": "webhooks"},
+   "id": "policy/viewer/webhooks",
    "expected": {"write": "none", "run": "none", "read": "none"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_workspaces",

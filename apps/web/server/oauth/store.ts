@@ -37,7 +37,10 @@ type StoreRoot = Pick<
   readonly endpointClients: {
     forScope(scope: WorkspaceScope): Pick<EndpointClientRepository, 'get'>;
   };
-  readonly directory: Pick<DatabaseRoot['directory'], 'principalById'>;
+  readonly directory: Pick<
+    DatabaseRoot['directory'],
+    'principalById' | 'findIdentity' | 'membershipsForUser'
+  >;
 };
 
 export function createRepositoryOAuthRuntime(root: StoreRoot): OAuthRuntime {
@@ -61,6 +64,10 @@ export function createRepositoryOAuthRuntime(root: StoreRoot): OAuthRuntime {
           break;
         case 'builder':
           resourcePath = BUILDER_RESOURCE_PATH;
+          break;
+        case 'app-backend':
+          // Its tokens come from the exchange alone, whose resource is never an endpoint's URL.
+          resourcePath = null;
           break;
         case 'a2a-agent': {
           // The A2A route is addressed by the agent's name, which is not the client's.
@@ -131,6 +138,42 @@ export function createRepositoryOAuthRuntime(root: StoreRoot): OAuthRuntime {
         subjectId: event.clientId,
         subjectLabel: `${event.clientName} (${event.detail})`,
       });
+    },
+    async findMember(workspaceId, issuer, subject) {
+      const identity = await root.directory.findIdentity(issuer, subject);
+      if (identity === null) return null;
+      const memberships = await root.directory.membershipsForUser(identity.userId);
+      const membership = memberships.find((row) => row.workspaceId === workspaceId);
+      if (membership === undefined) return null;
+      const principal = await root.directory.principalById(workspaceId, membership.principalId);
+      if (principal === null || principal.kind !== 'membership') return null;
+      return {
+        userId: identity.userId,
+        principalId: membership.principalId,
+        label: principal.label,
+      };
+    },
+    async issueExchanged(client, member, token) {
+      const tokens = root.oauthTokens.forScope(await scopeOf(client.workspaceId));
+      await tokens.issueExchanged(
+        {
+          id: token.id,
+          clientId: client.id,
+          kind: 'access',
+          tokenHash: token.tokenHash,
+          subjectPrincipalId: member.principalId,
+          resource: token.resource,
+          familyId: token.familyId,
+          expiresAt: token.expiresAt,
+        },
+        {
+          actorPrincipalId: member.principalId,
+          actorUserId: member.userId,
+          actorLabel: member.label,
+          clientId: client.id,
+          clientName: client.name,
+        },
+      );
     },
   };
 }

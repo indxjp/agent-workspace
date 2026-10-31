@@ -207,6 +207,7 @@ as of this document's date.
 | projects                                                 | all                                                                   | manage       | own                                  | none                      |
 | sessions                                                 | all                                                                   | own          | own                                  | own (read)                |
 | runs                                                     | all                                                                   | read/run any | read/run own                         | read/run own              |
+| webhooks (N-3, #250)                                     | all                                                                   | manage       | none                                 | none                      |
 | memberships, users, invitations, api-keys                | all                                                                   | manage       | none                                 | none                      |
 | tokens (mint only — issue #236)                          | all                                                                   | write any    | write own                            | none                      |
 | shares                                                   | all                                                                   | manage       | own                                  | own                       |
@@ -237,7 +238,7 @@ a role may confer itself and any role below it, and an Admin may confer every ro
 | Errors                  | `{ error: { code, message, details? } }` (`ApiProblemSchema`) is the target on every `/api/**` route, and the RBAC layer (every team route, and the 401/403/500/503 refused before any handler runs) and `GET /api/audit-events` answer it since SDK unit 6 (#238, ADR-0075). Those routes also render `detail`, a deprecated duplicate of `message`, until the next major release (ADR-0078 D7). One other spelling exists today: the bare `{ error: '<code>', message? }` of `POST /api/runtimes/test` (**S-4**). Two older spellings — the RBAC layer's `{ error: { code, detail } }` (`ApiProblemDetailSchema`) and the bare code on `GET /api/audit-events` — are still published so the SDK reads the `code` from a deployment older than #238. A failed model-connection probe answers `502` with the probe outcome as the body, not an envelope. `code` is stable; `message` is safe prose; `details` are per-field strings.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Status                  | 200 read/update, 201 create, 202 run accepted, 204 delete (except where the delete has something to say: model connections `200 { deleted, referencedBy }`, API keys and invitations `200 { … }` with the revoked row, files `200` with a subtree outcome), 400 malformed/invalid, 401, 403, 404 (also for cross-tenant — never 403), 409 conflict, 410 gone, 413, 415, 422 unprocessable, 426 `contracts_version_unsupported` (see Versioning), 429 with `Retry-After`, 5xx with a fixed message and no cause.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Pagination              | `GET /api/runs`, `GET /api/sessions` and `GET /api/audit-events` return one page and `nextCursor` (`null` on the last); the cursor is opaque, never an offset, and pages are keyed on the immutable `(created_at, id)`. The session and audit cursors are bound to their list and the caller's workspace, and any other is `400 invalid_cursor` (ADR-0079). `limit` ≤ 200 for runs and sessions (sessions answer every remaining row when it is omitted) and ≤ 500 for audit events (default 100). Every other list is unpaginated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Idempotency             | `Idempotency-Key` on `POST /api/agents/:id/runs` is planned in RF-301 (**S-6**). The current SDK sends no automatic idempotency key.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Idempotency             | `Idempotency-Key` on `POST /api/agents/:id/runs` (S-6, ADR-0151): a retry with the same key and the same request returns the run the first start queued; §5.12 states the rules. The SDK sends the header only when `runs.start` is given an `idempotencyKey`; it never invents one.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Credentials on the wire | Write-only. No response ever contains an API key secret (except the mint response, once), a model/connector/runtime credential, or a secret value. Response schemas have no field for them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Versioning              | `@indx-workspace/contracts` semver; `CONTRACTS_VERSION` is exported from the package root. Additive response fields are minor releases and removals/renames happen only in a major release; the strict SDK response decoders require coordinated releases (F-084). Every request carries `X-Agent-Workspace-Contracts: <MAJOR.MINOR.PATCH>` — the version the client was built against — and every `/api/**` answer carries the served range: `X-Agent-Workspace-Contracts` (the server's current version) and `X-Agent-Workspace-Contracts-Minimum` (the oldest it serves). The range is compared on `major.minor`. `apps/web/proxy.ts` judges the header first, before any authentication, authorisation or body parsing: outside the range answers `426 contracts_version_unsupported`, a header that is not a plain `MAJOR.MINOR.PATCH` answers `400 contracts_version_malformed`, both in the standard envelope with both versions in the message. A request without the header is always accepted and served at the current version — browser forms, links and the IdP's `form_post` callback cannot send it — so negotiation applies only to a client that declares a version; the SDK and `aw` always do (ADR-0078 D4). A `426` carries `Upgrade: agent-workspace-contracts/<major.minor>` (RFC 9110). Deprecation and served range (03 §3.3, ADR-0078 D7): an item is deprecated in a minor and removed only in the next major, no earlier than one minor after; the server serves its current minor and the previous minor of the same major, and at `X.0` the previous major's last minor, for that one minor. |
 | Cancellation            | Every SDK method takes `{ signal }`; `timeoutMs` bounds headers only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -708,26 +709,28 @@ append and delete are reachable over HTTP but the SDK does not expose them. `sub
 ### 5.12 Runs and the event stream — `aw.runs`
 
 ```ts
-RunStatus = 'queued'|'running'|'completed'|'failed'|'cancelled'
+RunStatus = 'queued'|'running'|'awaiting_approval'|'completed'|'failed'|'cancelled'
 RunResource { id, workspaceId, agentId, projectId|null, initiatingUserId|null, sessionId, status,
               createdAt, startedAt|null, endedAt|null, durationMs|null, model|null, provider|null,
               modelConnectionId|null, usage { inputTokens, outputTokens, cacheReadInputTokens,
               cacheCreationInputTokens, totalTokens, toolCalls }, cost { amount, currency, priceTableVersion|null },
               error|null, accountingState: 'pending'|'complete'|'partial'|'failed'|'unavailable', accountingError|null }
 StartRunRequest { prompt (≤100 000 chars, non-blank), sessionId?, modelConnectionId?+model? (together) }
+// optional header: Idempotency-Key, 1–255 characters after trimming (S-6)
 ```
 
-| Operation                           | Route                                                                                                                      | SDK                                                                  | Status |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------ |
-| Start (202)                         | `POST /api/agents/:id/runs`                                                                                                | `start(agentId, { prompt, sessionId?, modelOverride?, fileScope? })` | ✅     |
-| Read                                | `GET /api/runs/:id`                                                                                                        | `get(id)`                                                            | ✅     |
-| List (filters, cursor)              | `GET /api/runs`                                                                                                            | `list(query)`                                                        | ✅     |
-| Stream, one connection              | `GET /api/runs/:id/events`                                                                                                 | `events(id, { after? })`                                             | ✅     |
-| Stream with resume                  | (same)                                                                                                                     | `follow(id, { maxReconnects?, reconnectDelayMs? })`                  | ✅     |
-| Wait for the settled record         | (same + `GET /api/runs/:id`)                                                                                               | `waitForOutcome(id)`                                                 | ✅     |
-| Interrupt                           | `POST /api/runs/:id/interrupt`                                                                                             | `interrupt(id)`                                                      | ✅     |
-| Revoke gateway tokens (Owner/Admin) | `POST /api/runs/:id/revoke-tokens` (`POST /api/runs/:id` kept, **deprecated**, until the next major release (ADR-0078 D7)) | `revokeTokens(id, { tokenId? })`                                     | ✅     |
-| Feedback (204)                      | `POST /api/runs/:id/feedback`                                                                                              | — (posted by the surface page)                                       | ✅     |
+| Operation                           | Route                                                                                                                      | SDK                                                                                   | Status |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------ |
+| Start (202)                         | `POST /api/agents/:id/runs` (+ `Idempotency-Key`)                                                                          | `start(agentId, { prompt, sessionId?, modelOverride?, fileScope?, idempotencyKey? })` | ✅     |
+| Read                                | `GET /api/runs/:id`                                                                                                        | `get(id)`                                                                             | ✅     |
+| List (filters, cursor)              | `GET /api/runs`                                                                                                            | `list(query)`                                                                         | ✅     |
+| Stream, one connection              | `GET /api/runs/:id/events`                                                                                                 | `events(id, { after? })`                                                              | ✅     |
+| Stream with resume                  | (same)                                                                                                                     | `follow(id, { maxReconnects?, reconnectDelayMs? })`                                   | ✅     |
+| Reconnect backoff from `retry:`     | (same)                                                                                                                     | `follow(id, { maxReconnectDelayMs? })`                                                | ✅     |
+| Wait for the settled record         | (same + `GET /api/runs/:id`)                                                                                               | `waitForOutcome(id)`                                                                  | ✅     |
+| Interrupt                           | `POST /api/runs/:id/interrupt`                                                                                             | `interrupt(id)`                                                                       | ✅     |
+| Revoke gateway tokens (Owner/Admin) | `POST /api/runs/:id/revoke-tokens` (`POST /api/runs/:id` kept, **deprecated**, until the next major release (ADR-0078 D7)) | `revokeTokens(id, { tokenId? })`                                                      | ✅     |
+| Feedback (204)                      | `POST /api/runs/:id/feedback`                                                                                              | — (posted by the surface page)                                                        | ✅     |
 
 Stream frames, classified by the SDK (`RunEventFrame`): `run-status` and `runtime` carry a
 resume id; `run-failed`, `stream-reset`, `done` do not. A `runtime` frame's `name` is one of §6.3's
@@ -740,14 +743,52 @@ server that predates it). It is receive time at the control plane, not the engin
 The SDK consumes `done` as generator completion; it is not yielded as a frame. The generator's
 `RunStreamEnd` return value holds `lastEventId`, while SDK error classes do not expose that field.
 `follow` uses a cumulative reconnect budget and retains its cursor after `stream-reset`; callers
-rendering a transcript must clear their rendered state on that frame. Runtime bounds checks for
-reconnect options are not shipped (point 21/22).
+rendering a transcript must clear their rendered state on that frame. The two reconnect delays are
+bounds-checked (K-3, below); `maxReconnects` is not yet (point 21/22).
+
+**Idempotent start (S-6, ADR-0151, issue #250).** `POST /api/agents/:id/runs` honours an
+`Idempotency-Key` header, and `runs.start` sends it from `idempotencyKey`.
+
+- **Same key, same request: the same run.** The answer is `202` with the run that key first started,
+  whatever its status now: `queued`, `running`, `awaiting_approval`, or terminal, `cancelled`
+  included. No second run is created and nothing is launched again.
+- **Same key, different request: `409 run_idempotency_conflict`.** Send a new key.
+- **The key** is trimmed. A blank key, or one over 255 characters, is `400 invalid_idempotency_key`.
+  The key is scoped to the calling principal, so two callers may use the same key independently. It
+  is never freed: a run that finished, paused or was cancelled keeps it.
+- **"The same request"** is the agent id plus the parsed body, compared canonically: the SHA-256 of
+  its JSON with every object's members sorted. A retry that reorders an object's keys (such as an
+  `outputSchema` rebuilt by the client) is therefore the same request. Array order is part of what
+  was asked.
+- Two concurrent starts with one key create one run. The stored key is unique per principal, and
+  the start that loses the race answers as a replay.
+
+**Follow backoff (K-3, issue #250).** `follow` reconnects with a delay that
+grows while reconnects keep failing:
+
+- **Base.** The last `retry:` value the stream sent. Before the stream has sent one, the base is
+  `reconnectDelayMs` (default 3000).
+- **Growth.** For the _n_-th consecutive reconnect, the delay is
+  `d = min(maxReconnectDelayMs, base × 2^(n−1))`. `maxReconnectDelayMs` is a new option, default
+  30000, and a base above the cap is capped. A connection that delivers a new event resets _n_, as
+  it already resets the `maxReconnects` budget.
+- **Jitter.** The pause is uniform in `[d / 2, d]`, so followers dropped together do not reconnect
+  together.
+- **Precedence.** A `429` or `5xx` that carries `Retry-After` still sets the pause to exactly that
+  value, uncapped and unjittered. The server's instruction wins over the client's schedule.
+- `reconnectDelayMs` and `maxReconnectDelayMs` must be non-negative finite numbers with
+  `reconnectDelayMs ≤ maxReconnectDelayMs`. Anything else throws a `TypeError` before the first
+  request.
 
 `interrupt` is authorised as §3.3's `run` verb — Admin any, Builder and Viewer own — the same
 reading `POST /api/agents/:id/runs` already gets. It writes the run's terminal `cancelled` status
 and revokes its gateway tokens whether or not the runtime itself can be reached (the security
 boundary is the credential, not the child process); a follower observes the transition as a
-`run-status` frame. Problem codes: `409 run_not_interruptible` (already terminal),
+`run-status` frame. The success answer comes only after that status and the revocation have
+committed, so a caller never sees success for a run whose credential is still live. The runtime
+itself then stops within about one cancellation-watch interval (2 s) plus the 5 s signal bound,
+whichever replica served the interrupt: the replica holding the run's stream reads the committed
+status and interrupts its runtime (ADR-0151-FU-1440 D1, issue #261). Problem codes: `409 run_not_interruptible` (already terminal),
 `404 run_not_found`, `400 invalid_run_id`, `503 run_api_not_configured`. `revokeTokens` answers
 identically on both paths; the deprecated `POST /api/runs/:id` is removed only in the next
 major release, no earlier than one minor after this one (ADR-0078 D7).
@@ -860,6 +901,61 @@ secret reference `CONNECTOR_<NAME>`. Problem codes: `400 invalid_agent_id`,
 `404 agent_version_not_found`, `413` for a body over 16 KiB, `422 agent_name_not_portable`,
 `422 platform_model_unsupported`, `422 platform_limit_exceeded`, `422 platform_agent_not_found`,
 `422 platform_export_too_large` (over 8 MiB), `503 agent_policy_not_configured`.
+
+### 5.17 Webhooks — `aw.webhooks` (N-3, issue #250, ADR-SDK-18-N3-250)
+
+```ts
+WebhookEventType = 'run.completed'|'run.failed'|'run.cancelled'
+WebhookEndpoint  { id, workspaceId, url, events: WebhookEventType[], createdAt }
+CreateWebhookRequest  { url (absolute https, ≤2048 chars, no userinfo or fragment),
+                        events? (non-empty, distinct; default all three) }
+CreateWebhookResponse { webhook: WebhookEndpoint, secret: 'whsec_…' }   // the only time the secret is returned
+WebhookEvent { id, type: WebhookEventType, createdAt, workspaceId,
+               data: { run: { id, agentId, sessionId, status, endedAt, error, usage, cost, accountingState } } }
+```
+
+| Operation                      | Route                      | SDK                                                                  | Status |
+| ------------------------------ | -------------------------- | -------------------------------------------------------------------- | ------ |
+| List                           | `GET /api/webhooks`        | `list()` → `{ webhooks }`                                            | ✅     |
+| Create (201)                   | `POST /api/webhooks`       | `create({ url, events? })` → `{ webhook, secret }`                   | ✅     |
+| Remove (204)                   | `DELETE /api/webhooks/:id` | `remove(id)`                                                         | ✅     |
+| Verify a delivery (no request) | —                          | `verifyWebhookSignature({ secret, headers, body })` → `WebhookEvent` | ✅     |
+
+A **webhook** is an endpoint the platform posts a run's outcome to when the run reaches a terminal
+status. A workspace holds at most 10, so the list is unpaginated. There is no update: to change a
+webhook, remove it and create another. The routes are Owner/Admin (§3.3) and belong to the `runs`
+feature (ADR-0160).
+
+- **Signature (Standard Webhooks v1).** Each delivery is a `POST` of the `WebhookEvent` JSON with
+  three headers. `webhook-id` is the event `id`, the same on every retry. `webhook-timestamp` is the
+  attempt time in Unix seconds, fresh on every attempt. `webhook-signature` is
+  `v1,<base64 HMAC-SHA256(key, "<id>.<timestamp>.<body>")>`, where `key` is the base64-decoded part
+  of the secret after `whsec_`. The header may list several space-separated signatures, and one
+  match suffices. Receivers compare in constant time over the raw body and refuse a timestamp more
+  than 5 minutes from their clock. `verifyWebhookSignature` does exactly that with Web Crypto, in
+  Node and at the edge, and returns the contract-checked event.
+- **Events.** `run.completed`, `run.failed` and `run.cancelled`: one per (webhook, run), for the
+  run's terminal transition only. `awaiting_approval` sends nothing. A paused run sends its event
+  when the decision finishes it, and its continuation run sends its own. `usage` and `cost` are read
+  at the attempt, after waiting up to 2 minutes for `accountingState` to leave `pending`.
+  `accountingState` is always present, so a receiver knows whether the numbers are final.
+- **Delivery and retry.** Deliveries are written in the same transaction as the run's stop, so a
+  terminal run always has its deliveries. A worker that claims them from PostgreSQL sends them; no
+  other service is involved. Any `2xx` within 10 seconds counts as delivered, and the event is never
+  sent again. Anything else (another status, a timeout, a redirect, a network failure or an egress
+  refusal) is retried after 30 s, 2 min, 10 min, 30 min, 2 h, 6 h and 12 h, each with ±20 % jitter.
+  That is 8 attempts over about 21 hours, after which the delivery is given up. Delivery is
+  at-least-once, so deduplicate on `webhook-id` (or `data.run.id`). Order across runs is not
+  guaranteed.
+- **Egress.** The platform's egress policy (`packages/core/src/net/egress-policy.ts`, W9-PROV-127)
+  checks the URL at create and again on every attempt. It refuses private, loopback, link-local and
+  metadata addresses unless the host is on `EGRESS_ALLOW_HOSTS`. It requires HTTPS outside a local
+  posture, and it never follows redirects.
+
+Problem codes: `400 invalid_body`, `400 invalid_webhook_url`, `400 webhook_url_refused`,
+`400 invalid_webhook_id`, `404 webhook_not_found`, `409 webhook_limit_reached`,
+`503 webhook_api_not_configured`. Not part of N-3: a console page, a deliveries list or redeliver
+route, and secret rotation.
 
 ---
 
@@ -1239,7 +1335,9 @@ aw agents create|update --engine <id>                                           
 aw projects list|get|create|update|archive|restore|start-session|adopt-session
 aw sessions list|get|rename|archive|restore|transcript|subkeys
 aw runs start <agent> --prompt|--prompt-file [--session] [--model <conn>:<model>] [--wait|--follow]
+aw runs start … --idempotency-key <key>                            # S-6 (#250): sends the SDK's idempotencyKey; a blank key is a usage error
 aw runs get|list|events|follow|wait|interrupt
+aw webhooks list|create --webhook-url <url> [--event <type>]…|remove <id>   # N-3 (#250): create prints the secret once; --url stays the control plane's
 aw shares list|publish|revoke                                       # publish: RF-103
 aw metrics recent-runs
 aw audit list
@@ -1279,20 +1377,19 @@ ADR-0083); the rows a key is refused on run with the user token.
 
 Ordered by how much SDK surface they unblock. None is required for §5's ✅ rows.
 
-| ID   | Change                                                                                                                                                                                            | Unblocks                                                                                                                                                             |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S-4  | `POST /api/runtimes/test` uses the standard envelope (today `{ error: '<code>', message }`)                                                                                                       | runtime testing without a special case                                                                                                                               |
-| S-9  | Move `GET /api/setup/runtime-detect` to `GET /api/runtimes/detect` (keep the old path during a release)                                                                                           | runtime discovery outside setup                                                                                                                                      |
-| S-11 | `HEAD`/`?metadata=true` on `GET /api/files/:id`                                                                                                                                                   | `files.stat`                                                                                                                                                         |
-| S-6  | `Idempotency-Key` on run start (with RF-301)                                                                                                                                                      | safe retries from backends                                                                                                                                           |
-| S-19 | `PATCH /api/runtime-profiles/:id` accepts `null` for the nullable sizing fields and `runtimeConnectionId`                                                                                         | clearing a profile field                                                                                                                                             |
-| S-24 | `agent.message.delta` on a Claude run: enabling the Claude Agent SDK's `includePartialMessages` and mapping its `stream_event` messages onto the delta frame (today they reach `agent.native`)    | assistant text arriving as deltas rather than whole messages on the reference engine                                                                                 |
-| S-23 | A policy request shape that carries an `engine` the _contracts_ do not publish, so a client can ask a deployment for an engine it has not shipped a contract arm for and be refused by the server | `aw agents create\|update --engine <unpublished id>` reaching `400 unsupported_engine` from the route instead of the CLI's own pre-flight against `GET /api/engines` |
+| ID   | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Unblocks                                                                                                                                                             |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S-4  | `POST /api/runtimes/test` uses the standard envelope (today `{ error: '<code>', message }`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | runtime testing without a special case                                                                                                                               |
+| S-9  | Move `GET /api/setup/runtime-detect` to `GET /api/runtimes/detect` (keep the old path during a release)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | runtime discovery outside setup                                                                                                                                      |
+| S-11 | `HEAD`/`?metadata=true` on `GET /api/files/:id`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `files.stat`                                                                                                                                                         |
+| S-19 | `PATCH /api/runtime-profiles/:id` accepts `null` for the nullable sizing fields and `runtimeConnectionId`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | clearing a profile field                                                                                                                                             |
+| S-24 | `agent.message.delta` on a Claude run: enabling the Claude Agent SDK's `includePartialMessages` and mapping its `stream_event` messages onto the delta frame (today they reach `agent.native`)                                                                                                                                                                                                                                                                                                                                                                                            | assistant text arriving as deltas rather than whole messages on the reference engine                                                                                 |
+| S-23 | A policy request shape that carries an `engine` the _contracts_ do not publish, so a client can ask a deployment for an engine it has not shipped a contract arm for and be refused by the server                                                                                                                                                                                                                                                                                                                                                                                         | `aw agents create\|update --engine <unpublished id>` reaching `400 unsupported_engine` from the route instead of the CLI's own pre-flight against `GET /api/engines` |
 
 Also required, and already owned by the refactoring programme: RF-101 ✅ (principals), RF-103
 (server-owned share snapshots), RF-201 (agent archive),
 RF-202/203 (offboarding, invitation acceptance), RF-204 (typed credential ownership), RF-301
-(run leases/idempotency), RF-304 (durable storage operations).
+(run leases; its idempotency key landed as S-6, §5.12), RF-304 (durable storage operations).
 
 ---
 

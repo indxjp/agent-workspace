@@ -22,7 +22,6 @@ import {
   newObjectId,
   storageObjectName,
   streamToBytes,
-  type ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 import type { AgentResourceAssignments } from '@indx-workspace/contracts/agents';
@@ -50,6 +49,8 @@ import {
   skillInboxPath,
   type RunFileSource,
 } from './resource-loader';
+import { seedCatalogFile } from '@agent-workspace/core/db';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const OWNER_PRINCIPAL = '44444444-4444-4444-8444-444444444444';
@@ -288,6 +289,7 @@ describe('agent run resource loader', () => {
     });
     const ids = await seedFiles(storage, ['docs/', 'docs/ready.txt']);
     await catalog.reserve('docs/pending.txt', {
+      objectId: crypto.randomUUID(),
       ownerPrincipalId: OWNER_PRINCIPAL,
       sizeBytes: 10,
       contentType: 'text/plain',
@@ -314,10 +316,9 @@ describe('agent run resource loader', () => {
     const catalogs = createInMemoryCatalogStore();
     const storage = storageOver(catalogs);
     // A row from before the guard existed, so the service would refuse to write it today.
-    const row = await catalogs.forWorkspaceSync(WORKSPACE).putFile({
+    const row = await seedCatalogFile(catalogs.forWorkspaceSync(WORKSPACE), {
       path: '.ClAuDe/settings.json',
       kind: 'file',
-      storageKey: '.ClAuDe/settings.json',
       sizeBytes: 2,
       contentType: 'application/json',
       ownerPrincipalId: OWNER_PRINCIPAL,
@@ -1049,29 +1050,6 @@ const ctxOf = (member: Member): StorageContext => ({
   userId: member.userId,
 });
 
-/** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
-async function saveLegacyRow(
-  world: World,
-  legacy: ObjectStoreProvider,
-  path: string,
-  body: Uint8Array,
-  claimedSize: number = body.byteLength,
-) {
-  await legacy.forWorkspace(world.a.workspaceId).write(path, body, {});
-  const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-  const reserved = await catalog.reserve(path, {
-    ownerPrincipalId: world.a.principalId,
-    sizeBytes: claimedSize,
-    contentType: 'text/plain',
-  });
-  const confirmed = await catalog.confirm(reserved.row, {
-    sizeBytes: claimedSize,
-    contentType: 'text/plain',
-  });
-  if (confirmed === null) throw new Error('the legacy row did not confirm');
-  return confirmed.row;
-}
-
 function defineCatalogSuite(name: string, setup: () => Promise<World>) {
   describe(`agent run resource loader through the catalog service on the ${name}`, () => {
     // @story US-STO-06
@@ -1180,55 +1158,6 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
       expect(() => assertRunFilesFit(one.files, one.skills)).not.toThrow();
     });
 
-    // @story US-STO-05
-    it('[US-STO-05][api][sdk] a legacy grant and a new-naming grant are both delivered', async () => {
-      const world = await setup();
-      const legacy = createInMemoryObjectStoreProvider();
-      const storage = createStorageService({
-        catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
-        objects: createInMemoryObjectStore(),
-        legacy: { files: legacy },
-        log: noLog,
-      });
-      const saved = await storage.save(ctxOf(world.a), {
-        area: 'files',
-        path: 'reports/q3.txt',
-        maxBytes: 1024,
-        replace: true,
-        body: bytesToStream(bytesOf('new naming')),
-      });
-      if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
-      expect(saved.row.objectId).not.toBeNull();
-      const old = await saveLegacyRow(world, legacy, 'old/report.txt', bytesOf('old naming'));
-      const assignments: AgentResourceAssignments = {
-        files: [
-          { fileId: saved.row.id, access: 'read' },
-          { fileId: old.id, access: 'read' },
-        ],
-        skillIds: [],
-        connectorIds: [],
-        storageGrants: [],
-      };
-      const loader = createAgentRunResourceLoader({
-        catalog: world.catalogs,
-        storage,
-      });
-
-      const loaded = await loader.load(world.a.workspaceId, assignments);
-      expect(
-        await Promise.all(
-          loaded.files.map(async (file) => [file.path, await sourceText(loaded, file.path)]),
-        ),
-      ).toEqual([
-        ['old/report.txt', 'old naming'],
-        ['reports/q3.txt', 'new naming'],
-      ]);
-
-      await expect(loader.load(world.b.workspaceId, assignments)).rejects.toThrow(
-        /disappeared before the run was composed/u,
-      );
-    });
-
     /** A catalog service over `world`, and a ready `docs` folder row to grant. */
     async function folderWorld() {
       const world = await setup();
@@ -1237,14 +1166,12 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
       const storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
         objects,
-        legacy: { files: legacy },
         log: noLog,
       });
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      const folder = await catalog.putFile({
+      const folder = await seedCatalogFile(catalog, {
         path: 'docs',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: world.a.principalId,
@@ -1309,26 +1236,11 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
     });
 
     // @story US-STO-05
-    it('[US-STO-05][api][sdk] a folder grant delivers a legacy child with a row, not an object without one', async () => {
-      const { world, legacy, loadFolder } = await folderWorld();
-      await saveLegacyRow(world, legacy, 'docs/with-row.txt', bytesOf('with row'));
-      await legacy
-        .forWorkspace(world.a.workspaceId)
-        .write('docs/no-row.txt', bytesOf('no row'), {});
-
-      expect(await loadFolder()).toEqual([
-        ['docs', null],
-        ['docs/with-row.txt', 'with row'],
-      ]);
-    });
-
-    // @story US-STO-05
     it('[US-STO-05][api][sdk] a nested folder row under a folder grant is a directory entry', async () => {
       const { world, catalog, loadFolder } = await folderWorld();
-      await catalog.putFile({
+      await seedCatalogFile(catalog, {
         path: 'docs/nested',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: world.a.principalId,
@@ -1425,7 +1337,7 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
       const { world, saveRow, loader } = await skillWorld();
       await saveRow('.skills/demo/SKILL.md', '# demo from rows');
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      const skillRow = (await catalog.listFiles()).find(
+      const skillRow = (await listCatalogFiles(catalog)).find(
         (file) => file.path === '.skills/demo/SKILL.md',
       );
       if (skillRow === undefined) throw new Error('the skill row was not saved');
@@ -1493,7 +1405,7 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
       const { world, loader, saveRow } = await skillWorld();
       await saveRow('.skills/demo/SKILL.md', '# demo');
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      const folder = (await catalog.listFiles()).find((row) => row.path === '.skills');
+      const folder = (await listCatalogFiles(catalog)).find((row) => row.path === '.skills');
       if (folder === undefined) throw new Error('saving a skill row created no folder row');
 
       const loaded = await loader.load(world.a.workspaceId, {

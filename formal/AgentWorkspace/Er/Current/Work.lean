@@ -48,7 +48,7 @@ def workTables : List TableName :=
   [.projects, .sessions, .sessionTranscripts, .sessionMessages, .sessionStateStreams,
     .sessionStateEntries, .sessionStateBlobs, .runs, .runEvents, .runFeedback, .runTokens,
     .runUsageRecords, .auditEvents, .surfaceSessionKeys, .triggers, .triggerDeliveries,
-    .storageMigrationRuns, .builderToolCalls, .workspaceFeatures]
+    .storageMigrationRuns, .builderToolCalls, .workspaceFeatures, .webhooks, .webhookDeliveries]
 
 /-! ## Audit events -/
 
@@ -66,7 +66,7 @@ inductive AuditAction where
   | oauthGrantRevoked | fileUploaded | fileDownloaded | fileLinkCreated | fileMoved | fileDeleted
   | storageConnectionCreated | storageConnectionUpdated | storageConnectionDeleted
   | storageConnectionCredentialChanged | storageConnectionTested | storageConnectionWritten
-  | storageGrantChanged | workspaceFeaturesChanged
+  | storageGrantChanged | workspaceFeaturesChanged | userTokenExchanged
   deriving DecidableEq, Repr, Inhabited
 
 namespace AuditAction
@@ -115,6 +115,7 @@ def toWire : AuditAction → String
   | storageConnectionWritten => "storage-connection-written"
   | storageGrantChanged => "storage-grant-changed"
   | workspaceFeaturesChanged => "workspace-features-changed"
+  | userTokenExchanged => "user-token-exchanged"
 
 instance : WireEnum AuditAction where
   all := [userCreated, userDeleted, agentChanged, agentCreated, providerCredentialChanged,
@@ -126,7 +127,7 @@ instance : WireEnum AuditAction where
     oauthGrantRevoked, fileUploaded, fileDownloaded, fileLinkCreated, fileMoved, fileDeleted,
     storageConnectionCreated, storageConnectionUpdated, storageConnectionDeleted,
     storageConnectionCredentialChanged, storageConnectionTested, storageConnectionWritten,
-    storageGrantChanged, workspaceFeaturesChanged]
+    storageGrantChanged, workspaceFeaturesChanged, userTokenExchanged]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -337,6 +338,26 @@ def triggerKindShape (r : Row) : Bool :=
   | some k => (k == "webhook" && webhook) || (k == "schedule" && schedule)
   | none => webhook || schedule
 
+/-- `WEBHOOK_EVENT_TYPES`: the events a webhook subscribes to, one per terminal run status
+(ADR-SDK-18-N3-250 D3). -/
+@[aw_spec (ts := "packages/contracts/src/webhooks.ts#WEBHOOK_EVENT_TYPES")]
+def webhookEventWires : List String := ["run.completed", "run.failed", "run.cancelled"]
+
+/-- A character list cut at every comma, structurally, so the kernel can decide it. -/
+def splitOnComma : List Char → List (List Char)
+  | [] => [[]]
+  | ',' :: rest => [] :: splitOnComma rest
+  | c :: rest =>
+    match splitOnComma rest with
+    | [] => [[c]]
+    | w :: ws => (c :: w) :: ws
+
+/-- The items of a `text[]` cell as PostgreSQL renders it (`{a,b}`), for items that need no
+quoting: an event type is a dotted slug. -/
+def textArrayItems (cell : String) : List (List Char) :=
+  let inner := (cell.toList.drop 1).dropLast
+  if inner.isEmpty then [] else splitOnComma inner
+
 /-- The semantics of each check of the work tables that is not a closed set, by constraint name,
 reading a row under SQL's three-valued logic: a comparison with a `NULL` operand is `NULL`, and a
 check passes unless it is `false`. -/
@@ -347,7 +368,9 @@ check passes unless it is `false`. -/
   (ts := "packages/core/src/db/schema/run-feedback.ts#runFeedback")
   (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")
   (ts := "packages/core/src/db/schema/triggers.ts#triggers")
-  (ts := "packages/core/src/db/schema/trigger-deliveries.ts#triggerDeliveries")]
+  (ts := "packages/core/src/db/schema/trigger-deliveries.ts#triggerDeliveries")
+  (ts := "packages/core/src/db/schema/webhooks.ts#webhooks")
+  (ts := "packages/core/src/db/schema/webhook-deliveries.ts#webhookDeliveries")]
 def workCheck : String → Option (Row → Bool)
   | "projects_name_not_blank" => some fun r => (r.get "name").all hasNonSpace
   | "projects_default_model_pair" => some fun r =>
@@ -397,6 +420,16 @@ def workCheck : String → Option (Row → Bool)
   | "triggers_kind_shape" => some triggerKindShape
   | "trigger_deliveries_key_length" => some fun r =>
     (r.get "delivery_key").all fun k => 1 ≤ k.length && k.length ≤ 255
+  | "webhooks_url_length" => some fun r =>
+    (r.get "url").all fun u => 1 ≤ u.length && u.length ≤ 2048
+  | "webhooks_events_valid" => some fun r =>
+    (r.get "events").all fun e =>
+      let items := textArrayItems e
+      1 ≤ items.length && items.length ≤ 3 && items.all fun i => webhookEventWires.any (·.toList == i)
+  | "webhook_deliveries_event_type_valid" => some fun r =>
+    (r.get "event_type").all webhookEventWires.contains
+  | "webhook_deliveries_delivered_shape" => some fun r =>
+    (r.get "state").all fun s => (s == "delivered") == (r.get "delivered_at").isSome
   | _ => none
 
 /-- A check of a work table holds on a row: its semantics, or vacuously for a check this module
@@ -457,7 +490,14 @@ def workCheckSql : List (String × String) :=
     ("triggers_kind_shape",
       "(\"triggers\".\"kind\" = 'webhook' and \"triggers\".\"secret_hash\" is not null and \"triggers\".\"cron\" is null and \"triggers\".\"timezone\" is null)\n        or (\"triggers\".\"kind\" = 'schedule' and \"triggers\".\"secret_hash\" is null and \"triggers\".\"cron\" is not null and \"triggers\".\"timezone\" is not null)"),
     ("trigger_deliveries_key_length",
-      "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255")]
+      "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"),
+    ("webhooks_url_length", "char_length(\"webhooks\".\"url\") between 1 and 2048"),
+    ("webhooks_events_valid",
+      "cardinality(\"webhooks\".\"events\") between 1 and 3 and \"webhooks\".\"events\" <@ ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[]"),
+    ("webhook_deliveries_event_type_valid",
+      "\"webhook_deliveries\".\"event_type\" = any(ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[])"),
+    ("webhook_deliveries_delivered_shape",
+      "(\"webhook_deliveries\".\"state\" = 'delivered') = (\"webhook_deliveries\".\"delivered_at\" is not null)")]
 
 /-- The names of the other checks of table `t`. -/
 def otherChecks (t : TableName) : List String :=

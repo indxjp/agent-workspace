@@ -132,7 +132,7 @@ theorem closed_set_check_admits_only_its_values :
       checkHolds [⟨[("id", "af1")]⟩] ck = true := by
   decide +kernel
 
-/-- The composite unique targets: exactly these 18 tables declare a unique key over
+/-- The composite unique targets: exactly these 19 tables declare a unique key over
 `{id, workspace_id}`, the target of every tenant-paired reference into them. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem composite_unique_targets :
@@ -140,7 +140,8 @@ theorem composite_unique_targets :
         sameColumns u.columns ["id", "workspace_id"] && u.partialNullColumns.isEmpty &&
           u.partialNotNullColumns.isEmpty) =
       [.agentVersions, .agents, .apiKeys, .endpointClients, .files, .mcpServers, .memberships, .modelConnections, .projects, .runs,
-        .runtimeProfiles, .secrets, .sessions, .storageConnections, .shares, .skills, .triggers, .workspacePrincipals] := by
+        .runtimeProfiles, .secrets, .sessions, .storageConnections, .shares, .skills, .triggers, .workspacePrincipals,
+        .webhooks] := by
   decide +kernel
 
 /-- The five partial unique keys: at most one built-in agent per workspace and key (ordinary agents

@@ -201,9 +201,11 @@ defineObjectStoreContract('Google Cloud Storage (offline fake)', setup);
 // The real SDK adapter against fake-gcs-server over HTTP. The live acceptance fixture stays the
 // proof for Google Cloud Storage itself (the emulator does not verify signatures).
 //
-// Only the keys-and-tenants contract: fake-gcs-server 1.56.1 returns every common prefix on every
-// page of a delimited listing and does not count prefixes against maxResults (GCS counts items and
-// prefixes together), so the full contract's paging case fails on the emulator, not on the store.
+// Only the keys-and-tenants contract: on each page of a delimited listing fake-gcs-server 1.56.1
+// returns every common prefix at or after the page's start, uncapped, so a prefix that sorts after
+// the page's items comes back on every later page, and it does not count prefixes against
+// maxResults (GCS counts items and prefixes together). The full contract's paging case therefore
+// fails on the emulator, not on the store.
 // The read and write paths over this emulator are exercised by tests/load/object-store-round-trip.
 const gcsEndpoint = process.env['TEST_GCS_ENDPOINT']?.trim() ?? '';
 if (gcsEndpoint !== '') {

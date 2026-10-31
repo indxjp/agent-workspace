@@ -7,7 +7,11 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { resolveMigrationsDir, runMigrations } from '../migrate.js';
-import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import {
+  createIsolatedTestDatabase,
+  runMigrationsPastStorageProof,
+  type IsolatedTestDatabase,
+} from './testing.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -183,7 +187,7 @@ describe.skipIf(!hasDatabase)('0020 workspace principal backfill', () => {
     } finally {
       await client.end();
     }
-    await runMigrations({ url: isolated.url, maxConnections: 4 }, migrationsDir);
+    await runMigrationsPastStorageProof(isolated.url, migrationsDir);
 
     anomalous = await createIsolatedTestDatabase(
       'aw_principal_anomaly',

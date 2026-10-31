@@ -279,6 +279,35 @@ describe('start.environment.policy (C13, issue #524)', () => {
   });
 });
 
+describe('start.environment.features (ADR-0160 D5, issue #1495)', () => {
+  it('parses a start message with no features, as before', () => {
+    expect(LocalRuntimeStartMessageSchema.parse(start)).toEqual(start);
+  });
+
+  it('parses a start message carrying the project features, in order', () => {
+    const message = {
+      ...start,
+      environment: { ...start.environment, features: ['files', 'chat'] },
+    };
+    expect(LocalRuntimeStartMessageSchema.parse(message)).toEqual(message);
+  });
+
+  it.each<[string, unknown]>([
+    ['an empty list', []],
+    ['a repeated feature', ['chat', 'chat']],
+    ['a feature without its dependency', ['surfaces']],
+    ['an unknown feature', ['nope']],
+    ['a comma-separated string', 'chat,files'],
+  ])('refuses %s under environment.features', (_name, features) => {
+    const message = { ...start, environment: { ...start.environment, features } };
+    const result = LocalRuntimeStartMessageSchema.safeParse(message);
+    expect(result.success).toBe(false);
+    for (const issue of result.error?.issues ?? []) {
+      expect(issue.path.slice(0, 2)).toEqual(['environment', 'features']);
+    }
+  });
+});
+
 describe('start.environment.modelSecrets (issue #661)', () => {
   const withSecrets = (modelSecrets: unknown): Record<string, unknown> => ({
     ...start,

@@ -401,6 +401,66 @@ describe.skipIf(!hasDatabase)('AgentStorePort on PostgreSQL', () => {
     error.mockRestore();
   });
 
+  it('refuses a save as agent_archived when an archive commits after its version is written, and moves no pointer', async () => {
+    const scopes = createDatabaseWorkspaceScopeResolver(isolated.db);
+    const real = createRepositoryAgentVersionStoreProvider({
+      repositories: createDatabaseAgentVersionRepositoryProvider(isolated.db),
+      evaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(isolated.db),
+      scopes,
+    });
+    let archiveOnPointer: string | null = null;
+    // Archives the agent between the save's pre-lock reads and the locked pointer move.
+    const racing: AgentVersionStoreProvider = {
+      async forWorkspace(id) {
+        const store = await real.forWorkspace(id);
+        if (store === null) return null;
+        return {
+          ...store,
+          applyAndPoint: async (agentId, input) => {
+            if (agentId === archiveOnPointer) {
+              await isolated.db
+                .update(agentRows)
+                .set({ archivedAt: new Date() })
+                .where(eq(agentRows.id, agentId));
+            }
+            return store.applyAndPoint(agentId, input);
+          },
+        };
+      },
+    };
+    const port = createAgentStore({
+      agents: createRepositoryAgentStoreProvider({
+        repositories: createDatabaseAgentRepositoryProvider(isolated.db),
+        scopes,
+      }),
+      versions: racing,
+      pipeline: () => ({}),
+      actorLabel: (_workspaceId, id) => Promise.resolve(id),
+    });
+    const ctx = callContextOf(workspaceId, 'builder', principalId, userId);
+    const made = await port.save(ctx, { body: draftBody('racing') });
+    if (!made.ok) throw new Error(`the first save failed: ${made.code}`);
+    const pointers = () =>
+      isolated.db
+        .select({ versionId: agentVersionPointers.versionId })
+        .from(agentVersionPointers)
+        .where(eq(agentVersionPointers.agentId, made.agentId));
+    const pointersBefore = await pointers();
+
+    archiveOnPointer = made.agentId;
+    const result = await port.save(ctx, {
+      agentId: made.agentId,
+      baseVersion: made.version,
+      body: draftBody('racing, edited'),
+    });
+
+    expect(result).toMatchObject({ ok: false, code: 'agent_archived' });
+    expect(await pointers()).toEqual(pointersBefore);
+    const [row] = await isolated.db.select().from(agentRows).where(eq(agentRows.id, made.agentId));
+    // The row is `local`'s working copy: the refused move must not have renamed it.
+    expect(row?.name).toBe('racing');
+  });
+
   it("writes the creating agent, its version and the run on an agent-made agent, and nothing on a person's", async () => {
     const { port, ctx } = postgresFixture();
     const made = await port.save(ctx, { body: draftBody('creator') });

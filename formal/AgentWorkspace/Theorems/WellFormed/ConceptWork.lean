@@ -97,13 +97,13 @@ theorem every_work_check_is_refined :
       workCheckSql.map Prod.fst = workTables.flatMap otherChecks := by
   decide +kernel
 
-/-- The work tables carry 25 checks that are not closed sets and 20 closed-set checks. -/
+/-- The work tables carry 29 checks that are not closed sets and 21 closed-set checks. -/
 @[aw_spec (tier := T0)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
 theorem work_check_counts :
-    (workTables.flatMap otherChecks).length = 25 ∧
-      (workTables.flatMap fun t => (catalogue t).checks).length = 45 := by
+    (workTables.flatMap otherChecks).length = 29 ∧
+      (workTables.flatMap fun t => (catalogue t).checks).length = 50 := by
   decide +kernel
 
 /-! ## Foreign keys and their cardinality (generated) -/
@@ -161,13 +161,13 @@ end Generator
 
 aw_work_fk_cardinality_theorems
 
-/-- The work tables declare 50 foreign keys: 36 whose every column is `NOT NULL` and 14 with a
+/-- The work tables declare 54 foreign keys: 40 whose every column is `NOT NULL` and 14 with a
 nullable column. -/
 @[aw_spec (tier := T0)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem work_foreign_key_counts :
-    workForeignKeys.length = 50 ∧
-      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 36 := by
+    workForeignKeys.length = 54 ∧
+      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 40 := by
   decide +kernel
 
 /-! ## Concept rows -/
@@ -641,7 +641,7 @@ def stateBlobCells : List (String × Option String) :=
   [("workspace_id", some "w1"), ("session_id", some "s1"),
    ("engine", some "claude-agent-sdk"), ("blob_key", some "state.tar"),
    ("storage_key", some "session-state/s1/claude-agent-sdk/state.tar"),
-   ("status", some "ready"), ("size_bytes", some "3"), ("sha256", some "ab12"),
+   ("object_id", some "o3"), ("status", some "ready"), ("size_bytes", some "3"), ("sha256", some "ab12"),
    ("created_at", some (instant 3)), ("updated_at", some (instant 3))]
 
 /-- The `er-core` witness (two workspaces, a member, a principal, a connection, an agent) with a
@@ -701,6 +701,17 @@ def state : State
   -- The workspace has switched the surfaces feature off (ADR-0160 D6).
   | .workspaceFeatures =>
     [ofCells [("id", some "wf1"), ("workspace_id", some "w1"), ("feature", some "surfaces"),
+      ("created_at", some (instant 4))]]
+  -- A webhook subscribed to two outcomes, and the delivery the run's stop owes it
+  -- (ADR-SDK-18-N3-250 D3, D4).
+  | .webhooks =>
+    [ofCells [("id", some "wh1"), ("workspace_id", some "w1"),
+      ("url", some "https://hooks.example.com/"), ("events", some "{run.completed,run.failed}"),
+      ("created_at", some (instant 4))]]
+  | .webhookDeliveries =>
+    [ofCells [("id", some "wd1"), ("workspace_id", some "w1"), ("webhook_id", some "wh1"),
+      ("run_id", some "r1"), ("event_type", some "run.completed"), ("state", some "pending"),
+      ("attempts", some "0"), ("next_attempt_at", some (instant 4)),
       ("created_at", some (instant 4))]]
   | .triggerDeliveries =>
     [ofCells [("id", some "td1"), ("workspace_id", some "w1"), ("trigger_id", some "tr1"),

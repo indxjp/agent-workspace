@@ -15,6 +15,7 @@ import { conferredBy } from '../../rbac/conferral';
 import { createMemoryDirectory } from '../../rbac/memory-directory';
 import type { RunTokenDatabase } from '../../gateway/run-token-verifier';
 import type { AgentRecord } from '../../agents/contract';
+import { log } from '../../telemetry/logger';
 import { createAuthorization } from '../adapters/authorization/production';
 import { draftBody } from '../adapters/checker/checker.contract';
 import { toCallContext } from './call-context';
@@ -390,6 +391,69 @@ describe('verifyRunCaller', () => {
         ),
       ).toEqual(refused);
     });
+  });
+
+  it('fails closed and logs only the error class when a dependency throws', async () => {
+    const s = setup();
+    const error = vi.spyOn(log, 'error').mockImplementation(() => undefined);
+    const token = await s.issue({ caller: { sub: MEMBER, principalKind: 'membership' } });
+    class DirectoryUnavailableError extends Error {
+      override name = 'DirectoryUnavailableError';
+    }
+    const result = await verifyRunCaller(
+      bearer(token),
+      {
+        ...s.deps,
+        directory: {
+          forWorkspace: () => {
+            throw new DirectoryUnavailableError(`select * from memberships where tok=${token}`);
+          },
+        },
+      },
+      mcpPost(),
+    );
+    expect(result).toEqual({ ok: false, code: 'not_permitted', reads: false });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0]).toEqual([
+      'builder run caller verification failed',
+      { op: 'builder.transport', errorName: 'DirectoryUnavailableError' },
+    ]);
+    expect(JSON.stringify(error.mock.calls)).not.toContain(token);
+    expect(JSON.stringify(error.mock.calls)).not.toContain('memberships');
+  });
+
+  it('does not log a refusal that is an answer rather than a failure', async () => {
+    const s = setup();
+    const error = vi.spyOn(log, 'error').mockImplementation(() => undefined);
+    const token = await s.issue({
+      caller: { sub: 'someone-removed', principalKind: 'membership' },
+    });
+    expect(await verifyRunCaller(bearer(token), s.deps, mcpPost())).toMatchObject({
+      code: 'no_caller',
+    });
+    expect(await verifyRunCaller('Bearer nonsense', s.deps, mcpPost())).toMatchObject({
+      code: 'not_permitted',
+    });
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('looks the caller up by principal and never reads the member list', async () => {
+    const s = setup();
+    const token = await s.issue({ caller: { sub: MEMBER, principalKind: 'membership' } });
+    const workspace = s.directory.forWorkspace(WORKSPACE);
+    const list = vi.fn(() => Promise.reject(new Error('the member list must not be scanned')));
+    const find = vi.spyOn(workspace, 'findMembershipByPrincipal');
+    const result = await verifyRunCaller(
+      bearer(token),
+      {
+        ...s.deps,
+        directory: { forWorkspace: () => ({ ...workspace, listMemberships: list }) },
+      },
+      mcpPost(),
+    );
+    expect(result).toMatchObject({ ok: true, caller: { principalId: MEMBER, role: 'builder' } });
+    expect(find).toHaveBeenCalledExactlyOnceWith(MEMBER);
+    expect(list).not.toHaveBeenCalled();
   });
 
   it('puts no token, subject or error text in a result or a log line', async () => {

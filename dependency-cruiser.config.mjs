@@ -422,6 +422,21 @@ export default {
       to: { path: '^packages/core/src/storage/(?:s3-store|gcs-store|azure-blob-store)\\.ts$' },
     },
     {
+      name: 'only-the-catalog-service-reaches-object-storage',
+      severity: 'error',
+      comment:
+        'The storage design, §07 rule 3: only the catalog service may save files. A web server domain reaches object storage through `apps/web/server/storage/` (the catalog service and the names it re-exports), never `packages/core/src/storage` itself; a type-only import of `ObjectStore` counts, because that is how a store is passed around. The composition root wires the stores, and tests may import them. `tool-bundles/` is a named exception: tool bundles are not workspace files (design §07 rule 3 is about files). The pure helpers (content type, key safety, object name) do no I/O and stay importable. Zero known violations, ceiling 0.',
+      from: {
+        path: '^apps/web/server/',
+        pathNot:
+          '^apps/web/server/(?:storage|composition|tool-bundles)/|\\.(?:test|spec)\\.[cm]?[jt]sx?$',
+      },
+      to: {
+        path: '^packages/core/src/storage/',
+        pathNot: '^packages/core/src/storage/(?:content-type|key-safety|object-name)\\.ts$',
+      },
+    },
+    {
       name: 'production-does-not-import-tests',
       severity: 'error',
       from: { path: '^(apps|packages)/', pathNot: '\\.(?:test|spec)\\.[cm]?[jt]sx?$' },

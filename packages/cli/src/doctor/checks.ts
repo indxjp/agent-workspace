@@ -39,8 +39,7 @@ import {
   type ProfileProbes,
 } from '../validate.ts';
 
-export type DoctorCheckName =
-  'profile' | 'storage' | 'stores' | 'storage-layout' | 'prerequisites' | 'version-skew';
+export type DoctorCheckName = 'profile' | 'storage' | 'stores' | 'prerequisites' | 'version-skew';
 
 type DoctorStatus = 'pass' | 'warn' | 'fail';
 

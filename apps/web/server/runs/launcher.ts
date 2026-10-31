@@ -24,6 +24,7 @@ import {
 } from '@indx-workspace/contracts/runs';
 import { z } from 'zod';
 
+import { CANCELLATION_WATCH_INTERVAL_MS, watchRunForCancellation } from './cancellation-watch';
 import { registerLiveRun, releaseLiveRun, signalRuntimeInterrupt } from './interrupt';
 import { relayRunnerStream, type RelayOutcome } from './relay';
 import { RUN_STATUS_EVENT, RUN_WARNING_EVENT } from './sse';
@@ -233,6 +234,11 @@ export interface RunnerLauncherOptions {
     readonly initialDelayMs?: number;
     readonly maxDelayMs?: number;
   };
+  /**
+   * How often the launch reads its run's status to learn of a stop written by another replica
+   * (ADR-0151-FU-1440 D1). `CANCELLATION_WATCH_INTERVAL_MS` unless finite and positive; for tests.
+   */
+  readonly cancellationWatchIntervalMs?: number;
 }
 
 export interface RuntimeWorkspaceLifecycle {
@@ -818,6 +824,8 @@ interface RunPostAttempts {
   readonly connectTimeoutMs: number;
   readonly lifetime: AbortSignal;
   readonly lifetimeExpired: () => boolean;
+  /** Whether the cancellation watch saw the run stopped by someone else and aborted `lifetime`. */
+  readonly stoppedElsewhere: () => boolean;
   readonly lifetimeFailure: string;
   readonly retry: CapacityRetry;
   readonly stillRunning: () => Promise<boolean>;
@@ -858,6 +866,9 @@ async function postRunAwaitingCapacity(attempts: RunPostAttempts): Promise<RunPo
       });
       refusal = await readCapacityRefusal(response);
     } catch (cause) {
+      if (attempts.stoppedElsewhere()) {
+        return { kind: 'stopped', status: 'cancelled', error: STOPPED_WHILE_LIVE };
+      }
       const error = attempts.lifetimeExpired()
         ? attempts.lifetimeFailure
         : publicRunFailure(cause, {
@@ -929,6 +940,50 @@ async function postRunAwaitingCapacity(attempts: RunPostAttempts): Promise<RunPo
  */
 const INTERRUPTED_DURING_CAPACITY_WAIT =
   'the run was interrupted while it waited for runtime capacity';
+
+/**
+ * The error a launch concludes with when its cancellation watch saw the run stopped by someone
+ * else (an interrupt on any replica, the stale sweep, an approval expiry). `finish` is
+ * first-call-wins, so the stored status and error stay that writer's; this names the telemetry's.
+ */
+const STOPPED_WHILE_LIVE = 'the run was stopped while it was live';
+
+interface HeldRunWatch {
+  /** Aborts once the watch has seen the run stopped by someone else, and stopped its runtime. */
+  readonly signal: AbortSignal;
+  /** Stop watching; called before the launch writes its own stop. Idempotent. */
+  readonly stop: () => void;
+}
+
+/**
+ * Watch a run this launch holds, from `markRunning` to its conclusion (ADR-0151-FU-1440 D1, issue
+ * #261). A stop committed by another writer aborts the storage write-back (`interrupted`) and the
+ * run's fetch and relay (the returned signal), and raises the runtime's private interrupt. When an
+ * interrupt served by this process already did that through the live-run registry, `interrupted`
+ * is aborted and the watch does nothing more: `interrupted` is the once-per-launch flag.
+ */
+function watchHeldRun(
+  store: RunStore,
+  runId: string,
+  intervalMs: number,
+  interrupted: AbortController,
+  signalRuntime: () => Promise<void>,
+): HeldRunWatch {
+  const stoppedElsewhere = new AbortController();
+  const stop = watchRunForCancellation({
+    runId,
+    readStatus: async (id) => (await store.get(id))?.status ?? null,
+    intervalMs,
+    onStopped: () => {
+      if (interrupted.signal.aborted) return;
+      const reason = new Error(STOPPED_WHILE_LIVE);
+      interrupted.abort(reason);
+      stoppedElsewhere.abort(reason);
+      void signalRuntime();
+    },
+  });
+  return { signal: stoppedElsewhere.signal, stop };
+}
 
 /**
  * The secret values a preparation failure's log line is redacted of, or `null` when they are
@@ -1167,6 +1222,45 @@ async function concludeRelayed(
 }
 
 /**
+ * Conclude a relayed run, once its watch has stopped: `cancelled` when the watch saw it stopped by
+ * someone else while live (not a lifetime or relay failure), `failed` when its lifetime ran out,
+ * and otherwise as the relay's outcome says.
+ */
+async function concludeHeldRun(
+  store: RunStore,
+  options: RunnerLauncherOptions,
+  context: LaunchContext,
+  run: {
+    readonly outcome: RelayOutcome;
+    readonly persistenceFailure: string | null;
+    readonly stoppedElsewhere: boolean;
+    /** The lifetime's failure text when the lifetime expired, otherwise `null`. */
+    readonly lifetimeFailure: string | null;
+    readonly startedAtMs: number;
+    readonly target: RuntimeLaunchTarget | undefined;
+  },
+): Promise<void> {
+  const { persistenceFailure, startedAtMs, target } = run;
+  if (run.stoppedElsewhere) {
+    await conclude(store, context, 'cancelled', STOPPED_WHILE_LIVE, startedAtMs, options, target);
+  } else if (run.lifetimeFailure !== null) {
+    const reason = run.lifetimeFailure;
+    const error = persistenceFailure === null ? reason : `${reason} ${persistenceFailure}`;
+    await conclude(store, context, 'failed', error, startedAtMs, options, target);
+  } else {
+    await concludeRelayed(
+      store,
+      options,
+      context,
+      run.outcome,
+      persistenceFailure,
+      startedAtMs,
+      target,
+    );
+  }
+}
+
+/**
  * Build a `launch` for {@link import('./environment.js').RunApiEnvironment}.
  *
  * Fire-and-forget by contract: it returns as soon as the run is queued, and every outcome —
@@ -1213,6 +1307,10 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
     ),
     maxDelayMs: positiveOr(options.capacityRetry?.maxDelayMs, DEFAULT_CAPACITY_MAX_DELAY_MS),
   };
+  const cancellationWatchIntervalMs = positiveOr(
+    options.cancellationWatchIntervalMs,
+    CANCELLATION_WATCH_INTERVAL_MS,
+  );
 
   return (context: LaunchContext): void => {
     const work = (async (): Promise<void> => {
@@ -1299,6 +1397,7 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
         headers: runtimeHeaders,
         onInterrupt: () => interrupted.abort(new Error('the run was interrupted')),
       });
+      let stopWatch: () => void = () => undefined;
       try {
         // `markRunning` moves a run only out of `queued`, and reports whether *this* call is what
         // moved it. `false` here means something else already took the run out of `queued`, and on
@@ -1315,6 +1414,13 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
           await abandonInterruptedLaunch(store, options, context, startedAtMs, target);
           return;
         }
+        // From here until this launch writes its own stop, a stop committed by anyone else (an
+        // interrupt served by a replica that does not hold this run) stops the runtime. The
+        // `queued` window before this point is `markRunning`'s, above.
+        const watch = watchHeldRun(store, runId, cancellationWatchIntervalMs, interrupted, () =>
+          signalRuntimeInterrupt(base, runId, runtimeHeaders, doFetch),
+        );
+        stopWatch = watch.stop;
         await store.appendPlatformEvent(runId, {
           type: RUN_STATUS_EVENT,
           data: { status: 'running', error: null },
@@ -1356,8 +1462,10 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
             body: JSON.stringify(body),
           },
           connectTimeoutMs: timeoutMs,
-          lifetime: lifetime.signal,
+          // The stream's fetch carries this signal into its body, so the watch's abort ends the relay.
+          lifetime: AbortSignal.any([lifetime.signal, watch.signal]),
           lifetimeExpired: () => lifetimeExpired,
+          stoppedElsewhere: () => watch.signal.aborted,
           lifetimeFailure,
           retry: capacityRetry,
           stillRunning: async () => (await store.get(runId))?.status === 'running',
@@ -1366,6 +1474,7 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
         if (posted.kind === 'stopped') {
           // Nothing was relayed, so there are no outputs to collect.
           if (lifetimeTimer !== null) clearTimeout(lifetimeTimer);
+          watch.stop();
           await conclude(store, context, posted.status, posted.error, startedAtMs, options, target);
           return;
         }
@@ -1410,29 +1519,18 @@ export function createRunnerLauncher(options: RunnerLauncherOptions): (c: Launch
               ]),
           );
         }
-        if (lifetimeExpired) {
-          const reason = lifetimeFailure;
-          await conclude(
-            store,
-            context,
-            'failed',
-            persistenceFailure === null ? reason : `${reason} ${persistenceFailure}`,
-            startedAtMs,
-            options,
-            target,
-          );
-        } else {
-          await concludeRelayed(
-            store,
-            options,
-            context,
-            outcome,
-            persistenceFailure,
-            startedAtMs,
-            target,
-          );
-        }
+        // This launch writes its own stop next, which the watch must not take for someone else's.
+        watch.stop();
+        await concludeHeldRun(store, options, context, {
+          outcome,
+          persistenceFailure,
+          stoppedElsewhere: watch.signal.aborted,
+          lifetimeFailure: lifetimeExpired ? lifetimeFailure : null,
+          startedAtMs,
+          target,
+        });
       } finally {
+        stopWatch();
         releaseLiveRun(runId);
       }
     })()

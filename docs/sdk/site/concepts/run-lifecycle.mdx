@@ -206,8 +206,9 @@ Two frames need care, because their names are easy to misread:
 Every durable frame's `id:` is a resume cursor. Reconnect by sending it back as the `Last-Event-ID`
 request header (or the SDK's `after` option) — `aw.runs.events(id, { after: lastEventId })`.
 `aw.runs.follow(id)` does this automatically whenever the underlying connection drops before
-`done`: it reconnects up to `maxReconnects` times (default 5), waiting `reconnectDelayMs` between
-attempts (default 3000, matching the server's own SSE `retry:` value). `follow` does **not**
+`done`: it reconnects up to `maxReconnects` times in a row (default 5), backing off from the
+stream's own SSE `retry:` value (or `reconnectDelayMs`, default 3000, before one arrives) up to
+`maxReconnectDelayMs` (default 30000), each pause jittered. `follow` does **not**
 reconnect on a `ContractViolationError` (the server broke its own contract; retrying will not fix
 that) or on an abort of the caller's own `signal` — only a dropped connection is treated as
 transient. See [Streaming](/guides/streaming) for the full consumption pattern and

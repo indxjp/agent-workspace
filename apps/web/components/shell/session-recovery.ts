@@ -6,11 +6,11 @@
  * once (the card's verifier attack 2: "not left on a page whose data it may no longer read").
  *
  * `apps/web/proxy.ts`'s page-surface gate only verifies the session token's signature and expiry;
- * it never re-checks membership. `resolveIdentity` (`layout.tsx`) does, by re-reading
- * `membershipsForUser` fresh — but it returns `null` for two different reasons that must not be
- * treated alike: the caller's membership in the session's own workspace is genuinely gone (a
- * removal, or the session naming a workspace that no longer exists), or the RBAC runtime itself is
- * not wired at all — `apps/web/server/rbac/runtime.ts`'s own declared gap, belonging to a
+ * it never re-checks membership. `resolveIdentity` (`server/features/console.ts`) does, by
+ * re-reading `membershipsForUser` fresh — but it returns `null` for two different reasons that
+ * must not be treated alike: the caller's membership in the session's own workspace is genuinely
+ * gone (a removal, or the session naming a workspace that no longer exists), or the RBAC runtime
+ * itself is not wired at all — `apps/web/server/rbac/runtime.ts`'s own declared gap, belonging to a
  * different task. Redirecting for the second reason would turn an unrelated, already-declared gap
  * into every shell page redirecting in a loop; this function is the positive check (ADR-0015) that
  * tells the two apart before recommending either.

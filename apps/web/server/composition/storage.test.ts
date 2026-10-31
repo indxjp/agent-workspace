@@ -42,12 +42,7 @@ import { Principal } from '../rbac/principal';
 import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { createStorageService } from '../storage/service';
 import { purgeSessionAttachments } from '../surfaces/public/attachments';
-import {
-  installFilesApi,
-  installSkillsApi,
-  sessionStateBlobStore,
-  storageReadinessFailure,
-} from './storage';
+import { installFilesApi, installSkillsApi, storageReadinessFailure } from './storage';
 
 const scopes: DatabaseRoot['scopes'] = {
   forWorkspaceId: () => Promise.resolve(null),
@@ -135,11 +130,9 @@ describe('cloud object-store composition', () => {
       prefix: '',
     };
     const options = { managedIdentityClientId: '11111111-1111-1111-1111-111111111111' };
-    expect(injected.open).toHaveBeenCalledTimes(4);
+    expect(injected.open).toHaveBeenCalledTimes(2);
     expect(injected.open).toHaveBeenNthCalledWith(1, azure, 'files', options);
     expect(injected.open).toHaveBeenNthCalledWith(2, azure, 'skills', options);
-    expect(injected.open).toHaveBeenNthCalledWith(3, azure, 'session-state', options);
-    expect(injected.open).toHaveBeenNthCalledWith(4, azure, 'skills', options);
     expect(files.kind).toBe('serving');
     expect(skills.kind).toBe('serving');
   });
@@ -209,9 +202,8 @@ describe('cloud object-store composition', () => {
 
     await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     await installSkillsApi(resolveWorkspace, scopes, catalog);
-    await sessionStateBlobStore();
 
-    for (const area of ['files', 'skills', 'session-state']) {
+    for (const area of ['files', 'skills']) {
       expect(injected.open).toHaveBeenCalledWith(
         expect.objectContaining({ kind: 's3', endpoint: 'http://seaweedfs.example.test' }),
         area,
@@ -275,25 +267,8 @@ describe('cloud object-store composition', () => {
     expect(skills).toEqual({ kind: 'unavailable' });
   });
 
-  it('sessionStateBlobStore uses the session-state prefix on its bucket path', async () => {
-    setStorageUrl('s3://workspace-objects');
-
-    await expect(sessionStateBlobStore()).resolves.not.toBeNull();
-
-    // The old store never writes, so its log line must not claim blobs are installed.
-    expect(logInfo).toHaveBeenCalledWith(
-      expect.stringContaining('session-state old blob store opened for reads and purges'),
-    );
-    expect(logInfo).not.toHaveBeenCalledWith(expect.stringContaining('blobs installed'));
-    expect(injected.open).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 's3', bucket: 'workspace-objects' }),
-      'session-state',
-      expect.anything(),
-    );
-  });
-
   // @story US-STO-10
-  it('[US-STO-10][api][cli] an old setting alone installs nothing: no files, skills or session state', async () => {
+  it('[US-STO-10][api][cli] an old setting alone installs nothing: no files or skills', async () => {
     clearStorageEnvironment();
     vi.stubEnv('OBJECT_STORAGE_BACKEND', 's3');
     vi.stubEnv('OBJECT_STORAGE_BUCKET', 'workspace-objects');
@@ -302,12 +277,10 @@ describe('cloud object-store composition', () => {
 
     const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     const skills = await installSkillsApi(resolveWorkspace, scopes, catalog);
-    const sessions = await sessionStateBlobStore();
 
     expect(injected.open).not.toHaveBeenCalled();
     expect(files).toEqual({ kind: 'unavailable' });
     expect(skills).toEqual({ kind: 'unavailable' });
-    expect(sessions).toBeNull();
   });
 });
 
@@ -330,7 +303,7 @@ function clearStorageEnvironment(): void {
 
 describe('AW_STORAGE_URL composition', () => {
   // @story US-STO-10
-  it('[US-STO-10][api][cli] AW_STORAGE_URL alone installs files, skills and session-state', async () => {
+  it('[US-STO-10][api][cli] AW_STORAGE_URL alone installs files and skills', async () => {
     clearStorageEnvironment();
     vi.stubEnv('AWS_ACCESS_KEY_ID', 'access-key');
     vi.stubEnv('AWS_SECRET_ACCESS_KEY', 'secret-key');
@@ -339,7 +312,6 @@ describe('AW_STORAGE_URL composition', () => {
 
     const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     const skills = await installSkillsApi(resolveWorkspace, scopes, catalog);
-    const sessions = await sessionStateBlobStore();
 
     const bucket = {
       kind: 's3',
@@ -353,23 +325,19 @@ describe('AW_STORAGE_URL composition', () => {
       credentials: { accessKeyId: 'access-key', secretAccessKey: 'secret-key' },
       createBucketIfMissing: false,
     };
-    for (const area of ['files', 'skills', 'session-state']) {
+    for (const area of ['files', 'skills']) {
       expect(injected.open).toHaveBeenCalledWith(bucket, area, options);
     }
-    expect([files.kind, skills.kind, sessions === null]).toEqual(['serving', 'serving', false]);
+    expect([files.kind, skills.kind]).toEqual(['serving', 'serving']);
 
     injected.open.mockClear();
     vi.stubEnv('AW_STORAGE_URL', 'file:///srv/aw');
     await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     await installSkillsApi(resolveWorkspace, scopes, catalog);
-    await sessionStateBlobStore();
 
     expect(injected.open.mock.calls.map(([location, area]) => [location, area])).toEqual([
       [{ kind: 'file', root: '/srv/aw/files' }, 'files'],
       [{ kind: 'file', root: '/srv/aw/skills' }, 'skills'],
-      [{ kind: 'file', root: '/srv/aw/sessions' }, 'session-state'],
-      [{ kind: 'file', root: '/srv/aw/skills' }, 'skills'],
-      [{ kind: 'file', root: '/srv/aw/sessions' }, 'session-state'],
     ]);
   });
 
@@ -381,9 +349,8 @@ describe('AW_STORAGE_URL composition', () => {
 
     const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     const skills = await installSkillsApi(resolveWorkspace, scopes, catalog);
-    const sessions = await sessionStateBlobStore();
 
-    expect([files.kind, skills.kind, sessions === null]).toEqual(['serving', 'serving', false]);
+    expect([files.kind, skills.kind]).toEqual(['serving', 'serving']);
     expect(logError).not.toHaveBeenCalled();
     expect(injected.open.mock.calls.map(([location]) => location)).not.toContainEqual({
       kind: 'file',
@@ -413,7 +380,6 @@ describe('AW_STORAGE_URL composition', () => {
     const run = async (): Promise<void> => {
       await fresh.installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
       await fresh.installSkillsApi(resolveWorkspace, scopes, catalog);
-      await fresh.sessionStateBlobStore();
     };
 
     clearStorageEnvironment();
@@ -427,13 +393,13 @@ describe('AW_STORAGE_URL composition', () => {
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       '[compose] storage_setting_ignored: ignoring OBJECT_STORAGE_BUCKET, OBJECT_STORAGE_ENDPOINT; AW_STORAGE_URL alone says where files, skills and session state are kept (see .env.example). With AW_STORAGE_URL unset, nothing is read from the old location; files, skills and session state are off until AW_STORAGE_URL is set.',
     );
-    expect(error).toHaveBeenCalledTimes(3);
+    expect(error).toHaveBeenCalledTimes(2);
 
     vi.stubEnv('AW_STORAGE_URL', `s3://other-bucket?endpoint=http://${secrets.urlHost}`);
     vi.stubEnv('AW_FILE_STORAGE_ROOT', secrets.root);
     await run();
     expect(warn).toHaveBeenCalledTimes(2);
-    expect(error).toHaveBeenCalledTimes(3);
+    expect(error).toHaveBeenCalledTimes(2);
 
     for (const value of Object.values(secrets)) expect(logged()).not.toContain(value);
   });
@@ -459,7 +425,6 @@ describe('AW_STORAGE_CREATE_BUCKET beside another scheme, and a refused URL', ()
 
     const files = await storage.installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     await storage.installSkillsApi(resolveWorkspace, scopes, catalog);
-    await storage.sessionStateBlobStore();
 
     expect(files.kind).toBe('serving');
     expect(warn).toHaveBeenCalledExactlyOnceWith(
@@ -494,7 +459,6 @@ describe('storage service composition', () => {
 
     const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     await installSkillsApi(resolveWorkspace, scopes, catalog);
-    await sessionStateBlobStore();
 
     if (files.kind !== 'serving') throw new Error('the files API did not install');
     expect(files.runtime.storage).toBeDefined();
@@ -517,7 +481,7 @@ describe('storage service composition', () => {
 
 describe('skills area opened once', () => {
   // @story US-STO-08
-  it('[US-STO-08][unit][sdk] the skills runtime reuses the skills store the storage service opened', async () => {
+  it('[US-STO-08][unit][sdk] the skills area is opened once, by the skills runtime', async () => {
     setStorageUrl('azblob://account/workspace-objects');
 
     const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
@@ -525,11 +489,7 @@ describe('skills area opened once', () => {
     const skills = await installSkillsApi(resolveWorkspace, scopes, catalog, files.runtime.storage);
 
     expect(skills.kind).toBe('serving');
-    expect(injected.open.mock.calls.map(([, area]) => area)).toEqual([
-      'files',
-      'skills',
-      'session-state',
-    ]);
+    expect(injected.open.mock.calls.map(([, area]) => area)).toEqual(['files', 'skills']);
   });
 });
 
@@ -575,13 +535,8 @@ describe('storage service composition edge cases', () => {
 
     const files = await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts);
     const skills = await installSkillsApi(resolveWorkspace, scopes, catalog);
-    const sessions = await sessionStateBlobStore();
 
-    expect([files, skills, sessions]).toEqual([
-      { kind: 'unavailable' },
-      { kind: 'unavailable' },
-      null,
-    ]);
+    expect([files, skills]).toEqual([{ kind: 'unavailable' }, { kind: 'unavailable' }]);
     expect(injected.open).not.toHaveBeenCalled();
     expect(injected.openRoot).not.toHaveBeenCalled();
     expect(logError).toHaveBeenCalledWith(
@@ -590,7 +545,7 @@ describe('storage service composition edge cases', () => {
     expect(logError).toHaveBeenCalledWith(
       '[compose] skills API NOT installed: AW_STORAGE_URL is unset or blank; every /api/skills* route answers 503 skills_runtime_not_configured.',
     );
-    expect(logError).toHaveBeenCalledTimes(3);
+    expect(logError).toHaveBeenCalledTimes(2);
   });
 
   // @story US-STO-01
@@ -801,10 +756,9 @@ describe('AW_STORAGE_CLEANUP', () => {
       };
       const stopOnClose = vi.fn<(stop: () => void) => void>();
 
-      await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, undefined, sessionState, {
+      await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, sessionState, {
         lock,
         workspaceIds: () => Promise.resolve([]),
-        migrationRuns: createInMemoryStorageMigrationRuns(),
         stopOnClose,
       });
       await vi.waitFor(() =>
@@ -832,14 +786,6 @@ describe('AW_STORAGE_CLEANUP', () => {
 
 describe('AW_STORAGE_MIGRATE composition', () => {
   const owners = { ownerPrincipalId: () => Promise.resolve(null) };
-  /** What adopt records its pass in; no other job starts without a session-state store. */
-  const runLog = () => ({
-    lock: <T>(_name: string, work: () => Promise<T>) =>
-      work().then((value) => ({ acquired: true as const, value })),
-    workspaceIds: () => Promise.resolve([]),
-    migrationRuns: createInMemoryStorageMigrationRuns(),
-    stopOnClose: () => undefined,
-  });
 
   function useS3Root(): void {
     clearStorageEnvironment();
@@ -848,188 +794,6 @@ describe('AW_STORAGE_MIGRATE composition', () => {
     vi.stubEnv('AWS_REGION', 'eu-west-1');
     vi.stubEnv('AW_STORAGE_URL', 's3://aw-bucket/p?endpoint=http://seaweedfs.example.test:8333');
   }
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] adopt runs in the background: start-up resolves while the listing is pending', async () => {
-    useS3Root();
-    vi.stubEnv('AW_STORAGE_MIGRATE', 'adopt');
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const store = createInMemoryObjectStore();
-    const listPage = vi.fn<ObjectStore['listPage']>(async (prefix, options) => {
-      await gate;
-      return store.listPage(prefix, options);
-    });
-    injected.openRoot.mockResolvedValue({ ...store, listPage });
-
-    const files = await installFilesApi(
-      resolveWorkspace,
-      scopes,
-      catalog,
-      fileTexts,
-      owners,
-      undefined,
-      runLog(),
-    );
-
-    expect(files.kind).toBe('serving');
-    await vi.waitFor(() =>
-      expect(listPage).toHaveBeenCalledWith('files/workspaces', expect.anything()),
-    );
-    expect(logInfo).not.toHaveBeenCalledWith('[storage] adopted legacy files', expect.anything());
-    release();
-    await vi.waitFor(() =>
-      expect(logInfo).toHaveBeenCalledWith('[storage] adopted legacy files', expect.anything()),
-    );
-  });
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] an unknown value starts nothing and is not echoed', async () => {
-    useS3Root();
-    vi.stubEnv('AW_STORAGE_MIGRATE', 'purge-everything');
-    const listPage = vi.fn<ObjectStore['listPage']>();
-    injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
-
-    await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners);
-
-    expect(logError).toHaveBeenCalledTimes(1);
-    const message = String(logError.mock.calls[0]?.[0]);
-    expect(message).toContain('AW_STORAGE_MIGRATE');
-    expect(message).not.toContain('purge-everything');
-    expect(listPage).not.toHaveBeenCalled();
-  });
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] unset starts adopt in the background', async () => {
-    useS3Root();
-    vi.stubEnv('AW_STORAGE_MIGRATE', '');
-    const listPage = vi.fn<ObjectStore['listPage']>();
-    injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
-    listPage.mockResolvedValue({ entries: [], cursor: null });
-
-    await installFilesApi(
-      resolveWorkspace,
-      scopes,
-      catalog,
-      fileTexts,
-      owners,
-      undefined,
-      runLog(),
-    );
-
-    await vi.waitFor(() =>
-      expect(listPage).toHaveBeenCalledWith('files/workspaces', expect.anything()),
-    );
-    expect(logError).not.toHaveBeenCalled();
-  });
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] an old files root that does not open is recorded as an unclean adopt pass', async () => {
-    useS3Root();
-    vi.stubEnv('AW_STORAGE_MIGRATE', 'adopt');
-    const wiring = runLog();
-    await wiring.migrationRuns.record({
-      stage: 'adopt',
-      rowsChecked: 0,
-      legacyRows: 0,
-      mismatches: 0,
-      clean: true,
-      proofVersion: 2,
-    });
-    // The storage service opens the root first; the adopt pass's open of the old root fails.
-    injected.openRoot
-      .mockResolvedValueOnce(createInMemoryObjectStore())
-      .mockRejectedValueOnce(Object.assign(new Error('refused'), { name: 'AccessDenied' }));
-
-    await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners, undefined, wiring);
-
-    await vi.waitFor(() =>
-      expect(logError).toHaveBeenCalledWith(
-        '[compose] AW_STORAGE_MIGRATE=adopt stopped adopting (name=AccessDenied).',
-      ),
-    );
-    expect(await wiring.migrationRuns.latest('adopt')).toMatchObject({
-      clean: false,
-      mismatches: 1,
-      proofVersion: 2,
-    });
-  });
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] off starts nothing', async () => {
-    useS3Root();
-    vi.stubEnv('AW_STORAGE_MIGRATE', 'off');
-    const listPage = vi.fn<ObjectStore['listPage']>();
-    injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
-
-    await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners);
-
-    expect(listPage).not.toHaveBeenCalled();
-    expect(logError).not.toHaveBeenCalled();
-  });
-
-  async function installWithLock(mode: string) {
-    useS3Root();
-    vi.stubEnv('AW_STORAGE_MIGRATE', mode);
-    vi.stubEnv('CRON_SECRET', '');
-    const listPage = vi.fn<ObjectStore['listPage']>();
-    listPage.mockResolvedValue({ entries: [], cursor: null });
-    injected.openRoot.mockResolvedValue({ ...createInMemoryObjectStore(), listPage });
-    const locked: string[] = [];
-    const lock = async <T>(name: string, work: () => Promise<T>) => {
-      locked.push(name);
-      return { acquired: true as const, value: await work() };
-    };
-    await installFilesApi(resolveWorkspace, scopes, catalog, fileTexts, owners, undefined, {
-      lock,
-      workspaceIds: () => Promise.resolve([]),
-      migrationRuns: createInMemoryStorageMigrationRuns(),
-      stopOnClose: () => undefined,
-    });
-    return { listPage, locked };
-  }
-
-  const finalProgress = () =>
-    logInfo.mock.calls.some(
-      ([message]) =>
-        typeof message === 'string' &&
-        message.startsWith('{') &&
-        (JSON.parse(message) as { done?: boolean }).done === true,
-    );
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] copy adopts, then copies under the storage-migrate lock', async () => {
-    const { listPage, locked } = await installWithLock('copy');
-
-    await vi.waitFor(() => expect(finalProgress()).toBe(true));
-    expect(listPage).toHaveBeenCalledWith('files/workspaces', expect.anything());
-    expect(locked).toContain('storage-migrate');
-    expect(logError).not.toHaveBeenCalled();
-  });
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] copy-dry-run counts without adopting', async () => {
-    const { listPage, locked } = await installWithLock('copy-dry-run');
-
-    await vi.waitFor(() => expect(finalProgress()).toBe(true));
-    expect(listPage).not.toHaveBeenCalled();
-    expect(locked).toContain('storage-migrate');
-    expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('"mode":"copy-dry-run"'));
-  });
-
-  // @story US-STO-13
-  it('[US-STO-13][unit][cli] finalize adopts, then checks and records under the storage-migrate lock', async () => {
-    const { listPage, locked } = await installWithLock('finalize');
-
-    await vi.waitFor(() =>
-      expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('"verify":{')),
-    );
-    expect(listPage).toHaveBeenCalledWith('files/workspaces', expect.anything());
-    expect(locked).toContain('storage-migrate');
-    expect(logError).not.toHaveBeenCalled();
-  });
 
   type Lock = <T>(
     name: string,
@@ -1040,6 +804,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
   async function installSkillsWithAdopt(
     lock: Lock,
     workspaceIds: () => Promise<readonly string[]> = () => Promise.resolve([]),
+    migrationRuns = createInMemoryStorageMigrationRuns(),
   ) {
     const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
     const service = createStorageService({
@@ -1050,7 +815,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
     return installSkillsApi(resolveWorkspace, scopes, catalog, service, {
       lock,
       workspaceIds,
-      migrationRuns: createInMemoryStorageMigrationRuns(),
+      migrationRuns,
       owners,
     });
   }
@@ -1065,7 +830,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
   }
 
   // @story US-STO-13
-  it.each(['', 'adopt', 'copy', 'finalize'])(
+  it.each(['', 'adopt', 'copy', 'copy-dry-run', 'finalize'])(
     '[US-STO-13][unit][cli] AW_STORAGE_MIGRATE=%s runs the skills adopt at start-up under its lock',
     async (mode) => {
       useS3Root();
@@ -1084,7 +849,7 @@ describe('AW_STORAGE_MIGRATE composition', () => {
   );
 
   // @story US-STO-13
-  it.each(['off', 'copy-dry-run'])(
+  it.each(['off'])(
     '[US-STO-13][unit][cli] AW_STORAGE_MIGRATE=%s does not run the skills adopt',
     async (mode) => {
       useS3Root();
@@ -1138,4 +903,60 @@ describe('AW_STORAGE_MIGRATE composition', () => {
     );
     expect(workspaceIds).toHaveBeenCalledTimes(1);
   });
+
+  // #1925 item 6: once a pass has left no old skill form, walking every skill on every start-up
+  // costs O(skills + revisions) object-store calls and finds nothing.
+  const skillsRun = {
+    stage: 'skills' as const,
+    rowsChecked: 3,
+    legacyRows: 0,
+    mismatches: 0,
+    clean: true,
+    orphans: 0,
+    proofVersion: 2,
+  };
+
+  // @story US-STO-13
+  it('[US-STO-13][unit][cli] a start-up after a clean skills pass skips the walk', async () => {
+    useS3Root();
+    vi.stubEnv('AW_STORAGE_MIGRATE', '');
+    const { lock, locked } = recordingLock();
+    const workspaceIds = vi.fn(() => Promise.resolve([]));
+    const runs = createInMemoryStorageMigrationRuns();
+    await runs.record(skillsRun);
+
+    await installSkillsWithAdopt(lock, workspaceIds, runs);
+
+    await vi.waitFor(() =>
+      expect(logInfo).toHaveBeenCalledWith(
+        'skills adopt skipped: the latest pass left no old skill forms',
+      ),
+    );
+    expect(locked).toEqual(['storage-migrate-skills']);
+    expect(workspaceIds).not.toHaveBeenCalled();
+  });
+
+  // @story US-STO-13
+  it.each([
+    ['left old objects', { legacyRows: 1 }],
+    ['failed a workspace', { clean: false, mismatches: 1 }],
+    ['predates the proof', { proofVersion: 1 }],
+  ])(
+    '[US-STO-13][unit][cli] a start-up after a skills pass that %s walks again',
+    async (_case, latest) => {
+      useS3Root();
+      vi.stubEnv('AW_STORAGE_MIGRATE', '');
+      const { lock } = recordingLock();
+      const workspaceIds = vi.fn(() => Promise.resolve([]));
+      const runs = createInMemoryStorageMigrationRuns();
+      await runs.record({ ...skillsRun, ...latest });
+
+      await installSkillsWithAdopt(lock, workspaceIds, runs);
+
+      await vi.waitFor(() =>
+        expect(logInfo).toHaveBeenCalledWith('[storage] adopted legacy skills', expect.anything()),
+      );
+      expect(workspaceIds).toHaveBeenCalledTimes(1);
+    },
+  );
 });

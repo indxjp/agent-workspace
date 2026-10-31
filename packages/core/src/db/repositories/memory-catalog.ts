@@ -28,9 +28,9 @@ import { requireWorkspaceScope } from './scope.js';
 
 type Row = CatalogFile & { readonly status: FileStatus };
 
-// What a new row holds until writers record an object id and a checksum (the storage design, §04).
-// Only a pending row carries a reservation token.
-const LEGACY = {
+// What a new row holds until a writer sets it: a folder has no object id, a file's checksum comes
+// with its confirm (the storage design, §04). Only a pending row carries a reservation token.
+const NEW_ROW = {
   objectId: null,
   area: 'files',
   sha256: null,
@@ -77,6 +77,7 @@ const assertRowShape = (row: Row): void => {
     files_path_shape: !/^[^/\p{Cc}]+(\/[^/\p{Cc}]+)*$/u.test(row.path),
     files_path_no_dot_segments: /(^|\/)\.\.?(\/|$)/.test(row.path),
     files_storage_key_iff_file: !folder !== (row.storageKey !== null),
+    files_file_has_object_id: !folder && (row.objectId ?? null) === null,
     // `btrim` strips spaces only.
     files_storage_key_not_blank: row.storageKey?.replaceAll(' ', '') === '',
     files_size_non_negative: row.sizeBytes < 0,
@@ -146,7 +147,7 @@ export type InMemoryWorkspaceCatalog = ResourceCatalogRepository & {
     readonly path: string;
     readonly status: FileStatus;
     readonly ownerPrincipalId: string;
-    readonly objectId?: string;
+    readonly objectId: string;
   }): void;
 };
 
@@ -196,7 +197,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             sizeBytes: 0,
             contentType: null,
             status: 'ready',
-            ...LEGACY,
+            ...NEW_ROW,
             createdBy: row.createdBy,
             ownerPrincipalId: row.ownerPrincipalId,
             updatedAt: new Date(),
@@ -223,15 +224,11 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
       if (moving.some((row) => row.status === 'pending')) {
         throw new CatalogPathPendingError(oldPrefix);
       }
+      // A file's key names its object, so only the path moves.
       const moved = moving.map((row) => ({
         ...row,
         path: destination(row),
         updatedAt: new Date(),
-        // A row with an object id has a permanent key; only a legacy row's key is its path.
-        storageKey:
-          row.kind === 'file' && row.storageKey !== null && row.objectId === null
-            ? renamedKey(row.storageKey, oldPrefix, newPrefix)
-            : row.storageKey,
       }));
       moved.forEach(assertRowShape);
       for (const row of moving) rows.delete(row.path);
@@ -244,13 +241,6 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
       for (const row of moved) rows.set(row.path, row);
       ensureParents(moved);
       return moved;
-    };
-
-    const deleteByPrefix = (prefix: string): number => {
-      // A `deleting` row stays until `forget`: its object is still to be removed.
-      const doomed = under(prefix).filter((row) => row.status !== 'deleting');
-      for (const row of doomed) rows.delete(row.path);
-      return doomed.length;
     };
 
     // A folder cannot be `deleting` (`files_folder_is_ready`) and holds no object, so it is dropped.
@@ -321,16 +311,13 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           const holder = rows.get(path);
           // The ready file a pending replacement takes the path from.
           const target = holder?.status === 'ready' && holder.kind === 'file' ? holder : undefined;
-          const replacing = input.objectId !== undefined && target !== undefined;
+          const replacing = target !== undefined;
           if (holder !== undefined && !replacing) return takenOrRefreshed(holder, undefined);
           const waiting = [...rows.values()].find(
             (r) => r.status === 'pending' && r.targetPath === path,
           );
           if (waiting !== undefined) return takenOrRefreshed(waiting, target);
-          if (
-            input.objectId !== undefined &&
-            [...rows.values()].some((r) => r.objectId === input.objectId)
-          ) {
+          if ([...rows.values()].some((r) => r.objectId === input.objectId)) {
             throw new Error(
               'duplicate key value violates unique constraint "files_workspace_object_key"',
             );
@@ -340,13 +327,12 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             id,
             path: replacing ? sidePath(id) : path,
             kind: 'file',
-            storageKey:
-              input.objectId === undefined ? path : `${input.area ?? 'files'}/${input.objectId}`,
+            storageKey: `${input.area ?? 'files'}/${input.objectId}`,
             sizeBytes: input.sizeBytes,
             contentType: input.contentType,
             status: 'pending',
-            ...LEGACY,
-            objectId: input.objectId ?? null,
+            ...NEW_ROW,
+            objectId: input.objectId,
             area: input.area ?? 'files',
             targetPath: replacing ? path : null,
             uploadMode: input.uploadMode ?? null,
@@ -377,7 +363,7 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             sizeBytes: 0,
             contentType: null,
             status: 'ready',
-            ...LEGACY,
+            ...NEW_ROW,
             createdBy: input.createdBy ?? null,
             ownerPrincipalId: input.ownerPrincipalId,
             updatedAt: new Date(),
@@ -552,155 +538,18 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           rows.delete(current.path);
           reservedAt.delete(current.id);
         }),
-      referencing: ({ objectIds, storageKeys }) =>
+      referencing: ({ objectIds }) =>
         port('referencing', () =>
           [...rows.values()]
             .filter(
               (r) =>
                 r.kind === 'file' &&
-                (r.objectId === undefined || r.objectId === null
-                  ? r.storageKey !== null && storageKeys.includes(r.storageKey)
-                  : objectIds.includes(r.objectId)),
+                r.objectId !== undefined &&
+                r.objectId !== null &&
+                objectIds.includes(r.objectId),
             )
             .sort(byPath),
         ),
-
-      // storage-bridge(#1699): one-step catalog writes until every caller uses the service
-      listFiles: () =>
-        later(() => [...rows.values()].filter((r) => r.status === 'ready').sort(byPath)),
-      putFile: (input) =>
-        later(() => {
-          const existing = rows.get(input.path);
-          if (existing?.status === 'pending') throw new CatalogPathPendingError(input.path);
-          const row: Row = {
-            ...input,
-            id: existing?.id ?? crypto.randomUUID(),
-            status: 'ready',
-            objectId: existing?.objectId ?? LEGACY.objectId,
-            area: existing?.area ?? LEGACY.area,
-            sha256: existing?.sha256 ?? LEGACY.sha256,
-            targetPath: null,
-            reservationToken: null,
-            // An existing row keeps its attribution, a null one included, as PostgreSQL's upsert does.
-            createdBy: existing === undefined ? (input.createdBy ?? null) : existing.createdBy,
-            ownerPrincipalId: existing?.ownerPrincipalId ?? input.ownerPrincipalId,
-            updatedAt: new Date(),
-          };
-          assertRowShape(row);
-          ensureParents([row]);
-          rows.set(row.path, row);
-          return row;
-        }),
-      renameFile: (path, input) =>
-        later(() => {
-          if (isSidePath(input.path)) throw new Error(`${input.path} is a reserved catalog path.`);
-          const row = rows.get(path);
-          if (row === undefined || row.status !== 'ready') return null;
-          if (input.path !== path) {
-            const held = [...rows.values()].some(
-              (r) => r.status !== 'deleting' && logical(r) === input.path,
-            );
-            if (held) throw new CatalogPathTakenError(input.path);
-          }
-          const moved: Row = { ...row, ...input, updatedAt: new Date() };
-          assertRowShape(moved);
-          rows.delete(path);
-          rows.set(moved.path, moved);
-          if (input.path !== path) {
-            // The upload that was going to replace this file follows it.
-            for (const r of rows.values()) {
-              if (r.status === 'pending' && r.targetPath === path) {
-                rows.set(r.path, { ...r, targetPath: input.path });
-              }
-            }
-          }
-          ensureParents([moved]);
-          return moved;
-        }),
-      deleteFile: (path) =>
-        later(() => {
-          for (const r of [...rows.values()]) {
-            if (r.status !== 'deleting' && logical(r) === path) rows.delete(r.path);
-          }
-        }),
-      // storage-bridge(#1699): old object naming
-      adoptLegacyFiles: (objects, ownerPrincipalId) =>
-        later(() => {
-          const keys = new Set(
-            [...rows.values()]
-              .filter((row) => (row.area ?? 'files') === 'files')
-              .map((row) => row.storageKey),
-          );
-          const adopted: Row[] = [];
-          let hadRow = 0;
-          let pathTaken = 0;
-          for (const object of objects) {
-            if (isSidePath(object.storageKey)) pathTaken += 1;
-            else if (keys.has(object.storageKey)) hadRow += 1;
-            else if (rows.has(object.storageKey)) pathTaken += 1;
-            else {
-              const row: Row = {
-                id: crypto.randomUUID(),
-                path: object.storageKey,
-                kind: 'file',
-                storageKey: object.storageKey,
-                sizeBytes: object.sizeBytes,
-                contentType: object.contentType,
-                status: 'ready',
-                ...LEGACY,
-                createdBy: null,
-                ownerPrincipalId,
-                updatedAt: new Date(),
-              };
-              assertRowShape(row);
-              rows.set(row.path, row);
-              keys.add(object.storageKey);
-              adopted.push(row);
-            }
-          }
-          ensureParents(adopted);
-          return { adopted: adopted.length, hadRow, pathTaken };
-        }),
-      // storage-bridge(#1699): moves a legacy row to the new naming
-      switchObject: (rowId, expectedStorageKey, objectId, sha256) =>
-        later(() => {
-          const current = [...rows.values()].find((r) => r.id === rowId);
-          if (
-            current === undefined ||
-            current.kind !== 'file' ||
-            current.status !== 'ready' ||
-            (current.objectId ?? null) !== null ||
-            current.storageKey !== expectedStorageKey
-          ) {
-            return false;
-          }
-          rows.set(current.path, { ...current, objectId, sha256, updatedAt: new Date() });
-          return true;
-        }),
-      countLegacyFiles: () =>
-        later(
-          () =>
-            [...rows.values()].filter((r) => r.kind === 'file' && (r.objectId ?? null) === null)
-              .length,
-        ),
-      holdersOfKeys: (area, keys) =>
-        later(() =>
-          [...rows.values()]
-            .filter(
-              (r) =>
-                r.kind === 'file' &&
-                (r.area ?? 'files') === area &&
-                ((r.storageKey !== null && keys.includes(r.storageKey)) ||
-                  (area === 'files' && keys.includes(r.path))),
-            )
-            .sort(byPath),
-        ),
-      renameFilesByPrefix: (oldPrefix, newPrefix) =>
-        later(() => renameByPrefix(oldPrefix, newPrefix)),
-      deleteFilesByPrefix: (prefix) =>
-        later(() => {
-          deleteByPrefix(prefix);
-        }),
 
       // @story US-STO-08
       listSkills: () => later(() => [...state.skills.values()].sort(byName)),
@@ -855,8 +704,8 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
             'duplicate key value violates unique constraint "files_workspace_path_key"',
           );
         }
-        const objectId = input.objectId ?? null;
-        if (objectId !== null && [...rows.values()].some((r) => r.objectId === objectId)) {
+        const { objectId } = input;
+        if ([...rows.values()].some((r) => r.objectId === objectId)) {
           throw new Error(
             'duplicate key value violates unique constraint "files_workspace_object_key"',
           );
@@ -867,11 +716,11 @@ export function createInMemoryCatalog(): ResourceCatalogRepositoryProvider & {
           id,
           path: input.path,
           kind: 'file',
-          storageKey: input.path,
+          storageKey: `files/${objectId}`,
           sizeBytes: 0,
           contentType: null,
           status: input.status,
-          ...LEGACY,
+          ...NEW_ROW,
           objectId,
           reservationToken: input.status === 'pending' ? crypto.randomUUID() : null,
           createdBy: null,

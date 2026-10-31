@@ -127,3 +127,6 @@ the browser token of unit 4 (#236) to a user scope.
   names `cliSessions`); each keeps its name, so the successor is the same theorem over the wider
   model. `invitation_row_is_admitted` only gained a larger `maxHeartbeats`.
 - Out of scope, and unchanged: OIDC for the control plane's own UI.
+- Amended by [ADR-0161](0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md):
+  an app backend acting as a signed-in person gets an ADR-0134 `awo_live_` access token by token
+  exchange, not this `awu_live_` user token, which stays as decided here.

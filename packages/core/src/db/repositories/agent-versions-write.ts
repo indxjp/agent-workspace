@@ -119,6 +119,7 @@ function classifyWriteFailure(error: unknown): WriteFailure | null {
 /** The non-applied outcomes raised inside a transaction so that it rolls back. */
 type RollbackOutcome =
   | { readonly kind: 'not-found' }
+  | { readonly kind: 'agent-archived' }
   | { readonly kind: 'version-not-found' }
   | { readonly kind: 'surface-name-taken'; readonly name: string }
   | { readonly kind: 'reference-gone'; readonly referenceKind: AgentDefinitionReferenceKind }
@@ -566,12 +567,19 @@ export function agentVersionWrites(
         return await db.transaction(async (tx) => {
           await lockPointers(tx, environment);
           const locked = await tx
-            .select({ id: agents.id, runtimeProfileId: agents.runtimeProfileId })
+            .select({
+              id: agents.id,
+              runtimeProfileId: agents.runtimeProfileId,
+              archivedAt: agents.archivedAt,
+            })
             .from(agents)
             .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
             .for('update');
           const current = locked[0];
           if (current === undefined) throw new Rollback({ kind: 'not-found' });
+          // The handler refused an archived agent from a row it read before this lock; an archive
+          // that committed in between is only visible here, on the locked row (issue #1987).
+          if (current.archivedAt !== null) throw new Rollback({ kind: 'agent-archived' });
           if (input.expectedVersion !== undefined) {
             const pointed = await pointedNumber(tx, agentId, environment);
             if (pointed !== input.expectedVersion) {

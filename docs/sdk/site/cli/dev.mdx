@@ -211,6 +211,25 @@ The project pins `@indx-workspace/aw`, `@indx-workspace/embedded` and `@indx-wor
 npm's install-script prompt in an `allowScripts` block (pnpm's in `pnpm-workspace.yaml`), and its
 `dev` script is `aw dev`.
 
+### Choose the features
+
+`--features chat,files` writes a `features:` list into `agent-workspace.yaml`: the features this
+deployment installs (`chat`, `projects`, `files`, `skills`, `connectors`, `runs`, `sharing`,
+`surfaces`, `triggers`, `evaluations`, `builder`). Each id is listed once, with the features it
+needs: `surfaces` needs `chat`, and `triggers` and `evaluations` need `runs`. With no list, every
+feature is installed.
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+features: [chat, files, runs]
+```
+
+`aw dev` passes the list to the local runtime as `AW_DEPLOYMENT_FEATURES` when it starts, and a
+route of a feature the list leaves out answers `404 feature_disabled`. An `AW_DEPLOYMENT_FEATURES`
+set in `.env` or the environment must name the same features, or the runtime refuses to start;
+with no `features:` in the file, a valid one applies and `aw dev` prints a warning. A change to
+`features:` while `aw dev` runs prints `agent-workspace.yaml: features changed; restart aw dev to
+apply`. `aw deploy` passes the same list to the deployment (see [Deploy](/guides/deploy)).
+
 ## Start in an existing directory (aw init)
 
 Run `npx @indx-workspace/aw init` there. On a terminal it asks the same setup questions as

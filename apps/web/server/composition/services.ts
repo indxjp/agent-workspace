@@ -1,7 +1,7 @@
 import { log } from '../telemetry/logger';
 import { createHash } from 'node:crypto';
 
-import { loadEgressPolicyFromEnv } from '@agent-workspace/core';
+import { loadEgressPolicyFromEnv, loadOutboundProxyFromEnv } from '@agent-workspace/core';
 import type { RuntimeDriverId } from '@agent-workspace/run-protocol';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import { DEPLOYMENT_POSTURE_ENV, readDeploymentPosture } from '@agent-workspace/core/posture';
@@ -190,6 +190,7 @@ export function installStorageConnectionsApi(
       }),
       fileRoots,
       egress: loadEgressPolicyFromEnv(),
+      proxy: loadOutboundProxyFromEnv(process.env),
       isConnectionGranted: async (workspaceId, connectionId) => {
         const scope = await root.scopes.forWorkspaceId(workspaceId);
         return (

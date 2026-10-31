@@ -1,5 +1,5 @@
 import { applicationContext } from '../../../../../server/application-context';
-import { agentNotFound, refuseBuiltinWrite } from '../../../../../server/agents/handlers';
+import { agentNotFound, refuseBuiltinWriteFor } from '../../../../../server/agents/handlers';
 import type { BuiltinAgentOperation } from '../../../../../contracts/agents';
 import { problem, type ApiResult } from '../../../../../server/http/result';
 import { isUuid, parseAssignments } from '../../../../../server/agents/contract';
@@ -31,7 +31,7 @@ function ownershipOf(id: unknown, operation: BuiltinAgentOperation): OwnershipRe
     }
     const row = await runtime.agents.forWorkspace(principal.workspaceId).get(id);
     if (row === null) return { kind: 'refuse', result: agentNotFound() };
-    const readOnly = refuseBuiltinWrite(row, operation);
+    const readOnly = refuseBuiltinWriteFor(principal, row, operation);
     if (readOnly !== null) return { kind: 'refuse', result: readOnly };
     return {
       kind: 'ownership',

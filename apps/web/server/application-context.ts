@@ -39,6 +39,7 @@ import type { PublicSurfaces } from './surfaces/public/runtime';
 import type { Tokens } from './tokens/runtime';
 import type { ToolEndpoint } from './tool-endpoint/env';
 import type { Triggers } from './triggers/runtime';
+import type { Webhooks } from './webhooks/runtime';
 import type { WorkspaceFeaturesRuntime } from './workspaces/features-runtime';
 import type { WorkspacesRuntime } from './workspaces/runtime';
 
@@ -71,6 +72,8 @@ export interface ApplicationContext {
   readonly tokens: Tokens;
   readonly toolEndpoint: ToolEndpoint;
   readonly triggers: Triggers;
+  /** Run-outcome webhooks (N-3, ADR-SDK-18-N3-250): `unavailable` with no secrets service. */
+  readonly webhooks: Webhooks;
   readonly workspaceFeatures: WorkspaceFeaturesRuntime;
   readonly workspaces: WorkspacesRuntime;
 }

@@ -20,12 +20,13 @@ import {
   describeSkillCatalogConformance,
 } from './resource-catalogs.contract.js';
 import {
-  CatalogPathPendingError,
   createDatabaseResourceCatalogRepositoryProvider,
   STALE_SKILL_REVISION_MS,
 } from './resource-catalogs.js';
 import { createDatabaseWorkspaceScopeResolver, type WorkspaceScope } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
+import { listCatalogFiles } from './resource-catalogs.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -73,7 +74,12 @@ describeSkillCatalogConformance('the in-memory catalog', () => {
 it('failNext rejects the next call of one operation, once', async () => {
   const provider = createInMemoryCatalog();
   const catalog = provider.forWorkspace(crypto.randomUUID());
-  const input = { ownerPrincipalId: crypto.randomUUID(), sizeBytes: 1, contentType: null };
+  const input = {
+    ownerPrincipalId: crypto.randomUUID(),
+    sizeBytes: 1,
+    contentType: null,
+    objectId: crypto.randomUUID(),
+  };
   provider.failNext('reserve', new Error('store down'));
   await expect(catalog.get('a.txt')).resolves.toBeNull();
   await expect(catalog.reserve('a.txt', input)).rejects.toThrow('store down');
@@ -214,35 +220,21 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
 
   afterAll(async () => isolated.close());
 
-  it('upserts stable file and skill ids within one workspace', async () => {
+  it('keeps a file id across a rename and a skill id across an upsert', async () => {
     const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-    const file = await repo.putFile({
+    const file = await seedCatalogFile(repo, {
       path: 'handbook/readme.md',
       kind: 'file',
-      storageKey: 'handbook/readme.md',
       sizeBytes: 12,
       contentType: 'text/markdown',
       ownerPrincipalId: principalA,
       createdBy: userA,
     });
-    const updated = await repo.putFile({
-      path: file.path,
-      kind: 'file',
-      storageKey: file.storageKey,
-      sizeBytes: 13,
-      contentType: file.contentType,
-      ownerPrincipalId: principalA,
-      createdBy: userA,
+    await expect(repo.rename(file.path, 'handbook/renamed.md')).resolves.toEqual({
+      rows: 1,
+      files: 1,
     });
-    expect(updated.id).toBe(file.id);
-    const renamed = await repo.renameFile(file.path, {
-      path: 'handbook/renamed.md',
-      kind: 'file',
-      storageKey: 'handbook/renamed.md',
-      sizeBytes: updated.sizeBytes,
-      contentType: updated.contentType,
-    });
-    expect(renamed).toMatchObject({ id: file.id, path: 'handbook/renamed.md' });
+    await expect(repo.get('handbook/renamed.md')).resolves.toMatchObject({ id: file.id });
     const skill = await repo.putSkill({
       name: 'reviewer',
       skillMd: '# Reviewer',
@@ -268,19 +260,19 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       path: 'inbox/pending.bin',
       kind: 'file',
       storageKey: 'inbox/pending.bin',
+      objectId: crypto.randomUUID(),
       sizeBytes: 4,
       ownerPrincipalId: principalA,
       status: 'pending',
     });
-    const ready = await repo.putFile({
+    const ready = await seedCatalogFile(repo, {
       path: 'inbox/ready.bin',
       kind: 'file',
-      storageKey: 'inbox/ready.bin',
       sizeBytes: 4,
       contentType: null,
       ownerPrincipalId: principalA,
     });
-    const listed = await repo.listFiles();
+    const listed = await listCatalogFiles(repo);
     expect(listed.map((file) => file.path)).not.toContain('inbox/pending.bin');
     expect(listed.find((file) => file.path === ready.path)).toMatchObject({ status: 'ready' });
   });
@@ -297,15 +289,14 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         status: 'pending',
       }),
     ).rejects.toMatchObject({ cause: { code: '23514', constraint: 'files_folder_is_ready' } });
-    await repo.putFile({
+    await seedCatalogFile(repo, {
       path: 'implied/parent/leaf.txt',
       kind: 'file',
-      storageKey: 'implied/parent/leaf.txt',
       sizeBytes: 1,
       contentType: null,
       ownerPrincipalId: principalA,
     });
-    const folders = (await repo.listFiles()).filter(
+    const folders = (await listCatalogFiles(repo)).filter(
       (file) => file.path === 'implied' || file.path === 'implied/parent',
     );
     expect(folders).toHaveLength(2);
@@ -315,48 +306,17 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
   });
 
   // @story US-STO-02
-  it('[US-STO-02][contract][sdk] putFile over a pending row is refused and leaves it pending', async () => {
-    const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-    const [pending] = await isolated.db
-      .insert(files)
-      .values({
-        workspaceId: scopeA.workspaceId,
-        path: 'inbox/reserved.bin',
-        kind: 'file',
-        storageKey: 'inbox/reserved.bin',
-        sizeBytes: 4,
-        ownerPrincipalId: principalA,
-        status: 'pending',
-      })
-      .returning({ id: files.id });
-    await expect(
-      repo.putFile({
-        path: 'inbox/reserved.bin',
-        kind: 'file',
-        storageKey: 'inbox/reserved.bin',
-        sizeBytes: 4,
-        contentType: null,
-        ownerPrincipalId: principalA,
-      }),
-    ).rejects.toBeInstanceOf(CatalogPathPendingError);
-    await expect(repo.get('inbox/reserved.bin', { includePending: true })).resolves.toMatchObject({
-      id: pending?.id,
-      status: 'pending',
-    });
-  });
-
-  // @story US-STO-02
   it('[US-STO-02][contract][sdk] a parent folder is not added beside a pending file at its path', async () => {
     const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
     await repo.reserve('shadowed-by-pending', {
+      objectId: crypto.randomUUID(),
       ownerPrincipalId: principalA,
       sizeBytes: 1,
       contentType: null,
     });
-    await repo.putFile({
+    await seedCatalogFile(repo, {
       path: 'shadowed-by-pending/child.txt',
       kind: 'file',
-      storageKey: 'shadowed-by-pending/child.txt',
       sizeBytes: 1,
       contentType: null,
       ownerPrincipalId: principalA,
@@ -375,6 +335,12 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
     // turn: a write there costs a transaction id and a WAL flush per loser, serialized.
     const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
     const input = { ownerPrincipalId: principalA, sizeBytes: 3, contentType: 'text/plain' };
+    const objectIds = new Map<string, string>();
+    const objectIdOf = (path: string): string => {
+      const id = objectIds.get(path) ?? crypto.randomUUID();
+      objectIds.set(path, id);
+      return id;
+    };
     const version = async (id: string) => {
       const result = await isolated.db.execute(
         sql`select xmin::text as version from ${files} where ${files.id} = ${id}`,
@@ -383,7 +349,8 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
     };
     for (const uploadMode of [undefined, 'relay', 'signed'] as const) {
       const path = `rewrite-check/${uploadMode ?? 'none'}.bin`;
-      const declared = uploadMode === undefined ? input : { ...input, uploadMode };
+      const named = { ...input, objectId: objectIdOf(path) };
+      const declared = uploadMode === undefined ? named : { ...named, uploadMode };
       const reserved = await repo.reserve(path, declared);
       const before = await version(reserved.row.id);
 
@@ -398,7 +365,11 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         expect(await version(reserved.row.id)).toBe(before);
       }
     }
-    const resized = await repo.reserve('rewrite-check/none.bin', { ...input, sizeBytes: 4 });
+    const resized = await repo.reserve('rewrite-check/none.bin', {
+      ...input,
+      objectId: objectIdOf('rewrite-check/none.bin'),
+      sizeBytes: 4,
+    });
     expect(resized.row).toMatchObject({ sizeBytes: 4 });
     await expect(repo.pending('rewrite-check/none.bin')).resolves.toMatchObject({ sizeBytes: 4 });
   });
@@ -409,6 +380,7 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       path,
       kind: 'file' as const,
       storageKey: path,
+      objectId: crypto.randomUUID(),
       ownerPrincipalId: principalA,
       ...extra,
     });
@@ -428,40 +400,64 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
     it('[US-STO-02][contract][sdk] refuses an unknown area', async () => {
       await expect(
         isolated.db.execute(
-          sql`insert into files (workspace_id, path, kind, storage_key, owner_principal_id, area)
-            values (${scopeA.workspaceId}, 'area/bad.bin', 'file', 'area/bad.bin', ${principalA}, 'elsewhere')`,
+          sql`insert into files (workspace_id, path, kind, storage_key, object_id, owner_principal_id, area)
+            values (${scopeA.workspaceId}, 'area/bad.bin', 'file', 'area/bad.bin', ${crypto.randomUUID()}, ${principalA}, 'elsewhere')`,
         ),
       ).rejects.toMatchObject({ cause: { code: '23514', constraint: 'files_area_valid' } });
       await isolated.db.insert(files).values(row('area/good.bin', { area: 'staging' }));
     });
   });
 
+  // STO-113 #2: every reserve counts the workspace's pending uploads (`countPending`), so the count
+  // must not scan the workspace's ready rows, which are nearly all of them.
+  it('counts pending uploads through a partial index of the pending rows', async () => {
+    const indexes = await isolated.db.execute<{ indexdef: string }>(sql`
+      select indexdef from pg_indexes
+      where schemaname = 'public' and indexname = 'files_workspace_pending_updated_idx'
+    `);
+    expect(indexes.rows.map((row) => row.indexdef)).toEqual([
+      expect.stringMatching(
+        /ON public\.files USING btree \(workspace_id, updated_at\) WHERE \(status = 'pending'::text\)$/u,
+      ),
+    ]);
+    const plan = await isolated.db.transaction(async (tx) => {
+      // Only so that the plan does not depend on how few rows this test database holds.
+      await tx.execute(sql`set local enable_seqscan = off`);
+      return tx.execute<{ 'QUERY PLAN': string }>(sql`
+        explain select count(*) from files
+        where workspace_id = ${scopeA.workspaceId} and status = 'pending' and area <> 'staging'
+          and updated_at >= ${new Date(0).toISOString()}
+      `);
+    });
+    expect(plan.rows.map((row) => row['QUERY PLAN']).join('\n')).toContain(
+      'files_workspace_pending_updated_idx',
+    );
+  });
+
   it('keeps equal paths and names isolated by workspace', async () => {
     const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
     const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
-    const fileA = await a.putFile({
+    const fileA = await seedCatalogFile(a, {
       path: 'same.txt',
       kind: 'file',
-      storageKey: 'same.txt',
       sizeBytes: 1,
       contentType: null,
       ownerPrincipalId: principalA,
       createdBy: userA,
     });
-    const fileB = await b.putFile({
+    const fileB = await seedCatalogFile(b, {
       path: 'same.txt',
       kind: 'file',
-      storageKey: 'same.txt',
       sizeBytes: 2,
       contentType: null,
       ownerPrincipalId: principalB,
       createdBy: userB,
     });
     expect(fileA.id).not.toBe(fileB.id);
-    expect((await a.listFiles()).map((file) => file.id)).not.toContain(fileB.id);
+    expect((await listCatalogFiles(a)).map((file) => file.id)).not.toContain(fileB.id);
   });
 
-  describe('putFile writes the parent folders of a file or folder (issue #899)', () => {
+  describe('a catalog write adds the parent folders of a file or folder (issue #899)', () => {
     const fileInput = (path: string, owner: string, user: string) => ({
       path,
       kind: 'file' as const,
@@ -474,9 +470,9 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
 
     it('creates one folder row per parent, so a files() grant on the folder resolves', async () => {
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      await repo.putFile(fileInput('manuals/hydraulics/unit.md', principalA, userA));
+      await seedCatalogFile(repo, fileInput('manuals/hydraulics/unit.md', principalA, userA));
 
-      const rows = await repo.listFiles();
+      const rows = await listCatalogFiles(repo);
       for (const path of ['manuals', 'manuals/hydraulics']) {
         expect(rows.find((row) => row.path === path)).toMatchObject({
           kind: 'folder',
@@ -491,17 +487,16 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
 
     it('creates the parent rows of a nested folder too', async () => {
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      await repo.putFile({
+      await seedCatalogFile(repo, {
         path: 'contracts/2026',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
 
-      expect((await repo.listFiles()).find((row) => row.path === 'contracts')).toMatchObject({
+      expect((await listCatalogFiles(repo)).find((row) => row.path === 'contracts')).toMatchObject({
         kind: 'folder',
         ownerPrincipalId: principalA,
       });
@@ -509,20 +504,19 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
 
     it('keeps the id and owner of an existing folder row and never replaces a file row', async () => {
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      const folder = await repo.putFile({
+      const folder = await seedCatalogFile(repo, {
         path: 'kept',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: null,
       });
-      const file = await repo.putFile(fileInput('shadowed', principalA, userA));
-      await repo.putFile(fileInput('kept/a.md', principalA, userA));
-      await repo.putFile(fileInput('shadowed/b.md', principalA, userA));
+      const file = await seedCatalogFile(repo, fileInput('shadowed', principalA, userA));
+      await seedCatalogFile(repo, fileInput('kept/a.md', principalA, userA));
+      await seedCatalogFile(repo, fileInput('shadowed/b.md', principalA, userA));
 
-      const rows = await repo.listFiles();
+      const rows = await listCatalogFiles(repo);
       expect(rows.find((row) => row.path === 'kept')).toMatchObject({
         id: folder.id,
         createdBy: null,
@@ -536,26 +530,20 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
     it('writes the parent rows into the uploading workspace only', async () => {
       const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
       const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
-      await a.putFile(fileInput('only-in-a/x.md', principalA, userA));
+      await seedCatalogFile(a, fileInput('only-in-a/x.md', principalA, userA));
 
-      expect((await a.listFiles()).map((row) => row.path)).toContain('only-in-a');
-      expect((await b.listFiles()).map((row) => row.path)).not.toContain('only-in-a');
+      expect((await listCatalogFiles(a)).map((row) => row.path)).toContain('only-in-a');
+      expect((await listCatalogFiles(b)).map((row) => row.path)).not.toContain('only-in-a');
     });
 
     it('renameFile writes the parent folders of the target path, in its workspace only', async () => {
       const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
       const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
-      const file = await a.putFile(fileInput('rename-source.md', principalA, userA));
+      const file = await seedCatalogFile(a, fileInput('rename-source.md', principalA, userA));
 
-      await a.renameFile(file.path, {
-        path: 'rename-target/deep/moved.md',
-        kind: 'file',
-        storageKey: 'rename-target/deep/moved.md',
-        sizeBytes: 1,
-        contentType: null,
-      });
+      await a.rename(file.path, 'rename-target/deep/moved.md');
 
-      const rows = await a.listFiles();
+      const rows = await listCatalogFiles(a);
       for (const path of ['rename-target', 'rename-target/deep']) {
         expect(rows.find((row) => row.path === path)).toMatchObject({
           kind: 'folder',
@@ -566,21 +554,25 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       expect(rows.find((row) => row.id === file.id)).toMatchObject({
         path: 'rename-target/deep/moved.md',
       });
-      expect((await b.listFiles()).map((row) => row.path)).not.toContain('rename-target');
+      expect((await listCatalogFiles(b)).map((row) => row.path)).not.toContain('rename-target');
     });
 
-    it('renameFilesByPrefix writes the target folder and its parents when only children moved', async () => {
+    it('a folder rename writes the target folder and its parents when only children moved', async () => {
       const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
       const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
-      // Drop the parent row `putFile` wrote, the shape a pre-0051 upload left behind, so only the
+      // Drop the parent row the write added, the shape a pre-0051 upload left behind, so only the
       // child moves.
-      const seeded = await a.putFile(fileInput('prefix-source/x.md', principalA, userA));
-      await a.deleteFile('prefix-source');
+      const seeded = await seedCatalogFile(a, fileInput('prefix-source/x.md', principalA, userA));
+      await isolated.db
+        .delete(files)
+        .where(and(eq(files.workspaceId, scopeA.workspaceId), eq(files.path, 'prefix-source')));
 
-      const renamed = await a.renameFilesByPrefix('prefix-source', 'prefix-target/inner');
-      expect(renamed.map((row) => row.path)).toEqual(['prefix-target/inner/x.md']);
+      await expect(a.rename('prefix-source', 'prefix-target/inner')).resolves.toEqual({
+        rows: 1,
+        files: 1,
+      });
 
-      const rows = await a.listFiles();
+      const rows = await listCatalogFiles(a);
       for (const path of ['prefix-target', 'prefix-target/inner']) {
         expect(rows.find((row) => row.path === path)).toMatchObject({
           kind: 'folder',
@@ -590,26 +582,24 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       expect(rows.find((row) => row.id === seeded.id)).toMatchObject({
         path: 'prefix-target/inner/x.md',
       });
-      expect((await b.listFiles()).map((row) => row.path)).not.toContain('prefix-target');
+      expect((await listCatalogFiles(b)).map((row) => row.path)).not.toContain('prefix-target');
     });
   });
 
-  describe('renameFilesByPrefix / deleteFilesByPrefix (W9-FILES-131)', () => {
-    it('rewrites a folder and every descendant path/storage key while keeping ids, and leaves a same-prefixed sibling alone', async () => {
+  describe('folder rename and remove (W9-FILES-131)', () => {
+    it('rewrites a folder and every descendant path while keeping ids and object keys, and leaves a same-prefixed sibling alone', async () => {
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      const folder = await repo.putFile({
+      const folder = await seedCatalogFile(repo, {
         path: 'a',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
-      const child = await repo.putFile({
+      const child = await seedCatalogFile(repo, {
         path: 'a/b/c.txt',
         kind: 'file',
-        storageKey: 'a/b/c.txt',
         sizeBytes: 3,
         contentType: 'text/plain',
         ownerPrincipalId: principalA,
@@ -617,21 +607,19 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       });
       // The prefix-boundary counter-example: `a-sibling.txt` starts with the same three
       // characters as `a` but is not a descendant of it, and must survive untouched.
-      const sibling = await repo.putFile({
+      const sibling = await seedCatalogFile(repo, {
         path: 'a-sibling.txt',
         kind: 'file',
-        storageKey: 'a-sibling.txt',
         sizeBytes: 1,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
 
-      const renamed = await repo.renameFilesByPrefix('a', 'z');
-      // `a/b` is the folder row `putFile('a/b/c.txt')` wrote for the file's parent.
-      expect(renamed.map((row) => row.path).sort()).toEqual(['z', 'z/b', 'z/b/c.txt']);
+      // `a`, `a/b` (the folder row the write of `a/b/c.txt` added for its parent) and the file.
+      await expect(repo.rename('a', 'z')).resolves.toEqual({ rows: 3, files: 1 });
 
-      const rows = await repo.listFiles();
+      const rows = await listCatalogFiles(repo);
       const renamedFolder = rows.find((row) => row.id === folder.id);
       const renamedChild = rows.find((row) => row.id === child.id);
       const untouchedSibling = rows.find((row) => row.id === sibling.id);
@@ -639,17 +627,16 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       expect(renamedChild).toMatchObject({
         id: child.id,
         path: 'z/b/c.txt',
-        storageKey: 'z/b/c.txt',
+        storageKey: child.storageKey,
       });
       expect(untouchedSibling).toMatchObject({ id: sibling.id, path: 'a-sibling.txt' });
     });
 
     it('preserves the file id an agent_files grant references across a subtree rename (issue #131)', async () => {
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      const file = await repo.putFile({
+      const file = await seedCatalogFile(repo, {
         path: 'assigned/note.txt',
         kind: 'file',
-        storageKey: 'assigned/note.txt',
         sizeBytes: 4,
         contentType: 'text/plain',
         ownerPrincipalId: principalA,
@@ -684,72 +671,71 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
         access: 'read',
       });
 
-      await repo.renameFilesByPrefix('assigned', 'moved');
+      await repo.rename('assigned', 'moved');
 
       const grant = await isolated.db
         .select({ fileId: agentFiles.fileId })
         .from(agentFiles)
         .where(and(eq(agentFiles.workspaceId, workspaceId), eq(agentFiles.agentId, agentId)));
       expect(grant).toEqual([{ fileId: file.id }]);
-      const rows = await repo.listFiles();
+      const rows = await listCatalogFiles(repo);
       expect(rows.find((row) => row.id === file.id)).toMatchObject({ path: 'moved/note.txt' });
     });
 
     it('does not touch another workspace, and is a no-op when nothing is under the prefix', async () => {
       const a = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
       const b = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeB);
-      const otherWorkspaceFile = await b.putFile({
+      const otherWorkspaceFile = await seedCatalogFile(b, {
         path: 'shared-prefix/x.txt',
         kind: 'file',
-        storageKey: 'shared-prefix/x.txt',
         sizeBytes: 1,
         contentType: null,
         ownerPrincipalId: principalB,
         createdBy: userB,
       });
 
-      await expect(a.renameFilesByPrefix('shared-prefix', 'renamed-prefix')).resolves.toEqual([]);
-      const stillThere = await b.listFiles();
+      await expect(a.rename('shared-prefix', 'renamed-prefix')).resolves.toEqual({
+        rows: 0,
+        files: 0,
+      });
+      const stillThere = await listCatalogFiles(b);
       expect(stillThere.find((row) => row.id === otherWorkspaceFile.id)).toMatchObject({
         path: 'shared-prefix/x.txt',
       });
 
-      await expect(a.deleteFilesByPrefix('does-not-exist')).resolves.toBeUndefined();
+      await expect(a.remove('does-not-exist')).resolves.toEqual([]);
     });
 
-    it('deleteFilesByPrefix removes a folder and its descendants, never a same-prefixed sibling', async () => {
+    it('removing a folder takes its descendants, never a same-prefixed sibling', async () => {
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
-      const folder = await repo.putFile({
+      const folder = await seedCatalogFile(repo, {
         path: 'to-delete',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
-      const child = await repo.putFile({
+      const child = await seedCatalogFile(repo, {
         path: 'to-delete/child.txt',
         kind: 'file',
-        storageKey: 'to-delete/child.txt',
         sizeBytes: 1,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
-      const sibling = await repo.putFile({
+      const sibling = await seedCatalogFile(repo, {
         path: 'to-delete-sibling.txt',
         kind: 'file',
-        storageKey: 'to-delete-sibling.txt',
         sizeBytes: 1,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
 
-      await repo.deleteFilesByPrefix('to-delete');
+      await repo.remove('to-delete');
 
-      const rows = await repo.listFiles();
+      const rows = await listCatalogFiles(repo);
       expect(rows.find((row) => row.id === folder.id)).toBeUndefined();
       expect(rows.find((row) => row.id === child.id)).toBeUndefined();
       expect(rows.find((row) => row.id === sibling.id)).toMatchObject({
@@ -765,56 +751,49 @@ describe.skipIf(!hasDatabase)('ResourceCatalogRepository against PostgreSQL', ()
       // `pathUnderPrefix` in resource-catalogs.ts.
       const repo = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scopeA);
       const prefix = '😀x';
-      const folder = await repo.putFile({
+      const folder = await seedCatalogFile(repo, {
         path: prefix,
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
-      const child = await repo.putFile({
+      const child = await seedCatalogFile(repo, {
         path: `${prefix}/inner.txt`,
         kind: 'file',
-        storageKey: `${prefix}/inner.txt`,
         sizeBytes: 1,
         contentType: 'text/plain',
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
-      const sibling = await repo.putFile({
+      const sibling = await seedCatalogFile(repo, {
         path: `${prefix}-sibling.txt`,
         kind: 'file',
-        storageKey: `${prefix}-sibling.txt`,
         sizeBytes: 1,
         contentType: null,
         ownerPrincipalId: principalA,
         createdBy: userA,
       });
 
-      const renamed = await repo.renameFilesByPrefix(prefix, 'moved-emoji');
-      expect(renamed.map((row) => row.path).sort()).toEqual([
-        'moved-emoji',
-        'moved-emoji/inner.txt',
-      ]);
+      await expect(repo.rename(prefix, 'moved-emoji')).resolves.toEqual({ rows: 2, files: 1 });
 
-      const rowsAfterRename = await repo.listFiles();
+      const rowsAfterRename = await listCatalogFiles(repo);
       expect(rowsAfterRename.find((row) => row.id === folder.id)).toMatchObject({
         path: 'moved-emoji',
         storageKey: null,
       });
       expect(rowsAfterRename.find((row) => row.id === child.id)).toMatchObject({
         path: 'moved-emoji/inner.txt',
-        storageKey: 'moved-emoji/inner.txt',
+        storageKey: child.storageKey,
       });
       expect(rowsAfterRename.find((row) => row.id === sibling.id)).toMatchObject({
         path: `${prefix}-sibling.txt`,
       });
 
-      await repo.deleteFilesByPrefix('moved-emoji');
+      await repo.remove('moved-emoji');
 
-      const rowsAfterDelete = await repo.listFiles();
+      const rowsAfterDelete = await listCatalogFiles(repo);
       expect(rowsAfterDelete.find((row) => row.id === folder.id)).toBeUndefined();
       expect(rowsAfterDelete.find((row) => row.id === child.id)).toBeUndefined();
       expect(rowsAfterDelete.find((row) => row.id === sibling.id)).toMatchObject({

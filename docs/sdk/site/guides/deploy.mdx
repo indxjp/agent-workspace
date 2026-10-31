@@ -75,7 +75,12 @@ deployment's URL as above.
 
 `aw deploy` never prints a password or key. It names the file or the command that holds the
 Owner's password. `aw deploy` passes the project's `policy` to the deployment as
-`AW_DEPLOYMENT_POLICY`, so `aw promote` there holds the same eval bar as `aw dev`.
+`AW_DEPLOYMENT_POLICY`, so `aw promote` there holds the same eval bar as `aw dev`. It passes the
+project's `features:` list the same way, as `AW_DEPLOYMENT_FEATURES=chat,files` in the deployment's
+`.env`: Compose forwards it to web, Kubernetes gets it as the chart's `deploymentFeatures`, Cloud Run
+as the module's `deployment_features`, and the Vercel target pushes it with every other `.env`
+entry. A route of a feature the list leaves out answers `404 feature_disabled`. With no `features:`
+the line is removed and every feature is installed, as before.
 Every prerequisite that `aw deploy` can check is refused by name before anything is created.
 A Vercel or Cloudflare plan without the account's token or id reads nothing from the account: it
 says so and lists what an apply would create, as if nothing existed yet. `--yes` still needs both.

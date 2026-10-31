@@ -55,6 +55,7 @@ import { createDatabaseRuntimeProfileRepositoryProvider } from './runtime-profil
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
 import { postgresViolations, type PostgresViolation } from './violations.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -482,10 +483,44 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     ).resolves.toEqual({ kind: 'unknown-principal' });
   });
 
+  it.each(['local', 'production'] as const)(
+    'refuses a %s move of an archived agent from the locked row and writes nothing (#1987)',
+    async (environment) => {
+      const agentId = await seedAgent(`archived-${environment}`);
+      await version(agentId);
+      await isolated.db
+        .update(agents)
+        .set({ archivedAt: new Date('2026-01-02T03:04:05.000Z') })
+        .where(eq(agents.id, agentId));
+      const before = await snapshot(agentId);
+      const auditsBefore = await isolated.db.$count(
+        auditEvents,
+        and(eq(auditEvents.action, 'agent-changed'), eq(auditEvents.subjectId, agentId)),
+      );
+
+      await expect(
+        repoA.applyAndPoint(agentId, {
+          reason: 'set',
+          audit: auditBy(),
+          environment,
+          number: 1,
+          agent: materialise({ name: `archived-${environment}` }),
+        }),
+      ).resolves.toEqual({ kind: 'agent-archived' });
+
+      expect((await repoA.list(agentId))?.pointers).toEqual([]);
+      expect(await snapshot(agentId)).toEqual(before);
+      expect(
+        await isolated.db.$count(
+          auditEvents,
+          and(eq(auditEvents.action, 'agent-changed'), eq(auditEvents.subjectId, agentId)),
+        ),
+      ).toBe(auditsBefore);
+    },
+  );
+
   it('applies a version and its assignments, narrowing read-write to read (#133)', async () => {
     const agentId = await seedAgent('applied');
-    const archivedAt = new Date('2026-01-02T03:04:05.000Z');
-    await isolated.db.update(agents).set({ archivedAt }).where(eq(agents.id, agentId));
     await version(agentId);
     const outcome = await repoA.applyAndPoint(agentId, {
       reason: 'set',
@@ -504,7 +539,7 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
     });
     expect(outcome).toMatchObject({
       kind: 'applied',
-      agent: { id: agentId, instructions: 'Be helpful.', archivedAt },
+      agent: { id: agentId, instructions: 'Be helpful.' },
       pointer: { agentId, environment: 'local', number: 1 },
     });
     const rows = await snapshot(agentId);
@@ -930,6 +965,7 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
       path: 'pending-upload.pdf',
       kind: 'file',
       storageKey: 'pending-upload.pdf',
+      objectId: crypto.randomUUID(),
       status: 'pending',
       ownerPrincipalId: principalA,
       createdBy: userA,
@@ -1005,10 +1041,9 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
       missing: [{ kind: 'file', name: 'manuals' }],
     });
 
-    await catalogA.putFile({
+    await seedCatalogFile(catalogA, {
       path: 'manuals/hydraulic-unit.md',
       kind: 'file',
-      storageKey: 'manuals/hydraulic-unit.md',
       sizeBytes: 1,
       contentType: 'text/markdown',
       ownerPrincipalId: principalA,
@@ -1032,10 +1067,9 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
       connectors: [],
       files: [{ path: 'moved-into', access: 'read' as const }],
     };
-    await catalogA.putFile({
+    await seedCatalogFile(catalogA, {
       path: 'loose.md',
       kind: 'file',
-      storageKey: 'loose.md',
       sizeBytes: 1,
       contentType: 'text/markdown',
       ownerPrincipalId: principalA,
@@ -1046,13 +1080,7 @@ describe.skipIf(!hasDatabase)('AgentVersionRepository against real PostgreSQL', 
       missing: [{ kind: 'file', name: 'moved-into' }],
     });
 
-    await catalogA.renameFile('loose.md', {
-      path: 'moved-into/loose.md',
-      kind: 'file',
-      storageKey: 'moved-into/loose.md',
-      sizeBytes: 1,
-      contentType: 'text/markdown',
-    });
+    await catalogA.rename('loose.md', 'moved-into/loose.md');
 
     await expect(repoA.resolveDefinition(references)).resolves.toMatchObject({
       kind: 'resolved',

@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 
 import { ProjectsScreen } from '../../../components/projects/projects-screen';
+import { switchedOffPanel } from '../feature-gate';
 
 /**
  * `/projects` — the project list and its create form.
@@ -13,7 +14,9 @@ import { ProjectsScreen } from '../../../components/projects/projects-screen';
  */
 export const dynamic = 'force-dynamic';
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const off = await switchedOffPanel('projects');
+  if (off !== null) return off;
   return (
     <Suspense fallback={<main className="p-8 text-[13px] text-muted">Loading…</main>}>
       <ProjectsScreen />

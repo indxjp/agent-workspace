@@ -133,6 +133,18 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "webhooks"},
+   "id": "checks/webhooks",
+   "expected": {"otherChecks": ["webhooks_url_length", "webhooks_events_valid"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "webhook_deliveries"},
+   "id": "checks/webhook_deliveries",
+   "expected": {"otherChecks": ["webhook_deliveries_event_type_valid", "webhook_deliveries_delivered_shape"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "projects_name_not_blank"},
    "id": "check/projects_name_not_blank",
    "expected": {"sql": "length(btrim(\"projects\".\"name\")) > 0"}},
@@ -297,6 +309,36 @@
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "trigger_deliveries_key_length"},
    "id": "check/trigger_deliveries_key_length",
-   "expected": {"sql": "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"}}],
+   "expected": {"sql": "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhooks_url_length"},
+   "id": "check/webhooks_url_length",
+   "expected": {"sql": "char_length(\"webhooks\".\"url\") between 1 and 2048"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhooks_events_valid"},
+   "id": "check/webhooks_events_valid",
+   "expected":
+   {"sql":
+    "cardinality(\"webhooks\".\"events\") between 1 and 3 and \"webhooks\".\"events\" <@ ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[]"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhook_deliveries_event_type_valid"},
+   "id": "check/webhook_deliveries_event_type_valid",
+   "expected":
+   {"sql":
+    "\"webhook_deliveries\".\"event_type\" = any(ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[])"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhook_deliveries_delivered_shape"},
+   "id": "check/webhook_deliveries_delivered_shape",
+   "expected":
+   {"sql":
+    "(\"webhook_deliveries\".\"state\" = 'delivered') = (\"webhook_deliveries\".\"delivered_at\" is not null)"}}],
  "family": "concept-work",
  "description": "The refined checks of the work tables and their exact SQL"}

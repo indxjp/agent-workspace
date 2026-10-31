@@ -408,35 +408,51 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       await updating;
     });
 
-    it('[US-STO-12][unit][run] binds a pre-binding secret on its first read, so a later move cannot carry it', async () => {
+    // 0.6.11 reads only a bare secret, so a read that rewrote it would lock an undrained older
+    // revision out of the connection. Only create, edit and rotate write the envelope.
+    it('[US-STO-12][unit][run] reads a pre-binding secret for the row it is stored with, and never rewrites it', async () => {
       const bare = s3Credential();
       const f = await fixture(await setup(), undefined);
       await f.plantBare(bare);
-      expect(await f.storedTarget()).toBeNull();
+      const planted = (await f.stored())?.value;
       expect(await f.browse()).toEqual(bare);
-      expect(await f.storedTarget()).not.toBeNull();
-      // A move that bypasses the store (an older revision's PATCH) does not take it along.
-      await f.moveRowAround(URL_B);
-      expect(await f.browse()).toBeNull();
-      expect(await runRefusal(f.runs.open(f.workspace, f.id))).toBe(
-        'run_storage_grant_unavailable',
-      );
-      expect(opener).not.toHaveBeenCalled();
+      await f.runs.open(f.workspace, f.id);
+      expect(openedPairs()).toEqual([[URL_A, bare]]);
+      expect(await f.store.credential(f.id, URL_A)).toEqual(bare);
+      // Still the bare bytes an older revision reads.
+      expect(await f.storedTarget()).toBeNull();
+      expect((await f.stored())?.value.equals(planted ?? Buffer.alloc(0))).toBe(true);
+      expect(JSON.parse((await f.stored())?.value.toString('utf8') ?? 'null')).toEqual(bare);
     });
 
-    it("[US-STO-12][unit][run] a reader's bind of a pre-binding secret never undoes a rotation made since its read", async () => {
+    it('[US-STO-12][unit][run] a read of a pre-binding secret writes nothing, so a rotation made during it stands', async () => {
       const bare = s3Credential();
       const rotated = s3Credential();
       const f = await fixture(await setup(), undefined);
       await f.plantBare(bare);
-      // The reader has read the bare secret; its second read, just before the bind, is held.
-      const gate = f.secrets.arm('resolveByName', { skip: 1 });
+      const gate = f.secrets.arm('resolveByName');
       const reading = f.browse();
       await gate.reached;
       expect((await f.store.rotate(f.id, URL_A, rotated)).kind).toBe('changed');
       gate.release();
       expect(await reading).toEqual(rotated);
       expect(await f.browse()).toEqual(rotated);
+      expect(await f.storedTarget()).toBe(credentialTarget(URL_A));
+    });
+
+    it('[US-STO-12][unit][run] an edit that moves the row binds a pre-binding secret that reads left bare', async () => {
+      const bare = s3Credential();
+      const f = await fixture(await setup(), undefined);
+      await f.plantBare(bare);
+      expect(await f.browse()).toEqual(bare);
+      expect(await f.storedTarget()).toBeNull();
+      expect((await f.store.update(f.id, URL_A, { url: URL_B })).kind).toBe('updated');
+      expect(await f.storedTarget()).toBe(credentialTarget(URL_A));
+      expect(await f.browse()).toBeNull();
+      expect(await runRefusal(f.runs.open(f.workspace, f.id))).toBe(
+        'run_storage_grant_unavailable',
+      );
+      expect(opener).not.toHaveBeenCalled();
     });
 
     it("[US-STO-12][unit][run] a PATCH's bind of a pre-binding secret never undoes a rotation made since its read", async () => {

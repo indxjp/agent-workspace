@@ -1,6 +1,7 @@
 // Fitness test for the storage size limits (the storage design, §04 "Size limits"): each limit is
 // defined in exactly one place, and a copy anywhere else in the storage scope fails here. The
-// allowlist holds today's copies and may only shrink; #1626 deletes them.
+// allowlist holds today's copies, one site each, and matches the scan exactly both ways: a new
+// copy, a second copy under an allowlisted name, or an entry the scan no longer finds fails.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -23,11 +24,17 @@ function allowlist(): Record<string, string> {
   return JSON.parse(readFileSync(root + ALLOWLIST, 'utf8')) as Record<string, string>;
 }
 
-/** Shared by the real scan and the fixtures: (new violations, stale allowlist entries). */
+/**
+ * Shared by the real scan and the fixtures. `found` has one key per site, so a key found twice is
+ * a second copy under an allowlisted name. Each allowlisted key must be found exactly once.
+ */
 function compare(found: readonly string[], allowed: readonly string[]) {
+  const count = (key: string) => found.filter((site) => site === key).length;
+  const keys = [...new Set(found)];
   return {
-    added: found.filter((key) => !allowed.includes(key)),
-    stale: allowed.filter((key) => !found.includes(key)),
+    added: keys.filter((key) => !allowed.includes(key)),
+    grown: keys.filter((key) => allowed.includes(key) && count(key) > 1),
+    stale: allowed.filter((key) => count(key) === 0),
   };
 }
 
@@ -243,17 +250,42 @@ describe('storage size limits are defined once', () => {
     expect(findMissingOwners([])).toHaveLength(STORAGE_LIMITS.length);
   });
 
-  it('allowlist has no stale entry', () => {
-    expect(compare(['a::X'], ['a::X', 'b::Y'])).toEqual({ added: [], stale: ['b::Y'] });
-    expect(compare(['a::X', 'c::Z'], ['a::X'])).toEqual({ added: ['c::Z'], stale: [] });
+  it('counts a second copy under the same name in one file', () => {
+    const files = [
+      {
+        path: 'apps/runner/src/m.ts',
+        text: 'function a() { const CAP = 128 * 1024 * 1024; }\nfunction b() { const CAP = 2 ** 27; }',
+      },
+    ];
+    expect(findLimitCopies(files)).toEqual([
+      'apps/runner/src/m.ts::CAP',
+      'apps/runner/src/m.ts::CAP',
+    ]);
+  });
 
+  it('compares with the allowlist exactly, both ways', () => {
+    const none = { added: [], grown: [], stale: [] };
+    expect(compare(['a::X'], ['a::X'])).toEqual(none);
+    expect(compare(['a::X'], ['a::X', 'b::Y'])).toEqual({ ...none, stale: ['b::Y'] });
+    expect(compare(['a::X', 'c::Z'], ['a::X'])).toEqual({ ...none, added: ['c::Z'] });
+    expect(compare(['a::X', 'a::X'], ['a::X'])).toEqual({ ...none, grown: ['a::X'] });
+  });
+
+  it('every allowlist entry gives a reason', () => {
+    for (const [key, reason] of Object.entries(allowlist())) {
+      expect(typeof reason === 'string' && reason.trim().length > 0, key).toBe(true);
+    }
+  });
+
+  it('the allowlist matches the scan exactly and only shrinks', () => {
     const files = trackedTextFiles();
     const found = [...findLimitCopies(files), ...findMissingOwners(files)].sort();
-    const { added, stale } = compare(found, Object.keys(allowlist()));
+    const { added, grown, stale } = compare(found, Object.keys(allowlist()));
     const ownedBy = STORAGE_LIMITS.map((limit) => `${limit.name} (${limit.owner})`).join(', ');
-    expect(added, `new copy of a storage size limit: import it from its owner: ${ownedBy}`).toEqual(
-      [],
-    );
+    expect(
+      [...added, ...grown],
+      `new copy of a storage size limit: import it from its owner: ${ownedBy}`,
+    ).toEqual([]);
     expect(stale, 'allowlist entries the scan no longer finds: delete them').toEqual([]);
 
     // Bounded by the scope: parsing every apps/packages source took the scan to 4 s of vitest's 5.

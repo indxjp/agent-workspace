@@ -289,6 +289,11 @@ export interface WorkspaceDirectory {
   listUsers(): Promise<UserSummary[]>;
   createUser(input: CreateUserInput): Promise<CreateUserOutcome>;
   listMemberships(): Promise<MembershipSummary[]>;
+  /**
+   * The workspace's membership acting as `principalId`, or `null` when no live membership principal
+   * of this workspace has that id (another workspace's, an API key's, a removed member's or none).
+   */
+  findMembershipByPrincipal(principalId: string): Promise<MembershipSummary | null>;
   createMembership(input: CreateMembershipInput): Promise<CreateMembershipOutcome>;
   changeMembershipRole(id: string, role: ConferredRole): Promise<MembershipChangeOutcome>;
   deleteMembership(id: string): Promise<DeleteMembershipOutcome>;

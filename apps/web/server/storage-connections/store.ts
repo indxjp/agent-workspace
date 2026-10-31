@@ -119,8 +119,9 @@ export interface WorkspaceStorageConnectionsStore {
    * The stored credential, for the server to open the connection with; it never reaches a response.
    * `url` is the row snapshot the caller will open: `null` when no credential is stored, the stored
    * value is not a credential, or it was supplied for another endpoint, account or bucket. A bare
-   * (pre-binding) secret is bound on this read to the row as it is now, and returned only when
-   * that row still has `url`'s target.
+   * (pre-binding) secret is returned only while the row still has `url`'s target; it is bound to
+   * that target in memory and never written back, so an older revision can still read it. Only
+   * `create`, `update` and `rotate` write a secret.
    */
   credential(id: string, url: string): Promise<StorageConnectionCredential | null>;
   create(input: NewStorageConnection): Promise<CreateStorageConnectionResult>;
@@ -322,29 +323,13 @@ export function createRepositoryStorageConnectionsStoreProvider(
           const secret = await dependencies.secrets.resolveByName(scope, name);
           const stored = storedCredential(secret?.value);
           if (stored === null || stored.target !== null) return boundCredential(secret?.value, url);
-          // A bare secret predates the binding. It is bound now, to the row as it is now, and only
-          // when that row still has the snapshot's target: a PATCH binds it before moving the row,
-          // so it is never carried to a URL the row did not have when it was bound.
+          // A bare secret predates the binding. It counts as bound to the row as it is now, and
+          // only when that row still has the snapshot's target. Nothing is written back: 0.6.11
+          // reads only the bare form. `update` binds it to the old target before it moves the row;
+          // a move by an older revision is why the self-hosting guide says to drain them first.
           const target = credentialTarget(url);
           const row = await repository.get(id);
           if (row === null || target === null || credentialTarget(row.url) !== target) return null;
-          if (secret === null) return null;
-          // Only over the same bare bytes: a PATCH that bound it, or a rotation, since the first
-          // read is never undone, and what is stored now is judged instead.
-          const bound = await writeCredential(
-            dependencies.secrets,
-            scope,
-            id,
-            row.url,
-            stored.credential,
-            secret.value,
-          );
-          if (bound === 'skipped') {
-            return boundCredential(
-              (await dependencies.secrets.resolveByName(scope, name))?.value,
-              url,
-            );
-          }
           return stored.credential;
         },
         async create(input) {

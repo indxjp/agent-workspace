@@ -13,7 +13,7 @@ open AgentWorkspace AgentWorkspace.Concepts.Membership AgentWorkspace.Concepts.B
   AgentWorkspace.Authz.Roles AgentWorkspace.Authz.Resources AgentWorkspace.Authz.Permissions
   AgentWorkspace.Authz.TokenScope AgentWorkspace.Authz.Surface AgentWorkspace.Authz.Decide
 
-/-- `RESOURCES` is exactly these 31 path segments, in this order. -/
+/-- `RESOURCES` is exactly these 32 path segments, in this order. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/resources.ts#RESOURCES")
   (doc := "docs/formal/domains/d1-runs.md#authorisation")]
 theorem resource_wires_are_the_thirty_resources :
@@ -22,7 +22,7 @@ theorem resource_wires_are_the_thirty_resources :
         "invitations", "me", "memberships", "metrics", "model-connections", "models", "platforms", "projects",
         "runs", "runtime-connections", "runtime-profiles", "runtimes", "secrets", "sessions", "shares",
         "sharing-policies", "skills", "setup", "storage-connections", "tool-bundles", "tokens", "triggers",
-        "users", "workspaces"] := by
+        "users", "webhooks", "workspaces"] := by
   decide +kernel
 
 /-- The operation, grant, ownership, surface and method vocabularies are exactly the TypeScript
@@ -144,13 +144,13 @@ private def routeClassified (r : DeclaredRoute) : Bool :=
       | .refused _ => false
     | _ => false
 
-/-- The authorisation matrix is total: its 157 routes (the declared union minus the eighteen
+/-- The authorisation matrix is total: its 160 routes (the declared union minus the eighteen
 pre-authentication routes and the nine identity-only routes) are decided — `allow` or `deny`, never
-`refuse` — for every role and every ownership answer, 3 140 cells. -/
+`refuse` — for every role and every ownership answer, 3 200 cells. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#undecidedCells")
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")]
 theorem every_matrix_route_is_decided :
-    matrixRoutes.length = 157 ∧ ∀ r ∈ matrixRoutes, ∀ role : Role, ∀ o : Ownership,
+    matrixRoutes.length = 160 ∧ ∀ r ∈ matrixRoutes, ∀ role : Role, ∀ o : Ownership,
       (decideOrdinary ⟨WireEnum.toWire role, r.method, r.path, o, none⟩).effect ≠ .refuse := by
   have hall : matrixRoutes.all routeClassified = true := by decide +kernel
   refine ⟨by decide +kernel, fun r hr role o => ?_⟩

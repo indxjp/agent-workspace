@@ -63,7 +63,9 @@
      "users",
      "workspaces",
      "workspace_principals",
-     "workspace_features"],
-    "snapshot": "0092_snapshot.json"}}],
+     "workspace_features",
+     "webhooks",
+     "webhook_deliveries"],
+    "snapshot": "0096_snapshot.json"}}],
  "family": "er-core",
  "description": "The set of table names"}

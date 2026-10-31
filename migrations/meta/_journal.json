@@ -652,6 +652,34 @@
       "when": 1793129418757,
       "tag": "0092_workspace_features",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793210353079,
+      "tag": "0093_storage_proof_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1793232921052,
+      "tag": "0094_files_pending_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793384914121,
+      "tag": "0095_webhooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793384914122,
+      "tag": "0096_app_backend_endpoint_clients",
+      "breakpoints": true
     }
   ]
 }

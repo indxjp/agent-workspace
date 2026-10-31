@@ -140,6 +140,7 @@ import {
   TranscriptSubkeysResponseSchema,
 } from './sessions.js';
 import { ShareListResponseSchema, ShareResourceSchema } from './shares.js';
+import { TokenExchangeRequestSchema, TokenExchangeResponseSchema } from './token-exchange.js';
 import { SurfaceAttachmentResponseSchema } from './surfaces.js';
 import {
   PublishSkillRevisionRequestSchema,
@@ -166,6 +167,11 @@ import {
   UpdateTriggerRequestSchema,
   ZoomUrlValidationResponseSchema,
 } from './triggers.js';
+import {
+  CreateWebhookRequestSchema,
+  CreateWebhookResponseSchema,
+  WebhookListResponseSchema,
+} from './webhooks.js';
 import {
   SharingPolicySchema,
   WorkspaceListResponseSchema,
@@ -229,6 +235,8 @@ export const API_SCHEMAS = {
   CreateEvaluationRunRequestSchema,
   CreateTriggerRequestSchema,
   CreateTriggerResponseSchema,
+  CreateWebhookRequestSchema,
+  CreateWebhookResponseSchema,
   CreatedUserResponseSchema,
   DeleteModelConnectionResponseSchema,
   DiscoveredModelsResponseSchema,
@@ -312,6 +320,8 @@ export const API_SCHEMAS = {
   StreamResetFrameDataSchema,
   SurfaceAttachmentResponseSchema,
   TestConnectionOutcomeSchema,
+  TokenExchangeRequestSchema,
+  TokenExchangeResponseSchema,
   ToolBundleResponseSchema,
   TranscriptResponseSchema,
   TranscriptSubkeysResponseSchema,
@@ -324,6 +334,7 @@ export const API_SCHEMAS = {
   UploadToolBundleRequestSchema,
   UploadToolBundleResponseSchema,
   UserListResponseSchema,
+  WebhookListResponseSchema,
   WorkspaceFeaturesSchema,
   WorkspaceListResponseSchema,
   WorkspaceMembershipResponseSchema,
@@ -372,6 +383,16 @@ export interface ApiMultipartPart {
   readonly description: string;
 }
 
+/**
+ * One request header a route reads beyond the ones every route shares (the contracts version and
+ * the credential). The header's value is a string; its rules and refusals are in `description`.
+ */
+export interface ApiRequestHeader {
+  readonly name: string;
+  readonly required: boolean;
+  readonly description: string;
+}
+
 /** One success answer of a route. Failures are the standard envelope and are not listed per route. */
 export interface ApiSuccess {
   readonly status: number;
@@ -395,6 +416,8 @@ export interface ApiRoute {
   readonly summary: string;
   /** Absent when the request carries no body. */
   readonly request?: ApiBody;
+  /** Request headers this route reads beyond the shared ones; absent when it reads none. */
+  readonly headers?: readonly ApiRequestHeader[];
   /**
    * Older request bodies the route still accepts beside `request`, each on its own media type,
    * kept for one release and then removed (04 §4). The OpenAPI document marks them deprecated.
@@ -775,6 +798,18 @@ export const API_ROUTES: readonly ApiRoute[] = [
     security: 'user-token',
   },
   {
+    method: 'POST',
+    path: '/api/auth/token-exchange',
+    operationId: 'auth.exchange',
+    tag: 'auth',
+    feature: 'core',
+    summary:
+      "Exchange the signed-in person's OIDC ID token for a short-lived access token of an app-backend endpoint client (ADR-0161)",
+    request: json('TokenExchangeRequestSchema'),
+    success: ok(json('TokenExchangeResponseSchema')),
+    security: 'none',
+  },
+  {
     method: 'GET',
     path: '/api/sharing-policies',
     operationId: 'workspaces.sharingPolicy.get',
@@ -1083,6 +1118,38 @@ export const API_ROUTES: readonly ApiRoute[] = [
       { status: 200, body: json('ZoomUrlValidationResponseSchema') },
     ],
     security: 'none',
+  },
+
+  // §5.17 — run-outcome webhooks (N-3, issue #250, ADR-SDK-18-N3-250)
+  {
+    method: 'GET',
+    path: '/api/webhooks',
+    operationId: 'webhooks.list',
+    tag: 'webhooks',
+    feature: 'runs',
+    summary: "List the workspace's webhooks (at most 10, unpaginated); the secret is never listed",
+    success: ok(json('WebhookListResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/webhooks',
+    operationId: 'webhooks.create',
+    tag: 'webhooks',
+    feature: 'runs',
+    summary:
+      'Register a webhook for terminal run outcomes. The URL must pass the egress policy; the ' +
+      'whsec_ signing secret is returned once, in this answer',
+    request: json('CreateWebhookRequestSchema'),
+    success: created(json('CreateWebhookResponseSchema')),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/webhooks/:id',
+    operationId: 'webhooks.remove',
+    tag: 'webhooks',
+    feature: 'runs',
+    summary: 'Remove a webhook, its pending deliveries and its signing secret',
+    success: NO_CONTENT,
   },
 
   // §5.3 — model connections and models
@@ -2027,6 +2094,18 @@ export const API_ROUTES: readonly ApiRoute[] = [
     feature: 'core',
     summary: 'Start a run of an agent',
     request: json('StartRunRequestSchema'),
+    headers: [
+      {
+        name: 'Idempotency-Key',
+        required: false,
+        description:
+          'Makes a retried start safe (S-6, ADR-0151, spec §5.12): 1–255 characters after ' +
+          'trimming, scoped to the calling principal. The same key with the same request returns ' +
+          'the run the first start queued; the same key with a different request answers ' +
+          '`409 run_idempotency_conflict`; a blank or longer key answers ' +
+          '`400 invalid_idempotency_key`.',
+      },
+    ],
     success: [{ status: 202, body: json('StartRunResponseSchema') }],
   },
   {

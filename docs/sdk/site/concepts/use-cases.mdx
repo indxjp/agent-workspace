@@ -101,11 +101,11 @@ job.
 **Pages:** [Integrate a backend](/building/backend), [Retries and
 idempotency](/guides/retries-and-idempotency), [CLI vs SDK](/cli/cli-vs-sdk).
 
-<Note>
-  **Today:** there are no webhooks — poll or stream in-process — and a retried start is safe only
-  with an `idempotencyKey`. Tracked as [N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes) and
-  [S-6](/concepts/roadmap#s-6-idempotency-keys).
-</Note>
+A job that does not wait for the run registers a [webhook](/resources/webhooks) and acts on the
+signed `run.completed`, `run.failed` or `run.cancelled` it receives
+([Integrate a backend](/building/backend#receive-run-outcomes-with-a-webhook)). A retried start is
+safe with an `idempotencyKey`
+([Retries and idempotency](/guides/retries-and-idempotency#make-runs-start-idempotent-with-a-key)).
 
 ## 4. A review agent with commands allowed — and contained
 

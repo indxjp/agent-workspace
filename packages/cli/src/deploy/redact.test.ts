@@ -1,3 +1,4 @@
+import { IGNORED_STORAGE_VARIABLES } from '@indx-workspace/contracts/storage-settings';
 import { describe, expect, it } from 'vitest';
 
 import { createRedactor } from './redact.js';
@@ -10,7 +11,7 @@ describe('createRedactor', () => {
     OPERATOR_TOKEN: "'quoted-token'",
     WEB_IMAGE: 'registry.example/web@sha256:1111',
     COMPOSE_PROJECT_NAME: 'acme-ai',
-    OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
+    AWS_REGION: 'eu-west-1',
     SHORT: 'abc',
     AW_PUBLIC_URL: 'https://agents.acme.example',
     AGENT_WORKSPACE_VERSION: '0.6.1',
@@ -24,8 +25,8 @@ describe('createRedactor', () => {
   });
 
   it('keeps image references, the project name and public settings readable', () => {
-    expect(redact('pull registry.example/web@sha256:1111 for acme-ai, path style true')).toBe(
-      'pull registry.example/web@sha256:1111 for acme-ai, path style true',
+    expect(redact('pull registry.example/web@sha256:1111 for acme-ai in eu-west-1')).toBe(
+      'pull registry.example/web@sha256:1111 for acme-ai in eu-west-1',
     );
   });
 
@@ -39,6 +40,19 @@ describe('createRedactor', () => {
     expect(redact('GET https://agents.acme.example/api/health')).toBe(
       'GET https://agents.acme.example/api/health',
     );
+  });
+
+  // STO-606 (#1703): nothing generates the old storage variables any more, so a value left behind in
+  // an operator's `.env` is masked like any other key `deploy` does not know to be public.
+  it('masks the values of the eight ignored storage variables', () => {
+    expect(IGNORED_STORAGE_VARIABLES).toHaveLength(8);
+    const values = IGNORED_STORAGE_VARIABLES.map((name, index): [string, string] => [
+      name,
+      `old-storage-value-${String(index)}`,
+    ]);
+    const withOld = createRedactor(Object.fromEntries(values));
+    const printed = values.map(([, value]) => value).join(' ');
+    expect(withOld(printed)).toBe(values.map(() => '***').join(' '));
   });
 
   it('does not mask a value too short to be a credential', () => {

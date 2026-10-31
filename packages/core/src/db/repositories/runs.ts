@@ -37,6 +37,7 @@ import {
   sql,
   type SQL,
 } from 'drizzle-orm';
+import { webhookEventTypeOf } from '@indx-workspace/contracts/webhooks';
 
 import type { Database } from '../client.js';
 import { agentVersions } from '../schema/agent-versions.js';
@@ -162,6 +163,29 @@ interface StopSet {
 /** The largest `limit` a caller may request in one page. */
 const MAX_RUN_LIST_LIMIT = 200;
 
+/**
+ * The webhook outbox (ADR-SDK-18-N3-250 D4): inside a stop's transaction, one pending delivery per
+ * webhook of the run's workspace that subscribes to the event `status` emits. The caller's guarded
+ * update moves a run to a terminal status once; the unique (workspace, webhook, run) index is the
+ * database fact behind that. `awaiting_approval` is stopped, not final, and emits nothing (D3).
+ */
+async function enqueueWebhookDeliveriesIn(
+  tx: Transaction,
+  workspaceId: string,
+  runId: string,
+  status: RunStatus,
+): Promise<void> {
+  const eventType = webhookEventTypeOf(status);
+  if (eventType === null) return;
+  await tx.execute(sql`
+    insert into webhook_deliveries (workspace_id, webhook_id, run_id, event_type)
+    select webhook.workspace_id, webhook.id, ${runId}::uuid, ${eventType}::text
+    from webhooks as webhook
+    where webhook.workspace_id = ${workspaceId}::uuid
+      and ${eventType}::text = any(webhook.events)
+    on conflict (workspace_id, webhook_id, run_id) do nothing`);
+}
+
 /** The PostgreSQL {@link RunRepositoryProvider}. */
 export function createDatabaseRunRepositoryProvider(db: Database): RunRepositoryProvider {
   return {
@@ -270,6 +294,7 @@ export function createDatabaseRunRepositoryProvider(db: Database): RunRepository
               .where(every(eq(runEvents.runId, runId), lte(runEvents.sequence, cutoff)));
           }
         }
+        await enqueueWebhookDeliveriesIn(tx, checked.workspaceId, runId, status);
         // Token revocation is part of the same commit as the stop. A gateway can therefore
         // never observe a committed stopped run whose bearer remains active.
         await tx

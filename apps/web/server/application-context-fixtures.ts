@@ -34,6 +34,8 @@ function unwired<K extends keyof ApplicationContext>(domain: K): ApplicationCont
  * `files` defaults to `unavailable` for the same reason: session retention purges attachments and
  * the ownership resolvers read the catalogue best-effort. `surfaces` defaults to `disabled`: the
  * proxy's CORS answer and the run API's visitor limits read it on every request, best-effort.
+ * `webhooks` defaults to `unavailable`: the feature inventory drives its routes with every feature
+ * on, and a deployment with no secrets service answers `503 webhook_api_not_configured`.
  * `runs` defaults to `disabled`: the shell page and the A2A card read it best-effort, and a
  * deployment with no run runtime answers `503 run_api_not_configured`.
  * `rbac` has no quiet default: every authorisation decision reads it, so a test that reaches the
@@ -87,6 +89,7 @@ export function installTestDomains({
     tokens: unwired('tokens'),
     toolEndpoint: unwired('toolEndpoint'),
     triggers: unwired('triggers'),
+    webhooks: { kind: 'unavailable' },
     workspaceFeatures: unwired('workspaceFeatures'),
     workspaces: unwired('workspaces'),
   };

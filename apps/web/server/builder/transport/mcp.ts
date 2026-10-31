@@ -6,8 +6,9 @@
  * six Builder tools; `tools/call` refuses a write or spend tool with `no_caller` when no person is
  * behind the run, and otherwise runs the core (`handleToolCall`) as the run's caller (#1846 slice 4).
  * The call id is the engine's tool-use id (`params._meta["claudecode/toolUseId"]`, which the engine
- * sets and the model cannot), so a gateway retry of one tool call is the same call; without one it is
- * minted here. A refusal never echoes the token or its claims.
+ * sets and the model cannot), so a gateway retry of one tool call is the same call. A read without
+ * one gets an id minted here; a write or spend without one is refused `invalid_arguments`. A refusal
+ * never echoes the token or its claims.
  */
 import {
   BUILDER_REFUSAL_CODES,
@@ -24,6 +25,7 @@ import { log } from '../../telemetry/logger';
 import { answerLocally, readCall, toolCallName } from '../../tool-endpoint/handler';
 import { handleToolCall } from '../shell';
 import type { BuilderPorts, ToolResult } from '../tools/types';
+import { admitBuilderDoorCall } from './limits';
 import { toCallContext, type BuilderRun, type BuilderRunReader } from './call-context';
 import { verifyRunCaller, type RunCallerDeps, type RunCallerRefusal } from './run-caller';
 
@@ -47,9 +49,13 @@ const ToolUseMetaSchema = z.object({
   _meta: z.object({ 'claudecode/toolUseId': z.string().min(1).max(128) }),
 });
 
-function callIdOf(params: unknown): string {
-  return ToolUseMetaSchema.safeParse(params).data?._meta['claudecode/toolUseId'] ?? randomUUID();
+/** The engine's tool-use id, or `null` when the request carries none. */
+function toolUseIdOf(params: unknown): string | null {
+  return ToolUseMetaSchema.safeParse(params).data?._meta['claudecode/toolUseId'] ?? null;
 }
+
+/** The `details` line of the refusal of a write that arrives without the engine's tool-use id. */
+export const MISSING_TOOL_USE_ID = '_meta.claudecode/toolUseId: required for a write or spend tool';
 
 const REFUSED: RunCallerRefusal = { ok: false, code: 'not_permitted', reads: false };
 
@@ -82,6 +88,13 @@ export async function serveBuilderMcp(request: Request, deps: BuilderDoor): Prom
   if (!verified.ok && !verified.reads) {
     const refusal = BUILDER_REFUSAL_CODES[verified.code];
     return apiError(refusal.status, verified.code, refusal.fix);
+  }
+  const runId = verified.ok ? verified.caller.runId : verified.run.runId;
+  const admission = admitBuilderDoorCall(runId, Date.now());
+  if (!admission.admitted) {
+    const response = apiError(429, 'builder_rate_limited', 'too many requests; retry later.');
+    response.headers.set('Retry-After', String(admission.retryAfterSeconds));
+    return response;
   }
   const call = await readCall(request);
   if (call instanceof Response) return call;
@@ -116,6 +129,13 @@ async function callTool(
     return refusal(verified.code);
   }
   if (deps.ports === null) return refusal('builder_disabled');
+  // A write or spend is idempotent only by the engine's tool-use id: minting one here would make
+  // every retry of the same call a new call, past the replay and the approval claim. `_meta` is the
+  // engine's to set, so the model cannot fix this; the refusal says what is missing and nothing more.
+  const toolUseId = toolUseIdOf(params);
+  if (toolUseId === null && known !== undefined && BUILDER_TOOLS[known].kind !== 'read') {
+    return refusal('invalid_arguments', [MISSING_TOOL_USE_ID]);
+  }
   const identity = verified.ok ? verified.caller : verified.run;
   let run: BuilderRun | null;
   try {
@@ -128,13 +148,13 @@ async function callTool(
   }
   if (run === null) return refusal('not_permitted');
   const { name, arguments: args } = (params ?? {}) as { name?: unknown; arguments?: unknown };
-  const raw = { name, arguments: args, callId: callIdOf(params) };
+  const raw = { name, arguments: args, callId: toolUseId ?? randomUUID() };
   return handleToolCall(raw, toCallContext(identity, run), deps.ports, request.signal);
 }
 
-export function refusal(code: BuilderRefusalCode): ToolResult {
+export function refusal(code: BuilderRefusalCode, details?: readonly string[]): ToolResult {
   const fix = BUILDER_REFUSAL_CODES[code].fix;
-  return { ok: false, code, message: fix, fix };
+  return { ok: false, code, message: fix, ...(details === undefined ? {} : { details }), fix };
 }
 
 export function toolAnswer(result: ToolResult) {

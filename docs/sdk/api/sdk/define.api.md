@@ -8,6 +8,7 @@ import { AgentPermissionKey } from '@indx-workspace/contracts/agents';
 import { AgentPolicyLimits } from '@indx-workspace/contracts/agents';
 import { AgentPolicySchema } from '@indx-workspace/contracts/agents';
 import { AgentVersionBody } from '@indx-workspace/contracts/agent-versions';
+import { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-versions';
 import { BuiltinSkillName } from '@indx-workspace/contracts/skills';
 import { EngineId } from '@indx-workspace/contracts/engines';
 import type { ProjectConnector } from '@indx-workspace/contracts/project-file';
@@ -40,7 +41,7 @@ export interface AgentVersionSource {
     // (undocumented)
     readonly body: AgentVersionBody;
     readonly codeToolNames?: readonly string[] | undefined;
-    readonly project?: Pick<ProjectDocument, 'engine' | 'connectors' | 'models'> | undefined;
+    readonly project?: Pick<ProjectDocument, 'engine' | 'connectors'> | undefined;
     readonly surfaces?: readonly DefinedSurface[] | undefined;
     readonly toolModules?: readonly ToolModuleExport[] | undefined;
 }
@@ -305,6 +306,30 @@ export interface OpenApiToolInput {
     readonly name: string;
     readonly spec: string;
 }
+
+// @public
+export interface PinnableCodeTool {
+    // (undocumented)
+    readonly allowedDomains?: readonly string[] | undefined;
+    // (undocumented)
+    readonly description: string;
+    // (undocumented)
+    readonly inputSchema: Readonly<Record<string, unknown>>;
+    // (undocumented)
+    readonly limits: {
+        readonly timeoutMs: number;
+    };
+    // (undocumented)
+    readonly outputSchema?: Readonly<Record<string, unknown>> | undefined;
+    // (undocumented)
+    readonly secrets?: readonly string[] | undefined;
+}
+
+// @public
+export function pinnedOf(tool: PinnableCodeTool): PinnedToolDeclaration;
+
+// @public
+export type PinnedToolDeclaration = Omit<AgentVersionToolBundle, 'tool' | 'digest'>;
 
 // @public
 type PolicyArmInput<E extends EngineId> = Extract<z.input<typeof AgentPolicySchema>, {

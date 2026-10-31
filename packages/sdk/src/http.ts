@@ -33,12 +33,18 @@ import { readContractsVersionSkew } from './version.js';
  * admitted only on the person-facing routes (`me`, `workspaces`, `team.invitations`, the sharing
  * policy, `auth.revoke` and `workspaces.select`; ADR-0083), and like the other two bearers never
  * `credentials: 'include'`.
+ * `access-token` (ADR-0161) sends the `awo_live_…` token `aw.auth.exchange` returns: a backend
+ * acting as the signed-in person, admitted only on the `app-backend` grammar's routes (start a run
+ * on one of the endpoint client's bound agents, read and interrupt a run, and `me`) and only within
+ * the person's own role and agent grants. It lasts 300 s, so a backend caches one per person and
+ * exchanges again when it expires. Like the other bearers it never sets `credentials: 'include'`.
  */
 export type ClientAuth =
   | { readonly kind: 'api-key'; readonly apiKey: string }
   | { readonly kind: 'session' }
   | { readonly kind: 'browser-token'; readonly token: string }
-  | { readonly kind: 'user-token'; readonly token: string };
+  | { readonly kind: 'user-token'; readonly token: string }
+  | { readonly kind: 'access-token'; readonly token: string };
 
 export interface ClientOptions {
   /** The control plane's origin, optionally with a path prefix: `https://aw.example.com`. */
@@ -306,7 +312,11 @@ export class HttpClient {
     if (this.#options.auth.kind === 'api-key') {
       headers.set('authorization', `Bearer ${this.#options.auth.apiKey}`);
     }
-    if (this.#options.auth.kind === 'browser-token' || this.#options.auth.kind === 'user-token') {
+    if (
+      this.#options.auth.kind === 'browser-token' ||
+      this.#options.auth.kind === 'user-token' ||
+      this.#options.auth.kind === 'access-token'
+    ) {
       headers.set('authorization', `Bearer ${this.#options.auth.token}`);
     }
     for (const [name, value] of Object.entries(spec.headers ?? {})) headers.set(name, value);

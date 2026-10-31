@@ -37,9 +37,10 @@ export function createAllowedOwnerWarning(
     if (warned.has(agent.id)) return;
     if ((fineUntil.get(agent.id) ?? 0) > now()) return;
     try {
-      const members = await deps.directory.forWorkspace(workspaceId).listMemberships();
-      const owner = members.find((member) => member.principalId === agent.ownerPrincipalId);
-      if (owner?.role === 'owner' || owner?.role === 'admin') {
+      const owner = await deps.directory
+        .forWorkspace(workspaceId)
+        .findMembershipByPrincipal(agent.ownerPrincipalId);
+      if (owner !== null && (owner.role === 'owner' || owner.role === 'admin')) {
         fineUntil.set(agent.id, now() + OWNER_OK_TTL_MS);
         return;
       }
@@ -50,7 +51,7 @@ export function createAllowedOwnerWarning(
           workspaceId,
           agentId: agent.id,
           ownerPrincipalId: agent.ownerPrincipalId,
-          ownerRole: owner?.role ?? 'none',
+          ownerRole: owner === null ? 'none' : owner.role,
         },
       );
     } catch {

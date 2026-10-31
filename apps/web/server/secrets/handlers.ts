@@ -25,6 +25,7 @@ import { formatInUseReferrer, type InUseReferrer } from '@indx-workspace/contrac
 import {
   isStorageConnectionSecretName,
   isUuid,
+  isWebhookSigningSecretName,
   parseCreateSecretBody,
   parseReplaceSecretBody,
   storageConnectionIdOf,
@@ -65,6 +66,14 @@ export async function createSecret(
       409,
       'secret_name_conflict',
       'Secret names starting with STORAGE_CONNECTION_ are reserved for storage-connection credentials. Create the connection with POST /api/storage-connections.',
+    );
+  }
+  // A webhook's signing secret is minted by `POST /api/webhooks` and only ever written there.
+  if (isWebhookSigningSecretName(parsed.value.name)) {
+    return problem(
+      409,
+      'secret_name_conflict',
+      'Secret names of the form WEBHOOK_<id>_SIGNING_SECRET are reserved for webhook signing secrets. Create the webhook with POST /api/webhooks.',
     );
   }
   const outcome = await store.create({
@@ -195,11 +204,22 @@ export async function deleteSecret(
 /**
  * `409 secret_in_use` for replacing a storage connection's credential, whether or not the
  * connection still exists: only `/api/storage-connections` writes one, bound to the connection's
- * URL. `null` for any other secret.
+ * URL. The same for a webhook's signing secret, which only `/api/webhooks` writes. `null` for any
+ * other secret.
  */
 async function reservedSecret(store: WorkspaceSecretsStore, id: string): Promise<ApiResult | null> {
   const secret = (await store.list()).find((row) => row.id === id);
-  if (secret === undefined || !isStorageConnectionSecretName(secret.name)) return null;
+  if (secret === undefined) return null;
+  // A webhook's signing secret is rotated by removing and re-creating the webhook (ADR D1), never
+  // here: a value written here could be one the platform cannot sign with.
+  if (isWebhookSigningSecretName(secret.name)) {
+    return problem(
+      409,
+      'secret_in_use',
+      'This secret is reserved for a webhook signing secret. Rotate it by removing and re-creating the webhook with /api/webhooks.',
+    );
+  }
+  if (!isStorageConnectionSecretName(secret.name)) return null;
   const connectionId = storageConnectionIdOf(secret.name);
   return problem(
     409,

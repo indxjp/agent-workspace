@@ -44,6 +44,7 @@ import {
   resetTestRunApi,
 } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const OTHER_WORKSPACE = '55555555-5555-4555-8555-555555555555';
@@ -2719,11 +2720,15 @@ describe('runs.start attachments (issue #1307)', () => {
     const { createInMemoryAgentStoreProvider } = await import('../agents/memory-store');
     const catalog = createInMemoryCatalogStore();
     const seeded = catalog.forWorkspaceSync(WORKSPACE);
-    FILE_ID = (await seeded.putFile(row('notes/brief.md', 'text/markdown'))).id;
-    AUDIO_ID = (await seeded.putFile(row('meetings/a.m4a', null))).id;
-    RESERVED_ID = (await seeded.putFile(row('.attachments/upload.md', 'text/markdown'))).id;
+    FILE_ID = (await seedCatalogFile(seeded, row('notes/brief.md', 'text/markdown'))).id;
+    AUDIO_ID = (await seedCatalogFile(seeded, row('meetings/a.m4a', null))).id;
+    RESERVED_ID = (await seedCatalogFile(seeded, row('.attachments/upload.md', 'text/markdown')))
+      .id;
     BIG_ID = (
-      await seeded.putFile(row('notes/huge.bin', 'application/octet-stream', 10 * 1024 * 1024 + 1))
+      await seedCatalogFile(
+        seeded,
+        row('notes/huge.bin', 'application/octet-stream', 10 * 1024 * 1024 + 1),
+      )
     ).id;
     installTestDomains({
       agents: {

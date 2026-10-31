@@ -1,0 +1,75 @@
+---
+title: "WebhooksClient"
+description: "Every method of WebhooksClient, its parameters, return type, and route."
+---
+
+<Note>This page is generated from `packages/sdk/src/resources/webhooks.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+`/api/webhooks` — issue #250 (N-3), ADR-SDK-18-N3-250, spec §5.17. A webhook is an endpoint the
+platform posts a signed `WebhookEvent` to when one of the workspace's runs reaches a terminal
+status. A workspace holds at most ten, so the list is unpaginated, and there is no update: to
+change one, remove it and create another. Every route is Owner/Admin and belongs to the `runs`
+feature. A receiver checks a delivery with `verifyWebhookSignature`, which makes no request.
+
+Problem codes: `400 invalid_webhook_url`, `400 webhook_url_refused` (the egress policy refused
+the host), `400 invalid_webhook_id`, `404 webhook_not_found` (also for another workspace's id),
+`409 webhook_limit_reached`, `503 webhook_api_not_configured` (no secrets service).
+
+## list
+
+Every webhook of the workspace (at most ten). No secret is in the answer.
+
+```ts
+async list(options?: RequestOptions): Promise<readonly WebhookEndpoint[]>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<readonly WebhookEndpoint[]>`
+
+**Route:** `GET /api/webhooks`
+
+## create
+
+Register an endpoint. `events` defaults to all three terminal events. `secret` (`whsec_…`) in
+the answer is the signing secret, and this is the only time it is returned: store it now.
+`400 webhook_url_refused` when the platform's egress policy refuses the host, and
+`409 webhook_limit_reached` at ten webhooks.
+
+```ts
+create(input: CreateWebhookInput, options?: RequestOptions): Promise<CreateWebhookResponse>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `input` | `CreateWebhookInput` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<CreateWebhookResponse>`
+
+**Route:** `POST /api/webhooks`
+
+## remove
+
+Delete the webhook and its signing secret; deliveries not yet sent go with it.
+
+```ts
+async remove(id: string, options?: RequestOptions): Promise<void>
+```
+
+| Name | Type | Required |
+| --- | --- | --- |
+| `id` | `string` | Yes |
+| `options` | `RequestOptions` | No |
+
+**Returns:** `Promise<void>`
+
+**Route:** `DELETE /api/webhooks/:id`
+
+## CreateWebhookInput
+
+What a caller supplies to `create`: the request body, with `events` accepted read-only.
+
+`CreateWebhookInput`
