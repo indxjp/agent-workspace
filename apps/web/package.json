@@ -40,7 +40,7 @@
   "devDependencies": {
     "@agent-workspace/engine-claude-agent-sdk": "workspace:*",
     "@aws-sdk/client-s3": "3.1156.0",
-    "@aws-sdk/credential-provider-web-identity": "3.972.82",
+    "@aws-sdk/credential-provider-web-identity": "3.972.83",
     "@indx-workspace/aw": "workspace:*",
     "@tailwindcss/postcss": "4.3.3",
     "@types/react": "19.3.0",
