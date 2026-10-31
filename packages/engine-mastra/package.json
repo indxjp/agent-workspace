@@ -26,8 +26,8 @@
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
     "@agent-workspace/engine": "workspace:*",
-    "@ai-sdk/anthropic": "4.0.85",
-    "@ai-sdk/openai": "4.0.99",
+    "@ai-sdk/anthropic": "4.0.90",
+    "@ai-sdk/openai": "4.0.104",
     "@mastra/core": "1.79.0",
     "@mastra/mcp": "2.5.0",
     "@mastra/memory": "1.39.0",

@@ -28,7 +28,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "0.300.0",
     "@opentelemetry/sdk-node": "0.300.0",
     "@opentelemetry/sdk-trace": "3.0.0",
-    "croner": "10.0.1",
+    "croner": "11.0.0",
     "jose": "6.2.13",
     "next": "16.4.3",
     "openid-client": "6.8.8",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@agent-workspace/engine-claude-agent-sdk": "workspace:*",
-    "@aws-sdk/client-s3": "3.1156.0",
+    "@aws-sdk/client-s3": "3.1158.0",
     "@aws-sdk/credential-provider-web-identity": "3.972.82",
     "@indx-workspace/aw": "workspace:*",
     "@tailwindcss/postcss": "4.3.3",
