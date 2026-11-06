@@ -15,6 +15,8 @@ import {
   type RunEventFrame,
 } from '@indx-workspace/sdk';
 
+import type { RunApprovalDecision, RunStatus } from '@indx-workspace/contracts/runs';
+
 import { browserClient } from '../../lib/browser-client';
 
 /** What this screen does with a live run's event stream. Called for every frame this module reads. */
@@ -209,4 +211,40 @@ export function startAgentRunForSession(
   return sessionId === null
     ? startAgentRunInProject(agentId, prompt, modelOverride, projectId, client, version)
     : startAgentRun(agentId, prompt, modelOverride, sessionId, client, attachments);
+}
+
+/** What `POST /api/runs/:id/approval` answered (issue #1490, ADR-0145). */
+export type RunApprovalOutcome =
+  // The continuation's status from the 202 (`queued` or `running`): the chat shows it at once, so the
+  // run reads as live, and holds the follow-up, before its stream says anything.
+  | { readonly kind: 'continued'; readonly runId: string; readonly status: RunStatus }
+  | {
+      readonly kind: 'rejected';
+      readonly status: number;
+      readonly code: string;
+      readonly message: string;
+    }
+  | { readonly kind: 'transport-error'; readonly message: string };
+
+/**
+ * Approve or reject the tool call run `runId` paused on. The decision starts a continuation run in
+ * the same session; `continued` names it so the screen follows it into the same transcript. A
+ * refusal (the three `409`s, or any other problem) is returned, never retried; a `202` whose body
+ * is not the published contract is a transport error, because the SDK validates it.
+ */
+export async function decideRunApproval(
+  runId: string,
+  decision: RunApprovalDecision,
+  comment: string | undefined,
+  client: AgentWorkspaceClient = browserClient(),
+): Promise<RunApprovalOutcome> {
+  const input = comment === undefined ? {} : { comment };
+  try {
+    const { run } = await (decision === 'approve'
+      ? client.runs.approve(runId, input)
+      : client.runs.reject(runId, input));
+    return { kind: 'continued', runId: run.id, status: run.status };
+  } catch (error) {
+    return failureOutcome(error, 'the request to decide this approval failed');
+  }
 }

@@ -238,6 +238,9 @@ export const BuilderToolInputSchemas: {
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -454,6 +457,9 @@ export const BuilderToolInputSchemas: {
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -727,6 +733,9 @@ export const BuilderToolOutputSchemas: {
                         permissions: z.ZodReadonly<z.ZodObject<{
                             readFiles: z.ZodBoolean;
                             writeFiles: z.ZodBoolean;
+                            memory: z.ZodOptional<z.ZodEnum<{
+                                agent: "agent";
+                            }>>;
                             runCommands: z.ZodBoolean;
                             unrestrictedNetwork: z.ZodBoolean;
                         }, z.core.$strict>>;

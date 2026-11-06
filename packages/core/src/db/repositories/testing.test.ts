@@ -219,6 +219,47 @@ describe('relaxesDurability', () => {
   });
 });
 
+describe('createIsolatedTestDatabase options', () => {
+  it('refuses a maxConnections that is not a positive integer before touching a server', async () => {
+    for (const maxConnections of [0, -1, 1.5, Number.NaN]) {
+      await expect(
+        createIsolatedTestDatabase('aw_pool_size', 'postgres://unused@127.0.0.1:1/x', undefined, {
+          maxConnections,
+        }),
+      ).rejects.toThrow(/maxConnections/u);
+    }
+  });
+});
+
+/** Distinct backends serving `parallel` concurrent queries that each hold their connection a moment. */
+async function backendsFor(isolated: IsolatedTestDatabase, parallel: number): Promise<number> {
+  const pids = await Promise.all(
+    Array.from({ length: parallel }, () =>
+      isolated.db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid, pg_sleep(0.2)`),
+    ),
+  );
+  return new Set(pids.map((result) => result.rows[0]?.pid)).size;
+}
+
+describe.skipIf(!hasDatabase)('isolated PostgreSQL pool size', () => {
+  it('keeps four connections by default and honours maxConnections', async () => {
+    const byDefault = await createIsolatedTestDatabase('aw_pool_default');
+    const one = await createIsolatedTestDatabase('aw_pool_one', adminUrl, undefined, {
+      maxConnections: 1,
+    });
+    const six = await createIsolatedTestDatabase('aw_pool_six', adminUrl, undefined, {
+      maxConnections: 6,
+    });
+    try {
+      expect(await backendsFor(byDefault, 6)).toBe(4);
+      expect(await backendsFor(one, 3)).toBe(1);
+      expect(await backendsFor(six, 6)).toBe(6);
+    } finally {
+      await Promise.all([byDefault.close(), one.close(), six.close()]);
+    }
+  }, 180_000);
+});
+
 describe.skipIf(!hasDatabase)('isolated PostgreSQL teardown', () => {
   it('closes every resource before dropping the isolated database', async () => {
     const isolated = await createIsolatedTestDatabase('aw_rf002_resources');

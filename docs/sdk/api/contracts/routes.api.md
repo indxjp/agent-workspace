@@ -270,6 +270,9 @@ export const API_SCHEMAS: {
             permissions: z.ZodReadonly<z.ZodObject<{
                 readFiles: z.ZodBoolean;
                 writeFiles: z.ZodBoolean;
+                memory: z.ZodOptional<z.ZodEnum<{
+                    agent: "agent";
+                }>>;
                 runCommands: z.ZodBoolean;
                 unrestrictedNetwork: z.ZodBoolean;
             }, z.core.$strict>>;
@@ -554,6 +557,9 @@ export const API_SCHEMAS: {
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;
@@ -570,6 +576,112 @@ export const API_SCHEMAS: {
         archivedAt: z.ZodOptional<z.ZodISODateTime>;
         createdAt: z.ZodISODateTime;
         updatedAt: z.ZodISODateTime;
+    }, z.core.$strict>>;
+    readonly AgentTeamListResponseSchema: z.ZodReadonly<z.ZodObject<{
+        items: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            name: z.ZodString;
+            description: z.ZodNullable<z.ZodString>;
+            latestVersion: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                id: z.ZodString;
+                teamId: z.ZodString;
+                workspaceId: z.ZodString;
+                version: z.ZodNumber;
+                mode: z.ZodEnum<{
+                    handoff: "handoff";
+                }>;
+                lead: z.ZodReadonly<z.ZodObject<{
+                    agentId: z.ZodString;
+                    agentVersionId: z.ZodString;
+                }, z.core.$strict>>;
+                members: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                    name: z.ZodString;
+                    agentId: z.ZodString;
+                    agentVersionId: z.ZodString;
+                }, z.core.$strict>>>>;
+                createdBy: z.ZodNullable<z.ZodString>;
+                createdAt: z.ZodISODateTime;
+            }, z.core.$strict>>>;
+            ownerPrincipalId: z.ZodString;
+            createdBy: z.ZodNullable<z.ZodString>;
+            createdAt: z.ZodISODateTime;
+            updatedAt: z.ZodISODateTime;
+        }, z.core.$strict>>>>;
+        nextCursor: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>>;
+    readonly AgentTeamResourceSchema: z.ZodReadonly<z.ZodObject<{
+        id: z.ZodString;
+        workspaceId: z.ZodString;
+        name: z.ZodString;
+        description: z.ZodNullable<z.ZodString>;
+        latestVersion: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            teamId: z.ZodString;
+            workspaceId: z.ZodString;
+            version: z.ZodNumber;
+            mode: z.ZodEnum<{
+                handoff: "handoff";
+            }>;
+            lead: z.ZodReadonly<z.ZodObject<{
+                agentId: z.ZodString;
+                agentVersionId: z.ZodString;
+            }, z.core.$strict>>;
+            members: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                name: z.ZodString;
+                agentId: z.ZodString;
+                agentVersionId: z.ZodString;
+            }, z.core.$strict>>>>;
+            createdBy: z.ZodNullable<z.ZodString>;
+            createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>>;
+        ownerPrincipalId: z.ZodString;
+        createdBy: z.ZodNullable<z.ZodString>;
+        createdAt: z.ZodISODateTime;
+        updatedAt: z.ZodISODateTime;
+    }, z.core.$strict>>;
+    readonly AgentTeamVersionListResponseSchema: z.ZodReadonly<z.ZodObject<{
+        items: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            teamId: z.ZodString;
+            workspaceId: z.ZodString;
+            version: z.ZodNumber;
+            mode: z.ZodEnum<{
+                handoff: "handoff";
+            }>;
+            lead: z.ZodReadonly<z.ZodObject<{
+                agentId: z.ZodString;
+                agentVersionId: z.ZodString;
+            }, z.core.$strict>>;
+            members: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                name: z.ZodString;
+                agentId: z.ZodString;
+                agentVersionId: z.ZodString;
+            }, z.core.$strict>>>>;
+            createdBy: z.ZodNullable<z.ZodString>;
+            createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>>>;
+        nextCursor: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>>;
+    readonly AgentTeamVersionSchema: z.ZodReadonly<z.ZodObject<{
+        id: z.ZodString;
+        teamId: z.ZodString;
+        workspaceId: z.ZodString;
+        version: z.ZodNumber;
+        mode: z.ZodEnum<{
+            handoff: "handoff";
+        }>;
+        lead: z.ZodReadonly<z.ZodObject<{
+            agentId: z.ZodString;
+            agentVersionId: z.ZodString;
+        }, z.core.$strict>>;
+        members: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            name: z.ZodString;
+            agentId: z.ZodString;
+            agentVersionId: z.ZodString;
+        }, z.core.$strict>>>>;
+        createdBy: z.ZodNullable<z.ZodString>;
+        createdAt: z.ZodISODateTime;
     }, z.core.$strict>>;
     readonly AgentVersionCheckResponseSchema: z.ZodReadonly<z.ZodObject<{
         ok: z.ZodLiteral<true>;
@@ -598,6 +710,9 @@ export const API_SCHEMAS: {
                         permissions: z.ZodReadonly<z.ZodObject<{
                             readFiles: z.ZodBoolean;
                             writeFiles: z.ZodBoolean;
+                            memory: z.ZodOptional<z.ZodEnum<{
+                                agent: "agent";
+                            }>>;
                             runCommands: z.ZodBoolean;
                             unrestrictedNetwork: z.ZodBoolean;
                         }, z.core.$strict>>;
@@ -855,6 +970,9 @@ export const API_SCHEMAS: {
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -1152,6 +1270,8 @@ export const API_SCHEMAS: {
                 "storage-connection-written": "storage-connection-written";
                 "storage-grant-changed": "storage-grant-changed";
                 "workspace-features-changed": "workspace-features-changed";
+                "user-token-exchanged": "user-token-exchanged";
+                "memory-updated": "memory-updated";
             }>;
             subjectId: z.ZodNullable<z.ZodString>;
             subjectLabel: z.ZodString;
@@ -1320,6 +1440,9 @@ export const API_SCHEMAS: {
             permissions: z.ZodReadonly<z.ZodObject<{
                 readFiles: z.ZodBoolean;
                 writeFiles: z.ZodBoolean;
+                memory: z.ZodOptional<z.ZodEnum<{
+                    agent: "agent";
+                }>>;
                 runCommands: z.ZodBoolean;
                 unrestrictedNetwork: z.ZodBoolean;
             }, z.core.$strict>>;
@@ -1359,6 +1482,9 @@ export const API_SCHEMAS: {
                         permissions: z.ZodReadonly<z.ZodObject<{
                             readFiles: z.ZodBoolean;
                             writeFiles: z.ZodBoolean;
+                            memory: z.ZodOptional<z.ZodEnum<{
+                                agent: "agent";
+                            }>>;
                             runCommands: z.ZodBoolean;
                             unrestrictedNetwork: z.ZodBoolean;
                         }, z.core.$strict>>;
@@ -1565,6 +1691,32 @@ export const API_SCHEMAS: {
             createdAt: z.ZodISODateTime;
         }, z.core.$strict>>;
     }, z.core.$strict>>;
+    readonly CreateAgentTeamRequestSchema: z.ZodReadonly<z.ZodObject<{
+        name: z.ZodString;
+        description: z.ZodExactOptional<z.ZodString>;
+        version: z.ZodExactOptional<z.ZodReadonly<z.ZodObject<{
+            lead: z.ZodReadonly<z.ZodObject<{
+                agentId: z.ZodString;
+                agentVersionId: z.ZodString;
+            }, z.core.$strict>>;
+            members: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                name: z.ZodExactOptional<z.ZodString>;
+                agentId: z.ZodString;
+                agentVersionId: z.ZodString;
+            }, z.core.$strict>>>>;
+        }, z.core.$strict>>>;
+    }, z.core.$strict>>;
+    readonly CreateAgentTeamVersionRequestSchema: z.ZodReadonly<z.ZodObject<{
+        lead: z.ZodReadonly<z.ZodObject<{
+            agentId: z.ZodString;
+            agentVersionId: z.ZodString;
+        }, z.core.$strict>>;
+        members: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            name: z.ZodExactOptional<z.ZodString>;
+            agentId: z.ZodString;
+            agentVersionId: z.ZodString;
+        }, z.core.$strict>>>>;
+    }, z.core.$strict>>;
     readonly CreateAgentVersionRequestSchema: z.ZodReadonly<z.ZodObject<{
         dryRun: z.ZodOptional<z.ZodLiteral<true>>;
         body: z.ZodReadonly<z.ZodObject<{
@@ -1577,6 +1729,9 @@ export const API_SCHEMAS: {
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -1798,6 +1953,9 @@ export const API_SCHEMAS: {
             permissions: z.ZodReadonly<z.ZodObject<{
                 readFiles: z.ZodBoolean;
                 writeFiles: z.ZodBoolean;
+                memory: z.ZodOptional<z.ZodEnum<{
+                    agent: "agent";
+                }>>;
                 runCommands: z.ZodBoolean;
                 unrestrictedNetwork: z.ZodBoolean;
             }, z.core.$strict>>;
@@ -1842,9 +2000,11 @@ export const API_SCHEMAS: {
             builder: "builder";
             "mcp-project": "mcp-project";
             "a2a-agent": "a2a-agent";
+            "app-backend": "app-backend";
         }>;
         agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
         toolNames: z.ZodOptional<z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>>;
+        oidcAudience: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>;
     readonly CreateEvaluationRequestSchema: z.ZodReadonly<z.ZodObject<{
         version: z.ZodNumber;
@@ -1952,6 +2112,28 @@ export const API_SCHEMAS: {
             updatedAt: z.ZodISODateTime;
         }, z.core.$strict>>;
     }, z.core.$strict>>]>>;
+    readonly CreateWebhookRequestSchema: z.ZodReadonly<z.ZodObject<{
+        url: z.ZodString;
+        events: z.ZodOptional<z.ZodArray<z.ZodEnum<{
+            "run.completed": "run.completed";
+            "run.failed": "run.failed";
+            "run.cancelled": "run.cancelled";
+        }>>>;
+    }, z.core.$strict>>;
+    readonly CreateWebhookResponseSchema: z.ZodReadonly<z.ZodObject<{
+        webhook: z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            url: z.ZodString;
+            events: z.ZodArray<z.ZodEnum<{
+                "run.completed": "run.completed";
+                "run.failed": "run.failed";
+                "run.cancelled": "run.cancelled";
+            }>>;
+            createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>;
+        secret: z.ZodString;
+    }, z.core.$strict>>;
     readonly CreatedUserResponseSchema: z.ZodObject<{
         user: z.ZodObject<{
             id: z.ZodString;
@@ -2019,10 +2201,12 @@ export const API_SCHEMAS: {
                 builder: "builder";
                 "mcp-project": "mcp-project";
                 "a2a-agent": "a2a-agent";
+                "app-backend": "app-backend";
             }>;
             agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
             toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+            oidcAudience: z.ZodNullable<z.ZodString>;
             hasClientSecret: z.ZodBoolean;
             actsForPrincipalId: z.ZodString;
             apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -2039,10 +2223,12 @@ export const API_SCHEMAS: {
                 builder: "builder";
                 "mcp-project": "mcp-project";
                 "a2a-agent": "a2a-agent";
+                "app-backend": "app-backend";
             }>;
             agentIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
             toolNames: z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
             redirectUris: z.ZodReadonly<z.ZodArray<z.ZodString>>;
+            oidcAudience: z.ZodNullable<z.ZodString>;
             hasClientSecret: z.ZodBoolean;
             actsForPrincipalId: z.ZodString;
             apiKeyIds: z.ZodReadonly<z.ZodArray<z.ZodString>>;
@@ -2091,12 +2277,12 @@ export const API_SCHEMAS: {
     readonly PlatformExportRequestSchema: z.ZodReadonly<z.ZodObject<{
         version: z.ZodNumber;
         platform: z.ZodEnum<{
+            "aws-agentcore": "aws-agentcore";
             "claude-managed-agents": "claude-managed-agents";
             "copilot-studio": "copilot-studio";
             "m365-declarative-agent": "m365-declarative-agent";
             "microsoft-foundry": "microsoft-foundry";
             "gemini-enterprise": "gemini-enterprise";
-            "aws-agentcore": "aws-agentcore";
         }>;
         options: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     }, z.core.$strict>>;
@@ -2104,12 +2290,12 @@ export const API_SCHEMAS: {
         agentId: z.ZodString;
         version: z.ZodNumber;
         platform: z.ZodEnum<{
+            "aws-agentcore": "aws-agentcore";
             "claude-managed-agents": "claude-managed-agents";
             "copilot-studio": "copilot-studio";
             "m365-declarative-agent": "m365-declarative-agent";
             "microsoft-foundry": "microsoft-foundry";
             "gemini-enterprise": "gemini-enterprise";
-            "aws-agentcore": "aws-agentcore";
             "eject-claude-agent-sdk": "eject-claude-agent-sdk";
             "eject-mastra": "eject-mastra";
             "eject-openai-agents": "eject-openai-agents";
@@ -2146,12 +2332,12 @@ export const API_SCHEMAS: {
     readonly PlatformListResponseSchema: z.ZodReadonly<z.ZodObject<{
         platforms: z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
             id: z.ZodEnum<{
+                "aws-agentcore": "aws-agentcore";
                 "claude-managed-agents": "claude-managed-agents";
                 "copilot-studio": "copilot-studio";
                 "m365-declarative-agent": "m365-declarative-agent";
                 "microsoft-foundry": "microsoft-foundry";
                 "gemini-enterprise": "gemini-enterprise";
-                "aws-agentcore": "aws-agentcore";
                 "eject-claude-agent-sdk": "eject-claude-agent-sdk";
                 "eject-mastra": "eject-mastra";
                 "eject-openai-agents": "eject-openai-agents";
@@ -2354,6 +2540,7 @@ export const API_SCHEMAS: {
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>>;
             modelConnectionId: z.ZodNullable<z.ZodString>;
             engine: z.ZodNullable<z.ZodEnum<{
@@ -2376,6 +2563,7 @@ export const API_SCHEMAS: {
                 currency: z.ZodString;
                 priceTableVersion: z.ZodNullable<z.ZodString>;
             }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
             error: z.ZodNullable<z.ZodString>;
             output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
                 text: z.ZodString;
@@ -2393,6 +2581,7 @@ export const API_SCHEMAS: {
                 unavailable: "unavailable";
             }>;
             accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
     }, z.core.$strict>>;
     readonly InvitationListResponseSchema: z.ZodObject<{
@@ -2565,11 +2754,18 @@ export const API_SCHEMAS: {
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>;
             config: z.ZodReadonly<z.ZodObject<{
                 baseUrl: z.ZodOptional<z.ZodURL>;
                 deployment: z.ZodOptional<z.ZodString>;
                 apiVersion: z.ZodOptional<z.ZodString>;
+                projectId: z.ZodOptional<z.ZodString>;
+                location: z.ZodOptional<z.ZodEnum<{
+                    global: "global";
+                    us: "us";
+                    eu: "eu";
+                }>>;
             }, z.core.$strict>>;
             hasCredential: z.ZodBoolean;
             ready: z.ZodBoolean;
@@ -2586,11 +2782,18 @@ export const API_SCHEMAS: {
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>;
         config: z.ZodReadonly<z.ZodObject<{
             baseUrl: z.ZodOptional<z.ZodURL>;
             deployment: z.ZodOptional<z.ZodString>;
             apiVersion: z.ZodOptional<z.ZodString>;
+            projectId: z.ZodOptional<z.ZodString>;
+            location: z.ZodOptional<z.ZodEnum<{
+                global: "global";
+                us: "us";
+                eu: "eu";
+            }>>;
         }, z.core.$strict>>;
         hasCredential: z.ZodBoolean;
         ready: z.ZodBoolean;
@@ -2791,6 +2994,7 @@ export const API_SCHEMAS: {
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>>;
             modelConnectionId: z.ZodNullable<z.ZodString>;
             engine: z.ZodNullable<z.ZodEnum<{
@@ -2813,6 +3017,7 @@ export const API_SCHEMAS: {
                 currency: z.ZodString;
                 priceTableVersion: z.ZodNullable<z.ZodString>;
             }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
             error: z.ZodNullable<z.ZodString>;
             output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
                 text: z.ZodString;
@@ -2830,8 +3035,155 @@ export const API_SCHEMAS: {
                 unavailable: "unavailable";
             }>;
             accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>>>;
         nextCursor: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>>;
+    readonly RunDetailResponseSchema: z.ZodReadonly<z.ZodObject<{
+        run: z.ZodReadonly<z.ZodObject<{
+            children: z.ZodExactOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+                id: z.ZodString;
+                workspaceId: z.ZodString;
+                agentId: z.ZodString;
+                projectId: z.ZodNullable<z.ZodString>;
+                initiatingUserId: z.ZodNullable<z.ZodString>;
+                sessionId: z.ZodString;
+                agentVersion: z.ZodNullable<z.ZodNumber>;
+                status: z.ZodEnum<{
+                    completed: "completed";
+                    failed: "failed";
+                    queued: "queued";
+                    running: "running";
+                    awaiting_approval: "awaiting_approval";
+                    cancelled: "cancelled";
+                }>;
+                createdAt: z.ZodISODateTime;
+                startedAt: z.ZodNullable<z.ZodISODateTime>;
+                endedAt: z.ZodNullable<z.ZodISODateTime>;
+                durationMs: z.ZodNullable<z.ZodNumber>;
+                model: z.ZodNullable<z.ZodString>;
+                provider: z.ZodNullable<z.ZodEnum<{
+                    anthropic: "anthropic";
+                    "anthropic-compatible": "anthropic-compatible";
+                    openai: "openai";
+                    "azure-openai": "azure-openai";
+                    "openai-compatible": "openai-compatible";
+                    vertex: "vertex";
+                }>>;
+                modelConnectionId: z.ZodNullable<z.ZodString>;
+                engine: z.ZodNullable<z.ZodEnum<{
+                    "claude-agent-sdk": "claude-agent-sdk";
+                    "openai-agents": "openai-agents";
+                    pi: "pi";
+                    mastra: "mastra";
+                }>>;
+                engineVersion: z.ZodNullable<z.ZodString>;
+                usage: z.ZodReadonly<z.ZodObject<{
+                    inputTokens: z.ZodNumber;
+                    outputTokens: z.ZodNumber;
+                    cacheReadInputTokens: z.ZodNumber;
+                    cacheCreationInputTokens: z.ZodNumber;
+                    totalTokens: z.ZodNumber;
+                    toolCalls: z.ZodNumber;
+                }, z.core.$strict>>;
+                cost: z.ZodReadonly<z.ZodObject<{
+                    amount: z.ZodString;
+                    currency: z.ZodString;
+                    priceTableVersion: z.ZodNullable<z.ZodString>;
+                }, z.core.$strict>>;
+                spendCeilingUsd: z.ZodNullable<z.ZodString>;
+                error: z.ZodNullable<z.ZodString>;
+                output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                    text: z.ZodString;
+                    structured: z.ZodUnknown;
+                }, z.core.$strict>>>;
+                pendingApproval: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                    toolName: z.ZodString;
+                    canonicalCall: z.ZodString;
+                }, z.core.$strict>>>;
+                accountingState: z.ZodEnum<{
+                    failed: "failed";
+                    pending: "pending";
+                    complete: "complete";
+                    partial: "partial";
+                    unavailable: "unavailable";
+                }>;
+                accountingError: z.ZodNullable<z.ZodString>;
+                parentRunId: z.ZodNullable<z.ZodString>;
+            }, z.core.$strict>>>>>;
+            treeCost: z.ZodExactOptional<z.ZodReadonly<z.ZodObject<{
+                amount: z.ZodString;
+                currency: z.ZodString;
+            }, z.core.$strict>>>;
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            agentId: z.ZodString;
+            projectId: z.ZodNullable<z.ZodString>;
+            initiatingUserId: z.ZodNullable<z.ZodString>;
+            sessionId: z.ZodString;
+            agentVersion: z.ZodNullable<z.ZodNumber>;
+            status: z.ZodEnum<{
+                completed: "completed";
+                failed: "failed";
+                queued: "queued";
+                running: "running";
+                awaiting_approval: "awaiting_approval";
+                cancelled: "cancelled";
+            }>;
+            createdAt: z.ZodISODateTime;
+            startedAt: z.ZodNullable<z.ZodISODateTime>;
+            endedAt: z.ZodNullable<z.ZodISODateTime>;
+            durationMs: z.ZodNullable<z.ZodNumber>;
+            model: z.ZodNullable<z.ZodString>;
+            provider: z.ZodNullable<z.ZodEnum<{
+                anthropic: "anthropic";
+                "anthropic-compatible": "anthropic-compatible";
+                openai: "openai";
+                "azure-openai": "azure-openai";
+                "openai-compatible": "openai-compatible";
+                vertex: "vertex";
+            }>>;
+            modelConnectionId: z.ZodNullable<z.ZodString>;
+            engine: z.ZodNullable<z.ZodEnum<{
+                "claude-agent-sdk": "claude-agent-sdk";
+                "openai-agents": "openai-agents";
+                pi: "pi";
+                mastra: "mastra";
+            }>>;
+            engineVersion: z.ZodNullable<z.ZodString>;
+            usage: z.ZodReadonly<z.ZodObject<{
+                inputTokens: z.ZodNumber;
+                outputTokens: z.ZodNumber;
+                cacheReadInputTokens: z.ZodNumber;
+                cacheCreationInputTokens: z.ZodNumber;
+                totalTokens: z.ZodNumber;
+                toolCalls: z.ZodNumber;
+            }, z.core.$strict>>;
+            cost: z.ZodReadonly<z.ZodObject<{
+                amount: z.ZodString;
+                currency: z.ZodString;
+                priceTableVersion: z.ZodNullable<z.ZodString>;
+            }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
+            error: z.ZodNullable<z.ZodString>;
+            output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                text: z.ZodString;
+                structured: z.ZodUnknown;
+            }, z.core.$strict>>>;
+            pendingApproval: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                toolName: z.ZodString;
+                canonicalCall: z.ZodString;
+            }, z.core.$strict>>>;
+            accountingState: z.ZodEnum<{
+                failed: "failed";
+                pending: "pending";
+                complete: "complete";
+                partial: "partial";
+                unavailable: "unavailable";
+            }>;
+            accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>>;
     }, z.core.$strict>>;
     readonly RunResponseSchema: z.ZodReadonly<z.ZodObject<{
         run: z.ZodReadonly<z.ZodObject<{
@@ -2861,6 +3213,7 @@ export const API_SCHEMAS: {
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>>;
             modelConnectionId: z.ZodNullable<z.ZodString>;
             engine: z.ZodNullable<z.ZodEnum<{
@@ -2883,6 +3236,7 @@ export const API_SCHEMAS: {
                 currency: z.ZodString;
                 priceTableVersion: z.ZodNullable<z.ZodString>;
             }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
             error: z.ZodNullable<z.ZodString>;
             output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
                 text: z.ZodString;
@@ -2900,6 +3254,7 @@ export const API_SCHEMAS: {
                 unavailable: "unavailable";
             }>;
             accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
     }, z.core.$strict>>;
     readonly RunStatusEventDataSchema: z.ZodReadonly<z.ZodObject<{
@@ -2939,13 +3294,13 @@ export const API_SCHEMAS: {
             id: z.ZodString;
             name: z.ZodString;
             driver: z.ZodEnum<{
-                "aws-agentcore": "aws-agentcore";
                 local: "local";
                 "sandbox-runtime": "sandbox-runtime";
                 docker: "docker";
                 kubernetes: "kubernetes";
                 "gke-agent-sandbox": "gke-agent-sandbox";
                 "aca-sessions": "aca-sessions";
+                "aws-agentcore": "aws-agentcore";
                 "aws-ecs": "aws-ecs";
                 "cloud-run-sandbox": "cloud-run-sandbox";
                 "cloud-run-service": "cloud-run-service";
@@ -2960,13 +3315,13 @@ export const API_SCHEMAS: {
         id: z.ZodString;
         name: z.ZodString;
         driver: z.ZodEnum<{
-            "aws-agentcore": "aws-agentcore";
             local: "local";
             "sandbox-runtime": "sandbox-runtime";
             docker: "docker";
             kubernetes: "kubernetes";
             "gke-agent-sandbox": "gke-agent-sandbox";
             "aca-sessions": "aca-sessions";
+            "aws-agentcore": "aws-agentcore";
             "aws-ecs": "aws-ecs";
             "cloud-run-sandbox": "cloud-run-sandbox";
             "cloud-run-service": "cloud-run-service";
@@ -2982,13 +3337,13 @@ export const API_SCHEMAS: {
             workspaceId: z.ZodString;
             name: z.ZodString;
             driver: z.ZodEnum<{
-                "aws-agentcore": "aws-agentcore";
                 local: "local";
                 "sandbox-runtime": "sandbox-runtime";
                 docker: "docker";
                 kubernetes: "kubernetes";
                 "gke-agent-sandbox": "gke-agent-sandbox";
                 "aca-sessions": "aca-sessions";
+                "aws-agentcore": "aws-agentcore";
                 "aws-ecs": "aws-ecs";
                 "cloud-run-sandbox": "cloud-run-sandbox";
                 "cloud-run-service": "cloud-run-service";
@@ -3023,13 +3378,13 @@ export const API_SCHEMAS: {
         workspaceId: z.ZodString;
         name: z.ZodString;
         driver: z.ZodEnum<{
-            "aws-agentcore": "aws-agentcore";
             local: "local";
             "sandbox-runtime": "sandbox-runtime";
             docker: "docker";
             kubernetes: "kubernetes";
             "gke-agent-sandbox": "gke-agent-sandbox";
             "aca-sessions": "aca-sessions";
+            "aws-agentcore": "aws-agentcore";
             "aws-ecs": "aws-ecs";
             "cloud-run-sandbox": "cloud-run-sandbox";
             "cloud-run-service": "cloud-run-service";
@@ -3184,6 +3539,7 @@ export const API_SCHEMAS: {
     }, z.core.$strict>;
     readonly StorageConnectionTestOutcomeSchema: z.ZodDiscriminatedUnion<[z.ZodReadonly<z.ZodObject<{
         ok: z.ZodLiteral<true>;
+        emptyFolders: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
     }, z.core.$strict>>, z.ZodReadonly<z.ZodObject<{
         ok: z.ZodLiteral<false>;
         code: z.ZodEnum<{
@@ -3265,6 +3621,7 @@ export const API_SCHEMAS: {
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>>;
             modelConnectionId: z.ZodNullable<z.ZodString>;
             engine: z.ZodNullable<z.ZodEnum<{
@@ -3287,6 +3644,7 @@ export const API_SCHEMAS: {
                 currency: z.ZodString;
                 priceTableVersion: z.ZodNullable<z.ZodString>;
             }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
             error: z.ZodNullable<z.ZodString>;
             output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
                 text: z.ZodString;
@@ -3304,6 +3662,7 @@ export const API_SCHEMAS: {
                 unavailable: "unavailable";
             }>;
             accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
         events: z.ZodString;
     }, z.core.$strict>>;
@@ -3352,6 +3711,9 @@ export const API_SCHEMAS: {
             permissions: z.ZodReadonly<z.ZodObject<{
                 readFiles: z.ZodBoolean;
                 writeFiles: z.ZodBoolean;
+                memory: z.ZodOptional<z.ZodEnum<{
+                    agent: "agent";
+                }>>;
                 runCommands: z.ZodBoolean;
                 unrestrictedNetwork: z.ZodBoolean;
             }, z.core.$strict>>;
@@ -3530,6 +3892,7 @@ export const API_SCHEMAS: {
         subject: z.ZodOptional<z.ZodString>;
         fileScope: z.ZodOptional<z.ZodArray<z.ZodString>>;
         outputSchema: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+        spendCeilingUsd: z.ZodOptional<z.ZodNumber>;
     }, z.core.$strict>>;
     readonly StartRunResponseSchema: z.ZodReadonly<z.ZodObject<{
         run: z.ZodReadonly<z.ZodObject<{
@@ -3559,6 +3922,7 @@ export const API_SCHEMAS: {
                 openai: "openai";
                 "azure-openai": "azure-openai";
                 "openai-compatible": "openai-compatible";
+                vertex: "vertex";
             }>>;
             modelConnectionId: z.ZodNullable<z.ZodString>;
             engine: z.ZodNullable<z.ZodEnum<{
@@ -3581,6 +3945,7 @@ export const API_SCHEMAS: {
                 currency: z.ZodString;
                 priceTableVersion: z.ZodNullable<z.ZodString>;
             }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
             error: z.ZodNullable<z.ZodString>;
             output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
                 text: z.ZodString;
@@ -3598,6 +3963,7 @@ export const API_SCHEMAS: {
                 unavailable: "unavailable";
             }>;
             accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
         events: z.ZodString;
     }, z.core.$strict>>;
@@ -3640,6 +4006,18 @@ export const API_SCHEMAS: {
         }>;
         message: z.ZodString;
     }, z.core.$strict>>], "ok">;
+    readonly TokenExchangeRequestSchema: z.ZodReadonly<z.ZodObject<{
+        grant_type: z.ZodLiteral<"urn:ietf:params:oauth:grant-type:token-exchange">;
+        subject_token: z.ZodString;
+        subject_token_type: z.ZodLiteral<"urn:ietf:params:oauth:token-type:id_token">;
+        requested_token_type: z.ZodOptional<z.ZodLiteral<"urn:ietf:params:oauth:token-type:access_token">>;
+    }, z.core.$strict>>;
+    readonly TokenExchangeResponseSchema: z.ZodReadonly<z.ZodObject<{
+        access_token: z.ZodString;
+        issued_token_type: z.ZodLiteral<"urn:ietf:params:oauth:token-type:access_token">;
+        token_type: z.ZodLiteral<"Bearer">;
+        expires_in: z.ZodNumber;
+    }, z.core.$strict>>;
     readonly ToolBundleResponseSchema: z.ZodReadonly<z.ZodObject<{
         bundle: z.ZodReadonly<z.ZodObject<{
             digest: z.ZodString;
@@ -3728,6 +4106,7 @@ export const API_SCHEMAS: {
         agentIds: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
         toolNames: z.ZodOptional<z.ZodNullable<z.ZodReadonly<z.ZodArray<z.ZodString>>>>;
         redirectUris: z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodString>>>;
+        oidcAudience: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>;
     readonly UpdateTriggerRequestSchema: z.ZodReadonly<z.ZodObject<{
         name: z.ZodOptional<z.ZodString>;
@@ -3770,6 +4149,19 @@ export const API_SCHEMAS: {
             createdAt: z.ZodISODateTime;
         }, z.core.$strict>>;
     }, z.core.$strict>;
+    readonly WebhookListResponseSchema: z.ZodReadonly<z.ZodObject<{
+        webhooks: z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            url: z.ZodString;
+            events: z.ZodArray<z.ZodEnum<{
+                "run.completed": "run.completed";
+                "run.failed": "run.failed";
+                "run.cancelled": "run.cancelled";
+            }>>;
+            createdAt: z.ZodISODateTime;
+        }, z.core.$strict>>>;
+    }, z.core.$strict>>;
     readonly WorkspaceFeaturesSchema: z.ZodObject<{
         features: z.ZodArray<z.ZodObject<{
             id: z.ZodEnum<{
@@ -3891,10 +4283,21 @@ export interface ApiMultipartPart {
 }
 
 // @public
+export interface ApiRequestHeader {
+    // (undocumented)
+    readonly description: string;
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly required: boolean;
+}
+
+// @public
 export interface ApiRoute {
     readonly deprecated?: true;
     readonly deprecatedRequests?: readonly ApiBody[];
     readonly feature: RouteFeature;
+    readonly headers?: readonly ApiRequestHeader[];
     // (undocumented)
     readonly method: ApiRouteMethod;
     readonly operationId: string;

@@ -153,8 +153,8 @@ Terraform-managed secret payloads must never be committed.
 ## npm packages
 
 `@indx-workspace/contracts`, `@indx-workspace/platforms`, `@indx-workspace/sdk`,
-`@indx-workspace/react`, `@indx-workspace/aw`, `@indx-workspace/cli`, `@indx-workspace/embedded` and
-`@indx-workspace/create` are released
+`@indx-workspace/react`, `@indx-workspace/app`, `@indx-workspace/aw`, `@indx-workspace/cli`,
+`@indx-workspace/embedded` and `@indx-workspace/create` are released
 separately from the platform, by `.github/workflows/publish-packages.yml`, from a
 `packages-v<version>` tag (ADR-0082 and its amendments, ADR-0109). The `v*` tags above belong to
 the platform release; the two namespaces never overlap.
@@ -162,16 +162,16 @@ Each package packs from `packages/<name>`, except `@indx-workspace/embedded`, wh
 staging directory its build writes, `packages/embedded/publish` (ADR-0109); the release fails, and
 never skips it, when that directory is missing.
 
-- **Version.** All eight carry `CONTRACTS_VERSION` (`packages/contracts/src/version.ts`), pinned by
+- **Version.** All nine carry `CONTRACTS_VERSION` (`packages/contracts/src/version.ts`), pinned by
   `packages/aw/src/version.test.ts` and `tests/public-docs-truth.test.ts`. The workflow refuses a
-  tag that names any other version. That version moves on its own, by patch releases of the eight
+  tag that names any other version. That version moves on its own, by patch releases of the nine
   packages, and is not the platform version: the root `package.json` is, and it is the one
   `evidence-manifest.json` records.
 - **Evidence.** Before any publish, `scripts/release/pack-packages.mjs --smoke` packs each package,
   refuses a tarball with anything but `dist/` and the manifests (and, for the CLI, its generator
   `templates/`), a `workspace:` specifier, a sibling off lock-step, or any `@agent-workspace/*` name
   in the manifest, `dist/` or `templates/` (a third party's npm scope; for embedded this covers
-  `dist/web/`), then installs the eight tarballs into an empty project, imports every documented
+  `dist/web/`), then installs the nine tarballs into an empty project, imports every documented
   subpath, type-checks a consumer of `@indx-workspace/sdk/testing`, runs `npx aw --version` and
   `npx agent-workspace --help`, and runs `npm create @indx-workspace` offline into a new directory
   once per create smoke case (`CREATE_SMOKE_CASES`), with the flags after npm's `--` so npm does
@@ -191,11 +191,11 @@ never skips it, when that directory is missing.
   change.
   `--packages <list>` packs a subset, in publish order; it exists only for
   `tests/generated-project/run.mjs`, whose v1 Compose project needs only the CLI, and is refused
-  together with `--smoke` or `--expect-tag`, so a release and the smoke always pack all eight.
+  together with `--smoke` or `--expect-tag`, so a release and the smoke always pack all nine.
 - **Two jobs.** `verify` holds no OIDC token: it refuses a tag whose commit is not on `main`,
-  installs with `--ignore-scripts`, builds the eight without any cache (`--skip-nx-cache`, and no
+  installs with `--ignore-scripts`, builds the nine without any cache (`--skip-nx-cache`, and no
   remote-cache credential — ADR-0110), checks the pinned images are public, packs and verifies the
-  eight with `--expect-tag`, records each tarball's sha256 as a job output and uploads the tarballs
+  nine with `--expect-tag`, records each tarball's sha256 as a job output and uploads the tarballs
   and their list as an artifact of the run, kept for 7 days. Only then does it run the smoke, which
   re-packs into its own directory and must produce byte-identical tarballs. `publish` runs in the
   `npm-publish` environment with `id-token: write`, checks out without a git credential, installs
@@ -213,7 +213,8 @@ never skips it, when that directory is missing.
   `publish-packages.yml` and `npm-publish`.
 - **Re-runs.** A version npm already serves (`npm view` prints exactly that version) is skipped, so
   a re-run after a partial failure publishes only the rest; the run then fails unless npm serves
-  all eight. The tarball list must be exactly contracts, platforms, sdk, react, aw, cli, embedded, create, in
+  all nine. The tarball list must be exactly contracts, platforms, sdk, react, app, aw, cli, embedded,
+  create, in
   that order and at one version, or nothing is published; `publish-packages.mjs` checks this again from
   the tarballs' own manifests, and resolves each line of the list against the list file's
   directory. A published version is never overwritten; a fix is a new patch version and tag.
@@ -221,29 +222,31 @@ never skips it, when that directory is missing.
   jobs, which packs and verifies again from the tagged commit.
 - **First publish of a new package name (Owner, once).** A trusted publisher can be configured
   only for a package that exists, so for each name the list adds — `@indx-workspace/embedded`
-  (ADR-0109), `@indx-workspace/react` (issue #623), then `@indx-workspace/platforms` (issue #956) —
+  (ADR-0109), `@indx-workspace/react` (issue #623), `@indx-workspace/platforms` (issue #956), then
+  `@indx-workspace/app` (issue #1500) —
   the Owner publishes a placeholder first
   version by hand, `0.0.0-bootstrap` as for the first five (ADR-0082 D5), and then configures its
   trusted publisher (`indxjp/agent-workspace`, `publish-packages.yml`, `npm-publish`). For
   `@indx-workspace/react` this must happen before `packages-v0.4.0` is tagged: until it does, that
-  release and every later one is refused; the same holds for `@indx-workspace/platforms` and the
-  first `packages-v*` tag after it joined the list. The placeholder is a `package.json` alone (name, that
+  release and every later one is refused; the same holds for `@indx-workspace/platforms` and `@indx-workspace/app` and the
+  first `packages-v*` tag after each joined the list. The placeholder is a `package.json` alone (name, that
   version, `license`, `repository`) published with `npm publish --access public`; never publish the release version
   by hand, because the workflow would then skip it and npm would serve bytes the verify job never
   checked. Until the placeholder exists, the publish job refuses the whole release before
   publishing anything: before the first `npm publish`, `publish-packages.mjs` asks npm
-  (`npm view <name> versions --json`) about all eight packages, and a package npm has never served
+  (`npm view <name> versions --json`) about all nine packages, and a package npm has never served
   (E404 or no versions) fails the run with `ReleaseRefusedError` `NEVER_PUBLISHED`, naming it and
   this step. A lookup that fails any other way (network or registry error) also refuses
   (`REGISTRY_UNREACHABLE`) rather than proceeding. There is no bootstrap path inside the
   workflow; the placeholder is only ever published by hand. So a tag never leaves a partial
   lock-step set; after the Owner's step, re-run the publish job (or all jobs once the artifact has
   expired). This is a declared gap: until then, `@indx-workspace/embedded`,
-  `@indx-workspace/react` and `@indx-workspace/platforms` are proven from tarballs only.
+  `@indx-workspace/react`, `@indx-workspace/platforms` and `@indx-workspace/app` are proven from
+  tarballs only.
 
 ### Cut a package release
 
-1. Bump the eight packages lock-step in one pull request from a `release/<version>` branch (the
+1. Bump the nine packages lock-step in one pull request from a `release/<version>` branch (the
    only branch CI lets edit a `CHANGELOG.md`): `version` in each `package.json`,
    `CONTRACTS_VERSION`, `AW_VERSION`, `CLI_VERSION`, `release-images.json`'s `version` (same
    major.minor), the schema URL in the CLI's profile fixtures, `pnpm changes:collect` (merges and

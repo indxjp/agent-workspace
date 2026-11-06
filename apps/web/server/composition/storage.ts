@@ -19,16 +19,9 @@ import {
 import type { CleanupMode } from '../storage/cleanup-cron';
 import type { CleanupDependencies } from '../storage/cleanup';
 import type { SessionStateBlobCatalog, StorageService } from '../storage/service';
-import type { CopyDependencies } from '../storage/migrate-naming';
-import type {
-  FinalizeBlobCatalog,
-  LegacyBlobCopier,
-  MigrationRuns,
-  WorkspaceSkillsStoreProvider,
-} from '../storage/store';
+import type { MigrationRuns, WorkspaceSkillsStoreProvider } from '../storage/store';
 import {
   configuredPath,
-  legacyAreaPrefixes,
   resolveStorageSettings,
   STORAGE_URL_ENV,
   storageAreaPlace,
@@ -160,22 +153,14 @@ async function openArea(area: StorageArea): Promise<AreaSelection> {
 }
 
 /**
- * The skills area each storage service opened for its old-naming reads, so `installSkillsApi`
- * serves the same store instead of opening the area a second time.
- */
-const openedSkillsAreas = new WeakMap<StorageService, AreaSelection>();
-
-/**
- * The catalog service over the `AW_STORAGE_URL` root (new object names) and the old area stores
- * (rows without an object id). `null` when there is no shared root or it cannot be opened, and the
- * files API is then not installed: there is no path-based fallback.
+ * The catalog service over the `AW_STORAGE_URL` root. `null` when there is no shared root or it
+ * cannot be opened, and the files API is then not installed: there is no path-based fallback.
  */
 async function openStorageService(
   selection: Extract<AreaSelection, { kind: 'opened' }>,
   catalog: ReturnType<typeof createResourceCatalogStoreProvider>,
   sessionState: SessionStateOf | undefined,
   cleanup: StorageCleanupSetup | undefined,
-  copy: CopyJobSetup | null,
 ): Promise<StorageService | null> {
   const { settings } = selection;
   if (settings.kind !== 'url') return null;
@@ -183,42 +168,21 @@ async function openStorageService(
   try {
     const { openRootObjectStore } = await import('@agent-workspace/core/storage');
     const objects = await openRootObjectStore(root, openOptionsFor(root));
-    const skills = await openArea('skills');
-    const stateBlobs = await openArea('session-state');
     const { createStorageService } = await import('../storage/service');
     if (cleanup !== undefined && sessionState !== undefined) {
-      void startCleanupJob(selection, objects, catalog, sessionState, cleanup).catch(
-        (error: unknown) => {
-          log.error(
-            `[compose] storage cleanup did not start (name=${safeProviderErrorName(error)}).`,
-          );
-        },
-      );
+      void startCleanupJob(objects, catalog, sessionState, cleanup).catch((error: unknown) => {
+        log.error(
+          `[compose] storage cleanup did not start (name=${safeProviderErrorName(error)}).`,
+        );
+      });
     }
-    const legacy = {
-      files: selection.store,
-      ...(skills.kind === 'opened' ? { skills: skills.store } : {}),
-      ...(stateBlobs.kind === 'opened' ? { 'session-state': stateBlobs.store } : {}),
-    };
-    if (copy !== null) {
-      void startCopyJob(copy, { objects, legacy, catalog, sessionState, cleanup }).catch(
-        (error: unknown) => {
-          log.error(
-            `[compose] ${STORAGE_MIGRATE_ENV}=${copy.mode} stopped (name=${safeProviderErrorName(error)}).`,
-          );
-        },
-      );
-    }
-    const service = createStorageService({
+    return createStorageService({
       catalog: (workspaceId) => catalog.forWorkspace(workspaceId),
       objects,
-      legacy,
       ...(sessionState === undefined ? {} : { sessionState }),
       ...(cleanup?.audit === undefined ? {} : { audit: cleanup.audit }),
       log,
     });
-    openedSkillsAreas.set(service, skills);
-    return service;
   } catch (error) {
     log.error(storageReadinessFailure('storage', error));
     return null;
@@ -228,19 +192,12 @@ async function openStorageService(
 /** The session-state blob rows of a workspace: the service reads them, the cleanup checks them. */
 type SessionStateOf = (
   workspaceId: string,
-) => Promise<
-  SessionStateBlobCatalog &
-    Awaited<ReturnType<CleanupDependencies['sessionState']>> &
-    LegacyBlobCopier &
-    FinalizeBlobCatalog
->;
+) => Promise<SessionStateBlobCatalog & Awaited<ReturnType<CleanupDependencies['sessionState']>>>;
 
 /** What the cleanup job needs from the database root, and the mode read once at start-up. */
 export interface StorageCleanupWiring {
   readonly lock: DatabaseRoot['withNamedLock'];
   readonly workspaceIds: DatabaseRoot['listWorkspaceIds'];
-  /** The verify passes of the old-naming migration (`AW_STORAGE_MIGRATE=finalize`). */
-  readonly migrationRuns: MigrationRuns;
   /** The audit trail's sink; the storage service records file actions through it. */
   readonly audit?: DatabaseRoot['recordAuditEvent'];
   readonly stopOnClose: (stop: () => void) => void;
@@ -250,26 +207,15 @@ type StorageCleanupSetup = StorageCleanupWiring & { readonly mode: CleanupMode }
 
 /**
  * Schedule the cleanup pass (the storage design, §04 "The cleanup job"): hourly in this process,
- * one pass at a time across servers. Legacy-naming objects are reported and never deleted.
+ * one pass at a time across servers.
  */
 async function startCleanupJob(
-  selection: Extract<AreaSelection, { kind: 'opened' }>,
   objects: ObjectStore,
   catalog: ReturnType<typeof createResourceCatalogStoreProvider>,
   sessionState: SessionStateOf,
   cleanup: StorageCleanupSetup,
 ): Promise<void> {
-  const { openRootObjectStore } = await import('@agent-workspace/core/storage');
   const { runCleanupPass } = await import('../storage/cleanup');
-  // storage-bridge(#1699): the old files layout
-  const old = legacyAreaPrefixes(selection.settings).find((entry) => entry.area === 'files');
-  const legacy =
-    old === undefined
-      ? null
-      : {
-          objects: await openRootObjectStore(old.location, openOptionsFor(old.location)),
-          prefix: old.prefix,
-        };
   const driver = startStorageCleanup({
     cronSecret: configuredPath('CRON_SECRET'),
     stopOnClose: cleanup.stopOnClose,
@@ -278,7 +224,6 @@ async function startCleanupJob(
     pass: () =>
       runCleanupPass({
         objects,
-        legacy,
         catalogs: (workspaceId) => catalog.forWorkspace(workspaceId),
         sessionState,
         workspaceIds: cleanup.workspaceIds,
@@ -296,143 +241,6 @@ async function startCleanupJob(
 
 const STORAGE_MIGRATE_ENV = 'AW_STORAGE_MIGRATE';
 
-/** What `AW_STORAGE_MIGRATE` asks for. */
-type MigrateMode = 'off' | 'adopt' | 'copy' | 'copy-dry-run' | 'finalize';
-
-/** `null` for a value that is none of the modes. Unset is `adopt`, the default. */
-function readMigrateMode(raw: string | null): MigrateMode | null {
-  if (raw === null) return 'adopt';
-  return raw === 'off' ||
-    raw === 'adopt' ||
-    raw === 'copy' ||
-    raw === 'copy-dry-run' ||
-    raw === 'finalize'
-    ? raw
-    : null;
-}
-
-/** What the copy job needs beyond the stores: the mode, read once at start-up, and when to start. */
-interface CopyJobSetup {
-  readonly mode: 'copy' | 'copy-dry-run' | 'finalize';
-  /** Settles when the adopt stage is done, so the copy sees every row adopt gives. */
-  readonly after: Promise<void>;
-}
-
-/**
- * Run the copy stage (the storage design, §06), or for `finalize` the check-and-delete stage after
- * it, in this process, one run at a time across servers: it holds the database lock
- * `storage-migrate`, and a server that does not get it logs that and leaves the run to the holder.
- * Progress is logged by the stage itself.
- */
-// storage-bridge(#1699): old object naming
-async function startCopyJob(
-  copy: CopyJobSetup,
-  parts: {
-    readonly objects: ObjectStore;
-    readonly legacy: CopyDependencies['legacy'];
-    readonly catalog: ReturnType<typeof createResourceCatalogStoreProvider>;
-    readonly sessionState: SessionStateOf | undefined;
-    readonly cleanup: StorageCleanupSetup | undefined;
-  },
-): Promise<void> {
-  const { cleanup } = parts;
-  if (cleanup === undefined) {
-    log.error(
-      `[compose] ${STORAGE_MIGRATE_ENV}=${copy.mode} did not start: there is no database root to lock on.`,
-    );
-    return;
-  }
-  await copy.after;
-  const { mode } = copy;
-  if (mode === 'finalize') {
-    const { runFinalizeStage } = await import('../storage/migrate-finalize');
-    const finalized = await cleanup.lock('storage-migrate', () =>
-      runFinalizeStage({
-        objects: parts.objects,
-        legacy: parts.legacy,
-        catalog: (workspaceId) => parts.catalog.forWorkspace(workspaceId),
-        ...(parts.sessionState === undefined ? {} : { blobs: parts.sessionState }),
-        workspaceIds: cleanup.workspaceIds,
-        runs: cleanup.migrationRuns,
-        log,
-      }),
-    );
-    if (!finalized.acquired) log.info('storage migration skipped: another server is running it');
-    return;
-  }
-  const { runCopyStage } = await import('../storage/migrate-naming');
-  const outcome = await cleanup.lock('storage-migrate', () =>
-    runCopyStage({
-      objects: parts.objects,
-      legacy: parts.legacy,
-      catalog: (workspaceId) => Promise.resolve(parts.catalog.forWorkspace(workspaceId)),
-      ...(parts.sessionState === undefined ? {} : { blobs: parts.sessionState }),
-      workspaceIds: cleanup.workspaceIds,
-      mode,
-      log,
-    }),
-  );
-  if (!outcome.acquired) log.info('storage migration skipped: another server is running it');
-}
-
-/**
- * Unset or `AW_STORAGE_MIGRATE=adopt` gives every object the old naming left without a catalog row a
- * row, in the background (the storage design, §06). It is the default because lists and downloads
- * read the catalog, so a row-less upload would otherwise vanish from them; it is idempotent and
- * cheap once done. `copy` adopts first and then copies each old object to a new name (see
- * {@link startCopyJob}); `finalize` adopts, then checks every copy and deletes the old objects that
- * are accounted for; `copy-dry-run` only counts; `off` disables all of it. Never awaited:
- * requests and start-up do not wait for it, and a failure is logged by error name only. Any other
- * value is refused without echoing it. The promise settles when the adopt stage is done (or was not
- * asked for) and never rejects.
- */
-// storage-bridge(#1699): old object naming
-function startNamingMigration(
-  selection: Extract<AreaSelection, { kind: 'opened' }>,
-  catalog: ReturnType<typeof createResourceCatalogStoreProvider>,
-  owners: Pick<DatabaseRoot['workspaces'], 'ownerPrincipalId'> | undefined,
-  runs: MigrationRuns | undefined,
-  mode: MigrateMode,
-): Promise<void> {
-  // A dry run writes nothing, so it does not adopt either.
-  if (mode === 'off' || mode === 'copy-dry-run') return Promise.resolve();
-  const legacy = legacyAreaPrefixes(selection.settings).find((entry) => entry.area === 'files');
-  if (legacy === undefined || owners === undefined || runs === undefined) {
-    // Unset means nothing was asked for: a deployment with no old layout has nothing to adopt.
-    if (configuredPath(STORAGE_MIGRATE_ENV) !== null) {
-      log.error(
-        `[compose] ${STORAGE_MIGRATE_ENV}=${mode} did not adopt: there is no old files layout, owner lookup or run log.`,
-      );
-    }
-    return Promise.resolve();
-  }
-  return (async () => {
-    const { openRootObjectStore } = await import('@agent-workspace/core/storage');
-    const { recordFailedAdoptRun, runAdoptStage } = await import('../storage/migrate-naming');
-    let objects: ObjectStore;
-    try {
-      objects = await openRootObjectStore(legacy.location, openOptionsFor(legacy.location));
-    } catch (error) {
-      // The pass failed before it listed anything: record it, so an older clean row is never
-      // mistaken for its result.
-      await recordFailedAdoptRun(runs, log);
-      throw error;
-    }
-    await runAdoptStage({
-      objects,
-      prefix: legacy.prefix,
-      catalog: (workspaceId) => catalog.forWorkspace(workspaceId),
-      ownerPrincipalId: (workspaceId) => owners.ownerPrincipalId(workspaceId),
-      runs,
-      log,
-    });
-  })().catch((error: unknown) => {
-    log.error(
-      `[compose] ${STORAGE_MIGRATE_ENV}=${mode} stopped adopting (name=${safeProviderErrorName(error)}).`,
-    );
-  });
-}
-
 /** What the skills adopt pass needs from the database root. */
 export interface SkillsAdoptWiring extends Pick<StorageCleanupWiring, 'lock' | 'workspaceIds'> {
   readonly migrationRuns: MigrationRuns;
@@ -440,9 +248,10 @@ export interface SkillsAdoptWiring extends Pick<StorageCleanupWiring, 'lock' | '
 }
 
 /**
- * The skills part of the adopt stage (the storage design, §06), in the background and under its own
- * database lock, so it never waits for the copy stage's. Off with `AW_STORAGE_MIGRATE=off`, and a
- * dry run writes nothing, so it does not adopt either. Never rejects; a failure is logged by name.
+ * The skills adopt pass (the storage design, §06), in the background and under its own database
+ * lock. Off with `AW_STORAGE_MIGRATE=off`; this release has no other stage, so any other value runs
+ * it, unless the latest recorded pass already proved no old skill form is left. Never rejects; a
+ * failure is logged by name.
  */
 // storage-bridge(#1699): old skill forms
 async function startSkillsAdopt(
@@ -451,12 +260,13 @@ async function startSkillsAdopt(
   storage: StorageService,
   adopt: SkillsAdoptWiring,
 ): Promise<void> {
-  const mode = readMigrateMode(configuredPath(STORAGE_MIGRATE_ENV));
-  if (mode === null || mode === 'off' || mode === 'copy-dry-run') return;
+  if (configuredPath(STORAGE_MIGRATE_ENV) === 'off') return;
   try {
-    const { runSkillsAdoptStage } = await import('../storage/migrate-skills');
-    const ran = await adopt.lock('storage-migrate-skills', () =>
-      runSkillsAdoptStage({
+    const { runSkillsAdoptStage, skillsAdoptProven } = await import('../storage/migrate-skills');
+    const ran = await adopt.lock('storage-migrate-skills', async () => {
+      // Read under the lock, so a pass another server just finished counts.
+      if (skillsAdoptProven(await adopt.migrationRuns.latest('skills'))) return 'proven';
+      await runSkillsAdoptStage({
         workspaceIds: adopt.workspaceIds,
         objects: (workspaceId) => store.forWorkspace(workspaceId),
         catalog: (workspaceId) => Promise.resolve(catalog.forWorkspace(workspaceId)),
@@ -464,9 +274,13 @@ async function startSkillsAdopt(
         storage,
         runs: adopt.migrationRuns,
         log,
-      }),
-    );
+      });
+      return 'ran';
+    });
     if (!ran.acquired) log.info('skills adopt skipped: another server is running it');
+    else if (ran.value === 'proven') {
+      log.info('skills adopt skipped: the latest pass left no old skill forms');
+    }
   } catch (error) {
     log.error(`[compose] skills adopt stopped (name=${safeProviderErrorName(error)}).`);
   }
@@ -502,7 +316,6 @@ export async function installFilesApi(
   scopes: DatabaseRoot['scopes'],
   catalog: ReturnType<typeof createResourceCatalogStoreProvider>,
   fileTexts: DatabaseRoot['fileTexts'],
-  owners?: Pick<DatabaseRoot['workspaces'], 'ownerPrincipalId'>,
   sessionState?: DatabaseRoot['sessionState'],
   cleanup?: StorageCleanupWiring,
 ): Promise<Files> {
@@ -528,17 +341,6 @@ export async function installFilesApi(
       try {
         const { createFileTextStoreProvider, createRepositoryObjectStoreProvider } =
           await import('../files/store');
-        const migrateMode = readMigrateMode(configuredPath(STORAGE_MIGRATE_ENV));
-        if (migrateMode === null) {
-          log.error(
-            `[compose] ${STORAGE_MIGRATE_ENV} must be adopt, copy, copy-dry-run, finalize or off; the old-naming migration did not start.`,
-          );
-        }
-        // The copy waits for adopt, which starts once the storage service is up.
-        let adopted: () => void = () => undefined;
-        const afterAdopt = new Promise<void>((resolve) => {
-          adopted = resolve;
-        });
         const storage = await openStorageService(
           selection,
           catalog,
@@ -551,17 +353,7 @@ export async function installFilesApi(
                 return sessionState.forScope(scope);
               },
           cleanup === undefined ? undefined : { ...cleanup, mode: cleanupMode },
-          migrateMode === 'copy' || migrateMode === 'copy-dry-run' || migrateMode === 'finalize'
-            ? { mode: migrateMode, after: afterAdopt }
-            : null,
         );
-        void startNamingMigration(
-          selection,
-          catalog,
-          owners,
-          cleanup?.migrationRuns,
-          migrateMode ?? 'off',
-        ).then(adopted);
         if (storage === null) {
           log.error(
             '[compose] files API NOT installed: the catalog service did not open. Every ' +
@@ -599,8 +391,7 @@ export async function installSkillsApi(
   storage?: StorageService,
   adopt?: SkillsAdoptWiring,
 ): Promise<Skills> {
-  const opened = storage === undefined ? undefined : openedSkillsAreas.get(storage);
-  const selection = opened ?? (await openArea('skills'));
+  const selection = await openArea('skills');
   switch (selection.kind) {
     case 'refused':
       log.error(`[compose] skills API NOT installed: ${selection.reason}`);
@@ -633,46 +424,5 @@ export async function installSkillsApi(
   } catch (error) {
     log.error(storageReadinessFailure('skills', error));
     return { kind: 'unavailable' };
-  }
-}
-
-/**
- * The object store session-state **blobs** are written to, or `null` when this deployment has none.
- *
- * Its own prefix and its own root, never the files or skills store: a session-state blob is platform
- * bookkeeping about a conversation, and putting it inside `/api/files`' address space would make an
- * engine's internal state something a tenant can list, download and delete.
- *
- * `null` is a real answer, not a failure. Every *entry* is a database row and stays durable without
- * this, so a deployment with no object storage keeps working for every engine that has one — and the
- * two blob routes answer 503 naming the variable rather than pretending to have stored something
- * (ADR-0035).
- */
-export async function sessionStateBlobStore(): Promise<ObjectStoreProvider | null> {
-  const selection = await openArea('session-state');
-  switch (selection.kind) {
-    case 'refused':
-      log.error(`[compose] session-state blobs NOT installed: ${selection.reason}`);
-      return null;
-    case 'failed':
-      log.error(storageReadinessFailure('session-state', selection.cause));
-      return null;
-    case 'unset':
-      log.error(
-        `[compose] session-state blobs NOT installed: ${STORAGE_URL_ENV} is unset or blank. ` +
-          `Stream entries stay durable — ` +
-          `they are database rows — and PUT/GET /api/sessions/:id/state-blobs answer 503 ` +
-          `session_state_blobs_not_configured.`,
-      );
-      return null;
-    case 'opened':
-      // storage-bridge(#1699): this store only reads and purges blobs an earlier release saved; new
-      // blobs are saved through the storage service, so this line must not claim PUT works.
-      log.info(
-        `[compose] session-state old blob store opened for reads and purges: ` +
-          `${describePlace(selection.location, 'session-state')}. New blobs are saved only ` +
-          `through the storage service.`,
-      );
-      return selection.store;
   }
 }

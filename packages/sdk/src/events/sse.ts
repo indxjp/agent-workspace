@@ -35,7 +35,24 @@ export interface SseFrame {
  * as this wire format at all, and the caller drops it rather than guessing a name for it.
  */
 export function parseSseFrame(raw: string): SseFrame | null {
+  return parseSseBlock(raw).frame;
+}
+
+/** HTML §9.2: a `retry:` value is used only when it is ASCII digits and nothing else. */
+const RETRY_VALUE = /^[0-9]+$/u;
+
+/**
+ * One block's frame and its `retry:` hint, or `null` for either when the block has none. The
+ * platform sends `retry:` in a block of its own, with no `event:`, so the hint is read whether or
+ * not the block is a frame. Of several valid `retry:` lines the last wins; an invalid one (`1e4`,
+ * `-1`, empty) is ignored, as a browser's `EventSource` ignores it.
+ */
+function parseSseBlock(raw: string): {
+  readonly frame: SseFrame | null;
+  readonly retry: number | null;
+} {
   let event: string | null = null;
+  let retry: number | null = null;
   let id: string | null = null;
   let at: string | undefined;
   const dataLines: string[] = [];
@@ -58,14 +75,24 @@ export function parseSseFrame(raw: string): SseFrame | null {
       case 'data':
         dataLines.push(value);
         break;
+      case 'retry':
+        if (RETRY_VALUE.test(value)) retry = Number(value);
+        break;
       default:
-        // `retry:`, and anything else. Not an error: this consumer is not required to obey every
-        // field the server is entitled to send to stay correct about the ones it does read.
+        // Anything else. Not an error: this consumer is not required to obey every field the
+        // server is entitled to send to stay correct about the ones it does read.
         break;
     }
   }
+  return { frame: event === null ? null : frameOf(event, id, at, dataLines), retry };
+}
 
-  if (event === null) return null;
+function frameOf(
+  event: string,
+  id: string | null,
+  at: string | undefined,
+  dataLines: readonly string[],
+): SseFrame {
   const joined = dataLines.join('\n');
   const stamp = at === undefined ? {} : { at };
   if (joined === '') return { event, id, ...stamp, data: null };
@@ -111,6 +138,24 @@ export async function* readSseFrames(
   body: ReadableStream<Uint8Array>,
   signal?: AbortSignal,
 ): AsyncGenerator<SseFrame, void, void> {
+  yield* readSseStream(body, signal, undefined);
+}
+
+/**
+ * {@link readSseFrames}, also reporting each valid `retry:` value to `onRetry` as it is read
+ * (issue #250, K-3): the reconnection time the server asks for, which `runs.follow` backs off
+ * from. Internal to the SDK; the public frame shape is unchanged.
+ */
+export async function* readSseStream(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  onRetry: ((ms: number) => void) | undefined,
+): AsyncGenerator<SseFrame, void, void> {
+  const parse = (raw: string): SseFrame | null => {
+    const block = parseSseBlock(raw);
+    if (block.retry !== null) onRetry?.(block.retry);
+    return block.frame;
+  };
   const reader = body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
@@ -132,7 +177,7 @@ export async function* readSseFrames(
       const split = splitSseFrames(buffer);
       buffer = split.rest;
       for (const raw of split.frames) {
-        const frame = parseSseFrame(raw);
+        const frame = parse(raw);
         if (frame !== null) yield frame;
       }
     }
@@ -141,7 +186,7 @@ export async function* readSseFrames(
     if (signal?.aborted !== true) {
       const finalSplit = splitBuffer(buffer + decoder.decode(), true);
       for (const raw of finalSplit.frames) {
-        const frame = parseSseFrame(raw);
+        const frame = parse(raw);
         if (frame !== null) yield frame;
       }
     }

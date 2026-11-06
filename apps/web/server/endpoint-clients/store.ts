@@ -8,6 +8,7 @@ import type {
   DirectoryApiKeyRecord,
   EndpointClientRecord,
 } from '@agent-workspace/core/db';
+import type { DeploymentPosture } from '@agent-workspace/core/posture';
 import type { ApiKeyResource } from '@indx-workspace/contracts/api-keys';
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
 
@@ -31,6 +32,7 @@ function resource(record: EndpointClientRecord): EndpointClientResource {
     apiKeyIds: record.apiKeyIds,
     redirectUris: record.redirectUris,
     hasClientSecret: record.hasClientSecret,
+    oidcAudience: record.oidcAudience,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -53,6 +55,8 @@ function apiKeyResource(row: DirectoryApiKeyRecord): ApiKeyResource {
 export function createRepositoryEndpointClientsRuntime(
   root: StoreRoot,
   now: () => Date = () => new Date(),
+  /** The deployment posture the composition root read (ADR-0161 amendment DI10). */
+  posture: DeploymentPosture = 'production',
 ): EndpointClientsRuntime {
   const repository = async (workspaceId: string) => {
     const scope = await root.scopes.forWorkspaceId(workspaceId);
@@ -61,6 +65,7 @@ export function createRepositoryEndpointClientsRuntime(
   };
 
   return {
+    isLocalPosture: () => Promise.resolve(posture === 'local'),
     async list(workspaceId) {
       return (await (await repository(workspaceId)).list()).map(resource);
     },

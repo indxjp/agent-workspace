@@ -117,6 +117,8 @@ describe('createConnection', () => {
     baseUrl: '',
     deployment: '',
     apiVersion: '',
+    projectId: '',
+    location: 'global',
   };
 
   it('posts the credential to the create route only', async () => {
@@ -178,7 +180,14 @@ describe('testConnection', () => {
 });
 
 describe('updateConnection', () => {
-  const values = { name: 'Renamed', baseUrl: '', deployment: '', apiVersion: '' };
+  const values = {
+    name: 'Renamed',
+    baseUrl: '',
+    deployment: '',
+    apiVersion: '',
+    projectId: '',
+    location: 'global',
+  };
 
   it('patches the connection and returns it as the panel shows it', async () => {
     const { client, calls } = api(() => jsonResponse(200, { ...connection, name: 'Renamed' }));

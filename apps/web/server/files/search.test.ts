@@ -17,7 +17,8 @@ import {
   bytesToStream,
   createInMemoryObjectStore,
   createInMemoryObjectStoreProvider,
-  type ObjectStoreProvider,
+  storageObjectName,
+  type ObjectStore,
 } from '@agent-workspace/core/storage';
 import { FileSearchResponseSchema } from '@indx-workspace/contracts/files';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -45,6 +46,8 @@ import { encodeFileId } from './file-id';
 import { searchFiles } from './search';
 import { createRepositoryObjectStoreProvider, type FileTextStore } from './store';
 import type { CatalogFile } from '../storage/store';
+import { seedCatalogFile } from '@agent-workspace/core/db';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 /** The SHA-256 of no bytes, built at runtime: a reference whose content is never read here. */
 const EMPTY_SHA256 = createHash('sha256').digest('hex');
@@ -65,10 +68,9 @@ async function fixture(files: FakeFile[]) {
   const store = createInMemoryObjectStore();
   const catalog = createInMemoryCatalogStore().forWorkspaceSync(WORKSPACE_ID);
   for (const file of files) {
-    const row = await catalog.putFile({
+    const row = await seedCatalogFile(catalog, {
       path: file.path,
       kind: 'file',
-      storageKey: file.path,
       sizeBytes: file.body.length,
       contentType: file.contentType,
       ownerPrincipalId: OWNER_ID,
@@ -124,7 +126,8 @@ async function fixture(files: FakeFile[]) {
       await store.write(file.path, Buffer.from(file.body), { contentType: file.contentType });
     }
   };
-  const open = (row: CatalogFile) => store.read(row.storageKey ?? row.path);
+  // The fixture writes each file at its path; a row's own key names an object nobody wrote.
+  const open = (row: CatalogFile) => store.read(row.path);
   return { open, texts, put, catalog, cached };
 }
 
@@ -458,26 +461,28 @@ const ctxOf = (member: Member): StorageContext => ({
   userId: member.userId,
 });
 
-/** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
-async function saveLegacyRow(
+/** A ready row whose recorded size is `claimedSize`, whatever its object holds. */
+async function saveClaimedRow(
   world: World,
-  legacy: ObjectStoreProvider,
+  objects: ObjectStore,
   path: string,
   body: Uint8Array,
-  claimedSize: number = body.byteLength,
+  claimedSize: number,
 ) {
-  await legacy.forWorkspace(world.a.workspaceId).write(path, body, {});
   const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
+  const objectId = crypto.randomUUID();
   const reserved = await catalog.reserve(path, {
+    objectId,
     ownerPrincipalId: world.a.principalId,
     sizeBytes: claimedSize,
     contentType: 'text/plain',
   });
+  await objects.write(storageObjectName(world.a.workspaceId, 'files', objectId), body, {});
   const confirmed = await catalog.confirm(reserved.row, {
     sizeBytes: claimedSize,
     contentType: 'text/plain',
   });
-  if (confirmed === null) throw new Error('the legacy row did not confirm');
+  if (confirmed === null) throw new Error('the row did not confirm');
   return confirmed.row;
 }
 
@@ -494,7 +499,7 @@ function catalogTexts(
   cache: Map<string, string>,
 ): FileTextStore {
   const ready = async () =>
-    (await (await world.catalogs.forWorkspace(workspaceId)).listFiles()).filter(
+    (await listCatalogFiles(await world.catalogs.forWorkspace(workspaceId))).filter(
       (row) => row.kind === 'file',
     );
   return {
@@ -531,12 +536,13 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
     let storage: StorageService;
     const legacy = createInMemoryObjectStoreProvider();
     const caches = new Map<string, Map<string, string>>();
+    let objects: ObjectStore;
 
     function install(): void {
+      objects = createInMemoryObjectStore();
       storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
-        objects: createInMemoryObjectStore(),
-        legacy: { files: legacy },
+        objects,
         log: noLog,
       });
       const principals = new Map([
@@ -655,15 +661,6 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
     });
 
     // @story US-STO-01
-    it('[US-STO-01][api][sdk] search finds a legacy row', async () => {
-      await saveLegacyRow(world, legacy, 'old/report.txt', bytesOf('old zebracorn'));
-
-      expect(await hitPaths('a', 'zebracorn')).toEqual(['old/report.txt']);
-      expect(await hitPaths('b', 'zebracorn')).toEqual([]);
-      expect(await downloadStatus('b', 'old/report.txt')).toBe(404);
-    });
-
-    // @story US-STO-01
     it('[US-STO-01][api][sdk] search does not find a pending upload', async () => {
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
       await catalog.reserve('docs/pending.txt', {
@@ -684,7 +681,7 @@ function defineCatalogSuite(name: string, setup: () => Promise<World>) {
       // The row claims a small size; the object is larger than the cap and holds the word at its start.
       const oversized = new Uint8Array(EXTRACT_MAX_FILE_BYTES + 1).fill(0x20);
       oversized.set(bytesOf('zebracorn'));
-      await saveLegacyRow(world, legacy, 'big/claimed-small.txt', oversized, 9);
+      await saveClaimedRow(world, objects, 'big/claimed-small.txt', oversized, 9);
       await save('big/honest.txt', 'zebracorn');
 
       expect(await hitPaths('a', 'zebracorn')).toEqual(['big/honest.txt']);

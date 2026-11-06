@@ -1,11 +1,12 @@
 import type { ModelDiscovery } from './discovery';
 import type { TestConnectionResult } from './probe';
+import type { VertexDefaults } from './vertex-defaults';
 import type { ModelsStoreProvider, ResolvedModelConnection } from './store';
-// Read-only: `Role` is `rbac/roles.ts`'s own closed union of spec §21's four roles. Carrying it
+// Read-only: `Role` is `rbac/core/roles.ts`'s own closed union of spec §21's four roles. Carrying it
 // here — rather than a bare `string` — is what issue #149's write gate needs: `decide()` takes a
 // `Role`, and a resolution that only ever held a display label had nowhere for one to come from.
-import type { Role } from '../rbac/roles';
-import type { TokenScope } from '../rbac/token-scope';
+import type { Role } from '../rbac/core/roles';
+import type { TokenScope } from '../rbac/core/token-scope';
 
 export type ModelsActorResolution =
   | {
@@ -51,6 +52,11 @@ export interface ModelsRuntime {
   discover: ModelDiscovery;
   audit(event: ModelsAuditEvent): Promise<void>;
   log(message: string): void;
+  /**
+   * The install's `projectId` and `location` for a `vertex` connection, read from
+   * `AW_VERTEX_PROJECT_ID` and `AW_VERTEX_LOCATION` by the composition root. Absent means none.
+   */
+  readonly vertexDefaults?: VertexDefaults;
 }
 
 /**

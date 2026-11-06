@@ -189,7 +189,7 @@ elab "aw_work_tenant_theorems" : command => do
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T2))
         (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-        (ts := $fkTs) (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+        (ts := $fkTs) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
       theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : consistent catalogue st = true)
           {r r' : AgentWorkspace.Er.Core.Row}
           (href : References catalogue st $tIdent (workFk $tIdent $n) r r') :
@@ -314,7 +314,7 @@ theorem uniqueness_keys_refuse_a_second_row :
 /-- One store operation at instant `now`: the status machine decides whether the run moves
 (`Lifecycle.runStep`), and a move writes the timestamps `Run.stamp` gives. -/
 @[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 def timedStep (r : Run) (op : RunOp) (now : Nat) : Run :=
   match runStep r.status op with
   | .moved next => r.stamp next now
@@ -406,8 +406,8 @@ on a non-queued run answers `false`, `finish` with a non-terminal target rejects
 ignores it (`finish` on an already terminal run). -/
 @[aw_spec (tier := T2) (ts := "apps/web/server/runs/store.ts#RunStore")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem store_stamps_follow_the_status (r : Run) (target : RunStatus) (now : Nat) :
     (r.status = .queued →
         timedStep r .markRunning now = { r with status := .running, startedAt := some now }) ∧

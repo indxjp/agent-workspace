@@ -8,7 +8,7 @@ import {
 
 import { engineIsInstalled, engineNotInstalledMessage } from '../engines/images';
 import { pinSessionEngine, sessionEngineMismatchMessage } from '../engines/session-engine';
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../rbac/core/owner-principal';
 import type { DailyCostCap } from '../usage/daily-cost';
 import type {
   AgentRef,
@@ -20,12 +20,16 @@ import type {
 import { promptWithAttachments, type ResolvedAttachment } from './attachments';
 import {
   ApprovalDecisionError,
+  ChildRunLimitError,
+  ParentRunStoppedError,
   SessionBusyError,
   type ApprovalCall,
+  type CreateRunInput,
   type RunIdempotency,
   type RunRecord,
 } from './store';
 import { isAudioAttachment } from './transcription';
+import { effectiveSpendCeiling, SPEND_CEILING_WIDENS_MESSAGE } from './spend-ceiling';
 
 /**
  * The largest prompt one run may carry.
@@ -36,6 +40,9 @@ import { isAudioAttachment } from './transcription';
  * `docs/adr/W1-CP-04-start-run-request-shape.md`.
  */
 export const MAX_PROMPT_CHARS = 100_000;
+
+/** The longest `Idempotency-Key` a run start accepts; the run route and a Builder trial share it. */
+export const MAX_IDEMPOTENCY_KEY_CHARS = 255;
 
 /** The JSON body of `POST /api/agents/:id/runs`. */
 export interface StartRunBody {
@@ -68,6 +75,8 @@ export interface StartRunBody {
   readonly subject?: string;
   /** Narrows the run's file grants to these paths (issue #1539); judged by compose at launch. */
   readonly fileScope?: readonly string[];
+  /** Lowers the run's spend ceiling (ADR-0162); a value above its limit is refused. */
+  readonly spendCeilingUsd?: number;
 }
 
 /** A start {@link startRunOnSession} refused, with the status and code `startRun` answers. */
@@ -122,6 +131,17 @@ function launchOnlyContext(
   };
 }
 
+/** The start fields the run row stores, so a continuation built from the row alone can carry them on. */
+function storedStartFields(
+  input: Pick<StartRunBody, 'outputSchema' | 'subject'> & { readonly limits?: RunLimitsOverride },
+): Pick<CreateRunInput, 'outputSchema' | 'subject' | 'limitsOverride'> {
+  return {
+    ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
+    ...(input.subject === undefined ? {} : { subject: input.subject }),
+    ...(input.limits === undefined ? {} : { limitsOverride: input.limits }),
+  };
+}
+
 const dailyCostCapRefusal = async (
   cap: DailyCostCap | undefined,
   workspaceId: string,
@@ -151,7 +171,6 @@ const dailyCostCapRefusal = async (
           : 'The workspace has reached its daily model cost cap; runs can start again after it resets.',
         [
           `capUsd: ${String(reached.capUsd)}`,
-          `spentUsd: ${String(reached.spentUsd)}`,
           `resetsAt: ${reached.resetsAt}`,
           ...(reached.unpricedUsage === true ? ['unpricedUsage: true'] : []),
         ],
@@ -166,6 +185,48 @@ const limitsRefusal = (limits: RunLimitsOverride | undefined): RunStartRefused |
         'invalid_run_limits',
         'A run limit must be a positive number (maxTurns a whole one).',
       );
+
+/**
+ * The refusal a failed run insert answers, or the error itself rethrown when it is not one the
+ * store raises for a request it refused (a decided approval, a child over the fan-out, a busy
+ * session).
+ */
+function createRefusal(error: unknown): RunStartRefused {
+  if (error instanceof ApprovalDecisionError) {
+    return error.reason === 'expired'
+      ? refused(
+          RUN_APPROVAL_PROBLEM_CODES.approval_expired,
+          'approval_expired',
+          `run ${error.runId} waited more than 24 hours for a decision; it was cancelled.`,
+        )
+      : refused(
+          RUN_APPROVAL_PROBLEM_CODES.approval_already_decided,
+          'approval_already_decided',
+          `run ${error.runId} is no longer awaiting approval; it was already decided or stopped.`,
+        );
+  }
+  if (error instanceof ChildRunLimitError) {
+    return refused(
+      409,
+      'team_member_limit',
+      `run ${error.runId} already has its most child runs; no member run was started.`,
+    );
+  }
+  if (error instanceof ParentRunStoppedError) {
+    return refused(
+      409,
+      'parent_run_stopped',
+      `run ${error.runId} is no longer running; no member run was started.`,
+    );
+  }
+  // Two runs resuming one engine session would interleave its transcript.
+  if (!(error instanceof SessionBusyError)) throw error;
+  return refused(
+    409,
+    'session_busy',
+    'this session already has a run in progress; wait for it to finish or interrupt it.',
+  );
+}
 
 /**
  * Start one run of `agent` for `principal`: the preflight, the session, the engine pin, the run row
@@ -189,9 +250,49 @@ export async function startRunOnSession(
      * only by trusted in-process callers: `parseStartRunBody` rejects it in a request body.
      */
     readonly limits?: RunLimitsOverride;
+    /**
+     * Makes the run a child run of a team's lead run (ADR-0104 acceptance decisions 5 and 6),
+     * written once as `parent_run_id`; over `maxChildren` the start is refused
+     * `team_member_limit` and nothing is written. Set only by the member endpoint:
+     * `parseStartRunBody` rejects it in a request body.
+     */
+    readonly parent?: { readonly runId: string; readonly maxChildren: number };
+    /**
+     * The team version a team run's lead runs (ADR-0104 decision 4), written once on insert. Set
+     * only by the team run start, never from a request body.
+     */
+    readonly agentTeamVersionId?: string;
   },
 ): Promise<RunOnSessionStart> {
   const attachments = input.attachments ?? [];
+  // ADR-0162: the run's spend ceiling, decided with the start's other refusals and stored on insert.
+  let spendCeilingUsd: string | null = null;
+  const checkSpendCeiling = async (sessionId: string | null): Promise<RunStartRefused | null> => {
+    const limit =
+      env.spendLimitFor === undefined
+        ? null
+        : await env.spendLimitFor(
+            principal,
+            agent,
+            sessionId,
+            sessionId === null ? input.agentVersionId : undefined,
+          );
+    const decision = effectiveSpendCeiling(
+      limit,
+      input.limits?.maxBudgetUsd,
+      input.spendCeilingUsd,
+    );
+    if (decision.kind === 'widens') {
+      return refused(
+        RUN_START_PROBLEM_CODES.policy_cannot_widen,
+        'policy_cannot_widen',
+        SPEND_CEILING_WIDENS_MESSAGE,
+        ['spendCeilingUsd'],
+      );
+    }
+    spendCeilingUsd = decision.spendCeilingUsd;
+    return null;
+  };
   // Issue #393: a run whose agent has no runtime profile, or whose model cannot resolve, is refused
   // with a code that names the missing piece, before `store.create`. A run that would open a new
   // session is checked before `openSession` too (PR #403 review), so a refused first message leaves
@@ -226,7 +327,7 @@ export async function startRunOnSession(
             },
           );
     return refusal === null
-      ? null
+      ? checkSpendCeiling(sessionId)
       : refused(RUN_START_PROBLEM_CODES[refusal.code], refusal.code, refusal.message);
   };
   // Every refusal a run that opens its own session can meet is decided before that session is
@@ -311,12 +412,16 @@ export async function startRunOnSession(
       // one the agent's policy names. A record, never a default (ADR-0065).
       engine: pin.engine,
       prompt: input.prompt,
-      ...(input.outputSchema === undefined ? {} : { outputSchema: input.outputSchema }),
-      ...(input.subject === undefined ? {} : { subject: input.subject }),
+      ...storedStartFields(input),
       ...(input.idempotency === undefined ? {} : { idempotency: input.idempotency }),
       ...(input.decides === undefined
         ? {}
         : { decides: input.decides.runId, approvedToolCalls: input.decides.approvedToolCalls }),
+      ...(input.parent === undefined ? {} : { parent: input.parent }),
+      ...(input.agentTeamVersionId === undefined
+        ? {}
+        : { agentTeamVersionId: input.agentTeamVersionId }),
+      ...(spendCeilingUsd === null ? {} : { spendCeilingUsd }),
     });
   } catch (error) {
     // The session this call opened has no run in it now. It is removed only if it still has none: a
@@ -328,26 +433,7 @@ export async function startRunOnSession(
         });
       });
     }
-    if (error instanceof ApprovalDecisionError) {
-      return error.reason === 'expired'
-        ? refused(
-            RUN_APPROVAL_PROBLEM_CODES.approval_expired,
-            'approval_expired',
-            `run ${error.runId} waited more than 24 hours for a decision; it was cancelled.`,
-          )
-        : refused(
-            RUN_APPROVAL_PROBLEM_CODES.approval_already_decided,
-            'approval_already_decided',
-            `run ${error.runId} is no longer awaiting approval; it was already decided or stopped.`,
-          );
-    }
-    // Two runs resuming one engine session would interleave its transcript.
-    if (!(error instanceof SessionBusyError)) throw error;
-    return refused(
-      409,
-      'session_busy',
-      'this session already has a run in progress; wait for it to finish or interrupt it.',
-    );
+    return createRefusal(error);
   }
   // RF-303 (ADR-0151): the committed `queued` row is the acceptance, not the launch callback. A
   // handoff that throws leaves the run queued, where the stale-run sweep (`stale-sweep.ts`) ends it,

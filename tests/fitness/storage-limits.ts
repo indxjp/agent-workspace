@@ -424,10 +424,11 @@ function onlyTestsImport(path: string, files: readonly SourceFile[]): boolean {
 
 /**
  * Constants in scope whose value equals a limit's bytes outside that limit's owner file.
- * Returns sorted, unique `path::NAME` keys.
+ * Returns sorted `path::NAME` keys, one per site: two copies under one name in a file give the
+ * key twice, so an allowlisted name cannot hide a second copy.
  */
 export function findLimitCopies(files: readonly SourceFile[]): string[] {
-  const hits = new Set<string>();
+  const hits: string[] = [];
   const exported = exportedValues(files).values;
   const exports = exportTargets(files);
   for (const file of files.filter(({ path }) => inStorageScope(path))) {
@@ -436,9 +437,9 @@ export function findLimitCopies(files: readonly SourceFile[]): string[] {
         !usesLimit && STORAGE_LIMITS.some((l) => l.bytes === value && l.owner !== file.path),
     );
     if (copies.length === 0 || isTestSupport(file.path, files, exports)) continue;
-    for (const { name } of copies) hits.add(`${file.path}::${name}`);
+    for (const { name } of copies) hits.push(`${file.path}::${name}`);
   }
-  return [...hits].sort();
+  return hits.sort();
 }
 
 /** `owner::NAME` for each limit whose owner file does not export that name with that value. */

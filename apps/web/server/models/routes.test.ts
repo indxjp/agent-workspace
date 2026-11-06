@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
@@ -11,7 +11,7 @@ import { GET as LIST } from '../../app/api/models/route';
 import { installModelsApi } from '../composition/services';
 import { createInMemoryModelsStoreProvider } from './memory-store';
 import type { ModelsAuditEvent } from './runtime';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 import { Principal } from '../rbac/principal';
 import { installTestDomains } from '../application-context-fixtures';
 import { clearApplicationContext } from '../application-context';
@@ -76,6 +76,7 @@ describe('model connections HTTP surface', () => {
             return Promise.resolve();
           },
           log: (message) => logs.push(message),
+          vertexDefaults: { projectId: 'install-project-1', location: 'eu' },
         },
       },
     });
@@ -216,6 +217,41 @@ describe('model connections HTTP surface', () => {
       context,
     );
     expect(response.status).toBe(404);
+  });
+
+  it('creates a keyless vertex connection from the install defaults and refuses a credential for it', async () => {
+    const created = await CREATE(
+      request('http://web/api/model-connections', 'POST', { name: 'Vertex', provider: 'vertex' }),
+    );
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as {
+      id: string;
+      hasCredential: boolean;
+      ready: boolean;
+      config: Record<string, string>;
+    };
+    expect(body).toMatchObject({
+      hasCredential: false,
+      ready: true,
+      config: { projectId: 'install-project-1', location: 'eu' },
+    });
+    const withKey = await CREATE(
+      request('http://web/api/model-connections', 'POST', {
+        name: 'Vertex 2',
+        provider: 'vertex',
+        apiKey: API_KEY,
+      }),
+    );
+    expect(withKey.status).toBe(400);
+    expect(await withKey.text()).toContain('apiKey is not used');
+    const rotated = await ROTATE(
+      request(`http://web/api/model-connections/${body.id}/credential`, 'POST', {
+        apiKey: API_KEY,
+      }),
+      { params: Promise.resolve({ id: body.id }) },
+    );
+    expect(rotated.status).toBe(409);
+    expect(await rotated.text()).toContain('credential_not_used');
   });
 
   it('lists connections (names, provider, readiness) at GET /api/model-connections — issue #130', async () => {
@@ -533,4 +569,64 @@ describe('installModelsApi composition root — issue #149', () => {
       expect(body.error.code).toBe('forbidden');
     },
   );
+});
+
+describe('installModelsApi composition root — the install Vertex identity', () => {
+  afterEach(() => {
+    clearApplicationContext();
+    vi.unstubAllEnvs();
+  });
+
+  async function build() {
+    const principal = Principal.fromApiKey({
+      principalId: '99999999-9999-4999-8999-999999999999',
+      apiKeyId: '77777777-7777-4777-8777-777777777777',
+      label: 'Composition-root probe',
+      workspaceId: '88888888-8888-4888-8888-888888888888',
+      role: 'owner',
+    });
+    const { models } = await installModelsApi(
+      () => Promise.resolve({ kind: 'workspace', workspaceId: principal.workspaceId }),
+      () => Promise.resolve(principal),
+      {} as unknown as DatabaseRoot,
+      {} as unknown as SecretsService,
+    );
+    installTestDomains({ models });
+    return models;
+  }
+
+  it('reads AW_VERTEX_PROJECT_ID and refuses a foreign project through the real runtime', async () => {
+    vi.stubEnv('AW_VERTEX_PROJECT_ID', 'install-project-1');
+    vi.stubEnv('AW_VERTEX_LOCATION', 'eu');
+    const models = await build();
+    if (models.kind !== 'serving') throw new Error('the models API was not installed');
+    expect(models.runtime.vertexDefaults).toEqual({
+      projectId: 'install-project-1',
+      location: 'eu',
+    });
+    const foreign = await CREATE(
+      request('http://web/api/model-connections', 'POST', {
+        name: 'Foreign',
+        provider: 'vertex',
+        config: { projectId: 'someone-elses-1' },
+      }),
+    );
+    expect(foreign.status).toBe(400);
+  });
+
+  it('refuses a vertex create with a task-first message when the install has no Google Cloud project', async () => {
+    vi.stubEnv('AW_VERTEX_PROJECT_ID', '');
+    await build();
+    const response = await CREATE(
+      request('http://web/api/model-connections', 'POST', {
+        name: 'Vertex',
+        provider: 'vertex',
+        config: { projectId: 'my-project-123' },
+      }),
+    );
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'vertex_not_configured' },
+    });
+  });
 });

@@ -90,6 +90,8 @@ import { RUN_DOMAINS_DISABLED, wireRunDomains } from './wiring/run-api';
 import { wireRunResources } from './wiring/run-resources';
 import { wireRunRuntime } from './wiring/run-runtime';
 import { wireSubsystems } from './wiring/subsystems';
+import { wireAgentTeams } from './wiring/agent-teams';
+import { wireWebhooks } from './wiring/webhooks';
 
 export { storageRootsOverlap } from './config';
 export { sessionCookieValue } from './identity';
@@ -310,6 +312,12 @@ async function registerOpenedDatabase(
     switches: featureSwitches,
   });
   const context = {
+    // ADR-0104 acceptance (issues #1516, #1517): the team routes need the database, and the
+    // member endpoint the lead run's token and the directory its caller is read from.
+    agentTeams: wireAgentTeams(root, {
+      tokenSecret: configuredPath('GATEWAY_TOKEN_SECRET'),
+      directory: principalIdentity.rbac.directory,
+    }),
     agents: { ...wired.agentsRuntime, runtimeSwitchAudit: wired.runtimeSwitchAudit },
     agentVersions: wired.agentVersions,
     audit: wired.audit,
@@ -338,6 +346,9 @@ async function registerOpenedDatabase(
     ),
     workspaces: principalIdentity.workspaces,
     shares: wireShares(wired),
+    // N-3 (ADR-SDK-18-N3-250): the registry needs no run runtime; its worker sends what stopped
+    // runs wrote, and stops on close like the stale-run sweep.
+    webhooks: wireWebhooks(root, wired.secretsService, { log, stopOnClose }),
   };
   // The run API, the A2A and tool endpoints, `POST /api/tokens`, the triggers and the public
   // surfaces need the run runtime; with none they are disabled (503). One install, after

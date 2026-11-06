@@ -99,6 +99,43 @@ Problem codes of `GET /api/agents`, with their HTTP status: a query option it ca
 | --- | --- |
 | `invalid_agent_list_query` | `400` |
 
+## AGENT_MEMORY_DIRECTORY
+
+The directory under a run's working directory where its memory folder is materialised.
+
+Value: `'memory'`
+
+## AGENT_MEMORY_FILE
+
+The file the engine is told to keep its durable facts in, relative to the working directory.
+
+Value: `` `${AGENT_MEMORY_DIRECTORY}/MEMORY.md` ``
+
+## AGENT_MEMORY_LIMIT_EXCEEDED
+
+The run-failure code of a run whose memory folder is over either bound.
+
+Value: `'memory_limit_exceeded'`
+
+## AGENT_MEMORY_MAX_BYTES
+
+At most this many bytes, in total, are written back to a memory folder by one run.
+
+Value: `256 * 1024`
+
+## AGENT_MEMORY_MAX_FILES
+
+At most this many files are written back to a memory folder by one run.
+
+Value: `64`
+
+## AGENT_MEMORY_SCOPES
+
+The scopes an agent's memory folder may have (ADR-0163). Only `agent` ships: one folder per
+agent. A per-person scope waits for per-person file grants (#1281) and is refused until then.
+
+- `'agent'`
+
 ## AGENT_MODEL_MAX_LENGTH
 
 Value: `200`
@@ -120,8 +157,11 @@ Value: `200`
 
 ## AGENT_PERMISSION_KEYS
 
-The complete permission set carried by every agent request and response, in the specification's
+The four permission switches carried by every agent request and response, in the specification's
 order. `apps/web/server/agents/contract.test.ts` keeps this list aligned with the database schema.
+`memory` (ADR-0163) sits beside them in `AgentPermissionsSchema` but is not a switch: it is
+never withheld by an engine arm or capped by name, and it is in force only while both file
+switches are on (`agentMemoryEnabled`).
 
 - `'readFiles'`
 - `'writeFiles'`
@@ -346,6 +386,33 @@ The body of `GET /api/agents`.
 | --- | --- | --- | --- |
 | `agents` | `readonly AgentResource[]` | Yes |  |
 
+## agentMemoryEnabled
+
+Whether a run with these composed permissions keeps a memory folder: `memory` is set and the run
+may both read and write files. A run whose file switches were narrowed (a public share, a
+withholding arm, the deployment ceiling) has no memory, so memory never widens a run.
+
+```ts
+agentMemoryEnabled(permissions: AgentPermissions): boolean
+```
+
+## agentMemoryFolder
+
+The workspace file-store folder an agent's memory lives in: `memory/<agentId>`. Keyed by id, not
+name, so a renamed agent keeps its memory and a new agent given an old name does not inherit it.
+
+```ts
+agentMemoryFolder(agentId: string): string
+```
+
+## AgentMemoryScope
+
+`"agent"`
+
+## AgentMemoryScopeSchema
+
+`"agent"`
+
 ## AgentPermissionKey
 
 - `"readFiles"`
@@ -361,6 +428,7 @@ The body of `GET /api/agents`.
 | `writeFiles` | `false \| true` | Yes |  |
 | `runCommands` | `false \| true` | Yes |  |
 | `unrestrictedNetwork` | `false \| true` | Yes |  |
+| `memory` | `undefined \| "agent"` | No | ADR-0163: keep a memory folder across sessions. Absent means off. |
 
 ## AgentPermissionsSchema
 
@@ -370,6 +438,7 @@ The body of `GET /api/agents`.
 | `writeFiles` | `false \| true` | Yes |  |
 | `runCommands` | `false \| true` | Yes |  |
 | `unrestrictedNetwork` | `false \| true` | Yes |  |
+| `memory` | `undefined \| "agent"` | No | ADR-0163: keep a memory folder across sessions. Absent means off. |
 
 ## AgentPolicy
 
@@ -1119,7 +1188,7 @@ Which of §17 Step 4's switches grants each pi tool.
 ## policyNarrowedPermissions
 
 The permissions a run composes: the agent's, with every switch the stored `openai-agents`, `pi`
-or `mastra` arm withholds turned off. Only ever narrows.
+or `mastra` arm withholds turned off. Only ever narrows. `memory` is kept as stated (ADR-0163).
 
 ```ts
 policyNarrowedPermissions(permissions: AgentPermissions, policy: AgentPolicy | null): AgentPermissions

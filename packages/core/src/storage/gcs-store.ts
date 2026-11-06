@@ -31,7 +31,7 @@ import {
   type WriteOptions,
   compareListingNames,
 } from './object-store.js';
-import { resolveRange, toNodeReadable, toWebStream } from './streams.js';
+import { abortableBody, resolveRange, toNodeReadable, toWebStream } from './streams.js';
 
 const CONTENT_TYPE_KNOWN_METADATA_KEY = 'aw-content-type-known';
 
@@ -50,12 +50,19 @@ export interface GcsClient {
   delete(name: string): Promise<void>;
   copy(sourceName: string, destinationName: string): Promise<void>;
   head(name: string): Promise<GcsStoredObject | null>;
-  /** The whole object's metadata and the bytes of `range` (all of them when omitted). */
+  /**
+   * The whole object's metadata and the bytes of `range` (all of them when omitted). `signal`
+   * stops the media request; the metadata request takes none.
+   */
   readStream(
     name: string,
     range: ByteRange | undefined,
+    signal?: AbortSignal,
   ): Promise<{ object: GcsStoredObject; body: ReadableStream<Uint8Array> } | null>;
-  /** Rejects with {@link ObjectConflictError} when a precondition fails. */
+  /**
+   * Rejects with {@link ObjectConflictError} when a precondition fails. `options.signal` stops the
+   * upload, including a request still waiting for its response after the body was sent.
+   */
   writeStream(
     name: string,
     body: ReadableStream<Uint8Array> | Uint8Array,
@@ -199,14 +206,19 @@ export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStor
     },
 
     async read(key, readOptions) {
+      const signal = readOptions?.signal;
+      signal?.throwIfAborted();
       const found = await options.client.readStream(
         prefixedObjectKey(prefix, key),
         readOptions?.range,
+        signal,
       );
+      // `getMetadata` takes no signal: an abort while it ran is honoured once it answers.
+      signal?.throwIfAborted();
       if (found === null) return null;
       return {
         meta: metaOf(found.object),
-        body: found.body,
+        body: abortableBody(found.body, signal),
         range: resolveRange(readOptions?.range, found.object.sizeBytes),
       };
     },
@@ -215,7 +227,13 @@ export function createGcsObjectStore(options: GcsObjectStoreOptions): ObjectStor
       const name = await validatedWriteKey(body, writeOptions, () =>
         prefixedObjectKey(prefix, key),
       );
-      return metaOf(await options.client.writeStream(name, body, writeOptions));
+      return metaOf(
+        await options.client.writeStream(
+          name,
+          abortableBody(body, writeOptions.signal),
+          writeOptions,
+        ),
+      );
     },
 
     async listPage(listPrefix, listOptions) {
@@ -431,8 +449,8 @@ function safeGcsClient(client: GcsClient): GcsClient {
     delete: (name) => gcsProviderCall('delete', () => client.delete(name)),
     copy: (source, destination) => gcsProviderCall('copy', () => client.copy(source, destination)),
     head: (name) => gcsProviderCall('head', () => client.head(name)),
-    readStream: async (name, range) => {
-      const found = await gcsProviderCall('read', () => client.readStream(name, range));
+    readStream: async (name, range, signal) => {
+      const found = await gcsProviderCall('read', () => client.readStream(name, range, signal));
       return found === null ? null : { ...found, body: safeGcsBody(found.body) };
     },
     writeStream: async (name, body, options) => {
@@ -500,7 +518,7 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
       }
     },
 
-    async readStream(name, range) {
+    async readStream(name, range, signal) {
       const objectName = toObjectKey(name);
       let object: GcsStoredObject;
       try {
@@ -516,6 +534,14 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
       const source = bucket
         .file(objectName, { generation: object.etag })
         .createReadStream(served === null ? {} : { start: served.start, end: served.end });
+      // The SDK's stream takes no signal; destroying it ends the media request.
+      if (signal !== undefined) {
+        const stop = (): void => {
+          source.destroy();
+        };
+        signal.addEventListener('abort', stop, { once: true });
+        source.once('close', () => signal.removeEventListener('abort', stop));
+      }
       return { object, body: toWebStream(source) };
     },
 
@@ -558,6 +584,7 @@ export function createNativeGcsClient(bucket: Bucket): GcsClient {
                 }
               : {},
           }),
+          options.signal === undefined ? {} : { signal: options.signal },
         );
         // The simple upload's response, so the generation is this write's, not a later writer's.
         const written = file.metadata;

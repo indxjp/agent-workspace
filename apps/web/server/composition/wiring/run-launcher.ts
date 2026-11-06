@@ -10,8 +10,16 @@ import {
   modelResolutionRefusal,
   runStartRefusalError,
 } from '../../compose/run-preflight';
+import { isUnderMemoryDirectory } from '../../compose/agent-memory';
 import type { AgentRunResourceLoader, DeliveredStorageFolder } from '../../compose/resource-loader';
-import { buildRunRequestFor, runResourcesWithinCeiling } from '../../compose/run-request';
+import {
+  buildRunRequestFor,
+  runResourcesWithinCeiling,
+  type RunTeamMembers,
+} from '../../compose/run-request';
+import { memberEndpointPath } from '../../agent-teams/member-tools';
+import { readPublicUrl } from '../../endpoints/public-url';
+import { DomainError } from '../../errors';
 import { runtimeSettingsFor, type RuntimeLaunchTarget } from '../../compose/runtime-profile';
 import { type StorageWriteBackRun, writeBackStorage } from '../../compose/storage-writeback';
 import { createRuntimeWorkspaceLifecycle } from '../../compose/workspace-lifecycle';
@@ -38,7 +46,10 @@ import type { SubsystemsWiring } from './subsystems';
 
 /**
  * ADR-0147: run-scoped file search answers only from the paths this very request carries, so a
- * launch whose grants cannot be recorded fails rather than running with an empty snapshot.
+ * launch whose grants cannot be recorded fails rather than running with an empty snapshot. The
+ * memory folder is left out (ADR-0163): its run path `memory/` is not a workspace path (the folder
+ * is `memory/<agentId>/`), so recording it would let a search reach every agent's memory, and
+ * search does not read memory.
  */
 export async function recordRunFileGrants(
   runs: {
@@ -47,7 +58,10 @@ export async function recordRunFileGrants(
   runId: string,
   files: Parameters<typeof grantRoots>[0],
 ): Promise<void> {
-  const recorded = await runs?.snapshotFileGrants?.(runId, grantRoots(files));
+  const recorded = await runs?.snapshotFileGrants?.(
+    runId,
+    grantRoots(files.filter((file) => !isUnderMemoryDirectory(file.path))),
+  );
   if (recorded !== true) throw new Error('the run file grants were not recorded');
 }
 
@@ -110,6 +124,7 @@ export function createCompositionRunLauncher({
   secretsService,
   modelsApi,
   runnerManager,
+  runnerManagerFetch,
   resolveProviderCredential,
   filesRuntime,
   runResources,
@@ -129,7 +144,11 @@ export function createCompositionRunLauncher({
 }: Pick<AgentsWiring, 'scopes' | 'sessionRows' | 'recordRunTelemetry'> &
   Pick<
     SubsystemsWiring,
-    'secretsService' | 'modelsApi' | 'runnerManager' | 'resolveProviderCredential'
+    | 'secretsService'
+    | 'modelsApi'
+    | 'runnerManager'
+    | 'runnerManagerFetch'
+    | 'resolveProviderCredential'
   > &
   Pick<
     RunResourcesWiring,
@@ -156,18 +175,71 @@ export function createCompositionRunLauncher({
       ? null
       : (await wave5Repositories(workspaceId)).projects.get(sessionRow.projectId);
   };
+  /**
+   * A team lead run's members (ADR-0104 acceptance decisions 3, 4 and 6): its pinned team
+   * version's member names and its member endpoint at the deployment's public origin, which the
+   * lead's engine dials. `null` for a run of no team and for a child run (depth at most 1).
+   */
+  const teamMembersOf = async (context: LaunchContext): Promise<RunTeamMembers | null> => {
+    const versionId = context.run.agentTeamVersionId ?? null;
+    const isChild = context.run.parentRunId !== null && context.run.parentRunId !== undefined;
+    if (versionId === null || isChild) return null;
+    const scope = await scopes.forWorkspaceId(context.principal.workspaceId);
+    const version =
+      scope === null ? null : await root.agentTeams.forScope(scope).getVersion(versionId);
+    if (version === null) throw new Error('the team version this run runs could not be read');
+    const origin = readPublicUrl(process.env);
+    if (!origin.ok) {
+      throw new DomainError({
+        category: 'validation',
+        code: 'agent_team_members_unreachable',
+        publicMessage:
+          "agent_team_members_unreachable: a team lead reaches its members at this deployment's " +
+          'public origin, and AW_PUBLIC_URL is not set to one; the operator sets it.',
+      });
+    }
+    return {
+      url: `${origin.origin}${memberEndpointPath(context.run.id)}`,
+      names: version.members.map((member) => member.name),
+    };
+  };
   // The grant behind each folder compose delivered writable, so the write-back saves to the
   // connection that was delivered even when it is renamed during the run.
   const deliveredFolders = new WeakMap<LaunchContext, Map<string, DeliveredStorageFolder>>();
-  // The grant behind each folder the input archive was loaded with. The archive and compose are two
-  // loads; the write-back refuses a folder they delivered for different grants (a rename between them).
+  // The grant behind each folder the input archive was loaded with. The write-back refuses a folder
+  // the archive and compose delivered for different grants (a rename between two loads).
   const hydratedFolders = new WeakMap<LaunchContext, Map<string, DeliveredStorageFolder>>();
+  // One launch lists each granted connection folder once: compose asks for the selection the input
+  // archive already loaded, with the same arguments, and gets that load back rather than a second
+  // listing of the bucket. A different load (the run's attachments) is its own. A failed load is
+  // dropped, so a retry reads again.
+  const launchLoads = new WeakMap<
+    LaunchContext,
+    Map<string, ReturnType<AgentRunResourceLoader['load']>>
+  >();
+  const sharedLoader = (context: LaunchContext): AgentRunResourceLoader => ({
+    load: (...args) => {
+      let loads = launchLoads.get(context);
+      if (loads === undefined) {
+        loads = new Map();
+        launchLoads.set(context, loads);
+      }
+      const key = JSON.stringify(args);
+      const held = loads.get(key);
+      if (held !== undefined) return held;
+      const loading = runResources.load(...args);
+      loads.set(key, loading);
+      loading.catch(() => loads.delete(key));
+      return loading;
+    },
+  });
   const recordingFolders = (context: LaunchContext): AgentRunResourceLoader => {
     const folders = new Map<string, DeliveredStorageFolder>();
     deliveredFolders.set(context, folders);
+    const loader = sharedLoader(context);
     return {
       load: async (...args) => {
-        const selection = await runResources.load(...args);
+        const selection = await loader.load(...args);
         for (const [path, grant] of selection.storageFolders ?? []) folders.set(path, grant);
         return selection;
       },
@@ -176,18 +248,17 @@ export function createCompositionRunLauncher({
   return createRunnerLauncher({
     runtime: runtimeResolver,
     store: runs,
+    fetch: runnerManagerFetch,
     ...(filesRuntime?.storage === undefined
       ? {}
       : {
           workspaceLifecycle: createRuntimeWorkspaceLifecycle({
             resources: runResources,
-            // ponytail: compose loads the same resources again after the runtime is allocated;
-            // pass one load through if launch latency matters.
             granted: async (context) => {
               const selection = await runResourcesWithinCeiling(
                 context,
                 await runAgentOf(context),
-                runResources,
+                sharedLoader(context),
                 policyCeiling,
                 (await projectOf(context))?.id ?? null,
               );
@@ -195,6 +266,8 @@ export function createCompositionRunLauncher({
               return selection;
             },
             storage: filesRuntime.storage,
+            // ADR-0163: one `memory-updated` row per run that wrote its agent's memory folder.
+            audit: (event) => root.recordAuditEvent(event),
           }),
         }),
     ...(runStorageConnections === null
@@ -339,8 +412,10 @@ export function createCompositionRunLauncher({
         stillQueued: async () => (await runs.get(context.run.id))?.status === 'queued',
       });
 
+      // ADR-0104: a team lead run gets its members' server; every other run gets none.
+      const team = await atStep('resources', () => teamMembersOf(context));
       const request = await buildRunRequestFor(
-        launchContext,
+        team === null ? launchContext : { ...launchContext, team },
         runAgent,
         runtimeSettingsFor(runtimeTarget),
         gateway,

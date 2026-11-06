@@ -58,6 +58,16 @@ variable "deployment_policy" {
   }
 }
 
+variable "deployment_features" {
+  description = "The project's features as comma-separated ids (web's AW_DEPLOYMENT_FEATURES, ADR-0160 D5), rendered by aw deploy from agent-workspace.yaml. Empty installs every feature."
+  type        = string
+  default     = ""
+  validation {
+    condition     = can(regex("^([a-z]+(,[a-z]+)*)?$", var.deployment_features))
+    error_message = "deployment_features must be empty or comma-separated lower-case feature ids."
+  }
+}
+
 variable "public_url" {
   description = "web's AW_PUBLIC_URL: the https origin (no path) A2A agent cards (ADR-0135) and the OAuth issuer use, rendered by aw deploy. Empty leaves it unset."
   type        = string
@@ -79,10 +89,20 @@ variable "storage_signed_upload_max_bytes" {
   }
 }
 
-variable "db_tier" {
-  description = "Cloud SQL machine tier. db-f1-micro is a shared-core tier suitable for a test/demo deployment, not sustained production load."
+variable "size" {
+  description = "Deployment size. small = shared-core Cloud SQL, zonal, min 0 instances on gateway and runner manager, web min 1. standard = db-custom-2-7680, REGIONAL high availability, min 1 instance everywhere."
   type        = string
-  default     = "db-f1-micro"
+  default     = "small"
+  validation {
+    condition     = contains(["small", "standard"], var.size)
+    error_message = "size must be \"small\" or \"standard\"."
+  }
+}
+
+variable "data_protection" {
+  description = "Protects Cloud SQL, both buckets and the three long-lived Cloud Run services from deletion. False only for disposable test stacks; aw deploy destroy needs it false, deployed first."
+  type        = bool
+  default     = true
 }
 
 variable "web_max_instance_count" {
@@ -102,7 +122,11 @@ variable "gateway_pricing_json" {
   default     = <<-JSON
     {"version":"2026-09-10","models":{
       "anthropic:claude-sonnet-5":{"inputUsdPerMillion":"2.00","outputUsdPerMillion":"10.00","cacheReadUsdPerMillion":"0.20","cacheCreationUsdPerMillion":"2.50"},
-      "anthropic:claude-opus-5":{"inputUsdPerMillion":"5.00","outputUsdPerMillion":"25.00","cacheReadUsdPerMillion":"0.50","cacheCreationUsdPerMillion":"6.25"}
+      "anthropic:claude-opus-5":{"inputUsdPerMillion":"5.00","outputUsdPerMillion":"25.00","cacheReadUsdPerMillion":"0.50","cacheCreationUsdPerMillion":"6.25"},
+      "vertex:claude-opus-5-5":{"inputUsdPerMillion":"5.00","outputUsdPerMillion":"25.00","cacheReadUsdPerMillion":"0.50","cacheCreationUsdPerMillion":"6.25"},
+      "vertex:claude-sonnet-5-5":{"inputUsdPerMillion":"2.00","outputUsdPerMillion":"10.00","cacheReadUsdPerMillion":"0.20","cacheCreationUsdPerMillion":"2.50"},
+      "vertex:claude-haiku-5-5":{"inputUsdPerMillion":"1.00","outputUsdPerMillion":"5.00","cacheReadUsdPerMillion":"0.10","cacheCreationUsdPerMillion":"1.25"},
+      "vertex:claude-fable-5-1":{"inputUsdPerMillion":"10.00","outputUsdPerMillion":"50.00","cacheReadUsdPerMillion":"1.00","cacheCreationUsdPerMillion":"12.50"}
     }}
   JSON
   validation {
@@ -112,5 +136,83 @@ variable "gateway_pricing_json" {
       can(jsondecode(var.gateway_pricing_json).models)
     )
     error_message = "gateway_pricing_json must be JSON with version and models fields."
+  }
+}
+
+variable "network" {
+  description = "An existing VPC network to adopt as a full id (projects/PROJECT/global/networks/NAME), set together with subnetwork. Empty makes the module create its own network, subnets, Private Services Access, the private run.app DNS zone and the proxy-only subnet. An adopted network must already have Private Services Access (for Cloud SQL private IP), a private run.app zone resolving to 199.36.153.8-11 and an active proxy-only subnet (purpose REGIONAL_MANAGED_PROXY) in the region, for the gateway's internal load balancer; the module creates none of them."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.network == "" || can(regex("^projects/[^/]+/global/networks/[^/]+$", var.network))
+    error_message = "network must be empty or a full network id such as projects/PROJECT/global/networks/NAME."
+  }
+}
+
+variable "subnetwork" {
+  description = "The subnetwork of the adopted network that the services' Direct VPC egress uses, set together with network. Needs Private Google Access and room for roughly twice the services' instance count. Give the full id, such as projects/PROJECT/regions/REGION/subnetworks/NAME."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.subnetwork == "" || can(regex("^projects/[^/]+/regions/[^/]+/subnetworks/[^/]+$", var.subnetwork))
+    error_message = "subnetwork must be empty or a full subnetwork id such as projects/PROJECT/regions/REGION/subnetworks/NAME."
+  }
+}
+
+variable "oidc_issuer" {
+  description = "Single sign-on: the OpenID Connect issuer URL (https), set together with oidc_client_id. Empty leaves single sign-on off and creates no secret. The client secret goes into the oidc_client_secret_id secret as a version, added by aw deploy through gcloud."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.oidc_issuer == "" || startswith(var.oidc_issuer, "https://")
+    error_message = "oidc_issuer must be empty or start with https://."
+  }
+}
+
+variable "oidc_client_id" {
+  description = "Single sign-on: the OpenID Connect client id, set together with oidc_issuer."
+  type        = string
+  default     = ""
+}
+
+variable "domain" {
+  description = "A custom domain for the web control plane. Empty (the default) keeps the private-by-default run.app URL. Set it to put web behind an external HTTPS load balancer with a Google-managed certificate and an HTTP to HTTPS redirect; point the domain's A record at the load_balancer_ip output."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.domain == "" || can(regex("^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$", var.domain))
+    error_message = "domain must be empty or a lower-case hostname such as app.example.com."
+  }
+}
+
+variable "armor" {
+  description = "Attach a Cloud Armor policy (OWASP preconfigured rules) to the load balancer. Requires domain."
+  type        = bool
+  default     = false
+}
+
+variable "iap" {
+  description = "Put Identity-Aware Proxy in front of web, so only IAP-authorised users reach it. Requires domain."
+  type        = bool
+  default     = false
+}
+
+variable "vertex_location" {
+  type        = string
+  default     = "global"
+  description = "Where Claude on Vertex AI runs: global (default), us or eu. Regional endpoints (us, eu) cost 10 % more than global."
+  validation {
+    condition     = contains(["global", "us", "eu"], var.vertex_location)
+    error_message = "vertex_location must be global, us or eu."
+  }
+}
+
+variable "alerts_email" {
+  description = "Where alert notifications go. Empty creates no notification channel, no alert policy and no uptime check; the log-based metrics and the dashboard are always created."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.alerts_email == "" || can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", var.alerts_email))
+    error_message = "alerts_email must be empty or a valid email address."
   }
 }

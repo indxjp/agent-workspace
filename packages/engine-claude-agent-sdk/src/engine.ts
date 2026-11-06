@@ -70,7 +70,7 @@ export const CLAUDE_AGENT_SDK_ENGINE_ID = 'claude-agent-sdk';
  * `docs/adr/W2-CP-07-a-restatement-across-a-package-boundary-is-watched-by-a-replay-not-a-comment.md`
  * states.
  */
-export const CLAUDE_AGENT_SDK_VERSION = '0.3.310';
+export const CLAUDE_AGENT_SDK_VERSION = '0.3.316';
 
 /**
  * The Claude Agent SDK's capabilities, as R-01 measured them.

@@ -1,7 +1,7 @@
 import { applicationContext } from '../../../../server/application-context';
 import { getSession } from '../../../../server/auth';
 import { decide } from '../../../../server/rbac/decide';
-import { parseRole } from '../../../../server/rbac/roles';
+import { parseRole } from '../../../../server/rbac/core/roles';
 import { resolveTeamViewer } from '../../../../server/team/team-viewer';
 
 export const NOT_ALLOWED = 'Only workspace Owners and Admins can manage storage connections.';

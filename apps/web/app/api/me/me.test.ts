@@ -37,7 +37,7 @@ import {
 } from '../../../server/auth/session';
 import { clearFeatureSwitches, configureFeatureSwitches } from '../../../server/features/runtime';
 import { sessionCookieValue } from '../../../server/composition/identity';
-import { conferredBy } from '../../../server/rbac/conferral';
+import { conferredBy } from '../../../server/rbac/core/conferral';
 import {
   parsePresentedKey,
   presentedKeyText,

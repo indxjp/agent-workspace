@@ -1,6 +1,6 @@
 name: Publish packages
 
-# Publishes @indx-workspace/contracts, platforms, sdk, react, aw, cli, embedded and create to npm, in
+# Publishes @indx-workspace/contracts, platforms, sdk, react, app, aw, cli, embedded and create to npm,
 # lock-step at CONTRACTS_VERSION, from a `packages-v<version>` tag (issues #246, #364 and #450,
 # ADR-0082, ADR-0109).
 #
@@ -10,7 +10,7 @@ name: Publish packages
 # environment; renaming either breaks publishing on purpose.
 #
 # Two jobs, so the job that holds the OIDC token runs no third-party install script and no
-# runtime. `verify` (no id-token) builds, packs and verifies the eight tarballs, records their sha256
+# runtime. `verify` (no id-token) builds, packs and verifies the nine tarballs, records their sha256
 # as a job output and uploads them before the smoke runs; only then does it smoke-test
 # them, and its boot smoke runs `npm rebuild` of @embedded-postgres/* and boots the local runtime,
 # which the publishing job must never do. The smoke re-packs into its own directory and must
@@ -83,19 +83,19 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
-      # No dependency install script is needed to build the eight published packages: the build of
+      # No dependency install script is needed to build the nine published packages: the build of
       # @indx-workspace/embedded copies files and runs esbuild and next, and never starts PostgreSQL.
       - run: pnpm install --frozen-lockfile --ignore-scripts
       # Built from the tagged source in this job, never replayed from a cache: --skip-nx-cache skips
       # the local cache, and this workflow never runs .github/actions/nx-remote-cache, so it holds no
       # remote-cache credential and Nx has no remote cache to consult (docs/adr/0110).
       - name: Build the published packages
-        run: pnpm nx run-many -t build -p @indx-workspace/contracts @indx-workspace/platforms @indx-workspace/sdk @indx-workspace/react @indx-workspace/aw @indx-workspace/cli @indx-workspace/embedded @indx-workspace/create --skip-nx-cache --output-style=static
+        run: pnpm nx run-many -t build -p @indx-workspace/contracts @indx-workspace/platforms @indx-workspace/sdk @indx-workspace/react @indx-workspace/app @indx-workspace/aw @indx-workspace/cli @indx-workspace/embedded @indx-workspace/create --skip-nx-cache --output-style=static
       # A generated project pulls the images release-images.json pins; publishing a generator whose
       # images are not public yet ships a broken first start. Checked anonymously, as a user pulls.
       - name: Refuse to publish before the pinned platform images are public
         run: node scripts/release/images-published.mjs
-      # Packs all eight and verifies each tarball, running no third-party code. Stdout is the tarball
+      # Packs all nine and verifies each tarball, running no third-party code. Stdout is the tarball
       # list only; the list keeps basenames, which the publish job resolves against the list file's
       # own directory. The sha256 of each tarball becomes a job output here, before the smoke runs,
       # so nothing the smoke runs can change what the publish job accepts.
@@ -165,12 +165,12 @@ jobs:
           path: ${{ runner.temp }}/packages
       # Refuses a tarball whose sha256 is not the one verify recorded before its smoke, re-runs the
       # tarball checks at the version the tag names, checks the order, the names and lock-step,
-      # refuses the whole release, before any npm publish, if npm has never served one of the eight
+      # refuses the whole release, before any npm publish, if npm has never served one of the nine
       # packages or cannot be asked (a network error refuses, never proceeds), skips only a version
       # npm already serves (a re-run finishes a partial release), publishes the rest in order with
       # --provenance=$NPM_PROVENANCE, then polls npm for up to 15 minutes (it can lag a publish by
-      # minutes) and fails unless npm serves all eight.
-      - name: Publish, contracts first and create last, and confirm npm serves all eight
+      # minutes) and fails unless npm serves all nine.
+      - name: Publish, contracts first and create last, and confirm npm serves all nine
         timeout-minutes: 25
         env:
           EXPECTED_DIGESTS: ${{ needs.verify.outputs.digests }}

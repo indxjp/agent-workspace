@@ -21,6 +21,9 @@
  * and a refusal is ignored.
  */
 import { randomBytes } from 'node:crypto';
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import pg from 'pg';
@@ -291,6 +294,14 @@ async function forceDropAfterCreationFailure(
   }
 }
 
+/** Options for {@link createIsolatedTestDatabase}. */
+export interface IsolatedTestDatabaseOptions {
+  /** The suite pool's size, a positive integer; 4 when omitted. */
+  readonly maxConnections?: number;
+}
+
+const DEFAULT_MAX_CONNECTIONS = 4;
+
 /**
  * Create a fresh, migrated database whose physical name starts with `prefix`.
  *
@@ -301,7 +312,12 @@ export async function createIsolatedTestDatabase(
   prefix: string,
   rawAdminUrl: string | undefined = process.env['TEST_DATABASE_URL'],
   migrationsDir?: string,
+  options: IsolatedTestDatabaseOptions = {},
 ): Promise<IsolatedTestDatabase> {
+  const maxConnections = options.maxConnections ?? DEFAULT_MAX_CONNECTIONS;
+  if (!Number.isInteger(maxConnections) || maxConnections < 1) {
+    throw new Error(`maxConnections must be a positive integer, got ${String(maxConnections)}.`);
+  }
   if (!SAFE_PREFIX.test(prefix)) {
     throw new Error(
       `${JSON.stringify(prefix)} is not a usable test database prefix; expected ${String(SAFE_PREFIX)}.`,
@@ -341,7 +357,7 @@ export async function createIsolatedTestDatabase(
   }
 
   const url = connectionUrl(validatedAdminUrl, databaseName, suiteApplicationName);
-  const config: DatabaseConfig = { url, maxConnections: 4 };
+  const config: DatabaseConfig = { url, maxConnections };
   let pool: pg.Pool;
   let db: Database;
   try {
@@ -494,4 +510,51 @@ export async function createIsolatedTestDatabase(
       return closePromise;
     },
   };
+}
+
+/**
+ * Apply every migration in `migrationsDir` to a database that already holds stored data (files,
+ * skills or session-state blobs), as an upgrade through the release after 0.6.11 does: the
+ * migrations before the storage proof guard, then the clean adopt and skills passes that release
+ * records, then the rest. A fresh database needs none of this; `runMigrations` alone applies it.
+ */
+export async function runMigrationsPastStorageProof(
+  url: string,
+  migrationsDir: string,
+): Promise<void> {
+  const journal = JSON.parse(
+    await readFile(path.join(migrationsDir, 'meta', '_journal.json'), 'utf8'),
+  ) as { entries: Array<{ tag: string }> };
+  // By suffix: `pnpm migrations:renumber` may change the number.
+  const guard = journal.entries.findIndex((entry) => entry.tag.endsWith('_storage_proof_guard'));
+  if (guard < 0) throw new Error('the storage proof guard migration is missing');
+  const before = journal.entries.slice(0, guard);
+  const dir = await mkdtemp(path.join(tmpdir(), 'aw-before-storage-proof-'));
+  try {
+    await mkdir(path.join(dir, 'meta'));
+    await writeFile(
+      path.join(dir, 'meta', '_journal.json'),
+      JSON.stringify({ ...journal, entries: before }),
+    );
+    await Promise.all(
+      before.map((entry) =>
+        cp(path.join(migrationsDir, `${entry.tag}.sql`), path.join(dir, `${entry.tag}.sql`)),
+      ),
+    );
+    await runMigrations({ url, maxConnections: 2 }, dir);
+  } finally {
+    await rm(dir, { recursive: true });
+  }
+  const client = new pg.Client({ connectionString: url });
+  await client.connect();
+  try {
+    await client.query(
+      `insert into storage_migration_runs
+         (rows_checked, legacy_rows, mismatches, stage, clean, proof_version)
+       values (0, 0, 0, 'adopt', true, 2), (0, 0, 0, 'skills', true, 2)`,
+    );
+  } finally {
+    await client.end();
+  }
+  await runMigrations({ url, maxConnections: 2 }, migrationsDir);
 }

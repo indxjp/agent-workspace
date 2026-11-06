@@ -35,6 +35,9 @@ export interface RunnerFixture {
     | undefined;
 }
 
+/** The trial budget the Builder's policy allows: what `evals_run` and `trial_run` pass the runner. */
+const TRIAL_BUDGET_USD = BUILDER_DEFAULT_LIMITS.trialBudgetUsd;
+
 /** The budget in the agent's own policy that every fixture's runs resolve before the override lowers it. */
 export const POLICY_BUDGET_USD = 0.2;
 
@@ -53,7 +56,7 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
   describe(`RunnerPort.evaluate: ${label}`, () => {
     it('scores a saved version and answers the stored evaluation', async () => {
       const { port, ctx, agentId, version, started } = await make();
-      const result = await port.evaluate(ctx, agentId, version, [ORDER_CASE]);
+      const result = await port.evaluate(ctx, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]);
       if (!result.ok) throw new Error(`the evaluation was refused: ${result.code}`);
       expect(result.evaluation).toMatchObject({ agentId, version, passed: 1, total: 1 });
       expect(started()).toBe(1);
@@ -61,7 +64,7 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
 
     it("starts each case's run under the trial budget, lowering the agent's own budget and never raising it", async () => {
       const { port, ctx, agentId, version, lastRun } = await make();
-      await port.evaluate(ctx, agentId, version, [ORDER_CASE]);
+      await port.evaluate(ctx, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]);
       expect(lastRun()).toMatchObject({
         version,
         overrideUsd: BUILDER_DEFAULT_LIMITS.trialBudgetUsd,
@@ -69,37 +72,66 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
       });
     });
 
+    it("starts each case's run under the budget it is given, never above the trial cap (SPD-09)", async () => {
+      const { port, ctx, agentId, version, lastRun } = await make();
+      await port.evaluate(ctx, agentId, version, 0.1, [ORDER_CASE]);
+      expect(lastRun()).toMatchObject({ overrideUsd: 0.1, maxBudgetUsd: 0.1 });
+      await port.evaluate(ctx, agentId, version, 5, [ORDER_CASE]);
+      expect(lastRun()).toMatchObject({
+        overrideUsd: BUILDER_DEFAULT_LIMITS.trialBudgetUsd,
+        maxBudgetUsd: Math.min(POLICY_BUDGET_USD, BUILDER_DEFAULT_LIMITS.trialBudgetUsd),
+      });
+    });
+
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+      'starts nothing for a budget of %s',
+      async (budget) => {
+        const { port, ctx, agentId, version, started } = await make();
+        expect(await port.evaluate(ctx, agentId, version, budget, [ORDER_CASE])).toMatchObject({
+          ok: false,
+          code: 'invalid_run_limits',
+        });
+        expect(started()).toBe(0);
+      },
+    );
+
     it('answers the console route’s refusal for a version that does not exist', async () => {
       const { port, ctx, agentId, version, started } = await make();
-      const result = await port.evaluate(ctx, agentId, version + 1, [ORDER_CASE]);
+      const result = await port.evaluate(ctx, agentId, version + 1, TRIAL_BUDGET_USD, [ORDER_CASE]);
       expect(result).toMatchObject({ ok: false, code: 'agent_version_not_found' });
       expect(started()).toBe(0);
     });
 
     it('answers the console route’s refusal for an agent that does not exist', async () => {
       const { port, ctx, version, started } = await make();
-      const result = await port.evaluate(ctx, crypto.randomUUID(), version, [ORDER_CASE]);
+      const result = await port.evaluate(ctx, crypto.randomUUID(), version, TRIAL_BUDGET_USD, [
+        ORDER_CASE,
+      ]);
       expect(result).toMatchObject({ ok: false, code: 'agent_not_found' });
       expect(started()).toBe(0);
     });
 
     it('answers the console route’s refusal for an agent id that is not a UUID', async () => {
       const { port, ctx, version, started } = await make();
-      const result = await port.evaluate(ctx, 'not-a-uuid', version, [ORDER_CASE]);
+      const result = await port.evaluate(ctx, 'not-a-uuid', version, TRIAL_BUDGET_USD, [
+        ORDER_CASE,
+      ]);
       expect(result).toMatchObject({ ok: false, code: 'invalid_agent_id' });
       expect(started()).toBe(0);
     });
 
     it('refuses a request with no cases', async () => {
       const { port, ctx, agentId, version, started } = await make();
-      const result = await port.evaluate(ctx, agentId, version);
+      const result = await port.evaluate(ctx, agentId, version, TRIAL_BUDGET_USD);
       expect(result).toMatchObject({ ok: false, code: 'invalid_body' });
       expect(started()).toBe(0);
     });
 
     it('starts nothing for a viewer', async () => {
       const { port, viewer, agentId, version, started } = await make();
-      expect(await port.evaluate(viewer, agentId, version, [ORDER_CASE])).toMatchObject({
+      expect(
+        await port.evaluate(viewer, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]),
+      ).toMatchObject({
         ok: false,
         code: 'forbidden',
       });
@@ -108,7 +140,9 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
 
     it('starts nothing for a builder who does not own the agent', async () => {
       const { port, otherOwner, agentId, version, started } = await make();
-      expect(await port.evaluate(otherOwner, agentId, version, [ORDER_CASE])).toMatchObject({
+      expect(
+        await port.evaluate(otherOwner, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]),
+      ).toMatchObject({
         ok: false,
         code: 'forbidden',
       });
@@ -117,7 +151,7 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
 
     it('lets an admin evaluate an agent they do not own', async () => {
       const { port, admin, agentId, version, started } = await make();
-      const result = await port.evaluate(admin, agentId, version, [ORDER_CASE]);
+      const result = await port.evaluate(admin, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]);
       if (!result.ok) throw new Error(`the evaluation was refused: ${result.code}`);
       expect(result.evaluation).toMatchObject({ agentId, version, passed: 1, total: 1 });
       expect(started()).toBe(1);
@@ -125,7 +159,9 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
 
     it('starts nothing when no person is behind the run', async () => {
       const { port, noCaller, agentId, version, started } = await make();
-      expect(await port.evaluate(noCaller, agentId, version, [ORDER_CASE])).toMatchObject({
+      expect(
+        await port.evaluate(noCaller, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]),
+      ).toMatchObject({
         ok: false,
         code: 'no_caller',
       });
@@ -134,7 +170,9 @@ export function describeRunnerConformance(label: string, make: () => Promise<Run
 
     it('does not reach another workspace’s agent', async () => {
       const { port, otherWorkspace, agentId, version, started } = await make();
-      expect(await port.evaluate(otherWorkspace, agentId, version, [ORDER_CASE])).toMatchObject({
+      expect(
+        await port.evaluate(otherWorkspace, agentId, version, TRIAL_BUDGET_USD, [ORDER_CASE]),
+      ).toMatchObject({
         ok: false,
         code: 'agent_not_found',
       });

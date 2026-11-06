@@ -43,7 +43,7 @@ open AgentWorkspace
 
 /-- The SQL column types the schema uses, as Drizzle's `getSQLType()` and `drizzle-kit` spell
 them. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#sqlType")
+@[aw_spec (ts := "packages/core/src/db/tenancy-reference-cases.test-support.ts#sqlType")
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 inductive SqlType where
   | uuid
@@ -148,7 +148,7 @@ instance : WireEnum OnDelete where
 
 /-- How a table relates to the tenant: it is the tenant root, a global identity table exempt
 from tenant scoping, or scoped by a `workspace_id` column. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 inductive Tenancy where
   | root
@@ -242,6 +242,11 @@ inductive TableName where
   | workspaces
   | workspacePrincipals
   | workspaceFeatures
+  | webhooks
+  | webhookDeliveries
+  | agentTeams
+  | agentTeamVersions
+  | agentTeamVersionMembers
   deriving DecidableEq, Repr, Inhabited
 
 namespace TableName
@@ -306,6 +311,11 @@ def toWire : TableName → String
   | .workspaces => "workspaces"
   | .workspacePrincipals => "workspace_principals"
   | .workspaceFeatures => "workspace_features"
+  | .webhooks => "webhooks"
+  | .webhookDeliveries => "webhook_deliveries"
+  | .agentTeams => "agent_teams"
+  | .agentTeamVersions => "agent_team_versions"
+  | .agentTeamVersionMembers => "agent_team_version_members"
 
 /-- The table a SQL name denotes, if any. -/
 def ofSqlName? : String → Option TableName
@@ -367,6 +377,11 @@ def ofSqlName? : String → Option TableName
   | "workspaces" => some .workspaces
   | "workspace_principals" => some .workspacePrincipals
   | "workspace_features" => some .workspaceFeatures
+  | "webhooks" => some .webhooks
+  | "webhook_deliveries" => some .webhookDeliveries
+  | "agent_teams" => some .agentTeams
+  | "agent_team_versions" => some .agentTeamVersions
+  | "agent_team_version_members" => some .agentTeamVersionMembers
   | _ => none
 
 private theorem ofSqlName?_toWire (t : TableName) : ofSqlName? (toWire t) = some t := by
@@ -382,7 +397,8 @@ instance : WireEnum TableName where
     runtimeProfiles, runtimeVerifications, secrets, sessionMessages, sessionStateBlobs, sessionStateEntries,
     sessionStateStreams, sessionTranscripts, sessions, storageConnections, storageMigrationRuns,
     shareViews,
-    shareRunCharges, shares, skillRevisions, skills, surfaceSessionKeys, triggerDeliveries, triggers, userIdentities, users, workspaces, workspacePrincipals, workspaceFeatures]
+    shareRunCharges, shares, skillRevisions, skills, surfaceSessionKeys, triggerDeliveries, triggers, userIdentities, users, workspaces, workspacePrincipals, workspaceFeatures,
+    webhooks, webhookDeliveries, agentTeams, agentTeamVersions, agentTeamVersionMembers]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -430,6 +446,10 @@ def idKind? : TableName → Option IdKind
   | storageConnections => some .storageConnection
   | storageMigrationRuns => some .storageMigrationRun
   | workspaceFeatures => some .workspaceFeature
+  | webhooks => some .webhook
+  | webhookDeliveries => some .webhookDelivery
+  | agentTeams => some .agentTeam
+  | agentTeamVersions => some .agentTeamVersion
   | runs => some .run
   | runTokens => some .runToken
   | runUsageRecords => some .runUsageRecord
@@ -442,7 +462,7 @@ def idKind? : TableName → Option IdKind
   | projectFiles | projectMcpServers | sessionTranscripts | sessionMessages | runEvents
   | sessionStateStreams | sessionStateEntries | sessionStateBlobs
   | shareRunCharges | agentVersionPointers | surfaceSessionKeys
-  | endpointClientAgents | endpointClientApiKeys => none
+  | endpointClientAgents | endpointClientApiKeys | agentTeamVersionMembers => none
 
 end TableName
 
@@ -529,7 +549,7 @@ abbrev Schema := TableName → TableSpec
 /-- Today's schema, transcribed from `packages/core/src/db/schema/*.ts` as
 the latest snapshot (`Er.Snapshot.file`) renders it. -/
 @[aw_spec (ts := "packages/core/src/db/schema/index.ts")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
 def catalogue : Schema
@@ -816,7 +836,7 @@ def catalogue : Schema
       { name := "audit_events_actor_principal_workspace_fk", columns := ["workspace_id", "actor_principal_id"], refTable := .workspacePrincipals, refColumns := ["workspace_id", "id"], onDelete := .noAction, inline := false }]
     uniques := []
     checks := [
-      .oneOf "audit_events_action_valid" "action" ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed", "workspace-features-changed"],
+      .oneOf "audit_events_action_valid" "action" ["user-created", "user-deleted", "agent-changed", "agent-created", "provider-credential-changed", "api-key-created", "api-key-revoked", "connector-changed", "permission-changed", "runtime-profile-changed", "project-created", "project-deleted", "project-archived", "project-restored", "session-published", "public-link-revoked", "runnable-link-stopped", "public-sharing-policy-changed", "invitation-created", "invitation-resent", "invitation-revoked", "invitation-accepted", "endpoint-client-created", "endpoint-client-changed", "endpoint-client-revoked", "endpoint-tool-called", "oauth-client-secret-rotated", "oauth-grant-issued", "oauth-grant-revoked", "file-uploaded", "file-downloaded", "file-link-created", "file-moved", "file-deleted", "storage-connection-created", "storage-connection-updated", "storage-connection-deleted", "storage-connection-credential-changed", "storage-connection-tested", "storage-connection-written", "storage-grant-changed", "workspace-features-changed", "user-token-exchanged", "memory-updated"],
       .other "audit_events_details_only_agent_created",
       .other "audit_events_actor_label_not_blank",
       .other "audit_events_subject_label_not_blank",
@@ -939,6 +959,7 @@ def catalogue : Schema
       ⟨"client_secret_hash", .text, false⟩,
       ⟨"redirect_uris", .textArray, true⟩,
       ⟨"client_secret_rotated_at", .timestamptz, false⟩,
+      ⟨"oidc_audience", .text, false⟩,
       ⟨"revoked_at", .timestamptz, false⟩,
       ⟨"created_at", .timestamptz, true⟩,
       ⟨"updated_at", .timestamptz, true⟩]
@@ -950,9 +971,10 @@ def catalogue : Schema
       { name := "endpoint_clients_workspace_id_key", columns := ["workspace_id", "id"], kind := .constraint, partialNullColumns := [] },
       { name := "endpoint_clients_workspace_kind_name_key", columns := ["workspace_id", "kind", "name"], kind := .index, partialNullColumns := [] }]
     checks := [
-      .oneOf "endpoint_clients_kind_valid" "kind" ["mcp-project", "a2a-agent", "builder"],
+      .oneOf "endpoint_clients_kind_valid" "kind" ["mcp-project", "a2a-agent", "builder", "app-backend"],
       .other "endpoint_clients_tool_names_mcp_only",
       .other "endpoint_clients_redirect_uris_max",
+      .other "endpoint_clients_oidc_audience_app_backend",
       .other "endpoint_clients_revoked_after_created"] }
   | .fileTexts => {
     table := .fileTexts, source := "file-texts.ts", tsExport := "fileTexts", tenancy := .scoped
@@ -1019,6 +1041,7 @@ def catalogue : Schema
       .other "files_path_no_dot_segments",
       .other "files_storage_key_iff_file",
       .other "files_storage_key_not_blank",
+      .other "files_file_has_object_id",
       .other "files_size_non_negative",
       .other "files_folder_has_no_content"] }
   | .invitations => {
@@ -1132,7 +1155,7 @@ def catalogue : Schema
       { name := "model_connections_id_workspace_key", columns := ["id", "workspace_id"], kind := .constraint, partialNullColumns := [] },
       { name := "model_connections_workspace_name_key", columns := ["workspace_id", "name"], kind := .index, partialNullColumns := [] }]
     checks := [
-      .oneOf "model_connections_provider_valid" "provider" ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"]] }
+      .oneOf "model_connections_provider_valid" "provider" ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"]] }
   | .oauthTokens => {
     table := .oauthTokens, source := "oauth-tokens.ts", tsExport := "oauthTokens", tenancy := .scoped
     primaryKey := ["id"]
@@ -1238,6 +1261,8 @@ def catalogue : Schema
       ⟨"approval_deadline_at", .timestamptz, false⟩,
       ⟨"approved_tool_calls", .jsonb, true⟩,
       ⟨"continues_run_id", .uuid, false⟩,
+      ⟨"parent_run_id", .uuid, false⟩,
+      ⟨"agent_team_version_id", .uuid, false⟩,
       ⟨"approvals_consumed_at", .timestamptz, false⟩,
       ⟨"consumed_tool_calls", .jsonb, true⟩,
       ⟨"idempotency_key", .text, false⟩,
@@ -1249,6 +1274,7 @@ def catalogue : Schema
       ⟨"cache_read_input_tokens", .integer, true⟩,
       ⟨"cache_creation_input_tokens", .integer, true⟩,
       ⟨"cost_usd", .numeric 14 6, true⟩,
+      ⟨"spend_ceiling_usd", .numeric 14 6, false⟩,
       ⟨"cost_currency", .text, true⟩,
       ⟨"price_table_version", .text, false⟩,
       ⟨"tool_calls", .integer, true⟩,
@@ -1256,6 +1282,7 @@ def catalogue : Schema
       ⟨"prompt", .text, false⟩,
       ⟨"output_schema", .jsonb, false⟩,
       ⟨"subject", .text, false⟩,
+      ⟨"limits_override", .jsonb, false⟩,
       ⟨"output", .jsonb, false⟩,
       ⟨"accounting_state", .text, true⟩,
       ⟨"accounting_error", .text, false⟩,
@@ -1266,14 +1293,16 @@ def catalogue : Schema
       { name := "runs_model_connection_id_model_connections_id_fk", columns := ["model_connection_id"], refTable := .modelConnections, refColumns := ["id"], onDelete := .setNull, inline := true },
       { name := "runs_session_workspace_fk", columns := ["session_id", "workspace_id"], refTable := .sessions, refColumns := ["id", "workspace_id"], onDelete := .cascade, inline := false },
       { name := "runs_model_connection_workspace_fk", columns := ["model_connection_id", "workspace_id"], refTable := .modelConnections, refColumns := ["id", "workspace_id"], onDelete := .noAction, inline := false },
-      { name := "runs_continues_run_workspace_fk", columns := ["continues_run_id", "workspace_id"], refTable := .runs, refColumns := ["id", "workspace_id"], onDelete := .noAction, inline := false }]
+      { name := "runs_continues_run_workspace_fk", columns := ["continues_run_id", "workspace_id"], refTable := .runs, refColumns := ["id", "workspace_id"], onDelete := .noAction, inline := false },
+      { name := "runs_parent_workspace_fk", columns := ["parent_run_id", "workspace_id"], refTable := .runs, refColumns := ["id", "workspace_id"], onDelete := .noAction, inline := false },
+      { name := "runs_agent_team_version_workspace_fk", columns := ["agent_team_version_id", "workspace_id"], refTable := .agentTeamVersions, refColumns := ["id", "workspace_id"], onDelete := .noAction, inline := false }]
     uniques := [
       { name := "runs_id_workspace_unique", columns := ["id", "workspace_id"], kind := .index, partialNullColumns := [] },
       { name := "runs_workspace_idempotency_key_unique", columns := ["workspace_id", "idempotency_key"], kind := .index, partialNullColumns := [], partialNotNullColumns := ["idempotency_key"] },
       { name := "runs_continues_run_id_unique", columns := ["continues_run_id"], kind := .index, partialNullColumns := [], partialNotNullColumns := ["continues_run_id"] }]
     checks := [
       .oneOf "runs_status_valid" "status" ["queued", "running", "awaiting_approval", "completed", "failed", "cancelled"],
-      .oneOf "runs_provider_valid" "provider" ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"],
+      .oneOf "runs_provider_valid" "provider" ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"],
       .oneOf "runs_engine_valid" "engine" ["claude-agent-sdk", "openai-agents", "pi", "mastra"],
       .oneOf "runs_accounting_state_valid" "accounting_state" ["pending", "complete", "partial", "failed", "unavailable"],
       .other "runs_ended_at_iff_terminal",
@@ -1286,7 +1315,9 @@ def catalogue : Schema
       .other "runs_unpriced_cost_zero",
       .other "runs_output_only_when_completed",
       .other "runs_consumed_approvals_never_queued",
-      .other "runs_idempotency_key_has_hash"] }
+      .other "runs_idempotency_key_has_hash",
+      .other "runs_parent_not_self",
+      .other "runs_spend_ceiling_positive"] }
   | .runEvents => {
     table := .runEvents, source := "run-events.ts", tsExport := "runEvents", tenancy := .scoped
     primaryKey := ["run_id", "sequence"]
@@ -1512,7 +1543,7 @@ def catalogue : Schema
       ⟨"engine", .text, true⟩,
       ⟨"blob_key", .text, true⟩,
       ⟨"storage_key", .text, true⟩,
-      ⟨"object_id", .uuid, false⟩,
+      ⟨"object_id", .uuid, true⟩,
       ⟨"status", .text, true⟩,
       ⟨"size_bytes", .bigint, true⟩,
       ⟨"sha256", .text, true⟩,
@@ -1890,6 +1921,112 @@ def catalogue : Schema
       { name := "workspace_features_workspace_feature_key", columns := ["workspace_id", "feature"], kind := .constraint, partialNullColumns := [] }]
     checks := [
       .oneOf "workspace_features_feature_valid" "feature" ["chat", "projects", "files", "skills", "connectors", "runs", "sharing", "surfaces", "triggers", "evaluations", "builder"]] }
+  | .webhooks => {
+    table := .webhooks, source := "webhooks.ts", tsExport := "webhooks", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"url", .text, true⟩,
+      ⟨"events", .textArray, true⟩,
+      ⟨"created_at", .timestamptz, true⟩]
+    foreignKeys := [
+      { name := "webhooks_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true }]
+    uniques := [
+      { name := "webhooks_workspace_id_key", columns := ["workspace_id", "id"], kind := .constraint, partialNullColumns := [] }]
+    checks := [
+      .other "webhooks_url_length",
+      .other "webhooks_events_valid"] }
+  | .webhookDeliveries => {
+    table := .webhookDeliveries, source := "webhook-deliveries.ts", tsExport := "webhookDeliveries", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"webhook_id", .uuid, true⟩,
+      ⟨"run_id", .uuid, true⟩,
+      ⟨"event_type", .text, true⟩,
+      ⟨"state", .text, true⟩,
+      ⟨"attempts", .smallint, true⟩,
+      ⟨"next_attempt_at", .timestamptz, true⟩,
+      ⟨"last_attempt_at", .timestamptz, false⟩,
+      ⟨"last_status_code", .integer, false⟩,
+      ⟨"last_error", .text, false⟩,
+      ⟨"delivered_at", .timestamptz, false⟩,
+      ⟨"created_at", .timestamptz, true⟩]
+    foreignKeys := [
+      { name := "webhook_deliveries_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true },
+      { name := "webhook_deliveries_webhook_workspace_fk", columns := ["workspace_id", "webhook_id"], refTable := .webhooks, refColumns := ["workspace_id", "id"], onDelete := .cascade, inline := false },
+      { name := "webhook_deliveries_run_workspace_fk", columns := ["run_id", "workspace_id"], refTable := .runs, refColumns := ["id", "workspace_id"], onDelete := .cascade, inline := false }]
+    uniques := [
+      { name := "webhook_deliveries_webhook_run_key", columns := ["workspace_id", "webhook_id", "run_id"], kind := .index, partialNullColumns := [] }]
+    checks := [
+      .oneOf "webhook_deliveries_state_valid" "state" ["pending", "delivered", "failed"],
+      .other "webhook_deliveries_event_type_valid",
+      .other "webhook_deliveries_delivered_shape"] }
+  | .agentTeams => {
+    table := .agentTeams, source := "agent-teams.ts", tsExport := "agentTeams", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"name", .text, true⟩,
+      ⟨"description", .text, false⟩,
+      ⟨"owner_principal_id", .uuid, true⟩,
+      ⟨"created_by", .uuid, false⟩,
+      ⟨"created_at", .timestamptz, true⟩,
+      ⟨"updated_at", .timestamptz, true⟩,
+      ⟨"deleted_at", .timestamptz, false⟩]
+    foreignKeys := [
+      { name := "agent_teams_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true },
+      { name := "agent_teams_owner_principal_workspace_fk", columns := ["workspace_id", "owner_principal_id"], refTable := .workspacePrincipals, refColumns := ["workspace_id", "id"], onDelete := .noAction, inline := false },
+      { name := "agent_teams_created_by_workspace_fk", columns := ["workspace_id", "created_by"], refTable := .memberships, refColumns := ["workspace_id", "user_id"], onDelete := .noAction, inline := false }]
+    uniques := [
+      { name := "agent_teams_workspace_name_key", columns := ["workspace_id", "name"], kind := .index, partialNullColumns := ["deleted_at"] },
+      { name := "agent_teams_id_workspace_key", columns := ["id", "workspace_id"], kind := .constraint, partialNullColumns := [] }]
+    checks := [
+      .other "agent_teams_name_not_blank"] }
+  | .agentTeamVersions => {
+    table := .agentTeamVersions, source := "agent-team-versions.ts", tsExport := "agentTeamVersions", tenancy := .scoped
+    primaryKey := ["id"]
+    columns := [
+      ⟨"id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"team_id", .uuid, true⟩,
+      ⟨"number", .integer, true⟩,
+      ⟨"mode", .text, true⟩,
+      ⟨"lead_agent_id", .uuid, true⟩,
+      ⟨"lead_agent_version_id", .uuid, true⟩,
+      ⟨"created_by", .uuid, false⟩,
+      ⟨"created_at", .timestamptz, true⟩]
+    foreignKeys := [
+      { name := "agent_team_versions_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true },
+      { name := "agent_team_versions_team_workspace_fk", columns := ["team_id", "workspace_id"], refTable := .agentTeams, refColumns := ["id", "workspace_id"], onDelete := .cascade, inline := false },
+      { name := "agent_team_versions_lead_version_fk", columns := ["lead_agent_version_id", "lead_agent_id", "workspace_id"], refTable := .agentVersions, refColumns := ["id", "agent_id", "workspace_id"], onDelete := .noAction, inline := false },
+      { name := "agent_team_versions_created_by_workspace_fk", columns := ["workspace_id", "created_by"], refTable := .memberships, refColumns := ["workspace_id", "user_id"], onDelete := .noAction, inline := false }]
+    uniques := [
+      { name := "agent_team_versions_workspace_team_number_key", columns := ["workspace_id", "team_id", "number"], kind := .constraint, partialNullColumns := [] },
+      { name := "agent_team_versions_id_workspace_key", columns := ["id", "workspace_id"], kind := .constraint, partialNullColumns := [] }]
+    checks := [
+      .oneOf "agent_team_versions_mode_valid" "mode" ["handoff"],
+      .other "agent_team_versions_number_positive"] }
+  | .agentTeamVersionMembers => {
+    table := .agentTeamVersionMembers, source := "agent-team-version-members.ts", tsExport := "agentTeamVersionMembers", tenancy := .scoped
+    primaryKey := ["team_version_id", "agent_id"]
+    columns := [
+      ⟨"team_version_id", .uuid, true⟩,
+      ⟨"workspace_id", .uuid, true⟩,
+      ⟨"agent_id", .uuid, true⟩,
+      ⟨"agent_version_id", .uuid, true⟩,
+      ⟨"name", .text, true⟩]
+    foreignKeys := [
+      { name := "agent_team_version_members_workspace_id_workspaces_id_fk", columns := ["workspace_id"], refTable := .workspaces, refColumns := ["id"], onDelete := .cascade, inline := true },
+      { name := "agent_team_version_members_version_workspace_fk", columns := ["team_version_id", "workspace_id"], refTable := .agentTeamVersions, refColumns := ["id", "workspace_id"], onDelete := .cascade, inline := false },
+      { name := "agent_team_version_members_agent_version_fk", columns := ["agent_version_id", "agent_id", "workspace_id"], refTable := .agentVersions, refColumns := ["id", "agent_id", "workspace_id"], onDelete := .noAction, inline := false }]
+    uniques := [
+      { name := "agent_team_version_members_workspace_version_name_key", columns := ["workspace_id", "team_version_id", "name"], kind := .constraint, partialNullColumns := [] }]
+    checks := [
+      .other "agent_team_version_members_name_valid"] }
 
 /-! ## Looking things up in a table specification -/
 
@@ -1966,8 +2103,8 @@ def TableSpec.isSingleKey (s : TableSpec) (k : String) : Bool :=
 def ForeignKey.pairs (fk : ForeignKey) : List (String × String) := fk.columns.zip fk.refColumns
 
 /-- The buckets `tenancy.test.ts` sorts every foreign key into. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")]
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")]
 inductive FkClass where
   /-- `workspace_id → workspaces.id`: the reference to the tenant root itself. -/
   | rootReference
@@ -2020,8 +2157,8 @@ def siblingCovers (S : Schema) (t : TableName) (fk : ForeignKey) : Bool :=
   | _, _, _ => false
 
 /-- The tenancy bucket of a foreign key of table `t`. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#workspaceSelfPairingFault")
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#workspaceSelfPairingFault")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 def classify (S : Schema) (t : TableName) (fk : ForeignKey) : FkClass :=
   match (S fk.refTable).tenancy with
@@ -2065,8 +2202,8 @@ other schemas. Like the test: a scoped table has a `NOT NULL`
 Weaker than the test: the test also requires `workspace_id` to lead an index. The
 `ON DELETE CASCADE` of every root
 reference is a separate schema fact (`every_root_reference_cascades`), not part of the rule. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 def tenancyWellFormed (S : Schema) (t : TableName) : Bool :=
   let s := S t
@@ -2118,18 +2255,18 @@ def TableSpec.mapForeignKey (s : TableSpec) (n : String) (f : ForeignKey → For
 
 /-- No foreign key of the schema is `unpaired`: every reference between two tenant-carrying tables
 is tenant-paired by itself or by a sibling (the rule `tenancy.test.ts` enforces). -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 def pairingComplete (S : Schema) : Bool :=
   allTables.all fun t => (S t).foreignKeys.all fun fk => classify S t fk != .unpaired
 
 /-- A column named like a reference: its name ends in `_id` (`REFERENCE_SUFFIX`). -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#REFERENCE_SUFFIX")]
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#REFERENCE_SUFFIX")]
 def isIdColumn (c : String) : Bool := "_id".toList.isSuffixOf c.toList
 
 /-- `NON_REFERENCE_ID_COLUMNS`: the `*_id` columns that refer to nothing in this schema, each with
 the SQL type the declaration pins. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 def nonReferenceIdColumns : List (TableName × String × SqlType) :=
   [(.runUsageRecords, "provider_response_id", .text), (.auditEvents, "subject_id", .text),
@@ -2153,7 +2290,7 @@ def idColumnCovered (S : Schema) (decl : List (TableName × String × SqlType)) 
 /-- Every `*_id` column of the schema is a foreign-key column or a declared non-reference of the
 declared type, and every declaration names an existing column. Without this, `pairingComplete`
 could be satisfied by deleting a foreign key. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 def idColumnsCovered (S : Schema) (decl : List (TableName × String × SqlType)) : Bool :=
   (allTables.all fun t => (S t).columns.all (idColumnCovered S decl t)) &&

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import {
   agents as agentRows,
@@ -15,7 +16,7 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
 
 import { lowerLimits } from '../../../compose/run-request';
 import { createInMemoryAgentVersionStoreProvider } from '../../../agent-versions/memory-store';
@@ -28,13 +29,15 @@ import { createRepositoryAgentStoreProvider, type AgentStoreProvider } from '../
 import { ORDER_STATUS_FRAMES } from '../../../evaluations/fixtures';
 import type { RunApiEnvironment, RunPrincipal } from '../../../runs/environment';
 import { InMemoryRunStore } from '../../../runs/memory-store';
-import { startRunOnSession } from '../../../runs/service';
+import { MAX_IDEMPOTENCY_KEY_CHARS, startRunOnSession } from '../../../runs/service';
 import type { RunRecord } from '../../../runs/store';
+import { captureLog } from '../../../telemetry/capture-log';
+import type { EvalResult } from '../../ports';
 import { callContextOf } from '../../testing/context';
 import { draftBody } from '../checker/checker.contract';
 import { createAgentStore } from '../store/production';
 import { MemoryRunner } from './memory';
-import { BUILDER_TRIAL_KEY_PREFIX, createRunner } from './production';
+import { BUILDER_TRIAL_KEY_PREFIX, createRunner, isEvalRefusalCode } from './production';
 import {
   describeRunnerConformance,
   describeTrialConformance,
@@ -64,8 +67,11 @@ type VersionLimits = (
  * launched, and `last` holds what the last one was started with and the budget it ran under: the
  * limits of the saved version it is pinned to (`limitsOf`), lowered by the start's override.
  */
-function fakeRunApi(limitsOf: VersionLimits = () => Promise.resolve(null), interruptible = true) {
-  const store = new InMemoryRunStore();
+function fakeRunApi(
+  limitsOf: VersionLimits = () => Promise.resolve(null),
+  interruptible = true,
+  store = new InMemoryRunStore(),
+) {
   const counter: {
     started: number;
     last?: {
@@ -257,7 +263,7 @@ describe('the production runner without a run API', () => {
       () => Promise.resolve(),
     );
     const port = createRunner({ agents, versions, runApi: () => null });
-    await expect(port.evaluate(ctx, agentId, version, [ORDER_CASE])).rejects.toThrow(
+    await expect(port.evaluate(ctx, agentId, version, 0.1, [ORDER_CASE])).rejects.toThrow(
       /^The evaluations handler answered 503\.$/,
     );
     await expect(port.trial(ctx, agentId, version, 'hi', 0.1, 'k')).rejects.toThrow(
@@ -269,7 +275,7 @@ describe('the production runner without a run API', () => {
 /** A production runner over in-memory stores whose run API is `runApi(base)`, with a builder who saved an agent. */
 async function runnerOver(
   runApi: (base: RunApiEnvironment) => RunApiEnvironment,
-  { interruptible = true } = {},
+  { interruptible = true, store }: { interruptible?: boolean; store?: InMemoryRunStore } = {},
 ) {
   const agents = createInMemoryAgentStoreProvider();
   const versions = createInMemoryAgentVersionStoreProvider({ agents });
@@ -283,7 +289,7 @@ async function runnerOver(
     },
     () => Promise.resolve(),
   );
-  const { runs, counter } = fakeRunApi(undefined, interruptible);
+  const { runs, counter } = fakeRunApi(undefined, interruptible, store);
   const api = runApi(runs);
   return {
     port: createRunner({ agents, versions, runApi: () => api }),
@@ -352,6 +358,141 @@ describe('a production trial paused for an approval', () => {
       code: 'trial_not_stopped',
     });
     expect(counter.started).toBe(0);
+  });
+});
+
+/** What a failing driver's message carries: a key, and a URL with a password too short for any redaction pattern. */
+const BAIT = 'sk-ant-SENTINEL-bait-9f3c postgres://svc:hunter2@db.internal/aw';
+
+/** A run store whose reads fail once `broken` is set, as a database outage mid-trial would. */
+class FlakyReadStore extends InMemoryRunStore {
+  broken = false;
+  override get(runId: string): Promise<RunRecord | null> {
+    return this.broken ? Promise.reject(new Error(BAIT)) : super.get(runId);
+  }
+}
+
+describe('a production trial that fails after its run started (SPD-04)', () => {
+  it('interrupts the started run by id before the failure propagates, and answers no result', async () => {
+    const store = new FlakyReadStore();
+    const interrupted: string[] = [];
+    const { port, ctx, agentId, version } = await runnerOver(
+      (base) => ({
+        ...base,
+        // The run starts and keeps going: nothing finishes it but the interrupt.
+        launch: ({ run }) => {
+          store.broken = true;
+          void store.markRunning(run.id);
+        },
+        interruptRun: async (principal, run) => {
+          interrupted.push(run.id);
+          await base.interruptRun?.(principal, run);
+        },
+      }),
+      { store },
+    );
+
+    await expect(
+      port.trial(ctx, agentId, version, 'Where is 1042?', 0.1, 'outage'),
+    ).rejects.toThrow();
+
+    expect(interrupted).toHaveLength(1);
+    store.broken = false;
+    // The run was stopped, not left to finish on its own under the full policy budget.
+    expect((await store.get(interrupted[0] ?? ''))?.status).toBe('cancelled');
+  });
+
+  it('logs a failed interrupt by class and safe code only', async () => {
+    const log = captureLog();
+    try {
+      const { port, ctx, agentId, version } = await runnerOver((base) => ({
+        ...pausing(base),
+        interruptRun: () => Promise.reject(Object.assign(new Error(BAIT), { code: 'ECONNRESET' })),
+      }));
+      await port.trial(ctx, agentId, version, 'Refund order 1042', 0.1, 'stuck-log');
+      expect(log.text()).toContain('"errorName":"Error"');
+      expect(log.text()).toContain('"errorCode":"ECONNRESET"');
+      expect(log.text()).not.toContain('SENTINEL');
+      expect(log.text()).not.toContain('hunter2');
+    } finally {
+      log.restore();
+    }
+  });
+
+  it('logs no code that is not a system code, such as a token a library put there', async () => {
+    const log = captureLog();
+    try {
+      const { port, ctx, agentId, version } = await runnerOver((base) => ({
+        ...pausing(base),
+        interruptRun: () =>
+          Promise.reject(Object.assign(new Error('down'), { code: 'sk-ant-SENTINEL-code-9f3c' })),
+      }));
+      await port.trial(ctx, agentId, version, 'Refund order 1042', 0.1, 'stuck-code');
+      expect(log.text()).toContain('interrupting trial run');
+      expect(log.text()).not.toContain('errorCode');
+      expect(log.text()).not.toContain('SENTINEL');
+    } finally {
+      log.restore();
+    }
+  });
+});
+
+describe('a production evaluation under the Builder’s trial limits (SPD-05)', () => {
+  it('starts nothing when the run API cannot interrupt a run', async () => {
+    const { port, ctx, agentId, version, counter } = await runnerOver((base) => base, {
+      interruptible: false,
+    });
+    expect(await port.evaluate(ctx, agentId, version, 0.1, [ORDER_CASE])).toMatchObject({
+      ok: false,
+      code: 'trial_not_stopped',
+    });
+    expect(counter.started).toBe(0);
+  });
+
+  it('is refused as trial_not_stopped when a paused case run cannot be stopped', async () => {
+    const { port, ctx, agentId, version } = await runnerOver((base) => ({
+      ...pausing(base),
+      interruptRun: () => Promise.reject(new Error(BAIT)),
+    }));
+    const result = await port.evaluate(ctx, agentId, version, 0.1, [
+      { name: 'refund', input: 'Refund order 1042', expect: { contains: ['refunded'] } },
+    ]);
+    expect(result).toMatchObject({ ok: false, code: 'trial_not_stopped' });
+    expect(JSON.stringify(result)).not.toContain('hunter2');
+  });
+});
+
+describe('what a refused evaluation can say (B1-17)', () => {
+  it('is a closed list of codes, not any string', () => {
+    type Refused = Extract<EvalResult, { ok: false }>;
+    expectTypeOf<Refused['code']>().not.toEqualTypeOf<string>();
+    expectTypeOf<'trial_not_stopped'>().toExtend<Refused['code']>();
+    expectTypeOf<'agent_version_not_found'>().toExtend<Refused['code']>();
+  });
+
+  it('names the codes the evaluation route and a refused run start can answer, and no other', () => {
+    for (const code of [
+      'invalid_body',
+      'agent_version_not_found',
+      'run_api_not_configured',
+      'builtin_agent_read_only',
+      'trial_not_stopped',
+      'no_caller',
+      'forbidden',
+    ]) {
+      expect(isEvalRefusalCode(code), code).toBe(true);
+    }
+    for (const code of ['approval_required', 'invented_by_a_future_route', '']) {
+      expect(isEvalRefusalCode(code), code).toBe(false);
+    }
+  });
+});
+
+describe('the idempotency key limit (SPD-10)', () => {
+  it('is defined outside the run route module, which the runner then does not import', () => {
+    expect(MAX_IDEMPOTENCY_KEY_CHARS).toBe(255);
+    const source = readFileSync(new URL('./production.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/from '[^']*\/runs\/api'/);
   });
 });
 

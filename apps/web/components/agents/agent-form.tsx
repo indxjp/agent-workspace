@@ -30,7 +30,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
-import type { AgentPermissions } from '../../contracts/agents';
+import type { AgentPermissionKey, AgentPermissions } from '../../contracts/agents';
 
 import { browserClient } from '../../lib/browser-client';
 import { createAgent, loadNewAgentCatalogs } from './agent-requests-model';
@@ -93,18 +93,21 @@ export function ModelStep({
   value,
   onSelect,
   readOnly = false,
+  title = 'Step 2 · Model',
 }: Readonly<{
   models: readonly CatalogModel[];
   unavailable: readonly { readonly connectionName: string; readonly reason: string }[];
   value: ModelSelectionValue;
   onSelect: (value: ModelSelectionValue) => void;
   readOnly?: boolean;
+  /** The form numbers its steps; a screen that shows them in another order names them only. */
+  title?: string;
 }>) {
   const selected = findCatalogEntry(models, value);
   return (
     <section className="mt-4" aria-labelledby="model-heading">
       <h2 id="model-heading" className="mb-3 text-[15px]">
-        Which model should this agent use?
+        {title}
       </h2>
       {readOnly ? (
         <ReadList
@@ -150,16 +153,19 @@ export function RuntimeProfileStep({
   selectedId,
   onSelect,
   readOnly = false,
+  title = 'Step 3 · Runtime',
 }: Readonly<{
   profiles: readonly RuntimeProfileOption[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   readOnly?: boolean;
+  /** The form numbers its steps; a screen that shows them in another order names them only. */
+  title?: string;
 }>) {
   return (
     <section className="mt-4" aria-labelledby="runtime-profile-heading">
       <h2 id="runtime-profile-heading" className="mb-3 text-[15px]">
-        Step 5 · Runtime
+        {title}
       </h2>
       {readOnly ? (
         <ReadList
@@ -207,6 +213,7 @@ export function ResourcesStep({
   onSkill,
   onConnector,
   readOnly = false,
+  title = 'Step 4 · Resources',
 }: Readonly<{
   options: AgentResourceOptions;
   fileAccess: Readonly<Record<string, 'read' | 'read-write'>>;
@@ -216,12 +223,14 @@ export function ResourcesStep({
   onSkill: (id: string, selected: boolean) => void;
   onConnector: (id: string, selected: boolean) => void;
   readOnly?: boolean;
+  /** The form numbers its steps; a screen that shows them in another order names them only. */
+  title?: string;
 }>) {
   if (readOnly) {
     return (
       <section aria-labelledby="resources-heading" className="mt-4">
         <h2 className="mb-3 text-[15px]" id="resources-heading">
-          Step 3 · Resources
+          {title}
         </h2>
         <ReadList
           rows={[
@@ -280,7 +289,7 @@ export function ResourcesStep({
   return (
     <section aria-labelledby="resources-heading" className="mt-4">
       <h2 className="mb-3 text-[15px]" id="resources-heading">
-        Step 3 · Resources
+        {title}
       </h2>
       <div className={`${CARD} grid gap-3 p-4 md:grid-cols-3`}>
         <fieldset className="rounded border border-border p-3">
@@ -322,7 +331,7 @@ export function ResourcesStep({
   );
 }
 
-export const PERMISSION_CHOICES: ReadonlyArray<[keyof AgentPermissions, string, string]> = [
+export const PERMISSION_CHOICES: ReadonlyArray<[AgentPermissionKey, string, string]> = [
   ['readFiles', 'Read files', 'Read only the files and folders assigned above.'],
   ['writeFiles', 'Write files', 'Modify only resources explicitly assigned read/write.'],
   ['runCommands', 'Run commands', 'Execute commands inside the selected runtime.'],
@@ -337,15 +346,18 @@ export function PermissionsStep({
   permissions,
   onChange,
   readOnly = false,
+  title = 'Step 5 · Permissions',
 }: Readonly<{
   permissions: AgentPermissions;
-  onChange: (key: keyof AgentPermissions, enabled: boolean) => void;
+  onChange: (key: AgentPermissionKey, enabled: boolean) => void;
   readOnly?: boolean;
+  /** The form numbers its steps; a screen that shows them in another order names them only. */
+  title?: string;
 }>) {
   if (readOnly) {
     return (
       <fieldset className={`${CARD} mt-4 p-4`}>
-        <legend className="px-1 text-[15px] font-semibold">Step 4 · Permissions</legend>
+        <legend className="px-1 text-[15px] font-semibold">{title}</legend>
         <ReadList
           className=""
           rows={PERMISSION_CHOICES.map(([key, label]) => [
@@ -358,7 +370,7 @@ export function PermissionsStep({
   }
   return (
     <fieldset className={`${CARD} mt-4 p-4`}>
-      <legend className="px-1 text-[15px] font-semibold">Step 4 · Permissions</legend>
+      <legend className="px-1 text-[15px] font-semibold">{title}</legend>
       <p className="mb-3 text-[12px] text-muted">
         Choose each capability explicitly. High-risk capabilities start disabled.
       </p>
@@ -569,6 +581,7 @@ export function NewAgentScreen({
       {modeSwitch}
 
       <form onSubmit={onSubmit}>
+        <h2 className="mb-3 text-[15px]">Step 1 · Name and instructions</h2>
         <div className={CARD}>
           <div className="p-4">
             <div className={FIELD}>

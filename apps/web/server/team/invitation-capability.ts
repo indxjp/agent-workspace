@@ -17,10 +17,10 @@
  * has not read the row yet, and their own headers say so. Those exact values are what this asks
  * `decide()`, so the screen's answer and the route's answer are the same cell of the matrix rather
  * than two readings of it. `unknown` denies for every grant narrower than `any`, which is why Owner
- * and Admin — whose grant over `invitations` is `any` (§21's `MANAGE`, `rbac/permissions.ts`) — are
+ * and Admin — whose grant over `invitations` is `any` (§21's `MANAGE`, `rbac/core/permissions.ts`) — are
  * admitted and Builder and Viewer, who have no entry at all, are not.
  *
- * `resend` is a declared sub-resource of `invitations` (`rbac/declarations/W9-TEAM-121.ts`), so
+ * `resend` is a declared sub-resource of `invitations` (`rbac/core/declarations/W9-TEAM-121.ts`), so
  * `decide()` answers it at the parent's width; asking it separately is what proves that, rather than
  * assuming it.
  *
@@ -46,7 +46,7 @@
  */
 import { NO_INVITATION_CAPABILITY, type InvitationCapability } from '../../contracts/invitations';
 import { decide, type Ownership } from '../rbac/decide';
-import { parseRole } from '../rbac/roles';
+import { parseRole } from '../rbac/core/roles';
 import { conferrableRolesFor } from './membership-capability';
 import type { TeamViewer } from './team-viewer';
 

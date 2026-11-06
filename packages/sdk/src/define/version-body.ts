@@ -127,6 +127,7 @@ function permissionsOf(agent: DefineAgentInput): AgentPermissions {
   return {
     readFiles: given.readFiles ?? false,
     writeFiles: given.writeFiles ?? false,
+    ...(given.memory === undefined ? {} : { memory: given.memory }),
     runCommands: given.runCommands ?? false,
     unrestrictedNetwork: given.unrestrictedNetwork ?? false,
   };

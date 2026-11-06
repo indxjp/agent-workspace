@@ -1,0 +1,91 @@
+{{- /*
+Apps built with @indx-workspace/app (issue #1512, ADR-0103's production-apps amendment): one
+Deployment and one Service per `.Values.apps` entry. An app is not the platform: it reads only its
+own operator-created Secret `agent-workspace-app-<name>` (its own database role's DATABASE_URL, its
+identity secret, its API key, workspace id and connector id; docs/deploy/kubernetes.md), never the
+platform's Secrets, and it runs under the namespace's default ServiceAccount with no token mounted,
+not the platform's annotatable workload-identity one.
+*/}}
+{{- range $app := .Values.apps }}
+{{- $name := printf "agent-workspace-app-%s" $app.name }}
+{{- $publicUrl := required "publicUrl is required when apps are set: an app calls the platform at it" $.Values.publicUrl }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: { app.kubernetes.io/name: {{ $name | quote }}, agent-workspace.io/role: app }
+  annotations:
+    agent-workspace.io/database-schema: {{ $app.schema | quote }}
+spec:
+  replicas: {{ $app.replicas | default 1 }}
+  minReadySeconds: {{ $.Values.rollout.minReadySeconds }}
+  progressDeadlineSeconds: {{ $.Values.rollout.progressDeadlineSeconds }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ $.Values.rollout.maxUnavailable }}
+      maxSurge: {{ $.Values.rollout.maxSurge }}
+  selector:
+    matchLabels: { app.kubernetes.io/name: {{ $name | quote }} }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: {{ $name | quote }}, agent-workspace.io/role: app }
+      annotations:
+        agent-workspace.io/rollout-revision: {{ $.Values.rollout.revision | quote }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      automountServiceAccountToken: false
+      securityContext: { runAsNonRoot: true, {{- with $.Values.runAsUser }} runAsUser: {{ . }},{{ end }} seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: app
+          image: {{ $app.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } }
+          env:
+            # `env` wins over `envFrom`, so the Secret cannot move the listener off the probed port.
+            # Kubernetes sets HOSTNAME to the pod name, which the Next.js server would bind to.
+            - { name: PORT, value: "3000" }
+            - { name: HOSTNAME, value: "0.0.0.0" }
+            - { name: AW_URL, value: {{ $publicUrl | quote }} }
+            - { name: AW_APP_NAME, value: {{ $app.name | quote }} }
+            # The app migrates its own schema as it starts, as its own role (instrumentation.ts).
+            - { name: AW_APP_MIGRATE_ON_START, value: "1" }
+          envFrom:
+            - secretRef: { name: {{ $name }} }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: next-cache, mountPath: /app/.next/cache }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            failureThreshold: {{ $.Values.probes.startup.failureThreshold }}
+            periodSeconds: {{ $.Values.probes.startup.periodSeconds }}
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            failureThreshold: {{ $.Values.probes.readiness.failureThreshold }}
+            periodSeconds: {{ $.Values.probes.readiness.periodSeconds }}
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            failureThreshold: {{ $.Values.probes.liveness.failureThreshold }}
+            periodSeconds: {{ $.Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ $.Values.probes.liveness.timeoutSeconds }}
+      volumes:
+        - { name: tmp, emptyDir: {} }
+        - { name: next-cache, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: { agent-workspace.io/role: app }
+spec:
+  selector: { app.kubernetes.io/name: {{ $name | quote }} }
+  ports: [{ name: http, port: 3000, targetPort: 3000 }]
+---
+{{- end }}

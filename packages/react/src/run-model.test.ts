@@ -8,6 +8,7 @@ import type { AgentEvent } from '@indx-workspace/sdk/events';
 import { describe, expect, it } from 'vitest';
 
 import {
+  approvalProblemMessage,
   assistantResponseFromAgentEvent,
   badgeForRunStatus,
   beginRun,
@@ -25,6 +26,7 @@ import {
   type RunOpening,
   type Speaker,
 } from './run-model.js';
+import { surfaceStrings } from './locale.js';
 
 const USER: Speaker = { initials: 'AI', name: 'Aya Ito' };
 
@@ -215,5 +217,25 @@ describe("parseRunStatusPayload — server/runs/launcher.ts's `{ status, error }
   it('never throws on a malformed payload', () => {
     expect(parseRunStatusPayload(null)).toEqual({ status: undefined, error: null });
     expect(parseRunStatusPayload(3)).toEqual({ status: undefined, error: null });
+  });
+});
+
+describe('approvalProblemMessage (#1490)', () => {
+  it("words each approval refusal in the reader's language, and any other in the server's words", () => {
+    for (const locale of ['en', 'ja'] as const) {
+      const strings = surfaceStrings(locale);
+      expect(approvalProblemMessage('approval_expired', 'x', strings)).toBe(
+        strings.approvalExpired,
+      );
+      expect(approvalProblemMessage('approval_already_decided', 'x', strings)).toBe(
+        strings.approvalAlreadyDecided,
+      );
+      expect(approvalProblemMessage('run_not_awaiting_approval', 'x', strings)).toBe(
+        strings.approvalNotAwaiting,
+      );
+    }
+    expect(approvalProblemMessage('run_not_found', 'Run not found.', surfaceStrings('en'))).toBe(
+      'Run not found.',
+    );
   });
 });

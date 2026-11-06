@@ -6,7 +6,7 @@
  * `run-request.ts`'s own functions. No route imports it, and it imports no test-only module: each
  * test file builds its {@link RunWorld} on both catalogs.
  */
-import { streamToBytes } from '@agent-workspace/core/storage';
+import { streamToBytes } from '../storage/objects';
 import { decodeUstar } from '@agent-workspace/runtime/transfer';
 
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
@@ -185,8 +185,22 @@ export function installDeliveringRunApi(options: {
   readonly storageWriteback?: (run: StorageWriteBackRun) => Promise<unknown>;
   /** Called when the runner double answers `/run`, before the run's stream is relayed. */
   readonly onRun?: () => Promise<void>;
+  /**
+   * The runtime's workspace root on this host, for a `local-disk` target: the archive is extracted
+   * there by the launcher, and no `/files` request is made. Absent, the target pushes the archive.
+   */
+  readonly localDiskRoot?: string;
 }): { readonly agentId: string; delivered(runId: string): Promise<Delivered> } {
   const { world, storage, store } = options;
+  const target: RuntimeLaunchTarget =
+    options.localDiskRoot === undefined
+      ? TARGET
+      : {
+          ...TARGET,
+          driver: 'local',
+          workspaceRoot: options.localDiskRoot,
+          fileTransfer: 'local-disk',
+        };
   const agentId = options.agentId ?? crypto.randomUUID();
   const loader = createAgentRunResourceLoader({
     catalog: world.catalogs,
@@ -291,7 +305,7 @@ export function installDeliveringRunApi(options: {
     ...(options.preflight === undefined ? {} : { preflight: options.preflight }),
     launch: createRunnerLauncher({
       store,
-      runtime: { resolve: () => Promise.resolve(TARGET) },
+      runtime: { resolve: () => Promise.resolve(target) },
       workspaceLifecycle: createRuntimeWorkspaceLifecycle({
         storage,
         resources: loader,
@@ -309,7 +323,7 @@ export function installDeliveringRunApi(options: {
           ...(options.runnerFiles === undefined
             ? {}
             : {
-                cwd: `${TARGET.workspaceRoot}/${context.principal.workspaceId}/${context.session.id}`,
+                cwd: `${target.workspaceRoot}/${context.principal.workspaceId}/${context.session.id}`,
                 portable: { permissions: { writeFiles: true } },
               }),
           resources: {

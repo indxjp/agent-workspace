@@ -13,6 +13,19 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace }),
 }));
 
+/** The `filesEnabled` the route last handed the Builder chat. */
+const builderMode = vi.hoisted(() => ({ filesEnabled: undefined as boolean | undefined }));
+vi.mock('./builder-mode', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./builder-mode')>();
+  return {
+    ...actual,
+    BuilderMode: (props: Parameters<typeof actual.BuilderMode>[0]) => {
+      builderMode.filesEnabled = props.filesEnabled;
+      return <actual.BuilderMode {...props} />;
+    },
+  };
+});
+
 const { NewAgentScreen, nextAgentMode, parseAgentMode } = await import('./agent-form');
 
 const { BuilderMode } = await import('./builder-mode');
@@ -23,7 +36,7 @@ function render(query: string, chatEnabled: boolean): string {
   return renderToStaticMarkup(
     <NewAgentScreen
       chatEnabled={chatEnabled}
-      chat={(modeSwitch) => <BuilderMode modeSwitch={modeSwitch} />}
+      chat={(modeSwitch) => <BuilderMode modeSwitch={modeSwitch} filesEnabled />}
     />,
   );
 }
@@ -31,7 +44,7 @@ function render(query: string, chatEnabled: boolean): string {
 describe('NewAgentScreen mode switch', () => {
   it('has no Chat option before the caller’s features are known', () => {
     searchParams = new URLSearchParams('mode=chat');
-    const html = renderToStaticMarkup(<NewAgentRoute />);
+    const html = renderToStaticMarkup(<NewAgentRoute filesEnabled />);
     expect(html).not.toContain('radiogroup');
     expect(html).toContain('Create Agent');
   });
@@ -86,18 +99,22 @@ describe('NewAgentScreen mode switch', () => {
       label: 'Ada',
       features,
     });
-    async function chatOption(features: readonly string[]): Promise<boolean> {
+    async function chatOption(
+      features: readonly string[],
+      query = '',
+      filesEnabled = true,
+    ): Promise<boolean> {
       vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
       vi.stubGlobal('fetch', (input: string | URL) =>
         String(input).endsWith('/api/me')
           ? Promise.resolve(Response.json(me(features)))
           : new Promise<Response>(() => undefined),
       );
-      searchParams = new URLSearchParams('');
+      searchParams = new URLSearchParams(query);
       const container = document.createElement('div');
       document.body.append(container);
       await act(() => {
-        createRoot(container).render(<NewAgentRoute />);
+        createRoot(container).render(<NewAgentRoute filesEnabled={filesEnabled} />);
         return Promise.resolve();
       });
       return container.querySelector('#agent-mode-chat') !== null;
@@ -113,6 +130,41 @@ describe('NewAgentScreen mode switch', () => {
     it('hides the Chat tab when they do not', async () => {
       await expect(chatOption(['chat'])).resolves.toBe(false);
     });
+
+    // UX-21 in #2086: the Files switch the server page read reaches the Builder chat.
+    it.each([false, true])('hands filesEnabled=%s to the Builder chat', async (filesEnabled) => {
+      builderMode.filesEnabled = undefined;
+      await expect(chatOption(['chat', 'builder'], 'mode=chat', filesEnabled)).resolves.toBe(true);
+      expect(builderMode.filesEnabled).toBe(filesEnabled);
+    });
+  });
+
+  it('numbers its steps 1 to 5 in the order they appear (UX-22)', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    // Every read is refused, so each step renders its own empty state.
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        Response.json({ error: { code: 'not_found', message: 'Not found.' } }, { status: 404 }),
+      ),
+    );
+    searchParams = new URLSearchParams('');
+    const container = document.createElement('div');
+    document.body.append(container);
+    await act(async () => {
+      createRoot(container).render(<NewAgentScreen chatEnabled={false} />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const headings = [...container.querySelectorAll('form h2, form legend')]
+      .map((node) => node.textContent)
+      .filter((text) => text.startsWith('Step '));
+    expect(headings).toEqual([
+      'Step 1 · Name and instructions',
+      'Step 2 · Model',
+      'Step 3 · Runtime',
+      'Step 4 · Resources',
+      'Step 5 · Permissions',
+    ]);
+    vi.unstubAllGlobals();
   });
 
   it('parses only mode=chat with the feature on', () => {

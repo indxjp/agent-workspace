@@ -35,6 +35,8 @@ interface Harness {
   createAgent(name: string): Promise<AgentRecord>;
   save(agent: AgentRecord, edits?: FixtureEdits): Promise<void>;
   current(agentId: string): Promise<AgentRecord>;
+  /** Archives the agent in the store, as a sweep committing behind a handler's earlier read. */
+  archive(agentId: string): void;
 }
 
 /** A bundle lookup that holds every digest: it reports none missing. */
@@ -115,6 +117,7 @@ async function harness(): Promise<Harness> {
       if (saved.status !== 201) throw new Error(`the version saves: ${JSON.stringify(saved)}`);
     },
     current,
+    archive: (agentId) => agentProvider.archive(WORKSPACE, agentId, new Date()),
   };
 }
 
@@ -1056,6 +1059,54 @@ describe('an archived agent is frozen (issue #1851)', () => {
       const result = await attempt();
       expect(result.status).toBe(409);
       expect(result.body).toMatchObject({ error: { code: 'agent_archived' } });
+    },
+  );
+});
+
+describe('an archive that commits after the handler read (issue #1987, SEC-07)', () => {
+  /** Each door read the agent active, then the agent is archived before `applyAndPoint` runs. */
+  const doors = {
+    set: (agent: AgentRecord, deps: { store: WorkspaceAgentVersionStore }) =>
+      setAgentPointer({ environment: 'local', version: 1 }, agent, ACTOR, deps),
+    promote: (agent: AgentRecord, deps: { store: WorkspaceAgentVersionStore }) =>
+      promoteAgent({}, agent, ACTOR, deps),
+    rollback: (agent: AgentRecord, deps: { store: WorkspaceAgentVersionStore }) =>
+      rollbackAgent({ environment: 'local' }, agent, ACTOR, deps),
+  };
+
+  it.each(Object.entries(doors))(
+    'refuses %s with 409 agent_archived from the locked write and moves nothing',
+    async (_name, door) => {
+      const h = await harness();
+      const agent = await h.createAgent('Racing');
+      await h.save(agent, { instructions: 'Version one.' });
+      await h.save(agent, { instructions: 'Version two.' });
+      const deps = { store: h.store };
+      expect(
+        (await setAgentPointer({ environment: 'local', version: 1 }, agent, ACTOR, deps)).status,
+      ).toBe(200);
+      expect(
+        (await setAgentPointer({ environment: 'local', version: 2 }, agent, ACTOR, deps)).status,
+      ).toBe(200);
+      const pointersBefore = (await h.store.list(agent.id))?.pointers;
+      const auditsBefore = h.provider.audits().length;
+      const stale = await h.current(agent.id);
+      expect(stale.archivedAt).toBeUndefined();
+
+      const archiveOnApply: WorkspaceAgentVersionStore = {
+        ...h.store,
+        applyAndPoint: (id, input) => {
+          h.archive(id);
+          return h.store.applyAndPoint(id, input);
+        },
+      };
+      const result = await door(stale, { store: archiveOnApply });
+
+      expect(result.status).toBe(409);
+      expect(result.body).toMatchObject({ error: { code: 'agent_archived' } });
+      expect((await h.store.list(agent.id))?.pointers).toEqual(pointersBefore);
+      expect(h.provider.audits()).toHaveLength(auditsBefore);
+      expect((await h.current(agent.id)).instructions).toBe('Version two.');
     },
   );
 });

@@ -33,6 +33,8 @@ inductive IdKind where
   | connector | modelConnection | runtimeProfile | runtimeVerification | secret | project | session | run | runToken
   | runUsageRecord | runFeedback | share | shareView | auditEvent | trigger | triggerDelivery
   | storageConnection | storageMigrationRun | builderToolCall | workspaceFeature
+  | webhook | webhookDelivery
+  | agentTeam | agentTeamVersion
   deriving DecidableEq, Repr, Inhabited, Hashable, Ord
 
 namespace IdKind
@@ -43,7 +45,8 @@ def all : List IdKind :=
     cliSession, agent, agentFile, agentGrant, agentConnector, agentSkill, agentStorageGrant, agentVersion, agentVersionStorageGrant, agentVersionEvaluation, agentPointerMove, endpointClient, oauthToken, skill, skillRevision, file, fileText,
     connector, modelConnection, runtimeProfile, runtimeVerification, secret, project, session, run, runToken,
     runUsageRecord, runFeedback, share, shareView, auditEvent, trigger, triggerDelivery,
-    storageConnection, storageMigrationRun, builderToolCall, workspaceFeature]
+    storageConnection, storageMigrationRun, builderToolCall, workspaceFeature, webhook,
+    webhookDelivery, agentTeam, agentTeamVersion]
 
 theorem mem_all (k : IdKind) : k ∈ all := by cases k <;> decide
 
@@ -94,6 +97,10 @@ def toWire : IdKind → String
   | storageMigrationRun => "storage-migration-run"
   | builderToolCall => "builder-tool-call"
   | workspaceFeature => "workspace-feature"
+  | webhook => "webhook"
+  | webhookDelivery => "webhook-delivery"
+  | agentTeam => "agent-team"
+  | agentTeamVersion => "agent-team-version"
 
 /-- The kind a wire spelling denotes, if any. -/
 def ofWire? : String → Option IdKind
@@ -142,6 +149,10 @@ def ofWire? : String → Option IdKind
   | "storage-migration-run" => some storageMigrationRun
   | "builder-tool-call" => some builderToolCall
   | "workspace-feature" => some workspaceFeature
+  | "webhook" => some webhook
+  | "webhook-delivery" => some webhookDelivery
+  | "agent-team" => some agentTeam
+  | "agent-team-version" => some agentTeamVersion
   | _ => none
 
 private theorem ofWire?_toWire (k : IdKind) : ofWire? (toWire k) = some k := by
@@ -239,6 +250,14 @@ abbrev StorageConnectionId := Id .storageConnection
 abbrev BuilderToolCallId := Id .builderToolCall
 /-- One feature a workspace has switched off (`workspace_features`, ADR-0160 D6). -/
 abbrev WorkspaceFeatureId := Id .workspaceFeature
+/-- An endpoint a workspace has run outcomes posted to (`webhooks`, ADR-SDK-18-N3-250 D1). -/
+abbrev WebhookId := Id .webhook
+/-- One run outcome owed to one webhook, and its event id (`webhook_deliveries`, D3, D4). -/
+abbrev WebhookDeliveryId := Id .webhookDelivery
+/-- A lead agent and its member agents, published as one unit (`agent_teams`, ADR-0104). -/
+abbrev AgentTeamId := Id .agentTeam
+/-- One immutable, numbered version of an agent team (`agent_team_versions`, ADR-0104). -/
+abbrev AgentTeamVersionId := Id .agentTeamVersion
 
 /-- `run_events` is keyed by `(run_id, sequence)` (`run_events_pkey`). -/
 @[aw_spec (ts := "packages/core/src/db/schema/run-events.ts#runEvents")]

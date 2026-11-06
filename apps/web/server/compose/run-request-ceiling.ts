@@ -9,6 +9,7 @@ import {
 
 import {
   AGENT_PERMISSION_KEYS,
+  agentMemoryEnabled,
   type AgentPermissionKey,
   policyNarrowedPermissions,
 } from '../../contracts/agents';
@@ -84,6 +85,8 @@ export async function loadResourcesWithinCeiling(
           projectId,
           met.permissions,
           ceilingCapsFor(permissions, runAgent.agent.policy, met.permissions),
+          // ADR-0163: the memory folder is read only for a run whose met permissions keep it.
+          agentMemoryEnabled(met.permissions) ? runAgent.agent.id : null,
         ),
     met,
     ceiling,

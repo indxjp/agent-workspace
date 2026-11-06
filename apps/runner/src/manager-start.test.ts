@@ -221,6 +221,41 @@ describe('runner manager driver selection (#818)', () => {
   });
 });
 
+describe('runner manager cloud-run-service network', () => {
+  const cloudRun = {
+    RUNTIME_DRIVER: 'cloud-run-service',
+    GCP_PROJECT: 'proj',
+    GCP_REGION: 'asia-northeast1',
+    RUNTIME_SERVICE_ACCOUNT: 'sa@proj.iam.gserviceaccount.com',
+    AGENT_WORKSPACE_RUNTIME_IMAGE_CLAUDE_AGENT_SDK: `r@sha256:${'a'.repeat(64)}`,
+    RUNTIME_NETWORK: 'aw-net',
+    RUNTIME_SUBNETWORK: 'aw-sandbox-subnet',
+  };
+
+  it('serves cloud-run-service and fingerprints the network and subnetwork', () => {
+    const options = managerDriverOptions(cloudRun);
+    expect(options.expectedDriver).toBe('cloud-run-service');
+    expect(options.configurationFingerprint).toContain(':aw-net:aw-sandbox-subnet');
+  });
+
+  it.each(['RUNTIME_NETWORK', 'RUNTIME_SUBNETWORK'])('refuses a missing %s', (name) => {
+    expect(() => managerDriverOptions({ ...cloudRun, [name]: '  ' })).toThrow(name);
+    expect(() => managerDriverOptions({ ...cloudRun, [name]: undefined })).toThrow(name);
+  });
+
+  it.each(['RUNTIME_VPC_CONNECTOR', 'RUNTIME_EGRESS'])('refuses the legacy %s', (name) => {
+    expect(() => managerDriverOptions({ ...cloudRun, [name]: 'open' })).toThrow(
+      new RegExp(`${name} is no longer supported`, 'u'),
+    );
+  });
+
+  it('does not tell the user to set a project-file option that does not exist yet', () => {
+    expect(() => managerDriverOptions({ ...cloudRun, RUNTIME_EGRESS: 'open' })).toThrow(
+      /arrives in a later release/u,
+    );
+  });
+});
+
 describe('runner manager external (E2B) composition (ADR-0120)', () => {
   const BUILD_ID = '0b6f2f0e-5a52-4f6c-9d57-2c1f8d3a7e11';
   const external = {

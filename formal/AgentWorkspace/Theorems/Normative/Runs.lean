@@ -20,7 +20,7 @@ theorem live_and_terminal_statuses :
 it (so `startedAt` is stamped exactly once). -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")]
 theorem running_is_entered_only_from_queued (s t : RunStatus) :
     runStep s .markRunning = .moved t ↔ s = .queued ∧ t = .running := by
   cases s <;> cases t <;> decide +kernel
@@ -38,13 +38,13 @@ theorem documented_run_edges_are_admitted :
 it). The docs page leaves this open; finding F-001 records it. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#open-questions")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem queued_run_may_finish_directly (t : RunStatus) (h : t.isTerminal = true) :
     RunTransition .queued t :=
   ⟨.finish t, by cases t <;> simp_all [runStep, RunStatus.isTerminal]⟩
 
 /-- `finish` with a live target is refused as a programming error, never applied. -/
-@[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs.ts#finish")
+@[aw_spec (tier := T1) (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")]
 theorem finish_requires_terminal_target (s t : RunStatus) (h : t.isTerminal = false) :
     runStep s (.finish t) = .invalidCall := by

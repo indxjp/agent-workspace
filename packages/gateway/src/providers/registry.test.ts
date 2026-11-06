@@ -50,10 +50,12 @@ describe('registryProviderId', () => {
 });
 
 describe('Wave 4 provider registry', () => {
-  it('contains exactly the four declared provider rows', () => {
+  it('contains exactly the five declared provider rows, vertex last', () => {
     const ids = createProviderRegistry().map((provider) => provider.id);
     expect(ids).toEqual(PROVIDER_IDS);
-    expect(new Set(ids).size).toBe(4);
+    expect(new Set(ids).size).toBe(5);
+    expect(ids.at(-1)).toBe('vertex');
+    expect(registryProviderId('vertex')).toBe('vertex');
   });
 
   it('constructs Azure from the selected connection instead of process configuration', async () => {
@@ -97,6 +99,8 @@ describe('Wave 4 provider registry', () => {
       baseUrl: 'http://localhost:9500',
       deployment: 'deployment-fixture',
       apiVersion: '2025-04-01-preview',
+      projectId: 'my-project-123',
+      location: 'global',
     } satisfies Required<ModelConnectionConfig>;
     const attempt = async (id: RegisteredProviderId, settings: ModelConnectionConfig) => {
       const request = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ id: 'fixture' }));

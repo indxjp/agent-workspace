@@ -1,0 +1,158 @@
+# Written by aw deploy from environments.production.apps; edits are overwritten.
+services:
+  app-crm-role:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be digest pinned}
+    restart: 'no'
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      APP_PASSWORD: ${AW_APP_CRM_DB_PASSWORD:?run aw deploy production to generate AW_APP_CRM_DB_PASSWORD for crm}
+      APP_SQL: |
+        DO $$$$
+        BEGIN
+          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_crm') THEN
+            CREATE ROLE app_crm LOGIN;
+          END IF;
+        END
+        $$$$;
+        ALTER ROLE app_crm WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'APP_PASSWORD';
+        CREATE SCHEMA IF NOT EXISTS app_crm AUTHORIZATION app_crm;
+        ALTER SCHEMA app_crm OWNER TO app_crm;
+    command:
+      - sh
+      - -c
+      - printf '%s\n' "$$APP_SQL" | psql -X -q -v ON_ERROR_STOP=1 -v APP_PASSWORD="$$APP_PASSWORD"
+    networks:
+      - control
+  app-crm:
+    image: ghcr.io/acme/crm@sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /app/.next/cache:rw,nosuid,nodev,size=128m
+    depends_on:
+      app-crm-role:
+        condition: service_completed_successfully
+      web:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://app_crm:${AW_APP_CRM_DB_PASSWORD:?run aw deploy production to generate AW_APP_CRM_DB_PASSWORD for crm}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+      AW_URL: https://agents.acme.example
+      AW_APP_NAME: crm
+      AW_APP_MIGRATE_ON_START: '1'
+      AW_APP_IDENTITY_SECRET: ${AW_APP_CRM_IDENTITY_SECRET:?run aw deploy production to generate AW_APP_CRM_IDENTITY_SECRET for crm}
+      AW_APP_API_KEY: ${AW_APP_CRM_API_KEY:-}
+      AW_WORKSPACE_ID: ${AW_APP_CRM_WORKSPACE_ID:-}
+      AW_APP_CONNECTOR_ID: ${AW_APP_CRM_CONNECTOR_ID:-}
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - 127.0.0.1:3100:3000
+    networks:
+      - control
+      - apps-ingress
+  app-service-desk-role:
+    image: ${POSTGRES_IMAGE:?POSTGRES_IMAGE must be digest pinned}
+    restart: 'no'
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      APP_PASSWORD: ${AW_APP_SERVICE_DESK_DB_PASSWORD:?run aw deploy production to generate AW_APP_SERVICE_DESK_DB_PASSWORD for service-desk}
+      APP_SQL: |
+        DO $$$$
+        BEGIN
+          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_service_desk') THEN
+            CREATE ROLE app_service_desk LOGIN;
+          END IF;
+        END
+        $$$$;
+        ALTER ROLE app_service_desk WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD :'APP_PASSWORD';
+        CREATE SCHEMA IF NOT EXISTS app_service_desk AUTHORIZATION app_service_desk;
+        ALTER SCHEMA app_service_desk OWNER TO app_service_desk;
+    command:
+      - sh
+      - -c
+      - printf '%s\n' "$$APP_SQL" | psql -X -q -v ON_ERROR_STOP=1 -v APP_PASSWORD="$$APP_PASSWORD"
+    networks:
+      - control
+  app-service-desk:
+    image: ghcr.io/acme/service-desk@sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+      - /app/.next/cache:rw,nosuid,nodev,size=128m
+    depends_on:
+      app-service-desk-role:
+        condition: service_completed_successfully
+      web:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://app_service_desk:${AW_APP_SERVICE_DESK_DB_PASSWORD:?run aw deploy production to generate AW_APP_SERVICE_DESK_DB_PASSWORD for service-desk}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+      AW_URL: https://agents.acme.example
+      AW_APP_NAME: service-desk
+      AW_APP_MIGRATE_ON_START: '1'
+      AW_APP_IDENTITY_SECRET: ${AW_APP_SERVICE_DESK_IDENTITY_SECRET:?run aw deploy production to generate AW_APP_SERVICE_DESK_IDENTITY_SECRET for service-desk}
+      AW_APP_API_KEY: ${AW_APP_SERVICE_DESK_API_KEY:-}
+      AW_WORKSPACE_ID: ${AW_APP_SERVICE_DESK_WORKSPACE_ID:-}
+      AW_APP_CONNECTOR_ID: ${AW_APP_SERVICE_DESK_CONNECTOR_ID:-}
+      HOSTNAME: 0.0.0.0
+      PORT: '3000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1),()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      - 127.0.0.1:3101:3000
+    networks:
+      - control
+      - apps-ingress
+networks:
+  apps-ingress: {}

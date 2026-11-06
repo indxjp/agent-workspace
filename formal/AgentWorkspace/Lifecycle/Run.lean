@@ -41,8 +41,8 @@ inductive RunStepOutcome where
 /-- One operation on a run whose current status is `current`. -/
 @[aw_spec (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 def runStep (current : RunStatus) : RunOp → RunStepOutcome
   | .markRunning => if current = .queued then .moved .running else .noOp
   | .finish target =>
@@ -95,7 +95,7 @@ inductive RunAction where
 /-- One store/control-plane operation. An append is allowed until `finish` closes the log.
 The repository revokes gateway run tokens in the same transaction as terminal `finish`. -/
 @[aw_spec (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
   (ts := "apps/web/server/composition/wiring/run-api.ts#interruptRun")]
 def runAction (s : RunState) : RunAction → RunState
   | .markRunning elapsed =>

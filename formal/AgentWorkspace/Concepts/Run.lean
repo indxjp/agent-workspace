@@ -42,6 +42,7 @@ inductive ModelProvider where
   | openai
   | azureOpenai
   | openaiCompatible
+  | vertex
   deriving DecidableEq, Repr, Inhabited
 
 namespace ModelProvider
@@ -53,9 +54,10 @@ def toWire : ModelProvider → String
   | openai => "openai"
   | azureOpenai => "azure-openai"
   | openaiCompatible => "openai-compatible"
+  | vertex => "vertex"
 
 instance : WireEnum ModelProvider where
-  all := [anthropic, anthropicCompatible, openai, azureOpenai, openaiCompatible]
+  all := [anthropic, anthropicCompatible, openai, azureOpenai, openaiCompatible, vertex]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -167,8 +169,8 @@ terminal status stamps `endedAt`, and a `startedAt` if the run never had one ("a
 finished without ever having been marked running still gets a start"). -/
 @[aw_spec (ts := "apps/web/server/runs/store.ts#RunStore")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")]
 def stamp (r : Run) (next : RunStatus) (now : Nat) : Run :=
   if next.isTerminal then
     { r with status := next, startedAt := some (r.startedAt.getD now), endedAt := some now }

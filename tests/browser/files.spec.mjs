@@ -1,6 +1,6 @@
 /**
  * The Files screen journey (storage design, §07 "Browser tests", journey 1): upload, list, rename,
- * download and delete one file through the real UI.
+ * download and delete one file through the real UI, and find it with the search box (UX-17).
  *
  * The screen is client-rendered, so the Web cell of each story below can only be covered by a real
  * browser. The steps are one serial test per Playwright project because each depends on the last;
@@ -51,6 +51,24 @@ test('uploads, lists, renames, downloads and deletes a file on /files', async ({
       .setInputFiles({ name: 'q3.txt', mimeType: 'text/plain', buffer: bytes });
     await page.getByRole('button', { name: 'Upload here' }).click();
     await expect(fileRow()).toBeVisible();
+  });
+
+  await test.step('search finds q3.txt by its words and opens its folder (UX-17, #2090)', async () => {
+    const box = page.getByRole('searchbox', { name: 'Search inside files' });
+    const hit = page.getByRole('listitem').filter({ hasText: `${folder}/q3.txt` });
+    await box.fill(folder);
+    await box.press('Enter');
+    // Text is read on demand, a bounded number of files per request, so a busy shared workspace
+    // may answer in parts; "Search again" continues it.
+    await expect(async () => {
+      const again = page.getByRole('button', { name: 'Search again' });
+      if (await again.isVisible()) await again.click();
+      await expect(hit).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
+    await expect(page.getByRole('table')).toHaveCount(0);
+    await hit.getByRole('button', { name: 'Open folder' }).click();
+    await expect(fileRow()).toBeVisible();
+    await expect(box).toHaveValue('');
   });
 
   await test.step('[US-STO-03][browser][web] journey: rename the folder', async () => {

@@ -80,7 +80,7 @@ describe('compilePiRun', () => {
       apiKey: PI_GATEWAY_API_KEY_PLACEHOLDER,
     });
     expect(out.networkEgress).toBe(true);
-    expect(out.limits).toEqual({ maxTurns: 7, budget: null });
+    expect(out.limits).toEqual({ maxTurns: 7 });
     expect(out.workspace).toEqual({
       cwd: '/workspace/tenant',
       grants: [{ kind: 'file', path: 'contract.pdf', access: 'read', segments: ['contract.pdf'] }],
@@ -130,12 +130,15 @@ describe('compilePiRun', () => {
     expect(all.agent.tools).toEqual(['read', 'write', 'edit', 'bash']);
   });
 
-  it('carries a priced budget cap', () => {
-    const out = compiled({
-      portable: { ...request().portable, limits: { maxTurns: null, maxBudgetUsd: 2 } },
-    });
-    expect(out.limits.budget).toMatchObject({ maxBudgetUsd: 2, model: 'claude-sonnet-4-5' });
-    expect(out.limits.budget?.price.inputUsdPerMillion).toBe('3');
+  // ADR-0162 (#342): the gateway enforces the cap from its own catalogue, so the adapter prices
+  // nothing and refuses no cap, priced model or not.
+  it('compiles a budget cap on any model, priced or unpriced, without carrying it', () => {
+    for (const model of [null, 'claude-unlisted']) {
+      const out = compiled({
+        portable: { ...request().portable, model, limits: { maxTurns: null, maxBudgetUsd: 2 } },
+      });
+      expect(out.limits).toEqual({ maxTurns: null });
+    }
   });
 
   it('resumes under the id the request carries, and forks under the new session id', () => {
@@ -204,18 +207,6 @@ describe('compilePiRun', () => {
       },
       'engine_capability_unsupported',
       /subagents: false.*"billing-specialist"/u,
-    ],
-    [
-      'a cap on an unpriced model',
-      {
-        portable: {
-          ...request().portable,
-          model: 'claude-unlisted',
-          limits: { maxTurns: null, maxBudgetUsd: 1 },
-        },
-      },
-      'engine_capability_unsupported',
-      /claude-unlisted/u,
     ],
     [
       'an OpenAI-family connection',

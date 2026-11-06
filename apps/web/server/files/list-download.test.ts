@@ -56,6 +56,7 @@ import { createStorageService, type StorageContext, type StorageService } from '
 import { encodeFileId } from './file-id';
 import { toResponse } from './http';
 import { createRepositoryObjectStoreProvider } from './store';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const ACTOR_HEADER = 'x-test-actor';
 
@@ -148,7 +149,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
         objects,
-        legacy: { files: legacy },
         log: noLog,
       });
       const principals = new Map([
@@ -214,23 +214,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       });
       if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
       return saved.row;
-    }
-
-    /** A ready row in the old naming: `objectId` null, the bytes at the path in the area store. */
-    async function saveLegacy(path: string, text: string) {
-      await legacy.forWorkspace(world.a.workspaceId).write(path, bytesOf(text), {});
-      const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      const reserved = await catalog.reserve(path, {
-        ownerPrincipalId: world.a.principalId,
-        sizeBytes: bytesOf(text).byteLength,
-        contentType: 'text/plain',
-      });
-      const confirmed = await catalog.confirm(reserved.row, {
-        sizeBytes: bytesOf(text).byteLength,
-        contentType: 'text/plain',
-      });
-      if (confirmed === null) throw new Error('the legacy row did not confirm');
-      return confirmed.row;
     }
 
     const list = (actor: 'a' | 'b', path?: string) =>
@@ -307,10 +290,9 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       await save('docs/sub/b.txt', 'b');
       await save('top.txt', 't');
       const catalog = await world.catalogs.forWorkspace(world.a.workspaceId);
-      await catalog.putFile({
+      await seedCatalogFile(catalog, {
         path: 'empty',
         kind: 'folder',
-        storageKey: null,
         sizeBytes: 0,
         contentType: null,
         ownerPrincipalId: world.a.principalId,
@@ -328,18 +310,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
         'folder:docs/sub',
       ]);
       expect(await listed('b')).toEqual([]);
-    });
-
-    // @story US-STO-01
-    // @story US-STO-05
-    it('[US-STO-01][api][sdk] a legacy row still lists and downloads', async () => {
-      await saveLegacy('old/report.txt', 'old bytes');
-
-      expect((await listed('a', 'old')).map((file) => file.path)).toEqual(['old/report.txt']);
-      const response = await download('a', 'old/report.txt');
-      expect(response.status).toBe(200);
-      expect(await response.text()).toBe('old bytes');
-      expect((await download('b', 'old/report.txt')).status).toBe(404);
     });
 
     // @story US-STO-05

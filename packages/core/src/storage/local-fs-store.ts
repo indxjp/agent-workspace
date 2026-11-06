@@ -149,6 +149,7 @@ import {
   type ObjectStoreProvider,
 } from './object-store.js';
 import {
+  abortableBody,
   inWalkOrder,
   listPageFrom,
   resolveRange,
@@ -425,6 +426,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
     head: (key) => metaFor(key),
 
     async read(key, options) {
+      options?.signal?.throwIfAborted();
       // One handle for meta and body, so a concurrent `write` renaming a new file into place
       // cannot make `meta` describe a different inode than the bytes served.
       let handle: FileHandle;
@@ -445,7 +447,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
         const source = handle.createReadStream(
           range === null ? {} : { start: range.start, end: range.end },
         );
-        return { meta, range, body: toWebStream(source) };
+        return { meta, range, body: abortableBody(toWebStream(source), options?.signal) };
       } catch (error) {
         await handle.close().catch((closeError: unknown) => {
           throw new AggregateError(
@@ -461,7 +463,7 @@ export function createLocalFilesystemObjectStore(rootDir: string): ObjectStore {
       const objectPath = await validatedWriteKey(body, options, () => toFsPath(key));
       const stagingDir = path.join(resolvedRoot, STAGING_TREE);
       const staged = path.join(stagingDir, randomUUID());
-      const source = toNodeReadable(body);
+      const source = toNodeReadable(abortableBody(body, options.signal));
       try {
         await mkdir(stagingDir, { recursive: true });
         await mkdir(path.dirname(objectPath), { recursive: true });

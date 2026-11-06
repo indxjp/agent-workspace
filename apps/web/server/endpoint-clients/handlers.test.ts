@@ -19,7 +19,7 @@ import { applicationContext, clearApplicationContext } from '../application-cont
 import { installTestDomains } from '../application-context-fixtures';
 import { LOCAL_RUNTIME_API_KEY_NAME_PREFIX } from '../cli-auth/local-credential';
 import { resetOAuthLimits } from '../oauth/limits';
-import { conferredBy } from '../rbac/conferral';
+import { conferredBy } from '../rbac/core/conferral';
 import type { ToolEndpointEnvironment } from '../tool-endpoint/env';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
 import type { EndpointClientAuditEvent, EndpointClientsRuntime } from './runtime';
@@ -74,6 +74,7 @@ function installFake(): Fake {
     actsForPrincipalId: c.actsForPrincipalId,
     apiKeyIds: c.apiKeyIds,
     redirectUris: c.redirectUris,
+    oidcAudience: c.oidcAudience,
     hasClientSecret: c.hasClientSecret,
     revokedAt: c.revokedAt,
     createdAt: c.createdAt,
@@ -104,6 +105,7 @@ function installFake(): Fake {
         kind: input.kind,
         agentIds: input.agentIds,
         toolNames: input.toolNames,
+        oidcAudience: input.oidcAudience,
         actsForPrincipalId: input.actsForPrincipalId,
         apiKeyIds: [],
         redirectUris: [],
@@ -124,6 +126,7 @@ function installFake(): Fake {
         agentIds: patch.agentIds ?? client.agentIds,
         toolNames: patch.toolNames === undefined ? client.toolNames : patch.toolNames,
         redirectUris: patch.redirectUris ?? client.redirectUris,
+        oidcAudience: patch.oidcAudience ?? client.oidcAudience,
       };
       state.clients.set(id, next);
       return { kind: 'updated', client: view(next) };
@@ -184,6 +187,8 @@ function installFake(): Fake {
     audit: (_principal, event) => {
       state.audits.push(event);
     },
+    // The composition reads the posture once; the cases stub AW_DEPLOYMENT_POSTURE instead.
+    isLocalPosture: () => (process.env['AW_DEPLOYMENT_POSTURE'] ?? '').trim() !== 'production',
   };
   installTestDomains({
     endpointClients: {
@@ -196,6 +201,7 @@ function installFake(): Fake {
       mintKey: (...a) => Promise.resolve(sync.mintKey(...a)),
       agentOwnership: (...a) => Promise.resolve(sync.agentOwnership(...a)),
       audit: (...a) => Promise.resolve(sync.audit(...a)),
+      isLocalPosture: () => Promise.resolve(sync.isLocalPosture()),
     },
   });
   return state;
@@ -351,6 +357,95 @@ describe('create: API-key callers are refused', () => {
   });
 });
 
+describe("the local runtime's key and an app-backend client (ADR-0161 amendment DI10, issue #2075)", () => {
+  async function keyNamed(name: string): Promise<string> {
+    const created = await harness.directory.forWorkspace(TEST_WORKSPACE_ID).createApiKey({
+      name,
+      role: conferredBy('owner', 'admin', 'test'),
+      expiresAt: null,
+    });
+    if (created.kind !== 'created') throw new Error(created.kind);
+    return created.presented;
+  }
+  const localKey = () => keyNamed(`${LOCAL_RUNTIME_API_KEY_NAME_PREFIX}AAAAAAAA`);
+  const appBackend = () =>
+    createBody([agentOf(ownerCaller)], {
+      name: 'desk',
+      kind: 'app-backend',
+      oidcAudience: 'desk',
+    });
+  const createWith = (bearer: string, body: unknown) =>
+    harness.call(CREATE, {
+      method: 'POST',
+      path: '/api/endpoint-clients',
+      as: null,
+      bearer,
+      body,
+    });
+  const rotateWith = (bearer: string, id: string) =>
+    harness.call(ROTATE, {
+      method: 'POST',
+      path: `/api/endpoint-clients/${id}/secret`,
+      as: null,
+      bearer,
+      id,
+    });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('creates an app-backend client and rotates its secret in the local posture', async () => {
+    const bearer = await localKey();
+    const created = await createWith(bearer, appBackend());
+    expect(created.status).toBe(201);
+    const client = (created.body as { endpointClient: EndpointClientResource }).endpointClient;
+    expect(client).toMatchObject({ kind: 'app-backend', oidcAudience: 'desk' });
+    const rotated = await rotateWith(bearer, client.id);
+    expect(rotated.status).toBe(201);
+    expect(fake.audits.map((audit) => audit.action)).toEqual([
+      'endpoint-client-created',
+      'oauth-client-secret-rotated',
+    ]);
+  });
+
+  it('still refuses every other kind, with the code it answered before', async () => {
+    const bearer = await localKey();
+    const response = await createWith(bearer, createBody([agentOf(ownerCaller)]));
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: { code: 'api_key_not_permitted' } });
+    const other = await seedClient(ownerCaller);
+    const rotated = await rotateWith(bearer, other.id);
+    expect(rotated.status).toBe(403);
+    expect(rotated.body).toMatchObject({ error: { code: 'local_runtime_key_not_permitted' } });
+  });
+
+  it('still refuses every other API key, an app-backend client included', async () => {
+    const bearer = await keyNamed('ordinary-admin-key');
+    const response = await createWith(bearer, appBackend());
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: { code: 'api_key_not_permitted' } });
+    const seeded = await createAs(ownerCaller, appBackend());
+    const client = (seeded.body as { endpointClient: EndpointClientResource }).endpointClient;
+    const rotated = await rotateWith(bearer, client.id);
+    expect(rotated.status).toBe(403);
+    expect(rotated.body).toMatchObject({ error: { code: 'api_key_not_permitted' } });
+  });
+
+  it("refuses the local runtime's key under the production posture", async () => {
+    const bearer = await localKey();
+    const seeded = await createAs(ownerCaller, appBackend());
+    const client = (seeded.body as { endpointClient: EndpointClientResource }).endpointClient;
+    vi.stubEnv('AW_DEPLOYMENT_POSTURE', 'production');
+    const response = await createWith(bearer, appBackend());
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: { code: 'api_key_not_permitted' } });
+    const rotated = await rotateWith(bearer, client.id);
+    expect(rotated.status).toBe(403);
+    expect(rotated.body).toMatchObject({ error: { code: 'local_runtime_key_not_permitted' } });
+  });
+});
+
 describe('tenant isolation: one 404 for absent, foreign and malformed ids', () => {
   it('answers identically for a client in another workspace, a random id and a non-id', async () => {
     const foreign = randomUUID();
@@ -364,6 +459,7 @@ describe('tenant isolation: one 404 for absent, foreign and malformed ids', () =
       actsForPrincipalId: 'p',
       apiKeyIds: [],
       redirectUris: [],
+      oidcAudience: null,
       hasClientSecret: false,
       revokedAt: null,
       createdAt: new Date().toISOString(),
@@ -404,6 +500,7 @@ describe('tenant isolation: one 404 for absent, foreign and malformed ids', () =
       actsForPrincipalId: 'p',
       apiKeyIds: [],
       redirectUris: [],
+      oidcAudience: null,
       hasClientSecret: false,
       revokedAt: null,
       createdAt: '',
@@ -580,6 +677,96 @@ describe('revoke and update', () => {
     expect(key.body).toMatchObject({ error: { code: 'endpoint_client_invalid' } });
   });
 
+  describe('an app-backend client (ADR-0161 D4)', () => {
+    const appBody = (agentIds: string[], overrides: Record<string, unknown> = {}) => ({
+      name: 'portal',
+      kind: 'app-backend',
+      agentIds,
+      oidcAudience: 'portal-web',
+      ...overrides,
+    });
+    const patchAs = (caller: { email: string }, id: string, body: unknown) =>
+      harness.call(PATCH, {
+        method: 'PATCH',
+        path: `/api/endpoint-clients/${id}`,
+        as: caller,
+        id,
+        body,
+      });
+
+    it('is created by an owner or admin with its oidcAudience and 1-64 agents', async () => {
+      const created = await createAs(ownerCaller, appBody([agentOf(ownerCaller)]));
+      expect(created.status).toBe(201);
+      const client = (created.body as { endpointClient: EndpointClientResource }).endpointClient;
+      expect(client).toMatchObject({ kind: 'app-backend', oidcAudience: 'portal-web' });
+      expect(fake.audits.map((a) => a.action)).toEqual(['endpoint-client-created']);
+      const byAdmin = await createAs(adminCaller, appBody([agentOf(adminCaller)], { name: 'p2' }));
+      expect(byAdmin.status).toBe(201);
+    });
+
+    it('refuses a builder: its tokens act as any member who signs in to the app', async () => {
+      const response = await createAs(builderCaller, appBody([agentOf(builderCaller)]));
+      expect(response.status).toBe(403);
+      expect(response.body).toMatchObject({ error: { code: 'forbidden' } });
+      expect(fake.clients.size).toBe(0);
+    });
+
+    it('answers a validation problem without oidcAudience, and for it on another kind', async () => {
+      const bare = { name: 'portal', kind: 'app-backend', agentIds: [agentOf(ownerCaller)] };
+      const missing = await createAs(ownerCaller, bare);
+      expect(missing.status).toBe(400);
+      expect(missing.body).toMatchObject({ error: { code: 'invalid_field' } });
+      const stray = await createAs(
+        ownerCaller,
+        createBody([agentOf(ownerCaller)], { oidcAudience: 'portal-web' }),
+      );
+      expect(stray.status).toBe(400);
+      const none = await createAs(ownerCaller, appBody([]));
+      expect(none.status).toBe(400);
+      expect(fake.clients.size).toBe(0);
+    });
+
+    it('refuses an agent the creator could not run', async () => {
+      const response = await createAs(adminCaller, appBody([randomUUID()]));
+      expect(response.status).toBe(403);
+      expect(response.body).toMatchObject({
+        error: { code: 'endpoint_client_agent_not_runnable' },
+      });
+    });
+
+    it('changes its audience and agents, but takes no redirect URIs, no toolNames and no key', async () => {
+      const created = await createAs(ownerCaller, appBody([agentOf(ownerCaller)]));
+      const client = (created.body as { endpointClient: EndpointClientResource }).endpointClient;
+      const moved = await patchAs(ownerCaller, client.id, {
+        oidcAudience: 'portal-web-2',
+        agentIds: [agentOf(ownerCaller), agentOf(ownerCaller)],
+      });
+      expect(moved.status).toBe(200);
+      expect(
+        (moved.body as { endpointClient: EndpointClientResource }).endpointClient,
+      ).toMatchObject({ oidcAudience: 'portal-web-2' });
+      for (const body of [
+        { redirectUris: ['https://app.example/callback'] },
+        { toolNames: ['a_tool'] },
+      ]) {
+        const refused = await patchAs(ownerCaller, client.id, body);
+        expect(refused.status).toBe(400);
+        expect(refused.body).toMatchObject({ error: { code: 'endpoint_client_invalid' } });
+      }
+      const key = await mintAs(ownerCaller, client.id);
+      expect(key.status).toBe(400);
+      expect(key.body).toMatchObject({ error: { code: 'endpoint_client_invalid' } });
+      expect((await rotateAs(ownerCaller, client.id)).status).toBe(201);
+    });
+
+    it('refuses oidcAudience in a patch of another kind', async () => {
+      const client = await seedClient(ownerCaller);
+      const refused = await patchAs(ownerCaller, client.id, { oidcAudience: 'portal-web' });
+      expect(refused.status).toBe(400);
+      expect(refused.body).toMatchObject({ error: { code: 'endpoint_client_invalid' } });
+    });
+  });
+
   describe('a builder client whose acting principal is a Builder-role member', () => {
     async function builderClientOf(caller: { email: string }) {
       const created = await createAs(adminCaller, {
@@ -699,6 +886,7 @@ describe('revoking closes the client tool sandbox', () => {
       actsForPrincipalId: 'p',
       apiKeyIds: [],
       redirectUris: [],
+      oidcAudience: null,
       hasClientSecret: false,
       revokedAt: null,
       createdAt: new Date().toISOString(),
@@ -874,6 +1062,8 @@ describe('rotating the OAuth client secret', () => {
             revoke: () => Promise.resolve(null),
           }),
         audit: () => Promise.resolve(),
+        findMember: () => Promise.resolve(null),
+        issueExchanged: () => Promise.resolve(),
       },
     });
     try {
@@ -953,6 +1143,7 @@ describe('rotating the OAuth client secret', () => {
       actsForPrincipalId: 'p',
       apiKeyIds: [],
       redirectUris: [],
+      oidcAudience: null,
       hasClientSecret: false,
       revokedAt: null,
       createdAt: '',

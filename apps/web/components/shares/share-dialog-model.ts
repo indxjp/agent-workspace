@@ -36,6 +36,20 @@ export function sharePublishCommand(
 }
 
 /**
+ * The link a person can paste anywhere. The server answers a public share's `url` as a path
+ * (`/p/<token>`); pasted into an email or chat, a path opens nothing, so it is resolved against the
+ * origin the person is using the console on.
+ */
+export function absoluteShareUrl(url: string, origin: string): string {
+  return new URL(url, origin).href;
+}
+
+/** Only "Anyone with the link" makes a link, so only that choice says it copies one. */
+export function publishButtonLabel(visibility: ShareVisibility): string {
+  return visibility === 'public' ? 'Copy link' : 'Share';
+}
+
+/**
  * Publish a share. The public link when there is one, `null` for a private or workspace share,
  * or the sentence to show when the server refused it.
  */

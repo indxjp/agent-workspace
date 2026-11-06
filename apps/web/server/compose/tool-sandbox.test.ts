@@ -111,6 +111,22 @@ describe('buildToolSandboxRequest', () => {
     expect(reads).toEqual([]);
   });
 
+  it("never reads a webhook's signing secret a tool declares, and fails as missing", async () => {
+    const name = 'WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET';
+    const reads: string[] = [];
+    const message = await refusal(
+      buildToolSandboxRequest('run-1', [bundle({ secrets: [name] })], {
+        ...sources(),
+        secret: (secret) => {
+          reads.push(secret);
+          return Promise.resolve('whsec_c2lnbmluZw==');
+        },
+      }),
+    );
+    expect(message).toContain('code_tool_secret_missing');
+    expect(reads).toEqual([]);
+  });
+
   it('fails the run naming a tool whose bundle is gone', async () => {
     const message = await refusal(
       buildToolSandboxRequest('run-1', [bundle({ digest: OTHER_DIGEST })], sources()),

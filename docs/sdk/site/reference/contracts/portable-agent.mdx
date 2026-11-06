@@ -72,13 +72,13 @@ Value: `21`
 | `kind` | `"Agent"` | Yes |  |
 | `name` | `string` | Yes |  |
 | `instructions` | `string` | Yes |  |
-| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; memory?: "agent" \| undefined; }>` | Yes |  |
 | `tools` | `readonly (Readonly<{ kind: "mcp"; name: string; transport: "sse" \| "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" \| "api-key" \| "oauth2"; secretRef: string; }> \| undefined; }> \| Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] \| undefined; }> \| Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }> \| Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] \| undefined; baseUrl?: string \| undefined; auth?: Readonly<{ secretRef: string; header?: string \| undefined; }> \| undefined; }> \| Readonly<{ kind: "builtin"; id: "web_search" \| "web_fetch" \| "code_execution" \| "file_access"; }>)[]` | Yes |  |
 | `skills` | `readonly Readonly<{ name: string; path: string; }>[]` | Yes |  |
 | `knowledge` | `readonly (Readonly<{ kind: "files"; paths: readonly string[]; access?: "read" \| "read-write" \| undefined; }> \| Readonly<{ kind: "url"; url: string; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | Yes |  |
 | `subagents` | `readonly Readonly<{ name: string; }>[]` | Yes |  |
 | `description` | `undefined \| string` | No |  |
-| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| undefined; }>` | No | Absent: the host's default model. |
+| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex" \| undefined; }>` | No | Absent: the host's default model. |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No | A preference: the engine the agent runs on here, which another host may not offer. |
 | `limits` | `undefined \| Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }>` | No |  |
 | `extensions` | `undefined \| Readonly<{ engines?: Partial<Record<"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra", Readonly<Record<string, unknown>>>> \| undefined; platforms?: Partial<Record<"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents", Readonly<Record<string, unknown>>>> \| undefined; }>` | No |  |
@@ -91,9 +91,9 @@ Value: `21`
 | `kind` | `"Agent"` | Yes |  |
 | `name` | `string` | Yes |  |
 | `instructions` | `string` | Yes |  |
-| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; memory?: "agent" \| undefined; }>` | Yes |  |
 | `description` | `undefined \| string` | No |  |
-| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| undefined; }>` | No | Absent: the host's default model. |
+| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex" \| undefined; }>` | No | Absent: the host's default model. |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No | A preference: the engine the agent runs on here, which another host may not offer. |
 | `tools` | `undefined \| readonly (Readonly<{ kind: "mcp"; name: string; transport: "sse" \| "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" \| "api-key" \| "oauth2"; secretRef: string; }> \| undefined; }> \| Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] \| undefined; }> \| Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }> \| Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] \| undefined; baseUrl?: string \| undefined; auth?: Readonly<{ secretRef: string; header?: string \| undefined; }> \| undefined; }> \| Readonly<{ kind: "builtin"; id: "web_search" \| "web_fetch" \| "code_execution" \| "file_access"; }>)[]` | No |  |
 | `skills` | `undefined \| readonly Readonly<{ name: string; path: string; }>[]` | No |  |
@@ -110,13 +110,13 @@ Value: `21`
 | `kind` | `"Agent"` | Yes |  |
 | `name` | `string` | Yes |  |
 | `instructions` | `string` | Yes |  |
-| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; }>` | Yes |  |
+| `permissions` | `Readonly<{ readFiles: boolean; writeFiles: boolean; runCommands: boolean; unrestrictedNetwork: boolean; memory?: "agent" \| undefined; }>` | Yes |  |
 | `tools` | `readonly (Readonly<{ kind: "mcp"; name: string; transport: "sse" \| "streamable-http"; url: string; auth?: Readonly<{ scheme: "bearer" \| "api-key" \| "oauth2"; secretRef: string; }> \| undefined; }> \| Readonly<{ kind: "mcp"; name: string; transport: "stdio"; command: string; args?: readonly string[] \| undefined; }> \| Readonly<{ kind: "code"; name: string; description: string; inputSchema: Readonly<Record<string, unknown>>; }> \| Readonly<{ kind: "openapi"; name: string; specRef: string; allow?: readonly string[] \| undefined; baseUrl?: string \| undefined; auth?: Readonly<{ secretRef: string; header?: string \| undefined; }> \| undefined; }> \| Readonly<{ kind: "builtin"; id: "web_search" \| "web_fetch" \| "code_execution" \| "file_access"; }>)[]` | Yes |  |
 | `skills` | `readonly Readonly<{ name: string; path: string; }>[]` | Yes |  |
 | `knowledge` | `readonly (Readonly<{ kind: "files"; paths: readonly string[]; access?: "read" \| "read-write" \| undefined; }> \| Readonly<{ kind: "url"; url: string; }> \| Readonly<{ kind: "connector"; name: string; }>)[]` | Yes |  |
 | `subagents` | `readonly Readonly<{ name: string; }>[]` | Yes |  |
 | `description` | `undefined \| string` | No |  |
-| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| undefined; }>` | No | Absent: the host's default model. |
+| `model` | `undefined \| Readonly<{ id: string; provider?: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex" \| undefined; }>` | No | Absent: the host's default model. |
 | `engine` | `undefined \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | No | A preference: the engine the agent runs on here, which another host may not offer. |
 | `limits` | `undefined \| Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }>` | No |  |
 | `extensions` | `undefined \| Readonly<{ engines?: Partial<Record<"claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra", Readonly<Record<string, unknown>>>> \| undefined; platforms?: Partial<Record<"aws-agentcore" \| "claude-managed-agents" \| "copilot-studio" \| "m365-declarative-agent" \| "microsoft-foundry" \| "gemini-enterprise" \| "eject-claude-agent-sdk" \| "eject-mastra" \| "eject-openai-agents", Readonly<Record<string, unknown>>>> \| undefined; }>` | No |  |
@@ -182,7 +182,7 @@ A file's bytes: a string is UTF-8 text.
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
-| `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
+| `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | No |  |
 
 ## PortableNameSchema
 

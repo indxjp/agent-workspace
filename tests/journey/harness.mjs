@@ -17,7 +17,8 @@
  *                                     the secret comes from the environment, never an argument
  *
  * S2-08 (issue #550) adds the slice-2 checks: B2's and B3's budgets, the tool call, the ceiling's
- * server refusal and the secret's absence.
+ * server refusal and the secret's absence. Issue #1510 adds J1's portal budget and the `app` and
+ * `console` rows of `aw dev`'s ready screen.
  */
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
@@ -39,11 +40,24 @@ export const JOURNEY_LOOK_CHANGE_BUDGET_SECONDS = 60;
 /** B3's budget (S2-08): an OpenAPI document becomes a tool the widget answers with in 900 s. */
 export const JOURNEY_TOOL_BUDGET_SECONDS = 900;
 
-/** The only budgets a report may be checked against: no other value is accepted anywhere. */
+/**
+ * J1's budget (issue #1510): from the start of `npm create … --template portal` to the first page
+ * of the portal a person sees signed in, ten minutes or less. Declared on its own so that B1's
+ * budget can never be changed by changing J1's, though today both are 600 s.
+ */
+export const JOURNEY_PORTAL_BUDGET_SECONDS = 600;
+
+/**
+ * The only budgets a report may be checked against: no other value is accepted anywhere. Each
+ * value once, so a refusal lists it once even when two blocks share it.
+ */
 const BUDGETS = [
-  JOURNEY_BUDGET_SECONDS,
-  JOURNEY_LOOK_CHANGE_BUDGET_SECONDS,
-  JOURNEY_TOOL_BUDGET_SECONDS,
+  ...new Set([
+    JOURNEY_BUDGET_SECONDS,
+    JOURNEY_LOOK_CHANGE_BUDGET_SECONDS,
+    JOURNEY_TOOL_BUDGET_SECONDS,
+    JOURNEY_PORTAL_BUDGET_SECONDS,
+  ]),
 ];
 
 /** @param {number} seconds */
@@ -105,13 +119,18 @@ const SYNCED_LINE = /^synced: \S/u;
  * The password is never printed (BH061-011); the next row names the file that keeps it.
  */
 const ADMIN_SIGN_IN_LINE = /^sign in as (\S+@\S+)$/u;
+/** The ready screen's app row (issue #1510): `app       http://127.0.0.1:3100`, the app's origin. */
+const APP_LINE = /^app\s+(https?:\/\/[^/\s]+)\/?$/u;
+/** The ready screen's console row: `console   http://127.0.0.1:3000`, the runtime's origin. */
+const CONSOLE_LINE = /^console\s+(https?:\/\/[^/\s]+)\/?$/u;
 
 /**
  * One line `aw dev` printed, as the journey reads it: the ready screen's `try <url>` and
  * `embed <script …>` rows, the older `ready <url>`, `try: <url>` and `widget: <script …>` lines,
  * `signed in as <email> (workspace <slug>)`, C6's
- * `model connection: default (anthropic)`, the sync summary `synced: …`, and the console row
- * `sign in as <email>`. Any other line is `null`.
+ * `model connection: default (anthropic)`, the sync summary `synced: …`, the console rows
+ * `console <url>` and `sign in as <email>`, and the `app <url>` row of a project with an app.
+ * Any other line is `null`.
  *
  * @param {string} line
  */
@@ -129,6 +148,11 @@ export function parseDevLine(line) {
   const admin = ADMIN_SIGN_IN_LINE.exec(text);
   if (admin?.[1] !== undefined)
     return { kind: /** @type {const} */ ('adminSignIn'), email: admin[1] };
+  const app = APP_LINE.exec(text);
+  if (app?.[1] !== undefined) return { kind: /** @type {const} */ ('app'), origin: app[1] };
+  const consoleRow = CONSOLE_LINE.exec(text);
+  if (consoleRow?.[1] !== undefined)
+    return { kind: /** @type {const} */ ('console'), origin: consoleRow[1] };
   return null;
 }
 
@@ -143,6 +167,66 @@ export function devOrigin(parsed) {
   if (parsed?.kind === 'try') return new URL(parsed.url).origin;
   if (parsed?.kind === 'widget') return new URL(parsed.src).origin;
   return null;
+}
+
+/**
+ * The switchable features (ADR-0160 D1), as `@indx-workspace/contracts/features` lists them; kept
+ * here because this file runs where nothing of the repository is installed (`harness.test.ts`
+ * checks the two lists agree).
+ */
+export const JOURNEY_FEATURE_IDS = Object.freeze([
+  'chat',
+  'projects',
+  'files',
+  'skills',
+  'connectors',
+  'runs',
+  'sharing',
+  'surfaces',
+  'triggers',
+  'evaluations',
+  'builder',
+]);
+
+/**
+ * The console sidebar's entry of each feature that has one (`apps/web/components/shell/
+ * navigation.ts`; `harness.test.ts` checks they agree). The other features have no entry.
+ */
+export const CONSOLE_FEATURE_ENTRIES = Object.freeze({
+  chat: 'New chat',
+  projects: 'Projects',
+  files: 'Files',
+  skills: 'Skills',
+  connectors: 'Connectors',
+  runs: 'Runs',
+  sharing: 'Shared links',
+});
+
+/**
+ * The console sidebar entries a deployment installing `features` shows, and those it must not
+ * (ADR-0160 D8), each in {@link CONSOLE_FEATURE_ENTRIES} order. An unknown or repeated feature, or
+ * an empty list, is refused.
+ *
+ * @param {readonly string[]} features
+ */
+export function consoleEntriesFor(features) {
+  if (features.length === 0) throw new JourneyFailure('no feature was chosen');
+  if (new Set(features).size !== features.length) {
+    throw new JourneyFailure(`a feature is chosen twice: ${features.join(',')}`);
+  }
+  for (const feature of features) {
+    if (!JOURNEY_FEATURE_IDS.includes(feature)) {
+      throw new JourneyFailure(`${feature} is not a feature`);
+    }
+  }
+  /** @type {string[]} */
+  const shown = [];
+  /** @type {string[]} */
+  const hidden = [];
+  for (const [feature, label] of Object.entries(CONSOLE_FEATURE_ENTRIES)) {
+    (features.includes(feature) ? shown : hidden).push(label);
+  }
+  return { shown, hidden };
 }
 
 const HEX_COLOUR = /^#[0-9a-f]{6}$/u;
@@ -397,6 +481,7 @@ function tenthsUp(seconds) {
  * between the steps included; it is the total the budget is checked against, rounded up. Each
  * step's own seconds are kept beside it. It takes the steps and the wall clock alone; anything
  * else (a budget among them) is refused, and `budgetSeconds` must be one of the declared budgets.
+ * `finished: true` tells it apart from {@link unfinishedTimingsReport}'s record.
  *
  * @param {{ steps: readonly { name: string, seconds: number }[], wallSeconds: number }} input
  * @param {number} [budgetSeconds]
@@ -422,6 +507,7 @@ export function timingsReport(input, budgetSeconds = JOURNEY_BUDGET_SECONDS) {
   const totalSeconds = tenthsUp(input.wallSeconds);
   return {
     budgetSeconds: budget,
+    finished: /** @type {const} */ (true),
     totalSeconds,
     stepsSeconds: tenths(stepsTotal),
     withinBudget: totalSeconds <= budget,

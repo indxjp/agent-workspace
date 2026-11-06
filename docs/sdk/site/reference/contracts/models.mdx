@@ -9,13 +9,14 @@ description: "The @indx-workspace/contracts/models exports, sorted alphabeticall
 
 The body of `POST /api/model-connections`. `apiKey` is the provider credential, written once
 here and afterwards only through `RotateModelConnectionCredentialInput`; it never comes
-back. `config` may be omitted for a provider that requires nothing.
+back. It is required for an `api-key` provider and refused for a `workload-identity` one
+(`vertex`). `config` may be omitted for a provider that requires nothing.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
-| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
-| `apiKey` | `string` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes |  |
+| `apiKey` | `undefined \| string` | No |  |
 | `config` | `undefined \| ModelConnectionConfigInput` | No |  |
 
 ## DeleteModelConnectionResponse
@@ -113,6 +114,20 @@ skipped without a trace. `unavailable` is present only when at least one discove
 | `models` | `readonly DiscoveredModel[]` | Yes |  |
 | `unavailable` | `undefined \| readonly UnavailableModelConnection[]` | No |  |
 
+## GCP_PROJECT_ID_PATTERN
+
+A Google Cloud project id: 6 to 30 characters, lowercase letters, digits and hyphens.
+
+Value: `/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u`
+
+## isKeylessProvider
+
+True when the provider stores no credential and authenticates with the workload identity.
+
+```ts
+isKeylessProvider(provider: ModelProvider): boolean
+```
+
 ## MODEL_CONNECTION_CONFIG_FIELDS
 
 The non-credential settings a model connection can carry; which ones apply is per provider.
@@ -120,21 +135,25 @@ The non-credential settings a model connection can carry; which ones apply is pe
 - `'baseUrl'`
 - `'deployment'`
 - `'apiVersion'`
+- `'projectId'`
+- `'location'`
 
 ## MODEL_PROVIDER_CONFIG_RULES
 
 Per-provider config rules, exactly as `POST`/`PATCH /api/model-connections` enforce them:
 `anthropic`, `anthropic-compatible` and `openai` take an optional `baseUrl`;
 `openai-compatible` requires one; `azure-openai` requires `baseUrl`, `apiVersion` and
-`deployment`. A `baseUrl` must be an absolute URL the workspace's egress policy allows.
+`deployment`; `vertex` is keyless (`workload-identity`) and requires `projectId`, with an
+optional `location`. A `baseUrl` must be an absolute URL the workspace's egress policy allows.
 
 | Key | Value |
 | --- | --- |
-| `anthropic` | `{ allowed: ['baseUrl'], required: [] }` |
-| `'anthropic-compatible'` | `{ allowed: ['baseUrl'], required: [] }` |
-| `openai` | `{ allowed: ['baseUrl'], required: [] }` |
-| `'openai-compatible'` | `{ allowed: ['baseUrl'], required: ['baseUrl'] }` |
-| `'azure-openai'` | `{ allowed: ['baseUrl', 'apiVersion', 'deployment'], required: ['baseUrl', 'apiVersion', 'deployment'], }` |
+| `anthropic` | `{ allowed: ['baseUrl'], required: [], credential: 'api-key' }` |
+| `'anthropic-compatible'` | `{ allowed: ['baseUrl'], required: [], credential: 'api-key' }` |
+| `openai` | `{ allowed: ['baseUrl'], required: [], credential: 'api-key' }` |
+| `'openai-compatible'` | `{ allowed: ['baseUrl'], required: ['baseUrl'], credential: 'api-key' }` |
+| `'azure-openai'` | `{ allowed: ['baseUrl', 'apiVersion', 'deployment'], required: ['baseUrl', 'apiVersion', 'deployment'], credential: 'api-key', }` |
+| `vertex` | `{ allowed: ['projectId', 'location'], required: ['projectId'], credential: 'workload-identity', }` |
 
 ## ModelConnectionConfig
 
@@ -143,12 +162,16 @@ Per-provider config rules, exactly as `POST`/`PATCH /api/model-connections` enfo
 | `baseUrl` | `undefined \| string` | No |  |
 | `deployment` | `undefined \| string` | No |  |
 | `apiVersion` | `undefined \| string` | No |  |
+| `projectId` | `undefined \| string` | No |  |
+| `location` | `undefined \| "global" \| "us" \| "eu"` | No |  |
 
 ## ModelConnectionConfigField
 
 - `"apiVersion"`
 - `"baseUrl"`
 - `"deployment"`
+- `"projectId"`
+- `"location"`
 
 ## ModelConnectionConfigInput
 
@@ -159,6 +182,8 @@ The `config` a caller sends; the server checks it against `MODEL_PROVIDER_CONFIG
 | `baseUrl` | `undefined \| string` | No |  |
 | `deployment` | `undefined \| string` | No |  |
 | `apiVersion` | `undefined \| string` | No |  |
+| `projectId` | `undefined \| string` | No | `vertex` only: the Google Cloud project id. |
+| `location` | `undefined \| "global" \| "us" \| "eu"` | No | `vertex` only: a `VertexLocation`; absent means `global`. |
 
 ## ModelConnectionConfigSchema
 
@@ -169,6 +194,8 @@ A connection's stored settings as every response renders them. Never the credent
 | `baseUrl` | `undefined \| string` | No |  |
 | `deployment` | `undefined \| string` | No |  |
 | `apiVersion` | `undefined \| string` | No |  |
+| `projectId` | `undefined \| string` | No |  |
+| `location` | `undefined \| "global" \| "us" \| "eu"` | No |  |
 
 ## ModelConnectionListResponse
 
@@ -192,7 +219,7 @@ array so a caller never meets the key.
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes |  |
 | `config` | `ModelConnectionConfig` | Yes |  |
 | `hasCredential` | `false \| true` | Yes |  |
 | `ready` | `false \| true` | Yes |  |
@@ -206,14 +233,15 @@ One model connection as `GET /api/model-connections/:id`, the `201` of
 a bare item, not wrapped.
 
 The credential is write-only and has no field here. `hasCredential` says whether one is
-stored; `ready` is derived on every read as `hasCredential` plus every config field the
-provider requires (`MODEL_PROVIDER_CONFIG_RULES`) being present.
+stored; `ready` is derived on every read as every config field the provider requires
+(`MODEL_PROVIDER_CONFIG_RULES`) being present AND (`hasCredential` OR the provider's rule
+has `credential: 'workload-identity'`).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `id` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
-| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes |  |
+| `provider` | `"anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes |  |
 | `config` | `ModelConnectionConfig` | Yes |  |
 | `hasCredential` | `false \| true` | Yes |  |
 | `ready` | `false \| true` | Yes |  |
@@ -238,8 +266,9 @@ The `502` carries this outcome, not the error envelope: an unreachable provider 
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `allowed` | `readonly ("apiVersion" \| "baseUrl" \| "deployment")[]` | Yes | The config keys the server accepts for this provider; any other key is an `invalid_body`. |
-| `required` | `readonly ("apiVersion" \| "baseUrl" \| "deployment")[]` | Yes | The subset that must be present for the connection to be `ready` (with a credential). |
+| `allowed` | `readonly ("apiVersion" \| "baseUrl" \| "deployment" \| "projectId" \| "location")[]` | Yes | The config keys the server accepts for this provider; any other key is an `invalid_body`. |
+| `required` | `readonly ("apiVersion" \| "baseUrl" \| "deployment" \| "projectId" \| "location")[]` | Yes | The subset that must be present for the connection to be `ready` (with a credential). |
+| `credential` | `"api-key" \| "workload-identity"` | Yes | How the connection authenticates: `api-key` stores a write-only credential; `workload-identity` stores none and the gateway uses the identity it runs as. |
 
 ## RotateModelConnectionCredentialInput
 
@@ -344,3 +373,33 @@ connection to a new destination (ADR-0077 D5).
 | `name` | `undefined \| string` | No |  |
 | `config` | `undefined \| ModelConnectionConfigInput` | No |  |
 | `apiKey` | `undefined \| string` | No |  |
+
+## VERTEX_CLAUDE_MODELS
+
+The Claude models served on Vertex AI, newest first. The single source for the gateway's static
+model list, the CLI preflight probe and web setup's seeded model.
+
+- `{ id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5' }`
+- `{ id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5' }`
+- `{ id: 'claude-haiku-5-5', displayName: 'Claude Haiku 5.5' }`
+- `{ id: 'claude-fable-5-1', displayName: 'Claude Fable 5.1' }`
+
+## VERTEX_DEFAULT_MODEL
+
+The model a freshly set-up `vertex` connection is seeded with.
+
+Value: `'claude-sonnet-5-5'`
+
+## VERTEX_LOCATIONS
+
+The Vertex AI locations a `vertex` connection (and `gcp.modelLocation`) can name; absent means `global`.
+
+- `'global'`
+- `'us'`
+- `'eu'`
+
+## VertexLocation
+
+- `"global"`
+- `"us"`
+- `"eu"`

@@ -64,6 +64,8 @@ interface BucketSeams {
 function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = {}) {
   const objects = new Map(Object.entries(initial));
   const attempts: string[] = [];
+  /** The signal each read and write was given, in call order. */
+  const signals: (AbortSignal | undefined)[] = [];
   const etag = (text: string) => `"${sha(text)}"`;
   const bodyBytes = async (key: string, body: ReadableStream<Uint8Array>): Promise<Uint8Array> => {
     if (seams.duringWrite === undefined) return streamToBytes(body);
@@ -76,7 +78,8 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
     return Buffer.concat(chunks);
   };
   const store: Pick<ObjectStore, 'read' | 'write'> = {
-    read: (key) => {
+    read: (key, readOptions) => {
+      signals.push(readOptions?.signal);
       const failure = seams.failRead?.(key);
       if (failure !== undefined) return Promise.reject(failure);
       const text = objects.get(key);
@@ -96,6 +99,7 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
       );
     },
     write: async (key, body, options: WriteOptions) => {
+      signals.push(options.signal);
       attempts.push(key);
       seams.beforeWrite?.(key, objects);
       if (seams.hangWrite === true) return new Promise<never>(() => undefined);
@@ -123,7 +127,7 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
       };
     },
   };
-  return { store, objects, attempts };
+  return { store, objects, attempts, signals };
 }
 
 function tarOf(files: Readonly<Record<string, string>>, folder = FOLDER): Uint8Array {
@@ -213,6 +217,7 @@ async function writeBack(setup: Setup) {
   const audit = vi.fn(setup.audit ?? (() => Promise.resolve()));
   const reads: string[] = [];
   const opened: string[] = [];
+  const openSignals: (AbortSignal | undefined)[] = [];
   const grants: readonly Grant[] = setup.grants ?? DEFAULT_GRANTS;
   const launchGrants: readonly Grant[] = setup.launchGrants ?? grants;
   const folders =
@@ -297,8 +302,9 @@ async function writeBack(setup: Setup) {
           const row = rows[connectionId] ?? null;
           return row instanceof Error ? Promise.reject(row) : Promise.resolve(row);
         },
-        openWritable: (_workspaceId, connectionId) => {
+        openWritable: (_workspaceId, connectionId, signal) => {
           opened.push(connectionId);
+          openSignals.push(signal);
           return Promise.resolve(bucketOf(connectionId).store);
         },
       },
@@ -312,6 +318,7 @@ async function writeBack(setup: Setup) {
     audit,
     reads,
     opened,
+    openSignals,
     counts: counts.get(CONNECTION),
     all: counts,
     labels: () => audit.mock.calls.map(([event]) => event.subjectLabel),
@@ -874,6 +881,26 @@ describe('the write-back deadline', () => {
     expect(result.labels()).toEqual([
       'run run-1 · 0 written · 0 unchanged · 0 conflicted · 0 refused · 3 failed · 0 bytes · refused: deadline',
     ]);
+  });
+
+  // #1835 (STO-509): a hung store SDK call is stopped by the store itself, not only abandoned.
+  it('[US-STO-12][unit][run] passes its signal to the open, every read and every write', async () => {
+    const deadline = new AbortController();
+    const result = await writeBack({
+      delivered: { 'a.md': 'old' },
+      bucket: { 'reports/a.md': 'old' },
+      files: { 'a.md': 'new', 'b.md': 'b' },
+      signal: deadline.signal,
+    });
+
+    expect(result.counts).toMatchObject({ written: 2 });
+    // One signal for the save: the run's deadline, or a cancel the stored status shows.
+    const [saving] = result.openSignals;
+    expect(saving).toBeInstanceOf(AbortSignal);
+    expect(result.signals).toHaveLength(3);
+    expect(result.signals.every((signal) => signal === saving)).toBe(true);
+    deadline.abort(timedOut());
+    expect(saving?.aborted).toBe(true);
   });
 
   it('[US-STO-12][unit][run] starts no grant once the deadline has passed', async () => {

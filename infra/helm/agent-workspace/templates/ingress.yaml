@@ -1,5 +1,10 @@
 {{- if .Values.ingress.enabled }}
 {{- $host := required "ingress.host is required when ingress.enabled" .Values.ingress.host }}
+{{- /* Each app's `host` (templates/apps.yaml) is one more rule, and one more name on the certificate. */}}
+{{- $hosts := list $host }}
+{{- range .Values.apps }}
+{{- $hosts = append $hosts .host }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -14,7 +19,7 @@ spec:
   {{- end }}
   {{- if .Values.ingress.tls.clusterIssuer }}
   tls:
-    - hosts: [{{ $host | quote }}]
+    - hosts: [{{ range $index, $each := $hosts }}{{ if $index }}, {{ end }}{{ $each | quote }}{{ end }}]
       secretName: agent-workspace-tls
   {{- end }}
   rules:
@@ -25,4 +30,13 @@ spec:
             pathType: Prefix
             backend:
               service: { name: agent-workspace-web, port: { number: 3000 } }
+    {{- range .Values.apps }}
+    - host: {{ .host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: {{ printf "agent-workspace-app-%s" .name }}, port: { number: 3000 } }
+    {{- end }}
 {{- end }}

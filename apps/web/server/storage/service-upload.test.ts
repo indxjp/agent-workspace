@@ -224,6 +224,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
 
       for (let index = 0; index < MAX_PENDING_UPLOADS_PER_WORKSPACE - 1; index += 1) {
         await h.catalog.reserve(`seed/${index}.bin`, {
+          objectId: crypto.randomUUID(),
           ownerPrincipalId: h.ws.principalId,
           sizeBytes: 1,
           contentType: null,
@@ -241,6 +242,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const h = await harness();
       for (let index = 0; index < MAX_PENDING_UPLOADS_PER_WORKSPACE - 1; index += 1) {
         await h.catalog.reserve(`seed/${index}.bin`, {
+          objectId: crypto.randomUUID(),
           ownerPrincipalId: h.ws.principalId,
           sizeBytes: 1,
           contentType: null,
@@ -268,6 +270,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const h = await harness();
       for (let index = 0; index < MAX_PENDING_UPLOADS_PER_WORKSPACE; index += 1) {
         await h.catalog.reserve(`abandoned/${index}.bin`, {
+          objectId: crypto.randomUUID(),
           ownerPrincipalId: h.ws.principalId,
           sizeBytes: 1,
           contentType: null,

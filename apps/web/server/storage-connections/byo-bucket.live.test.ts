@@ -13,15 +13,19 @@
  * The connection gets a least-privilege credential (no delete); the objects are seeded and cleaned
  * up through a separate admin store that may delete.
  *
- * The `file` lane runs in normal CI. A cloud lane is registered only when the live job sets
- * `STORAGE_LIVE_LANE` (`live-e2e.yml`, `suite=storage`), and a lane without its variables fails
- * naming the first one missing; nothing is skipped.
+ * The `file` lane runs in normal CI, where the admin and the connection are the same user. A live
+ * lane is registered only when the live job sets `STORAGE_LIVE_LANE` (`live-e2e.yml`,
+ * `suite=storage`), and a lane without its variables fails naming the first one missing; nothing is
+ * skipped. The live `file` lane gives the two their own identities: the operator (root, through
+ * `sudo`) owns the folder, and the connection, the server's own user, cannot delete what it owns.
  */
 // @story US-STO-12
+import { spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { fromTokenFile } from '@aws-sdk/credential-provider-web-identity';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -204,7 +208,105 @@ const fileLane: Lane = async (work) => {
   return { url, credential, admin: await openStore(url, credential, [root]), fileRoots: [root] };
 };
 
-const cloudLanes: Readonly<Record<string, Lane>> = {
+/** Temporary folders a test made; removed after each test. */
+const tempDirs: string[] = [];
+
+/** Runs `args` as the operator (root, through `sudo`), never as the user the server runs as. */
+const asOperator = (args: readonly string[], input?: Uint8Array): void => {
+  const result = spawnSync('sudo', ['-n', ...args], {
+    ...(input === undefined ? {} : { input }),
+    stdio: [input === undefined ? 'ignore' : 'pipe', 'ignore', 'pipe'],
+  });
+  if (result.status !== 0) {
+    throw new Error(`sudo ${args[0] ?? ''} failed: ${String(result.stderr)}`);
+  }
+};
+
+/**
+ * The operator's view of `folder`: it seeds and cleans up as root, and reads as any user can. The
+ * server, and so the connection, runs as the job's own user, which may create files in the
+ * operator's sticky folder but never delete or replace one it does not own.
+ */
+async function operatorStore(
+  folder: string,
+  url: string,
+  fileRoots: readonly string[],
+): Promise<ObjectStore> {
+  const reader = await openConnectionStore(
+    url,
+    { provider: 'file' },
+    { writable: false, fileRoots, egress },
+  );
+  const fileOf = (key: string) => path.join(folder, ...key.split('/'));
+  return new Proxy(reader, {
+    get(target, name) {
+      if (name === 'write') {
+        return async (key: string, body: ReadableStream<Uint8Array> | Uint8Array) => {
+          const bytes = body instanceof Uint8Array ? body : await streamToBytes(body);
+          asOperator(['install', '-d', '-m', '1777', path.dirname(fileOf(key))]);
+          asOperator(['tee', fileOf(key)], bytes);
+          return target.head(key);
+        };
+      }
+      if (name === 'delete') {
+        return (key: string) => {
+          asOperator(['rm', '-f', fileOf(key)]);
+          return Promise.resolve();
+        };
+      }
+      const member: unknown = Reflect.get(target, name);
+      return typeof member === 'function'
+        ? (member as (...args: unknown[]) => unknown).bind(target)
+        : member;
+    },
+  });
+}
+
+/**
+ * The `file` lane with two identities (`live-e2e.yml`, `suite=storage`): the operator's root,
+ * `STORAGE_LIVE_FILE_ROOT`, is owned by root with a sticky, world-writable `acme-data` folder, and
+ * the connection is the server's own user, as on a host where the operator owns the shared folder.
+ */
+const operatorFileLane: Lane = async () => {
+  const root = requireEnv('STORAGE_LIVE_FILE_ROOT');
+  const folder = path.join(root, 'acme-data');
+  const url = pathToFileURL(folder).href;
+  return {
+    url,
+    credential: { provider: 'file' },
+    admin: await operatorStore(folder, url, [root]),
+    fileRoots: [root],
+  };
+};
+
+/**
+ * Least privilege on the `file` lane, which the cloud lanes prove with a key that has no delete:
+ * the connection, opened writable as the write-back opens it, can add a file of its own but cannot
+ * delete or replace one the operator owns.
+ */
+async function folderLeastPrivilege(prepare: Lane): Promise<void> {
+  const work = realpathSync(
+    mkdtempSync(path.join(process.env['RUNNER_TEMP'] ?? tmpdir(), 'aw-byo-')),
+  );
+  tempDirs.push(work);
+  const lane = await prepare(work);
+  const seeded = 'reports/operator.csv';
+  const own = 'reports/own.md';
+  await lane.admin.write(seeded, new Blob([CSV]).stream(), {});
+  try {
+    const store = await openStore(lane.url, lane.credential, lane.fileRoots);
+    await expect(store.delete(seeded)).rejects.toThrow();
+    await expect(store.write(seeded, new Blob(['tampered\n']).stream(), {})).rejects.toThrow();
+    expect(await text(lane.admin, seeded)).toBe(CSV);
+    await store.write(own, new Blob([SUMMARY]).stream(), { ifNoneMatch: '*' });
+    expect(await text(lane.admin, own)).toBe(SUMMARY);
+  } finally {
+    await Promise.allSettled([lane.admin.delete(seeded), lane.admin.delete(own)]);
+  }
+}
+
+const liveLanes: Readonly<Record<string, Lane>> = {
+  file: operatorFileLane,
   s3: async (work) => {
     const { bucket, region, session } = s3Role();
     const prefix = livePrefix();
@@ -254,8 +356,8 @@ const cloudLanes: Readonly<Record<string, Lane>> = {
 };
 
 const liveLane = process.env['STORAGE_LIVE_LANE'];
-if (liveLane !== undefined && !Object.hasOwn(cloudLanes, liveLane)) {
-  throw new Error(`STORAGE_LIVE_LANE must be one of ${Object.keys(cloudLanes).join(', ')}`);
+if (liveLane !== undefined && !Object.hasOwn(liveLanes, liveLane)) {
+  throw new Error(`STORAGE_LIVE_LANE must be one of ${Object.keys(liveLanes).join(', ')}`);
 }
 
 const text = async (store: ObjectStore, key: string): Promise<string | null> => {
@@ -286,7 +388,6 @@ const guideStorageUrls = (code: string): string[] =>
 const queryNames = (url: string): string[] =>
   [...new URLSearchParams(url.split('?')[1] ?? '').keys()].sort();
 
-const tempDirs: string[] = [];
 afterEach(() => {
   clearApplicationContext();
   for (const [name, value] of savedEnv) {
@@ -709,10 +810,10 @@ describe('the own-bucket tutorial', () => {
     });
   }
 
-  const cloud = liveLane === undefined ? undefined : cloudLanes[liveLane];
-  if (liveLane === 's3' && cloud !== undefined) {
+  const live = liveLane === undefined ? undefined : liveLanes[liveLane];
+  if (liveLane === 's3' && live !== undefined) {
     // @story US-STO-12
-    it('[US-STO-12][api][cli] the tutorial works on S3', () => tutorial(cloud), 120_000);
+    it('[US-STO-12][api][cli] the tutorial works on S3', () => tutorial(live), 120_000);
     // @story US-STO-12
     it(
       '[US-STO-12][api][cli] a key limited to one folder opens a prefix-less S3 URL, as the guide gives it',
@@ -720,12 +821,20 @@ describe('the own-bucket tutorial', () => {
       120_000,
     );
   }
-  if (liveLane === 'gcs' && cloud !== undefined) {
+  if (liveLane === 'file' && live !== undefined) {
     // @story US-STO-12
-    it('[US-STO-12][api][cli] the tutorial works on GCS', () => tutorial(cloud), 120_000);
+    it('[US-STO-12][api][cli] the tutorial works on a folder the operator owns', () =>
+      tutorial(live));
+    // @story US-STO-12
+    it('[US-STO-12][api][cli] the connection cannot delete or replace a file the operator owns', () =>
+      folderLeastPrivilege(live));
   }
-  if (liveLane === 'azblob' && cloud !== undefined) {
+  if (liveLane === 'gcs' && live !== undefined) {
     // @story US-STO-12
-    it('[US-STO-12][api][cli] the tutorial works on Azure Blob', () => tutorial(cloud), 120_000);
+    it('[US-STO-12][api][cli] the tutorial works on GCS', () => tutorial(live), 120_000);
+  }
+  if (liveLane === 'azblob' && live !== undefined) {
+    // @story US-STO-12
+    it('[US-STO-12][api][cli] the tutorial works on Azure Blob', () => tutorial(live), 120_000);
   }
 });

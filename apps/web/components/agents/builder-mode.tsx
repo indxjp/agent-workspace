@@ -13,14 +13,21 @@ import type { ComposerPrefill } from '../run/run-view';
 import { initialsFrom } from '../shell/identity';
 import { loadAgents } from './agent-requests-model';
 import { BTN, BTN_DEFAULT } from './agent-form';
-import { BuilderApproval } from './builder-approval';
+import { BuilderApproval, type DecisionProblem } from './builder-approval';
+import { detailText, refusalText } from './builder-messages';
 import { BuilderSaved } from './builder-saved';
-import { builderRefusalIn, draftsFrom, type SavedDraft } from './definition-from-run';
-import type { DefinitionSection } from '@indx-workspace/sdk/portable';
+import {
+  builderRefusalIn,
+  draftsFrom,
+  type DraftView,
+  type SavedDraft,
+} from './definition-from-run';
+import { diffBodies, type DefinitionSection } from '@indx-workspace/sdk/portable';
 import { DefinitionPreview } from './definition-preview';
 import type { RequestProblem } from './model';
 
 const UNAVAILABLE = 'The Builder is not available in this workspace';
+const NOT_SENT = 'The decision did not reach the server. Check your connection and try again.';
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -54,6 +61,19 @@ function composerAgentFor(builder: BuilderIdentity): ComposerAgent {
     runTarget: { kind: 'unknown' },
     drivableProviders: [],
   };
+}
+
+/**
+ * The body the person last saw before the latest draft: the last earlier draft that reads
+ * differently. The Builder checks a body and then saves that same body, and comparing the save with
+ * its own check would hide every change just when the approval card asks about them (UX-11).
+ */
+function previousBody(drafts: readonly DraftView[], latest: DraftView): DraftView['body'] | null {
+  for (let index = drafts.length - 2; index >= 0; index -= 1) {
+    const draft = drafts[index];
+    if (draft !== undefined && diffBodies(draft.body, latest.body).length > 0) return draft.body;
+  }
+  return null;
 }
 
 /**
@@ -93,21 +113,25 @@ export function BuilderPreviewPanel({
           className="mb-3 rounded-(--radius) border border-border-strong bg-danger-soft p-3 text-[13px]"
         >
           <p className="font-semibold">
-            The last check failed: <code>{failure.code}</code>
+            {latest.source === 'save' ? 'The last save failed.' : 'The last check failed.'}{' '}
+            {failure.message ?? ''}
           </p>
           {failure.details.length === 0 ? null : (
             <ul className="mt-1 list-disc pl-5">
               {failure.details.map((detail, index) => (
                 // Two details may read the same; the position keeps their keys apart.
-                <li key={`${String(index)}:${detail}`}>{detail}</li>
+                <li key={`${String(index)}:${detail}`}>{detailText(detail)}</li>
               ))}
             </ul>
           )}
+          <p className="mt-1 text-[12px] text-muted">
+            Code: <code>{failure.code}</code>
+          </p>
         </div>
       )}
       <DefinitionPreview
         body={latest.body}
-        previous={drafts.at(-2)?.body ?? null}
+        previous={previousBody(drafts, latest)}
         onAskBuilder={onAskBuilder}
       />
     </>
@@ -117,7 +141,8 @@ export function BuilderPreviewPanel({
 export function BuilderChat({
   builder,
   user,
-}: Readonly<{ builder: BuilderIdentity; user: Speaker }>) {
+  filesEnabled = true,
+}: Readonly<{ builder: BuilderIdentity; user: Speaker; filesEnabled?: boolean }>) {
   const [entries, setEntries] = useState<readonly RunEvent[]>([]);
   const [decided, setDecided] = useState<readonly string[]>([]);
   // The continuation runs the person approved: only their saves count as saved.
@@ -142,7 +167,10 @@ export function BuilderChat({
       ? asked.runId
       : null;
 
-  async function decide(runId: string, decision: 'approve' | 'reject'): Promise<string | null> {
+  async function decide(
+    runId: string,
+    decision: 'approve' | 'reject',
+  ): Promise<DecisionProblem | null> {
     const runs = browserClient().runs;
     try {
       const { run } = await (decision === 'approve' ? runs.approve(runId) : runs.reject(runId));
@@ -151,7 +179,9 @@ export function BuilderChat({
       setFollow((current) => ({ runId: run.id, nonce: (current?.nonce ?? 0) + 1 }));
       return null;
     } catch (error) {
-      return error instanceof ApiProblemError ? error.code : 'request_failed';
+      return error instanceof ApiProblemError
+        ? { message: error.message, code: error.code }
+        : { message: NOT_SENT, code: 'request_failed' };
     }
   }
 
@@ -182,13 +212,18 @@ export function BuilderChat({
       <div className="min-w-0 lg:order-1">
         {refusal === null ? null : (
           <p role="alert" className="mb-3 text-[13px]">
-            {UNAVAILABLE} · <code>{refusal}</code>
+            {UNAVAILABLE}. {refusalText(refusal)}{' '}
+            <span className="text-muted">
+              Code: <code>{refusal}</code>
+            </span>
           </p>
         )}
         <HomeChat
+          landmark={false}
           agents={{ kind: 'agents', agents: [composerAgentFor(builder)] }}
           recent={[]}
           user={user}
+          filesEnabled={filesEnabled}
           agent={{ id: builder.id, locked: true }}
           {...(prefill === undefined ? {} : { prefill })}
           {...(follow === undefined ? {} : { follow })}
@@ -209,7 +244,10 @@ export function BuilderChat({
 }
 
 /** `/agents/new?mode=chat`: the chat with the built-in Builder beside the definition it writes. */
-export function BuilderMode({ modeSwitch }: Readonly<{ modeSwitch: ReactNode }>) {
+export function BuilderMode({
+  modeSwitch,
+  filesEnabled,
+}: Readonly<{ modeSwitch: ReactNode; filesEnabled: boolean }>) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   useEffect(() => {
     let active = true;
@@ -242,8 +280,11 @@ export function BuilderMode({ modeSwitch }: Readonly<{ modeSwitch: ReactNode }>)
     };
   }, []);
 
+  // The page's one <main> in every state, as the form mode's, with the heading and mode switch
+  // inside it; the chat it holds draws a plain <div> (`landmark={false}`). "Skip to content" lands
+  // here (UX-23).
   return (
-    <div className="w-full max-w-[1320px] px-5 pt-[26px] pb-[90px] sm:px-8">
+    <main className="w-full max-w-[1320px] px-5 pt-[26px] pb-[90px] sm:px-8">
       <h1 className="mb-[22px] text-[21px]">New Agent</h1>
       {modeSwitch}
       {loaded.kind === 'loading' ? (
@@ -255,8 +296,8 @@ export function BuilderMode({ modeSwitch }: Readonly<{ modeSwitch: ReactNode }>)
       ) : loaded.builder === undefined ? (
         <p className="text-[13px] text-muted">{UNAVAILABLE}</p>
       ) : (
-        <BuilderChat builder={loaded.builder} user={loaded.user} />
+        <BuilderChat builder={loaded.builder} user={loaded.user} filesEnabled={filesEnabled} />
       )}
-    </div>
+    </main>
   );
 }

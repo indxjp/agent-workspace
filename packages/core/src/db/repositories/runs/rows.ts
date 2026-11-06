@@ -1,3 +1,7 @@
+import {
+  ProjectPolicyLimitsSchema,
+  type ProjectPolicyLimits,
+} from '@indx-workspace/contracts/policy-ceiling';
 import { and, sql, type SQL } from 'drizzle-orm';
 
 import { agentVersions } from '../../schema/agent-versions.js';
@@ -163,6 +167,7 @@ export const RUN_COLUMNS = {
   cacheCreationInputTokens: runs.cacheCreationInputTokens,
   toolCalls: runs.toolCalls,
   costUsd: runs.costUsd,
+  spendCeilingUsd: runs.spendCeilingUsd,
   costCurrency: runs.costCurrency,
   priceTableVersion: runs.priceTableVersion,
   error: runs.error,
@@ -177,6 +182,7 @@ export const RUN_COLUMNS = {
   // NULL for a legacy session that pins none. Never copied onto `runs`, where it could disagree.
   agentVersion: agentVersions.number,
   output: runs.output,
+  parentRunId: runs.parentRunId,
 } as const;
 
 /**
@@ -248,6 +254,14 @@ function parseOutputSchema(value: unknown): Readonly<Record<string, unknown>> | 
   throw new Error('runs.output_schema holds a value that is not a JSON Schema object');
 }
 
+/** `runs.limits_override` is persisted JSON: null or a lower-only limits object; anything else throws. */
+function parseLimitsOverride(value: unknown): ProjectPolicyLimits | null {
+  if (value === null) return null;
+  const parsed = ProjectPolicyLimitsSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  throw new Error('runs.limits_override holds a value that is not a lower-only limits object');
+}
+
 export function toRunRecord(row: {
   id: string;
   workspaceId: string;
@@ -275,6 +289,7 @@ export function toRunRecord(row: {
   cacheCreationInputTokens: number;
   toolCalls: number;
   costUsd: string;
+  spendCeilingUsd: string | null;
   costCurrency: string;
   priceTableVersion: string | null;
   error: string | null;
@@ -284,9 +299,12 @@ export function toRunRecord(row: {
   initiatingUserId: string | null;
   agentVersion: number | null;
   output: unknown;
+  parentRunId: string | null;
   outputSchema?: unknown;
   prompt?: string | null;
   subject?: string | null;
+  limitsOverride?: unknown;
+  agentTeamVersionId?: string | null;
 }): RunRecord {
   if (row.costCurrency !== 'USD') {
     throw new Error(
@@ -320,6 +338,7 @@ export function toRunRecord(row: {
     cacheCreationInputTokens: row.cacheCreationInputTokens,
     toolCalls: row.toolCalls,
     costUsd: row.costUsd,
+    spendCeilingUsd: row.spendCeilingUsd,
     costCurrency: row.costCurrency,
     priceTableVersion: row.priceTableVersion,
     error: row.error,
@@ -329,11 +348,16 @@ export function toRunRecord(row: {
     initiatingUserId: row.initiatingUserId,
     agentVersion: row.agentVersion,
     output: parseRunOutput(row.output),
+    parentRunId: row.parentRunId,
     ...(row.outputSchema === undefined
       ? {}
       : { outputSchema: parseOutputSchema(row.outputSchema) }),
     ...(row.prompt === undefined ? {} : { prompt: row.prompt }),
     ...(row.subject === undefined ? {} : { subject: row.subject }),
+    ...(row.limitsOverride === undefined
+      ? {}
+      : { limitsOverride: parseLimitsOverride(row.limitsOverride) }),
+    ...(row.agentTeamVersionId === undefined ? {} : { agentTeamVersionId: row.agentTeamVersionId }),
   };
 }
 

@@ -10,7 +10,7 @@
  */
 // @story US-STO-12
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, mkdtemp, rm, truncate, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, truncate, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -79,6 +79,8 @@ interface StartOptions {
   readonly connections?: ReadonlyMap<string, string>;
   /** Opens the connection's read-only store; the `file://` folder when absent. */
   readonly open?: RunStorageConnections['open'];
+  /** A `local-disk` runtime whose workspace root is this folder; a push-archive one when absent. */
+  readonly localDiskRoot?: string;
 }
 
 /** The name of connection `id` as it is now, or `undefined` when it does not exist. */
@@ -179,6 +181,7 @@ async function start(options: StartOptions) {
     storageConnections,
     agentId: agent.id,
     preflight: startPreflight(preflight),
+    ...(options.localDiskRoot === undefined ? {} : { localDiskRoot: options.localDiskRoot }),
   });
   const response = await startRun(
     new Request(`http://web.test/api/agents/${runs.agentId}/runs`, {
@@ -229,6 +232,40 @@ describe('a run granted a connection folder', () => {
     );
     expect(member).toMatchObject({ type: 'file', mode: 0o444, data: Buffer.from(CSV) });
     expect(delivered.archive.map((entry) => entry.path).join('\n')).not.toMatch(/other/u);
+  });
+
+  it('[US-STO-12][api][run] a local-disk runtime gets the folder extracted on this host, read-only, with no /files request', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'aw-sto12-local-'));
+    try {
+      const { world, runs, started } = await run({
+        access: 'read',
+        writeAllowed: false,
+        localDiskRoot: workspaceRoot,
+      });
+      const delivered = await runs.delivered(started.id);
+      const cwd = join(workspaceRoot, world.workspaceId, started.sessionId);
+      const onDisk = join(cwd, 'storage', 'acme-data', 'reports', '2026', 'q3.csv');
+
+      // The `/run` body carries the digest the streamed archive reported, as push-archive's does.
+      expect(delivered.files).toEqual([
+        { kind: 'directory', path: 'storage/acme-data/reports', access: 'read' },
+        {
+          kind: 'file',
+          path: 'storage/acme-data/reports/2026/q3.csv',
+          access: 'read',
+          size: Buffer.byteLength(CSV),
+          sha256: createHash('sha256').update(CSV).digest('hex'),
+        },
+      ]);
+      expect(delivered.archive).toEqual([]);
+      expect(await readFile(onDisk, 'utf8')).toBe(CSV);
+      if (process.platform !== 'win32') expect((await stat(onDisk)).mode & 0o777).toBe(0o444);
+      await expect(stat(join(cwd, 'storage', 'acme-data', 'other'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it('[US-STO-12][api][run] a file:// file whose name holds a literal % is skipped, not a failed run', async () => {
@@ -349,6 +386,7 @@ describe('a run granted a connection folder', () => {
       const provider = createInMemoryAgentVersionStoreProvider({
         agents: agentProvider,
         references: {},
+        connectionExists: (_workspaceId, id) => Promise.resolve(registry.has(id)),
       });
       const store = await provider.forWorkspace(workspaceId);
       if (store === null) throw new Error('the memory store answers every workspace');
@@ -432,11 +470,21 @@ describe('a run granted a connection folder', () => {
             storageGrantsOf: (versionId) => store.storageGrantsOf(versionId),
           }),
       });
-      return async (number: number) => {
+      const grantsOf = async (number: number) => {
         const version = await store.find(created.agent.id, number);
         if (version === null) throw new Error(`version ${String(number)} exists`);
         return (await read(workspaceId, created.agent.id, version.id)).assignments.storageGrants;
       };
+      return Object.assign(grantsOf, {
+        /** Point `local` at version `number`, as `aw rollback` or the console does. */
+        pointLocal: async (number: number) => {
+          const row = await agents.get(created.agent.id);
+          if (row === null) throw new Error('the agent exists');
+          return setAgentPointer({ environment: 'local', version: number }, row, actor, deps);
+        },
+        /** Whether the agent's current grants name the connection: what its DELETE is refused on. */
+        isGranted: (id: string) => store.isConnectionGranted(id),
+      });
     }
 
     /** What a production run (version 1) reads while local is on version 2 (`archive`). */
@@ -476,10 +524,12 @@ describe('a run granted a connection folder', () => {
       registry.delete(connectionId);
       const connections = registry;
 
-      await expectRefused(
-        { access: 'read', writeAllowed: false, connections, grants: await grantsOf(1) },
-        'run_storage_grant_unavailable',
-      );
+      // The delete took version 1's grant row with it, as PostgreSQL's cascade does, so the run is
+      // refused while its version is read, before any connection is looked up.
+      await expect(grantsOf(1)).rejects.toMatchObject({
+        code: 'run_storage_grant_unavailable',
+        publicMessage: expect.stringContaining('whose connection no longer exists') as string,
+      });
       const { runs, started } = await run({
         access: 'read',
         writeAllowed: false,
@@ -494,10 +544,34 @@ describe('a run granted a connection folder', () => {
       registry.delete(connectionId);
       registry.set(crypto.randomUUID(), 'acme-data');
 
-      await expectRefused(
-        { access: 'read', writeAllowed: false, connections: registry, grants: await grantsOf(1) },
-        'run_storage_grant_unavailable',
-      );
+      await expect(grantsOf(1)).rejects.toMatchObject({
+        code: 'run_storage_grant_unavailable',
+      });
+    });
+
+    it('[US-STO-12][api][run] pointing local back at version 1 after a delete-and-recreate binds it to no connection', async () => {
+      const versions = await pinnedVersions(null);
+      registry.delete(connectionId);
+      const recreated = crypto.randomUUID();
+      registry.set(recreated, 'acme-data');
+
+      expect((await versions.pointLocal(1)).status).toBe(200);
+
+      // Version 1 was deployed with the deleted connection: its folder is not bound again by name,
+      // so the recreated connection is held by nothing and its DELETE is not refused.
+      expect(await versions.isGranted(recreated)).toBe(false);
+      await expect(versions(1)).rejects.toMatchObject({ code: 'run_storage_grant_unavailable' });
+    });
+
+    it('[US-STO-12][api][run] pointing local back at version 1 restores the connection it was deployed with', async () => {
+      const versions = await pinnedVersions('archive');
+      // A second connection under another name, which version 1 never named.
+      registry.set(crypto.randomUUID(), 'acme-archive');
+
+      expect((await versions.pointLocal(1)).status).toBe(200);
+
+      expect(await versions.isGranted(connectionId)).toBe(true);
+      expect(await versions(1)).toEqual([{ connectionId, prefix: 'reports', access: 'read' }]);
     });
   });
 });

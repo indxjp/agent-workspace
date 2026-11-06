@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createCloudRunDriver, type CloudRunResourceClient } from './cloud-run.js';
 
+const NET = {
+  network: 'projects/proj/global/networks/aw',
+  subnetwork: 'projects/proj/regions/r/subnetworks/aw-sandbox',
+};
+
 function echoConnection(value: string) {
   return {
     events: (async function* () {
@@ -52,6 +57,7 @@ describe('cloud-run-service runtime', () => {
       project: 'proj',
       region: 'asia-northeast1',
       serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+      ...NET,
       client,
       pollIntervalMs: 0,
       startAgent: (runtime, request) => echoConnection(`${runtime.externalId}:${request}`),
@@ -79,6 +85,7 @@ describe('cloud-run-service runtime', () => {
       project: 'proj',
       region: 'asia-northeast1',
       serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+      ...NET,
       client,
       startAgent: () => echoConnection('unused'),
     });
@@ -104,6 +111,8 @@ describe('cloud-run-service runtime', () => {
         project: 'proj',
         region: 'asia-northeast1',
         serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+        ...NET,
+        ...NET,
         requireDigest: true,
         client: fakeClient().client,
         startAgent: () => echoConnection('unused'),
@@ -118,6 +127,7 @@ describe('cloud-run-service runtime', () => {
       project: 'proj',
       region: 'asia-northeast1',
       serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+      ...NET,
       client,
       pollIntervalMs: 0,
       startAgent: () => echoConnection('unused'),
@@ -153,6 +163,7 @@ describe('cloud-run-service runtime', () => {
       project: 'proj',
       region: 'asia-northeast1',
       serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+      ...NET,
       client,
       pollIntervalMs: 0,
       readyTimeoutMs: 0,
@@ -166,6 +177,53 @@ describe('cloud-run-service runtime', () => {
       }),
     ).rejects.toThrow(/did not become ready/u);
     expect(deleted).toHaveLength(1);
+  });
+});
+
+describe('cloud-run-service runtime: sandbox has no internet', () => {
+  function driver(
+    client: CloudRunResourceClient,
+    overrides: { network?: string; subnetwork?: string } = {},
+  ) {
+    return createCloudRunDriver<string, string>({
+      images: new Map([['claude-agent-sdk', 'runtime@sha256:abc']]),
+      project: 'proj',
+      region: 'asia-northeast1',
+      serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+      ...NET,
+      ...overrides,
+      client,
+      startAgent: () => echoConnection('unused'),
+    });
+  }
+
+  it.each(['open', 'restricted'] as const)(
+    'refuses the %s network policy before any service is created',
+    async (networkPolicy) => {
+      const { client, created } = fakeClient();
+      await expect(
+        driver(client).create({
+          sessionId: 's',
+          engine: 'claude-agent-sdk',
+          workspacePath: '/ws/s',
+          runSpec: {
+            runtimeProfileId: 'p',
+            driver: 'cloud-run-service',
+            networkPolicy,
+            filesystem: 'read-write',
+          },
+        }),
+      ).rejects.toThrow(/not available on Cloud Run yet.*arrives in a later release/u);
+      expect(created).toHaveLength(0);
+    },
+  );
+
+  it.each([{ network: '' }, { subnetwork: ' ' }])('refuses construction with %j', (overrides) => {
+    expect(() => driver(fakeClient().client, overrides)).toThrow(/must be a non-empty string/u);
+  });
+
+  it('advertises only the none network policy', () => {
+    expect(driver(fakeClient().client).capabilities.networkPolicies).toEqual(['none']);
   });
 });
 
@@ -189,7 +247,7 @@ describe('createCloudRunAdminClient', () => {
         region: 'asia-northeast1',
         project: 'proj',
         serviceAccount: 'sa@proj.iam.gserviceaccount.com',
-        egress: 'none',
+        ...NET,
         labels: {},
       }),
     ).rejects.toThrow(/create service rt-1 failed: 403/u);
@@ -198,6 +256,43 @@ describe('createCloudRunAdminClient', () => {
     );
     const headers = new Headers(calls[0]?.init.headers);
     expect(headers.get('authorization')).toBe('Bearer tok');
+  });
+
+  it('puts every sandbox on the firewalled network, internal-only, with a /ping startup probe', async () => {
+    const { createCloudRunAdminClient } = await import('./cloud-run.js');
+    const bodies: unknown[] = [];
+    const client = createCloudRunAdminClient({
+      fetch: (_url, init = {}) => {
+        bodies.push(JSON.parse(typeof init.body === 'string' ? init.body : '{}'));
+        return Promise.resolve(new Response(JSON.stringify({ name: 'op' }), { status: 200 }));
+      },
+      accessToken: () => Promise.resolve('tok'),
+    });
+    await client.createService({
+      serviceId: 'rt-1',
+      image: 'runtime@sha256:abc',
+      region: 'asia-northeast1',
+      project: 'proj',
+      serviceAccount: 'sa@proj.iam.gserviceaccount.com',
+      ...NET,
+      labels: {},
+    });
+    const body = bodies[0] as {
+      ingress: string;
+      template: { vpcAccess: Record<string, unknown>; containers: Array<Record<string, unknown>> };
+    };
+    expect(body.ingress).toBe('INGRESS_TRAFFIC_INTERNAL_ONLY');
+    expect(body.template.vpcAccess).toEqual({
+      networkInterfaces: [{ ...NET, tags: ['aw-sandbox'] }],
+      egress: 'ALL_TRAFFIC',
+    });
+    expect(body.template.vpcAccess).not.toHaveProperty('connector');
+    expect(body.template.containers[0]?.['startupProbe']).toEqual({
+      httpGet: { path: '/ping', port: 8080 },
+      periodSeconds: 2,
+      failureThreshold: 50,
+      timeoutSeconds: 1,
+    });
   });
 });
 
@@ -231,6 +326,7 @@ describe('cloud-run-service runtime: one image per engine (ENG-07)', () => {
       project: 'proj',
       region: 'asia-northeast1',
       serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
+      ...NET,
       client: recordingClient(images),
       pollIntervalMs: 0,
       startAgent: (runtime, request) => echoConnection(`${runtime.externalId}:${request}`),

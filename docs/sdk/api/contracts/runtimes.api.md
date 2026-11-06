@@ -94,13 +94,13 @@ export const RuntimeConnectionListResponseSchema: z.ZodReadonly<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         driver: z.ZodEnum<{
-            "aws-agentcore": "aws-agentcore";
             local: "local";
             "sandbox-runtime": "sandbox-runtime";
             docker: "docker";
             kubernetes: "kubernetes";
             "gke-agent-sandbox": "gke-agent-sandbox";
             "aca-sessions": "aca-sessions";
+            "aws-agentcore": "aws-agentcore";
             "aws-ecs": "aws-ecs";
             "cloud-run-sandbox": "cloud-run-sandbox";
             "cloud-run-service": "cloud-run-service";
@@ -120,13 +120,13 @@ export const RuntimeConnectionResourceSchema: z.ZodReadonly<z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     driver: z.ZodEnum<{
-        "aws-agentcore": "aws-agentcore";
         local: "local";
         "sandbox-runtime": "sandbox-runtime";
         docker: "docker";
         kubernetes: "kubernetes";
         "gke-agent-sandbox": "gke-agent-sandbox";
         "aca-sessions": "aca-sessions";
+        "aws-agentcore": "aws-agentcore";
         "aws-ecs": "aws-ecs";
         "cloud-run-sandbox": "cloud-run-sandbox";
         "cloud-run-service": "cloud-run-service";
@@ -156,13 +156,13 @@ export const RuntimeProfileListResponseSchema: z.ZodReadonly<z.ZodObject<{
         workspaceId: z.ZodString;
         name: z.ZodString;
         driver: z.ZodEnum<{
-            "aws-agentcore": "aws-agentcore";
             local: "local";
             "sandbox-runtime": "sandbox-runtime";
             docker: "docker";
             kubernetes: "kubernetes";
             "gke-agent-sandbox": "gke-agent-sandbox";
             "aca-sessions": "aca-sessions";
+            "aws-agentcore": "aws-agentcore";
             "aws-ecs": "aws-ecs";
             "cloud-run-sandbox": "cloud-run-sandbox";
             "cloud-run-service": "cloud-run-service";
@@ -202,13 +202,13 @@ export const RuntimeProfileResourceSchema: z.ZodReadonly<z.ZodObject<{
     workspaceId: z.ZodString;
     name: z.ZodString;
     driver: z.ZodEnum<{
-        "aws-agentcore": "aws-agentcore";
         local: "local";
         "sandbox-runtime": "sandbox-runtime";
         docker: "docker";
         kubernetes: "kubernetes";
         "gke-agent-sandbox": "gke-agent-sandbox";
         "aca-sessions": "aca-sessions";
+        "aws-agentcore": "aws-agentcore";
         "aws-ecs": "aws-ecs";
         "cloud-run-sandbox": "cloud-run-sandbox";
         "cloud-run-service": "cloud-run-service";

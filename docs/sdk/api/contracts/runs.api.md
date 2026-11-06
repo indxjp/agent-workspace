@@ -44,6 +44,7 @@ export const InterruptRunResponseSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>>;
         modelConnectionId: z.ZodNullable<z.ZodString>;
         engine: z.ZodNullable<z.ZodEnum<{
@@ -66,6 +67,7 @@ export const InterruptRunResponseSchema: z.ZodReadonly<z.ZodObject<{
             currency: z.ZodString;
             priceTableVersion: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
         error: z.ZodNullable<z.ZodString>;
         output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
             text: z.ZodString;
@@ -83,6 +85,7 @@ export const InterruptRunResponseSchema: z.ZodReadonly<z.ZodObject<{
             unavailable: "unavailable";
         }>;
         accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>>;
 }, z.core.$strict>>;
 
@@ -108,7 +111,10 @@ export const MAX_RUN_ATTACHMENTS = 10;
 export const MAX_RUN_FILE_SCOPE_PATHS = 100;
 
 // @public
-export const MODEL_PROVIDERS: readonly ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"];
+export const MAX_SPEND_CEILING_USD = 1000000;
+
+// @public
+export const MODEL_PROVIDERS: readonly ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"];
 
 // @public (undocumented)
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
@@ -172,6 +178,12 @@ export const RUN_APPROVAL_PROBLEM_CODES: {
     readonly approval_already_decided: 409;
     readonly approval_expired: 409;
 };
+
+// @public
+export const RUN_BUDGET_REACHED: "run_budget_reached";
+
+// @public
+export const RUN_CHILDREN_MAX = 16;
 
 // @public
 export const RUN_FILE_CORRUPT: "run_file_corrupt";
@@ -277,6 +289,7 @@ export const RunApprovalResponseSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>>;
         modelConnectionId: z.ZodNullable<z.ZodString>;
         engine: z.ZodNullable<z.ZodEnum<{
@@ -299,6 +312,7 @@ export const RunApprovalResponseSchema: z.ZodReadonly<z.ZodObject<{
             currency: z.ZodString;
             priceTableVersion: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
         error: z.ZodNullable<z.ZodString>;
         output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
             text: z.ZodString;
@@ -316,6 +330,7 @@ export const RunApprovalResponseSchema: z.ZodReadonly<z.ZodObject<{
             unavailable: "unavailable";
         }>;
         accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>>;
     events: z.ZodString;
 }, z.core.$strict>>;
@@ -330,10 +345,310 @@ export const RunCostSchema: z.ZodReadonly<z.ZodObject<{
     priceTableVersion: z.ZodNullable<z.ZodString>;
 }, z.core.$strict>>;
 
+// @public (undocumented)
+export type RunDetail = z.infer<typeof RunDetailSchema>;
+
+// @public (undocumented)
+export type RunDetailResponse = z.infer<typeof RunDetailResponseSchema>;
+
+// @public
+export const RunDetailResponseSchema: z.ZodReadonly<z.ZodObject<{
+    run: z.ZodReadonly<z.ZodObject<{
+        children: z.ZodExactOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+            id: z.ZodString;
+            workspaceId: z.ZodString;
+            agentId: z.ZodString;
+            projectId: z.ZodNullable<z.ZodString>;
+            initiatingUserId: z.ZodNullable<z.ZodString>;
+            sessionId: z.ZodString;
+            agentVersion: z.ZodNullable<z.ZodNumber>;
+            status: z.ZodEnum<{
+                completed: "completed";
+                failed: "failed";
+                queued: "queued";
+                running: "running";
+                awaiting_approval: "awaiting_approval";
+                cancelled: "cancelled";
+            }>;
+            createdAt: z.ZodISODateTime;
+            startedAt: z.ZodNullable<z.ZodISODateTime>;
+            endedAt: z.ZodNullable<z.ZodISODateTime>;
+            durationMs: z.ZodNullable<z.ZodNumber>;
+            model: z.ZodNullable<z.ZodString>;
+            provider: z.ZodNullable<z.ZodEnum<{
+                anthropic: "anthropic";
+                "anthropic-compatible": "anthropic-compatible";
+                openai: "openai";
+                "azure-openai": "azure-openai";
+                "openai-compatible": "openai-compatible";
+                vertex: "vertex";
+            }>>;
+            modelConnectionId: z.ZodNullable<z.ZodString>;
+            engine: z.ZodNullable<z.ZodEnum<{
+                "claude-agent-sdk": "claude-agent-sdk";
+                "openai-agents": "openai-agents";
+                pi: "pi";
+                mastra: "mastra";
+            }>>;
+            engineVersion: z.ZodNullable<z.ZodString>;
+            usage: z.ZodReadonly<z.ZodObject<{
+                inputTokens: z.ZodNumber;
+                outputTokens: z.ZodNumber;
+                cacheReadInputTokens: z.ZodNumber;
+                cacheCreationInputTokens: z.ZodNumber;
+                totalTokens: z.ZodNumber;
+                toolCalls: z.ZodNumber;
+            }, z.core.$strict>>;
+            cost: z.ZodReadonly<z.ZodObject<{
+                amount: z.ZodString;
+                currency: z.ZodString;
+                priceTableVersion: z.ZodNullable<z.ZodString>;
+            }, z.core.$strict>>;
+            spendCeilingUsd: z.ZodNullable<z.ZodString>;
+            error: z.ZodNullable<z.ZodString>;
+            output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                text: z.ZodString;
+                structured: z.ZodUnknown;
+            }, z.core.$strict>>>;
+            pendingApproval: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+                toolName: z.ZodString;
+                canonicalCall: z.ZodString;
+            }, z.core.$strict>>>;
+            accountingState: z.ZodEnum<{
+                failed: "failed";
+                pending: "pending";
+                complete: "complete";
+                partial: "partial";
+                unavailable: "unavailable";
+            }>;
+            accountingError: z.ZodNullable<z.ZodString>;
+            parentRunId: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>>>>>;
+        treeCost: z.ZodExactOptional<z.ZodReadonly<z.ZodObject<{
+            amount: z.ZodString;
+            currency: z.ZodString;
+        }, z.core.$strict>>>;
+        id: z.ZodString;
+        workspaceId: z.ZodString;
+        agentId: z.ZodString;
+        projectId: z.ZodNullable<z.ZodString>;
+        initiatingUserId: z.ZodNullable<z.ZodString>;
+        sessionId: z.ZodString;
+        agentVersion: z.ZodNullable<z.ZodNumber>;
+        status: z.ZodEnum<{
+            completed: "completed";
+            failed: "failed";
+            queued: "queued";
+            running: "running";
+            awaiting_approval: "awaiting_approval";
+            cancelled: "cancelled";
+        }>;
+        createdAt: z.ZodISODateTime;
+        startedAt: z.ZodNullable<z.ZodISODateTime>;
+        endedAt: z.ZodNullable<z.ZodISODateTime>;
+        durationMs: z.ZodNullable<z.ZodNumber>;
+        model: z.ZodNullable<z.ZodString>;
+        provider: z.ZodNullable<z.ZodEnum<{
+            anthropic: "anthropic";
+            "anthropic-compatible": "anthropic-compatible";
+            openai: "openai";
+            "azure-openai": "azure-openai";
+            "openai-compatible": "openai-compatible";
+            vertex: "vertex";
+        }>>;
+        modelConnectionId: z.ZodNullable<z.ZodString>;
+        engine: z.ZodNullable<z.ZodEnum<{
+            "claude-agent-sdk": "claude-agent-sdk";
+            "openai-agents": "openai-agents";
+            pi: "pi";
+            mastra: "mastra";
+        }>>;
+        engineVersion: z.ZodNullable<z.ZodString>;
+        usage: z.ZodReadonly<z.ZodObject<{
+            inputTokens: z.ZodNumber;
+            outputTokens: z.ZodNumber;
+            cacheReadInputTokens: z.ZodNumber;
+            cacheCreationInputTokens: z.ZodNumber;
+            totalTokens: z.ZodNumber;
+            toolCalls: z.ZodNumber;
+        }, z.core.$strict>>;
+        cost: z.ZodReadonly<z.ZodObject<{
+            amount: z.ZodString;
+            currency: z.ZodString;
+            priceTableVersion: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
+        error: z.ZodNullable<z.ZodString>;
+        output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+            text: z.ZodString;
+            structured: z.ZodUnknown;
+        }, z.core.$strict>>>;
+        pendingApproval: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+            toolName: z.ZodString;
+            canonicalCall: z.ZodString;
+        }, z.core.$strict>>>;
+        accountingState: z.ZodEnum<{
+            failed: "failed";
+            pending: "pending";
+            complete: "complete";
+            partial: "partial";
+            unavailable: "unavailable";
+        }>;
+        accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>>;
+}, z.core.$strict>>;
+
+// @public
+export const RunDetailSchema: z.ZodReadonly<z.ZodObject<{
+    children: z.ZodExactOptional<z.ZodReadonly<z.ZodArray<z.ZodReadonly<z.ZodObject<{
+        id: z.ZodString;
+        workspaceId: z.ZodString;
+        agentId: z.ZodString;
+        projectId: z.ZodNullable<z.ZodString>;
+        initiatingUserId: z.ZodNullable<z.ZodString>;
+        sessionId: z.ZodString;
+        agentVersion: z.ZodNullable<z.ZodNumber>;
+        status: z.ZodEnum<{
+            completed: "completed";
+            failed: "failed";
+            queued: "queued";
+            running: "running";
+            awaiting_approval: "awaiting_approval";
+            cancelled: "cancelled";
+        }>;
+        createdAt: z.ZodISODateTime;
+        startedAt: z.ZodNullable<z.ZodISODateTime>;
+        endedAt: z.ZodNullable<z.ZodISODateTime>;
+        durationMs: z.ZodNullable<z.ZodNumber>;
+        model: z.ZodNullable<z.ZodString>;
+        provider: z.ZodNullable<z.ZodEnum<{
+            anthropic: "anthropic";
+            "anthropic-compatible": "anthropic-compatible";
+            openai: "openai";
+            "azure-openai": "azure-openai";
+            "openai-compatible": "openai-compatible";
+            vertex: "vertex";
+        }>>;
+        modelConnectionId: z.ZodNullable<z.ZodString>;
+        engine: z.ZodNullable<z.ZodEnum<{
+            "claude-agent-sdk": "claude-agent-sdk";
+            "openai-agents": "openai-agents";
+            pi: "pi";
+            mastra: "mastra";
+        }>>;
+        engineVersion: z.ZodNullable<z.ZodString>;
+        usage: z.ZodReadonly<z.ZodObject<{
+            inputTokens: z.ZodNumber;
+            outputTokens: z.ZodNumber;
+            cacheReadInputTokens: z.ZodNumber;
+            cacheCreationInputTokens: z.ZodNumber;
+            totalTokens: z.ZodNumber;
+            toolCalls: z.ZodNumber;
+        }, z.core.$strict>>;
+        cost: z.ZodReadonly<z.ZodObject<{
+            amount: z.ZodString;
+            currency: z.ZodString;
+            priceTableVersion: z.ZodNullable<z.ZodString>;
+        }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
+        error: z.ZodNullable<z.ZodString>;
+        output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+            text: z.ZodString;
+            structured: z.ZodUnknown;
+        }, z.core.$strict>>>;
+        pendingApproval: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+            toolName: z.ZodString;
+            canonicalCall: z.ZodString;
+        }, z.core.$strict>>>;
+        accountingState: z.ZodEnum<{
+            failed: "failed";
+            pending: "pending";
+            complete: "complete";
+            partial: "partial";
+            unavailable: "unavailable";
+        }>;
+        accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>>>>>;
+    treeCost: z.ZodExactOptional<z.ZodReadonly<z.ZodObject<{
+        amount: z.ZodString;
+        currency: z.ZodString;
+    }, z.core.$strict>>>;
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    agentId: z.ZodString;
+    projectId: z.ZodNullable<z.ZodString>;
+    initiatingUserId: z.ZodNullable<z.ZodString>;
+    sessionId: z.ZodString;
+    agentVersion: z.ZodNullable<z.ZodNumber>;
+    status: z.ZodEnum<{
+        completed: "completed";
+        failed: "failed";
+        queued: "queued";
+        running: "running";
+        awaiting_approval: "awaiting_approval";
+        cancelled: "cancelled";
+    }>;
+    createdAt: z.ZodISODateTime;
+    startedAt: z.ZodNullable<z.ZodISODateTime>;
+    endedAt: z.ZodNullable<z.ZodISODateTime>;
+    durationMs: z.ZodNullable<z.ZodNumber>;
+    model: z.ZodNullable<z.ZodString>;
+    provider: z.ZodNullable<z.ZodEnum<{
+        anthropic: "anthropic";
+        "anthropic-compatible": "anthropic-compatible";
+        openai: "openai";
+        "azure-openai": "azure-openai";
+        "openai-compatible": "openai-compatible";
+        vertex: "vertex";
+    }>>;
+    modelConnectionId: z.ZodNullable<z.ZodString>;
+    engine: z.ZodNullable<z.ZodEnum<{
+        "claude-agent-sdk": "claude-agent-sdk";
+        "openai-agents": "openai-agents";
+        pi: "pi";
+        mastra: "mastra";
+    }>>;
+    engineVersion: z.ZodNullable<z.ZodString>;
+    usage: z.ZodReadonly<z.ZodObject<{
+        inputTokens: z.ZodNumber;
+        outputTokens: z.ZodNumber;
+        cacheReadInputTokens: z.ZodNumber;
+        cacheCreationInputTokens: z.ZodNumber;
+        totalTokens: z.ZodNumber;
+        toolCalls: z.ZodNumber;
+    }, z.core.$strict>>;
+    cost: z.ZodReadonly<z.ZodObject<{
+        amount: z.ZodString;
+        currency: z.ZodString;
+        priceTableVersion: z.ZodNullable<z.ZodString>;
+    }, z.core.$strict>>;
+    spendCeilingUsd: z.ZodNullable<z.ZodString>;
+    error: z.ZodNullable<z.ZodString>;
+    output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+        text: z.ZodString;
+        structured: z.ZodUnknown;
+    }, z.core.$strict>>>;
+    pendingApproval: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
+        toolName: z.ZodString;
+        canonicalCall: z.ZodString;
+    }, z.core.$strict>>>;
+    accountingState: z.ZodEnum<{
+        failed: "failed";
+        pending: "pending";
+        complete: "complete";
+        partial: "partial";
+        unavailable: "unavailable";
+    }>;
+    accountingError: z.ZodNullable<z.ZodString>;
+    parentRunId: z.ZodNullable<z.ZodString>;
+}, z.core.$strict>>;
+
 // @public
 export interface RunFailure {
     // (undocumented)
-    readonly code: RunStartProblemCode | 'engine_model_protocol_unsupported' | typeof RUNTIME_CAPACITY_EXHAUSTED | typeof RUN_PREPARATION_FAILED | typeof OUTPUT_SCHEMA_UNSATISFIED | typeof RUN_FILE_CORRUPT | null;
+    readonly code: RunStartProblemCode | 'engine_model_protocol_unsupported' | typeof RUNTIME_CAPACITY_EXHAUSTED | typeof RUN_PREPARATION_FAILED | typeof OUTPUT_SCHEMA_UNSATISFIED | typeof RUN_FILE_CORRUPT | typeof RUN_BUDGET_REACHED | null;
     // (undocumented)
     readonly message: string;
 }
@@ -394,6 +709,7 @@ export const RunListResponseSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>>;
         modelConnectionId: z.ZodNullable<z.ZodString>;
         engine: z.ZodNullable<z.ZodEnum<{
@@ -416,6 +732,7 @@ export const RunListResponseSchema: z.ZodReadonly<z.ZodObject<{
             currency: z.ZodString;
             priceTableVersion: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
         error: z.ZodNullable<z.ZodString>;
         output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
             text: z.ZodString;
@@ -433,6 +750,7 @@ export const RunListResponseSchema: z.ZodReadonly<z.ZodObject<{
             unavailable: "unavailable";
         }>;
         accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>>>>;
     nextCursor: z.ZodNullable<z.ZodString>;
 }, z.core.$strict>>;
@@ -480,6 +798,7 @@ export const RunResourceSchema: z.ZodReadonly<z.ZodObject<{
         openai: "openai";
         "azure-openai": "azure-openai";
         "openai-compatible": "openai-compatible";
+        vertex: "vertex";
     }>>;
     modelConnectionId: z.ZodNullable<z.ZodString>;
     engine: z.ZodNullable<z.ZodEnum<{
@@ -502,6 +821,7 @@ export const RunResourceSchema: z.ZodReadonly<z.ZodObject<{
         currency: z.ZodString;
         priceTableVersion: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>>;
+    spendCeilingUsd: z.ZodNullable<z.ZodString>;
     error: z.ZodNullable<z.ZodString>;
     output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
         text: z.ZodString;
@@ -519,6 +839,7 @@ export const RunResourceSchema: z.ZodReadonly<z.ZodObject<{
         unavailable: "unavailable";
     }>;
     accountingError: z.ZodNullable<z.ZodString>;
+    parentRunId: z.ZodNullable<z.ZodString>;
 }, z.core.$strict>>;
 
 // @public
@@ -550,6 +871,7 @@ export const RunResponseSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>>;
         modelConnectionId: z.ZodNullable<z.ZodString>;
         engine: z.ZodNullable<z.ZodEnum<{
@@ -572,6 +894,7 @@ export const RunResponseSchema: z.ZodReadonly<z.ZodObject<{
             currency: z.ZodString;
             priceTableVersion: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
         error: z.ZodNullable<z.ZodString>;
         output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
             text: z.ZodString;
@@ -589,6 +912,7 @@ export const RunResponseSchema: z.ZodReadonly<z.ZodObject<{
             unavailable: "unavailable";
         }>;
         accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>>;
 }, z.core.$strict>>;
 
@@ -602,6 +926,15 @@ export type RunStatus = (typeof RUN_STATUSES)[number];
 export const RUNTIME_CAPACITY_EXHAUSTED: "runtime_capacity_exhausted";
 
 // @public (undocumented)
+export type RunTreeCost = z.infer<typeof RunTreeCostSchema>;
+
+// @public
+export const RunTreeCostSchema: z.ZodReadonly<z.ZodObject<{
+    amount: z.ZodString;
+    currency: z.ZodString;
+}, z.core.$strict>>;
+
+// @public (undocumented)
 export type RunUsage = z.infer<typeof RunUsageSchema>;
 
 // @public (undocumented)
@@ -613,6 +946,9 @@ export const RunUsageSchema: z.ZodReadonly<z.ZodObject<{
     totalTokens: z.ZodNumber;
     toolCalls: z.ZodNumber;
 }, z.core.$strict>>;
+
+// @public
+export const SpendCeilingUsdSchema: z.ZodNumber;
 
 // @public (undocumented)
 export type StartRunRequest = z.infer<typeof StartRunRequestSchema>;
@@ -630,6 +966,7 @@ export const StartRunRequestSchema: z.ZodReadonly<z.ZodObject<{
     subject: z.ZodOptional<z.ZodString>;
     fileScope: z.ZodOptional<z.ZodArray<z.ZodString>>;
     outputSchema: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    spendCeilingUsd: z.ZodOptional<z.ZodNumber>;
 }, z.core.$strict>>;
 
 // @public (undocumented)
@@ -664,6 +1001,7 @@ export const StartRunResponseSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>>;
         modelConnectionId: z.ZodNullable<z.ZodString>;
         engine: z.ZodNullable<z.ZodEnum<{
@@ -686,6 +1024,7 @@ export const StartRunResponseSchema: z.ZodReadonly<z.ZodObject<{
             currency: z.ZodString;
             priceTableVersion: z.ZodNullable<z.ZodString>;
         }, z.core.$strict>>;
+        spendCeilingUsd: z.ZodNullable<z.ZodString>;
         error: z.ZodNullable<z.ZodString>;
         output: z.ZodNullable<z.ZodReadonly<z.ZodObject<{
             text: z.ZodString;
@@ -703,6 +1042,7 @@ export const StartRunResponseSchema: z.ZodReadonly<z.ZodObject<{
             unavailable: "unavailable";
         }>;
         accountingError: z.ZodNullable<z.ZodString>;
+        parentRunId: z.ZodNullable<z.ZodString>;
     }, z.core.$strict>>;
     events: z.ZodString;
 }, z.core.$strict>>;

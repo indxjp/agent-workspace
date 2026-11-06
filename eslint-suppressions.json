@@ -34,16 +34,6 @@
       "count": 1
     }
   },
-  "apps/web/app/p/s/[name]/page.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
-  "apps/web/app/p/s/[name]/try/page.tsx": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "apps/web/app/signin/page.tsx": {
     "no-restricted-properties": {
       "count": 1
@@ -134,24 +124,9 @@
       "count": 1
     }
   },
-  "apps/web/server/surfaces/loader/handler.ts": {
-    "no-restricted-properties": {
-      "count": 1
-    }
-  },
   "apps/web/server/surfaces/loader/test-runtime.ts": {
     "no-restricted-properties": {
       "count": 1
-    }
-  },
-  "apps/web/server/surfaces/public/handlers.ts": {
-    "no-restricted-properties": {
-      "count": 7
-    }
-  },
-  "apps/web/server/surfaces/public/limits.ts": {
-    "no-restricted-properties": {
-      "count": 2
     }
   },
   "apps/web/server/telemetry/runtime.ts": {

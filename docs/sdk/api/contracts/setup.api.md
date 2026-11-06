@@ -55,12 +55,12 @@ export const CompleteSetupAnswersSchema: z.ZodReadonly<z.ZodObject<{
     "embedder.brandColour": z.ZodString;
     "admin.platforms": z.ZodReadonly<z.ZodArray<z.ZodEnum<{
         none: "none";
+        "aws-agentcore": "aws-agentcore";
         "claude-managed-agents": "claude-managed-agents";
         "copilot-studio": "copilot-studio";
         "m365-declarative-agent": "m365-declarative-agent";
         "microsoft-foundry": "microsoft-foundry";
         "gemini-enterprise": "gemini-enterprise";
-        "aws-agentcore": "aws-agentcore";
     }>>>;
     "admin.features": z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
         skills: "skills";
@@ -90,7 +90,7 @@ export const SETUP_FILE_PATHS: readonly ["agent-workspace.yaml", "agents/<agentN
 export const SETUP_PLATFORM_CHOICES: readonly ["claude-managed-agents", "copilot-studio", "m365-declarative-agent", "microsoft-foundry", "gemini-enterprise", "aws-agentcore", "none"];
 
 // @public
-export const SETUP_PROVIDERS: readonly ["anthropic", "openai", "azure-openai", "openai-compatible"];
+export const SETUP_PROVIDERS: readonly ["anthropic", "openai", "azure-openai", "openai-compatible", "vertex"];
 
 // @public
 export const SETUP_QUESTIONS: readonly [SetupQuestion<"setup.theme", z.ZodEnum<{
@@ -126,12 +126,12 @@ export const SETUP_QUESTIONS: readonly [SetupQuestion<"setup.theme", z.ZodEnum<{
     unrestrictedNetwork: "unrestrictedNetwork";
 }>>>>, SetupQuestion<"embedder.surfaceTitle", z.ZodString>, SetupQuestion<"embedder.brandColour", z.ZodString>, SetupQuestion<"admin.platforms", z.ZodReadonly<z.ZodArray<z.ZodEnum<{
     none: "none";
+    "aws-agentcore": "aws-agentcore";
     "claude-managed-agents": "claude-managed-agents";
     "copilot-studio": "copilot-studio";
     "m365-declarative-agent": "m365-declarative-agent";
     "microsoft-foundry": "microsoft-foundry";
     "gemini-enterprise": "gemini-enterprise";
-    "aws-agentcore": "aws-agentcore";
 }>>>>, SetupQuestion<"admin.features", z.ZodReadonly<z.ZodArray<z.ZodEnum<{
     skills: "skills";
     files: "files";
@@ -219,12 +219,12 @@ export const SetupAnswersSchema: z.ZodReadonly<z.ZodObject<{
     "embedder.brandColour": z.ZodOptional<z.ZodString>;
     "admin.platforms": z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
         none: "none";
+        "aws-agentcore": "aws-agentcore";
         "claude-managed-agents": "claude-managed-agents";
         "copilot-studio": "copilot-studio";
         "m365-declarative-agent": "m365-declarative-agent";
         "microsoft-foundry": "microsoft-foundry";
         "gemini-enterprise": "gemini-enterprise";
-        "aws-agentcore": "aws-agentcore";
     }>>>>;
     "admin.features": z.ZodOptional<z.ZodOptional<z.ZodReadonly<z.ZodArray<z.ZodEnum<{
         skills: "skills";

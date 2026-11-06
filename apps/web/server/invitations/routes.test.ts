@@ -14,7 +14,7 @@ import {
   mintInvitationIdentityToken,
 } from '../auth';
 import { mintSessionToken, newSessionClaims, verifySessionToken } from '../auth/session';
-import { conferredBy } from '../rbac/conferral';
+import { conferredBy } from '../rbac/core/conferral';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
 import { installRbacHarness, TEST_WORKSPACE_ID } from '../rbac/testing';

@@ -467,3 +467,36 @@ Decision.
 
 Consequence: a public pull request runs the inner loop on GitHub's 4-vCPU runners without the Nx
 remote cache (its OIDC exchange accepts INDXDev only), so it is slower than here and costs nothing.
+
+## Amendment 2026-11-05: the light jobs on GitHub-hosted runners, the builds on Blacksmith
+
+The pool now serves mostly short jobs, and they wait for it. Over the last 30 `CI` runs on
+2026-11-05, an MS-A2 job waited 4.6 min for a runner at p50, 12.8 min at p90 and 18 min at worst,
+while it then ran about 1.5 min; a Blacksmith job waited 6-8 s. `fast checks`, `build` and
+`build-embedded` sit at the head of every pull-request and queue run, so that wait is on the
+critical path of every change. The Owner asked for the light jobs to go back to GitHub-hosted
+runners and the heavy ones to stay on Blacksmith, as indx-everything#394 and indx-dev/.github#18
+did on 2026-11-04.
+
+Decision.
+
+1. **Light jobs on plain `ubuntu-latest`.** `fast-checks`, `cancel-on-fast-failure`,
+   `cancel-on-build-failure` and `ci-success` in `ci.yml`, and every job of `quality.yml`,
+   `security.yml`, `internal-checks.yml`, `ci-nx-cache.yml` and `nightly-alarm.yml`. They check,
+   call an API or summarise: 7 s to about 2 min, and they download their own pinned tools. The label
+   is plain, with no override variable, as in #394, and it is also the public export's free label.
+   `scripts/check-workflows.mjs` holds them to exactly that label (`HOSTED_JOBS`), and refuses
+   `ubuntu-latest` on any other job of the policy workflows.
+2. **The builds on Blacksmith.** `build` and `build-embedded` build the whole workspace; on a 2-vCPU
+   hosted runner `build-embedded`'s webpack build alone took about 9 minutes (Amendment
+   2026-10-16). They join `OFFLOADED_JOBS` on `blacksmith-8vcpu-ubuntu-2404`. The host handoff
+   directory is not set there, so the jobs behind them download the `workspace-build` artifact.
+3. **`ubuntu-latest` is Ubuntu 26.04 now.** It broke `actions/setup-python` for Python 3.12.8 in
+   another repository. The light jobs here use Node and pinned downloads only; a job that needs a
+   tool missing on 26.04 moves to a pinned label in its own pull request.
+4. **Unchanged:** the nightly and `ci:full` heavy tier and the live lanes stay on the pool. With
+   the light jobs and the builds off it, the Owner confirmed on 2026-11-06 that the pool is fine for
+   them.
+
+Revert: set the `runs-on` back to the pool expression and empty `HOSTED_JOBS`, and drop `build` and
+`build-embedded` from `OFFLOADED_JOBS`.

@@ -71,6 +71,9 @@ spec:
             {{- if and (eq $name "web") $.Values.deploymentPolicy }}
             - { name: AW_DEPLOYMENT_POLICY, value: {{ $.Values.deploymentPolicy | quote }} }
             {{- end }}
+            {{- if and (eq $name "web") $.Values.deploymentFeatures }}
+            - { name: AW_DEPLOYMENT_FEATURES, value: {{ $.Values.deploymentFeatures | quote }} }
+            {{- end }}
             {{- if and (eq $name "web") $.Values.publicUrl }}
             - { name: AW_PUBLIC_URL, value: {{ $.Values.publicUrl | quote }} }
             {{- end }}

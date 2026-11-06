@@ -41,6 +41,8 @@ import { clearApplicationContext } from '../application-context';
 import { createAgentRunResourceLoader } from '../compose/resource-loader';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import type { StorageService } from '../storage/service';
+import { seedCatalogFile } from '@agent-workspace/core/db';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
 const ACTOR_HEADER = 'x-test-actor';
@@ -90,7 +92,7 @@ let cachedTerms: Map<string, string>;
 function textCache(): FileTextRepository {
   return {
     listStale: async () =>
-      (await catalog.forWorkspaceSync(WORKSPACE).listFiles())
+      (await listCatalogFiles(catalog.forWorkspaceSync(WORKSPACE)))
         .filter((row) => row.kind === 'file' && !cachedTerms.has(row.id))
         .map((row) => ({
           id: row.id,
@@ -106,7 +108,7 @@ function textCache(): FileTextRepository {
     },
     search: async (tsquery, _limit, allowedFileIds) => {
       const word = tsquery.replaceAll("'", '');
-      const rows = await catalog.forWorkspaceSync(WORKSPACE).listFiles();
+      const rows = await listCatalogFiles(catalog.forWorkspaceSync(WORKSPACE));
       return rows.flatMap((row) =>
         (allowedFileIds === null || allowedFileIds.includes(row.id)) &&
         cachedTerms.get(row.id)?.split(' ').includes(word) === true
@@ -265,7 +267,7 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
     });
     await putPending('docs/a.txt');
     expect(await listedPaths()).not.toContain('docs/a.txt');
-    const ready = await catalog.forWorkspaceSync(WORKSPACE).listFiles();
+    const ready = await listCatalogFiles(catalog.forWorkspaceSync(WORKSPACE));
     expect(ready.map((row) => row.path)).not.toContain('docs/a.txt');
   });
 
@@ -318,13 +320,14 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
   it('[US-STO-02][api][sdk] a Builder gets no link over a file another member created after authorisation', async () => {
     const repository = catalog.forWorkspaceSync(WORKSPACE);
     const reserve = repository.reserve.bind(repository);
-    let created: Awaited<ReturnType<typeof repository.putFile>> | null = null;
+    // The fixture writes through the real reserve, not the interception below.
+    const direct = { ...repository, reserve };
+    let created: Awaited<ReturnType<typeof seedCatalogFile>> | null = null;
     // The path was absent when the route authorised; the owner creates it before the reservation.
     repository.reserve = async (path, input) => {
-      created = await repository.putFile({
+      created = await seedCatalogFile(direct, {
         path,
         kind: 'file',
-        storageKey: path,
         sizeBytes: 1,
         contentType: 'text/plain',
         ownerPrincipalId: ME,
@@ -336,35 +339,6 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain('store.invalid');
     expect(await pendingRow()).toEqual(created);
-  });
-
-  it('[US-STO-02][api][sdk] a Builder gets no link over a reserved target that is renamed and its old path reused', async () => {
-    const repository = catalog.forWorkspaceSync(WORKSPACE);
-    const reserve = repository.reserve.bind(repository);
-    const file = (path: string, ownerPrincipalId: string) => ({
-      path,
-      kind: 'file' as const,
-      storageKey: path,
-      sizeBytes: 1,
-      contentType: 'text/plain',
-      ownerPrincipalId,
-    });
-    // The owner creates the path after the route authorised; once the replacement is reserved, the
-    // owner's file (and the replacement with it) moves away and the Builder writes its own file at
-    // the old path. A decision that reads the path again would see the Builder's file.
-    repository.reserve = async (path, input) => {
-      await repository.putFile(file(path, ME));
-      const outcome = await reserve(path, input);
-      await repository.renameFile(path, { ...file('docs/moved.txt', ME), storageKey: path });
-      await repository.putFile(file(path, SOMEONE_ELSE));
-      return outcome;
-    };
-    const response = await mint('docs/a.txt', 'builder');
-    repository.reserve = reserve;
-
-    expect(response.status).toBe(403);
-    await expect(repository.get('docs/moved.txt')).resolves.toMatchObject({ ownerPrincipalId: ME });
-    await expect(repository.pending('docs/moved.txt')).resolves.toBeNull();
   });
 
   it('[US-STO-02][api][sdk] an Azure-style store signs a new path unbound, and the oversize object is deleted at completion', async () => {
@@ -380,10 +354,9 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
   });
 
   it('[US-STO-02][api][sdk] a folder row answers 409 and returns no link', async () => {
-    await catalog.forWorkspaceSync(WORKSPACE).putFile({
+    await seedCatalogFile(catalog.forWorkspaceSync(WORKSPACE), {
       path: 'docs',
       kind: 'folder',
-      storageKey: null,
       sizeBytes: 0,
       contentType: null,
       ownerPrincipalId: ME,
@@ -395,6 +368,7 @@ describe('POST /api/files/:id/upload-urls reserves a pending row', () => {
 
   it('[US-STO-02][api][sdk] a pending upload by another member answers 409 upload_in_progress', async () => {
     const reserved = await catalog.forWorkspaceSync(WORKSPACE).reserve('docs/a.txt', {
+      objectId: crypto.randomUUID(),
       ownerPrincipalId: '5b0c9a51-7f3e-4c1d-9a2b-3c4d5e6f7a8b',
       sizeBytes: 5,
       contentType: 'text/plain',
@@ -657,6 +631,7 @@ describe('pending upload cap', () => {
     const repository = catalog.forWorkspaceSync(WORKSPACE);
     for (let index = 0; index < count; index += 1) {
       await repository.reserve(`seed/${index}.bin`, {
+        objectId: crypto.randomUUID(),
         sizeBytes: 5,
         contentType: null,
         ownerPrincipalId: ME,

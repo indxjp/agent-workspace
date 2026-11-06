@@ -6,7 +6,10 @@ import type {
   WorkspaceScope,
 } from '@agent-workspace/core/db';
 
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
+
 import type { ModelDiscovery } from '../models/discovery';
+import type { VertexDefaults } from '../models/vertex-defaults';
 import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
 import { setupSecretsOf, setupStepFailure } from '../setup/failure';
 import { setupConnectionName, type SetupInput } from '../setup/runtime';
@@ -49,17 +52,57 @@ const CREDENTIAL_UNREADABLE: SetupFailure = {
     'the key it was stored with and that the secrets store is reachable, then retry.',
 };
 
+/** A keyless setup with no Google Cloud project to name: the Owner adds the connection by hand. */
+const VERTEX_NOT_CONFIGURED: SetupFailure = {
+  ok: false,
+  status: 422,
+  code: 'vertex_not_configured',
+  message:
+    'Claude on Vertex AI needs a Google Cloud project; add the connection on the Models screen.',
+};
+
 export async function setupConnectionCandidate(
   store: WorkspaceModelsStore,
   workspaceId: string,
   provider: SeededSetupProvider,
   apiKey: string,
   baseUrl: string | undefined,
+  vertexDefaults: VertexDefaults,
 ): Promise<SetupConnectionCandidate | SetupFailure> {
   const name = setupConnectionName(provider);
   const existing = (await store.list()).find((entry) => entry.name === name);
   const configOf = (stored: ModelConnectionRecord['config']): ModelConnectionRecord['config'] =>
     baseUrl === undefined ? stored : { ...stored, baseUrl };
+  if (isKeylessProvider(provider)) {
+    // No secret to rotate or repair. An existing row is kept exactly as the Owner left it, so a
+    // second setup never overwrites a later edit; a new one takes the install's project and location.
+    const defaults = vertexDefaults;
+    const config: ModelConnectionRecord['config'] =
+      existing?.config ??
+      (defaults.projectId === undefined
+        ? {}
+        : { projectId: defaults.projectId, location: defaults.location ?? 'global' });
+    if (config.projectId === undefined) return VERTEX_NOT_CONFIGURED;
+    const now = new Date();
+    return {
+      existingId: existing?.id ?? null,
+      previousCredential: null,
+      repairsCredential: false,
+      storedConfig: existing?.config ?? null,
+      resolved: {
+        connection: {
+          id: existing?.id ?? crypto.randomUUID(),
+          workspaceId,
+          name,
+          provider,
+          config,
+          createdAt: existing === undefined ? now : new Date(existing.createdAt),
+          updatedAt: existing === undefined ? now : new Date(existing.updatedAt),
+        },
+        credential: '',
+      },
+    };
+  }
   if (existing !== undefined && !existing.hasCredential) {
     // The row has no secret at all, so there is nothing to lose: it is repaired in place.
     return {
@@ -168,7 +211,7 @@ export async function persistSetup(context: {
     const created = await workspaceModels.create({
       name: candidate.resolved.connection.name,
       provider: input.provider,
-      apiKey: input.providerApiKey,
+      ...(isKeylessProvider(input.provider) ? {} : { apiKey: input.providerApiKey }),
       config: candidate.resolved.connection.config,
     });
     if (created.kind !== 'created')
@@ -206,18 +249,21 @@ export async function persistSetup(context: {
           (await workspaceModels.update(existingId, { config: stored })).kind === 'updated',
       });
     }
-    // A row with no secret at all is given a fresh one under the same id; a row with a readable
-    // secret has it rotated. An unreadable secret never reaches here (`credential_unreadable`).
-    const written = candidate.repairsCredential
-      ? await workspaceModels.writeCredential(existingId, input.providerApiKey)
-      : await workspaceModels.replaceCredential(existingId, input.providerApiKey);
-    if (!written)
-      return {
-        ok: false,
-        status: 500,
-        code: 'credential_missing',
-        message: 'The setup-owned provider credential could not be reconciled.',
-      };
+    // A keyless row has no secret to reconcile. A row with no secret at all is given a fresh one
+    // under the same id; a row with a readable secret has it rotated. An unreadable secret never
+    // reaches here (`credential_unreadable`).
+    if (!isKeylessProvider(input.provider)) {
+      const written = candidate.repairsCredential
+        ? await workspaceModels.writeCredential(existingId, input.providerApiKey)
+        : await workspaceModels.replaceCredential(existingId, input.providerApiKey);
+      if (!written)
+        return {
+          ok: false,
+          status: 500,
+          code: 'credential_missing',
+          message: 'The setup-owned provider credential could not be reconciled.',
+        };
+    }
     const previous = candidate.previousCredential;
     if (previous !== null) {
       undo.push({

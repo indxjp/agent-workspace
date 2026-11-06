@@ -506,7 +506,8 @@ describe('granted file references', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'agent-reference-rw-'));
     try {
       const target = await hydrate(root, reference('read-write', 'draft.txt'));
-      expect((await lstat(target)).mode & 0o777).toBe(0o644);
+      // Windows keeps only the read-only attribute of a mode, so a writable file reads back 0o666.
+      expect((await lstat(target)).mode & 0o777).toBe(process.platform === 'win32' ? 0o666 : 0o644);
       await writeFile(target, 'changed');
       expect(await readFile(target, 'utf8')).toBe('changed');
     } finally {

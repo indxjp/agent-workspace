@@ -64,12 +64,14 @@ function install(
     expiresAt: EXPIRES_AT,
     resumeKey: RESUME_KEY,
   },
+  env: () => Readonly<Record<string, string | undefined>> = () => process.env,
 ): FakeRuntimeCalls {
   const calls: FakeRuntimeCalls = { resolved: [], opened: [], requests: [] };
   installTestDomains({
     surfaces: {
       kind: 'serving',
       runtime: {
+        env,
         resolve: (name, mode) => {
           calls.resolved.push(mode === 'public' ? name : `${name} (${mode})`);
           return Promise.resolve(resolved);
@@ -456,6 +458,7 @@ describe('an origin only the local draft lists, while production serves visitors
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: (_name, mode) => Promise.resolve(mode === 'public' ? production : draft),
           open: () => Promise.reject(new Error('a refused origin never opens a session')),
           checkModel: () => Promise.reject(new Error('the bootstrap never checks a model alone')),
@@ -487,6 +490,7 @@ describe('an origin only the local draft lists, while production serves visitors
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: (_name, mode) => {
             modes.push(mode);
             return Promise.resolve(mode === 'public' ? PRODUCTION : DRAFT);
@@ -555,6 +559,7 @@ describe('the local draft’s default origins under `aw dev` (#699, composed wit
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: () => Promise.resolve(RESOLVED),
           open: () => Promise.reject(new Error('the run routes never open a session')),
           checkModel: () => Promise.reject(new Error('the run routes never check a model')),
@@ -570,6 +575,7 @@ describe('the local draft’s default origins under `aw dev` (#699, composed wit
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: () => Promise.resolve(RESOLVED),
           open: () => Promise.reject(new Error('the run routes never open a session')),
           checkModel: () => Promise.reject(new Error('the run routes never check a model')),
@@ -655,6 +661,7 @@ describe('CORS of the run routes a visitor token may call (#680)', () => {
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: () => Promise.resolve(null),
           open: () => Promise.reject(new Error('never opened')),
           visitorSurface: () => Promise.resolve(null),
@@ -683,6 +690,22 @@ describe('CORS of the run routes a visitor token may call (#680)', () => {
       'cache-control': 'no-store',
       vary: 'origin',
     });
+  });
+});
+
+describe('the environment the composition root injects (refactoring plan part 05)', () => {
+  it('is the installed runtime’s, read on every call, when a caller passes none', async () => {
+    let env: Readonly<Record<string, string>> = LOCAL_ENV;
+    install(RESOLVED, undefined, () => env);
+    const pageHeaders = new Headers({ host: '127.0.0.1:4310' });
+    expect((await readSurfacePage('main', pageHeaders))?.branch).toBe('loopback');
+    expect(toResponse(await createSurfaceSession(request(), 'main')).status).toBe(201);
+
+    env = {};
+    await expect(readSurfacePage('main', pageHeaders)).resolves.toBeNull();
+    const refused = toResponse(await createSurfaceSession(request(), 'main'));
+    expect(refused.status).toBe(404);
+    expect(codeOf(await refused.json())).toBe('surface_sessions_unavailable');
   });
 });
 

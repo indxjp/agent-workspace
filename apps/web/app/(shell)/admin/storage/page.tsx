@@ -1,4 +1,5 @@
 import { StorageConnectionsScreen } from '../../../../components/storage/storage-connections-screen';
+import { NotAllowedScreen } from '../../../../components/shell/screen-main';
 
 import { callerManagesStorage, NOT_ALLOWED } from './manages-storage';
 
@@ -7,7 +8,7 @@ export const revalidate = 0;
 
 export default async function StoragePage() {
   if (!(await callerManagesStorage())) {
-    return <p className="p-8 text-sm text-muted">{NOT_ALLOWED}</p>;
+    return <NotAllowedScreen title="Storage">{NOT_ALLOWED}</NotAllowedScreen>;
   }
   return <StorageConnectionsScreen />;
 }

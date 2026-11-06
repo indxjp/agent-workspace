@@ -268,7 +268,7 @@ export function isWithholdingArm(policy: AgentPolicy): policy is WithholdingArm 
 
 /**
  * The permissions a run composes: the agent's, with every switch the stored `openai-agents`, `pi`
- * or `mastra` arm withholds turned off. Only ever narrows.
+ * or `mastra` arm withholds turned off. Only ever narrows. `memory` is kept as stated (ADR-0163).
  */
 export function policyNarrowedPermissions(
   permissions: AgentPermissions,
@@ -281,6 +281,8 @@ export function policyNarrowedPermissions(
   return {
     readFiles: permissions.readFiles && !withheld.includes('readFiles'),
     writeFiles: permissions.writeFiles && !withheld.includes('writeFiles'),
+    // ADR-0163: carried as stated; it is in force only while both file switches stay on.
+    ...(permissions.memory === undefined ? {} : { memory: permissions.memory }),
     runCommands: permissions.runCommands && !withheld.includes('runCommands'),
     unrestrictedNetwork:
       permissions.unrestrictedNetwork && !withheld.includes('unrestrictedNetwork'),

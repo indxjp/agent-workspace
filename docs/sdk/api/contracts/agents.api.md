@@ -48,6 +48,24 @@ export const AGENT_LIST_PROBLEM_CODES: {
     readonly invalid_agent_list_query: 400;
 };
 
+// @public
+export const AGENT_MEMORY_DIRECTORY = "memory";
+
+// @public
+export const AGENT_MEMORY_FILE = "memory/MEMORY.md";
+
+// @public
+export const AGENT_MEMORY_LIMIT_EXCEEDED = "memory_limit_exceeded";
+
+// @public
+export const AGENT_MEMORY_MAX_BYTES: number;
+
+// @public
+export const AGENT_MEMORY_MAX_FILES = 64;
+
+// @public
+export const AGENT_MEMORY_SCOPES: readonly ["agent"];
+
 // @public (undocumented)
 export const AGENT_MODEL_MAX_LENGTH = 200;
 
@@ -103,6 +121,9 @@ export const AgentDefinitionAgentSchema: z.ZodReadonly<z.ZodObject<{
     permissions: z.ZodReadonly<z.ZodObject<{
         readFiles: z.ZodBoolean;
         writeFiles: z.ZodBoolean;
+        memory: z.ZodOptional<z.ZodEnum<{
+            agent: "agent";
+        }>>;
         runCommands: z.ZodBoolean;
         unrestrictedNetwork: z.ZodBoolean;
     }, z.core.$strict>>;
@@ -147,6 +168,9 @@ export const AgentDefinitionSchema: z.ZodReadonly<z.ZodObject<{
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;
@@ -307,6 +331,9 @@ export const AgentListResponseSchema: z.ZodReadonly<z.ZodObject<{
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;
@@ -326,6 +353,20 @@ export const AgentListResponseSchema: z.ZodReadonly<z.ZodObject<{
     }, z.core.$strict>>>>;
 }, z.core.$strict>>;
 
+// @public
+export function agentMemoryEnabled(permissions: AgentPermissions): boolean;
+
+// @public
+export function agentMemoryFolder(agentId: string): string;
+
+// @public (undocumented)
+export type AgentMemoryScope = z.infer<typeof AgentMemoryScopeSchema>;
+
+// @public (undocumented)
+export const AgentMemoryScopeSchema: z.ZodEnum<{
+    agent: "agent";
+}>;
+
 // @public (undocumented)
 export type AgentPermissionKey = (typeof AGENT_PERMISSION_KEYS)[number];
 
@@ -336,6 +377,9 @@ export type AgentPermissions = z.infer<typeof AgentPermissionsSchema>;
 export const AgentPermissionsSchema: z.ZodReadonly<z.ZodObject<{
     readFiles: z.ZodBoolean;
     writeFiles: z.ZodBoolean;
+    memory: z.ZodOptional<z.ZodEnum<{
+        agent: "agent";
+    }>>;
     runCommands: z.ZodBoolean;
     unrestrictedNetwork: z.ZodBoolean;
 }, z.core.$strict>>;
@@ -641,6 +685,9 @@ export const AgentResourceSchema: z.ZodReadonly<z.ZodObject<{
     permissions: z.ZodReadonly<z.ZodObject<{
         readFiles: z.ZodBoolean;
         writeFiles: z.ZodBoolean;
+        memory: z.ZodOptional<z.ZodEnum<{
+            agent: "agent";
+        }>>;
         runCommands: z.ZodBoolean;
         unrestrictedNetwork: z.ZodBoolean;
     }, z.core.$strict>>;
@@ -798,6 +845,9 @@ export const CreateAgentWithAssignmentsResponseSchema: z.ZodReadonly<z.ZodObject
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;

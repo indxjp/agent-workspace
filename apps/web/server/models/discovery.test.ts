@@ -449,3 +449,26 @@ describe('createModelDiscovery', () => {
     });
   });
 });
+
+describe('createModelDiscovery — vertex', () => {
+  it('lists the static Claude models for a keyless connection without a credential or a fetch', async () => {
+    const resolved: ResolvedModelConnection = {
+      ...connection('vertex', { projectId: 'my-project-123' }),
+      credential: '',
+    };
+    const calls: unknown[] = [];
+    const discover = createModelDiscovery({
+      fetch: (...args) => {
+        calls.push(args);
+        return Promise.reject(new Error('vertex discovery must not fetch'));
+      },
+    });
+    const result = await discover(resolved);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.models.map((model) => model.providerModelId)).toContain('claude-sonnet-5-5');
+    }
+    expect(calls).toHaveLength(0);
+    expect(discoveryCacheFingerprint(resolved, new Uint8Array(32))).toMatch(/^[0-9a-f]{64}$/u);
+  });
+});

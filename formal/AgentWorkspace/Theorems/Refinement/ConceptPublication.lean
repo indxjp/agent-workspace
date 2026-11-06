@@ -29,7 +29,7 @@ theorem target_refines_current (st : State) (h : Publication.Target.consistent s
 
 /-- A share as the service publishes it meets the two row-local Target checks: it has a mode when
 it is an agent share, and a budget only when it is runnable. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (tier := T4) (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2063-publishing-an-agent")]
 theorem well_published_share_meets_the_target_checks (s : Share) (h : s.wellPublished = true) :
     Publication.Target.agentHasMode s.toRow = true ∧
@@ -53,7 +53,7 @@ theorem witness_state_meets_the_target :
 /-- An agent share without a mode is consistent today but refused by the Target: the database
 lets `mode` be `NULL` on an agent share, although the service always writes one. -/
 @[aw_spec (tier := T4) (ts := "packages/core/src/db/schema/shares.ts#shares")
-  (ts := "apps/web/server/shares/core/service.ts#ShareService")
+  (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2063-publishing-an-agent")]
 theorem current_admits_an_agent_share_without_mode :
     let st := stateWith [{ Invariants.ConceptPublication.Witness.share with

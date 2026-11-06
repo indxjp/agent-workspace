@@ -119,6 +119,11 @@ names for the same thing. Each alias resolves to exactly one term
 | **trigger delivery**        | The claimed slot of one firing of a trigger, unique per (trigger, delivery key) within the dedupe window, naming the run it started.                                                    | The delivery key is a webhook's `Idempotency-Key` or a schedule's `scheduled_at`.                                                          | `Er.Target.triggerDeliveries`                                                                                         |
 | **builder tool call**       | One tool call of a Builder run as its journal keeps it: the tool, what the core decided, how it ended, and the input and result, capped at the tool-output limit.                       | A retry with the same (run, call) keeps the first row. The run id is the engine's, not a row of `runs`.                                    | `Er.Target.builderToolCalls`                                                                                          |
 | **workspace feature**       | One product feature a workspace has switched off (ADR-0160 D6); a workspace with no row for a feature has it on.                                                                        | "disabled feature", `workspace_features`; set by the whole switched-off set, never a patch.                                                | `Er.Core.TableName.workspaceFeatures`                                                                                 |
+| **webhook**                 | An endpoint a workspace has the outcomes of its runs posted to (ADR-SDK-18-N3-250 D1); at most ten per workspace, its signing secret held by the secrets service.                       | "webhook endpoint"; subscribed to a non-empty set of `run.completed`, `run.failed`, `run.cancelled`.                                       | `Er.Core.TableName.webhooks`                                                                                          |
+| **webhook delivery**        | One run outcome owed to one webhook, written in the run's stop and retried until it is delivered or given up (D3, D4).                                                                  | `webhook_deliveries`, the outbox; one per (webhook, run).                                                                                  | `Er.Core.TableName.webhookDeliveries`                                                                                 |
+| **agent team**              | A lead agent and up to eight member agents of one workspace, published as one unit (ADR-0104, accepted for `handoff` mode).                                                             | `agent_teams`; one live team per (workspace, name), and a deleted team keeps its versions.                                                 | `Er.Core.TableName.agentTeams`                                                                                        |
+| **agent team version**      | One immutable, numbered snapshot of an agent team that pins the lead's and each member's agent version (ADR-0104 decision 11).                                                          | `agent_team_versions`, "team member" (`agent_team_version_members`); a member name is a slug of at most 52 characters.                     | `Er.Core.TableName.agentTeamVersions`                                                                                 |
+| **child run**               | A run that a lead run started by calling an agent-team member; it names the lead as its parent (ADR-0104 decisions 5 and 7).                                                            | `parent_run_id`, a run of the same workspace and never the run itself; the depth is at most 1.                                             | `Concepts.RunTree`                                                                                                    |
 | **storage migration run**   | One verify pass of the move off the old object naming: how many objects it checked and how many old rows and mismatches it found.                                                       | Old copies are deleted only while the latest run shows no old rows and no mismatches.                                                      | `Er.Target.storageMigrationRuns`                                                                                      |
 | **audit event**             | One recorded control-plane action.                                                                                                                                                      | Every publish is audited as `session-published`.                                                                                           | `Er.Current.Work.AuditEvent`                                                                                          |
 | **share**                   | One published subject of one workspace; the only mechanism that reaches outside a workspace.                                                                                            | —                                                                                                                                          | `Concepts.Share.Share`                                                                                                |
@@ -263,6 +268,8 @@ erDiagram
   sessions ||--o{ runs : "session_id"
   model_connections |o--o{ runs : "model_connection_id"
   runs |o--o{ runs : "continues_run_id"
+  runs |o--o{ runs : "parent_run_id"
+  agent_team_versions |o--o{ runs : "agent_team_version_id"
   runs ||--o{ run_events : "run_id"
   runs ||--o{ run_feedback : "run_id"
   runs ||--o{ run_usage_records : "run_id"
@@ -303,6 +310,15 @@ erDiagram
   memberships |o--o| workspace_principals : "membership_id"
   api_keys |o--o| workspace_principals : "api_key_id"
   workspace_principals |o--o{ workspace_principals : "acts_for_principal_id"
+  webhooks ||--o{ webhook_deliveries : "webhook_id"
+  runs ||--o{ webhook_deliveries : "run_id"
+  workspace_principals ||--o{ agent_teams : "owner_principal_id"
+  memberships |o--o{ agent_teams : "created_by"
+  agent_teams ||--o{ agent_team_versions : "team_id"
+  agent_versions ||--o{ agent_team_versions : "lead_agent_version_id, lead_agent_id"
+  memberships |o--o{ agent_team_versions : "created_by"
+  agent_team_versions ||--o{ agent_team_version_members : "team_version_id"
+  agent_versions ||--o{ agent_team_version_members : "agent_version_id, agent_id"
 ```
 
 Reading it against today's diagram (`docs/sdk/07-structure-map.md` §3): the `memberships → agent_grants`

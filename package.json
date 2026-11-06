@@ -64,6 +64,7 @@
   },
   "devDependencies": {
     "@indx-workspace/aw": "workspace:*",
+    "@indx-workspace/cli": "workspace:*",
     "@indx-workspace/contracts": "workspace:*",
     "@agent-workspace/core": "workspace:*",
     "@agent-workspace/engine": "workspace:*",
@@ -76,31 +77,31 @@
     "@agent-workspace/runtime": "workspace:*",
     "@agent-workspace/skills-office": "workspace:*",
     "@indx-workspace/sdk": "workspace:*",
-    "@aws-sdk/client-s3": "3.1156.0",
+    "@aws-sdk/client-s3": "3.1161.0",
     "@cloudflare/containers": "0.3.7",
     "@eslint/js": "10.0.1",
     "@microsoft/api-extractor": "7.59.4",
     "@playwright/test": "1.64.1",
     "@seriousme/openapi-schema-validator": "2.11.0",
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.6",
     "@types/pg": "8.23.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "@vitest/coverage-v8": "5.0.5",
     "dependency-cruiser": "18.7.0",
     "drizzle-orm": "0.45.4",
     "embedded-postgres": "18.4.0-beta.17",
-    "eslint": "10.13.0",
+    "eslint": "10.14.0",
     "eslint-config-prettier": "10.1.8",
     "fast-check": "4.10.2",
     "jscpd": "5.4.2",
-    "knip": "6.43.0",
-    "nx": "24.0.1",
+    "knip": "6.44.1",
+    "nx": "24.0.3",
     "openapi-fetch": "0.17.0",
     "openapi-typescript": "7.13.0",
     "pg": "8.23.1",
     "prettier": "3.9.10",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "typescript-eslint": "8.72.0",
+    "typescript-eslint": "8.72.1",
     "vitest": "5.0.5"
   },
   "nx": {
@@ -118,7 +119,7 @@
       "lint": {
         "executor": "nx:run-commands",
         "options": {
-          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts tests scripts sites/lp/assets/site.js --max-warnings 0"
+          "command": "eslint eslint.config.mjs playwright.config.ts playwright.journey.config.mjs playwright.generated-project.config.mjs playwright.azure-live.config.mjs playwright.app-kit.config.mjs vitest.config.ts vitest.coverage.config.ts vitest.apps.coverage.config.ts vitest.ui-cli.coverage.config.ts tests scripts sites/lp/assets/site.js --max-warnings 0"
         }
       },
       "test": {

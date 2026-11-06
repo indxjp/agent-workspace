@@ -7,7 +7,7 @@ import { FIXTURE_PERMISSIONS, versionRequest } from '../../../agent-versions/fix
 import { createInMemoryAgentVersionStoreProvider } from '../../../agent-versions/memory-store';
 import { createInMemoryAgentStoreProvider } from '../../../agents/memory-store';
 import type { AgentStoreProvider } from '../../../agents/store';
-import type { Role } from '../../../rbac/roles';
+import type { Role } from '../../../rbac/core/roles';
 import { callContextOf } from '../../testing/context';
 import { describeCheckerConformance, draftBody, type CheckerFixture } from './checker.contract';
 import { MemoryChecker } from './memory';

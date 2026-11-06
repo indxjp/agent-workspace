@@ -1,6 +1,6 @@
-// `starterFor` reads the starter files with `node:fs` (typed by `node-fs.d.ts`): `./project` is the
+// `starterFor` checks the starters root with `node:fs` (typed by `node-fs.d.ts`): `./project` is the
 // Node-side subpath, used by aw and create, and this package carries no Node types.
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 
 import { isMap, isSeq, parseDocument } from 'yaml';
 import { z } from 'zod';
@@ -42,13 +42,8 @@ import {
 import { projectDependencies } from './dependencies.js';
 import { ProjectRenderError, type ProjectRenderIssue } from './errors.js';
 import { ProjectFileError, readProjectFileText } from './reader.js';
+import { renderTemplateDirectory, type ProjectFile } from './template.js';
 import { writeProjectFileText, type ProjectFileMapping } from './writer.js';
-
-/** One file of a rendered project: its path relative to the project root, and its text. */
-export interface ProjectFile {
-  readonly path: string;
-  readonly contents: string;
-}
 
 /** The project name `projectNameFor` falls back to when a directory name has nothing usable. */
 const FALLBACK_PROJECT_NAME = 'agent-workspace';
@@ -65,12 +60,14 @@ function projectFileHeader(keyVariable: string, placeholders: boolean): readonly
     'The Agent Workspace project file: what `aw dev` runs, and where.',
     'No secret belongs in this file; it is meant to be committed.',
     `\`aw dev\` reads the model key from ${keyVariable} in its own environment.`,
+    'To deploy to your Google Cloud project: add this under environments, then `aw deploy production`.',
+    '  production: { target: gcp-cloudrun, url: https://<host>, gcp: { project: <id>, region: asia-northeast1 } }',
     ...(placeholders ? ['Replace each `your-` value under models.default before `aw dev`.'] : []),
   ];
 }
 
 /** The environment variable each model provider's key is read from. */
-const MODEL_KEY_VARIABLES: Readonly<Record<ModelProvider, string>> = {
+const MODEL_KEY_VARIABLES: Readonly<Record<Exclude<ModelProvider, 'vertex'>, string>> = {
   anthropic: 'ANTHROPIC_API_KEY',
   'anthropic-compatible': 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
@@ -83,7 +80,7 @@ const MODEL_KEY_VARIABLES: Readonly<Record<ModelProvider, string>> = {
  * endpoint under `.example` (RFC 2606), which never resolves, so no request reaches a real host.
  */
 const MODEL_CONFIG_PLACEHOLDERS: Readonly<
-  Record<Exclude<ModelConnectionConfigField, 'baseUrl'>, string>
+  Record<Exclude<ModelConnectionConfigField, 'baseUrl' | 'projectId' | 'location'>, string>
 > = {
   deployment: 'your-deployment',
   apiVersion: 'your-api-version',
@@ -132,6 +129,7 @@ const RUNTIME_OVERRIDES: readonly (readonly [string, string])[] = [
   ['@modelcontextprotocol/core@>=2.0.0 <2.3.0', '^2.3.0'],
   ['@modelcontextprotocol/node@>=2.0.0 <2.1.0', '2.1.1'],
   ['@hono/node-server@>=1.19.10 <2.1.3', '^2.1.3'],
+  ['minimatch@>=10.0.0 <11.0.1', '^11.0.3'],
 ];
 
 const ProjectNameSchema = z
@@ -533,72 +531,30 @@ interface Starter {
 
 /**
  * The files kept under `starters/<theme>/` (real files, so they are type-checked and linted like
- * code; the build copies them beside this module). `{{agentName}}` in a file's text and
- * `__agentName__` in its path become the agent's name (a trailing `.template.txt` is dropped: the
- * file stays inert in the repository), and `{{version}}` the exact version the project's packages are
- * pinned to (`renderProjectShell`'s); nothing else is substituted, and a README's file map is
- * re-aligned after the substitution. Every
- * `tools/<name>.ts` that is not a run file is a tool the agent imports. A theme with no
- * directory has no starter.
+ * code; the build copies them beside this module), rendered by `renderTemplateDirectory` with two
+ * values: `agentName`, the agent's name, and `version`, the exact version the project's packages are
+ * pinned to (`renderProjectShell`'s). A starter that uses `{{version}}` when there is none is
+ * refused. Every rendered `tools/<name>.ts` that is not a run file is a tool the agent imports. A
+ * theme with no directory has no starter.
  */
 function starterFor(theme: string, agentName: string, version: string | undefined): Starter {
   // A missing starters root is a broken package (a build that skipped the copy): let it throw.
   statSync(new URL('./starters/', import.meta.url));
-  const root = new URL(`./starters/${theme}/`, import.meta.url);
-  let paths: string[];
-  try {
-    paths = readdirSync(root, { recursive: true, encoding: 'utf8' })
-      .map((path) => path.replaceAll('\\', '/'))
-      .filter((path) => statSync(new URL(path, root)).isFile())
-      .sort();
-  } catch (error) {
-    // Only a theme with no directory under an existing starters root has no starter.
-    if ((error as { readonly code?: unknown }).code === 'ENOENT') return { files: [], tools: [] };
-    throw error;
-  }
-  const files = paths.map((path) => {
-    const text = readFileSync(new URL(path, root), 'utf8');
-    if (version === undefined && text.includes('{{version}}')) {
-      throw new ProjectRenderError('the project', [
-        { path: 'version', message: `is required: the ${theme} starter pins packages to it` },
-      ]);
-    }
-    const contents = text
-      .replaceAll('{{agentName}}', agentName)
-      .replaceAll('{{version}}', version ?? '');
-    return {
-      path: path.replaceAll('__agentName__', agentName).replace(/\.template\.txt$/u, ''),
-      contents: path.endsWith('README.md') ? alignFileMaps(contents) : contents,
-    };
-  });
-  const tools = paths
-    .map((path) => /^tools\/([^/]+)\.ts$/u.exec(path)?.[1])
+  // Only a theme with no directory under an existing starters root has no starter.
+  const files = renderTemplateDirectory(
+    new URL(`./starters/${theme}/`, import.meta.url),
+    { agentName, ...(version === undefined ? {} : { version }) },
+    'the project',
+    {
+      optional: true,
+      missingMessage: () => `is required: the ${theme} starter pins packages to it`,
+    },
+  );
+  const tools = files
+    .map((file) => /^tools\/([^/]+)\.ts$/u.exec(file.path)?.[1])
     .filter((name): name is string => name !== undefined && !name.endsWith('.run'))
     .map((name) => ({ name, identifier: toolIdentifier(name) }));
   return { files, tools };
-}
-
-/**
- * A README's file map (a `text` block of `path   description` rows) is aligned for the
- * `{{agentName}}` placeholder; once the name replaces it, the descriptions are re-padded so they
- * start in one column again (BH061-075).
- */
-function alignFileMaps(text: string): string {
-  return text.replace(
-    /(```text\n)([\s\S]*?)(```)/gu,
-    (_block, open: string, body: string, close: string) => {
-      const lines = body.split('\n');
-      const rows = lines.map((line) => /^(\S+) +(\S.*)$/u.exec(line));
-      const width = Math.max(0, ...rows.map((row) => (row?.[1]?.length ?? 0) + 2));
-      const aligned = lines.map((line, index) => {
-        const row = rows[index];
-        return row === null || row === undefined
-          ? line
-          : `${(row[1] ?? '').padEnd(width)}${row[2] ?? ''}`;
-      });
-      return `${open}${aligned.join('\n')}${close}`;
-    },
-  );
 }
 
 function frozenFiles(files: readonly ProjectFile[]): readonly ProjectFile[] {

@@ -8,6 +8,7 @@ import {
   SETUP_REQUEST_HEADERS,
   SETUP_UNANSWERED,
   setupOutcomeOf,
+  setupProviderApiKey,
   setupUnanswered,
 } from './setup-requests-model';
 
@@ -75,5 +76,15 @@ describe('detectionOf', () => {
     ['a body that is not JSON', () => new Response('<html></html>', { status: 200 })],
   ])('is null on %s', async (_name, respond) => {
     await expect(detectionOf(respond())).resolves.toBeNull();
+  });
+});
+
+describe('setupProviderApiKey', () => {
+  it('sends an empty key for Claude on Google Cloud, even after one was typed for another provider', () => {
+    expect(setupProviderApiKey('vertex', 'sk-typed-earlier')).toBe('');
+  });
+
+  it('sends the typed key for every other provider', () => {
+    expect(setupProviderApiKey('anthropic', 'sk-test')).toBe('sk-test');
   });
 });

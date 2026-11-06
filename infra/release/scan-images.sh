@@ -56,7 +56,21 @@ while read -r name dockerfile target engine engine_version <&3; do
     case " $only " in *" $name "*) ;; *) continue ;; esac
   fi
   reference="agent-workspace-scan/$name:$tag"
+  # Each final stage runs `apt-get upgrade` so that a build applies the Debian security fixes
+  # published since the pinned base was built (ADR-0087 D3). A warm BuildKit cache on a shared
+  # daemon (MS-A2) replays that layer from before a fix existed, and the scan then fails on a
+  # finding a release build (a fresh builder) would not carry: apt 2.6.1 for CVE-2026-109518,
+  # fixed in bookworm-security on 2026-11-04. Those stages are always rebuilt, never cached.
+  upgrade_stages="$(awk '
+    /^[[:space:]]*#/ { next }
+    toupper($1) == "FROM" && toupper($(NF - 1)) == "AS" { stage = $NF }
+    /apt-get upgrade/ && stage != "" && !(stage in seen) { seen[stage] = 1; list = list sep stage; sep = "," }
+    END { print list }
+  ' "$dockerfile")"
   set -- --platform "$platform" --file "$dockerfile" --target "$target" --load --tag "$reference"
+  if [ -n "$upgrade_stages" ]; then
+    set -- "$@" --no-cache-filter "$upgrade_stages"
+  fi
   if [ "$engine" != - ]; then
     # runtime.Dockerfile re-checks ENGINE_VERSION against the manifests it copied.
     set -- "$@" --build-arg "ENGINE=$engine" --build-arg "ENGINE_VERSION=$engine_version"

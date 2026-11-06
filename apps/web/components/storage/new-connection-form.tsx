@@ -15,6 +15,7 @@ import {
 } from './storage-form-parts';
 import {
   createConnectionInput,
+  connectionNameProblem,
   credentialProblem,
   EMPTY_CREDENTIALS,
   PROVIDER_OPTIONS,
@@ -46,7 +47,7 @@ export function NewConnectionForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
-    const refused = credentialProblem(provider, credentials);
+    const refused = connectionNameProblem(name) ?? credentialProblem(provider, credentials);
     if (refused !== null) {
       setProblem(refused);
       setCredentials(EMPTY_CREDENTIALS);
@@ -97,7 +98,8 @@ export function NewConnectionForm() {
               onChange={(event) => setName(event.target.value)}
             />
             <p id="storage-name-help" className={HELP}>
-              Lowercase letters, digits and hyphens. Grants use this name.
+              Lowercase letters, digits and hyphens, starting with a letter, up to 63 characters.
+              Grants use this name.
             </p>
           </div>
           <div>

@@ -1,8 +1,8 @@
 import { MODEL_PROVIDERS, type ModelProvider } from '@indx-workspace/contracts/runs';
 
 import { digitGroup, instantOfUtcFields, isKeysetTimestamp } from '../pagination/keyset-timestamp';
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
-import type { Grant } from '../rbac/permissions';
+import { ownerPrincipalIdOf } from '../rbac/core/owner-principal';
+import type { Grant } from '../rbac/core/permissions';
 import type { RunPrincipal } from './environment';
 import { isUuid } from './http';
 import { MAX_RUN_LIST_LIMIT, runStatuses, type ListRunsInput, type RunStatus } from './store';
@@ -158,6 +158,17 @@ export type RunListQueryResult =
     };
 
 /**
+ * ADR-0161 (the amendment of issue #1530): an app backend lists only the runs of the agents its
+ * endpoint client binds, lowercased; `null` for every other caller. Applied unconditionally, like
+ * the own-grant owner filter, so no query parameter widens it. An agent id is a UUID; anything else
+ * could never match a run, and would not cast in SQL.
+ */
+function boundAgentsOf(principal: RunPrincipal): readonly string[] | null {
+  if (principal.scope?.kind !== 'app-backend') return null;
+  return (principal.scope.agentIds ?? []).filter(isUuid).map((agentId) => agentId.toLowerCase());
+}
+
+/**
  * Parse and validate every `GET /api/runs` query parameter, including the authorisation rule
  * issue #135 states as a "deliberately not built": the `user` filter exists only for a caller
  * whose grant is `any` (Owner and Admin, under the current `runs` classification — see
@@ -204,6 +215,7 @@ export function parseRunListQuery(
     createdTo?: Date;
     initiatingUserId?: string;
     ownerPrincipalId?: string;
+    agentIds?: readonly string[];
   } = {};
 
   const status = params.get('status');
@@ -214,9 +226,19 @@ export function parseRunListQuery(
     filter.status = status as RunStatus;
   }
 
+  const bound = boundAgentsOf(principal);
+  if (bound !== null) filter.agentIds = bound;
+
   const agent = params.get('agent');
   if (agent !== null) {
     if (!isUuid(agent)) return reject(400, 'invalid_agent', 'agent must be a UUID.');
+    if (bound !== null && !bound.includes(agent.toLowerCase())) {
+      return reject(
+        403,
+        'token_out_of_scope',
+        'this app-backend-scoped credential lists only the runs of the agents its endpoint client binds, and "agent" names another.',
+      );
+    }
     filter.agentId = agent;
   }
 

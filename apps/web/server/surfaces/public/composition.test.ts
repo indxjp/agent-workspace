@@ -17,6 +17,7 @@ import {
 import { FIXTURE_PERMISSIONS, versionRequest } from '../../agent-versions/fixtures';
 import type { AgentRecord } from '../../agents/contract';
 import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
+import { counterIds, type IdGenerator } from '../../ids';
 import { hashApiKeySecret } from '../../rbac/api-key';
 import {
   createSurfaceSessionsRuntime,
@@ -67,7 +68,7 @@ interface Fixture {
   env: Readonly<Record<string, string>>;
 }
 
-async function fixture(): Promise<Fixture> {
+async function fixture(options: { readonly ids?: IdGenerator } = {}): Promise<Fixture> {
   const agentStore = createInMemoryAgentStoreProvider();
   const workspaceAgents = agentStore.forWorkspace(WORKSPACE_ID);
   async function agent(name: string, owner: string): Promise<AgentRecord> {
@@ -281,6 +282,7 @@ async function fixture(): Promise<Fixture> {
               : { token: TOKEN, expiresAt: EXPIRES_AT },
           ),
       }),
+      ...(options.ids === undefined ? {} : { ids: options.ids }),
     }),
   };
   return state;
@@ -321,6 +323,17 @@ describe('createSurfaceSessionsRuntime().open (issue #538)', () => {
     expect(state.sessions.get(opened.sessionId)?.agentVersionId).toBe(
       `local-version-of-${state.agents.desk.id}`,
     );
+  });
+
+  it('names each new session with the id generator it is given', async () => {
+    state = await fixture({ ids: counterIds() });
+    const first = await openedBy(state, {});
+    const second = await openedBy(state, {});
+    expect([first.sessionId, second.sessionId]).toStrictEqual([
+      '00000000-0000-4000-8000-000000000001',
+      '00000000-0000-4000-8000-000000000002',
+    ]);
+    expect(state.sessions.get(first.sessionId)?.agentId).toBe(state.agents.desk.id);
   });
 
   it('opens an offered agent of the same owner as that owner, after its own preflight', async () => {

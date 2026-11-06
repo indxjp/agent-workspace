@@ -18,7 +18,7 @@
  * meet in the middle: `beginRun` is the only constructor of a `Run` and the test drives it with a
  * first message; `HomeChat` is then rendered with exactly that value and must produce the run view.
  * The half a string render cannot cover — that **Send** calls `beginRun` — is covered by the
- * source-derived test at the bottom, which fails if `home-chat.tsx` stops importing it. This is
+ * source-derived test at the bottom, which follows `HomeChat` into its state hook. This is
  * stated plainly in the pull request's Declared gaps rather than glossed as a full interaction test.
  *
  * The `apps/web` Vitest project needs `oxc.jsx.runtime: 'automatic'` for any of this to load, since
@@ -35,8 +35,15 @@ import { describe, expect, it } from 'vitest';
 
 import { HomeChat, type ComposerAgents } from '../composer/home-chat';
 import { MOCKUP_AGENTS } from '../composer/mockup-fixture';
-import { MOCKUP_RUN, MOCKUP_RUN_COMPLETED } from './mockup-fixture';
-import { RunView, shareSubjectForSession } from './run-view';
+import {
+  MOCKUP_RUN,
+  MOCKUP_RUN_COMPLETED,
+  MOCKUP_TEAM_LEAD_ID,
+  MOCKUP_TEAM_RESEARCHER_ID,
+  MOCKUP_TEAM_RUN,
+  MOCKUP_TEAM_WRITER_ID,
+} from './mockup-fixture';
+import { RunView, shareSubjectForSession, type RunViewTree } from './run-view';
 import {
   NotARunError,
   beginRun,
@@ -68,7 +75,7 @@ function afterTheFirstMessage(text: string): Run {
   return beginRun(OPENING, userMessage('m0-1', USER, text));
 }
 
-function home(props: { readonly run?: Run | null } = {}): string {
+function home(props: { readonly run?: Run | null; readonly filesEnabled?: boolean } = {}): string {
   return renderToStaticMarkup(
     createElement(HomeChat, { agents: AGENTS, recent: [], user: USER, ...props }),
   );
@@ -117,6 +124,18 @@ describe('§19.5.1 rule 5 — the home chat becomes the run view', () => {
     expect(home({ run })).toBe(
       renderToStaticMarkup(createElement(RunView, { run, sessionId: null })),
     );
+  });
+
+  it('is the page main landmark with its h1 on its own, and neither inside another screen (UX-23)', () => {
+    const run = afterTheFirstMessage('hello');
+    const page = renderToStaticMarkup(createElement(RunView, { run, sessionId: null }));
+    expect(page.match(/<main\b/gu)).toHaveLength(1);
+    expect(page.match(/<h1\b/gu)).toHaveLength(1);
+    const held = renderToStaticMarkup(
+      createElement(RunView, { run, sessionId: null, landmark: false }),
+    );
+    expect(held).not.toMatch(/<main\b|<h1\b/u);
+    expect(held.match(/<h2\b/gu)?.length).toBeGreaterThanOrEqual(1);
   });
 
   it('reaches the run view only through screenFor, which refuses anything that is not a run', () => {
@@ -211,6 +230,18 @@ describe('Attach file is disabled with a reason the screen reader reads', () => 
     expect(button).not.toContain('aria-describedby');
     expect(html).not.toContain('Files can be attached once the session has started.');
   });
+
+  // UX-21 in #2086: with Files switched off, the control is not offered at all.
+  it('is not shown when the workspace has Files switched off', () => {
+    const off = renderToStaticMarkup(
+      createElement(RunView, { run: MOCKUP_RUN, sessionId: 'session-1', filesEnabled: false }),
+    );
+    expect(off).not.toContain('Attach file');
+    expect(home({ run: afterTheFirstMessage('Hi'), filesEnabled: false })).not.toContain(
+      'Attach file',
+    );
+    expect(home({ run: afterTheFirstMessage('Hi') })).toContain('Attach file');
+  });
 });
 
 // ── One run component, one chat implementation ──────────────────────────────────────────────────
@@ -295,6 +326,8 @@ describe('there is no second chat implementation', () => {
     'apps/web/components/resources/resource-screens.tsx',
     'apps/web/components/storage/edit-connection-screen.tsx',
     'apps/web/components/storage/new-connection-form.tsx',
+    // The approval prompt's optional comment (issue #1490), sent with a decision, not a message.
+    'packages/react/src/approval-prompt.tsx',
   ];
 
   it('has exactly one composer per chat — the workspace chat and the hosted surface chat', () => {
@@ -337,12 +370,12 @@ describe('there is no second chat implementation', () => {
     expect(page).toContain('HomeChat');
     expect(page).toContain("from '../../components/composer/home-chat'");
 
-    // The half a string render cannot press: Send calls beginRun, and the screen decision is
-    // screenFor. If either import disappears, rule 5 has been broken somewhere this file cannot
-    // see, and this assertion is what says so.
+    // Send opens the run in the state hook; the screen chooses the one shared transcript.
     const chat = readFileSync(join(WEB, 'components', 'composer', 'home-chat.tsx'), 'utf8');
+    const state = readFileSync(join(WEB, 'components', 'composer', 'use-home-chat.ts'), 'utf8');
     expect(chat).toContain("from '../run/run-view'");
-    expect(chat).toContain('beginRun(');
+    expect(chat).toContain('useHomeChatState(props)');
+    expect(state).toContain('beginRun(');
     expect(chat).toContain('screenFor(');
     expect(chat).toContain('sessionId={activeSessionId}');
   });
@@ -414,5 +447,59 @@ describe('assistant Markdown', () => {
 
   it('keeps a user message literal', () => {
     expect(answered('**x**', 'Sure.')).toContain('<span>**x**</span>');
+  });
+});
+
+// ── The run tree (ADR-0104, issue #1517) ────────────────────────────────────────────────────────
+
+describe('agent__ activity rows link to the child runs they started', () => {
+  const TREE: RunViewTree = {
+    parentRunId: null,
+    children: [
+      { id: MOCKUP_TEAM_RESEARCHER_ID, agentName: 'researcher' },
+      { id: MOCKUP_TEAM_WRITER_ID, agentName: 'writer' },
+    ],
+  };
+
+  it('shows the member name and the child run link on each member call', () => {
+    const html = renderToStaticMarkup(
+      createElement(RunView, { run: MOCKUP_TEAM_RUN, sessionId: null, tree: TREE }),
+    );
+    expect(html).toContain('>researcher</span>');
+    expect(html).toContain('>writer</span>');
+    expect(html).not.toContain('>mcp__agent__researcher</span>');
+    expect(html).toContain(`href="/runs?run=${MOCKUP_TEAM_RESEARCHER_ID}"`);
+    expect(html).toContain(`href="/runs?run=${MOCKUP_TEAM_WRITER_ID}"`);
+    expect(html).toContain('aria-label="Opens child run: researcher"');
+    expect(html.match(/data-testid="run-member-link"/gu)).toHaveLength(2);
+    expect(html).not.toContain('data-testid="run-parent"');
+  });
+
+  it('says a member call has no child run yet when the tree has none for it', () => {
+    const html = renderToStaticMarkup(
+      createElement(RunView, { run: MOCKUP_TEAM_RUN, sessionId: null }),
+    );
+    expect(html).toContain('>researcher</span>');
+    expect(html).not.toContain('data-testid="run-member-link"');
+    expect(html).toContain('Child run not started yet');
+  });
+
+  it('leaves every other tool row as it was', () => {
+    const html = renderToStaticMarkup(createElement(RunView, { run: MOCKUP_RUN, sessionId: null }));
+    expect(html).toContain('mcp__internalSearch.query');
+    expect(html).not.toContain('Child run not started yet');
+  });
+
+  it('links a child run to its lead run', () => {
+    const html = renderToStaticMarkup(
+      createElement(RunView, {
+        run: MOCKUP_RUN_COMPLETED,
+        sessionId: null,
+        tree: { parentRunId: MOCKUP_TEAM_LEAD_ID, children: [] },
+      }),
+    );
+    expect(html).toContain('data-testid="run-parent"');
+    expect(html).toContain('Part of a team run');
+    expect(html).toContain(`href="/runs?run=${MOCKUP_TEAM_LEAD_ID}"`);
   });
 });

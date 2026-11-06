@@ -8,8 +8,10 @@
 # disk, and nothing is thrown away after a job (docs/adr/0053, Amendment 2026-10-23). A job therefore
 # publishes its services on random host ports, names its containers per runner and removes them when
 # it ends. scripts/check-workflows.mjs holds every job to `[self-hosted, ms-a2]` except the few it
-# lists in OFFLOADED_JOBS, which run on `blacksmith-8vcpu-ubuntu-2404`: typecheck and lint, the test
-# shards, formal, the Docker E2Es and browser (ADR-0053, Amendments 2026-10-23 and 2026-10-25).
+# lists in OFFLOADED_JOBS, which run on `blacksmith-8vcpu-ubuntu-2404`: build and build-embedded,
+# typecheck and lint, the test shards, formal, the Docker E2Es and browser (ADR-0053, Amendments
+# 2026-10-23, 2026-10-25 and 2026-11-05), and the light jobs in HOSTED_JOBS (fast-checks, the two
+# cancel jobs and ci-success), which run on GitHub's plain `ubuntu-latest` (Amendment 2026-11-05).
 # Each runs-on is an expression on github.repository_owner: those runners in INDXDev, a free
 # GitHub-hosted runner in the public export and in any fork (ADR-0053, Amendment 2026-10-26).
 # The run is shaped so no work is done twice: the `build` job builds every
@@ -40,8 +42,8 @@
 # tiers. The pull request runs the inner loop (fast checks, build, typecheck and lint, tests). The
 # merge queue runs the same inner loop on the merged commit, plus `formal` and `image-scan` when the
 # diff reaches what they read (their `scope` steps). The heavy tier (release checks and images,
-# generated-project-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser, and formal
-# and image-scan unscoped) runs nightly on main (`schedule`), on a dispatch, on a pull request
+# generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser,
+# and formal and image-scan unscoped) runs nightly on main (`schedule`), on a dispatch, on a pull request
 # labelled `ci:full` before its next push (never on its `edited` runs, which skip `build`), and as
 # the release gate: publish-packages.yml and images.yml call this workflow with `full: true` on the
 # tagged commit before they publish. A failed nightly opens or updates one issue
@@ -113,7 +115,7 @@ env:
 jobs:
   fast-checks:
     name: fast checks · PR contract · workflow policy
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     # id-token: the job's GitHub OIDC token is its only remote-cache credential (see the header).
     permissions:
       contents: read
@@ -321,12 +323,12 @@ jobs:
       - name: Generated SDK reference and llms.txt are current
         run: pnpm docs:check
 
-      # Design §07: gaps print, a malformed story tag fails, and a cell covered at the base that is
-      # uncovered here fails. #1703 will require zero gaps.
+      # Design §07: a malformed story tag fails, a cell covered at the base that is uncovered here
+      # fails, and so does any gap of a storage story (#1703). A Builder gap prints until its issue.
       - name: Storage story coverage
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: pnpm stories:check --base "${BASE_SHA:-origin/main}"
+        run: pnpm stories:check --base "${BASE_SHA:-origin/main}" --require-complete
 
       - name: Licence gate
         run: |
@@ -345,7 +347,7 @@ jobs:
     name: build · every workspace but embedded
     if: >-
       github.event.action != 'edited'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -537,7 +539,7 @@ jobs:
     name: build · embedded and its tests
     if: >-
       github.event.action != 'edited'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -1657,6 +1659,14 @@ jobs:
         with:
           embedded: 'true'
 
+      # Issue #1512: the single-vm app overlay (compose.apps.yaml) boots a stand-in app on its own
+      # database role, which is refused a platform table and another app's schema. The script reads
+      # the restored packages/cli build; it and the overlay's source are under paths the scope
+      # pattern above already matches.
+      - name: Boot the single-vm app overlay
+        if: steps.scope.outputs.applies == 'true'
+        run: node tests/generated-project/compose-apps.mjs
+
       # MS-A2 runs several jobs on one Docker daemon, so the project publishes on free ports, not
       # 3000 and 8333.
       - name: Pick free host ports
@@ -1669,6 +1679,29 @@ jobs:
           GP_WORK_DIR: ${{ runner.temp }}/generated-project
         run: node tests/generated-project/run.mjs
 
+      # The suite stops the project in its own last test; a cancelled or timed-out job never gets
+      # there, and on MS-A2 the whole stack (services, runtime sandboxes, volumes) then kept running
+      # on the shared daemon for hours. This reaps whatever a project under GP_WORK_DIR left behind;
+      # after a passing run it finds nothing.
+      - name: Remove what the generated project left running
+        if: always() && steps.scope.outputs.applies == 'true'
+        env:
+          GP_WORK_DIR: ${{ runner.temp }}/generated-project
+        run: |
+          set -uo pipefail
+          projects="$(docker ps --all --format '{{.Label "com.docker.compose.project"}} {{.Label "com.docker.compose.project.working_dir"}}' |
+            awk -v dir="$GP_WORK_DIR/" '$1 != "" && index($2, dir) == 1 { print $1 }' | sort -u)"
+          for project in $projects; do
+            echo "::warning title=Generated project left running::removing $project"
+            { docker ps --all --quiet --filter "label=com.docker.compose.project=$project"
+              docker ps --all --quiet --filter "label=agent-workspace.compose-project=$project"; } |
+              sort -u | xargs --no-run-if-empty docker rm --force --volumes > /dev/null
+            docker network ls --quiet --filter "label=com.docker.compose.project=$project" |
+              xargs --no-run-if-empty docker network rm > /dev/null
+            docker volume ls --quiet --filter "label=com.docker.compose.project=$project" |
+              xargs --no-run-if-empty docker volume rm > /dev/null
+          done
+
       - name: Keep the Playwright report and failure evidence
         if: failure() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1677,6 +1710,194 @@ jobs:
           path: |
             playwright-report/generated-project/
             test-results/generated-project/
+          retention-days: 14
+
+  # #1506: a generated app under `aw dev`, end to end, against this change's own packages
+  # (tests/app-kit/run.mjs): the nine published packages are packed and installed from `file:`,
+  # `create` writes the project, `aw generate` adds the app `desk`, a resource and an agent on a
+  # scripted model, `aw dev` migrates and starts the app and registers its identity-signed MCP
+  # connector, and a ticket the signed-in person created is closed by the agent acting as them, with
+  # its audit row carrying the run id. A second `aw dev` changes nothing. No Docker, no secret, no
+  # model key: the embedded PostgreSQL and the `local` driver run on the runner itself, so a
+  # GitHub-hosted runner is enough (the standard pool expression: MS-A2 here, ubuntu-latest
+  # elsewhere).
+  #
+  # PATH FILTER INSIDE THE JOB, as its neighbour does: ci-success treats a skipped job as a failure.
+  app-kit-e2e:
+    name: app kit · aw dev runs a generated app, an agent writes as the person
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    needs: build
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    # Packing and the three npm installs take about 5 minutes, `next dev`'s first compile and the
+    # runtime's first start about 3; run.mjs caps itself at 40 (APP_KIT_TIMEOUT_MS).
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches a generated app
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What the generated app installs and runs: the published packages, the local runtime's
+          # apps and migrations, how they are packed, and this test and its job.
+          pattern='^(packages/|apps/(web|runner)/|migrations/|tests/app-kit/|tests/generated-project/project\.mjs$|scripts/release/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/ci\.yml$)'
+          # Read the whole list before matching (see generated-project-e2e).
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=App-kit E2E not applicable::the diff touches nothing a generated app installs or runs."
+          fi
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Run the generated app end to end
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          APP_KIT_WORK_DIR: ${{ runner.temp }}/app-kit
+        run: node tests/app-kit/run.mjs
+
+      - name: Keep the failure evidence
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: app-kit-e2e
+          path: |
+            ${{ runner.temp }}/app-kit/desk-project/.aw/logs/
+          retention-days: 14
+
+  # #1531: the apps benchmark's installed cells for every app under examples/ (tests/apps/lane.mjs),
+  # against this change's own packages: the app regenerated from its commands.sh (Generated),
+  # installed from the packed tarballs, built with `next build` and its own tests run (Agent on
+  # data), its import boundary cruised (No fork), its Playwright journeys under `aw dev` on the
+  # embedded runtime with the scripted fake model, in en and in ja (Journeys,
+  # playwright.apps.config.mjs), and `aw deploy production` rendered into Compose and Helm, its
+  # image built (its `npm ci` from the lane's loopback registry of the packed packages, so the
+  # build runs with --network host) and the platform booted with it (Self-host, Docker). A cell an app claims but the lane measures as a gap fails the job;
+  # a declared gap does not. No root gate sees an example, so this lane is what keeps them
+  # compiling. No secret, no model key.
+  #
+  # PATH FILTER INSIDE THE JOB, as its neighbours do: ci-success treats a skipped job as a failure.
+  apps-e2e:
+    name: apps · the example apps' benchmark cells, installed
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    needs: build
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    # For examples/minimal the lane took about 10 minutes locally without Docker (pack 1,
+    # regenerate 3, install, build and tests 2, journeys in both languages 3); the app image's
+    # npm ci and next build add about 3. lane.mjs caps itself at 80 (APPS_LANE_TIMEOUT_MS): the
+    # platform boot, once an app image builds, adds the four platform images (about 16 cold, as in
+    # generated-project-e2e), and each reference app adds its own install, build and journeys.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches an example app
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What an example installs and runs: the published packages, the local runtime's apps and
+          # migrations, how they are packed, the examples and this lane, and its job.
+          pattern='^(packages/|apps/(web|runner)/|examples/|tests/apps/|tests/generated-project/(fake-anthropic|project)\.mjs$|scripts/release/|migrations/|pnpm-lock\.yaml$|package\.json$|\.github/workflows/ci\.yml$|playwright\.apps\.config\.mjs$)'
+          # Read the whole list before matching (see generated-project-e2e).
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Apps E2E not applicable::the diff touches nothing an example app installs or runs."
+          fi
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Run the apps lane
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          APPS_WORK_DIR: ${{ runner.temp }}/apps-lane
+        run: node tests/apps/lane.mjs
+
+      - name: Keep the failure evidence
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: apps-e2e
+          path: |
+            ${{ runner.temp }}/apps-lane/lane-report.json
+            ${{ runner.temp }}/apps-lane/*-aw-dev.log
+            ${{ runner.temp }}/apps-lane/reports/
+            playwright-report/apps/
+            test-results/apps/
           retention-days: 14
 
   # Developer journey — the slice-1 exit test (delivery unit S1-19, issue #457; plan §7 "S1-19").
@@ -1701,6 +1922,12 @@ jobs:
   # policy_cannot_widen) with Bash denied at compose, and the token absent from every file but the
   # sealed store, every log and transcript, and the runtime's environment. The timings go under
   # `budgets` in journey-timings.json.
+  #
+  # J1 (issue #1510) closes the journey, on its own clock and fixed 600 s budget
+  # (JOURNEY_PORTAL_BUDGET_SECONDS): `npm create @indx-workspace@latest portal -- --template portal
+  # --theme blank --features chat,files,connectors --yes`, npm install, npm run dev, and the portal's
+  # /sign-in through aw dev's development OIDC issuer until the first signed-in page; then, untimed,
+  # the console shows only the chosen features. Recorded under `budgets.portal`.
   #
   # NO SECRET IS USED. The model answers through the fake Anthropic provider
   # (tests/generated-project/fake-anthropic.mjs, wrapped by tests/journey/fake-anthropic-tools.mjs)
@@ -1738,13 +1965,14 @@ jobs:
         part: [journey, first-hour]
     # Every phase has its own cap, so a slow run fails inside run.mjs with a named reason and its
     # `finally` still collects the evidence: checkout and setup (~2 min), install (8), build (10),
-    # then the journey step (80 = JOURNEY_PREPARE_TIMEOUT_MS 10 + B1's 600 s budget and its 60 s
+    # then the journey step (96 = JOURNEY_PREPARE_TIMEOUT_MS 10 + B1's 600 s budget and its 60 s
     # grace, 11 + JOURNEY_CHECKS_TIMEOUT_MS 10 + B2's 60 s + 60 s, 2 + B3b's and B3a's 900 s +
-    # 60 s each, 16 + 16 + the ceiling and secret checks' JOURNEY_CHECKS_TIMEOUT_MS 10 + 3 for
-    # cleanup = 78, and 2 to spare), the first-hour step (25 = JOURNEY_PREPARE_TIMEOUT_MS 10 + the
+    # 60 s each, 16 + 16 + the ceiling and secret checks' JOURNEY_CHECKS_TIMEOUT_MS 10 + J1's
+    # 600 s budget and its 60 s grace, 11 + its console check's PORTAL_CHECKS_MS 5 + 3 for
+    # cleanup = 94, and 2 to spare), the first-hour step (25 = JOURNEY_PREPARE_TIMEOUT_MS 10 + the
     # stopwatch's 11 + 1 to read its record + 3 for cleanup), and the uploads (~3). harness.test.ts
     # checks this arithmetic.
-    timeout-minutes: 130
+    timeout-minutes: 140
     permissions:
       contents: read
       # .github/actions/workspace-build waits for the build artifacts through the run's API.
@@ -1813,7 +2041,7 @@ jobs:
           wait: 'true'
 
       - name: Run the developer journey on a clean container
-        timeout-minutes: 80
+        timeout-minutes: 96
         if: matrix.part == 'journey' && steps.scope.outputs.applies == 'true'
         env:
           JOURNEY_WORK_DIR: ${{ runner.temp }}/journey
@@ -2434,6 +2662,12 @@ jobs:
       # A skipped or flaky browser test passes Playwright but not this (audit F-14).
       - name: No browser test was skipped or flaky
         run: node scripts/ci/playwright-no-skip.mjs
+      # The app kit's J3 journey (#1509) against the desk fixture app, which its own config builds
+      # and starts from the restored package dist/; the platform's servers above never serve an app.
+      - name: App kit journeys
+        run: pnpm exec playwright test -c playwright.app-kit.config.mjs
+      - name: No app kit browser test was skipped
+        run: node scripts/ci/playwright-no-skip.mjs playwright-report/app-kit-results.json
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -2453,7 +2687,7 @@ jobs:
     name: end the run when fast checks fail
     needs: fast-checks
     if: failure()
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
@@ -2466,7 +2700,7 @@ jobs:
     name: end the run when a build fails
     needs: [build, build-embedded]
     if: failure()
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
@@ -2478,7 +2712,7 @@ jobs:
   # The one status check to require. fast-checks and heavy-checks run side by side, so a
   # branch rule pointing at either would see the other's result only by accident; this job
   # fails if any required job (the two gate jobs, `formal`, `image-scan`,
-  # `generated-project-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
+  # `generated-project-e2e`, `app-kit-e2e`, `apps-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
   # or a cancellation is a failure here, not a pass, because a gate that did not run has not
   # passed, except where the COST note skips a tier on purpose. full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
   # over the `needs` context on the smallest runner size.
@@ -2497,13 +2731,15 @@ jobs:
         formal,
         image-scan,
         generated-project-e2e,
+        app-kit-e2e,
+        apps-e2e,
         journey-e2e,
         docs-claims,
         tool-sandbox-e2e,
         coverage,
         browser,
       ]
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Every required job succeeded
         env:

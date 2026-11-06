@@ -52,6 +52,7 @@ import {
 } from '../resources/catalog-store';
 import { createStorageService } from '../storage/service';
 import { createRepositoryObjectStoreProvider } from './store';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const ACTOR_HEADER = 'x-test-actor';
 
@@ -158,7 +159,6 @@ function defineSuite(name: string, setup: () => Promise<World>) {
       const storage = createStorageService({
         catalog: (workspaceId) => world.catalogs.forWorkspace(workspaceId),
         objects,
-        legacy: { files: legacy },
         log: noLog,
       });
       const principals: Record<Actor, { member: Member; role: 'owner' | 'viewer' | 'admin' }> = {
@@ -418,7 +418,7 @@ function defineSuite(name: string, setup: () => Promise<World>) {
         expect(folder.status).toBe(400);
         expect((await post(path, bytesOf('x'), 'v')).status).toBe(403);
         expect(await filesObjects()).toEqual([]);
-        expect(await (await catalogA()).listFiles()).toEqual([]);
+        expect(await listCatalogFiles(await catalogA())).toEqual([]);
       },
     );
 

@@ -2,7 +2,7 @@ import { BUILDER_TOOL_NAMES, BUILDER_TOOLS } from '@indx-workspace/contracts/bui
 import { describe, expect, it } from 'vitest';
 
 import { TEST_DOOR } from '../../testing/context';
-import { ROLES, type Role } from '../../../rbac/roles';
+import { ROLES, type Role } from '../../../rbac/core/roles';
 import type { Facts } from '../../core/facts';
 import type { AuthorizationPort, BuilderToolKind, CallContext } from '../../ports';
 

@@ -176,7 +176,15 @@
     "from": "apps/web/server/composition/session-rbac.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"
@@ -434,7 +442,15 @@
     "from": "apps/web/server/composition/wiring/tokens-surfaces.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
+    "dependencyTypes": [
+      "aliased",
+      "aliased-tsconfig",
+      "aliased-tsconfig-paths",
+      "local",
+      "type-only",
+      "import",
+      "pre-compilation-only"
+    ],
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"
@@ -668,15 +684,7 @@
     "from": "apps/web/server/skills/pending-delete.ts",
     "to": "packages/core/src/db/index.ts",
     "unresolvedTo": "@agent-workspace/core/db",
-    "dependencyTypes": [
-      "aliased",
-      "aliased-tsconfig",
-      "aliased-tsconfig-paths",
-      "local",
-      "type-only",
-      "import",
-      "pre-compilation-only"
-    ],
+    "dependencyTypes": ["aliased", "aliased-tsconfig", "aliased-tsconfig-paths", "local", "import"],
     "rule": {
       "severity": "error",
       "name": "domain-does-not-import-persistence"

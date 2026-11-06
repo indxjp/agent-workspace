@@ -14,6 +14,9 @@ export interface AllowedOwnerWarningDeps {
 /** How long an owner found to be an Owner or Admin is trusted before the next run looks again. */
 export const OWNER_OK_TTL_MS = 10 * 60 * 1000;
 
+/** How many owners found fine are remembered; past it the one remembered longest ago is dropped. */
+export const OWNER_OK_MAX_ENTRIES = 1000;
+
 /**
  * A warning, once per agent, for an allow-listed agent whose owner is not an Owner or Admin of its
  * workspace (#1851). An owner who checked out is looked at again every 10 minutes. The deployment
@@ -24,7 +27,8 @@ export const OWNER_OK_TTL_MS = 10 * 60 * 1000;
  * There is no cross-workspace agent query to run at startup, so this runs when such an agent's run
  * reaches the door. An agent is remembered only once it has warned. An owner found to be fine is
  * trusted for {@link OWNER_OK_TTL_MS}, so a role lowered later is still caught on a run after that,
- * without a membership lookup on every run. It never refuses and never throws: a directory failure
+ * without a membership lookup on every run; at most {@link OWNER_OK_MAX_ENTRIES} such owners are
+ * remembered, so the cache cannot grow with the number of agents. It never refuses and never throws: a directory failure
  * only means the agent is looked at again on its next run.
  */
 export function createAllowedOwnerWarning(
@@ -33,14 +37,27 @@ export function createAllowedOwnerWarning(
   const now = deps.now ?? Date.now;
   const warned = new Set<string>();
   const fineUntil = new Map<string, number>();
+  const rememberFine = (agentId: string): void => {
+    const at = now();
+    for (const [id, until] of fineUntil) if (until <= at) fineUntil.delete(id);
+    // Re-inserted last, so the map stays ordered oldest-first and the eviction below drops the
+    // agent trusted longest ago.
+    fineUntil.delete(agentId);
+    fineUntil.set(agentId, at + OWNER_OK_TTL_MS);
+    for (const id of fineUntil.keys()) {
+      if (fineUntil.size <= OWNER_OK_MAX_ENTRIES) break;
+      fineUntil.delete(id);
+    }
+  };
   return async (workspaceId, agent) => {
     if (warned.has(agent.id)) return;
     if ((fineUntil.get(agent.id) ?? 0) > now()) return;
     try {
-      const members = await deps.directory.forWorkspace(workspaceId).listMemberships();
-      const owner = members.find((member) => member.principalId === agent.ownerPrincipalId);
-      if (owner?.role === 'owner' || owner?.role === 'admin') {
-        fineUntil.set(agent.id, now() + OWNER_OK_TTL_MS);
+      const owner = await deps.directory
+        .forWorkspace(workspaceId)
+        .findMembershipByPrincipal(agent.ownerPrincipalId);
+      if (owner !== null && (owner.role === 'owner' || owner.role === 'admin')) {
+        rememberFine(agent.id);
         return;
       }
       warned.add(agent.id);
@@ -50,7 +67,7 @@ export function createAllowedOwnerWarning(
           workspaceId,
           agentId: agent.id,
           ownerPrincipalId: agent.ownerPrincipalId,
-          ownerRole: owner?.role ?? 'none',
+          ownerRole: owner === null ? 'none' : owner.role,
         },
       );
     } catch {

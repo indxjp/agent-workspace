@@ -1,7 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import http from 'node:http';
-import https from 'node:https';
-import type { LookupFunction } from 'node:net';
 import { Readable } from 'node:stream';
 
 import { DefaultAzureCredential } from '@azure/identity';
@@ -46,7 +43,14 @@ import {
   RangeNotSatisfiableError,
   SignedUrlUnsupportedError,
 } from './object-store.js';
-import { countedBody, resolveRange, toNodeReadable, toWebStream } from './streams.js';
+import { connectionAgents, type ConnectionTransport } from './connection-transport.js';
+import {
+  abortableBody,
+  countedBody,
+  resolveRange,
+  toNodeReadable,
+  toWebStream,
+} from './streams.js';
 
 const CONTENT_TYPE_KNOWN_METADATA = 'aw_content_type_known';
 
@@ -75,16 +79,21 @@ export interface AzureBlobContainer {
   /**
    * The whole blob's meta, the bytes of `range` (all of them when omitted) and the range actually
    * served. Throws {@link RangeNotSatisfiableError} when the blob no longer holds `range`.
+   * `signal` stops the download, the body included.
    */
   readStream(
     name: string,
     range: ByteRange | undefined,
+    signal?: AbortSignal,
   ): Promise<{
     meta: ObjectMeta;
     range: { readonly start: number; readonly end: number } | null;
     body: ReadableStream<Uint8Array>;
   } | null>;
-  /** `null` when a precondition failed; the caller turns that into {@link ObjectConflictError}. */
+  /**
+   * `null` when a precondition failed; the caller turns that into {@link ObjectConflictError}.
+   * `options.signal` stops the upload, its staged blocks and its commit included.
+   */
   writeStream(
     name: string,
     body: ReadableStream<Uint8Array> | Uint8Array,
@@ -139,8 +148,11 @@ export interface AzureBlobObjectStoreConfig {
   readonly keyPrefix?: string;
   /** Absent means the deployment's own identity ({@link DefaultAzureCredential}). */
   readonly connection?: AzureBlobConnection;
-  /** Resolves every hostname the client dials; a connection store answers only with checked addresses. */
-  readonly lookup?: LookupFunction;
+  /**
+   * How a connection store's client reaches the service: pinned to the checked addresses, or
+   * through the outbound proxy. Absent, the SDK's own agents (and its own proxy policy).
+   */
+  readonly transport?: ConnectionTransport;
 }
 
 function contentType(
@@ -344,7 +356,7 @@ export function createAzureSdkBlobContainer(
       );
     },
     head: headBlob,
-    async readStream(name, range) {
+    async readStream(name, range, signal) {
       const found = await azureProviderCall('blob', 'read', async () => {
         try {
           const response = await client
@@ -352,6 +364,7 @@ export function createAzureSdkBlobContainer(
             .download(
               range?.start ?? 0,
               range?.end === undefined ? undefined : range.end - range.start + 1,
+              signal === undefined ? {} : { abortSignal: signal },
             );
           const source = response.readableStreamBody;
           if (!(source instanceof Readable)) {
@@ -397,6 +410,7 @@ export function createAzureSdkBlobContainer(
               .getBlockBlobClient(name)
               .uploadStream(source, UPLOAD_BUFFER_BYTES, UPLOAD_MAX_CONCURRENCY, {
                 conditions: writeConditions(options),
+                ...(options.signal === undefined ? {} : { abortSignal: options.signal }),
                 ...(hasContentType
                   ? {
                       blobHTTPHeaders: { blobContentType: options.contentType },
@@ -485,6 +499,8 @@ export function createAzureBlobObjectStore(
     },
     head: (key) => client.head(prefixedObjectKey(prefix, key)),
     async read(key, readOptions) {
+      const signal = readOptions?.signal;
+      signal?.throwIfAborted();
       const objectKey = prefixedObjectKey(prefix, key);
       // A ranged read checks the size first, so a bad range fails the same way on every backend
       // and Azure is only ever asked for a range inside the blob.
@@ -494,15 +510,25 @@ export function createAzureBlobObjectStore(
         if (meta === null) return null;
         range = resolveRange(readOptions.range, meta.sizeBytes);
       }
-      const found = await client.readStream(objectKey, range ?? undefined);
+      const found = await client.readStream(objectKey, range ?? undefined, signal);
       // The range the GET served, which a concurrent replacement can make differ from the HEAD's.
-      return found === null ? null : { ...found, range: range === null ? null : found.range };
+      return found === null
+        ? null
+        : {
+            ...found,
+            body: abortableBody(found.body, signal),
+            range: range === null ? null : found.range,
+          };
     },
     async write(key, body, writeOptions) {
       const name = await validatedWriteKey(body, writeOptions, () =>
         prefixedObjectKey(prefix, key),
       );
-      const meta = await client.writeStream(name, body, writeOptions);
+      const meta = await client.writeStream(
+        name,
+        abortableBody(body, writeOptions.signal),
+        writeOptions,
+      );
       if (meta === null) throw new ObjectConflictError();
       return meta;
     },
@@ -629,14 +655,17 @@ export function azureCredentialFor(
     : new AnonymousCredential();
 }
 
-/** Sends every request over a socket opened with `lookup`, so the client never resolves a name itself. */
-function pinnedAgentFactory(lookup: LookupFunction): RequestPolicyFactory {
-  const httpAgent = new http.Agent({ keepAlive: true, lookup });
-  const httpsAgent = new https.Agent({ keepAlive: true, lookup });
+/**
+ * Sends every request with the connection's own agents. Setting `request.agent` also keeps the
+ * SDK's proxy policy, which only installs an agent on a request without one, from choosing a route
+ * of its own: the connection store has already decided between the pinned sockets and the proxy.
+ */
+function connectionAgentFactory(transport: ConnectionTransport): RequestPolicyFactory {
+  const agents = connectionAgents(transport);
   return {
     create: (next) => ({
       sendRequest(request) {
-        request.agent = request.url.startsWith('http:') ? httpAgent : httpsAgent;
+        request.agent = request.url.startsWith('http:') ? agents.http : agents.https;
         return next.sendRequest(request);
       },
     }),
@@ -668,11 +697,11 @@ export async function createAzureBlobObjectStoreFromConfig(
       ? `${serviceUrl}?${connection.sasToken.replace(/^\?/u, '')}`
       : serviceUrl;
   let service: BlobServiceClient;
-  if (config.lookup === undefined) {
+  if (config.transport === undefined) {
     service = new BlobServiceClient(url, credential);
   } else {
     const pipeline = newPipeline(credential);
-    pipeline.factories.push(pinnedAgentFactory(config.lookup));
+    pipeline.factories.push(connectionAgentFactory(config.transport));
     service = new BlobServiceClient(url, pipeline);
   }
   const containerClient = service.getContainerClient(container);

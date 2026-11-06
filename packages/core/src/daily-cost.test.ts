@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDailyCostRule, utcDayStart } from './daily-cost.js';
+import { createDailyCostRule } from './daily-cost.js';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 const OTHER_WORKSPACE = '55555555-5555-4555-8555-555555555555';
@@ -69,9 +69,7 @@ describe('the daily cost rule: refuses at the cap, on unpriced usage and on an u
         ),
       now: clock('2026-10-26T12:00:00Z').now,
     });
-    await expect(
-      rule.dailyCostUsd(WORKSPACE, utcDayStart(new Date('2026-10-26T12:00:00Z'))),
-    ).resolves.toBe(2);
+    await expect(rule.refusal(WORKSPACE, 2)).resolves.toMatchObject({ capUsd: 2, spentUsd: 2 });
     await expect(rule.refusal(WORKSPACE, 5)).resolves.toBeNull();
   });
 

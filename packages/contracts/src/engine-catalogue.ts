@@ -291,20 +291,20 @@ function permissionToolsOf(
  *   `maxBudget` are `native`: the SDK enforces both itself. `wireProtocols` is Anthropic Messages
  *   alone, the only ingress the gateway serves a Claude run over.
  * * `openai-agents` (ADR-0074): `skills: false` is a refusal, not a gap: a skill on this engine is
- *   refused by name. `maxBudget: 'adapter'` is **provisional** (ADR-0074 D7): the adapter prices
- *   the usage the gateway reports back and stops the run `max_budget`, until #342 moves the cap
- *   into the gateway. `wireProtocols` lists Responses first, so `resolveWireProtocol` picks it for
- *   an OpenAI-family connection and Anthropic Messages for an Anthropic-family one.
+ *   refused by name. `maxBudget: 'adapter'` means the platform around the engine enforces the
+ *   cap: since #342 the gateway stops the run at its spend ceiling (ADR-0162), and the adapter
+ *   prices nothing and refuses no cap. `wireProtocols` lists Responses first, so
+ *   `resolveWireProtocol` picks it for an OpenAI-family connection and Anthropic Messages for an
+ *   Anthropic-family one.
  * * `pi` (ADR-0081): `mcp: false` is a refusal, not a gap: pi has no MCP client, and an agent with
  *   a connector is refused by name rather than bridged. `maxTurns` and `maxBudget` are `'adapter'`:
- *   the adapter counts `turn_end` and prices each response with the port's provisional table
- *   (ADR-0074 D7). `wireProtocols` is Anthropic Messages alone until the gateway serves OpenAI
- *   dialects to pi.
+ *   the adapter counts `turn_end`, and the gateway enforces the cap (ADR-0162). `wireProtocols` is
+ *   Anthropic Messages alone until the gateway serves OpenAI dialects to pi.
  * * `mastra` (ADR-0084): `fork: false` is a refusal, not a gap: a Mastra thread is continued, never
- *   branched. `maxTurns` is `'native'` (Mastra's `maxSteps`); `maxBudget` is `'adapter'`, priced
- *   with the port's provisional table (ADR-0074 D7). `wireProtocols` lists Anthropic Messages
- *   first and both OpenAI dialects after it: Mastra takes an explicit AI SDK provider for each, so
- *   every connection is reached in its own native dialect and the gateway never translates.
+ *   branched. `maxTurns` is `'native'` (Mastra's `maxSteps`); `maxBudget` is `'adapter'`, enforced
+ *   by the gateway (ADR-0162). `wireProtocols` lists Anthropic Messages first and both OpenAI
+ *   dialects after it: Mastra takes an explicit AI SDK provider for each, so every connection is
+ *   reached in its own native dialect and the gateway never translates.
  *
  * `structuredOutput` is `true` for every engine but `pi`: `claude-agent-sdk` hands the schema to its
  * `outputFormat` option, `openai-agents` to `outputType` and `mastra` to `structuredOutput`. `pi`

@@ -14,6 +14,7 @@
  * gap on this task's pull request rather than papered over with a `text` column that means
  * "some secret, somewhere".
  */
+import { GCP_PROJECT_ID_PATTERN, VERTEX_LOCATIONS } from '@indx-workspace/contracts/models';
 import { MODEL_PROVIDERS } from '@indx-workspace/contracts/runs';
 import { jsonb, pgTable, text, unique, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
@@ -42,6 +43,10 @@ export const ModelConnectionConfig = z
     apiVersion: z.string().min(1).optional(),
     /** Azure OpenAI deployment name. */
     deployment: z.string().min(1).optional(),
+    /** Vertex AI: the Google Cloud project id. */
+    projectId: z.string().regex(GCP_PROJECT_ID_PATTERN).optional(),
+    /** Vertex AI: the location; absent means `global`. */
+    location: z.enum(VERTEX_LOCATIONS).optional(),
   })
   .strict();
 export type ModelConnectionConfig = z.infer<typeof ModelConnectionConfig>;

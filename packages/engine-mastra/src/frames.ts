@@ -20,7 +20,7 @@
  * | everything else, step boundaries included | `agent.native`                             |
  *
  * `finish` reaches this module inside the boundary's `run_completed`, because only the boundary
- * knows whether the run ended by itself, at `maxSteps`, at the budget or by an interrupt — the
+ * knows whether the run ended by itself, at `maxSteps` or by an interrupt — the
  * frame still carries the `finish` chunk as its `raw`.
  *
  * ## Two invariants, and where they are held
@@ -32,11 +32,7 @@
  *   rather than an `agent.tool.result` with a hole in front of it.
  */
 import type { AgentStopReason } from '@indx-workspace/contracts/run-events';
-import {
-  engineFrameBuilder,
-  type EngineFrame,
-  type ProvisionalModelPrice,
-} from '@agent-workspace/engine';
+import { engineFrameBuilder, type EngineFrame } from '@agent-workspace/engine';
 
 import { MASTRA_ENGINE_ID } from './compile.js';
 import { mastraToolKind } from './tools.js';
@@ -48,8 +44,6 @@ export type MastraUsage = {
   readonly cacheReadInputTokens: number;
   readonly cacheWriteInputTokens: number;
   readonly reasoningTokens: number | null;
-  /** The provisional estimate under a cap; `0` when the run carries none. Never billing. */
-  readonly costUsd: number;
 };
 
 /**
@@ -74,9 +68,6 @@ export type MastraFrameMapper = {
   map(event: MastraEvent): readonly EngineFrame[];
 };
 
-/** What a prompt-cache write costs, as a multiple of the input rate (Anthropic's five-minute TTL). */
-const CACHE_WRITE_INPUT_MULTIPLIER = 1.25;
-
 const builder = engineFrameBuilder(MASTRA_ENGINE_ID);
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -95,14 +86,11 @@ function count(value: unknown): number | null {
 
 /**
  * Add one step's `usage` (the AI SDK's `LanguageModelUsage`, as Mastra reports it on
- * `step-finish`) to a running total, priced with `price` when the run carries a cap. A step without
- * readable input and output counts leaves the total as it was.
+ * `step-finish`) to a running total. A step without readable input and output counts leaves the
+ * total as it was. Nothing is priced here: the gateway prices and bills every call (ADR-0065 D6,
+ * ADR-0162).
  */
-export function addMastraUsage(
-  total: MastraUsage | null,
-  usage: unknown,
-  price: ProvisionalModelPrice | null,
-): MastraUsage | null {
+export function addMastraUsage(total: MastraUsage | null, usage: unknown): MastraUsage | null {
   if (!isRecord(usage)) return total;
   const input = count(usage['inputTokens']);
   const output = count(usage['outputTokens']);
@@ -110,15 +98,6 @@ export function addMastraUsage(
   const cacheRead = count(usage['cachedInputTokens']) ?? 0;
   const cacheWrite = count(usage['cacheCreationInputTokens']) ?? 0;
   const reasoning = count(usage['reasoningTokens']);
-  const uncached = Math.max(0, input - cacheRead - cacheWrite);
-  const perToken = (rate: string): number => Number(rate) / 1_000_000;
-  const cost =
-    price === null
-      ? 0
-      : uncached * perToken(price.inputUsdPerMillion) +
-        cacheWrite * perToken(price.inputUsdPerMillion) * CACHE_WRITE_INPUT_MULTIPLIER +
-        cacheRead * perToken(price.cachedInputUsdPerMillion) +
-        output * perToken(price.outputUsdPerMillion);
   return {
     inputTokens: (total?.inputTokens ?? 0) + input,
     outputTokens: (total?.outputTokens ?? 0) + output,
@@ -128,7 +107,6 @@ export function addMastraUsage(
       reasoning === null && (total === null || total.reasoningTokens === null)
         ? null
         : (total?.reasoningTokens ?? 0) + (reasoning ?? 0),
-    costUsd: (total?.costUsd ?? 0) + cost,
   };
 }
 

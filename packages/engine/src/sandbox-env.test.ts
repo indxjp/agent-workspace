@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isCredentialEnvName,
+  QUIET_CLAUDE_ENVIRONMENT,
+  quietEnvironmentVerdict,
   PROVIDER_MASTER_CREDENTIAL_ENV,
   sandboxEnvironmentVerdict,
 } from './sandbox-env.js';
@@ -84,5 +86,35 @@ describe('isCredentialEnvName', () => {
     ['API_KEY_PREFIX', false],
   ])('%s → %s', (name, expected) => {
     expect(isCredentialEnvName(name)).toBe(expected);
+  });
+});
+
+describe('quietEnvironmentVerdict', () => {
+  it('accepts the quiet environment', () => {
+    expect(quietEnvironmentVerdict({ ...QUIET_CLAUDE_ENVIRONMENT, PATH: '/usr/bin' })).toEqual({
+      ok: true,
+    });
+  });
+
+  it('names the three flags', () => {
+    expect(Object.keys(QUIET_CLAUDE_ENVIRONMENT).sort()).toEqual([
+      'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+      'DISABLE_ERROR_REPORTING',
+      'DISABLE_TELEMETRY',
+    ]);
+  });
+
+  it.each(Object.keys(QUIET_CLAUDE_ENVIRONMENT))('refuses a missing %s', (name) => {
+    const env: Record<string, string> = { ...QUIET_CLAUDE_ENVIRONMENT };
+    delete env[name];
+    const verdict = quietEnvironmentVerdict(env);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.variable).toBe(name);
+  });
+
+  it.each(Object.keys(QUIET_CLAUDE_ENVIRONMENT))('refuses an empty %s', (name) => {
+    const verdict = quietEnvironmentVerdict({ ...QUIET_CLAUDE_ENVIRONMENT, [name]: '' });
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.variable).toBe(name);
   });
 });

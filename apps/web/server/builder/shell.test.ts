@@ -180,6 +180,21 @@ describe('handleToolCall: replay', () => {
     expect((await ports.audit.runCounts(ctx)).toolCalls).toBe(1);
   });
 
+  it('refuses a repeated write as builder_disabled once the feature is switched off mid-run, not the stored result', async () => {
+    const feature = { on: true };
+    const ports = makeMemoryPorts({ feature: { enabled: () => Promise.resolve(feature.on) } });
+    const ctx = callContextOf(WORKSPACE, 'builder', OWNER);
+    await record(ports, ctx, stored);
+    const repeat = { name: 'draft_save', arguments: { body: EXAMPLES[0]?.body }, callId: 'c-1' };
+
+    expect(await handleToolCall(repeat, ctx, ports)).toStrictEqual(stored);
+    feature.on = false;
+    const result = await handleToolCall(repeat, ctx, ports);
+
+    const fix = BUILDER_REFUSAL_CODES.builder_disabled.fix;
+    expect(result).toStrictEqual({ ok: false, code: 'builder_disabled', message: fix, fix });
+  });
+
   it('answers internal_error, logged, for a stored result its schema does not accept', async () => {
     const error = vi.spyOn(log, 'error').mockImplementation(() => undefined);
     const ports = makeMemoryPorts();

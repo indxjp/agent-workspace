@@ -469,6 +469,19 @@
      {"redirect_uris": "{https://a.example/cb}"},
      {"redirect_uris": "{a,b,c,d,e,f,g,h,i,j}"}]}},
   {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_oidc_audience_app_backend_renders_as_snapshot",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_oidc_audience_app_backend_separates_its_samples",
+    "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],
+   "input": {"table": "endpoint_clients", "check": "endpoint_clients_oidc_audience_app_backend"},
+   "id": "check/endpoint_clients_oidc_audience_app_backend",
+   "expected":
+   {"sql": "(\"endpoint_clients\".\"kind\" = 'app-backend') = (\"endpoint_clients\".\"oidc_audience\" is not null)",
+    "refused": [{"kind": "app-backend"}, {"oidc_audience": "portal-web", "kind": "a2a-agent"}],
+    "pattern": null,
+    "column": null,
+    "accepted":
+    [{"oidc_audience": "portal-web", "kind": "app-backend"}, {"kind": "mcp-project"}, {"kind": "builder"}]}},
+  {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_revoked_after_created_renders_as_snapshot",
     "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.endpoint_clients_revoked_after_created_separates_its_samples",
     "AgentWorkspace.Theorems.WellFormed.ConceptIdentity.refined_checks_cover_the_cluster"],

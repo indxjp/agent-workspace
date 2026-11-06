@@ -48,6 +48,62 @@ Write a starter project here: agent-workspace.yaml, an agent and a surface
 aw init [--yes] [--theme <theme>] [--sandbox <sandbox>] [--provider <provider>] [--model-base-url <url>] [--agent <agent>] [--engine <engine>] [--tools <tools>] [--openapi <openapi>] [--permissions <permissions>] [--title <title>] [--color <color>] [--platform <platform>] [--features <features>] [--answers <file>]
 ```
 
+## aw generate app
+
+Write a portal app here: app.config.ts, its MCP route, its first migration and CI; pins the app kit in package.json
+
+```
+aw generate app <name>
+```
+
+## aw generate resource
+
+Write a resource, its migration, its two route files, its list (a board with --board), detail, edit and new pages, and its test; field types: text[(max)], richText, number[(min,max)], money(CUR), bool, date, dateTime, enum(a,b), person, ref(resource), files, tags, ? for optional
+
+```
+aw generate resource <name> <field:type>... [--board <field>]
+```
+
+## aw generate agent
+
+Write an agent on the app's MCP connector; --tools names the resources its instructions describe and does not restrict its tools (every call is still limited to what the person may do)
+
+```
+aw generate agent <name> --tools <resource>[,<resource>...]
+```
+
+## aw generate page
+
+Write app/\<name\>/page.tsx from the app kit parts: a dashboard placeholder, a list of --resource, or an empty page of your own
+
+```
+aw generate page <name> --kind dashboard|list|custom [--resource <resource>]
+```
+
+## aw generate recipe
+
+Write recipes/\<name\>.ts and its test, started by a resource's committed write or a cron schedule (UTC unless --tz), and add it to app.config.ts
+
+```
+aw generate recipe <name> --on resource:<resource>.<created|updated|deleted>|'schedule:<cron>' [--tz <iana>]
+```
+
+## aw generate channel
+
+Bind a resource to a realtime channel: write channels/\<resource\>.ts keyed on its ref() field (--key, else the first ref() to another resource), its events route and its ChannelView page, and pass \{ publish \} in the resource's two route files
+
+```
+aw generate channel <resource> [--key <refField>]
+```
+
+## aw destroy
+
+Show what aw generate or aw blueprint add wrote for it, and with --yes remove it; refuses files edited since
+
+```
+aw destroy <app|resource|agent|page|recipe|channel|blueprint> <name> [--yes]
+```
+
 ## aw dev
 
 Run this project on a local runtime (on --port, else PORT, else environments.local.port), sign aw in, create the default model connection and push agents/ and surfaces/ to local on every save; --sandbox docker (or runtime.default: docker) needs a reachable Docker
@@ -154,10 +210,10 @@ aw versions [agent]
 
 ## aw deploy
 
-Deploy the project's production environment through agent-workspace deploy; plans unless --yes; --infra names a checkout's infra/ whose gcp-cloudrun module or kubernetes chart is used instead of the one shipped with @indx-workspace/cli
+Deploy the project's production environment through agent-workspace deploy; plans unless --yes; --infra names a checkout's infra/ whose gcp-cloudrun module or kubernetes chart is used instead of the one shipped with @indx-workspace/cli; --show-owner-password prints the Owner password of a gcp-cloudrun stack; destroy production deletes that stack after you type the Google Cloud project id; status production reports its versions, revision health, data protection and drift, creates nothing, and exits 3 when the plan has changes
 
 ```
-aw deploy <environment> [--plan | --yes] [--infra <dir>]
+aw deploy <environment> [--plan | --yes] [--infra <dir>] | production --show-owner-password | destroy production | status production
 ```
 
 ## aw platforms list
@@ -534,6 +590,30 @@ Rotate the webhook secret; it is shown once and the old URL stops working
 
 ```
 aw triggers secret rotate <id>
+```
+
+## aw webhooks list
+
+Every webhook of the workspace; no secret is shown
+
+```
+aw webhooks list
+```
+
+## aw webhooks create
+
+Register an endpoint for run outcomes; the signing secret is shown once
+
+```
+aw webhooks create [--file <json>] [--webhook-url <url>] [--event <type> …]
+```
+
+## aw webhooks remove
+
+Delete a webhook and its signing secret; nothing more is sent to it
+
+```
+aw webhooks remove <id>
 ```
 
 ## aw models connections list
@@ -1088,6 +1168,62 @@ Show a pointer move, and point an environment at a version with --yes
 aw agents pointers set <id> <environment> <version> [--yes]
 ```
 
+## aw agent-teams list
+
+Every agent team of the workspace, with its newest version's lead and members
+
+```
+aw agent-teams list
+```
+
+## aw agent-teams get
+
+One agent team with its newest version
+
+```
+aw agent-teams get <team>
+```
+
+## aw agent-teams create
+
+Create an agent team; with --lead and --member, its version 1 too
+
+```
+aw agent-teams create <name> [--description <text>] [--lead <agent>[@<version>] --member [<name>=]<agent>[@<version>] …]
+```
+
+## aw agent-teams remove
+
+Delete an agent team; its name is free again
+
+```
+aw agent-teams remove <team>
+```
+
+## aw agent-teams versions create
+
+Save a team's next version; the lead stays the current one unless --lead names another
+
+```
+aw agent-teams versions create <team> [--lead <agent>[@<version>]] --member [<name>=]<agent>[@<version>] …
+```
+
+## aw agent-teams run
+
+Run an agent team: its newest version's lead starts and calls the members as tools
+
+```
+aw agent-teams run <team> <prompt> [--session <id>] [--idempotency-key <key>] [--wait|--follow] [--fail-on-error]
+```
+
+## aw agent-teams versions list
+
+A team's versions, newest first, with each one's lead and members
+
+```
+aw agent-teams versions list <team>
+```
+
 ## aw projects list
 
 Active projects, or archived ones, or all
@@ -1213,7 +1349,7 @@ aw sessions subkeys <provider-session-id> [--project-key <key>]
 Queue a run, and optionally wait for or follow it
 
 ```
-aw runs start <agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait|--follow] [--fail-on-error]
+aw runs start <agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--spend-ceiling-usd <usd>] [--attach <file-id|path>]... [--idempotency-key <key>] [--wait|--follow] [--fail-on-error]
 ```
 
 ## aw runs get
@@ -1342,4 +1478,36 @@ Mint a short-lived, run- or session-scoped bearer for a customer frontend
 
 ```
 aw tokens mint --scope run|session --id <id> [--ttl <seconds>]
+```
+
+## aw blueprint add
+
+Install an app blueprint from npm: fetched with npm pack --ignore-scripts and checked against its integrity; shows every file, edit and slot, and writes them only with --yes (exit 3 without)
+
+```
+aw blueprint add <npm-spec> [--yes]
+```
+
+## aw blueprint list
+
+The installed app blueprints: each name, npm package, exact version and integrity
+
+```
+aw blueprint list [--json]
+```
+
+## aw blueprint diff
+
+Show a blueprint's next version (npm's latest, or --to) as line diffs of each file; writes nothing, exits 3 when it has changes and 0 when it has none
+
+```
+aw blueprint diff <name> [--to <version>]
+```
+
+## aw blueprint update
+
+Propose a blueprint's next version per file (add, update, remove, conflict; exit 3 without --yes); --yes applies it and writes each edited file's new version beside it as \<file\>.blueprint-\<version\>, never over it
+
+```
+aw blueprint update <name> [--to <version>] [--yes]
 ```

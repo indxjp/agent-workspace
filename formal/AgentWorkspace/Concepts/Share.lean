@@ -157,7 +157,7 @@ instance : WireEnum Expiry where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- The lifetime of an expiry in milliseconds, `none` for `never` (`EXPIRY_MS`). -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#EXPIRY_MS")]
+@[aw_spec (ts := "apps/web/server/shares/core/rules.ts#EXPIRY_MS")]
 def Expiry.durationMs? : Expiry → Option Nat
   | .hours24 => some 86400000
   | .days7 => some 604800000
@@ -175,7 +175,7 @@ def Expiry.expiresAt? (e : Expiry) (createdAt : Nat) : Option Nat :=
 def passphraseMaxLength : Nat := 1024
 
 /-- Every share token starts with `pub_` (`ShareService.publish`). -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")]
 def tokenPrefix : String := "pub_"
 
 /-- The public link of a share is `/p/<token>` (`toShareResource`). -/
@@ -184,7 +184,7 @@ def tokenPrefix : String := "pub_"
 def publicUrlPrefix : String := "/p/"
 
 /-- The budget, in USD, a runnable share gets when the publisher names none. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2063-publishing-an-agent")]
 def defaultRunnableBudgetUsd : String := "20"
 
@@ -419,7 +419,7 @@ share a mode (`definition` by default), gives a budget to a runnable share only 
 exactly when its subject is an agent; it has a budget exactly when it is runnable; a non-session
 share includes nothing; the token has the `pub_` prefix; and it starts unstopped, unrevoked,
 unsuspended and with nothing spent. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "apps/web/server/shares/core/input.ts#PublishShareRequestSchema")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def Share.wellPublished (s : Share) : Bool :=
@@ -503,7 +503,7 @@ instance : WireEnum ShareState where
 def Share.expiredAt (s : Share) (now : Nat) : Bool := s.expiresAt.any (· ≤ now)
 
 /-- The state of a share at instant `now`. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/formal/inventory.md#2-state-machines")]
 def Share.stateAt (s : Share) (now : Nat) : ShareState :=
   if s.revokedAt.isSome then .revoked
@@ -515,7 +515,7 @@ def Share.stateAt (s : Share) (now : Nat) : ShareState :=
 /-- A public link opens at `now` (before any passphrase): the share is public and live. This is
 the availability test of `ShareService.resolve` and of the unscoped token lookup
 `findShareWorkspace`, which only finds public shares. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "packages/core/src/db/repositories/root.ts#findShareWorkspace")
   (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")]
 def Share.publiclyOpen (s : Share) (now : Nat) : Bool :=
@@ -590,7 +590,7 @@ structure PublishRequest where
   deriving DecidableEq, Repr, Inhabited
 
 /-- Why `ShareService.publish` refuses an otherwise valid request. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "packages/contracts/src/shares.ts#SHARES_PROBLEM_CODES")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 inductive PublishRefusal where
@@ -606,7 +606,7 @@ inductive PublishRefusal where
 def PublishRefusal.code (_ : PublishRefusal) : String := "invalid_share"
 
 /-- The public message of each refusal, as `ShareService.publish` words it. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")]
 def PublishRefusal.message : PublishRefusal → String
   | .publicSharingOff => "Public sharing is disabled for this workspace."
   | .runnableUnreleased => "Runnable public links are not available in this release (D-06)."
@@ -636,7 +636,7 @@ def ownerOrAdmin (role : Membership.Role) : Bool := role == .owner || role == .a
 
 /-- `ShareService.publish` for a request the schema accepted, by a caller of `role`, with the
 workspace's public-sharing policy, the runnable release gate, at instant `now`. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "apps/web/server/shares/runnable/feature.ts#runnablePublicLinksEnabled")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def publishDecision (r : PublishRequest) (role : Membership.Role)
@@ -690,7 +690,7 @@ def ResolveOutcome.code? : ResolveOutcome → Option String
 
 /-- `ShareService.resolve` at instant `now`: a closed link is unavailable whatever the passphrase;
 an open link with a passphrase opens only for the right one; an open link without one opens. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2062-publishing-a-session-run-history")]
 def Share.resolveAt (s : Share) (now : Nat) (a : PassphraseAttempt) : ResolveOutcome :=
   if !s.publiclyOpen now then .unavailable

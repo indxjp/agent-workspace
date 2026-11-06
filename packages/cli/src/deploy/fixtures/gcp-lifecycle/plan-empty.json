@@ -1,0 +1,50 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.7",
+  "resource_changes": [
+    {
+      "address": "google_artifact_registry_repository.images",
+      "mode": "managed",
+      "type": "google_artifact_registry_repository",
+      "name": "images",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": ["no-op"],
+        "before": { "repository_id": "acme-ai", "location": "asia-northeast1", "format": "DOCKER" },
+        "after": { "repository_id": "acme-ai", "location": "asia-northeast1", "format": "DOCKER" },
+        "after_unknown": {},
+        "before_sensitive": {},
+        "after_sensitive": {}
+      }
+    },
+    {
+      "address": "data.google_project.current",
+      "mode": "data",
+      "type": "google_project",
+      "name": "current",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": ["read"],
+        "before": null,
+        "after": { "project_id": "acme-prod" },
+        "after_unknown": {},
+        "before_sensitive": false,
+        "after_sensitive": {}
+      }
+    }
+  ],
+  "output_changes": {
+    "web_url": {
+      "actions": ["no-op"],
+      "before": "https://aw-web-abc123-an.a.run.app",
+      "after": "https://aw-web-abc123-an.a.run.app",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    }
+  },
+  "timestamp": "2026-11-04T15:56:58Z",
+  "applyable": false,
+  "complete": true,
+  "errored": false
+}

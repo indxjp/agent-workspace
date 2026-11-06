@@ -21,6 +21,7 @@ const CAPABILITIES = {
   openai: OPENAI_CAPABILITIES,
   'azure-openai': AZURE_OPENAI_CAPABILITIES,
   'openai-compatible': OPENAI_COMPATIBLE_CAPABILITIES,
+  vertex: ANTHROPIC_CAPABILITIES,
 } as const;
 
 const OPTIONAL_KEYS = {
@@ -114,7 +115,13 @@ describe('spec §9 gateway inventory', () => {
 
   it('keeps the composition root and registry on the same exact provider table', () => {
     expect(createProviderRegistry().map((provider) => provider.id)).toEqual(PROVIDER_IDS);
-    expect(PROVIDER_IDS).toEqual(['anthropic', 'openai', 'azure-openai', 'openai-compatible']);
+    expect(PROVIDER_IDS).toEqual([
+      'anthropic',
+      'openai',
+      'azure-openai',
+      'openai-compatible',
+      'vertex',
+    ]);
   });
 
   it('renders every provider from the complete union report', () => {

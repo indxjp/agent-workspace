@@ -88,6 +88,8 @@ export interface DevStatus {
   readonly agents: readonly { readonly name: string; readonly file: string }[];
   readonly surfaces: readonly string[];
   readonly origin: string;
+  /** Issue #1506: the generated app's dev server, `http://127.0.0.1:<port>`; no row when unset. */
+  readonly app?: string;
   /**
    * How to sign in to the local web console at {@link origin}: the email, and where the first-run
    * password is (a file path or a variable name, never the password itself).
@@ -131,6 +133,7 @@ export function readyScreen(status: DevStatus, style: ScreenStyle): string {
     plainRow('console', status.origin),
     plainRow('', `sign in as ${status.console.email}`),
     plainRow('', `password in ${status.console.password}`),
+    ...(status.app === undefined ? [] : [plainRow('app', status.app)]),
     plainRow('chat', 'npx aw chat'),
     '',
     done('runtime', `ready in ${runtime.seconds.toFixed(1)} s   logs: ${runtime.logPath}`),

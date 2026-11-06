@@ -29,6 +29,11 @@
       "@agent-workspace/runtime/driver/aca-sessions": ["./packages/runtime/src/aca-sessions.ts"],
       "@agent-workspace/runtime/engine-images": ["./packages/runtime/src/engine-images.ts"],
       "@agent-workspace/runtime/transfer": ["./packages/runtime/src/transfer.ts"],
+      "@indx-workspace/app": ["./packages/app/src/index.ts"],
+      "@indx-workspace/app/server": ["./packages/app/src/server/index.ts"],
+      "@indx-workspace/app/db": ["./packages/app/src/db/index.ts"],
+      "@indx-workspace/app/react": ["./packages/app/src/react/index.ts"],
+      "@indx-workspace/app/testing": ["./packages/app/src/testing/index.ts"],
       "@indx-workspace/platforms": ["./packages/platforms/src/index.ts"],
       "@indx-workspace/platforms/testing": ["./packages/platforms/src/testing/index.ts"]
     },

@@ -48,7 +48,8 @@ def workTables : List TableName :=
   [.projects, .sessions, .sessionTranscripts, .sessionMessages, .sessionStateStreams,
     .sessionStateEntries, .sessionStateBlobs, .runs, .runEvents, .runFeedback, .runTokens,
     .runUsageRecords, .auditEvents, .surfaceSessionKeys, .triggers, .triggerDeliveries,
-    .storageMigrationRuns, .builderToolCalls, .workspaceFeatures]
+    .storageMigrationRuns, .builderToolCalls, .workspaceFeatures, .webhooks, .webhookDeliveries,
+    .agentTeams, .agentTeamVersions, .agentTeamVersionMembers]
 
 /-! ## Audit events -/
 
@@ -66,7 +67,7 @@ inductive AuditAction where
   | oauthGrantRevoked | fileUploaded | fileDownloaded | fileLinkCreated | fileMoved | fileDeleted
   | storageConnectionCreated | storageConnectionUpdated | storageConnectionDeleted
   | storageConnectionCredentialChanged | storageConnectionTested | storageConnectionWritten
-  | storageGrantChanged | workspaceFeaturesChanged
+  | storageGrantChanged | workspaceFeaturesChanged | userTokenExchanged | memoryUpdated
   deriving DecidableEq, Repr, Inhabited
 
 namespace AuditAction
@@ -115,6 +116,8 @@ def toWire : AuditAction → String
   | storageConnectionWritten => "storage-connection-written"
   | storageGrantChanged => "storage-grant-changed"
   | workspaceFeaturesChanged => "workspace-features-changed"
+  | userTokenExchanged => "user-token-exchanged"
+  | memoryUpdated => "memory-updated"
 
 instance : WireEnum AuditAction where
   all := [userCreated, userDeleted, agentChanged, agentCreated, providerCredentialChanged,
@@ -126,7 +129,7 @@ instance : WireEnum AuditAction where
     oauthGrantRevoked, fileUploaded, fileDownloaded, fileLinkCreated, fileMoved, fileDeleted,
     storageConnectionCreated, storageConnectionUpdated, storageConnectionDeleted,
     storageConnectionCredentialChanged, storageConnectionTested, storageConnectionWritten,
-    storageGrantChanged, workspaceFeaturesChanged]
+    storageGrantChanged, workspaceFeaturesChanged, userTokenExchanged, memoryUpdated]
   toWire := toWire
   complete := by intro a; cases a <;> decide
   nodup := by decide
@@ -337,6 +340,41 @@ def triggerKindShape (r : Row) : Bool :=
   | some k => (k == "webhook" && webhook) || (k == "schedule" && schedule)
   | none => webhook || schedule
 
+/-- `WEBHOOK_EVENT_TYPES`: the events a webhook subscribes to, one per terminal run status
+(ADR-SDK-18-N3-250 D3). -/
+@[aw_spec (ts := "packages/contracts/src/webhooks.ts#WEBHOOK_EVENT_TYPES")]
+def webhookEventWires : List String := ["run.completed", "run.failed", "run.cancelled"]
+
+/-- A character list cut at every comma, structurally, so the kernel can decide it. -/
+def splitOnComma : List Char → List (List Char)
+  | [] => [[]]
+  | ',' :: rest => [] :: splitOnComma rest
+  | c :: rest =>
+    match splitOnComma rest with
+    | [] => [[c]]
+    | w :: ws => (c :: w) :: ws
+
+/-- The items of a `text[]` cell as PostgreSQL renders it (`{a,b}`), for items that need no
+quoting: an event type is a dotted slug. -/
+def textArrayItems (cell : String) : List (List Char) :=
+  let inner := (cell.toList.drop 1).dropLast
+  if inner.isEmpty then [] else splitOnComma inner
+
+/-- `AGENT_TEAM_MEMBER_NAME_MAX_LENGTH`: `mcp__agent__<name>` fits the 64-character tool-name budget
+(ADR-0104 acceptance decision 3). -/
+@[aw_spec (ts := "packages/contracts/src/agent-teams.ts#AGENT_TEAM_MEMBER_NAME_MAX_LENGTH")]
+def agentTeamMemberNameMax : Nat := 52
+
+/-- A member name as `agent_team_version_members_name_valid` reads it: `[a-z0-9][a-z0-9_-]*`, at
+most `agentTeamMemberNameMax` characters. -/
+@[aw_spec (ts := "packages/contracts/src/agent-teams.ts#isAgentTeamMemberName")]
+def agentTeamMemberNameValid (n : String) : Bool :=
+  let slug (c : Char) : Bool := ('a' ≤ c && c ≤ 'z') || ('0' ≤ c && c ≤ '9')
+  match n.toList with
+  | [] => false
+  | c :: rest =>
+    slug c && rest.all (fun d => slug d || d == '_' || d == '-') && n.length ≤ agentTeamMemberNameMax
+
 /-- The semantics of each check of the work tables that is not a closed set, by constraint name,
 reading a row under SQL's three-valued logic: a comparison with a `NULL` operand is `NULL`, and a
 check passes unless it is `false`. -/
@@ -347,7 +385,12 @@ check passes unless it is `false`. -/
   (ts := "packages/core/src/db/schema/run-feedback.ts#runFeedback")
   (ts := "packages/core/src/db/schema/audit-events.ts#auditEvents")
   (ts := "packages/core/src/db/schema/triggers.ts#triggers")
-  (ts := "packages/core/src/db/schema/trigger-deliveries.ts#triggerDeliveries")]
+  (ts := "packages/core/src/db/schema/trigger-deliveries.ts#triggerDeliveries")
+  (ts := "packages/core/src/db/schema/webhooks.ts#webhooks")
+  (ts := "packages/core/src/db/schema/webhook-deliveries.ts#webhookDeliveries")
+  (ts := "packages/core/src/db/schema/agent-teams.ts#agentTeams")
+  (ts := "packages/core/src/db/schema/agent-team-versions.ts#agentTeamVersions")
+  (ts := "packages/core/src/db/schema/agent-team-version-members.ts#agentTeamVersionMembers")]
 def workCheck : String → Option (Row → Bool)
   | "projects_name_not_blank" => some fun r => (r.get "name").all hasNonSpace
   | "projects_default_model_pair" => some fun r =>
@@ -375,6 +418,10 @@ def workCheck : String → Option (Row → Bool)
     (r.get "approvals_consumed_at").isNone || (r.get "status").all (· != "queued")
   | "runs_idempotency_key_has_hash" => some fun r =>
     (r.get "idempotency_key").isNone == (r.get "idempotency_request_hash").isNone
+  | "runs_spend_ceiling_positive" => some fun r =>
+    (r.get "spend_ceiling_usd").all fun c => isNonNegDecimal c && !isZeroDecimal c
+  | "runs_parent_not_self" => some fun r =>
+    (r.get "parent_run_id").all fun p => (r.get "id").all (· != p)
   -- `char_length` counts code points, as `String.length` does.
   | "run_feedback_comment_length" => some fun r => (r.get "comment").all (·.length ≤ 1000)
   | "run_tokens_expiry_after_created" => some fun r =>
@@ -397,6 +444,21 @@ def workCheck : String → Option (Row → Bool)
   | "triggers_kind_shape" => some triggerKindShape
   | "trigger_deliveries_key_length" => some fun r =>
     (r.get "delivery_key").all fun k => 1 ≤ k.length && k.length ≤ 255
+  | "webhooks_url_length" => some fun r =>
+    (r.get "url").all fun u => 1 ≤ u.length && u.length ≤ 2048
+  | "webhooks_events_valid" => some fun r =>
+    (r.get "events").all fun e =>
+      let items := textArrayItems e
+      1 ≤ items.length && items.length ≤ 3 && items.all fun i => webhookEventWires.any (·.toList == i)
+  | "webhook_deliveries_event_type_valid" => some fun r =>
+    (r.get "event_type").all webhookEventWires.contains
+  | "webhook_deliveries_delivered_shape" => some fun r =>
+    (r.get "state").all fun s => (s == "delivered") == (r.get "delivered_at").isSome
+  | "agent_teams_name_not_blank" => some fun r => (r.get "name").all hasNonSpace
+  | "agent_team_versions_number_positive" => some fun r =>
+    (r.get "number").all fun n => (parseNat? n).any (0 < ·)
+  | "agent_team_version_members_name_valid" => some fun r =>
+    (r.get "name").all agentTeamMemberNameValid
   | _ => none
 
 /-- A check of a work table holds on a row: its semantics, or vacuously for a check this module
@@ -436,6 +498,9 @@ def workCheckSql : List (String × String) :=
       "\"runs\".\"approvals_consumed_at\" is null or \"runs\".\"status\" <> 'queued'"),
     ("runs_idempotency_key_has_hash",
       "(\"runs\".\"idempotency_key\" is null) = (\"runs\".\"idempotency_request_hash\" is null)"),
+    ("runs_parent_not_self", "\"runs\".\"parent_run_id\" <> \"runs\".\"id\""),
+    ("runs_spend_ceiling_positive",
+      "\"runs\".\"spend_ceiling_usd\" is null or \"runs\".\"spend_ceiling_usd\" > 0"),
     ("run_feedback_comment_length",
       "\"run_feedback\".\"comment\" is null or char_length(\"run_feedback\".\"comment\") <= 1000"),
     ("run_tokens_expiry_after_created",
@@ -457,7 +522,18 @@ def workCheckSql : List (String × String) :=
     ("triggers_kind_shape",
       "(\"triggers\".\"kind\" = 'webhook' and \"triggers\".\"secret_hash\" is not null and \"triggers\".\"cron\" is null and \"triggers\".\"timezone\" is null)\n        or (\"triggers\".\"kind\" = 'schedule' and \"triggers\".\"secret_hash\" is null and \"triggers\".\"cron\" is not null and \"triggers\".\"timezone\" is not null)"),
     ("trigger_deliveries_key_length",
-      "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255")]
+      "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"),
+    ("webhooks_url_length", "char_length(\"webhooks\".\"url\") between 1 and 2048"),
+    ("webhooks_events_valid",
+      "cardinality(\"webhooks\".\"events\") between 1 and 3 and \"webhooks\".\"events\" <@ ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[]"),
+    ("webhook_deliveries_event_type_valid",
+      "\"webhook_deliveries\".\"event_type\" = any(ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[])"),
+    ("webhook_deliveries_delivered_shape",
+      "(\"webhook_deliveries\".\"state\" = 'delivered') = (\"webhook_deliveries\".\"delivered_at\" is not null)"),
+    ("agent_teams_name_not_blank", "length(btrim(\"agent_teams\".\"name\")) > 0"),
+    ("agent_team_versions_number_positive", "\"agent_team_versions\".\"number\" > 0"),
+    ("agent_team_version_members_name_valid",
+      "\"agent_team_version_members\".\"name\" ~ '^[a-z0-9][a-z0-9_-]*$' and char_length(\"agent_team_version_members\".\"name\") <= 52")]
 
 /-- The names of the other checks of table `t`. -/
 def otherChecks (t : TableName) : List String :=

@@ -172,8 +172,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * True for an agent with no restore (`agent-changed`, `archived: false`) at or after `since`.
  *
- * ponytail: scans the workspace's recent audit rows; add an index on
- * (workspace_id, action, subject_id) if audit volume makes the hourly sweep slow.
+ * Served by the partial index `audit_events_agent_restore_idx`, whose predicate is the two
+ * conditions on `action` and `details` below: keep them in step with it.
  */
 function notRestoredSince(workspaceId: string, since: Date): SQL {
   return notExists(

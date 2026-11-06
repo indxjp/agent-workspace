@@ -80,7 +80,7 @@ example :
     let c : Compiled :=
       { cwd := "/workspace", tools := [], skillTools := false, networkEgress := false,
         connection := connectionFor .anthropicMessages "http://gw" "tok",
-        model := "claude-sonnet-4-5", maxSteps := none, budgetCap := false,
+        model := "claude-sonnet-4-5", maxSteps := none,
         grants := [{ directory := true, segments := ["docs"], readOnly := true }], skills := [],
         connectors := [], memory := memoryFor "s1" "tenant", observability := observabilityOff }
     writeAllowed c "docs/a.md" = false ∧ writeAllowed c "x/../docs/a.md" = false ∧
@@ -137,7 +137,7 @@ example :
     let c : Compiled :=
       { cwd := "/workspace", tools := [], skillTools := false, networkEgress := false,
         connection := connectionFor .anthropicMessages "http://gw" "tok",
-        model := "claude-sonnet-4-5", maxSteps := none, budgetCap := false,
+        model := "claude-sonnet-4-5", maxSteps := none,
         grants := [{ directory := false, segments := ["contracts", "signed.pdf"],
                      readOnly := true }], skills := [],
         connectors := [], memory := memoryFor "s1" "tenant", observability := observabilityOff }

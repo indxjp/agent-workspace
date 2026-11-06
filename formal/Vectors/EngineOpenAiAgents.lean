@@ -84,7 +84,6 @@ private def outcomeJson : Outcome → Json
       [("ok", true), ("tools", Lean.toJson (c.tools.map Tool.name)),
        ("networkEgress", c.networkEgress), ("connection", connectionJson c.connection),
        ("connectors", Lean.toJson c.connectors), ("maxTurns", optNatJson c.maxTurns),
-       ("budgetCap", c.budgetCap),
        ("grants", Json.arr (c.grants.map grantJson).toArray),
        ("tracingDisabled", c.tracingDisabled)]
   | .refused r => Json.mkObj [("ok", false), ("code", r.code), ("names", r.names)]
@@ -93,7 +92,6 @@ private def refusalWitness (r : Behaviour.Engines.OpenAiAgents.Refusal) : List S
   match r.names with
   | "skills" => [t "Normative" "a_granted_skill_is_refused_by_name"]
   | "fork" => [t "Normative" "a_fork_is_refused_by_name"]
-  | "maxBudget" => [t "Normative" "an_unpriced_budget_cap_is_refused_by_name"]
   | "wireProtocols" => [t "Normative" "an_unspoken_protocol_is_refused_by_name"]
   | "model" => [t "Normative" "anthropic_without_a_model_is_refused_by_name"]
   | "approvals" => [t "Normative" "an_unhonourable_connector_is_refused_by_name"]
@@ -109,8 +107,8 @@ private def compileVector (id : String) (r : Request) : Vector :=
          t "Normative" "no_vendor_hosted_tool_is_compiled",
          t "Normative" "compiled_protocol_is_the_gateway_protocol",
          t "Adversarial" "every_model_request_goes_to_the_gateway_with_the_run_token",
-         t "Adversarial" "tracing_is_disabled_for_every_compiled_run",
-         t "Normative" "an_accepted_budget_cap_is_priced_and_compiled"] ++
+         t "Adversarial" "tracing_is_disabled_for_every_compiled_run"] ++
+          (if r.budgetCap then [t "Normative" "a_budget_cap_never_changes_the_compile"] else []) ++
           (if r.connectors.any (·.remote) then
             [t "Normative" "a_remote_connector_needs_no_network_switch"] else [])
       | .refused refusal => refusalWitness refusal }
@@ -216,7 +214,7 @@ private def writeVector (candidate : String) : Vector :=
     let c : Compiled :=
       { tools := [.applyPatch], networkEgress := false,
         connection := connectionFor .openaiResponses "http://gw" "tok", connectors := [],
-        maxTurns := none, budgetCap := false, grants, tracingDisabled := true }
+        maxTurns := none, grants, tracingDisabled := true }
     { id := candidate,
       input := Json.mkObj
         [("grants", Json.arr (writeGrants.map fun (d, p, ro) =>

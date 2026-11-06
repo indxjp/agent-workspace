@@ -67,10 +67,10 @@ export function productionBuilderPorts(root: BuilderCompositionRoot): BuilderPor
     toolDomainsRefusal,
   });
   const actorLabel: ActorLabel = async (workspaceId, principalId) => {
-    const members = await root.directory.forWorkspace(workspaceId).listMemberships();
-    const member = members.find((candidate) => candidate.principalId === principalId);
-    if (member === undefined)
-      throw new Error('The acting person is not a member of the workspace.');
+    const member = await root.directory
+      .forWorkspace(workspaceId)
+      .findMembershipByPrincipal(principalId);
+    if (member === null) throw new Error('The acting person is not a member of the workspace.');
     return member.email;
   };
   return {

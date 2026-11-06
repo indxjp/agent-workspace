@@ -167,14 +167,14 @@ private def racedTerminal : RunState :=
 
 /-- The losing terminal writer cannot publish a second status event. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/composition/wiring/run-api.ts#interruptRun")
-  (ts := "apps/web/server/runs/launcher.ts#conclude")]
+  (ts := "apps/web/server/runs/launcher-outcomes.ts#conclude")]
 theorem interrupt_conclude_commits_one_terminal_event :
     racedTerminal.status = .cancelled ∧
     racedTerminal.terminalEvents = [.cancelled] := by
   decide +kernel
 
 /-- Changing the runner's private outcome text cannot change either public terminal message. -/
-@[aw_spec (tier := T3) (ts := "apps/web/server/runs/launcher.ts#publicRelayFailure")]
+@[aw_spec (tier := T3) (ts := "apps/web/server/runs/launcher-outcomes.ts#publicRelayFailure")]
 theorem runtime_outcome_text_does_not_reach_public_record
     (first second : String) (cancelled : Bool) :
     Sse.publicRuntimeOutcomeReason cancelled first =
@@ -183,7 +183,7 @@ theorem runtime_outcome_text_does_not_reach_public_record
 
 /-- A successful terminal finish closes the log and revokes the run credential. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem terminal_finish_closes_log_and_revokes_token :
     let finished := runAction { status := .running } (.finish .completed 1)
     finished.logClosed = true ∧ finished.runTokenRevoked = true ∧

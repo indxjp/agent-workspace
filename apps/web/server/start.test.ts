@@ -91,6 +91,14 @@ describe('startWeb', () => {
     );
     expect(mocks.createNext).not.toHaveBeenCalled();
   });
+
+  it('rejects the dev issuer under the production posture before Next is created (ADR-0161 DI9)', async () => {
+    mocks.createNext.mockClear();
+    await expect(
+      startWeb({ NODE_ENV: 'production', OIDC_ISSUER_URL: 'http://127.0.0.1:3200' }),
+    ).rejects.toThrow(/OIDC_ISSUER_URL must be an https: URL/u);
+    expect(mocks.createNext).not.toHaveBeenCalled();
+  });
 });
 
 /**

@@ -7,6 +7,11 @@ import {
   DiscoveredModelsResponseSchema,
   MODEL_CONNECTION_CONFIG_FIELDS,
   MODEL_PROVIDER_CONFIG_RULES,
+  ModelConnectionConfigSchema,
+  VERTEX_CLAUDE_MODELS,
+  VERTEX_DEFAULT_MODEL,
+  VERTEX_LOCATIONS,
+  isKeylessProvider,
   ModelConnectionListResponseSchema,
   ModelConnectionResourceSchema,
   ModelConnectionTestOutcomeSchema,
@@ -117,17 +122,65 @@ describe('MODEL_PROVIDER_CONFIG_RULES', () => {
   });
 
   it('spells out the specification: optional baseUrl, required baseUrl, and the Azure triple', () => {
-    expect(MODEL_PROVIDER_CONFIG_RULES.anthropic).toEqual({ allowed: ['baseUrl'], required: [] });
+    expect(MODEL_PROVIDER_CONFIG_RULES.anthropic).toEqual({
+      allowed: ['baseUrl'],
+      required: [],
+      credential: 'api-key',
+    });
     expect(MODEL_PROVIDER_CONFIG_RULES['anthropic-compatible']).toEqual(
       MODEL_PROVIDER_CONFIG_RULES.anthropic,
     );
-    expect(MODEL_PROVIDER_CONFIG_RULES.openai).toEqual({ allowed: ['baseUrl'], required: [] });
+    expect(MODEL_PROVIDER_CONFIG_RULES.openai).toEqual({
+      allowed: ['baseUrl'],
+      required: [],
+      credential: 'api-key',
+    });
     expect(MODEL_PROVIDER_CONFIG_RULES['openai-compatible'].required).toEqual(['baseUrl']);
     expect([...MODEL_PROVIDER_CONFIG_RULES['azure-openai'].required].sort()).toEqual([
       'apiVersion',
       'baseUrl',
       'deployment',
     ]);
+  });
+});
+
+describe('the vertex provider', () => {
+  it('is keyless, allows projectId and location, and requires projectId', () => {
+    expect(MODEL_PROVIDER_CONFIG_RULES.vertex).toEqual({
+      allowed: ['projectId', 'location'],
+      required: ['projectId'],
+      credential: 'workload-identity',
+    });
+  });
+
+  it('is the only keyless provider', () => {
+    expect(MODEL_PROVIDERS.filter(isKeylessProvider)).toEqual(['vertex']);
+  });
+
+  it('accepts a Google Cloud project id and refuses a malformed one', () => {
+    for (const projectId of ['my-agents-123', 'abcde1']) {
+      expect(ModelConnectionConfigSchema.safeParse({ projectId }).success).toBe(true);
+    }
+    for (const projectId of ['My-Project', 'abc', '1abcdef', 'abcde-', 'a'.repeat(31)]) {
+      expect(ModelConnectionConfigSchema.safeParse({ projectId }).success).toBe(false);
+    }
+  });
+
+  it('accepts only the listed locations', () => {
+    for (const location of VERTEX_LOCATIONS) {
+      expect(ModelConnectionConfigSchema.safeParse({ location }).success).toBe(true);
+    }
+    expect(ModelConnectionConfigSchema.safeParse({ location: 'asia' }).success).toBe(false);
+  });
+
+  it('lists its models newest first and defaults to one of them', () => {
+    expect(VERTEX_CLAUDE_MODELS.map((model) => model.id)).toEqual([
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+      'claude-fable-5-1',
+    ]);
+    expect(VERTEX_CLAUDE_MODELS.map((model) => model.id)).toContain(VERTEX_DEFAULT_MODEL);
   });
 });
 

@@ -18,7 +18,7 @@ private theorem terminal_run_step_is_noop (s : RunStatus) (h : s.isTerminal = tr
 ("first terminal transition wins"). -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")]
 theorem run_terminal_is_absorbing (s : RunStatus) (h : s.isTerminal = true) (ops : List RunOp) :
     applyRunOps s ops = s := by
@@ -33,7 +33,7 @@ theorem run_terminal_is_absorbing (s : RunStatus) (h : s.isTerminal = true) (ops
 returns. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
-  (ts := "packages/core/src/db/repositories/runs.ts#markRunning")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#markRunning")]
 theorem run_never_returns_to_queued (s : RunStatus) (h : s ≠ .queued) (ops : List RunOp) :
     applyRunOps s ops ≠ .queued := by
   induction ops generalizing s with

@@ -92,7 +92,12 @@ async function apply(
   const read = parseProjectFile(yaml);
   const check = await applyProjectResources({
     io,
-    session: { baseUrl: 'http://127.0.0.1:3000', apiKey: 'ak_live_test', workspaceSlug: 'local' },
+    session: {
+      baseUrl: 'http://127.0.0.1:3000',
+      apiKey: 'ak_live_test',
+      workspaceId: '0b9d6c1e-4f3a-4b2c-9d8e-7f6a5b4c3d2e',
+      workspaceSlug: 'local',
+    },
     read,
     start: localStartMessage(read, root),
     root,

@@ -119,6 +119,8 @@ export interface RunListItem {
   readonly engineVersion: string | null;
   readonly usage: RunUsage;
   readonly cost: RunCost;
+  /** The run's spend ceiling in USD (ADR-0162), a six-place decimal; `null` when it has none. */
+  readonly spendCeilingUsd: string | null;
   readonly error: string | null;
   /** The run's final answer (ADR-0143); `null` until it completes, and for a run that did not. */
   readonly output: { readonly text: string; readonly structured: unknown } | null;
@@ -127,6 +129,8 @@ export interface RunListItem {
   /** Checked against {@link ACCOUNTING_STATE_NAMES} at the response boundary. */
   readonly accountingState: string;
   readonly accountingError: string | null;
+  /** The lead run a team member call started this one from (ADR-0104); `null` for a root run. */
+  readonly parentRunId: string | null;
 }
 
 /** {@link parseRunResource} refuses a value by throwing this, naming what it expected. */
@@ -162,11 +166,13 @@ export const RUN_KEYS = [
   'engineVersion',
   'usage',
   'cost',
+  'spendCeilingUsd',
   'error',
   'output',
   'pendingApproval',
   'accountingState',
   'accountingError',
+  'parentRunId',
 ] as const satisfies readonly (keyof RunResource)[];
 export const USAGE_KEYS = [
   'inputTokens',
@@ -410,11 +416,16 @@ export function parseRunResource(value: unknown, where = 'run'): RunListItem {
       currency,
       priceTableVersion,
     },
+    spendCeilingUsd:
+      record['spendCeilingUsd'] === null
+        ? null
+        : requireUsdAmount(record, 'spendCeilingUsd', where),
     error: requireNullableString(record, 'error', where),
     output: parseOutput(record['output'], `${where}.output`),
     pendingApproval: parsePendingApproval(record['pendingApproval'], `${where}.pendingApproval`),
     accountingState,
     accountingError,
+    parentRunId: requireNullableUuid(record, 'parentRunId', where),
   };
 }
 

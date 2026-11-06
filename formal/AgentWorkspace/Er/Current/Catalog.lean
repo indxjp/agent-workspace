@@ -131,6 +131,8 @@ def clusterCheckHolds (n : String) (r : Row) : Bool :=
   else if n == "files_storage_key_iff_file" then
     (r.get "kind").all fun k => (k == "file") == (r.get "storage_key").isSome
   else if n == "files_storage_key_not_blank" then rowNotBlank (r.get "storage_key")
+  else if n == "files_file_has_object_id" then
+    (r.get "kind").all fun k => k != "file" || (r.get "object_id").isSome
   else if n == "files_size_non_negative" then
     (r.get "size_bytes").all fun s => s.toList.head? != some '-'
   -- `split_part(path, '/', 1)` is the path up to its first `/`, or all of it.
@@ -205,6 +207,8 @@ def checkSql : List (String × String) :=
       "(\"files\".\"kind\" = 'file') = (\"files\".\"storage_key\" is not null)"),
     ("files_storage_key_not_blank",
       "\"files\".\"storage_key\" is null or length(btrim(\"files\".\"storage_key\")) > 0"),
+    ("files_file_has_object_id",
+      "\"files\".\"kind\" <> 'file' or \"files\".\"object_id\" is not null"),
     ("files_size_non_negative", "\"files\".\"size_bytes\" >= 0"),
     ("files_side_path_target",
       "(\"files\".\"target_path\" is not null) = (split_part(\"files\".\"path\", '/', 1) = '%aside') and (\"files\".\"target_path\" is null or \"files\".\"status\" <> 'ready')"),
@@ -251,6 +255,7 @@ def modelledChecks : List (TableName × String) :=
     (.files, "files_folder_is_ready"),
     (.files, "files_path_shape"), (.files, "files_path_no_dot_segments"),
     (.files, "files_storage_key_iff_file"), (.files, "files_storage_key_not_blank"),
+    (.files, "files_file_has_object_id"),
     (.files, "files_size_non_negative"), (.files, "files_side_path_target"),
     (.files, "files_sha256_shape"),
     (.files, "files_folder_has_no_content"),
@@ -452,7 +457,7 @@ def state : State
      row [("id", "f2"), ("workspace_id", "w1"), ("path", "contracts/agreement.pdf"),
         ("kind", "file"), ("storage_key", "files/w1/contracts/agreement.pdf"),
         ("size_bytes", "1024"), ("content_type", "application/pdf"), ("created_by", "u1"),
-        ("status", "ready"), ("area", "files"), ("owner_principal_id", "p1"),
+        ("status", "ready"), ("object_id", "o2"), ("area", "files"), ("owner_principal_id", "p1"),
         ("created_at", "t0"), ("updated_at", "t0")]]
   | .fileTexts =>
     [row [("id", "ft1"), ("workspace_id", "w1"), ("file_id", "f2"), ("ordinal", "0"),

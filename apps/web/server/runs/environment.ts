@@ -30,7 +30,7 @@ import type { SurfaceLimitProblemCode } from '@indx-workspace/contracts/surfaces
 import type { CeilingFor } from '../policy-ceiling/ceiling';
 import type { DailyCostCap } from '../usage/daily-cost';
 import type { PrincipalKind, Via } from '../rbac/principal';
-import type { TokenScope } from '../rbac/token-scope';
+import type { TokenScope } from '../rbac/core/token-scope';
 import type { ResolvedAttachment } from './attachments';
 import type { SseEvent } from './sse';
 import type { RunRecord, RunStore } from './store';
@@ -65,7 +65,7 @@ export interface RunPrincipal {
    * The principal that owns what this caller writes and that own/other is decided against
    * (`rbac/principal.ts`'s `ownerPrincipalId`). Equal to `principalId` except for a local
    * runtime key, which writes for the member it acts for (issue #509, S1-24). Every composition
-   * root sets it, so it is required (`rbac/owner-principal.ts`).
+   * root sets it, so it is required (`rbac/core/owner-principal.ts`).
    */
   readonly ownerPrincipalId: string;
   readonly userId: string | null;
@@ -235,8 +235,17 @@ export interface LaunchContext {
    * refuses a path the agent is not granted with `run_file_scope_not_granted`.
    */
   readonly fileScope?: readonly string[];
-  /** Lowers this run's limits; like `fileScope` it lives only in this context, and an approval continuation does not inherit it. */
+  /**
+   * Lowers this run's limits. The run row stores the same override (`runs.limits_override`), which
+   * an approval continuation reads from the paused run, so the cap survives the pause (#1963).
+   */
   readonly limits?: RunLimitsOverride;
+  /**
+   * A team lead run's members (ADR-0104 acceptance decisions 3, 4 and 6): the lead run's member
+   * endpoint and each member's team-local name. Set by the launcher only for a root run of a team
+   * version, read from the run's `agent_team_version_id`; compose gives a child run none.
+   */
+  readonly team?: { readonly url: string; readonly names: readonly string[] };
 }
 
 /** The judge model's reply: its text, and why it stopped (`max_tokens`, …) when the provider said. */
@@ -322,6 +331,19 @@ export interface RunApiEnvironment {
       readonly fileScope?: readonly string[];
     },
   ) => Promise<{ readonly code: RunStartProblemCode; readonly message: string } | null>;
+  /**
+   * The spend limit a run of `agent` composes with (ADR-0162 decision 2): its `limits.maxBudgetUsd`
+   * as the run will read it (the session's pinned version, or `agentVersionId` / `local`'s for a new
+   * session) met with the deployment ceiling's, or `null` for no limit. The start stores the lower
+   * of it and the body's `spendCeilingUsd` on the run, and refuses a body value above it. Absent: only
+   * the body's value (and a trusted override) sets the ceiling.
+   */
+  readonly spendLimitFor?: (
+    principal: RunPrincipal,
+    agent: AgentRef,
+    sessionId: string | null,
+    agentVersionId?: string,
+  ) => Promise<number | null>;
   /**
    * The deployment's policy ceiling (issue #535): `startRun` refuses an explicit `modelOverride`
    * outside its `models` with `403 policy_cannot_widen`. Absent when `AW_DEPLOYMENT_POLICY` is unset.

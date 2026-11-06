@@ -35,6 +35,10 @@
       "types": "./src/a2a.ts",
       "default": "./dist/a2a.js"
     },
+    "./agent-teams": {
+      "types": "./src/agent-teams.ts",
+      "default": "./dist/agent-teams.js"
+    },
     "./agent-versions": {
       "types": "./src/agent-versions.ts",
       "default": "./dist/agent-versions.js"
@@ -183,6 +187,10 @@
       "types": "./src/team.ts",
       "default": "./dist/team.js"
     },
+    "./token-exchange": {
+      "types": "./src/token-exchange.ts",
+      "default": "./dist/token-exchange.js"
+    },
     "./tokens": {
       "types": "./src/tokens.ts",
       "default": "./dist/tokens.js"
@@ -194,6 +202,10 @@
     "./triggers": {
       "types": "./src/triggers.ts",
       "default": "./dist/triggers.js"
+    },
+    "./webhooks": {
+      "types": "./src/webhooks.ts",
+      "default": "./dist/webhooks.js"
     },
     "./workspaces": {
       "types": "./src/workspaces.ts",
@@ -216,6 +228,10 @@
       "./a2a": {
         "types": "./dist/a2a.d.ts",
         "default": "./dist/a2a.js"
+      },
+      "./agent-teams": {
+        "types": "./dist/agent-teams.d.ts",
+        "default": "./dist/agent-teams.js"
       },
       "./agent-versions": {
         "types": "./dist/agent-versions.d.ts",
@@ -365,6 +381,10 @@
         "types": "./dist/team.d.ts",
         "default": "./dist/team.js"
       },
+      "./token-exchange": {
+        "types": "./dist/token-exchange.d.ts",
+        "default": "./dist/token-exchange.js"
+      },
       "./tokens": {
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.js"
@@ -376,6 +396,10 @@
       "./triggers": {
         "types": "./dist/triggers.d.ts",
         "default": "./dist/triggers.js"
+      },
+      "./webhooks": {
+        "types": "./dist/webhooks.d.ts",
+        "default": "./dist/webhooks.js"
       },
       "./workspaces": {
         "types": "./dist/workspaces.d.ts",

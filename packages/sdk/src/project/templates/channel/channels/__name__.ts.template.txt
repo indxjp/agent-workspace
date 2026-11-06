@@ -1,0 +1,7 @@
+import {{targetVariable}} from '@/resources/{{target}}';
+import { channel } from '@indx-workspace/app/server';
+
+// Every write of a {{name}}, through its routes or an agent tool, is published to the {{target}}
+// its `{{keyField}}` field names. Whoever may read that {{target}} follows it at
+// /api/channels/{{name}}/events?key=<the {{target}}'s id>.
+export default channel('{{name}}', { resource: {{targetVariable}}, key: '{{keyField}}' });

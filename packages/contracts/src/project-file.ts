@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { EngineIdSchema } from './engines.js';
 import { FeatureListSchema } from './features.js';
 import { ConnectorIdentitySchema } from './identity-assertion.js';
-import { MODEL_CONNECTION_CONFIG_FIELDS, MODEL_PROVIDER_CONFIG_RULES } from './models.js';
+import {
+  MODEL_CONNECTION_CONFIG_FIELDS,
+  MODEL_PROVIDER_CONFIG_RULES,
+  type ModelConnectionConfigField,
+  isKeylessProvider,
+  VERTEX_LOCATIONS,
+} from './models.js';
 import { ProjectPolicySchema } from './policy-ceiling.js';
 import { ProjectPlatformsSchema } from './project-platforms.js';
 import { MODEL_PROVIDERS } from './runs.js';
@@ -292,20 +298,6 @@ const ProjectOriginUrlSchema = z
     }
   });
 
-/**
- * The `production` environment (issue #621): the deploy recipe it uses and the URL it is served
- * at — nothing else. Where its data lives follows from the recipe; `aw deploy` turns it into the
- * CLI's v1 profile, which stays internal.
- */
-export const ProductionEnvironmentSchema = z
-  .object({
-    target: z.enum(PROJECT_DEPLOY_TARGETS),
-    url: ProjectOriginUrlSchema,
-  })
-  .strict()
-  .readonly();
-export type ProductionEnvironment = z.infer<typeof ProductionEnvironmentSchema>;
-
 /** The reserved key a parser would drop from a map rather than check (see `projectResourceMap`). */
 const PROTOTYPE_KEY = '__proto__';
 
@@ -326,7 +318,7 @@ function refusePrototypeKey(value: unknown, context: z.RefinementCtx<unknown>): 
 }
 
 /**
- * A `models` or `connectors` map: name keys in {@link NAME_KEY_PATTERN}, bounded in size. The map
+ * A `models`, `connectors` or `environments.production.apps` map: name keys in {@link NAME_KEY_PATTERN}, bounded in size. The map
  * is a pipe whose first step only refuses an own `__proto__` key (see {@link refusePrototypeKey})
  * and transforms nothing, so the editor schema is still the record's.
  */
@@ -341,6 +333,137 @@ function projectResourceMap<Value extends z.ZodType>(value: Value) {
   return z.unknown().superRefine(refusePrototypeKey).pipe(map);
 }
 
+/** A digest-pinned image reference, `<repository>@sha256:<64 hex>`, as platform images are. */
+const DIGEST_REFERENCE_PATTERN = /^[^\s@]+@sha256:[0-9a-f]{64}$/u;
+
+/** The all-zero digest a template or a test uses as a placeholder; it names no real image. */
+const PLACEHOLDER_DIGEST_SUFFIX = `@sha256:${'0'.repeat(64)}`;
+
+/**
+ * One app the `production` environment runs beside the platform, under
+ * `environments.production.apps.<name>` (issue #1512, ADR-0103's production-apps amendment): the
+ * image built from the app's Next.js output, pinned by digest, and the https origin it is served
+ * at. Its database schema is not a field: it is {@link appSchemaName} of the key, so it cannot
+ * disagree with the schema the app kit migrates.
+ */
+export const ProductionAppSchema = z
+  .strictObject({
+    image: z
+      .string()
+      .max(PROJECT_URL_MAX_LENGTH, { abort: true })
+      .regex(
+        DIGEST_REFERENCE_PATTERN,
+        'must be a sha256 digest reference, such as ghcr.io/acme/desk@sha256:…',
+      )
+      .refine((image) => !image.endsWith(PLACEHOLDER_DIGEST_SUFFIX), {
+        message: 'must name a real image; the all-zero digest is a placeholder',
+      }),
+    url: ProjectOriginUrlSchema,
+  })
+  .readonly();
+export type ProductionApp = z.infer<typeof ProductionAppSchema>;
+
+/**
+ * The PostgreSQL schema an app's data lives in, which is also the name of the database role that
+ * owns it in production: `app_` and the app's name key with its hyphens as underscores
+ * (`service-desk` → `app_service_desk`). The app kit's `appSchemaName` derives the same name, and
+ * a parity test keeps the two equal.
+ */
+export function appSchemaName(name: string): string {
+  return `app_${name.replaceAll('-', '_')}`;
+}
+
+/**
+ * `environments.production.gcp`: where the `gcp-cloudrun` recipe creates its stack, in the user's
+ * own Google Cloud. `project` is a project id by the rule `infra/terraform/gcp-cloudrun`'s
+ * `project_id` variable applies; `region` is a region such as `asia-northeast1`. The region has no
+ * default here: the module's own default stays in Terraform. `modelLocation` is where Vertex AI
+ * serves the deployment's Claude models (`global`, `us` or `eu`); absent means `global`.
+ *
+ * Each optional key below is one Terraform variable of the module, and none holds a secret:
+ * `domain` is the host name the web app is served at behind the load balancer; `armor` puts Cloud
+ * Armor in front of it; `iap` puts Identity-Aware Proxy on it (it runs only with a `domain`);
+ * `oidc` names the single sign-on provider, whose client secret the CLI asks for once and keeps
+ * in Secret Manager, never in this file. `size` picks the D-12 preset (`small` or `standard`);
+ * `dataProtection` (on by default) keeps the Cloud SQL database, the buckets and the services from
+ * deletion, and `aw deploy destroy` needs it `false`, deployed first; `alertsEmail` is the address
+ * alert notifications go to, and no alert policy is created without it.
+ */
+export const ProductionGcpSchema = z
+  .strictObject({
+    project: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, 'must be a Google Cloud project id'),
+    region: z
+      .string()
+      .regex(/^[a-z]+-[a-z]+[0-9]{1,2}$/, 'must be a Google Cloud region, such as asia-northeast1'),
+    domain: z
+      .string()
+      .max(253)
+      .regex(
+        /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/,
+        'must be a lower-case host name with at least one dot, such as agents.example.com; no scheme, port or path',
+      )
+      .optional(),
+    armor: z.boolean().optional(),
+    iap: z.boolean().optional(),
+    oidc: z
+      .strictObject({
+        issuer: z.url({ protocol: /^https$/u, error: 'must be an https:// issuer URL' }).max(2048),
+        clientId: z.string().min(1).max(512),
+      })
+      .readonly()
+      .optional(),
+    modelLocation: z.enum(VERTEX_LOCATIONS).optional(),
+    size: z.enum(['small', 'standard']).optional(),
+    dataProtection: z.boolean().optional(),
+    alertsEmail: z.email().max(254).optional(),
+  })
+  .superRefine((gcp, context) => {
+    for (const key of ['armor', 'iap'] as const) {
+      if (gcp[key] === true && gcp.domain === undefined) {
+        context.addIssue({ code: 'custom', path: [key], message: 'needs gcp.domain' });
+      }
+    }
+  })
+  .readonly();
+export type ProductionGcp = z.infer<typeof ProductionGcpSchema>;
+
+/**
+ * The `production` environment (issue #621): the deploy recipe it uses, the URL it is served at
+ * and, optionally, the apps it runs beside the platform (issue #1512), keyed by app name, and the
+ * Google Cloud `gcp` project and region — nothing else. Where its data lives follows from the
+ * recipe; `aw deploy` turns it into the CLI's v1 profile, which stays internal. Only the
+ * `single-vm` and `kubernetes` targets deploy `apps`; the others refuse it at
+ * `environments.production.apps`. Only `gcp-cloudrun` accepts `gcp`; the others refuse it at
+ * `environments.production.gcp`.
+ */
+export const ProductionEnvironmentSchema = z
+  .object({
+    target: z.enum(PROJECT_DEPLOY_TARGETS),
+    url: ProjectOriginUrlSchema,
+    apps: projectResourceMap(ProductionAppSchema).optional(),
+    gcp: ProductionGcpSchema.optional(),
+  })
+  .strict()
+  .superRefine((production, context) => {
+    if (production.gcp !== undefined && production.target !== 'gcp-cloudrun') {
+      context.addIssue({
+        code: 'custom',
+        path: ['gcp'],
+        message: 'is accepted only with target: gcp-cloudrun',
+      });
+    }
+  })
+  .readonly();
+export type ProductionEnvironment = z.infer<typeof ProductionEnvironmentSchema>;
+
+/** The settings a project file can carry: the keyless provider's `projectId` and `location` are not among them. */
+export const PROJECT_FILE_CONFIG_FIELDS = MODEL_CONNECTION_CONFIG_FIELDS.filter(
+  (field): field is Exclude<ModelConnectionConfigField, 'projectId' | 'location'> =>
+    field !== 'projectId' && field !== 'location',
+);
+
 /**
  * One model connection a project file declares under `models.<name>` (C10, C11, issue #524):
  * the provider, the credential as a secret reference, and the provider's settings. Which settings
@@ -353,7 +476,9 @@ function projectResourceMap<Value extends z.ZodType>(value: Value) {
  */
 export const ProjectModelConnectionSchema = z
   .object({
-    provider: z.enum(MODEL_PROVIDERS),
+    provider: z.enum(MODEL_PROVIDERS).refine((provider) => !isKeylessProvider(provider), {
+      error: 'is set up by aw deploy for gcp-cloudrun, not in the project file',
+    }),
     credential: SecretReferenceSchema,
     baseUrl: ProjectHttpUrlSchema.optional(),
     deployment: z.string().min(1).max(PROJECT_CONFIG_TEXT_MAX_LENGTH).optional(),
@@ -365,7 +490,7 @@ export const ProjectModelConnectionSchema = z
   .strict()
   .superRefine((connection, context) => {
     const rule = MODEL_PROVIDER_CONFIG_RULES[connection.provider];
-    for (const field of MODEL_CONNECTION_CONFIG_FIELDS) {
+    for (const field of PROJECT_FILE_CONFIG_FIELDS) {
       const present = connection[field] !== undefined;
       if (present && !rule.allowed.includes(field)) {
         context.addIssue({
@@ -426,7 +551,8 @@ export type ProjectConnector = z.infer<typeof ProjectConnectorSchema>;
 
 /**
  * A v2 project file: the `local` environment and, optionally, `production` (issue #621: a deploy
- * `target` and a `url`). Any other key — at the root, under `environments` (`preview`), in `local`
+ * `target`, a `url` and, since issue #1512, optional `apps`, and `gcp` for the `gcp-cloudrun`
+ * target). Any other key — at the root, under `environments` (`preview`), in `local`
  * (`storage`) or in `production` (`cloud`) — is refused by a strict object, which reports
  * `unrecognized_keys` at the parent's path.
  *

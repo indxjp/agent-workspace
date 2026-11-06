@@ -30,7 +30,7 @@ import {
   withCatalogService,
 } from '../../files/http';
 import { applicationContext } from '../../application-context';
-import { mayAccessSession } from '../../rbac/owner-principal';
+import { mayAccessSession } from '../../rbac/core/owner-principal';
 import type { Principal } from '../../rbac/principal';
 import { createProjectRunGate } from '../../projects/archive-gate';
 import { requireResourceAccess } from '../../resources/authorise';

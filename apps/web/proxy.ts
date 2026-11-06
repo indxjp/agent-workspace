@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { isAgentEndpointRoute } from './server/auth/agent-endpoint-routes';
 import { isApiKeyRoute, matchApiRoute } from './server/auth/api-key-routes';
+import { isAppBackendRoute } from './server/auth/app-backend-routes';
 import { isOAuthRoute } from './server/auth/oauth-routes';
 import { checkRequestOrigin } from './server/auth/origin';
 import { classifyPath, enforcementFor } from './server/auth/paths';
@@ -122,6 +123,19 @@ function isCliTokenRoute(request: NextRequest, authorization: string | null): bo
 }
 
 /**
+ * ADR-0161 D9: the credential shape of an access token from `POST /api/auth/token-exchange`,
+ * admitted only on the `app-backend` grammar's routes (`server/auth/app-backend-routes.ts`). The
+ * route resolves it, refuses one whose client is not an `app-backend` client, and `decide()`
+ * narrows it to the client's bound agents; a bearer header is never sent by a browser on its own,
+ * so these need no origin check.
+ */
+function isAppBackendTokenRoute(request: NextRequest, authorization: string | null): boolean {
+  const bearer = authorization === null ? null : /^Bearer[ ]([^ ]+)$/iu.exec(authorization.trim());
+  if (!bearer?.[1]?.startsWith('awo_live_')) return false;
+  return isAppBackendRoute(request.method, request.nextUrl.pathname);
+}
+
+/**
  * ADR-0144: Microsoft Graph and Zoom call a fixed URL with no session and no header, so the secret
  * in the path is the whole authentication, checked by the route. Exact by method and shape.
  */
@@ -140,11 +154,21 @@ function isBuilderMcpRoute({ method, nextUrl }: NextRequest): boolean {
   return method === 'POST' && nextUrl.pathname === '/api/builder/mcp';
 }
 
+/**
+ * Issue #1517 (ADR-0104 acceptance decision 4): a team lead run's member endpoint takes the lead
+ * run's own run token, as the runner's session seam does. The route verifies the token again and
+ * admits it only for the run its path names, so the edge lets exactly this method and shape by.
+ */
+function isTeamMemberMcpRoute({ method, nextUrl }: NextRequest): boolean {
+  return method === 'POST' && /^\/api\/runs\/[^/]+\/members\/mcp$/u.test(nextUrl.pathname);
+}
+
 /** The routes that carry their own credential and check it themselves, so they need no session. */
 function authenticatesItself(request: NextRequest): boolean {
   const { method, nextUrl } = request;
   return (
     isBuilderMcpRoute(request) ||
+    isTeamMemberMcpRoute(request) ||
     isAgentEndpointRoute(method, nextUrl.pathname) ||
     isOAuthRoute(method, nextUrl.pathname) ||
     isTriggerFire(request)
@@ -229,6 +253,11 @@ function isPreAuthenticationRoute(request: NextRequest): boolean {
       (request.nextUrl.pathname === '/api/auth/callback' ||
         request.nextUrl.pathname === '/api/auth/workspace'))
   ) {
+    return true;
+  }
+  // ADR-0161 D3: an app backend exchanges a person's ID token. The handler authenticates the
+  // endpoint client with its secret and verifies the ID token; no session exists or is wanted.
+  if (request.method === 'POST' && request.nextUrl.pathname === '/api/auth/token-exchange') {
     return true;
   }
   // Issue #121's one pre-membership operation. This exemption is exact by method and path: the
@@ -340,6 +369,7 @@ async function gateRequest(request: NextRequest): Promise<NextResponse> {
   if (isCliSignInRoute(request) || isCliTokenRoute(request, authorization)) {
     return NextResponse.next();
   }
+  if (isAppBackendTokenRoute(request, authorization)) return NextResponse.next();
   // ADR-0120 clause 7: Vercel Cron sends no session, only `Authorization: Bearer $CRON_SECRET`, which
   // the route checks itself and which answers 404 where `CRON_SECRET` is unset. Exact by method and path.
   // ADR-0144 D5: the schedule pass is called the same way, and so is the storage cleanup (#1674).

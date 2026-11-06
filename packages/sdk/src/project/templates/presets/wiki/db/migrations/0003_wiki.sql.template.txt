@@ -1,0 +1,46 @@
+CREATE TABLE IF NOT EXISTS "{{schema}}"."spaces" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "workspace_id" text NOT NULL,
+  "created_by" text NOT NULL,
+  "updated_by" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "name" text NOT NULL,
+  CONSTRAINT "spaces_name_check" CHECK (char_length("name") <= 120)
+);
+CREATE INDEX IF NOT EXISTS "spaces_list_idx" ON "{{schema}}"."spaces" ("workspace_id", "created_at" DESC, "id" DESC);
+CREATE TABLE IF NOT EXISTS "{{schema}}"."pages" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "workspace_id" text NOT NULL,
+  "created_by" text NOT NULL,
+  "updated_by" text NOT NULL,
+  "created_at" timestamptz NOT NULL DEFAULT now(),
+  "updated_at" timestamptz NOT NULL DEFAULT now(),
+  "title" text NOT NULL,
+  "parent" uuid,
+  "position" numeric NOT NULL,
+  "blocks" jsonb NOT NULL,
+  "space" uuid NOT NULL,
+  "_search_text" text NOT NULL DEFAULT '',
+  "_revision_id" uuid,
+  "_search" tsvector GENERATED ALWAYS AS (to_tsvector('simple'::regconfig, "_search_text")) STORED,
+  CONSTRAINT "pages_title_check" CHECK (char_length("title") <= 300),
+  CONSTRAINT "pages_blocks_check" CHECK (jsonb_typeof("blocks") = 'array')
+);
+CREATE INDEX IF NOT EXISTS "pages_list_idx" ON "{{schema}}"."pages" ("workspace_id", "created_at" DESC, "id" DESC);
+CREATE INDEX IF NOT EXISTS "pages_search_idx" ON "{{schema}}"."pages" USING gin ("_search");
+CREATE TABLE IF NOT EXISTS "{{schema}}"."page_revisions" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "workspace_id" text NOT NULL,
+  "page_id" uuid NOT NULL,
+  "title" text NOT NULL,
+  "blocks" jsonb NOT NULL,
+  "author_principal_id" text NOT NULL,
+  "via" text NOT NULL,
+  "run_id" text,
+  "at" timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT "page_revisions_via_check" CHECK ("via" IN ('person', 'agent')),
+  CONSTRAINT "page_revisions_agent_run_check" CHECK ("via" <> 'agent' OR "run_id" IS NOT NULL),
+  CONSTRAINT "page_revisions_blocks_check" CHECK (jsonb_typeof("blocks") = 'array')
+);
+CREATE INDEX IF NOT EXISTS "page_revisions_list_idx" ON "{{schema}}"."page_revisions" ("workspace_id", "page_id", "at" DESC, "id" DESC);

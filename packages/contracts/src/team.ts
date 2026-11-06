@@ -28,7 +28,7 @@ export const USER_NAME_MAX_LENGTH = 200;
  * constraint — renaming it would be a data migration. Every enum this package publishes is
  * kebab-case (`connectors.ts` already prints the literal `'api-key'`), so the wire keeps the
  * kebab-case spelling and the server maps `api_key → api-key` at the edge. The correspondence is
- * gated rather than commented: `apps/web/server/sdk-conformance.test.ts` asserts the two
+ * gated rather than commented: `apps/web/server/sdk-conformance.*.test.ts` asserts the two
  * vocabularies stay in step, so neither can gain or rename a member alone.
  */
 export const PRINCIPAL_KINDS = ['membership', 'api-key'] as const;

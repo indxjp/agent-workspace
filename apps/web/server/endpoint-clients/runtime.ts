@@ -21,6 +21,8 @@ export interface NewEndpointClient {
   readonly kind: EndpointClientResource['kind'];
   readonly agentIds: readonly string[];
   readonly toolNames: readonly string[] | null;
+  /** An `app-backend` client's ID token audience (ADR-0161 D4); `null` for every other kind. */
+  readonly oidcAudience: string | null;
   readonly actsForPrincipalId: string;
   readonly createdByPrincipalId: string;
 }
@@ -29,6 +31,7 @@ export interface EndpointClientPatchInput {
   readonly agentIds?: readonly string[] | undefined;
   readonly toolNames?: readonly string[] | null | undefined;
   readonly redirectUris?: readonly string[] | undefined;
+  readonly oidcAudience?: string | undefined;
 }
 
 export type MintKeyOutcome =
@@ -106,4 +109,9 @@ export interface EndpointClientsRuntime {
     principal: Pick<Principal, 'workspaceId' | 'principalId' | 'userId' | 'label'>,
     event: EndpointClientAuditEvent,
   ): Promise<void>;
+  /**
+   * ADR-0161 amendment DI10 (issue #2075): whether the deployment posture is `local`, read once by
+   * the composition root. Only then may the local runtime's key manage an `app-backend` client.
+   */
+  isLocalPosture(): Promise<boolean>;
 }

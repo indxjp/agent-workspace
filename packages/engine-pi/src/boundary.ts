@@ -176,21 +176,12 @@ async function initialLines(compiled: PiCompiled, deps: PiRunDeps): Promise<PiFi
 }
 
 /**
- * What a prompt-cache write costs, as a multiple of the model's input rate. Anthropic bills a
- * five-minute cache write at 1.25× the input rate (the one-hour TTL at 2×; pi-ai asks for the
- * five-minute one), and pi-ai caches the system prompt and history every turn, so pricing a write
- * at the plain input rate would let a run pass its `maxBudgetUsd` cap by a quarter of its
- * cache-write spend before `max_budget` fired.
- */
-const PI_CACHE_WRITE_INPUT_MULTIPLIER = 1.25;
-
-/**
  * The model, as data: pi's catalogue entry for the named Anthropic model (or its default's, for a
- * model the catalogue does not list), re-pointed at the gateway with the run token as its bearer,
- * and priced with the provisional table when the run carries a cap.
+ * model the catalogue does not list), re-pointed at the gateway with the run token as its bearer.
+ * pi's own `cost` rates are left as listed: nothing here prices a cap, the gateway does (ADR-0162).
  */
 function modelFor(compiled: PiCompiled, runtime: ModelRuntime): PiModel {
-  const { connection, agent, limits } = compiled;
+  const { connection, agent } = compiled;
   const listed =
     runtime.getModel(PI_GATEWAY_PROVIDER, agent.model) ??
     runtime.getModel(PI_GATEWAY_PROVIDER, PI_DEFAULT_ANTHROPIC_MODEL);
@@ -199,23 +190,12 @@ function modelFor(compiled: PiCompiled, runtime: ModelRuntime): PiModel {
       `pi ${PI_CODING_AGENT_VERSION} lists no Anthropic model to describe ${agent.model} with.`,
     );
   }
-  const price = limits.budget?.price;
   return {
     ...listed,
     id: agent.model,
     name: agent.model,
     baseUrl: connection.baseUrl,
     headers: { ...(listed.headers ?? {}), authorization: connection.headers.authorization },
-    ...(price === undefined
-      ? {}
-      : {
-          cost: {
-            input: Number(price.inputUsdPerMillion),
-            output: Number(price.outputUsdPerMillion),
-            cacheRead: Number(price.cachedInputUsdPerMillion),
-            cacheWrite: Number(price.inputUsdPerMillion) * PI_CACHE_WRITE_INPUT_MULTIPLIER,
-          },
-        }),
   };
 }
 
@@ -284,9 +264,9 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 /**
  * Run one compiled agent on pi, yielding plain events and, last, `run_completed`.
  *
- * `max_turns` (the `turn_end` count reached with work still to do), `max_budget` (pi's priced
- * usage reaching the cap) and `cancelled` (the caller's interrupt) each end the run through
- * `session.abort()` and a terminal event; a model call that failed is re-thrown, so the runner
+ * `max_turns` (the `turn_end` count reached with work still to do) and `cancelled` (the caller's
+ * interrupt) each end the run through `session.abort()` and a terminal event; a spend ceiling is
+ * the gateway's (ADR-0162), whose refused call arrives here as a failed model call; a model call that failed is re-thrown, so the runner
  * reports it as the run's error rather than as a turn that ended normally. A stop whose
  * `session.abort()` rejects fails the run the same way, since pi never confirmed it.
  */
@@ -363,7 +343,7 @@ export async function* startPiRun(
   const state: {
     turns: number;
     usage: PiUsage | null;
-    limit: 'max_turns' | 'max_budget' | null;
+    limit: 'max_turns' | null;
     lastAssistant: Readonly<Record<string, unknown>> | null;
   } = { turns: 0, usage: null, limit: null, lastAssistant: null };
   let mirrored: Promise<void> = Promise.resolve();
@@ -389,20 +369,11 @@ export async function* startPiRun(
       }),
     );
   };
-  const stop = (reason: 'max_turns' | 'max_budget'): void => {
-    if (state.limit !== null) return;
-    state.limit = reason;
-    abortSession();
-  };
-
   const unsubscribe = session.subscribe((event) => {
     queue.push(event);
     if (event.type === 'message_end' && event.message.role === 'assistant') {
       state.lastAssistant = isRecord(event.message) ? event.message : null;
       state.usage = addPiUsage(state.usage, state.lastAssistant?.['usage']);
-      if (limits.budget !== null && (state.usage?.costUsd ?? 0) >= limits.budget.maxBudgetUsd) {
-        stop('max_budget');
-      }
     }
     if (event.type === 'turn_end') {
       state.turns += 1;
@@ -450,7 +421,7 @@ export async function* startPiRun(
         : new Error('pi refused an abort with a non-Error value.');
     }
 
-    let stopReason: 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled';
+    let stopReason: 'end_turn' | 'max_turns' | 'cancelled';
     if (state.limit !== null) stopReason = state.limit;
     else if (deps.signal.aborted) stopReason = 'cancelled';
     else {

@@ -652,6 +652,83 @@
       "when": 1793129418757,
       "tag": "0092_workspace_features",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1793210353079,
+      "tag": "0093_storage_proof_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1793232921052,
+      "tag": "0094_files_pending_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793384914121,
+      "tag": "0095_webhooks",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1793384914122,
+      "tag": "0096_app_backend_endpoint_clients",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793460470374,
+      "tag": "0097_agent_teams",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793473114907,
+      "tag": "0098_agent_team_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793484888340,
+      "tag": "0099_run_spend_ceiling",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793490719076,
+      "tag": "0100_audit_memory_updated",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793490719077,
+      "tag": "0101_run_limits_override",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793490719078,
+      "tag": "0102_rebackfill_version_storage_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793834356970,
+      "tag": "0103_model_provider_vertex",
+      "breakpoints": true
     }
   ]
 }

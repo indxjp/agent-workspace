@@ -18,6 +18,16 @@ export interface ActivityStep {
     readonly tool: string | null;
 }
 
+// @public
+export function approvalProblemMessage(code: string, message: string, strings: ApprovalProblemStrings): string;
+
+// @public
+export interface ApprovalProblemStrings {
+    readonly approvalAlreadyDecided: string;
+    readonly approvalExpired: string;
+    readonly approvalNotAwaiting: string;
+}
+
 export { AssistantResponse }
 
 export { assistantResponseFromAgentEvent }

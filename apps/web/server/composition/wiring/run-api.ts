@@ -11,7 +11,7 @@ import type { ApplicationContext } from '../../application-context';
 import { engineForStoredPolicy } from '../../engines/session-engine';
 import { createModelJudge } from '../../evaluations/handlers';
 import { createProjectRunGate } from '../../projects/archive-gate';
-import { ownerPrincipalIdOf } from '../../rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../../rbac/core/owner-principal';
 import type { AgentRef, RunApiEnvironment, RunPrincipal, SessionRef } from '../../runs/environment';
 import { signalLiveRun } from '../../runs/interrupt';
 import { admitSurfaceVisitorWrite } from '../../surfaces/public/limits';
@@ -101,7 +101,9 @@ export function wireRunApi(
     runPreflight,
     sessionPin,
     runStartPreflight,
+    spendLimitFor,
     evaluationsOf,
+    runnerManagerFetch,
   } = wired;
   // Issue #235 (S-14): the interrupt route reuses exactly this revocation, so it is a function
   // rather than duplicated inline in both `revokeRunTokens` and `interruptRun` below.
@@ -154,7 +156,7 @@ export function wireRunApi(
     interruptRun: async (principal, run) => {
       await runs.finish(run.id, 'cancelled', 'the run was interrupted by request', true);
       await revokeAllRunTokensFor(principal, run.id);
-      await signalLiveRun(run.id, globalThis.fetch);
+      await signalLiveRun(run.id, runnerManagerFetch);
     },
     // Issue #539 (S2-05c, C19): one row per rating; the handler has already authorised the call.
     recordRunFeedback: async (principal, run, { rating, comment }) => {
@@ -222,6 +224,7 @@ export function wireRunApi(
     }),
     describeRunTarget: (workspaceId, agentId) => runPreflight.describe(workspaceId, agentId),
     preflight: runStartPreflight,
+    spendLimitFor,
     findAgentVersion: async (principal, agentId, number) => {
       const scope = await scopes.forWorkspaceId(principal.workspaceId);
       return scope === null ? null : root.agentVersions.forScope(scope).find(agentId, number);

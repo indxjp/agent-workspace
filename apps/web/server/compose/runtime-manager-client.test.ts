@@ -5,6 +5,7 @@ import {
   RuntimeManagerError,
   createRuntimeManagerClient,
   probeRuntimeManager,
+  withRunnerManagerIdentity,
 } from './runtime-manager-client';
 import { setupStepFailure } from '../setup/failure';
 
@@ -573,5 +574,54 @@ describe('verification while the manager Worker is starting', () => {
     );
 
     expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+describe('withRunnerManagerIdentity', () => {
+  const AUDIENCE = 'https://manager-abc.a.run.app';
+  const ID_TOKEN = 'google-signed-id-token-value';
+  const mint = vi.fn<(audience: string) => Promise<string>>().mockResolvedValue(ID_TOKEN);
+
+  it('adds the ID token beside the manager bearer for the manager origin', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({}));
+    const wrapped = withRunnerManagerIdentity(fetch, AUDIENCE, mint);
+    await wrapped(`${AUDIENCE}/runtimes/h1/run`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    });
+    const init = fetch.mock.calls[0]?.[1];
+    const headers = new Headers(init?.headers);
+    expect(mint).toHaveBeenCalledWith(AUDIENCE);
+    expect(headers.get('X-Serverless-Authorization')).toBe(`Bearer ${ID_TOKEN}`);
+    expect(headers.get('Authorization')).toBe(`Bearer ${TOKEN}`);
+    expect(init?.method).toBe('POST');
+  });
+
+  it('passes other origins through untouched', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({}));
+    mint.mockClear();
+    const init = { headers: { Authorization: 'Bearer other' } };
+    await withRunnerManagerIdentity(fetch, AUDIENCE, mint)('https://elsewhere.example/x', init);
+    expect(fetch).toHaveBeenCalledWith('https://elsewhere.example/x', init);
+    expect(mint).not.toHaveBeenCalled();
+  });
+
+  it('rejects naming the audience, never the token, when minting fails', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const failing = vi.fn().mockRejectedValue(new Error('metadata server unreachable'));
+    const call = withRunnerManagerIdentity(fetch, AUDIENCE, failing)(`${AUDIENCE}/healthz`);
+    await expect(call).rejects.toThrow(AUDIENCE);
+    await expect(call).rejects.not.toThrow(ID_TOKEN);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps the token out of the error when the manager call itself fails', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new Error('connect refused'));
+    const error = await withRunnerManagerIdentity(
+      fetch,
+      AUDIENCE,
+      mint,
+    )(`${AUDIENCE}/x`).catch((e: unknown) => e);
+    expect(String(error)).not.toContain(ID_TOKEN);
   });
 });

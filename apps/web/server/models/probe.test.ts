@@ -163,3 +163,20 @@ describe('probeModelConnection — bounded (issue #415)', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('probeModelConnection — vertex', () => {
+  it('makes no network call and reports the identity-based answer', async () => {
+    const request = vi.fn<typeof fetch>();
+    const result = await probeModelConnection(
+      { ...connection('vertex', { projectId: 'my-project-123' }), credential: '' },
+      request,
+    );
+    expect(request).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      ok: true,
+      status: null,
+      message:
+        "Uses this install's Google Cloud identity; the gateway checks access on the first run.",
+    });
+  });
+});

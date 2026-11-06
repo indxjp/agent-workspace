@@ -758,3 +758,17 @@ local registry in the slice-1 exit test) only.
 - Persisting `MASTER_ENCRYPTION_KEY` means data an earlier contributor run wrote under a random key
   stays unreadable; a one-time reset of `.agent-workspace/` may be needed, and the runtime unit's
   notes say so.
+
+## Amendment — the start message's development issuer (issue #2075, 2026-11-01)
+
+Recorded in [ADR-0161](0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md)'s
+2026-11-01 amendment (DI2, DI5, DI8), which contract C1 follows:
+
+- The `start` message may carry `environment.devIssuer`, a `.strict()` object with `issuer`,
+  `clientId`, `clientSecret`, `redirectUri` and `ownerSubject`. `aw dev` sends it only when it runs
+  its development OIDC issuer on `127.0.0.1`. A message without it starts as before.
+- When it is present, `applyLocalRuntimeEnvironment` sets `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`,
+  `OIDC_CLIENT_SECRET` and `OIDC_REDIRECT_URI` from it. It refuses to start with
+  `dev_issuer_oidc_set` when the environment or `.env` already holds an `OIDC_*` name. The four
+  names join the reserved list that a secret reference may not name.
+- At each such start, the launcher links `(issuer, ownerSubject)` to the bootstrap Owner.

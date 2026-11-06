@@ -47,9 +47,9 @@ import type {
   UserSummary,
   WorkspaceDirectory,
 } from './directory';
-import type { ConferredRole } from './conferral';
+import type { ConferredRole } from './core/conferral';
 import { hashInvitationToken, INVITATION_TTL_MS, mintInvitationToken } from '../invitations/token';
-import type { Role } from './roles';
+import type { Role } from './core/roles';
 
 interface UserRow {
   id: string;
@@ -337,6 +337,14 @@ export function createMemoryDirectory(options: MemoryDirectoryOptions = {}): Mem
           .map(summariseMembership)
           .sort((a, b) => a.email.localeCompare(b.email)),
       ),
+
+    findMembershipByPrincipal: (principalId: string): Promise<MembershipSummary | null> => {
+      const row = [...memberships.values()].find(
+        (candidate) =>
+          candidate.workspaceId === workspaceId && candidate.principalId === principalId,
+      );
+      return Promise.resolve(row === undefined ? null : summariseMembership(row));
+    },
 
     createMembership: (input: CreateMembershipInput): Promise<CreateMembershipOutcome> => {
       const email = normaliseEmail(input.email);

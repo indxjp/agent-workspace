@@ -1,4 +1,5 @@
 import { RuntimesScreen } from '../../../../components/runtimes/runtimes-screen';
+import { NotAllowedScreen } from '../../../../components/shell/screen-main';
 import { getSession } from '../../../../server/auth';
 import { decide } from '../../../../server/rbac/decide';
 import { applicationContext } from '../../../../server/application-context';
@@ -34,7 +35,9 @@ async function callerManagesRuntimes(): Promise<boolean> {
 export default async function RuntimesPage() {
   if (!(await callerManagesRuntimes())) {
     return (
-      <p className="p-8 text-sm text-muted">Only workspace Owners and Admins can view runtimes.</p>
+      <NotAllowedScreen title="Runtimes">
+        Only workspace Owners and Admins can view runtimes.
+      </NotAllowedScreen>
     );
   }
   const registry = currentWebRuntimeRegistry();

@@ -15,6 +15,11 @@
  *                `DELETE /api/model-connections/:id` (only after the caller types the connection's
  *                 name — `confirmationMatches` — so cancelling never issues the delete request at all)
  */
+import {
+  VERTEX_LOCATIONS,
+  isKeylessProvider,
+  type ModelConnectionConfigField,
+} from '@indx-workspace/contracts/models';
 import { useState, type FormEvent } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
@@ -38,11 +43,16 @@ import {
   type ReferencingAgent,
 } from './model';
 
-const FIELD_LABEL: Record<'baseUrl' | 'deployment' | 'apiVersion', string> = {
+const FIELD_LABEL: Record<ModelConnectionConfigField, string> = {
   baseUrl: 'Base URL',
   deployment: 'Deployment',
   apiVersion: 'API version',
+  projectId: 'Google Cloud project',
+  location: 'Location',
 };
+
+/** What a keyless connection shows where an API-key connection shows its key controls. */
+const KEYLESS_NOTICE = "Uses this install's Google Cloud identity. No API key is stored.";
 
 const CARD = 'rounded-(--radius-sm) border border-border-strong bg-surface-2 p-4';
 const CONTROL =
@@ -60,6 +70,8 @@ function editValuesFrom(connection: ModelConnectionView): EditFormValues {
     baseUrl: connection.config.baseUrl ?? '',
     deployment: connection.config.deployment ?? '',
     apiVersion: connection.config.apiVersion ?? '',
+    projectId: connection.config.projectId ?? '',
+    location: connection.config.location ?? 'global',
   };
 }
 
@@ -157,6 +169,7 @@ export function ProviderDetailPanel({
   }
 
   const status = connectionStatus(connection);
+  const keyless = isKeylessProvider(connection.provider);
   const fields = editableConfigFields(connection.provider);
   const removeReady = confirmationMatches(confirmText, connection.name);
 
@@ -190,12 +203,27 @@ export function ProviderDetailPanel({
             className="block text-[13px] font-semibold"
           >
             {FIELD_LABEL[field]}
-            <input
-              id={`${field}-${connection.id}`}
-              className={`${CONTROL} mt-1 font-mono`}
-              value={values[field]}
-              onChange={(event) => set(field, event.target.value)}
-            />
+            {field === 'location' ? (
+              <select
+                id={`${field}-${connection.id}`}
+                className={`${CONTROL} mt-1`}
+                value={values[field]}
+                onChange={(event) => set(field, event.target.value)}
+              >
+                {VERTEX_LOCATIONS.map((location) => (
+                  <option key={location} value={location}>
+                    {location}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                id={`${field}-${connection.id}`}
+                className={`${CONTROL} mt-1 font-mono`}
+                value={values[field]}
+                onChange={(event) => set(field, event.target.value)}
+              />
+            )}
           </label>
         ))}
         {saveError === null ? null : (
@@ -214,50 +242,64 @@ export function ProviderDetailPanel({
         </div>
       </form>
 
-      <form onSubmit={rotate} className={`${CARD} space-y-3`}>
-        <h3 className="text-[13px] font-semibold">
-          Rotate credential{' '}
-          <span
-            className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${status.tone === 'ok' ? 'bg-ok-soft text-ok' : status.tone === 'warn' ? 'bg-warn-soft text-warn' : 'bg-danger-soft text-danger'}`}
-          >
-            {status.text}
-          </span>
-        </h3>
-        <label htmlFor={`rotate-${connection.id}`} className="block text-[13px] font-semibold">
-          New API key
-          <input
-            id={`rotate-${connection.id}`}
-            type="password"
-            {...CREDENTIAL_INPUT_PROPS}
-            className={`${CONTROL} mt-1 font-mono`}
-            value={rotateKey}
-            onChange={(event) => setRotateKey(event.target.value)}
-          />
-          <span className="mt-1 block text-[11.5px] font-normal text-muted">
-            The current key is never shown. Saving replaces it and retests the connection
-            immediately.
-          </span>
-        </label>
-        {rotateError === null ? null : (
-          <p role="alert" className={ALERT}>
-            {rotateError}
-          </p>
-        )}
-        {rotateMessage === null ? null : (
-          <p role="status" className={NOTICE}>
-            {rotateMessage}
-          </p>
-        )}
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={rotating || rotateKey === ''}
-            className={`${BUTTON} border-accent bg-accent text-white`}
-          >
-            {rotating ? 'Rotating…' : 'Rotate credential'}
-          </button>
+      {keyless ? (
+        <div className={`${CARD} space-y-3`}>
+          <h3 className="text-[13px] font-semibold">
+            Sign-in{' '}
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${status.tone === 'ok' ? 'bg-ok-soft text-ok' : 'bg-warn-soft text-warn'}`}
+            >
+              {status.text}
+            </span>
+          </h3>
+          <p className={NOTICE}>{KEYLESS_NOTICE}</p>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={rotate} className={`${CARD} space-y-3`}>
+          <h3 className="text-[13px] font-semibold">
+            Rotate credential{' '}
+            <span
+              className={`ml-1 rounded-full px-2 py-0.5 text-[10px] ${status.tone === 'ok' ? 'bg-ok-soft text-ok' : status.tone === 'warn' ? 'bg-warn-soft text-warn' : 'bg-danger-soft text-danger'}`}
+            >
+              {status.text}
+            </span>
+          </h3>
+          <label htmlFor={`rotate-${connection.id}`} className="block text-[13px] font-semibold">
+            New API key
+            <input
+              id={`rotate-${connection.id}`}
+              type="password"
+              {...CREDENTIAL_INPUT_PROPS}
+              className={`${CONTROL} mt-1 font-mono`}
+              value={rotateKey}
+              onChange={(event) => setRotateKey(event.target.value)}
+            />
+            <span className="mt-1 block text-[11.5px] font-normal text-muted">
+              The current key is never shown. Saving replaces it and retests the connection
+              immediately.
+            </span>
+          </label>
+          {rotateError === null ? null : (
+            <p role="alert" className={ALERT}>
+              {rotateError}
+            </p>
+          )}
+          {rotateMessage === null ? null : (
+            <p role="status" className={NOTICE}>
+              {rotateMessage}
+            </p>
+          )}
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={rotating || rotateKey === ''}
+              className={`${BUTTON} border-accent bg-accent text-white`}
+            >
+              {rotating ? 'Rotating…' : 'Rotate credential'}
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className={`${CARD} space-y-3`}>
         <h3 className="text-[13px] font-semibold text-danger">Remove connection</h3>

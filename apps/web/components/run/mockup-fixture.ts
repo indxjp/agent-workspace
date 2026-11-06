@@ -36,6 +36,8 @@ import {
   type UnbuiltAction,
 } from '@indx-workspace/react/run-model';
 
+import type { RunListItem } from './history';
+
 const AYA = { initials: 'AI', name: 'Aya Ito' } as const;
 const AGENT = { initials: 'CS', name: 'Customer Support Agent' } as const;
 
@@ -358,6 +360,111 @@ export const MOCKUP_RUN_COMPLETED: Run = {
               text('`output/contract-review-2026-q3.md`'),
               text('.'),
             ],
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// ── A team run (ADR-0104, issue #1517) ──────────────────────────────────────────────────────────
+
+/**
+ * Not in `ui/agent-run.html`, which predates agent teams: a lead run that called two members,
+ * `researcher` and `writer`, so the run tree views have one example to render. Same rule as above:
+ * a fixture, never data.
+ */
+export const MOCKUP_TEAM_LEAD_ID = 'a1111111-1111-4111-8111-111111111111';
+export const MOCKUP_TEAM_RESEARCHER_ID = 'a2222222-2222-4222-8222-222222222222';
+export const MOCKUP_TEAM_WRITER_ID = 'a3333333-3333-4333-8333-333333333333';
+
+function teamRun(patch: Partial<RunListItem>): RunListItem {
+  return {
+    id: MOCKUP_TEAM_LEAD_ID,
+    workspaceId: 'b1111111-1111-4111-8111-111111111111',
+    agentId: 'c1111111-1111-4111-8111-111111111111',
+    projectId: null,
+    initiatingUserId: null,
+    sessionId: 'd1111111-1111-4111-8111-111111111111',
+    agentVersion: 1,
+    status: 'completed',
+    createdAt: '2026-10-30T10:00:00.000Z',
+    startedAt: '2026-10-30T10:00:01.000Z',
+    endedAt: '2026-10-30T10:01:01.000Z',
+    durationMs: 60000,
+    model: 'claude-sonnet-5',
+    provider: 'anthropic',
+    modelConnectionId: null,
+    engine: 'claude-agent-sdk',
+    engineVersion: null,
+    usage: {
+      inputTokens: 1000,
+      outputTokens: 200,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      totalTokens: 1200,
+      toolCalls: 2,
+    },
+    cost: { amount: '0.050000', currency: 'USD', priceTableVersion: '2026-10-01' },
+    spendCeilingUsd: null,
+    error: null,
+    output: { text: 'Done.', structured: null },
+    pendingApproval: null,
+    accountingState: 'complete',
+    accountingError: null,
+    parentRunId: null,
+    ...patch,
+  };
+}
+
+/** The lead run: the root of the tree. */
+export const MOCKUP_TEAM_LEAD: RunListItem = teamRun({});
+
+/** The lead's two child runs, oldest first, as `GET /api/runs/:id` lists them. */
+export const MOCKUP_TEAM_CHILDREN: readonly RunListItem[] = [
+  teamRun({
+    id: MOCKUP_TEAM_RESEARCHER_ID,
+    agentId: 'c2222222-2222-4222-8222-222222222222',
+    sessionId: 'd2222222-2222-4222-8222-222222222222',
+    createdAt: '2026-10-30T10:00:05.000Z',
+    durationMs: 20000,
+    cost: { amount: '0.020000', currency: 'USD', priceTableVersion: '2026-10-01' },
+    parentRunId: MOCKUP_TEAM_LEAD_ID,
+  }),
+  teamRun({
+    id: MOCKUP_TEAM_WRITER_ID,
+    agentId: 'c3333333-3333-4333-8333-333333333333',
+    sessionId: 'd3333333-3333-4333-8333-333333333333',
+    status: 'running',
+    createdAt: '2026-10-30T10:00:30.000Z',
+    endedAt: null,
+    durationMs: null,
+    cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+    output: null,
+    accountingState: 'pending',
+    parentRunId: MOCKUP_TEAM_LEAD_ID,
+  }),
+];
+
+/** The tree cost the read answers: 0.05 + 0.02 + 0.00. */
+export const MOCKUP_TEAM_TREE_COST = { amount: '0.070000', currency: 'USD' } as const;
+
+/** The lead's transcript: one activity bracket calling both members. */
+export const MOCKUP_TEAM_RUN: Run = {
+  ...MOCKUP_RUN_COMPLETED,
+  heading: { ...MOCKUP_RUN_COMPLETED.heading, title: 'Research lead' },
+  messages: [
+    MOCKUP_RUN.messages[0],
+    {
+      kind: 'agent',
+      id: 'm2',
+      speaker: { initials: 'RL', name: 'Research lead' },
+      blocks: [
+        {
+          kind: 'activity',
+          steps: [
+            done('member-1', 'Asked a member', 'mcp__agent__researcher', '20 s'),
+            done('member-2', 'Asked a member', 'agent__writer', '31 s'),
           ],
         },
       ],

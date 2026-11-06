@@ -50,7 +50,7 @@ import {
 } from './memory-directory';
 import { Principal } from './principal';
 import { presentedKeyText, readBearerApiKeyAttempt } from './api-key';
-import type { Role } from './roles';
+import type { Role } from './core/roles';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 

@@ -31,7 +31,7 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { conferredBy, type ConferredRole } from './conferral';
+import { conferredBy, type ConferredRole } from './core/conferral';
 import type {
   CreateApiKeyOutcome,
   CreateInvitationOutcome,
@@ -43,7 +43,7 @@ import type {
 import { listMemberships } from './handlers';
 import { createMemoryDirectory } from './memory-directory';
 import { createPostgresDirectory } from './postgres-directory';
-import type { Role } from './roles';
+import type { Role } from './core/roles';
 
 /**
  * A role an Owner may confer, for the fixture rows below.
@@ -271,6 +271,42 @@ export function describeDirectoryConformance(
           kind: 'no-such-membership',
           id: leaver.id,
         });
+      });
+
+      it('finds a membership by its principal, and by nothing that is not one live in this workspace', async () => {
+        const fixture = await makeFixture();
+        const directory = fixture.root.forWorkspace(fixture.a.id);
+        const other = fixture.root.forWorkspace(fixture.b.id);
+        const member = createdUser(
+          await directory.createUser({
+            email: fixture.email('principal'),
+            name: 'Principal',
+            role: asOwner('builder'),
+          }),
+        ).membership;
+        await expect(directory.findMembershipByPrincipal(member.principalId)).resolves.toEqual(
+          member,
+        );
+        // The membership's own id is not its principal, and another workspace has no such principal.
+        await expect(directory.findMembershipByPrincipal(member.id)).resolves.toBeNull();
+        await expect(other.findMembershipByPrincipal(member.principalId)).resolves.toBeNull();
+        await expect(directory.findMembershipByPrincipal(ABSENT)).resolves.toBeNull();
+        await expect(directory.findMembershipByPrincipal('not-a-uuid')).resolves.toBeNull();
+        // An API key's principal is a principal, but not a member.
+        const { presented } = createdKey(
+          await directory.createApiKey({ name: 'CI', role: asOwner('viewer'), expiresAt: null }),
+        );
+        const identity = await fixture.root.authenticateApiKey(presented, new Date());
+        if (identity === null) throw new Error('the fixture key does not authenticate');
+        await expect(directory.findMembershipByPrincipal(identity.principalId)).resolves.toBeNull();
+        // It follows the member through a role change and out through removal.
+        await directory.changeMembershipRole(member.id, asOwner('viewer'));
+        await expect(directory.findMembershipByPrincipal(member.principalId)).resolves.toEqual({
+          ...member,
+          role: 'viewer',
+        });
+        await directory.deleteMembership(member.id);
+        await expect(directory.findMembershipByPrincipal(member.principalId)).resolves.toBeNull();
       });
 
       it('answers no-such-membership for an id nobody has', async () => {

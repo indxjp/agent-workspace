@@ -891,7 +891,7 @@ def ownerResolver (repo : WorkspaceRepo) (id : String) (p : RequestPrincipal)
 constraint, as a set, transcribed from the Drizzle schema (the latest snapshot, `Er.Snapshot.file`);
 `tests/formal/authz-tenancy.test.ts` recomputes it from the live table objects. This is the one
 fact rule 1 needs that `Er.Core.TableSpec` does not carry (it models unique keys only). -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#leadingIndexedColumns")]
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#leadingIndexedColumns")]
 def leadingIndexedColumns : TableName → List String
   | .agentFiles => ["file_id", "workspace_id"]
   | .agentGrants => ["agent_id", "user_id", "workspace_id"]
@@ -924,7 +924,7 @@ def leadingIndexedColumns : TableName → List String
   | .projectFiles => ["workspace_id"]
   | .projectMcpServers => ["workspace_id"]
   | .projects => ["workspace_id", "default_agent_id", "owner_principal_id", "id"]
-  | .runs => ["workspace_id", "session_id", "model_connection_id", "id", "continues_run_id"]
+  | .runs => ["workspace_id", "session_id", "model_connection_id", "id", "continues_run_id", "parent_run_id", "agent_team_version_id"]
   | .runEvents => ["workspace_id"]
   | .runFeedback => ["workspace_id"]
   | .runUsageRecords => ["run_id", "workspace_id"]
@@ -953,13 +953,18 @@ def leadingIndexedColumns : TableName → List String
   | .workspaces => ["slug"]
   | .workspacePrincipals => ["workspace_id"]
   | .workspaceFeatures => ["workspace_id"]
+  | .webhooks => ["workspace_id"]
+  | .webhookDeliveries => ["created_at", "next_attempt_at", "workspace_id"]
+  | .agentTeams => ["workspace_id", "id"]
+  | .agentTeamVersions => ["workspace_id", "id"]
+  | .agentTeamVersionMembers => ["workspace_id"]
 
 /-- Rule 1 of `tenancy.test.ts` ("the table is scoped"), as the test states it: an exempt table
 (the root or a global table, `TENANT_EXEMPT`) has no `workspace_id`; any other has a `NOT NULL`
 `workspace_id`, exactly one foreign key whose whole column list is `workspace_id`, that key
 references `workspaces(id)`, and `workspace_id` leads an index. -/
-@[aw_spec (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+@[aw_spec (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 def testRule1 (S : Schema) (leaders : TableName → List String) (t : TableName) : Bool :=
   let s := S t
   match s.tenancy with

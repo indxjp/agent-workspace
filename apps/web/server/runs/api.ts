@@ -23,7 +23,7 @@
  *
  * `listRuns` and `readRun` render every item through the same {@link renderRun} (issue #135's
  * "list and detail cannot drift"), and share the same authorisation shape: `decide()` against
- * spec §21's `runs` classification in `apps/web/server/rbac/permissions.ts` — a grant of `any`
+ * spec §21's `runs` classification in `apps/web/server/rbac/core/permissions.ts` — a grant of `any`
  * lists the whole workspace, and any narrower grant is enforced by filtering on the session's
  * exact owning principal, since `decide()` itself only tells a collection route that the caller "owes the
  * result set the filter" (`rbac/decide.ts`'s own comment on `not-applicable` ownership).
@@ -46,12 +46,15 @@ import {
   MAX_RUN_ATTACHMENTS,
   MAX_RUN_FILE_SCOPE_PATHS,
   outputSchemaViolation,
+  RUN_CHILDREN_MAX,
   RUN_IDEMPOTENCY_PROBLEM_CODES,
   RUN_START_PROBLEM_CODES,
+  SpendCeilingUsdSchema,
 } from '@indx-workspace/contracts/runs';
 import { SURFACE_LIMIT_PROBLEM_CODES } from '@indx-workspace/contracts/surfaces';
 
 import { forVisitor, upgradeEventStream } from './agent-frames';
+import { maskStrings, runDirectoryMask, withoutRunDirectory } from './host-paths';
 import { resolveRunAttachments } from './attachments';
 import { readResumeCursor } from './cursor';
 import {
@@ -64,8 +67,14 @@ import {
 import { featureRefusalResponse } from '../features/guard';
 import { apiError, isUuid, json, readJsonBody } from './http';
 import { encodeRunListCursor, parseRunListQuery } from './list-query';
-import { MAX_PROMPT_CHARS, startRunOnSession, type StartRunBody } from './service';
+import {
+  MAX_IDEMPOTENCY_KEY_CHARS,
+  MAX_PROMPT_CHARS,
+  startRunOnSession,
+  type StartRunBody,
+} from './service';
 import { sseStreamResponse, type SseControlFrame, type StreamOutcome } from './sse';
+import { treeCostOf } from './tree-cost';
 import {
   IdempotencyKeyTakenError,
   isTerminalRunStatus,
@@ -74,8 +83,8 @@ import {
   type RunStore,
 } from './store';
 import { decide, type Ownership } from '../rbac/decide';
-import type { Grant } from '../rbac/permissions';
-import { parseRole } from '../rbac/roles';
+import type { Grant } from '../rbac/core/permissions';
+import { parseRole } from '../rbac/core/roles';
 import { resolveAgentRunOwnership } from '../agents/run-ownership';
 import { publishedEngineId } from '../engines/session-engine';
 import { enforceCeiling } from '../policy-ceiling/ceiling';
@@ -94,6 +103,7 @@ const START_RUN_KEYS: ReadonlySet<string> = new Set([
   'outputSchema',
   'subject',
   'fileScope',
+  'spendCeilingUsd',
 ]);
 
 type AttachmentsParse =
@@ -190,6 +200,23 @@ function parseFileScope(
   };
 }
 
+/** `StartRunRequestSchema.spendCeilingUsd` (ADR-0162), judged by the contract's own schema. */
+function parseSpendCeiling(
+  raw: unknown,
+):
+  | { readonly kind: 'ok'; readonly field: { readonly spendCeilingUsd?: number } }
+  | { readonly kind: 'rejected'; readonly reason: string } {
+  if (raw === undefined) return { kind: 'ok', field: {} };
+  const parsed = SpendCeilingUsdSchema.safeParse(raw);
+  return parsed.success
+    ? { kind: 'ok', field: { spendCeilingUsd: parsed.data } }
+    : {
+        kind: 'rejected',
+        reason:
+          '"spendCeilingUsd" must be a positive number of USD, at most 1000000 and with at most six decimal places, when it is present',
+      };
+}
+
 /** The start-run keys this server refuses, or `null` when every key is one it honours. */
 function refuseStartRunKeys(record: Record<string, unknown>): StartRunBodyVerdict | null {
   const unknown = Object.keys(record).find((key) => !START_RUN_KEYS.has(key));
@@ -269,13 +296,13 @@ export function parseStartRunBody(input: unknown): StartRunBodyVerdict {
   return { kind: 'ok', body: { prompt, sessionId: rawSession, modelOverride, ...perRun } };
 }
 
-/** The optional `version`, `outputSchema`, `attachments`, `subject` and `fileScope` of a start-run body, each checked. */
+/** The optional `version`, `outputSchema`, `attachments`, `subject`, `fileScope` and `spendCeilingUsd` of a start-run body, each checked. */
 function parseRunOptions(record: Record<string, unknown>):
   | {
       readonly kind: 'ok';
       readonly fields: Pick<
         StartRunBody,
-        'version' | 'outputSchema' | 'attachments' | 'subject' | 'fileScope'
+        'version' | 'outputSchema' | 'attachments' | 'subject' | 'fileScope' | 'spendCeilingUsd'
       >;
     }
   | { readonly kind: 'rejected'; readonly reason: string } {
@@ -297,6 +324,8 @@ function parseRunOptions(record: Record<string, unknown>):
   if (parsedSubject.kind === 'rejected') return parsedSubject;
   const parsedScope = parseFileScope(record['fileScope']);
   if (parsedScope.kind === 'rejected') return parsedScope;
+  const parsedCeiling = parseSpendCeiling(record['spendCeilingUsd']);
+  if (parsedCeiling.kind === 'rejected') return parsedCeiling;
   return {
     kind: 'ok',
     fields: {
@@ -305,8 +334,14 @@ function parseRunOptions(record: Record<string, unknown>):
       ...(attached.attachments === undefined ? {} : { attachments: attached.attachments }),
       ...parsedSubject.field,
       ...parsedScope.field,
+      ...parsedCeiling.field,
     },
   };
+}
+
+/** A run's cost as `cost` renders it, and as `treeCost` sums it. */
+function costOf(run: RunRecord): { readonly amount: string; readonly currency: string } {
+  return { amount: run.costUsd ?? '0.000000', currency: run.costCurrency ?? 'USD' };
 }
 
 /** The JSON shape a run is rendered as. Dates are ISO 8601 strings; `bigint` never appears. */
@@ -315,6 +350,11 @@ export function renderRun(run: RunRecord): Record<string, unknown> {
   const outputTokens = run.outputTokens ?? 0;
   const cacheReadInputTokens = run.cacheReadInputTokens ?? 0;
   const cacheCreationInputTokens = run.cacheCreationInputTokens ?? 0;
+  // UX-02 (#2086): the error and the call awaiting approval are shown as they are, so the run's
+  // directory on the runtime host is masked in them as in its events. `output` is the run's result
+  // for its caller and is served unchanged.
+  const mask = runDirectoryMask(run.workspaceId, run.sessionId);
+  const pendingApproval = run.status === 'awaiting_approval' ? (run.pendingApproval ?? null) : null;
   return {
     id: run.id,
     workspaceId: run.workspaceId,
@@ -350,17 +390,18 @@ export function renderRun(run: RunRecord): Record<string, unknown> {
       totalTokens: inputTokens + outputTokens + cacheReadInputTokens + cacheCreationInputTokens,
       toolCalls: run.toolCalls ?? 0,
     },
-    cost: {
-      amount: run.costUsd ?? '0.000000',
-      currency: run.costCurrency ?? 'USD',
-      priceTableVersion: run.priceTableVersion ?? null,
-    },
-    error: run.error,
+    cost: { ...costOf(run), priceTableVersion: run.priceTableVersion ?? null },
+    // ADR-0162: fixed at start; `null` for a run with no ceiling and every run before it.
+    spendCeilingUsd: run.spendCeilingUsd ?? null,
+    error: run.error === null || mask === null ? run.error : mask(run.error),
     // ADR-0143: `null` until the run is `completed`, and for a failed or cancelled one.
     output: run.output ?? null,
     // ADR-0145: the call being waited on, only while the run is paused; `approvedToolCalls` is a
     // continuation's private input and is never rendered.
-    pendingApproval: run.status === 'awaiting_approval' ? (run.pendingApproval ?? null) : null,
+    pendingApproval:
+      pendingApproval === null || mask === null
+        ? pendingApproval
+        : maskStrings(pendingApproval, mask),
     // Issue #134's ledger-recomputed aggregate. The fallback matches the column's own default;
     // both `RunStore` implementations always set it, and the field is optional on `RunRecord`
     // only because most of this interface's fields are (see that type's own comment).
@@ -369,6 +410,29 @@ export function renderRun(run: RunRecord): Record<string, unknown> {
       run.accountingError === undefined || run.accountingError === null
         ? null
         : 'Usage accounting could not be completed.',
+    // ADR-0104 acceptance: the lead run a team's member call started this one from; `null` for a
+    // root run, which is every run until U4.2c starts child runs.
+    parentRunId: run.parentRunId ?? null,
+  };
+}
+
+/**
+ * `GET /api/runs/:id`'s body (ADR-0104 acceptance decision 7, spec 04 §5.12 "Run trees"): the run,
+ * its children oldest first (one `where parent_run_id = $1` read, at most `RUN_CHILDREN_MAX`), and
+ * `treeCost`, their exact decimal sum with the run's own cost. Lists render {@link renderRun} only.
+ */
+export async function renderRunDetail(
+  store: RunStore,
+  run: RunRecord,
+): Promise<Record<string, unknown>> {
+  const children = await store.listChildren(run.workspaceId, run.id, RUN_CHILDREN_MAX);
+  return {
+    ...renderRun(run),
+    children: children.map(renderRun),
+    treeCost: treeCostOf(
+      { cost: costOf(run) },
+      children.map((child) => ({ cost: costOf(child) })),
+    ),
   };
 }
 
@@ -495,9 +559,6 @@ async function modelOverrideRefusal(
   return refused === null ? null : json(refused.body, RUN_START_PROBLEM_CODES.policy_cannot_widen);
 }
 
-/** The longest `Idempotency-Key` a run start accepts; the trigger firing's bound. */
-export const MAX_IDEMPOTENCY_KEY_CHARS = 255;
-
 /** A start's answer: `202` with the run and its stream URL, for a new run and a replay alike. */
 function accepted(run: RunRecord): Response {
   // 202, not 201: the run is accepted and queued, and what the caller actually wants is the
@@ -572,11 +633,42 @@ export async function startRun(request: Request, agentId: string): Promise<Respo
   const ownership = await resolveAgentRunOwnership(principal, agentId);
   const permission = requireRunPermission(request, principal, ownership);
   if (permission !== null) return permission;
+  return startAuthorisedRun(request, env, principal, agentId, null);
+}
 
+/**
+ * What a team run start pins on the lead's run (ADR-0104 acceptance decisions 4 and 11): the
+ * lead's version, which a new session runs, and the team version the run records.
+ */
+export interface TeamRunPin {
+  readonly agentVersionId: string;
+  readonly agentTeamVersionId: string;
+}
+
+/**
+ * The rest of `POST /api/agents/:id/runs` once the caller is authenticated and may run `agentId`:
+ * the body, the subject and scope rules, the start key, the visitor limits, the agent, the
+ * attachments, the ceiling, the version and the start. `POST /api/agent-teams/:id/runs` reaches
+ * the same path with the lead and `team`, so a team run meets every refusal a run of its lead does.
+ */
+export async function startAuthorisedRun(
+  request: Request,
+  env: RunApiEnvironment,
+  principal: RunPrincipal,
+  agentId: string,
+  team: TeamRunPin | null,
+): Promise<Response> {
   const raw = await readJsonBody(request);
   if (raw.kind !== 'ok') return apiError(400, 'invalid_body', raw.reason);
   const parsed = parseStartRunBody(raw.value);
   if (parsed.kind !== 'ok') return apiError(400, 'invalid_body', parsed.reason);
+  if (team !== null && parsed.body.version !== undefined) {
+    return apiError(
+      400,
+      'invalid_body',
+      '"version" is not accepted here: the team version pins the version its lead runs.',
+    );
+  }
   // ADR-0142 D2: only a backend acting for its own users names a subject. A session or a browser
   // token states who it is already, so it cannot assert someone else.
   if (parsed.body.subject !== undefined && principal.via !== 'api-key') {
@@ -628,7 +720,7 @@ export async function startRun(request: Request, agentId: string): Promise<Respo
 
   // Issue #697: a named version is looked up in the principal's workspace, so another workspace's
   // number is as unknown as one that was never saved.
-  let agentVersionId: string | undefined;
+  let agentVersionId: string | undefined = team?.agentVersionId;
   if (parsed.body.version !== undefined) {
     const found = await env.findAgentVersion?.(principal, agent.id, parsed.body.version);
     if (found === undefined || found === null) {
@@ -648,6 +740,7 @@ export async function startRun(request: Request, agentId: string): Promise<Respo
       attachments: attachments.files,
       ...(agentVersionId === undefined ? {} : { agentVersionId }),
       ...(idempotency === undefined ? {} : { idempotency }),
+      ...(team === null ? {} : { agentTeamVersionId: team.agentTeamVersionId }),
     });
   } catch (error) {
     // Two starts with one key raced and the other committed first: answer with its run.
@@ -697,7 +790,7 @@ export async function readRun(request: Request, runId: string): Promise<Response
     (await env.ownsRun(principal, run)) ? 'own' : 'other',
   );
   if (permission !== null) return permission;
-  return json({ run: renderRun(run) }, 200);
+  return json({ run: await renderRunDetail(env.store, run) }, 200);
 }
 
 type RunListAccess =
@@ -819,11 +912,34 @@ export async function interruptRunFor(
   principal: RunPrincipal,
   run: RunRecord,
 ): Promise<'stopped' | 'terminal'> {
-  if (isTerminalRunStatus(run.status)) return 'terminal';
-  if (env.interruptRun === undefined) throw new Error('the run API has no interruptRun installed');
-  await env.interruptRun(principal, run);
-  return 'stopped';
+  const outcome = isTerminalRunStatus(run.status) ? 'terminal' : 'stopped';
+  const interruptRun = env.interruptRun;
+  if (interruptRun === undefined) {
+    if (outcome === 'terminal') return outcome;
+    throw new Error('the run API has no interruptRun installed');
+  }
+  if (outcome === 'stopped') await interruptRun(principal, run);
+  // ADR-0104 acceptance decision 8: interrupting a team's lead run interrupts every live child
+  // through the same durable path (#261, ADR-0151-FU-1440): each child's committed `cancelled`
+  // status and token revocation, and the cancellation watch of the replica holding it. A child
+  // never has children (depth at most 1), so one level is the whole tree.
+  if (run.parentRunId === null || run.parentRunId === undefined) {
+    const children = await env.store.listChildren(run.workspaceId, run.id, RUN_CHILDREN_MAX);
+    await Promise.all(
+      children
+        .filter((child) => INTERRUPTIBLE_CHILD_STATUSES.has(child.status))
+        .map((child) => interruptRun(principal, child)),
+    );
+  }
+  return outcome;
 }
+
+/** The child statuses an interrupt of the root stops: every one that is not yet over. */
+const INTERRUPTIBLE_CHILD_STATUSES: ReadonlySet<RunRecord['status']> = new Set([
+  'queued',
+  'running',
+  'awaiting_approval',
+]);
 
 /**
  * POST /api/runs/:id/interrupt — issue #235 (S-14). Stop a run this principal may run.
@@ -991,10 +1107,11 @@ export async function streamRunEvents(request: Request, runId: string): Promise<
     // ENG-03: the stream serves one vocabulary. A row recorded before it is upgraded here, on read,
     // into the neutral `agent.*` frames — never migrated in place. `agent-frames.ts` says why.
     // ADR-0145 D4: a session-scoped token is a visitor, and is never served operator-only fields.
+    // UX-02 (#2086): the run's directory on the runtime host is masked in every frame.
     source:
       principal.scope?.kind === 'session'
-        ? forVisitor(upgradeEventStream(handle.events, resumedWithin))
-        : upgradeEventStream(handle.events, resumedWithin),
+        ? forVisitor(withoutRunDirectory(upgradeEventStream(handle.events, resumedWithin), run))
+        : withoutRunDirectory(upgradeEventStream(handle.events, resumedWithin), run),
     prelude,
     signal: request.signal,
     // Re-read the record after the source is exhausted rather than closing over the one fetched

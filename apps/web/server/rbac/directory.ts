@@ -21,9 +21,9 @@
  * repository layer for `findRunWorkspace`. It returns the workspace and the role and no row
  * content beyond them.
  */
-import type { ConferredRole } from './conferral';
-import type { Role } from './roles';
-import type { TokenScope } from './token-scope';
+import type { ConferredRole } from './core/conferral';
+import type { Role } from './core/roles';
+import type { TokenScope } from './core/token-scope';
 
 /** A `users` row, as an API response may see it. */
 export interface UserSummary {
@@ -289,6 +289,11 @@ export interface WorkspaceDirectory {
   listUsers(): Promise<UserSummary[]>;
   createUser(input: CreateUserInput): Promise<CreateUserOutcome>;
   listMemberships(): Promise<MembershipSummary[]>;
+  /**
+   * The workspace's membership acting as `principalId`, or `null` when no live membership principal
+   * of this workspace has that id (another workspace's, an API key's, a removed member's or none).
+   */
+  findMembershipByPrincipal(principalId: string): Promise<MembershipSummary | null>;
   createMembership(input: CreateMembershipInput): Promise<CreateMembershipOutcome>;
   changeMembershipRole(id: string, role: ConferredRole): Promise<MembershipChangeOutcome>;
   deleteMembership(id: string): Promise<DeleteMembershipOutcome>;

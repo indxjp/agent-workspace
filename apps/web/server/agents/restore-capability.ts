@@ -8,7 +8,7 @@
 import type { AgentRestoreCapability } from '../../contracts/agents';
 import { applicationContext } from '../application-context';
 import { getSession } from '../auth';
-import { archiveCapabilityFor, archiveGrantsForRole } from '../projects/archive-capability';
+import { ownershipCapabilityFor, ownershipGrantsForRole } from '../projects/archive-capability';
 
 const RESTORE_PATH = '/api/agents/:id/restore';
 
@@ -24,7 +24,7 @@ export function agentRestoreGrantsForRole(role: string): {
   readonly canRestoreOwn: boolean;
   readonly canRestoreOther: boolean;
 } {
-  const grants = archiveGrantsForRole(role, RESTORE_PATH);
+  const grants = ownershipGrantsForRole(role, RESTORE_PATH);
   return { canRestoreOwn: grants.canArchiveOwn, canRestoreOther: grants.canArchiveOther };
 }
 
@@ -34,7 +34,7 @@ export async function resolveAgentRestoreCapability(): Promise<AgentRestoreCapab
   if (runtime === null) return NO_RESTORE_CAPABILITY;
   const session = await getSession();
   if (session === null) return NO_RESTORE_CAPABILITY;
-  const capability = await archiveCapabilityFor(runtime.directory, session, RESTORE_PATH);
+  const capability = await ownershipCapabilityFor(runtime.directory, session, RESTORE_PATH);
   return {
     canRestoreOwn: capability.canArchiveOwn,
     canRestoreOther: capability.canArchiveOther,

@@ -18,7 +18,7 @@ import {
   selectionCookieName,
   sessionCookieName,
 } from '../../../../server/auth';
-import { conferredBy } from '../../../../server/rbac/conferral';
+import { conferredBy } from '../../../../server/rbac/core/conferral';
 import { createMemoryDirectory } from '../../../../server/rbac/memory-directory';
 import { type RbacRuntime } from '../../../../server/rbac/runtime';
 import type { WorkspaceRepositoryPort } from '../../../../server/workspaces/runtime';

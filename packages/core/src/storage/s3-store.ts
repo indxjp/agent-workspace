@@ -11,9 +11,6 @@ import {
 } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { isHttpEndpoint } from '@indx-workspace/contracts/storage-url';
-import { Agent as HttpAgent } from 'node:http';
-import { Agent as HttpsAgent } from 'node:https';
-import type { LookupFunction } from 'node:net';
 import type { Readable } from 'node:stream';
 
 import {
@@ -37,8 +34,15 @@ import {
   PRESIGNED_URL_DEFAULT_TTL_SECONDS,
   RangeNotSatisfiableError,
 } from './object-store.js';
+import { connectionAgents, type ConnectionTransport } from './connection-transport.js';
 import { presignS3Url } from './s3-presign.js';
-import { countedBody, resolveRange, toNodeReadable, toWebStream } from './streams.js';
+import {
+  abortableBody,
+  countedBody,
+  resolveRange,
+  toNodeReadable,
+  toWebStream,
+} from './streams.js';
 
 export interface S3ObjectStoreOptions {
   readonly client: S3Client;
@@ -77,8 +81,11 @@ export interface S3ObjectStoreConfig {
    * store's own prefix need not be, so the connection's first listing of that folder is the check.
    */
   readonly checkBucketOnOpen?: boolean;
-  /** Resolves every hostname the client dials; a connection store answers only with checked addresses. */
-  readonly lookup?: LookupFunction;
+  /**
+   * How a connection store's client reaches the endpoint: pinned to the checked addresses, or
+   * through the outbound proxy. Absent, the SDK's own default agents.
+   */
+  readonly transport?: ConnectionTransport;
   /**
    * See {@link S3ObjectStoreOptions.listingOrder}. Left out, it follows `endpoint`: none, or an
    * `amazonaws.com` host, is AWS (`native`); any other endpoint is `bare-key`.
@@ -177,8 +184,14 @@ function responseDateOf(output: object): Date | null {
   return value instanceof Date ? value : null;
 }
 
+/** A listing that asks for content types sends at most this many HEADs at once. */
+const LIST_HEAD_CONCURRENCY = 8;
+
 // One part in flight keeps a write's memory near UPLOAD_PART_BYTES whatever the object size.
 // The S3 minimum part size: at 8 MiB the 256 MiB load case reached 64.6 MiB of RSS growth on CI.
+// At 5 MiB, the 1 GiB round trip (`tests/load/object-store-round-trip.test.ts`, AW_LOAD_TESTS=1,
+// SeaweedFS, after the HTTP warm-up) measured 10.9, 13.5 and 18.8 MiB of RSS growth over three
+// runs, with no new-space growth: at least 45 MiB under its 64 MiB bound (#1746).
 const UPLOAD_PART_BYTES = 5 * 1024 * 1024;
 const UPLOAD_QUEUE_SIZE = 1;
 
@@ -252,6 +265,21 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
       throw error;
     }
   };
+  /** Each key's stored content type (`null` when unknown or gone), in order, a few at a time. */
+  async function contentTypesOf(
+    keys: readonly string[],
+    signal: AbortSignal | undefined,
+  ): Promise<(string | null)[]> {
+    const types: (string | null)[] = [];
+    for (let from = 0; from < keys.length; from += LIST_HEAD_CONCURRENCY) {
+      signal?.throwIfAborted();
+      const batch = keys.slice(from, from + LIST_HEAD_CONCURRENCY);
+      const metas = await Promise.all(batch.map((key) => backend.head(key)));
+      types.push(...metas.map((meta) => meta?.contentType ?? null));
+    }
+    return types;
+  }
+
   const backend: ObjectStore = {
     capabilities: {
       sign: true,
@@ -279,6 +307,8 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
     },
 
     async read(key, readOptions) {
+      const signal = readOptions?.signal;
+      signal?.throwIfAborted();
       // A ranged read checks the object's size first, so a bad range fails the same way on every
       // backend and the `Range` header always carries two valid numbers.
       let range: { readonly start: number; readonly end: number } | null = null;
@@ -298,6 +328,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
             Key: prefixedObjectKey(prefix, key),
             ...(range === null ? {} : { Range: `bytes=${range.start}-${range.end}` }),
           }),
+          signal === undefined ? {} : { abortSignal: signal },
         );
         if (response.Body === undefined) return null;
         const source = response.Body as Readable;
@@ -315,9 +346,11 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
             lastModified: response.LastModified ?? new Date(0),
           },
           range: served === null ? null : { start: Number(served[1]), end: Number(served[2]) },
-          body: toWebStream(source),
+          body: abortableBody(toWebStream(source), signal),
         };
       } catch (error) {
+        // An abort is the caller's stop, never a missing object.
+        signal?.throwIfAborted();
         if (isMissingObject(error)) return null;
         // The object changed between the size check and the read.
         if (isRangeRefused(error)) throw new RangeNotSatisfiableError();
@@ -334,10 +367,18 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
       const objectKey = await validatedWriteKey(body, writeOptions, () =>
         prefixedObjectKey(prefix, key),
       );
-      const counted = countedBody(body);
+      const counted = countedBody(abortableBody(body, writeOptions.signal));
       const source = toNodeReadable(counted.body);
+      // The library takes a controller, not a signal: the caller's signal aborts it, so a part or
+      // the completing request the SDK holds is stopped too, not only the body.
+      const uploadAbort = new AbortController();
+      const stopUpload = (): void => {
+        uploadAbort.abort(writeOptions.signal?.reason);
+      };
+      writeOptions.signal?.addEventListener('abort', stopUpload, { once: true });
       const upload = new Upload({
         client: options.client,
+        abortController: uploadAbort,
         queueSize: UPLOAD_QUEUE_SIZE,
         partSize: UPLOAD_PART_BYTES,
         leavePartsOnError: false,
@@ -391,6 +432,7 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
         }
         throw error;
       } finally {
+        writeOptions.signal?.removeEventListener('abort', stopUpload);
         source.destroy(); // cancels the source stream if it was not read to the end
       }
     },
@@ -414,22 +456,37 @@ export function createS3ObjectStore(options: S3ObjectStoreOptions): ObjectStore 
         if (addressableObjectName(key) === null) continue;
         entries.push({ kind: 'folder', key });
       }
+      const files: { readonly key: string; readonly size: number; readonly lastModified: Date }[] =
+        [];
       for (const object of response.Contents ?? []) {
         if (object.Key === undefined || object.Key === requestedPrefix) continue;
         // Another tool's name (a console folder's `name/`): skip it before HEAD refuses it.
         if (addressableObjectName(object.Key.slice(prefix.length)) === null) continue;
-        // ponytail: one HEAD per file for its content type; drop once the catalog is the
-        // listing's source of truth.
-        listOptions?.signal?.throwIfAborted();
-        const meta = await backend.head(object.Key.slice(prefix.length));
-        entries.push({
-          kind: 'file',
+        files.push({
           key: object.Key.slice(prefix.length),
-          sizeBytes: object.Size ?? 0,
-          contentType: meta?.contentType ?? null,
+          size: object.Size ?? 0,
           lastModified: object.LastModified ?? new Date(0),
         });
       }
+      // ListObjectsV2 carries no content type: a caller that reads it pays one HEAD per file, a
+      // few at a time; every other listing (a run's delivery, a browse, the catalog's own
+      // listings, which read types from their rows) sends none.
+      const types =
+        listOptions?.contentTypes === true
+          ? await contentTypesOf(
+              files.map((file) => file.key),
+              listOptions.signal,
+            )
+          : null;
+      files.forEach((file, index) => {
+        entries.push({
+          kind: 'file',
+          key: file.key,
+          sizeBytes: file.size,
+          contentType: types?.[index] ?? null,
+          lastModified: file.lastModified,
+        });
+      });
       const cursor =
         response.IsTruncated === true ? (response.NextContinuationToken ?? null) : null;
       if (response.IsTruncated === true && cursor === null) {
@@ -523,6 +580,12 @@ export function createS3ObjectStoreProvider(options: S3ObjectStoreOptions): Obje
   return scopedObjectStoreProvider(createS3ObjectStore(options));
 }
 
+/** The S3 client's request handler options for a connection's transport. */
+function s3RequestAgents(transport: ConnectionTransport) {
+  const agents = connectionAgents(transport, { maxSockets: 50 });
+  return { httpAgent: agents.http, httpsAgent: agents.https };
+}
+
 /** Construct and provision a scoped S3-compatible provider from deployment configuration. */
 export async function createS3ObjectStoreProviderFromConfig(
   config: S3ObjectStoreConfig,
@@ -547,18 +610,9 @@ export async function createS3ObjectStoreFromConfig(
       region: config.region,
       ...(config.endpoint === undefined ? {} : { endpoint: config.endpoint }),
       ...(config.forcePathStyle === undefined ? {} : { forcePathStyle: config.forcePathStyle }),
-      ...(config.lookup === undefined
+      ...(config.transport === undefined
         ? {}
-        : {
-            requestHandler: {
-              httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50, lookup: config.lookup }),
-              httpsAgent: new HttpsAgent({
-                keepAlive: true,
-                maxSockets: 50,
-                lookup: config.lookup,
-              }),
-            },
-          }),
+        : { requestHandler: s3RequestAgents(config.transport) }),
       ...(hasAccessKey && hasSecret
         ? {
             credentials: {

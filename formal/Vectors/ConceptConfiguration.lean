@@ -138,7 +138,8 @@ def checkVectors : List Vector :=
 
 def fieldSets : List (List ModelConnection.ConfigField) :=
   [[], [.baseUrl], [.deployment], [.apiVersion], [.baseUrl, .deployment],
-    [.baseUrl, .apiVersion], [.deployment, .apiVersion], [.baseUrl, .deployment, .apiVersion]]
+    [.baseUrl, .apiVersion], [.deployment, .apiVersion], [.baseUrl, .deployment, .apiVersion],
+    [.projectId], [.location], [.projectId, .location], [.baseUrl, .projectId]]
 
 def configJson (c : ModelConnection.Config) : Json :=
   Json.mkObj ((WireEnum.all : List ModelConnection.ConfigField).filterMap fun f =>
@@ -149,6 +150,8 @@ private def snake (s : String) : String := s.map fun c => if c == '-' then '_' e
 private def fieldSnake : ModelConnection.ConfigField → String
   | .baseUrl => "base_url"
   | .deployment => "deployment"
+  | .projectId => "project_id"
+  | .location => "location"
   | .apiVersion => "api_version"
 
 private def verdict (allowed required : Bool) : String :=
@@ -175,7 +178,9 @@ def blankConfigs : List (ModelConnection.Provider × ModelConnection.Config) :=
       (p, match f with
         | .baseUrl => { c with baseUrl := some "  " }
         | .deployment => { c with deployment := some "\t" }
-        | .apiVersion => { c with apiVersion := some " " })
+        | .apiVersion => { c with apiVersion := some " " }
+        | .projectId => { c with projectId := some " " }
+        | .location => { c with location := some " " })
 
 /-- Values made only of characters JavaScript's `trim` strips beyond ASCII space and tab. -/
 def unicodeBlanks : List (String × String) :=

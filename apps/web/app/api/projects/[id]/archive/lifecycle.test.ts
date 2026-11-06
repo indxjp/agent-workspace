@@ -30,7 +30,7 @@ import { GET as GET_PROJECT } from '../route';
 import { GET as LIST_PROJECTS } from '../../route';
 import { createPostgresDirectory } from '../../../../../server/rbac/postgres-directory';
 import { Principal } from '../../../../../server/rbac/principal';
-import type { Role } from '../../../../../server/rbac/roles';
+import type { Role } from '../../../../../server/rbac/core/roles';
 import { clearApplicationContext } from '../../../../../server/application-context';
 import { installTestDomains } from '../../../../../server/application-context-fixtures';
 

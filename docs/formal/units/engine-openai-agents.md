@@ -11,12 +11,12 @@ mapping, and the SDK `Session` over the engine-scoped store. The path rules are
 ## Compile
 
 `compile` is `compileOpenAiAgentsRun`, check for check and in the same order: the policy arm, the
-file grants (normalised against the adapter's `.openai-agents` directory), skills, fork, a budget
-cap on a model the provisional price table cannot price, the gateway connection, its wire protocol, an Anthropic-family connection's model, spec A.11's
-environment verdict, then the connectors. A requirement the engine cannot honour is refused with the
-port's code and the capability it names — `skills`, `fork`, `maxBudget`, `wireProtocols`, `model`,
-`approvals` — never dropped. An accepted cap is carried into the configuration, and is accepted only
-on a priced model. A remote (HTTP or SSE) connector compiles without `unrestrictedNetwork`, as on the
+file grants (normalised against the adapter's `.openai-agents` directory), skills, fork, the gateway
+connection, its wire protocol, an Anthropic-family connection's model, spec A.11's environment
+verdict, then the connectors. A requirement the engine cannot honour is refused with the port's code
+and the capability it names — `skills`, `fork`, `wireProtocols`, `model`, `approvals` — never
+dropped. A per-run budget cap never changes the compile: the gateway enforces it (ADR-0162), so it is
+neither refused, whatever the model, nor carried into the configuration. A remote (HTTP or SSE) connector compiles without `unrestrictedNetwork`, as on the
 Claude engine. An accepted compile speaks the protocol the
 gateway connection names, through `OpenAIProvider` for the two OpenAI dialects and `aisdk()` for
 Anthropic Messages, and compose resolves an OpenAI-family connection to the Responses dialect and an
@@ -76,10 +76,8 @@ announced is `agent.malformed`, so tool pairing holds on every mapped stream.
 The SDK enforces `maxTurns` natively (a hypothesis): a run whose model would take more responses than
 the limit stops at the limit, and the adapter ends it with `agent.result {stopReason: 'max_turns'}`.
 
-The provisional budget cap (ADR-0074 D7, #342) is the adapter's own: after each response the
-estimated cost so far is compared with the cap, and the run stops `max_budget` at the first response
-that reaches it. A run under its cap is never stopped by it, a stop happens only at the cap, and no
-response starts after it is reached, so a run overshoots by at most one response.
+The adapter has no budget stop: the provisional cap of ADR-0074 D7 is retired by ADR-0162 (#342),
+and the gateway refuses a model call once the run's settled cost reaches its spend ceiling.
 
 ## Session
 
@@ -92,11 +90,10 @@ on the session sees the first run's items.
 
 - **T1** (`Theorems/Normative/OpenAiAgents.lean`): the tools are exactly the permitted ones; no
   vendor-hosted tool; the SDK `shell` tool type is not relayed; the protocol follows the connection;
-  each unsupported requirement, an unpriced budget cap among them, is refused by name; an accepted
-  cap is compiled and priced; a remote connector needs no network switch.
+  each unsupported requirement is refused by name; a budget cap never changes the compile; a remote
+  connector needs no network switch.
 - **T2** (`Theorems/Invariants/OpenAiAgents.lean`): no event is dropped; tool pairing holds; the run
-  stops at or before `maxTurns` with `max_turns`; the provisional budget stops a run only at its cap,
-  never under it, and no response starts after it.
+  stops at or before `maxTurns` with `max_turns`.
 - **T2** (`Theorems/Invariants/EngineSwitch.lean`): an engine switch never widens the tool plan —
   every tool the adapter offers under the carried arm is one the old Claude arm allowed, for every
   permission set; a switch is refused exactly when a denial is untranslatable, naming those; the

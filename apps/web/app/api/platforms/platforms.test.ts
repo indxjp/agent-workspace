@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PlatformListResponseSchema } from '@indx-workspace/contracts/platforms';
 import { PLATFORM_TARGETS } from '@indx-workspace/platforms';
 
-import { ROLES, type Role } from '../../../server/rbac/roles';
+import { ROLES, type Role } from '../../../server/rbac/core/roles';
 import {
   installRbacHarness,
   TEST_WORKSPACE_ID,

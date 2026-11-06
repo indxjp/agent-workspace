@@ -88,7 +88,6 @@ import {
   type CanUseTool,
   type McpServerConfig as SdkMcpServerConfig,
   type Options as SdkOptions,
-  type SDKMessage,
   type SessionStore,
   type Settings,
 } from '@anthropic-ai/claude-agent-sdk';
@@ -498,7 +497,10 @@ function buildSdkOptions(compiled: CompiledSdkOptions, overlay: SdkOptionOverlay
     ...(compiled.outputFormat === undefined
       ? {}
       : {
-          outputFormat: { type: 'json_schema', schema: { ...compiled.outputFormat.schema } },
+          outputFormat: {
+            type: 'json_schema',
+            schema: withoutMetaSchema(compiled.outputFormat.schema),
+          },
         }),
     ...(overlay.sessionStore === undefined ? {} : { sessionStore: overlay.sessionStore }),
     ...(overlay.abortController === undefined ? {} : { abortController: overlay.abortController }),
@@ -506,6 +508,19 @@ function buildSdkOptions(compiled: CompiledSdkOptions, overlay: SdkOptionOverlay
       ? {}
       : { canUseTool, settings: gatedRunSettings(approval.gate.requireApproval) }),
   };
+}
+
+/**
+ * A copy of a run's output schema without its top-level `$schema`. ADR-0143 fixes the dialect at
+ * draft 2020-12 and lets a schema name it (`z.toJSONSchema` does), but Claude Code's `--json-schema`
+ * validator loads no 2020-12 meta-schema and refuses a schema that references it ("no schema with
+ * key or ref"), ending the run before the model is asked. The dialect is already settled by the
+ * contract, so the reference carries nothing the CLI needs.
+ */
+function withoutMetaSchema(schema: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const copy: Record<string, unknown> = { ...schema };
+  delete copy['$schema'];
+  return copy;
 }
 
 /**
@@ -641,6 +656,12 @@ type RunState = {
   readonly mirrorErrors: string[];
   sawResult: boolean;
   exhausted: boolean;
+  /**
+   * Set when the stream stayed open past `linger.ms` after its `result` and the SDK was aborted
+   * (issue #2076). The CLI may have been killed before it handed its last transcript batch to the
+   * mirror, so the verdict cannot claim the session durable.
+   */
+  lingered: boolean;
   failure: string | null;
 };
 
@@ -655,6 +676,7 @@ function newRunState(storeConfigured: boolean): RunState {
     mirrorErrors: [],
     sawResult: false,
     exhausted: false,
+    lingered: false,
     failure: null,
   };
 }
@@ -695,6 +717,13 @@ function verdict(state: RunState): SessionDurability {
   }
   if (state.failure !== null) {
     return { durable: false, reason: `the run stream ended in an error: ${state.failure}` };
+  }
+  if (state.lingered) {
+    return {
+      durable: false,
+      reason:
+        "the SDK stream was aborted after the run's result because it stayed open past the linger window, so the CLI may have been stopped before its last transcript batch was mirrored.",
+    };
   }
   if (!state.storeConfigured) {
     return {
@@ -827,13 +856,98 @@ export type ClaudeRun = {
   abort(reason?: unknown): void;
 };
 
-async function* normalise(
-  source: AsyncIterable<SDKMessage>,
+/**
+ * How long the SDK's stream may stay open after the run's `result` before the run ends without
+ * it. With a string prompt the `result` is the CLI's last message, and the stream closes as the
+ * CLI exits; a CLI that lingers instead (for example on a connection to an MCP server it never
+ * finishes closing) would otherwise hold the run open until its credential expires (issue #2076).
+ */
+export const RESULT_LINGER_MS = 5_000;
+
+/** What {@link normalise} does when the stream lingers past its `result`. */
+export type ResultLinger = {
+  /** {@link RESULT_LINGER_MS} outside tests. */
+  readonly ms: number;
+  /** Stop the SDK and its CLI: the run's abort. */
+  readonly abort: (reason: Error) => void;
+};
+
+const LINGERED = Symbol('lingered');
+
+/** `next`, or {@link LINGERED} when it has not settled within `ms`. */
+async function within<T>(next: Promise<T>, ms: number): Promise<T | typeof LINGERED> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<typeof LINGERED>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(LINGERED);
+    }, ms);
+  });
+  try {
+    return await Promise.race([next, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * The SDK's messages, each through `classifySdkEvent`. Once a `result` has arrived, a stream that
+ * does not end within `linger.ms` is ended here: the SDK is aborted, and the run ends with the
+ * result it reached, as though the stream had drained.
+ */
+export function normalise(
+  source: AsyncIterable<unknown>,
+  linger: ResultLinger,
+): AsyncGenerator<ClassifiedSdkEvent, void, void> {
+  return normaliseInto(source, linger, newRunState(false));
+}
+
+/**
+ * {@link normalise} with the rest of what {@link startRun} wires around it: `mirror` instrumented
+ * as the SDK's `sessionStore`, and the durability verdict over both. `startRun` hands the
+ * instrumented store to `query()`; a test calls its `append` itself, as the SDK would.
+ */
+export function normaliseMirrored(
+  source: AsyncIterable<unknown>,
+  linger: ResultLinger,
+  mirror: TranscriptMirror,
+): {
+  readonly events: AsyncGenerator<ClassifiedSdkEvent, void, void>;
+  readonly sessionStore: TranscriptMirror;
+  readonly sessionDurability: () => SessionDurability;
+} {
+  const state = newRunState(true);
+  return {
+    events: normaliseInto(source, linger, state),
+    sessionStore: instrumentSessionStore(mirror, state),
+    sessionDurability: () => verdict(state),
+  };
+}
+
+async function* normaliseInto(
+  source: AsyncIterable<unknown>,
+  linger: ResultLinger,
   state: RunState,
 ): AsyncGenerator<ClassifiedSdkEvent, void, void> {
+  const iterator = source[Symbol.asyncIterator]();
+  let open = true;
   try {
-    for await (const raw of source) {
-      const event = classifySdkEvent(raw);
+    for (;;) {
+      const next = iterator.next();
+      const step = state.sawResult ? await within(next, linger.ms) : await next;
+      if (step === LINGERED) {
+        // The pending read settles (or rejects) once the abort reaches the SDK; nobody awaits it.
+        next.catch(() => undefined);
+        state.lingered = true;
+        linger.abort(
+          new Error(`the SDK stream stayed open ${String(linger.ms)} ms after the run's result`),
+        );
+        break;
+      }
+      if (step.done === true) {
+        open = false;
+        break;
+      }
+      const event = classifySdkEvent(step.value);
       if (event.kind === 'system' && event.subtype === 'mirror_error') {
         state.mirrorErrors.push(describeMirrorError(event.event));
       } else if (event.kind === 'result' || event.kind === 'result-unknown') {
@@ -841,14 +955,20 @@ async function* normalise(
       }
       yield event;
     }
-    // Set only here, after the loop drained normally. A consumer that `break`s out leaves this
-    // false, and the durability verdict then refuses on "not exhausted" rather than answering
-    // from a partial run.
+    // Set only here, after the loop drained normally or lingered past its `result`. A consumer
+    // that `break`s out leaves this false, and the durability verdict then refuses on "not
+    // exhausted" rather than answering from a partial run. A lingered stream is over for the run,
+    // but `state.lingered` keeps the verdict from reading it as drained.
     state.exhausted = true;
   } catch (error) {
+    open = false;
     state.exhausted = true;
     state.failure = describeError(error);
     throw error;
+  } finally {
+    // What `for await` does on an early exit: close the source. Not awaited, since a source that
+    // lingered may answer `return()` only after its pending read.
+    if (open) iterator.return?.().catch(() => undefined);
   }
 }
 
@@ -926,7 +1046,16 @@ export function startRun(start: ClaudeRunStart, deps: RunDeps = {}): ClaudeRun {
   });
 
   return {
-    events: normalise(session, state),
+    events: normaliseInto(
+      session,
+      {
+        ms: RESULT_LINGER_MS,
+        abort: (reason) => {
+          abortController.abort(reason);
+        },
+      },
+      state,
+    ),
     sessionDurability: () => verdict(state),
     approvalRequest: () => state.approval.request,
     handoff: () => state.handoff,

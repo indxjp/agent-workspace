@@ -1,6 +1,7 @@
 /**
  * Proof that the dependency-cruiser rules fire: #1154 (engine adapter boundaries), #1188 (wire
- * modules never name a database record) and #1621 (the storage design, §07 rules 1 and 2).
+ * modules never name a database record), #1621 (the storage design, §07 rules 1 and 2), #1678
+ * (§07 rule 3), #1500 (the app kit's fences) and AGENTS.md hexagonal rule 2 (a domain core is pure).
  *
  * A rule nothing tests can lose its `pathNot` or `from` pattern in an edit and keep reporting a
  * green `pnpm architecture:check`. This runs the real CLI with the real config, exactly as that
@@ -41,6 +42,15 @@ function fakePackage(name: string, entry = 'index.js'): Readonly<Record<string, 
   };
 }
 
+const objectStorageImports = [
+  "import type { ObjectStore } from '../../../../packages/core/src/storage/object-store';",
+  "export * from '../../../../packages/core/src/storage/key-safety';",
+  "export * from '../../../../packages/core/src/storage/content-type';",
+  "export * from '../../../../packages/core/src/storage/object-name';",
+  'export type Store = ObjectStore;',
+  '',
+].join('\n');
+
 const sdkImport = (...specifiers: readonly string[]): string =>
   `${specifiers.map((specifier) => `import '${specifier}';`).join('\n')}\nexport {};\n`;
 
@@ -80,6 +90,19 @@ const fixture: Readonly<Record<string, string>> = {
   ].join('\n'),
   'packages/sdk/src/index.ts': 'export const sdk = 1;\n',
   'packages/aw/src/index.ts': 'export const aw = 1;\n',
+  'packages/react/src/index.ts': 'export const react = 1;\n',
+  // #1500: the app kit reaches only the published sdk, contracts and react, never core or an
+  // application; and nothing else in the workspace imports the app kit.
+  'packages/app/src/index.ts': [
+    "export * from '../../sdk/src/index';",
+    "export * from '../../contracts/src/index';",
+    "export * from '../../react/src/index';",
+    "export * from '../../core/src/index';",
+    "export * from '../../../apps/web/server/agents/store';",
+    '',
+  ].join('\n'),
+  'packages/react/src/uses-app.ts': "export * from '../../app/src/index';\n",
+  'apps/web/server/agents/app-kit.ts': "export * from '../../../../packages/app/src/index';\n",
   // F-15 boundaries. Each file below plants allowed edges and one forbidden edge.
   'packages/core/src/bad.ts': [
     "export * from '../../contracts/src/index';",
@@ -172,6 +195,40 @@ const fixture: Readonly<Record<string, string>> = {
   ].join('\n'),
   'apps/web/server/files/raw-store.test.ts':
     "export * from '../../../../packages/core/src/storage/s3-store';\n",
+  // The storage design, §07 rule 3: only the catalog service reaches object storage. A domain may
+  // import the pure helpers (content type, key safety, object name); a type-only import of
+  // `ObjectStore` counts. The catalog service, the composition root, tests and the tool bundles
+  // (not workspace files) may import the rest.
+  'packages/core/src/storage/object-store.ts': 'export interface ObjectStore {\n  id: string;\n}\n',
+  'packages/core/src/storage/key-safety.ts': 'export const toObjectKey = 1;\n',
+  'packages/core/src/storage/content-type.ts': 'export const inferContentType = 1;\n',
+  'packages/core/src/storage/object-name.ts': 'export const storageObjectName = 1;\n',
+  'apps/web/server/foo/upload.ts': objectStorageImports,
+  'apps/web/server/foo/upload.test.ts': objectStorageImports,
+  'apps/web/server/storage/service.ts': objectStorageImports,
+  'apps/web/server/composition/objects.ts': objectStorageImports,
+  'apps/web/server/tool-bundles/handlers.ts': objectStorageImports,
+  // AGENTS.md "Hexagonal rules" 2: a domain core imports only its own core/, the contracts and zod.
+  // A Node built-in, an npm package, another server module (its own store and ports, type-only
+  // too) and another domain's core are refused; a test beside the core may import anything.
+  ...fakePackage('zod'),
+  ...fakePackage('left-pad'),
+  'apps/web/server/pilot/core/facts.ts': 'export const fact = 1;\n',
+  'apps/web/server/pilot/core/decide.ts': [
+    "export * from './facts';",
+    "export * from '../../../../../packages/contracts/src/index';",
+    "import 'zod';",
+    "import 'node:fs';",
+    "import 'left-pad';",
+    "export * from '../store';",
+    "export type * from '../ports';",
+    "export * from '../../other/core/rules';",
+    '',
+  ].join('\n'),
+  'apps/web/server/pilot/core/decide.test.ts': "import 'node:fs';\nexport * from '../store';\n",
+  'apps/web/server/pilot/store.ts': 'export const pilotStore = 1;\n',
+  'apps/web/server/pilot/ports.ts': 'export interface PilotPort {\n  id: string;\n}\n',
+  'apps/web/server/other/core/rules.ts': 'export const rule = 1;\n',
 };
 
 const reportSchema = z.object({
@@ -301,8 +358,27 @@ describe('the dependency-cruiser rules fire on planted violations', () => {
     ]);
   });
 
+  it('F-10: the app kit reaches only sdk, contracts and react', () => {
+    expect(edgesOf('app-kit-depends-only-on-published-packages')).toStrictEqual([
+      'packages/app/src/index.ts -> apps/web/server/agents/store.ts',
+      'packages/app/src/index.ts -> packages/core/src/index.ts',
+    ]);
+  });
+
+  it('F-10: neither an application nor another package imports the app kit', () => {
+    expect(edgesOf('platform-never-imports-the-app-kit')).toStrictEqual([
+      'apps/web/server/agents/app-kit.ts -> packages/app/src/index.ts',
+      'packages/react/src/uses-app.ts -> packages/app/src/index.ts',
+    ]);
+    // react's own fence reports the same edge.
+    expect(edgesOf('react-depends-only-on-sdk-and-contracts')).toStrictEqual([
+      'packages/react/src/uses-app.ts -> packages/app/src/index.ts',
+    ]);
+  });
+
   it('F-15: cli and create are libraries that never import an application', () => {
     expect(edgesOf('libraries-do-not-import-applications')).toStrictEqual([
+      'packages/app/src/index.ts -> apps/web/server/agents/store.ts',
       'packages/cli/src/index.ts -> apps/web/server/agents/store.ts',
       'packages/create/src/index.ts -> apps/web/server/agents/store.ts',
     ]);
@@ -363,27 +439,53 @@ describe('the dependency-cruiser rules fire on planted violations', () => {
     ]);
   });
 
+  it('design §07 rule 3: only the catalog service reaches object storage', () => {
+    expect(edgesOf('only-the-catalog-service-reaches-object-storage')).toStrictEqual([
+      // the raw backend files are object storage too; the #1746 rule reports the same three edges
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/azure-blob-store.ts',
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/gcs-store.ts',
+      'apps/web/server/files/raw-store.ts -> packages/core/src/storage/s3-store.ts',
+      'apps/web/server/foo/upload.ts -> packages/core/src/storage/object-store.ts',
+    ]);
+  });
+
+  it('AGENTS.md hexagonal rule 2: a domain core imports only its own core, contracts and zod', () => {
+    expect(edgesOf('domain-core-is-pure')).toStrictEqual([
+      'apps/web/server/pilot/core/decide.ts -> apps/web/server/other/core/rules.ts',
+      'apps/web/server/pilot/core/decide.ts -> apps/web/server/pilot/ports.ts',
+      'apps/web/server/pilot/core/decide.ts -> apps/web/server/pilot/store.ts',
+      'apps/web/server/pilot/core/decide.ts -> fs',
+      'apps/web/server/pilot/core/decide.ts -> node_modules/left-pad/index.js',
+    ]);
+  });
+
   it('reports nothing else: the allowed edges stay allowed and every import resolves', () => {
     // 5 earlier + 7 F-15 + the cli and create fence rules firing on the same planted imports
     // + 3 baseline-rule cases + the 2 wire modules the domain rule also reports + 1 F-08 (run-protocol)
     // + 3 F-08 (the Claude adapter's core import; core's engine and run-protocol imports)
     // + 4 design §07 rule 1 (one per cloud, two S3 libraries) + 2 design §07 rule 2
-    // + 1 storage backends subpath + 3 raw backend factories (#1746)
-    expect(violations).toHaveLength(2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3);
+    // + 1 storage backends subpath + 3 raw backend factories (#1746) + 4 design §07 rule 3
+    // + 2 app kit fence (#1500) + its application import, which the library rule also reports
+    // + 2 imports of the app kit + react's fence on one of them + 5 domain core imports
+    expect(violations).toHaveLength(
+      2 + 1 + 2 + 7 + 2 + 3 + 2 + 1 + 3 + 4 + 2 + 1 + 3 + 4 + 2 + 1 + 2 + 1 + 5,
+    );
   });
 });
 
 /**
- * F-15 baselines. `.dependency-cruiser-known-violations.json` lists the violations of the three
- * baseline rules that existed when the rules were added; `architecture:check` ignores exactly
+ * F-15 baselines. `.dependency-cruiser-known-violations.json` lists the violations of the baseline
+ * rules that existed when the rules were added; `architecture:check` ignores exactly
  * those. It may only shrink: a new violation fails the check, and a fixed one must be removed from
  * the file (`pnpm exec depcruise --config dependency-cruiser.config.mjs --output-type baseline
  * apps packages > .dependency-cruiser-known-violations.json`), after which the ceiling below drops.
  */
 const baselineCeiling: Readonly<Record<string, number>> = {
   'routes-do-not-import-routes': 0,
-  'app-does-not-import-core': 1,
-  'domain-does-not-import-persistence': 46,
+  'app-does-not-import-core': 0,
+  'domain-does-not-import-persistence': 44,
+  // The storage design, §07 rule 3: landed with no known violation, and none may be added.
+  'only-the-catalog-service-reaches-object-storage': 0,
 };
 
 describe('the known-violations baseline only shrinks', () => {

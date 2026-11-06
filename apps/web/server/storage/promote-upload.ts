@@ -92,7 +92,7 @@ export async function promoteUpload(
   } catch (error) {
     // The commit may have happened with its reply lost, and the file renamed since: ask by object
     // id, which no rename changes. A failed lookup leaves the copy to the orphan sweep.
-    const held = await catalog.referencing({ objectIds: [objectId], storageKeys: [] }).then(
+    const held = await catalog.referencing({ objectIds: [objectId] }).then(
       (rows) => rows.length > 0,
       (lookupError: unknown) => {
         log.warn('[storage] could not check a promoted copy; the cleanup job will', {

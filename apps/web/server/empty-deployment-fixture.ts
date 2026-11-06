@@ -5,6 +5,7 @@
  */
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 
+import { createInMemoryAgentTeamsRuntime } from './agent-teams/memory-store';
 import { createInMemoryAgentVersionStoreProvider } from './agent-versions/memory-store';
 import { createInMemoryAgentStoreProvider } from './agents/memory-store';
 import { applicationContext } from './application-context';
@@ -47,6 +48,7 @@ export function installEmptyDeployment(): void {
   const agents = createInMemoryAgentStoreProvider();
   installTestDomains({
     a2a: { kind: 'disabled' },
+    agentTeams: createInMemoryAgentTeamsRuntime({ lookup: () => null }),
     connectors: { kind: 'unavailable' },
     files: { kind: 'unavailable' },
     models: { kind: 'unavailable' },
@@ -98,6 +100,7 @@ export function installEmptyDeployment(): void {
       mintKey: unreachableWrite,
       agentOwnership: () => Promise.resolve('unknown'),
       audit: () => Promise.resolve(),
+      isLocalPosture: () => Promise.resolve(false),
     },
     invitations: {
       recordAuditEvent: () => Promise.resolve(),
@@ -109,6 +112,8 @@ export function installEmptyDeployment(): void {
       agentNames: () => Promise.resolve(null),
       tokens: unreachableWrite,
       audit: () => Promise.resolve(),
+      findMember: () => Promise.resolve(null),
+      issueExchanged: unreachableWrite,
     },
     projects: {
       resolveActor: actorOf,

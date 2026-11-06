@@ -21,7 +21,7 @@ import { problemWithDetail as problem, readJsonBody } from '../http/result';
 import { authorise, type OwnershipResolver } from '../rbac/http';
 import type { ApiResult } from '../http/result';
 import type { Principal } from '../rbac/principal';
-import type { BrowserTokenScope } from '../rbac/token-scope';
+import type { BrowserTokenScope } from '../rbac/core/token-scope';
 import type { TokensRuntime } from './runtime';
 
 const notConfigured = (): ApiResult =>

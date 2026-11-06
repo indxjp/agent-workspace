@@ -46,6 +46,7 @@ import { requestEmbedClose } from './surface-chat-embed.js';
 import { surfaceStrings, type SurfaceStrings } from './locale.js';
 import {
   AgentSwitcher,
+  AttachmentChips,
   FeedbackButtons,
   SuggestedPrompts,
   SurfaceDisclaimer,
@@ -195,7 +196,11 @@ export function sendsOnEnter(event: {
   );
 }
 
-function SurfaceComposer({
+/**
+ * The default composer `<Chat/>` draws. Exported from this module only, so its markup can be
+ * pinned by a golden test; it is not part of the package's public surface.
+ */
+export function SurfaceComposer({
   value,
   onChange,
   onSubmit,
@@ -206,6 +211,11 @@ function SurfaceComposer({
   attachments,
 }: ComposerProps): ReactNode {
   const fileInput = useRef<HTMLInputElement>(null);
+  // The id is the React key the chips always had; a remove maps it back to the file's index.
+  const chips = (attachments?.files ?? []).map((file, index) => ({
+    id: `${String(index)}-${file.name}`,
+    name: file.name,
+  }));
   return (
     <form
       className="aw-composer"
@@ -255,21 +265,14 @@ function SurfaceComposer({
               event.target.value = '';
             }}
           />
-          {attachments.files.map((file, index) => (
-            <span key={`${String(index)}-${file.name}`} className="aw-chip">
-              {file.name}
-              <button
-                type="button"
-                aria-label={attachments.removeLabel(file.name)}
-                disabled={disabled}
-                onClick={() => {
-                  attachments.onRemove(index);
-                }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
+          <AttachmentChips
+            items={chips}
+            removeLabel={attachments.removeLabel}
+            disabled={disabled}
+            onRemove={(id) => {
+              attachments.onRemove(chips.findIndex((chip) => chip.id === id));
+            }}
+          />
         </div>
       )}
       <button type="submit" className="aw-send" disabled={!canSend}>

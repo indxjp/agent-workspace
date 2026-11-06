@@ -1,0 +1,852 @@
+name: GCP Cloud Run preview
+
+# Live proof of `aw deploy production` on target gcp-cloudrun (BYOC GCP phases P1 to P4 and P6): a deploy
+# from empty state within its 1500 s budget, an empty re-plan, `aw deploy status production` (healthy,
+# no drift, data protection off), the monitoring resources (log metrics, dashboard, alert policies; the
+# project file sets alertsEmail), a recorded probe of the runner manager's IAM condition (D-16), the sandbox no-internet lane (Cloud
+# Run Jobs inside the VPC prove a `none` sandbox reaches the gateway but no public host, no private
+# range and no Google API through its metadata token; the internal gateway refuses the internet),
+# the authenticated browser journey, model traffic through Vertex AI only, the private-shape
+# assertions (internal runner manager, private-only Cloud SQL, OIDC sign-in redirect), and `aw deploy destroy production`, then a check
+# that nothing of the prefix is left, monitoring resources included. The project file sets
+# `dataProtection: false`, so the disposable stack destroys cleanly. An over-budget first deploy,
+# missing monitoring and a failed positive control of the IAM probe fail the job after the proofs.
+# Everything lives in the disposable project; agent-workspace-* and indx-test* are never touched.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or SHA to deploy and test
+        required: true
+        default: main
+        type: string
+      action:
+        description: What to do with the stack
+        required: true
+        default: apply-test-destroy
+        type: choice
+        options: [apply-test-destroy, apply, destroy]
+      keep_minutes:
+        description: Minutes to keep the stack up after the tests, before any destroy
+        required: true
+        default: 0
+        type: number
+      run_prefix:
+        description: Resource prefix, 19 characters at most (empty is aw-byoc-<run id>; set it to destroy an earlier run)
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: gcp-cloudrun-preview
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  preview:
+    if: github.repository_owner == 'INDXDev'
+    runs-on: [self-hosted, ms-a2]
+    # Direct VPC subnets cannot be deleted for 1-2 hours after their Cloud Run services are gone, so
+    # the destroy step retries for up to 150 minutes. Self-hosted runner: the wait costs nothing.
+    timeout-minutes: 300
+    env:
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      GCP_PROJECT: ${{ vars.GCP_TEST_PROJECT }}
+      GCP_REGION: asia-northeast1
+      ACTION: ${{ inputs.action }}
+      KEEP_MINUTES: ${{ inputs.keep_minutes }}
+      RUN_PREFIX_INPUT: ${{ inputs.run_prefix }}
+      EVIDENCE_DIR: dist/gcp-cloudrun-preview
+      # A dummy, non-secret value for the CLI's non-interactive single sign-on secret step.
+      AW_OIDC_CLIENT_SECRET: not-a-secret-live-test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_TERRAFORM_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3.0.1
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.16.7
+          # The wrapper exits 0 for `plan -detailed-exitcode`'s 2; aw must see Terraform's own status.
+          terraform_wrapper: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Name the stack and refuse any project or prefix that is not disposable
+        run: |
+          set -euo pipefail
+          prefix="${RUN_PREFIX_INPUT:-aw-byoc-${GITHUB_RUN_ID}}"
+          if ! printf '%s' "$prefix" | grep -Eq '^[a-z][a-z0-9-]{1,17}[a-z0-9]$'; then
+            echo "::error::the prefix must be 3-19 lowercase letters, digits and hyphens"; exit 1
+          fi
+          case "$GCP_PROJECT" in
+            ''|agent-workspace-*|indx-test*) echo "::error::GCP_TEST_PROJECT must name the disposable project"; exit 1 ;;
+          esac
+          case "$prefix" in
+            agent-workspace*|indx-test*) echo "::error::the prefix must not name a protected resource"; exit 1 ;;
+          esac
+          mkdir -p "$EVIDENCE_DIR" "$RUNNER_TEMP/bin" "$RUNNER_TEMP/aw-home" "$RUNNER_TEMP/project"
+          {
+            echo "PREFIX=$prefix"
+            echo "AW_HOME=$RUNNER_TEMP/aw-home"
+            echo "PROJECT_DIR=$RUNNER_TEMP/project"
+          } >> "$GITHUB_ENV"
+          # A fresh HOME gives `aw` an empty deployment state; the per-prefix backend gives Terraform
+          # an empty state prefix. The credential file of the auth step is an absolute path, so gcloud
+          # and Terraform keep working under it.
+          {
+            echo '#!/bin/sh'
+            echo "HOME=\"$RUNNER_TEMP/aw-home\" exec node \"$GITHUB_WORKSPACE/packages/aw/dist/index.js\" \"\$@\""
+          } > "$RUNNER_TEMP/bin/aw"
+          chmod +x "$RUNNER_TEMP/bin/aw"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Install and build aw from the ref
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @indx-workspace/aw... build
+
+      - name: Build the four images from the ref
+        # The published release images predate the ref and reject what it adds (`provider: vertex`),
+        # so the deploy is given images built from this very commit. They are staged in a repository
+        # of the disposable project; `aw deploy` copies them by digest into the stack's own registry.
+        if: inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          staging="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/${PREFIX}-staging"
+          gcloud artifacts repositories describe ${PREFIX}-staging --project "$GCP_PROJECT" --location "$GCP_REGION" >/dev/null 2>&1 \
+            || gcloud artifacts repositories create ${PREFIX}-staging --project "$GCP_PROJECT" --location "$GCP_REGION" --repository-format docker --quiet
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          tag="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          mkdir -p "$RUNNER_TEMP/meta"
+          for spec in web:Dockerfile:web gateway:gateway.Dockerfile:gateway runner:Dockerfile:runner runtime:runtime.Dockerfile:runtime; do
+            name="${spec%%:*}"; rest="${spec#*:}"; file="${rest%%:*}"; target="${rest#*:}"
+            docker buildx build --platform linux/amd64 --file "$file" --target "$target" \
+              --tag "$staging/$name:$tag" --push --metadata-file "$RUNNER_TEMP/meta/$name.json" .
+            digest="$(node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'))['containerimage.digest']" "$RUNNER_TEMP/meta/$name.json")"
+            printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo "::error::no digest for the $name image"; exit 1; }
+            echo "AW_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=$staging/$name@$digest" >> "$GITHUB_ENV"
+          done
+
+      - name: Write the project file
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          number="$(gcloud projects describe "$GCP_PROJECT" --format='value(projectNumber)')"
+          test -n "$number"
+          cat > agent-workspace.yaml <<YAML
+          apiVersion: agentworkspace.dev/v2
+          kind: Project
+          name: $PREFIX
+          environments:
+            local:
+              cloud: local
+              identity:
+                bootstrapAdmin: owner@example.invalid
+            production:
+              target: gcp-cloudrun
+              url: https://$PREFIX-web-$number.$GCP_REGION.run.app
+              gcp:
+                project: $GCP_PROJECT
+                region: $GCP_REGION
+                # The disposable stack must destroy cleanly. The project file outranks TF_VAR_*, so
+                # this key is what is proven. (A stack deployed by an older ref with only
+                # TF_VAR_data_protection still plans data_protection false.) size stays at its default.
+                dataProtection: false
+                # Proves the alert path; the address bounces.
+                alertsEmail: alerts@example.invalid
+                oidc:
+                  issuer: https://accounts.google.com
+                  clientId: aw-byoc-live-test.apps.googleusercontent.com
+          YAML
+
+      - name: Deploy from empty state
+        if: inputs.action != 'destroy'
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          aw deploy production --yes 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/deploy-first.log"
+          seconds=$(( $(date +%s) - start ))
+          echo "first_deploy_seconds=$seconds" >> "$GITHUB_WORKSPACE/$EVIDENCE_DIR/timings.txt"
+          # A deploy that planned the stack but applied nothing still exits 0 and says "not up yet".
+          log="$GITHUB_WORKSPACE/$EVIDENCE_DIR/deploy-first.log"
+          grep -q '^Applied\.$' "$log" || { echo "::error::the first deploy did not apply the stack"; exit 1; }
+          if grep -q 'not up yet' "$log"; then echo "::error::the first deploy left the web app not up"; exit 1; fi
+          module="$AW_HOME/.config/agent-workspace/deployments/$PREFIX/production.infra/terraform/gcp-cloudrun"
+          web_url="$(terraform -chdir="$module" output -raw web_url)"
+          test -n "$web_url" || { echo "::error::the first deploy left no web_url output"; exit 1; }
+          # The limit is the plan's 25-minute budget for a first deploy. A stack that applied but took
+          # longer still gets its proof steps, so one run reports both the time and the journey; the
+          # step "Fail on a first deploy over its time budget" fails the job afterwards.
+          if [ "$seconds" -gt 1500 ]; then
+            echo "::error::first deploy took ${seconds}s (limit 1500s)"
+            echo "first deploy took ${seconds}s (limit 1500s)" > "$GITHUB_WORKSPACE/$EVIDENCE_DIR/over-budget"
+          fi
+
+      - name: Re-run the deploy and require an empty plan
+        if: inputs.action != 'destroy'
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          aw deploy production --yes 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/deploy-second.log"
+          seconds=$(( $(date +%s) - start ))
+          echo "second_deploy_seconds=$seconds" >> "$GITHUB_WORKSPACE/$EVIDENCE_DIR/timings.txt"
+          grep -q 'No changes' "$GITHUB_WORKSPACE/$EVIDENCE_DIR/deploy-second.log" \
+            || { echo "::error::the second deploy planned changes"; exit 1; }
+          if [ "$seconds" -gt 180 ]; then echo "::error::second deploy took ${seconds}s (limit 180s)"; exit 1; fi
+
+      - name: Report the stack status
+        # Read-only: exit 0 is healthy revisions and no drift, 3 is drift, anything else is not ready.
+        if: inputs.action != 'destroy'
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          aw deploy status production 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/status.log"
+          grep -q 'Data protection: off' "$GITHUB_WORKSPACE/$EVIDENCE_DIR/status.log" \
+            || { echo "::error::the status does not report 'Data protection: off' (the live stack is unprotected by design)"; exit 1; }
+
+      - name: Require the monitoring resources
+        # Never fails the step itself: a missing resource writes the monitoring-failed marker and the
+        # step "Fail on missing monitoring or a failed IAM probe" fails the job afterwards. Not part of
+        # the deploy timing. The token goes to curl on stdin and is never printed.
+        if: inputs.action != 'destroy'
+        run: |
+          set -uo pipefail
+          ev="$EVIDENCE_DIR"
+          : > "$ev/monitoring.txt"
+          missing=0
+          for metric in web-5xx gateway-5xx gateway-upstream-errors runner-mgr-failures; do
+            if gcloud logging metrics describe "${PREFIX}-${metric}" --project "$GCP_PROJECT" >/dev/null 2>&1; then
+              echo "log metric ${PREFIX}-${metric}: present" >> "$ev/monitoring.txt"
+            else
+              echo "::error::log metric ${PREFIX}-${metric} is missing"; echo "log metric ${PREFIX}-${metric} missing" >> "$ev/monitoring.txt"; missing=1
+            fi
+          done
+          dashboards="$(gcloud monitoring dashboards list --project "$GCP_PROJECT" --filter="displayName=${PREFIX}" --format='value(name)' 2>/dev/null | grep -c . || true)"
+          echo "dashboards named ${PREFIX}: $dashboards" >> "$ev/monitoring.txt"
+          if [ "$dashboards" -lt 1 ]; then echo "::error::no dashboard named ${PREFIX}"; missing=1; fi
+          # Alert policies through the Monitoring REST API: the gcloud policies command is a beta or
+          # alpha track that the pinned setup-gcloud does not install.
+          policies="$(printf 'Authorization: Bearer %s\n' "$(gcloud auth print-access-token)" \
+            | curl -sS -f -H @- "https://monitoring.googleapis.com/v3/projects/${GCP_PROJECT}/alertPolicies?pageSize=1000" 2>/dev/null \
+            | jq -r --arg p "$PREFIX" '[.alertPolicies[]? | select(.displayName | startswith($p))] | length' 2>/dev/null || echo 0)"
+          echo "alert policies starting with ${PREFIX}: $policies" >> "$ev/monitoring.txt"
+          case "$policies" in ''|*[!0-9]*) policies=0 ;; esac
+          if [ "$policies" -lt 8 ]; then echo "::error::$policies alert policies start with ${PREFIX} (want at least 8)"; missing=1; fi
+          cat "$ev/monitoring.txt"
+          if [ "$missing" -ne 0 ]; then echo "monitoring resources of $PREFIX are missing (see monitoring.txt)" > "$ev/monitoring-failed"; fi
+          exit 0
+
+      - name: Load masked live configuration
+        if: inputs.action != 'destroy'
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -euo pipefail
+          password="$(aw deploy production --show-owner-password)"
+          echo "::add-mask::$password"
+          test -n "$password"
+          module="$AW_HOME/.config/agent-workspace/deployments/$PREFIX/production.infra/terraform/gcp-cloudrun"
+          {
+            echo "TF_MODULE=$module"
+            echo "GCP_LIVE_BASE_URL=$(terraform -chdir="$module" output -raw web_url)"
+            echo "GCP_LIVE_BOOTSTRAP_EMAIL=owner@example.invalid"
+            echo "GCP_LIVE_BOOTSTRAP_PASSWORD=$password"
+            echo "GCP_LIVE_PROJECT=$GCP_PROJECT"
+          } >> "$GITHUB_ENV"
+
+      - name: Prove a none sandbox has no internet
+        # Runs before the browser journey and never fails the step itself: a failed proof writes the
+        # isolation-failed marker (and isolation-security when a denied destination was reached) and the step
+        # "Fail on the sandbox isolation proof" fails the job afterwards. The jobs run inside the VPC
+        # because the runner manager is internal and has no exec route. A missing run.jobs.create or
+        # iam.serviceaccounts.actAs permission of the Terraform service account is an Owner item: the
+        # gcloud error names it, and nothing here grants it.
+        if: inputs.action != 'destroy'
+        run: |
+          set -uo pipefail
+          lane=infra/tests/isolation
+          ev="$EVIDENCE_DIR"
+          region_args=(--project "$GCP_PROJECT" --region "$GCP_REGION")
+          staging="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/${PREFIX}-staging"
+          web_sa="${PREFIX}-web@${GCP_PROJECT}.iam.gserviceaccount.com"
+          runtime_sa="${PREFIX}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com"
+          rm -f "$ev"/iso-*.json
+          # NAME=VALUE pairs as a YAML map (JSON is YAML) for --env-vars-file. --set-env-vars splits its
+          # list on commas, or on the ^x^ delimiter, and a value (a URL, a script, an email) can hold either.
+          env_file() {
+            local file="$1"; shift
+            jq -n '$ARGS.positional | map(index("=") as $i
+              | if ($i // 0) < 1 then error("not NAME=VALUE: \(.)") else {key: .[:$i], value: .[$i + 1:]} end) | from_entries' \
+              --args "$@" > "$file"
+          }
+          # The result line of one execution, from Cloud Logging. log-result.mjs accepts only the line
+          # that carries this execution's nonce, so a line of an earlier execution of a job with the
+          # same name (a re-run keeps GITHUB_RUN_ID, a prefix can be reused) is never read; the
+          # execution_name label narrows the query when the execution name was captured.
+          read_line() {
+            job="$1"; mode="$2"; nonce="$3"; execution="$4"; out="$5"
+            filter="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$job\" AND textPayload:\"$nonce\""
+            if [ -n "$execution" ]; then
+              filter="$filter AND labels.\"run.googleapis.com/execution_name\"=\"$execution\""
+            fi
+            for attempt in 1 2 3 4 5 6 7 8 9; do
+              if gcloud logging read "$filter" \
+                --project "$GCP_PROJECT" --freshness=30m --order=desc --format='value(textPayload)' 2>/dev/null \
+                | node $lane/log-result.mjs "$mode" "$nonce" > "$out"; then
+                return 0
+              fi
+              : > "$out"
+              echo "no $mode result line with this execution's nonce yet (attempt $attempt/9); waiting 20 s"
+              sleep 20
+            done
+            echo "::error::no $mode result line with nonce $nonce was ingested"
+            return 1
+          }
+          # Execute a lane job with a fresh nonce and read that execution's result line.
+          execute_job() {
+            job="$1"; mode="$2"; out="$3"; shift 3
+            nonce="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${mode}-$(openssl rand -hex 8)"
+            execution="$(gcloud run jobs execute "$job" "${region_args[@]}" "$@" \
+              --update-env-vars "AW_ISOLATION_NONCE=$nonce" --wait --format='value(metadata.name)')" || return 1
+            # Only a plain execution name narrows the query; anything else leaves the nonce alone to bind it.
+            printf '%s' "$execution" | grep -Eq '^[a-z0-9][a-z0-9-]{0,127}$' || execution=""
+            echo "$mode execution: ${execution:-unknown}, nonce $nonce"
+            read_line "$job" "$mode" "$nonce" "$execution" "$out"
+          }
+          set +e
+          (
+            set -euo pipefail
+            # (a) The gateway is internal: from the internet it must answer 404, like the runner manager.
+            gateway_url="$(terraform -chdir="$TF_MODULE" output -raw gateway_url)"
+            gateway_internal_url="$(terraform -chdir="$TF_MODULE" output -raw gateway_internal_url)"
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$gateway_url/health" || true)"
+            echo "$code" > "$ev/iso-refusal.txt"
+            echo "gateway_health_http_code_from_internet=$code"
+            # (b) The lane image: the runtime image plus the lane script.
+            mkdir -p "$RUNNER_TEMP/meta"
+            tag="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+            docker buildx build --platform linux/amd64 -f $lane/cloud-run-lane.Dockerfile \
+              --build-arg RUNTIME_IMAGE="$AW_RUNTIME_IMAGE" --tag "$staging/iso-lane:$tag" \
+              --push --metadata-file "$RUNNER_TEMP/meta/iso-lane.json" $lane
+            digest="$(node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'))['containerimage.digest']" "$RUNNER_TEMP/meta/iso-lane.json")"
+            printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || { echo "::error::no digest for the lane image"; exit 1; }
+            image="$staging/iso-lane@$digest"
+            # (c) The Cloud SQL private address (the positive control and the private-range target) and
+            # the public host as an IP literal, resolved here because the sandbox cannot resolve it.
+            private_ip="$(gcloud sql instances describe "$PREFIX-pg" --project "$GCP_PROJECT" --format='value(ipAddresses[0].ipAddress)')"
+            test -n "$private_ip"
+            internet_url="${ISOLATION_INTERNET_URL:-http://connectivitycheck.gstatic.com/generate_204}"
+            internet_host="$(node -p "new URL(process.argv[1]).hostname" "$internet_url")"
+            internet_ip="$(getent ahostsv4 "$internet_host" | awk 'NR==1{print $1}')"
+            test -n "$internet_ip"
+            network="$(terraform -chdir="$TF_MODULE" output -raw network 2>/dev/null || echo "$PREFIX-vpc")"
+            network="${network##*/}"
+            manager_url="$(terraform -chdir="$TF_MODULE" output -raw runner_manager_url)"
+            # (d) The control job runs in the services subnet as the web service account.
+            env_file "$RUNNER_TEMP/iso-ctl.env.yaml" "CLOUD_RUN_MANAGER_URL=$manager_url" "ISOLATION_PRIVATE_ADDRESS=$private_ip"
+            gcloud run jobs deploy "$PREFIX-iso-ctl" "${region_args[@]}" --image "$image" \
+              --command node --args /opt/aw-lane/cloud-run-lane.mjs,create \
+              --service-account "$web_sa" --network "$network" --subnet "$PREFIX-services" \
+              --vpc-egress private-ranges-only --set-secrets "RUNNER_MANAGER_TOKEN=$PREFIX-runner-manager-token:latest" \
+              --env-vars-file "$RUNNER_TEMP/iso-ctl.env.yaml" \
+              --max-retries 0 --task-timeout 600s --quiet
+            execute_job "$PREFIX-iso-ctl" create "$ev/iso-create.json"
+            service="$(jq -r '.service // empty' "$ev/iso-create.json")"
+            echo "$(jq -r '.handleId // empty' "$ev/iso-create.json")" > "$ev/iso-handle.txt"
+            test -n "$service" || { echo "::error::no sandbox was created: $(jq -c '.error // .results["sandbox-create"]' "$ev/iso-create.json")"; exit 1; }
+            echo "sandbox service: $service"
+            # (e) The sandbox is shaped as promised: internal ingress, all-traffic Direct VPC egress on the
+            # sandbox subnet with the tag the firewall names, and the runtime service account.
+            gcloud run services describe "$service" "${region_args[@]}" --format=json > "$ev/iso-sandbox-service.json"
+            jq '{
+                  ingress: .metadata.annotations["run.googleapis.com/ingress"],
+                  egress: .spec.template.metadata.annotations["run.googleapis.com/vpc-access-egress"],
+                  interfaces: (.spec.template.metadata.annotations["run.googleapis.com/network-interfaces"] // "[]" | fromjson),
+                  serviceAccount: .spec.template.spec.serviceAccountName
+                }' "$ev/iso-sandbox-service.json" > "$ev/isolation-sandbox-annotations.json"
+            jq -e --arg subnet "$PREFIX-sandbox" --arg sa "$runtime_sa" '
+                .ingress == "internal" and .egress == "all-traffic" and .serviceAccount == $sa
+                and (.interfaces | length == 1) and (.interfaces[0].tags | index("aw-sandbox"))
+                and ((.interfaces[0].subnetwork | split("/") | last) == $subnet)' \
+              "$ev/isolation-sandbox-annotations.json" >/dev/null \
+              || { echo "::error::the sandbox service does not have the promised shape"; cat "$ev/isolation-sandbox-annotations.json"; touch "$ev/iso-shape-failed"; }
+            sandbox_network="$(jq -r '.interfaces[0].network // empty' "$ev/isolation-sandbox-annotations.json")"
+            sandbox_network="${sandbox_network##*/}"
+            sandbox_subnet="$(jq -r '.interfaces[0].subnetwork // empty' "$ev/isolation-sandbox-annotations.json")"
+            sandbox_subnet="${sandbox_subnet##*/}"
+            sandbox_sa="$(jq -r '.serviceAccount // empty' "$ev/isolation-sandbox-annotations.json")"
+            # (f) The probe job takes the sandbox's network shape and service account.
+            control="$(jq -r '.results["control-private-range"].outcome // "fail"' "$ev/iso-create.json")"
+            env_file "$RUNNER_TEMP/iso-probe.env.yaml" "ISOLATION_GATEWAY_URL=$gateway_internal_url" \
+              "ISOLATION_GATEWAY_RUN_APP_URL=$gateway_url" "ISOLATION_PRIVATE_ADDRESS=$private_ip" \
+              "ISOLATION_INTERNET_URL=$internet_url" "ISOLATION_INTERNET_ADDRESS=$internet_ip" \
+              "ISOLATION_CONTROL_PRIVATE=$control" "ISOLATION_EXTERNAL_RUNAPP_HOST=${ISOLATION_EXTERNAL_RUNAPP_HOST:-}" \
+              "ISOLATION_EXTERNAL_BUCKET=${ISOLATION_EXTERNAL_BUCKET:-}"
+            gcloud run jobs deploy "$PREFIX-iso-probe" "${region_args[@]}" --image "$image" \
+              --command node --args /opt/aw-lane/cloud-run-lane.mjs,probe \
+              --service-account "${sandbox_sa:-$runtime_sa}" --network "${sandbox_network:-$network}" \
+              --subnet "${sandbox_subnet:-$PREFIX-sandbox}" --network-tags aw-sandbox --vpc-egress all-traffic \
+              --env-vars-file "$RUNNER_TEMP/iso-probe.env.yaml" \
+              --max-retries 0 --task-timeout 300s --quiet
+            execute_job "$PREFIX-iso-probe" probe "$ev/iso-probe.json"
+            # (g) The token job: the sandbox's service account on the services subnet, the one place
+            # it can reach a Google API. The Cloud Run API must answer 403, and testIamPermissions on
+            # the project must grant none of the sensitive permissions the lane lists.
+            env_file "$RUNNER_TEMP/iso-token.env.yaml" "GCP_PROJECT=$GCP_PROJECT" "GCP_REGION=$GCP_REGION"
+            gcloud run jobs deploy "$PREFIX-iso-token" "${region_args[@]}" --image "$image" \
+              --command node --args /opt/aw-lane/cloud-run-lane.mjs,token \
+              --service-account "${sandbox_sa:-$runtime_sa}" --network "$network" --subnet "$PREFIX-services" \
+              --vpc-egress private-ranges-only --env-vars-file "$RUNNER_TEMP/iso-token.env.yaml" \
+              --max-retries 0 --task-timeout 300s --quiet
+            execute_job "$PREFIX-iso-token" token "$ev/iso-token.json"
+          )
+          status=$?
+          # (h) Destroy the sandbox whatever happened above.
+          handle="$(cat "$ev/iso-handle.txt" 2>/dev/null || true)"
+          if [ -n "$handle" ]; then
+            execute_job "$PREFIX-iso-ctl" destroy "$ev/iso-destroy.json" \
+              --args "/opt/aw-lane/cloud-run-lane.mjs,destroy,$handle"
+          fi
+          code="$(cat "$ev/iso-refusal.txt" 2>/dev/null || echo none)"
+          node -e '
+            const fs = require("node:fs");
+            const [dir, code] = process.argv.slice(1);
+            const read = (name) => { try { return JSON.parse(fs.readFileSync(`${dir}/${name}`, "utf8")).results ?? {}; } catch { return {}; } };
+            const results = { ...read("iso-create.json"), ...read("iso-probe.json"), ...read("iso-token.json"), ...read("iso-destroy.json") };
+            results["gateway-refusal"] = {
+              title: "The gateway run.app URL refuses the internet",
+              outcome: code === "404" ? "pass" : "fail",
+              detail: `GET /health from the internet answered ${code} (want 404)`,
+            };
+            for (const [id, title] of Object.entries({
+              "sandbox-create": "A sandbox is created through the runner manager",
+              "control-private-range": "The private address is reachable from the services subnet",
+              "gateway-reachable": "The gateway answers from a none sandbox through its internal load balancer",
+              "egress-internet": "A none sandbox cannot reach a public host",
+              "egress-private-range": "A none sandbox cannot reach the private ranges",
+              "metadata-token-useless": "The sandbox metadata token has no permissions",
+              "egress-google-vip": "A none sandbox gets no answer from the Google VIPs (run.app services and buckets of any project)",
+              "egress-gateway-run-app": "A none sandbox gets no answer from the gateway\u0027s run.app URL",
+              "sandbox-destroy": "The sandbox is destroyed through the runner manager",
+            })) results[id] ??= { title, outcome: "inconclusive", detail: "the lane did not get that far" };
+            fs.writeFileSync(`${dir}/isolation-cloud-run.json`, JSON.stringify({ lane: "cloud-run", results }, null, 2) + "\n");
+          ' "$ev" "$code"
+          set -e
+          summary_status=0
+          node $lane/summary.mjs "cloud-run=$ev/isolation-cloud-run.json" | tee "$ev/isolation-summary.md" || summary_status=1
+          if [ "$status" -ne 0 ] || [ "$summary_status" -ne 0 ] || [ -f "$ev/iso-shape-failed" ]; then
+            echo "::error::the sandbox isolation proof did not pass (see isolation-summary.md; a PERMISSION_DENIED above names the Owner item to grant)"
+            echo "isolation proof status=$status summary=$summary_status" > "$ev/isolation-failed"
+          fi
+          if jq -e '[.results[].detail | strings | startswith("SECURITY:")] | any' "$ev/isolation-cloud-run.json" >/dev/null; then
+            echo "::error::SECURITY: a none sandbox reached a denied destination (a public host, the private range or a Google VIP) — stop and escalate (plan P4 stop)"
+            echo "a none sandbox reached a denied destination" > "$ev/isolation-security"
+          fi
+          exit 0
+
+      - name: Probe the runner manager's IAM condition
+        # D-16: records whether Cloud Run evaluates the runner manager's IAM condition (create only
+        # `rt-*` services, delete only those). Every call is validateOnly, so nothing is created or
+        # changed. Only the positive control (a 2xx for an `rt-` service) fails the job, through the
+        # iam-probe-failed marker; the other answers are recorded in iam-condition.json. The deploy
+        # service account needs actAs on the runner manager account: a missing permission is an Owner
+        # item, the gcloud error names it, and nothing here grants it.
+        if: inputs.action != 'destroy'
+        run: |
+          set -uo pipefail
+          ev="$EVIDENCE_DIR"
+          region_args=(--project "$GCP_PROJECT" --region "$GCP_REGION")
+          staging="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/${PREFIX}-staging"
+          job="${PREFIX}-iam-probe"
+          nonce="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-iam-$(openssl rand -hex 8)"
+          probe_failed() { echo "$1" > "$ev/iam-probe-failed"; echo "::error::$1"; exit 0; }
+          # NAME=VALUE pairs as a YAML map (JSON is YAML) for --env-vars-file. --set-env-vars splits its
+          # list on commas, or on the ^x^ delimiter, and a value (a URL, a script, an email) can hold either.
+          env_file() {
+            local file="$1"; shift
+            jq -n '$ARGS.positional | map(index("=") as $i
+              | if ($i // 0) < 1 then error("not NAME=VALUE: \(.)") else {key: .[:$i], value: .[$i + 1:]} end) | from_entries' \
+              --args "$@" > "$file"
+          }
+          digest="$(node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'))['containerimage.digest']" "$RUNNER_TEMP/meta/iso-lane.json" 2>/dev/null || true)"
+          printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || probe_failed "the IAM probe has no lane image digest"
+          cat > "$RUNNER_TEMP/iam-probe.js" <<'JS'
+          (async () => {
+            const env = process.env;
+            const out = { mode: 'iam', nonce: env.AW_ISOLATION_NONCE };
+            try {
+              const meta = 'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
+              const token = (await (await fetch(meta, { headers: { 'Metadata-Flavor': 'Google' } })).json()).access_token;
+              const base = `https://run.googleapis.com/v2/projects/${env.GCP_PROJECT}/locations/${env.GCP_REGION}/services`;
+              const status = async (method, url, body) => {
+                const response = await fetch(url, {
+                  method,
+                  headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+                  body,
+                });
+                return response.status;
+              };
+              const body = JSON.stringify({
+                template: { serviceAccount: env.RUNTIME_SA, containers: [{ image: env.RUNTIME_IMAGE }] },
+              });
+              const suffix = Math.random().toString(16).slice(2, 10);
+              out.positiveControl = await status('POST', `${base}?serviceId=rt-iam-probe-${suffix}&validateOnly=true`, body);
+              out.createOtherName = await status('POST', `${base}?serviceId=${env.PREFIX}-iam-probe-x&validateOnly=true`, body);
+              out.deleteWeb = await status('DELETE', `${base}/${env.PREFIX}-web?validateOnly=true`);
+            } catch (error) {
+              out.error = error instanceof Error ? error.name : 'error';
+            }
+            console.log(`AW_IAM_PROBE ${JSON.stringify(out)}`);
+          })();
+          JS
+          env_file "$RUNNER_TEMP/iam-probe.env.yaml" "AW_PROBE_B64=$(base64 -w0 "$RUNNER_TEMP/iam-probe.js")" \
+            "GCP_PROJECT=$GCP_PROJECT" "GCP_REGION=$GCP_REGION" "PREFIX=$PREFIX" \
+            "RUNTIME_SA=${PREFIX}-runtime@${GCP_PROJECT}.iam.gserviceaccount.com" "RUNTIME_IMAGE=$AW_RUNTIME_IMAGE" \
+            || probe_failed "the IAM probe environment could not be written"
+          # `^@^` makes @ the separator of --args, so the comma of the script is plain text.
+          deploy_log="$RUNNER_TEMP/iam-probe-deploy.log"
+          gcloud run jobs deploy "$job" "${region_args[@]}" --image "$staging/iso-lane@$digest" \
+            --service-account "${PREFIX}-runner-mgr@${GCP_PROJECT}.iam.gserviceaccount.com" \
+            --command node --args "^@^-e@eval(Buffer.from(process.env.AW_PROBE_B64, 'base64').toString())" \
+            --env-vars-file "$RUNNER_TEMP/iam-probe.env.yaml" \
+            --max-retries 0 --task-timeout 300s --quiet 2> "$deploy_log"
+          deployed=$?
+          cat "$deploy_log" >&2
+          if [ "$deployed" -ne 0 ]; then
+            # Only a PERMISSION_DENIED is an Owner item; any other error is recorded as gcloud gave it.
+            if grep -q 'PERMISSION_DENIED' "$deploy_log"; then
+              probe_failed "the IAM probe job could not be deployed: PERMISSION_DENIED, an Owner item to grant: $(grep -m1 'PERMISSION_DENIED' "$deploy_log")"
+            fi
+            first="$(grep -m1 '^ERROR' "$deploy_log" || grep -m1 -v '^[[:space:]]*$' "$deploy_log" || echo "gcloud exited $deployed")"
+            probe_failed "the IAM probe job could not be deployed: $first"
+          fi
+          gcloud run jobs execute "$job" "${region_args[@]}" --update-env-vars "AW_ISOLATION_NONCE=$nonce" --wait --format='value(metadata.name)' \
+            || probe_failed "the IAM probe job did not complete"
+          filter="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$job\" AND textPayload:\"$nonce\""
+          : > "$ev/iam-condition.json"
+          for attempt in 1 2 3 4 5 6 7 8 9; do
+            gcloud logging read "$filter" --project "$GCP_PROJECT" --freshness=30m --order=desc --format='value(textPayload)' 2>/dev/null \
+              | grep '^AW_IAM_PROBE ' | head -n 1 | sed 's/^AW_IAM_PROBE //' > "$ev/iam-condition.json"
+            if jq -e --arg n "$nonce" '.nonce == $n' "$ev/iam-condition.json" >/dev/null 2>&1; then break; fi
+            : > "$ev/iam-condition.json"
+            echo "no IAM probe result line with this execution's nonce yet (attempt $attempt/9); waiting 20 s"
+            sleep 20
+          done
+          [ -s "$ev/iam-condition.json" ] || probe_failed "no IAM probe result line with nonce $nonce was ingested"
+          cat "$ev/iam-condition.json"
+          positive="$(jq -r '.positiveControl // 0' "$ev/iam-condition.json")"
+          create_other="$(jq -r '.createOtherName // 0' "$ev/iam-condition.json")"
+          delete_web="$(jq -r '.deleteWeb // 0' "$ev/iam-condition.json")"
+          case "$positive" in 2??) ;; *) probe_failed "the positive control (validate-only create of an rt-* service as the runner manager) answered $positive, want 2xx" ;; esac
+          case "$create_other" in 2??) echo "::warning::the runner manager may create a service that is not rt-* (validate-only answered $create_other): Cloud Run does not evaluate the IAM condition on create" ;; esac
+          case "$delete_web" in 2??) echo "::warning::the runner manager may delete the web service (validate-only answered $delete_web): Cloud Run does not evaluate the IAM condition on delete" ;; esac
+          exit 0
+
+      - name: Install Chromium
+        if: inputs.action != 'destroy'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Validate the authenticated stack in Chromium
+        if: inputs.action != 'destroy'
+        run: pnpm exec playwright test --config=playwright.gcp-live.config.mjs
+
+      - name: Require that model traffic reached Vertex AI and never api.anthropic.com
+        if: inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          # The gateway logs the host of each upstream model call as {"msg":"model upstream request",
+          # "host":...} (packages/gateway/src/upstream-log.ts); only hosts are read, never payloads.
+          # Entries can reach Cloud Logging a little late, so read again for up to two minutes.
+          log="$RUNNER_TEMP/gateway-upstream.json"
+          count() {
+            node -e 'const e=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const h=process.argv[2]; console.log(h === "" ? e.length : e.filter((x) => x.jsonPayload?.host === h).length)' "$log" "$1"
+          }
+          for attempt in 1 2 3 4; do
+            gcloud logging read \
+              "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${PREFIX}-gateway\" AND jsonPayload.msg=\"model upstream request\"" \
+              --project "$GCP_PROJECT" --freshness=2h --format=json > "$log"
+            vertex="$(count aiplatform.googleapis.com)"
+            [ "$vertex" -gt 0 ] && break
+            sleep 30
+          done
+          anthropic="$(count api.anthropic.com)"
+          total="$(count '')"
+          {
+            echo "gateway_upstream_requests=$total"
+            echo "gateway_upstream_aiplatform=$vertex"
+            echo "gateway_upstream_anthropic=$anthropic"
+          } | tee "$EVIDENCE_DIR/gateway-upstream-hosts.txt"
+          if [ "$vertex" -lt 1 ]; then echo "::error::the gateway logged no model request to aiplatform.googleapis.com"; exit 1; fi
+          if [ "$anthropic" -ne 0 ]; then echo "::error::the gateway logged $anthropic model requests to api.anthropic.com"; exit 1; fi
+
+      - name: Assert the private shape
+        if: inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          out="$EVIDENCE_DIR/private-shape.txt"
+          : > "$out"
+          fail=0
+          # (a) The runner manager is internal-only: from the internet it must answer 404 (the ingress refusal).
+          manager_url="$(terraform -chdir="$TF_MODULE" output -raw runner_manager_url)"
+          code="$(curl -s -o /dev/null -w '%{http_code}' "$manager_url/ping" || true)"
+          echo "runner_manager_ping_http_code=$code" >> "$out"
+          case "$code" in
+            404) ;;
+            *) echo "::error::the runner manager answered $code from the internet (want 404)"; fail=1 ;;
+          esac
+          # (b) Cloud SQL has a private address only.
+          sql_types="$(gcloud sql instances describe "$PREFIX-pg" --project "$GCP_PROJECT" --format='value(ipAddresses[].type)')"
+          echo "cloud_sql_ip_types=$sql_types" >> "$out"
+          if [ "$sql_types" != "PRIVATE" ]; then
+            echo "::error::Cloud SQL address types are '$sql_types' (want exactly PRIVATE)"; fail=1
+          fi
+          # (c) Single sign-on is configured: the login route redirects to Google with our client and callback.
+          curl -s -o /dev/null -D headers.txt "$GCP_LIVE_BASE_URL/api/auth/login" || true
+          status="$(head -n 1 headers.txt | tr -d '\r' | awk '{print $2}')"
+          location="$(grep -i '^location:' headers.txt | head -n 1 | sed 's/^[Ll]ocation:[[:space:]]*//' | tr -d '\r')"
+          callback="$(node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$GCP_LIVE_BASE_URL/api/auth/callback")"
+          echo "login_http_status=$status" >> "$out"
+          echo "login_location=$location" >> "$out"
+          case "$status" in
+            303) ;;
+            *) echo "::error::/api/auth/login answered '$status' (want 303)"; fail=1 ;;
+          esac
+          case "$location" in
+            https://accounts.google.com/o/oauth2/v2/auth*) ;;
+            *) echo "::error::the login redirect does not go to accounts.google.com"; fail=1 ;;
+          esac
+          case "$location" in
+            *client_id=aw-byoc-live-test.apps.googleusercontent.com*) ;;
+            *) echo "::error::the login redirect lacks the OIDC client_id"; fail=1 ;;
+          esac
+          case "$location" in
+            *redirect_uri=$callback*) ;;
+            *) echo "::error::the login redirect lacks redirect_uri=$callback"; fail=1 ;;
+          esac
+          echo "result=$([ "$fail" -eq 0 ] && echo pass || echo fail)" >> "$out"
+          exit "$fail"
+
+      - name: Record the service logs of a failed check
+        if: failure() && inputs.action != 'destroy'
+        run: |
+          set -uo pipefail
+          set +e
+          # Diagnostics only: this step never fails the job. The browser journey only sees the web app's
+          # generic 502 `upstream_failure`; the cause is in the services' own logs (an INFO app line or a
+          # Cloud Run request log), which are gone once the stack is destroyed. Recorded before destroy.
+          # Cloud Logging ingests with a delay, so poll (20 s, up to ~3 min) until entries appear.
+          out="$GITHUB_WORKSPACE/$EVIDENCE_DIR/service-logs.txt"
+          filter="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=(\"${PREFIX}-web\" OR \"${PREFIX}-runner-mgr\" OR \"${PREFIX}-gateway\")"
+          read_logs() {
+            gcloud logging read "$filter" --project "$GCP_PROJECT" --freshness=10m --limit=400 --order=desc --format=json 2>/dev/null |
+              jq -r '.[] | [
+                  .timestamp,
+                  .resource.labels.service_name,
+                  .severity,
+                  (.httpRequest.status // ""),
+                  (.httpRequest.requestMethod // ""),
+                  ((.httpRequest.requestUrl // "") | sub("^[a-zA-Z]+://[^/]*"; "") | sub("[?#].*$"; "")),
+                  (.textPayload // ""),
+                  (.jsonPayload.msg // .jsonPayload.message // "" | tostring),
+                  (.jsonPayload.error // "" | tostring),
+                  (.jsonPayload.code // "" | tostring),
+                  (.jsonPayload.errorName // "" | tostring),
+                  (if .jsonPayload.msg != null then (.jsonPayload.message // "") else "" end | tostring),
+                  (.jsonPayload.safeCause // "" | tostring),
+                  (.jsonPayload.causeName // "" | tostring),
+                  (.jsonPayload.causeCode // "" | tostring)
+                ] | map(tostring | gsub("[\\r\\n\\t]+"; " ")) | join("\t")' 2>/dev/null |
+              grep -viE 'password|secret|token|authorization' | cut -c1-600 | head -n 400
+          }
+          : > "$out"
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            read_logs > "$out.tmp"
+            if [ -s "$out.tmp" ]; then break; fi
+            echo "no service log entries ingested yet (attempt $attempt/10); waiting 20 s"
+            sleep 20
+          done
+          {
+            echo "# timestamp service severity status method path textPayload msg error code errorName message safeCause causeName causeCode (tab separated, newest first)"
+            tail -n 400 "$out.tmp"
+          } > "$out"
+          rm -f "$out.tmp"
+          cat "$out"
+          exit 0
+
+      - name: Fail on a first deploy over its time budget
+        if: always() && inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          marker="$EVIDENCE_DIR/over-budget"
+          if [ -f "$marker" ]; then echo "::error::$(cat "$marker")"; exit 1; fi
+
+      - name: Fail on the sandbox isolation proof
+        if: always() && inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          marker="$EVIDENCE_DIR/isolation-failed"
+          if [ -f "$marker" ]; then echo "::error::$(cat "$marker")"; exit 1; fi
+
+      - name: Fail on missing monitoring or a failed IAM probe
+        if: always() && inputs.action != 'destroy'
+        run: |
+          set -euo pipefail
+          status=0
+          for marker in "$EVIDENCE_DIR/monitoring-failed" "$EVIDENCE_DIR/iam-probe-failed"; do
+            if [ -f "$marker" ]; then echo "::error::$(cat "$marker")"; status=1; fi
+          done
+          exit "$status"
+
+      - name: Keep the stack up
+        if: inputs.action != 'destroy' && inputs.keep_minutes > 0
+        run: sleep "$(( KEEP_MINUTES * 60 ))"
+
+      - name: Rebuild the deployment state of the earlier run
+        if: inputs.action == 'destroy'
+        working-directory: ${{ env.PROJECT_DIR }}
+        # A fresh HOME has no deployment state, and `destroy` needs the variables a plan renders.
+        # Without --yes this plans and creates nothing.
+        run: |
+          set -uo pipefail
+          # The default shell is `bash -e`: lift -e around the pipeline so its exit 3 reaches the
+          # status check below instead of ending the step.
+          set +e
+          aw deploy production 2>&1 | tee "$GITHUB_WORKSPACE/$EVIDENCE_DIR/rebuild-state.log"
+          statuses=("${PIPESTATUS[@]}")
+          set -e
+          status="${statuses[0]}"
+          if [ "${statuses[1]}" -ne 0 ]; then exit "${statuses[1]}"; fi
+          # Exit 3 is "changes pending": the plan still rendered the variables destroy needs.
+          if [ "$status" -ne 0 ] && [ "$status" -ne 3 ]; then exit "$status"; fi
+
+      - name: Delete the sandbox services of the install
+        if: always() && inputs.action != 'apply'
+        run: |
+          set -uo pipefail
+          # The runner manager creates `rt-<uuid>` services at run time; they are not in Terraform
+          # state. They run as the install's runtime service account, which names the install.
+          # The three isolation jobs of the lane and the IAM probe job belong to the prefix too.
+          for job in "${PREFIX}-iso-ctl" "${PREFIX}-iso-probe" "${PREFIX}-iso-token" "${PREFIX}-iam-probe"; do
+            if gcloud run jobs describe "$job" --project "$GCP_PROJECT" --region "$GCP_REGION" >/dev/null 2>&1; then
+              gcloud run jobs delete "$job" --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet
+            fi
+          done
+          gcloud run services list --project "$GCP_PROJECT" --region "$GCP_REGION" \
+            --filter='metadata.labels.agent-workspace-runtime=cloud-run-service' \
+            --format='value(metadata.name,spec.template.spec.serviceAccountName)' \
+            | { grep -E -- "[[:space:]]${PREFIX}-runtime@" || true; } | cut -f1 \
+            | while read -r service; do
+                gcloud run services delete "$service" --project "$GCP_PROJECT" --region "$GCP_REGION" --quiet
+              done
+
+      - name: Destroy the stack
+        if: always() && inputs.action != 'apply'
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -uo pipefail
+          # The default shell is `bash -e`, and `set -u -o pipefail` does not lift it: without this a
+          # failing destroy would end the step before its status and output are recorded.
+          set +e
+          # Google Cloud holds a Direct VPC subnet for 1-2 hours after its Cloud Run services are
+          # gone. While destroy fails with the CLI's "releases the network 1.*2 hours" message, retry
+          # every 10 minutes for at most 150 minutes; any other failure ends the step.
+          log="$GITHUB_WORKSPACE/$EVIDENCE_DIR/destroy.log"
+          : > "$log"
+          start=$(date +%s)
+          while :; do
+            attempt="$RUNNER_TEMP/destroy-attempt.log"
+            printf '%s\n' "$GCP_PROJECT" | aw deploy destroy production > "$attempt" 2>&1
+            status=$?
+            cat "$attempt" | tee -a "$log"
+            if [ "$status" -eq 0 ]; then break; fi
+            if ! grep -q 'releases the network 1.*2 hours' "$attempt"; then exit "$status"; fi
+            if [ $(( $(date +%s) - start )) -ge 9000 ]; then
+              echo "::error::the network was still held after 150 minutes"; exit "$status"
+            fi
+            echo "The network is not released yet; retrying in 10 minutes."
+            sleep 600
+          done
+          set -e
+          # The staging repository of the image build belongs to the prefix, so it goes with it.
+          if gcloud artifacts repositories describe "${PREFIX}-staging" --project "$GCP_PROJECT" --location "$GCP_REGION" >/dev/null 2>&1; then
+            gcloud artifacts repositories delete "${PREFIX}-staging" --project "$GCP_PROJECT" --location "$GCP_REGION" --quiet
+          fi
+
+      - name: List what is left of the prefix
+        if: always() && inputs.action != 'apply'
+        run: |
+          set -uo pipefail
+          left="$EVIDENCE_DIR/leftovers.txt"
+          : > "$left"
+          list() {
+            kind="$1"; shift
+            "$@" > "$EVIDENCE_DIR/list-$kind.txt" 2> "$EVIDENCE_DIR/list-$kind.err" \
+              || { echo "$kind: listing failed" >> "$left"; return; }
+            # The prefix as a whole word: `${PREFIX}-...` names, `${PREFIX} ...` display names, and
+            # the Artifact Registry repository, which is named exactly `${PREFIX}`.
+            grep -E -- "(^|[^a-z0-9-])${PREFIX}($|[- ])" "$EVIDENCE_DIR/list-$kind.txt" | sed "s/^/$kind: /" >> "$left" || true
+          }
+          # Monitoring REST listing of one collection's display names (the policies and channels
+          # commands are beta or alpha tracks). The token goes to curl on stdin.
+          monitoring_names() {
+            printf 'Authorization: Bearer %s\n' "$(gcloud auth print-access-token)" \
+              | curl -sS -f -H @- "https://monitoring.googleapis.com/v3/projects/${GCP_PROJECT}/$1?pageSize=1000" \
+              | jq -r --arg key "$1" '.[$key][]?.displayName'
+          }
+          list run gcloud run services list --project "$GCP_PROJECT" --region "$GCP_REGION" --format='value(metadata.name)'
+          list job gcloud run jobs list --project "$GCP_PROJECT" --region "$GCP_REGION" --format='value(name)'
+          list sql gcloud sql instances list --project "$GCP_PROJECT" --format='value(name)'
+          list bucket gcloud storage buckets list --project "$GCP_PROJECT" --format='value(name)'
+          list artifacts gcloud artifacts repositories list --project "$GCP_PROJECT" --location "$GCP_REGION" --format='value(name)'
+          list sandbox gcloud run services list --project "$GCP_PROJECT" --region "$GCP_REGION" --filter='metadata.labels.agent-workspace-runtime=cloud-run-service' --format='value(metadata.name,spec.template.spec.serviceAccountName)'
+          list network gcloud compute networks list --project "$GCP_PROJECT" --format='value(name)'
+          list subnet gcloud compute networks subnets list --project "$GCP_PROJECT" --regions "$GCP_REGION" --format='value(name)'
+          list address gcloud compute addresses list --global --project "$GCP_PROJECT" --format='value(name)'
+          list firewall gcloud compute firewall-rules list --project "$GCP_PROJECT" --format='value(name)'
+          list dns gcloud dns managed-zones list --project "$GCP_PROJECT" --format='value(name)'
+          list secrets gcloud secrets list --project "$GCP_PROJECT" --format='value(name)'
+          list service-account gcloud iam service-accounts list --project "$GCP_PROJECT" --format='value(email)'
+          list logmetric gcloud logging metrics list --project "$GCP_PROJECT" --format='value(name)'
+          list dashboard gcloud monitoring dashboards list --project "$GCP_PROJECT" --format='value(displayName)'
+          list alertpolicy monitoring_names alertPolicies
+          list channel monitoring_names notificationChannels
+          list uptime gcloud monitoring uptime list-configs --project "$GCP_PROJECT" --format='value(displayName)'
+          # Recorded only: Google Cloud cannot delete KMS key rings or keys. The shared
+          # <project>-aw-tfstate bucket holds state for every prefix and is never a leftover.
+          gcloud kms keyrings list --project "$GCP_PROJECT" --location "$GCP_REGION" --format='value(name)' \
+            > "$EVIDENCE_DIR/kms-keyrings-recorded.txt" 2>&1 || echo "kms listing failed" >> "$EVIDENCE_DIR/kms-keyrings-recorded.txt"
+          sed -i "\#${GCP_PROJECT}-aw-tfstate#d" "$left"
+          if [ -s "$left" ]; then
+            echo "::error::resources of $PREFIX are left after destroy"; cat "$left"; exit 1
+          fi
+
+      - name: Record the stack outputs and the commit
+        if: always()
+        run: |
+          git rev-parse HEAD > "$EVIDENCE_DIR/commit-sha.txt"
+          if [ -n "${TF_MODULE:-}" ] && [ -d "$TF_MODULE/.terraform" ]; then
+            # Named, non-secret outputs only: `output -json` would print the sensitive ones.
+            for name in web_url gateway_url runner_manager_url artifact_repository image_registry objects_bucket state_bucket cloud_sql_connection_name runtime_service_account network oidc_client_secret_id dashboard_id; do
+              printf '%s=%s\n' "$name" "$(terraform -chdir="$TF_MODULE" output -raw "$name" 2>/dev/null || true)"
+            done > "$EVIDENCE_DIR/terraform-outputs.txt"
+          fi
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gcp-cloudrun-preview-${{ github.run_id }}
+          path: dist/gcp-cloudrun-preview/
+          if-no-files-found: warn
+          retention-days: 30

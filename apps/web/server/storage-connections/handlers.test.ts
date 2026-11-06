@@ -8,6 +8,7 @@ import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { S3Client } from '@aws-sdk/client-s3';
 import { normalizeCdnUrl } from 'next/dist/server/server-utils';
@@ -48,7 +49,7 @@ import { installTestDomains } from '../application-context-fixtures';
 import { PROBE_TIMEOUT_MS } from '../models/probe';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 import { log } from '../telemetry/logger';
 import {
   createRepositoryStorageConnectionsStoreProvider,
@@ -208,7 +209,7 @@ describe('storage connections API', () => {
     const created = await post(body);
     const { id } = StorageConnectionResourceSchema.parse(await created.json());
     await post(body);
-    await post({ ...body, name: 'bad', url: `file://${outsideRoot}` });
+    await post({ ...body, name: 'bad', url: pathToFileURL(outsideRoot).href });
     expect(audits).toEqual([
       expect.objectContaining({
         workspaceId: WORKSPACE_A,
@@ -271,7 +272,7 @@ describe('storage connections API', () => {
     const outside = await post({
       ...body,
       name: 'local',
-      url: `file://${outsideRoot}`,
+      url: pathToFileURL(outsideRoot).href,
       credential: undefined,
     });
     expect(outside.status).toBe(422);
@@ -281,7 +282,7 @@ describe('storage connections API', () => {
     const inside = await post({
       ...body,
       name: 'local',
-      url: `file://${fileRoot}/shared`,
+      url: pathToFileURL(path.join(fileRoot, 'shared')).href,
       credential: undefined,
     });
     expect(inside.status).toBe(201);
@@ -491,7 +492,7 @@ async function connectFolder(name: string): Promise<string> {
   const dir = path.join(fileRoot, name);
   mkdirSync(dir);
   seedFolder(dir, ['reports/a.txt', 'reports/2026/b.txt', 'reports-old/c.txt', 'secret/d.txt']);
-  const response = await post({ name, url: `file://${dir}`, allowedPrefixes: ['reports'] });
+  const response = await post({ name, url: pathToFileURL(dir).href, allowedPrefixes: ['reports'] });
   expect(response.status).toBe(201);
   return StorageConnectionResourceSchema.parse(await response.json()).id;
 }
@@ -622,7 +623,11 @@ describe.each(['memory', 'postgres'] as const)(
       const refused = [
         [{ name: `taken-${kind}` }, 409, 'storage_connection_name_taken'],
         [{ url: 'gcs://acme-bucket/exports' }, 422, 'storage_connection_url_invalid'],
-        [{ url: `file://${fileRoot}/shared` }, 422, 'storage_connection_url_invalid'],
+        [
+          { url: pathToFileURL(path.join(fileRoot, 'shared')).href },
+          422,
+          'storage_connection_url_invalid',
+        ],
         [{ url: 's3://acme-data@host/x' }, 422, 'storage_connection_url_has_secret'],
         [{}, 400, 'invalid_storage_connection'],
       ] as const;
@@ -834,7 +839,7 @@ describe.each(['memory', 'postgres'] as const)(
       mkdirSync(dir);
       // Through the store the product opens, so the seed lands wherever that store reads.
       const objects = await openConnectionStore(
-        `file://${dir}`,
+        pathToFileURL(dir).href,
         { provider: 'file' },
         { writable: true, fileRoots: [fileRoot], egress: { production: false, allowHosts: [] } },
       );
@@ -845,7 +850,11 @@ describe.each(['memory', 'postgres'] as const)(
         'reports/a&b/amp.txt',
       ];
       for (const key of keys) await objects.write(key, new TextEncoder().encode(key), {});
-      const created = await post({ name, url: `file://${dir}`, allowedPrefixes: ['reports'] });
+      const created = await post({
+        name,
+        url: pathToFileURL(dir).href,
+        allowedPrefixes: ['reports'],
+      });
       expect(created.status).toBe(201);
       const { id } = StorageConnectionResourceSchema.parse(await created.json());
 
@@ -945,6 +954,27 @@ describe.each(['memory', 'postgres'] as const)(
         error: { code: 'storage_connection_endpoint_forbidden' },
       });
       expect(testedAudits()).toHaveLength(2);
+    });
+
+    // @story US-STO-12
+    it('[US-STO-12][api][sdk] a test names the allowed folders it found nothing in', async () => {
+      const name = `empty-${kind}`;
+      const dir = path.join(fileRoot, name);
+      mkdirSync(dir);
+      seedFolder(dir, ['reports/a.txt', 'deep/2026/b.txt']);
+      mkdirSync(path.join(dir, 'blank'));
+      const created = await post({
+        name,
+        url: pathToFileURL(dir).href,
+        allowedPrefixes: ['reports', 'missing', 'deep', 'blank', 'reports/a.txt/x'],
+      });
+      const { id } = StorageConnectionResourceSchema.parse(await created.json());
+      const tested = await reach('test', id);
+      expect(StorageConnectionTestOutcomeSchema.parse(await tested.json())).toEqual({
+        ok: true,
+        emptyFolders: ['missing', 'blank', 'reports/a.txt/x'],
+      });
+      expect(testedAudits()).toHaveLength(1);
     });
 
     // @story US-STO-12

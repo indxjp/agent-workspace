@@ -36,7 +36,7 @@ import {
 } from './keys';
 import { withSkillMetaColumn } from './meta-column';
 import type { MultipartReader } from './multipart';
-import { readBytes } from '@agent-workspace/core/storage/streams';
+import { readBytes } from '../storage/objects';
 import type { SkillObjects } from '../storage/store';
 import { skillSyncContext, syncSkillCatalogRow } from './pending-delete';
 import type { ApiResult } from '../http/result';

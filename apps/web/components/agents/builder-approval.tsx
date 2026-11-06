@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { z } from 'zod';
 
 import {
@@ -7,11 +7,23 @@ import {
   type BuilderToolInputs,
 } from '@indx-workspace/contracts/builder';
 import type { AgentEvent } from '@indx-workspace/sdk/events';
-import { diffBodies, uncoveredKeys, type DefinitionChange } from '@indx-workspace/sdk/portable';
+import {
+  diffBodies,
+  revealInvisible,
+  uncoveredKeys,
+  type DefinitionChange,
+} from '@indx-workspace/sdk/portable';
 
 import { browserClient } from '../../lib/browser-client';
 import { BTN, BTN_DEFAULT, CARD } from './agent-form';
+import { changeInWords } from './builder-approval-words';
 import { builderToolName } from './definition-from-run';
+
+/** Why a decision was not accepted: the server's sentence, and its code for a support request. */
+export interface DecisionProblem {
+  readonly message: string;
+  readonly code: string;
+}
 
 /** The tool calls the Builder pauses on (design §04); every card is built from the call's input. */
 type ApprovalCall =
@@ -68,12 +80,18 @@ type View =
       readonly kind: 'evals';
       readonly name: string;
       readonly version: number;
-      readonly cases: readonly string[];
+      readonly cases: readonly {
+        readonly name: string;
+        readonly input: string;
+        readonly expect: string;
+      }[];
     };
 
-/** Bidirectional and zero-width controls, which could reorder or hide the text around them. */
-const HIDDEN = /[\u00AD\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu;
-const plain = (text: string): string => text.replace(HIDDEN, '');
+/**
+ * Model-written text with every character that draws nothing or reorders the text around it shown
+ * as its code point, so it is seen and two strings that differ only by one never look equal.
+ */
+const plain = revealInvisible;
 
 const UNREADABLE: View = { kind: 'unreadable' };
 const CAP = `$${BUILDER_DEFAULT_LIMITS.trialBudgetUsd.toFixed(2)}`;
@@ -112,9 +130,15 @@ async function viewOf(call: ApprovalCall | null): Promise<View> {
     const { agentId, version } = call.input;
     const name = (await versionOf(agentId, version))?.definition.agent.name;
     if (name === undefined) return UNREADABLE;
-    return call.tool === 'trial_run'
-      ? { kind: 'trial', name, version, input: plain(call.input.input) }
-      : { kind: 'evals', name, version, cases: call.input.cases.map((item) => plain(item.name)) };
+    if (call.tool === 'trial_run') {
+      return { kind: 'trial', name: plain(name), version, input: plain(call.input.input) };
+    }
+    const cases = call.input.cases.map((item) => ({
+      name: plain(item.name),
+      input: plain(item.input),
+      expect: plain(JSON.stringify(item.expect)),
+    }));
+    return { kind: 'evals', name: plain(name), version, cases };
   } catch {
     // Fail closed: a card that cannot be built offers Reject only.
     return UNREADABLE;
@@ -154,6 +178,26 @@ function Detail({ label, children }: Readonly<{ label: string; children: ReactNo
   );
 }
 
+/** The changes exactly as the tool input has them: the path, the value before and after. */
+function ExactChanges({ changes }: Readonly<{ changes: readonly DefinitionChange[] }>) {
+  return (
+    <table className="mt-2 w-full text-left text-[12px]">
+      <tbody>
+        {changes.map((change, index) => (
+          <tr key={`${change.path}:${String(index)}`} className="align-top">
+            <td className="pr-3 [overflow-wrap:anywhere]">
+              <code>{plain(change.path)}</code>
+            </td>
+            <td className="[overflow-wrap:anywhere]">
+              {'before' in change ? show(change.before) : '(none)'} → {show(change.after)}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function Body({ view }: Readonly<{ view: View }>) {
   switch (view.kind) {
     case 'loading':
@@ -172,21 +216,25 @@ function Body({ view }: Readonly<{ view: View }>) {
           {view.changes.length === 0 ? (
             <p className="mt-2 text-muted">No changes in the listed sections.</p>
           ) : (
-            <table className="mt-2 w-full text-left">
-              <tbody>
-                {view.changes.map((change, index) => (
-                  <tr key={`${change.path}:${String(index)}`} className="align-top">
-                    <td className="pr-3">{change.section}</td>
-                    <td className="pr-3 [overflow-wrap:anywhere]">
-                      <code>{plain(change.path)}</code>
-                    </td>
-                    <td className="[overflow-wrap:anywhere]">
-                      {'before' in change ? show(change.before) : '(none)'} → {show(change.after)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <dl className="mt-2 grid grid-cols-[minmax(0,180px)_minmax(0,1fr)] gap-x-3 gap-y-1">
+                {view.changes.map((change, index) => {
+                  const { label, value } = changeInWords(change);
+                  return (
+                    <Fragment key={`${change.path}:${String(index)}`}>
+                      <dt className="text-muted [overflow-wrap:anywhere]">{label}</dt>
+                      <dd className="m-0 min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                        {value}
+                      </dd>
+                    </Fragment>
+                  );
+                })}
+              </dl>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-muted">Show the exact fields</summary>
+                <ExactChanges changes={view.changes} />
+              </details>
+            </>
           )}
           {view.also.length === 0 ? null : (
             <p className="mt-2">Also changes (not shown here): {view.also.join(', ')}</p>
@@ -216,8 +264,16 @@ function Body({ view }: Readonly<{ view: View }>) {
             <Detail label="Checks">{String(view.cases.length)}</Detail>
           </dl>
           <ul className="mt-1 list-disc pl-5">
-            {view.cases.map((name, index) => (
-              <li key={`${String(index)}:${name}`}>{name}</li>
+            {view.cases.map(({ name, input, expect }, index) => (
+              <li key={`${String(index)}:${name}`} className="[overflow-wrap:anywhere]">
+                {name}
+                <br />
+                <span className="text-muted">Input: </span>
+                <span className="whitespace-pre-wrap">{input}</span>
+                <br />
+                <span className="text-muted">Expect: </span>
+                {expect}
+              </li>
             ))}
           </ul>
           <p className="mt-2">{EVALS_CAP}</p>
@@ -229,15 +285,15 @@ function Body({ view }: Readonly<{ view: View }>) {
 /**
  * What the person is asked to allow when the Builder pauses on `draft_save`, `trial_run` or
  * `evals_run`. It is built from the tool input (design §08 Agent basics rule 10); every
- * model-written string is a text child, never HTML or markdown. `onDecide` answers the problem code
- * when the server refuses the decision, or `null`.
+ * model-written string is a text child, never HTML or markdown. `onDecide` answers why the server
+ * refused the decision, or `null`.
  */
 export function BuilderApproval({
   events,
   onDecide,
 }: Readonly<{
   events: readonly AgentEvent[];
-  onDecide: (decision: 'approve' | 'reject') => Promise<string | null>;
+  onDecide: (decision: 'approve' | 'reject') => Promise<DecisionProblem | null>;
 }>) {
   // The call the run is paused on: the latest `agent.approval.requested`, read from its tool input
   // and never from assistant text. Keyed on that event so later events do not rebuild the card.
@@ -251,7 +307,7 @@ export function BuilderApproval({
   );
   const [view, setView] = useState<View>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<DecisionProblem | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -280,7 +336,10 @@ export function BuilderApproval({
       <Body view={view} />
       {problem === null ? null : (
         <p role="alert" className="mt-2">
-          The decision was not accepted: <code>{problem}</code>
+          The decision was not accepted. {problem.message}{' '}
+          <span className="text-muted">
+            Code: <code>{problem.code}</code>
+          </span>
         </p>
       )}
       <div className="mt-3 flex gap-2">

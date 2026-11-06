@@ -56,6 +56,7 @@ const SETTLED = {
     toolCalls: 2,
   },
   cost: { amount: '0.012500', currency: 'USD', priceTableVersion: 'v1' },
+  spendCeilingUsd: null,
   output: null,
   accountingState: 'complete',
 };

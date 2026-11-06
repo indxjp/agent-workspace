@@ -443,3 +443,65 @@
   background: var(--accent);
   color: var(--accent-foreground);
 }
+
+.aw-approval {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-approval-heading {
+  margin: 0;
+  font-weight: 600;
+  /* A tool name can be one long word (`mcp__server__tool`); it wraps instead of widening the card. */
+  overflow-wrap: anywhere;
+}
+
+.aw-approval-call {
+  margin: 0;
+  max-height: 12rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.aw-approval-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.aw-approval-comment {
+  padding: 6px 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.aw-approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.aw-approval-button {
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.aw-approval-approve {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.aw-approval-problem {
+  margin: 0;
+  font-size: 12px;
+}

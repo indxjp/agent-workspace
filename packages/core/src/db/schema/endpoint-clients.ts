@@ -1,7 +1,8 @@
 /**
  * `endpoint_clients` — what an external agent platform may reach
  * (ADR-0134). A client names exactly one resource: an MCP project tool endpoint, one agent's
- * A2A endpoint, or the Builder's MCP door (`builder`, no agent). Credentials are bound to a client (`endpoint_client_api_keys`), never
+ * A2A endpoint, the Builder's MCP door (`builder`, no agent), or an app's backend acting as the
+ * person signed in to it (`app-backend`, ADR-0161). Credentials are bound to a client (`endpoint_client_api_keys`), never
  * free-floating, so revoking the client revokes everything that could reach the resource.
  *
  * `acts_for_principal_id` is the membership principal that created the client. A credential bound
@@ -56,6 +57,11 @@ export const endpointClients = pgTable(
       withTimezone: true,
       mode: 'date',
     }),
+    /**
+     * `app-backend` only (ADR-0161 D4): the app's OIDC `client_id` at the deployment's issuer, which
+     * is the `aud` of the ID tokens the client may exchange. NULL for every other kind.
+     */
+    oidcAudience: text('oidc_audience'),
     revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -83,6 +89,10 @@ export const endpointClients = pgTable(
       sql`${table.toolNames} is null or ${table.kind} = 'mcp-project'`,
     ),
     check('endpoint_clients_redirect_uris_max', sql`cardinality(${table.redirectUris}) <= 10`),
+    check(
+      'endpoint_clients_oidc_audience_app_backend',
+      sql`(${table.kind} = 'app-backend') = (${table.oidcAudience} is not null)`,
+    ),
     check(
       'endpoint_clients_revoked_after_created',
       sql`${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt}`,

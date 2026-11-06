@@ -6,17 +6,20 @@ import {
   PROVIDER_CHOICES,
   agentsReferencing,
   confirmationMatches,
+  connectionDetail,
   connectionStatus,
   createConnectionPayload,
   editableConfigFields,
   formatApiError,
   isEditFormValid,
+  isProviderFormComplete,
   providerLabel,
   readAgentSummaries,
   readModelConnections,
   requiredConfigFields,
   updateConnectionPayload,
   type EditFormValues,
+  type ModelConnectionView,
 } from './model';
 
 describe('PROVIDER_CHOICES', () => {
@@ -33,6 +36,7 @@ describe('PROVIDER_CHOICES', () => {
       'azure-openai',
       'openai',
       'openai-compatible',
+      'vertex',
     ]);
   });
 
@@ -56,21 +60,23 @@ describe('PROVIDER_CHOICES', () => {
 
 describe('connectionStatus', () => {
   it('reports a missing credential before it reports incomplete configuration', () => {
-    expect(connectionStatus({ hasCredential: false, ready: false })).toEqual({
-      text: 'Credential missing',
-      tone: 'danger',
-    });
+    expect(connectionStatus({ provider: 'anthropic', hasCredential: false, ready: false })).toEqual(
+      {
+        text: 'Credential missing',
+        tone: 'danger',
+      },
+    );
   });
 
   it('reports incomplete configuration when the credential exists but readiness does not', () => {
-    expect(connectionStatus({ hasCredential: true, ready: false })).toEqual({
+    expect(connectionStatus({ provider: 'anthropic', hasCredential: true, ready: false })).toEqual({
       text: 'Configuration incomplete',
       tone: 'warn',
     });
   });
 
   it('reports ready only when the server says both are true', () => {
-    expect(connectionStatus({ hasCredential: true, ready: true })).toEqual({
+    expect(connectionStatus({ provider: 'anthropic', hasCredential: true, ready: true })).toEqual({
       text: 'Ready',
       tone: 'ok',
     });
@@ -103,7 +109,14 @@ describe('requiredConfigFields / editableConfigFields — the field set §126 va
   });
 });
 
-const EMPTY: EditFormValues = { name: 'Prod Claude', baseUrl: '', deployment: '', apiVersion: '' };
+const EMPTY: EditFormValues = {
+  name: 'Prod Claude',
+  baseUrl: '',
+  deployment: '',
+  apiVersion: '',
+  projectId: '',
+  location: 'global',
+};
 
 describe('isEditFormValid', () => {
   it('rejects a blank name regardless of provider', () => {
@@ -135,6 +148,8 @@ describe('createConnectionPayload', () => {
     baseUrl: ' https://x ',
     deployment: ' d ',
     apiVersion: ' v ',
+    projectId: ' my-project-1 ',
+    location: 'eu',
   } as const;
 
   it('drops the fields typed before a provider switch that the provider does not accept', () => {
@@ -156,6 +171,65 @@ describe('createConnectionPayload', () => {
   });
 });
 
+describe('Claude on Google Cloud (vertex)', () => {
+  const typed = {
+    name: ' Cloud ',
+    provider: 'vertex',
+    apiKey: 'left-over-key',
+    baseUrl: 'https://x',
+    deployment: '',
+    apiVersion: '',
+    projectId: ' my-project-1 ',
+    location: 'eu',
+  } as const;
+
+  it('is offered as a provider choice', () => {
+    expect(providerLabel('vertex')).toBe('Claude on Google Cloud (Vertex AI)');
+  });
+
+  it('sends no apiKey and only project and location', () => {
+    const payload = createConnectionPayload(typed);
+    expect(payload).toEqual({
+      name: 'Cloud',
+      provider: 'vertex',
+      config: { projectId: 'my-project-1', location: 'eu' },
+    });
+    expect('apiKey' in payload).toBe(false);
+  });
+
+  it('can be saved with a name alone: no key, and the server fills in the project', () => {
+    expect(isProviderFormComplete({ ...typed, apiKey: '', projectId: '' })).toBe(true);
+    expect(isProviderFormComplete({ ...typed, name: ' ', apiKey: '' })).toBe(false);
+  });
+
+  it('reads project and location back and never calls a keyless connection credential-missing', () => {
+    const [parsed] = readModelConnections({
+      models: [
+        {
+          id: 'a',
+          name: 'Cloud',
+          provider: 'vertex',
+          config: { projectId: 'my-project-1', location: 'us', extra: 1 },
+          hasCredential: false,
+          ready: true,
+        },
+      ],
+    });
+    expect(parsed?.config).toEqual({ projectId: 'my-project-1', location: 'us' });
+    expect(connectionStatus({ provider: 'vertex', hasCredential: false, ready: true })).toEqual({
+      text: 'Ready',
+      tone: 'ok',
+    });
+    expect(connectionStatus({ provider: 'vertex', hasCredential: false, ready: false })).toEqual({
+      text: 'Configuration incomplete',
+      tone: 'warn',
+    });
+    expect(connectionDetail(parsed as ModelConnectionView)).toBe(
+      'Claude on Google Cloud (Vertex AI) · project my-project-1 · us',
+    );
+  });
+});
+
 describe('updateConnectionPayload', () => {
   it('omits config fields the provider does not allow and blank ones it does', () => {
     expect(updateConnectionPayload(EMPTY, 'anthropic')).toEqual({
@@ -172,6 +246,8 @@ describe('updateConnectionPayload', () => {
           baseUrl: ' https://x ',
           deployment: ' d ',
           apiVersion: ' 2024-01-01 ',
+          projectId: '',
+          location: 'global',
         },
         'azure-openai',
       ),

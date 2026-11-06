@@ -386,6 +386,23 @@ describe.skipIf(!hasDatabase)(
       );
       if (storageNamed.kind !== 'created') throw new Error('fixture connector was not created');
       await expect(store.resolveIdentityKey(storageNamed.server.id)).resolves.toBeNull();
+
+      // A webhook's signing secret is platform-owned too: a connector identity never reads it.
+      const signing = await secretsService.create(scope, {
+        name: 'WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET',
+        value: Buffer.from('whsec_c2lnbmluZw==', 'utf8'),
+      });
+      expect(signing.kind).toBe('created');
+      const webhookNamed = await store.create(
+        {
+          ...input,
+          name: 'identity-webhook',
+          identity: { secret: 'WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET' },
+        },
+        owner,
+      );
+      if (webhookNamed.kind !== 'created') throw new Error('fixture connector was not created');
+      await expect(store.resolveIdentityKey(webhookNamed.server.id)).resolves.toBeNull();
       await expect(store.get(optedIn.server.id)).resolves.toMatchObject({
         identity: { secret: 'IDENTITY_SIGNING_KEY' },
       });

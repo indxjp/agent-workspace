@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { AgentRef, RunApiEnvironment, RunPrincipal, SessionRef } from './environment';
 import { InMemoryRunStore } from './memory-store';
+import { parseStartRunBody } from './api';
 import { startRunOnSession } from './service';
 import { SessionBusyError } from './store';
 
@@ -110,11 +111,12 @@ describe('startRunOnSession: a failed run insert', () => {
 
 describe('startRunOnSession: the lower-only limits override', () => {
   function launching() {
-    const { env, sessions } = harness();
+    const { env, sessions, store } = harness();
     const launched: unknown[] = [];
     return {
       env: { ...env, launch: (context: unknown) => void launched.push(context) },
       sessions,
+      store,
       launched,
     };
   }
@@ -125,6 +127,21 @@ describe('startRunOnSession: the lower-only limits override', () => {
     await startRunOnSession(env, PRINCIPAL, AGENT, START);
     expect(launched[0]).toMatchObject({ limits: { maxBudgetUsd: 0.3 } });
     expect(launched[1]).not.toHaveProperty('limits');
+  });
+
+  it('stores the override on the run row, so a run built from the row alone can keep it (#1963, SPD-01)', async () => {
+    const { env, store } = launching();
+    const capped = await startRunOnSession(env, PRINCIPAL, AGENT, {
+      ...START,
+      limits: { maxBudgetUsd: 0.3, maxTurns: 4 },
+    });
+    const uncapped = await startRunOnSession(env, PRINCIPAL, AGENT, START);
+    if (capped.kind !== 'started' || uncapped.kind !== 'started') throw new Error('start refused');
+    expect((await store.get(capped.run.id))?.limitsOverride).toEqual({
+      maxBudgetUsd: 0.3,
+      maxTurns: 4,
+    });
+    expect((await store.get(uncapped.run.id))?.limitsOverride).toBeNull();
   });
 
   it.each([
@@ -143,6 +160,78 @@ describe('startRunOnSession: the lower-only limits override', () => {
     ).resolves.toMatchObject({ kind: 'refused', status: 422, code: 'invalid_run_limits' });
     expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
     expect(launched).toEqual([]);
+  });
+});
+
+describe('startRunOnSession: the spend ceiling (ADR-0162)', () => {
+  function withLimit(limit: number | null) {
+    const { env, sessions, store } = harness();
+    const asked: (string | null)[] = [];
+    const spendLimitFor: NonNullable<RunApiEnvironment['spendLimitFor']> = (
+      _principal,
+      _agent,
+      sessionId,
+    ) => {
+      asked.push(sessionId);
+      return Promise.resolve(limit);
+    };
+    return { env: { ...env, spendLimitFor }, sessions, store, asked };
+  }
+
+  it('refuses 403 policy_cannot_widen at spendCeilingUsd above the agent limit, before a session opens', async () => {
+    const { env, sessions, store } = withLimit(1);
+    const create = vi.spyOn(store, 'create');
+    await expect(
+      startRunOnSession(env, PRINCIPAL, AGENT, { ...START, spendCeilingUsd: 1.5 }),
+    ).resolves.toMatchObject({
+      kind: 'refused',
+      status: 403,
+      code: 'policy_cannot_widen',
+      details: ['spendCeilingUsd'],
+    });
+    expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('stores a lower spendCeilingUsd on the run', async () => {
+    const started = await startRunOnSession(withLimit(1).env, PRINCIPAL, AGENT, {
+      ...START,
+      spendCeilingUsd: 0.25,
+    });
+    expect(started).toMatchObject({ kind: 'started', run: { spendCeilingUsd: '0.250000' } });
+  });
+
+  it("stores the agent's limit when the start names none, asked with the follow-up's session", async () => {
+    const { env, asked } = withLimit(2);
+    const started = await startRunOnSession(env, PRINCIPAL, AGENT, {
+      ...START,
+      sessionId: EXISTING_SESSION,
+    });
+    expect(started).toMatchObject({ kind: 'started', run: { spendCeilingUsd: '2.000000' } });
+    expect(asked).toEqual([EXISTING_SESSION]);
+  });
+
+  it('lets a trusted override lower it further, and stores none when nothing sets one', async () => {
+    const lowered = await startRunOnSession(withLimit(2).env, PRINCIPAL, AGENT, {
+      ...START,
+      spendCeilingUsd: 1,
+      limits: { maxBudgetUsd: 0.5 },
+    });
+    expect(lowered).toMatchObject({ kind: 'started', run: { spendCeilingUsd: '0.500000' } });
+    const none = await startRunOnSession(withLimit(null).env, PRINCIPAL, AGENT, START);
+    expect(none).toMatchObject({ kind: 'started', run: { spendCeilingUsd: null } });
+  });
+
+  it('reads spendCeilingUsd from the body and refuses a malformed one', () => {
+    expect(parseStartRunBody({ prompt: 'hi', spendCeilingUsd: 0.5 })).toMatchObject({
+      kind: 'ok',
+      body: { spendCeilingUsd: 0.5 },
+    });
+    for (const spendCeilingUsd of [0, -1, '1', 0.0000001]) {
+      expect(parseStartRunBody({ prompt: 'hi', spendCeilingUsd })).toMatchObject({
+        kind: 'rejected',
+      });
+    }
   });
 });
 
@@ -210,7 +299,7 @@ describe('startRunOnSession: the daily cost cap (#1851 slice 3)', () => {
       kind: 'refused',
       status: 429,
       code: 'daily_cost_cap_reached',
-      details: ['capUsd: 5', 'spentUsd: 5', 'resetsAt: 2026-10-27T00:00:00.000Z'],
+      details: ['capUsd: 5', 'resetsAt: 2026-10-27T00:00:00.000Z'],
     });
     expect(create).not.toHaveBeenCalled();
     expect([...sessions.keys()]).toEqual([EXISTING_SESSION]);
@@ -270,12 +359,7 @@ describe('startRunOnSession: the daily cost cap (#1851 slice 3)', () => {
       kind: 'refused',
       status: 429,
       code: 'daily_cost_cap_reached',
-      details: [
-        'capUsd: 5',
-        'spentUsd: 0',
-        'resetsAt: 2026-10-27T00:00:00.000Z',
-        'unpricedUsage: true',
-      ],
+      details: ['capUsd: 5', 'resetsAt: 2026-10-27T00:00:00.000Z', 'unpricedUsage: true'],
     });
   });
 
@@ -293,5 +377,73 @@ describe('startRunOnSession: the daily cost cap (#1851 slice 3)', () => {
     };
     await startRunOnSession(capped, PRINCIPAL, AGENT, START);
     expect(asked).toEqual([WORKSPACE]);
+  });
+});
+
+describe('startRunOnSession: a child run of a team lead (ADR-0104 acceptance, #1517)', () => {
+  const LEAD = '88888888-8888-4888-8888-888888888888';
+  const TEAM_VERSION = '99999999-9999-4999-8999-999999999999';
+
+  it('writes parent_run_id and the team version on insert, and they are read back', async () => {
+    const { env, store } = harness();
+    const lead = await startRunOnSession(env, PRINCIPAL, AGENT, {
+      ...START,
+      agentTeamVersionId: TEAM_VERSION,
+    });
+    if (lead.kind !== 'started') throw new Error(lead.code);
+    expect((await store.get(lead.run.id))?.agentTeamVersionId).toBe(TEAM_VERSION);
+    expect(await store.markRunning(lead.run.id)).toBe(true);
+    const child = await startRunOnSession(env, PRINCIPAL, AGENT, {
+      ...START,
+      parent: { runId: lead.run.id, maxChildren: 16 },
+    });
+    if (child.kind !== 'started') throw new Error(child.code);
+    expect((await store.get(child.run.id))?.parentRunId).toBe(lead.run.id);
+    expect((await store.get(child.run.id))?.agentTeamVersionId).toBeNull();
+    expect((await store.get(lead.run.id))?.parentRunId).toBeNull();
+  });
+
+  /** A root run that is `running`, as a lead whose member calls start children is. */
+  async function runningLead(env: RunApiEnvironment, store: InMemoryRunStore): Promise<string> {
+    const lead = await startRunOnSession(env, PRINCIPAL, AGENT, START);
+    if (lead.kind !== 'started') throw new Error(lead.code);
+    expect(await store.markRunning(lead.run.id)).toBe(true);
+    return lead.run.id;
+  }
+
+  it('refuses a child of a lead that is no longer running with parent_run_stopped', async () => {
+    const { env, store, sessions } = harness();
+    const leadId = await runningLead(env, store);
+    await store.finish(leadId, 'cancelled', null);
+    const before = sessions.size;
+    await expect(
+      startRunOnSession(env, PRINCIPAL, AGENT, {
+        ...START,
+        parent: { runId: leadId, maxChildren: 16 },
+      }),
+    ).resolves.toMatchObject({ kind: 'refused', status: 409, code: 'parent_run_stopped' });
+    expect(sessions.size).toBe(before);
+    await expect(store.listChildren(WORKSPACE, leadId, 16)).resolves.toEqual([]);
+  });
+
+  it('refuses the start over the fan-out limit with team_member_limit, leaving no session', async () => {
+    const { env, store, sessions } = harness();
+    const parent = { runId: await runningLead(env, store), maxChildren: 1 };
+    const first = await startRunOnSession(env, PRINCIPAL, AGENT, { ...START, parent });
+    expect(first.kind).toBe('started');
+    const before = sessions.size;
+    await expect(
+      startRunOnSession(env, PRINCIPAL, AGENT, { ...START, parent }),
+    ).resolves.toMatchObject({ kind: 'refused', code: 'team_member_limit' });
+    expect(sessions.size).toBe(before);
+  });
+
+  it('is refused from a request body: parseStartRunBody rejects every tree field', () => {
+    for (const field of ['parent', 'parentRunId', 'agentTeamVersionId']) {
+      expect(parseStartRunBody({ prompt: 'hi', [field]: LEAD })).toEqual({
+        kind: 'rejected',
+        reason: `unknown field ${JSON.stringify(field)} in the request body`,
+      });
+    }
   });
 });

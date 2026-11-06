@@ -4,7 +4,13 @@ import { IsoDateTimeSchema } from './identifiers.js';
 import { MODEL_PROVIDERS, type ModelProvider } from './runs.js';
 
 /** The non-credential settings a model connection can carry; which ones apply is per provider. */
-export const MODEL_CONNECTION_CONFIG_FIELDS = ['baseUrl', 'deployment', 'apiVersion'] as const;
+export const MODEL_CONNECTION_CONFIG_FIELDS = [
+  'baseUrl',
+  'deployment',
+  'apiVersion',
+  'projectId',
+  'location',
+] as const;
 export type ModelConnectionConfigField = (typeof MODEL_CONNECTION_CONFIG_FIELDS)[number];
 
 export interface ModelProviderConfigRule {
@@ -12,25 +18,63 @@ export interface ModelProviderConfigRule {
   readonly allowed: readonly ModelConnectionConfigField[];
   /** The subset that must be present for the connection to be `ready` (with a credential). */
   readonly required: readonly ModelConnectionConfigField[];
+  /**
+   * How the connection authenticates: `api-key` stores a write-only credential; `workload-identity`
+   * stores none and the gateway uses the identity it runs as.
+   */
+  readonly credential: 'api-key' | 'workload-identity';
 }
+
+/** The Vertex AI locations a `vertex` connection (and `gcp.modelLocation`) can name; absent means `global`. */
+export const VERTEX_LOCATIONS = ['global', 'us', 'eu'] as const;
+export type VertexLocation = (typeof VERTEX_LOCATIONS)[number];
+
+/**
+ * The Claude models served on Vertex AI, newest first. The single source for the gateway's static
+ * model list, the CLI preflight probe and web setup's seeded model.
+ */
+export const VERTEX_CLAUDE_MODELS = [
+  { id: 'claude-opus-5-5', displayName: 'Claude Opus 5.5' },
+  { id: 'claude-sonnet-5-5', displayName: 'Claude Sonnet 5.5' },
+  { id: 'claude-haiku-5-5', displayName: 'Claude Haiku 5.5' },
+  { id: 'claude-fable-5-1', displayName: 'Claude Fable 5.1' },
+] as const;
+
+/** The model a freshly set-up `vertex` connection is seeded with. */
+export const VERTEX_DEFAULT_MODEL = 'claude-sonnet-5-5';
+
+/** A Google Cloud project id: 6 to 30 characters, lowercase letters, digits and hyphens. */
+export const GCP_PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u;
 
 /**
  * Per-provider config rules, exactly as `POST`/`PATCH /api/model-connections` enforce them:
  * `anthropic`, `anthropic-compatible` and `openai` take an optional `baseUrl`;
  * `openai-compatible` requires one; `azure-openai` requires `baseUrl`, `apiVersion` and
- * `deployment`. A `baseUrl` must be an absolute URL the workspace's egress policy allows.
+ * `deployment`; `vertex` is keyless (`workload-identity`) and requires `projectId`, with an
+ * optional `location`. A `baseUrl` must be an absolute URL the workspace's egress policy allows.
  */
 export const MODEL_PROVIDER_CONFIG_RULES: Readonly<Record<ModelProvider, ModelProviderConfigRule>> =
   {
-    anthropic: { allowed: ['baseUrl'], required: [] },
-    'anthropic-compatible': { allowed: ['baseUrl'], required: [] },
-    openai: { allowed: ['baseUrl'], required: [] },
-    'openai-compatible': { allowed: ['baseUrl'], required: ['baseUrl'] },
+    anthropic: { allowed: ['baseUrl'], required: [], credential: 'api-key' },
+    'anthropic-compatible': { allowed: ['baseUrl'], required: [], credential: 'api-key' },
+    openai: { allowed: ['baseUrl'], required: [], credential: 'api-key' },
+    'openai-compatible': { allowed: ['baseUrl'], required: ['baseUrl'], credential: 'api-key' },
     'azure-openai': {
       allowed: ['baseUrl', 'apiVersion', 'deployment'],
       required: ['baseUrl', 'apiVersion', 'deployment'],
+      credential: 'api-key',
+    },
+    vertex: {
+      allowed: ['projectId', 'location'],
+      required: ['projectId'],
+      credential: 'workload-identity',
     },
   };
+
+/** True when the provider stores no credential and authenticates with the workload identity. */
+export function isKeylessProvider(provider: ModelProvider): boolean {
+  return MODEL_PROVIDER_CONFIG_RULES[provider].credential === 'workload-identity';
+}
 
 /**
  * The reserved model-id prefix of a scripted model: a test tool that replays a file of turns
@@ -82,6 +126,8 @@ export const ModelConnectionConfigSchema = z
     baseUrl: z.url().optional(),
     deployment: z.string().min(1).optional(),
     apiVersion: z.string().min(1).optional(),
+    projectId: z.string().regex(GCP_PROJECT_ID_PATTERN).optional(),
+    location: z.enum(VERTEX_LOCATIONS).optional(),
   })
   .strict()
   .readonly();
@@ -94,8 +140,9 @@ export type ModelConnectionConfig = z.infer<typeof ModelConnectionConfigSchema>;
  * a bare item, not wrapped.
  *
  * The credential is write-only and has no field here. `hasCredential` says whether one is
- * stored; `ready` is derived on every read as `hasCredential` plus every config field the
- * provider requires ({@link MODEL_PROVIDER_CONFIG_RULES}) being present.
+ * stored; `ready` is derived on every read as every config field the provider requires
+ * ({@link MODEL_PROVIDER_CONFIG_RULES}) being present AND (`hasCredential` OR the provider's rule
+ * has `credential: 'workload-identity'`).
  */
 export const ModelConnectionResourceSchema = z
   .object({
@@ -264,17 +311,22 @@ export interface ModelConnectionConfigInput {
   readonly baseUrl?: string;
   readonly deployment?: string;
   readonly apiVersion?: string;
+  /** `vertex` only: the Google Cloud project id. */
+  readonly projectId?: string;
+  /** `vertex` only: a {@link VertexLocation}; absent means `global`. */
+  readonly location?: VertexLocation;
 }
 
 /**
  * The body of `POST /api/model-connections`. `apiKey` is the provider credential, written once
  * here and afterwards only through {@link RotateModelConnectionCredentialInput}; it never comes
- * back. `config` may be omitted for a provider that requires nothing.
+ * back. It is required for an `api-key` provider and refused for a `workload-identity` one
+ * (`vertex`). `config` may be omitted for a provider that requires nothing.
  */
 export interface CreateModelConnectionInput {
   readonly name: string;
   readonly provider: ModelProvider;
-  readonly apiKey: string;
+  readonly apiKey?: string;
   readonly config?: ModelConnectionConfigInput;
 }
 

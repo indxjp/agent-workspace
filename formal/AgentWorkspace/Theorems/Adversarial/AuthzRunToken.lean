@@ -181,7 +181,7 @@ every request naming another session `s′ ≠ s`: reading one of its runs or th
 whose body names it, and a rating of one of its runs. Whatever the route, the scope grammar or the
 session match refuses it, and both with the same code. -/
 @[aw_spec (tier := T3) (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")
   (doc := "docs/formal/domains/visitor-sessions.md#the-visitor-token")]
 theorem visitor_token_reaches_only_its_session (s : SessionId) (req : Request)
     (h : req.sessionId ≠ some s.val) :
@@ -196,7 +196,7 @@ events), running an agent, rating a run (`feedback`), minting a presigned downlo
 (`download-urls`; the file path under `.attachments/<s>/` is the session it names, issue #251),
 or handing one file to its own session (`attachments` on `sessions`, issue #1308), and in each
 case for session `s`. `upload-urls` is not in the grammar (issue #1574). -/
-@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR")
+@[aw_spec (tier := T3) (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")
   (ts := "apps/web/server/runs/api.ts#requireSessionScopeMatch")
   (doc := "docs/formal/domains/visitor-sessions.md#the-visitor-token")]
 theorem visitor_token_proceeds_only_inside_its_grammar (s : SessionId) (req : Request)

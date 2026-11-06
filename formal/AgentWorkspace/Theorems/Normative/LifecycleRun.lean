@@ -76,7 +76,7 @@ theorem interrupt_refuses_terminal :
 /-- Normal terminal finish does not revoke browser-token rows; they are a separate table. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem finish_leaves_browser_token_row :
     (runAction ({} : RunState) (.finish .completed 1)).browserTokenRevoked = false := by
   decide +kernel
@@ -95,7 +95,7 @@ theorem preparation_failure_path :
 /-- Accounting failure can be superseded by a later priced usage settlement. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem later_settlement_supersedes_failure :
     (recordAccounting (failAccounting {}) true true).state = .complete := by
   decide +kernel
@@ -103,7 +103,7 @@ theorem later_settlement_supersedes_failure :
 /-- A settlement failure changes only pending accounting. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#markAccountingFailed")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#markAccountingFailed")]
 theorem accounting_failure_only_from_pending :
     (failAccounting ({} : RunAccounting)).state = .failed ∧
     (failAccounting (recordAccounting {} true true)).state = .complete := by
@@ -112,7 +112,7 @@ theorem accounting_failure_only_from_pending :
 /-- A late price changes an existing unpriced response into complete accounting. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem late_pricing_recomputes_accounting :
     let first := recordAccounting {} false true
     first.state = .unavailable ∧
@@ -123,7 +123,7 @@ theorem late_pricing_recomputes_accounting :
 /-- A ledger with one priced and one unpriced response is partial in either arrival order. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem mixed_ledger_is_partial_in_both_orders :
     let pricedFirst := recordAccounting (recordAccounting {} true true) false true
     let unpricedFirst := recordAccounting (recordAccounting {} false true) true true
@@ -134,7 +134,7 @@ theorem mixed_ledger_is_partial_in_both_orders :
 /-- Only two different priced catalogue versions refuse settlement. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem price_version_conflict_requires_two_prices :
     priceVersionConflict (some "v1") (some "v2") ∧
     !priceVersionConflict (some "v1") (some "v1") ∧
@@ -145,7 +145,7 @@ theorem price_version_conflict_requires_two_prices :
 /-- A terminal run can still have pending accounting, then settle without reopening the run. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem terminal_run_can_settle_later :
     let finished : AccountedRun :=
       { lifecycle := runAction {} (.finish .completed 2), accounting := {} }

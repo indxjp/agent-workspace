@@ -1,9 +1,19 @@
 output "web_url" {
-  value = google_cloud_run_v2_service.web.uri
+  value = var.domain == "" ? google_cloud_run_v2_service.web.uri : "https://${var.domain}"
+}
+
+# The address to point the domain's A record at; empty without a domain.
+output "load_balancer_ip" {
+  value = var.domain == "" ? "" : google_compute_global_address.lb[0].address
 }
 
 output "gateway_url" {
   value = google_cloud_run_v2_service.gateway.uri
+}
+
+# The address sandboxes (and web) reach the gateway at: its internal load balancer.
+output "gateway_internal_url" {
+  value = local.gateway_internal_url
 }
 
 output "runner_manager_url" {
@@ -43,4 +53,24 @@ output "bootstrap_admin_password" {
 output "runner_manager_token" {
   value     = random_password.runner_manager_token.result
   sensitive = true
+}
+
+output "network" {
+  description = "The VPC network the services and Cloud SQL use (created or adopted)."
+  value       = local.network_id
+}
+
+output "oidc_client_secret_id" {
+  description = "The Secret Manager secret that holds the single sign-on client secret, or empty when single sign-on is off."
+  value       = var.oidc_issuer == "" ? "" : google_secret_manager_secret.oidc_client_secret[0].secret_id
+}
+
+# The Cloud Monitoring dashboard id (always created).
+output "dashboard_id" {
+  value = google_monitoring_dashboard.main.id
+}
+
+# Whether alert policies, the notification channel and the uptime check exist.
+output "alerts_enabled" {
+  value = var.alerts_email != ""
 }

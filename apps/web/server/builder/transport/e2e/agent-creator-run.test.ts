@@ -36,9 +36,9 @@ const RESERVED = 'Refund desk';
 const ALLOW = { builder: { allow: [CREATOR] } } as const;
 /** Lists a second agent, so that agent-made run of it is refused for being agent-made and not for being unlisted. */
 const ALLOW_RESERVED = { builder: { allow: [CREATOR, RESERVED] } } as const;
-/** Midday of a fixed UTC day: the quota's day cannot roll over while a test runs. */
 /** Lists the specialist, which is the only way its own run could have `aw-control`. */
 const LISTS_SPECIALIST = { builder: { allow: [CREATOR, SPECIALIST] } } as const;
+/** Midday of a fixed UTC day: the quota's day cannot roll over while a test runs. */
 const NOON = new Date('2026-03-04T12:00:00Z');
 const PERSON = callContextOf(WORKSPACE, 'builder', 'principal-builder', 'user-builder');
 
@@ -72,7 +72,7 @@ const freshDoor = (ceiling: { builder: { allow: readonly string[] } } | null = A
     override: { clock: () => NOON },
   });
 
-/** Every pointer move of every agent in the workspace, which a refused save must leave as it was. */
+/** Every pointer move of the agents named, which a refused save must leave as it was. */
 async function pointerMoves(door: Door, agentIds: readonly string[]) {
   const store = await door.versions.forWorkspace(WORKSPACE);
   if (store === null) throw new Error('the workspace has no version store');
@@ -155,6 +155,28 @@ describe('[US-BLD-07][api][run] an allow-listed agent builds a narrower speciali
     expect(
       awControlServerFor(specialist, LISTS_SPECIALIST, 'http://gateway.invalid', run.token),
     ).toEqual({});
+  });
+
+  it('[US-BLD-07][api][run] refuses the specialist its own run at the door, whether or not it is listed', async () => {
+    for (const ceiling of [ALLOW, LISTS_SPECIALIST]) {
+      const door = freshDoor(ceiling);
+      const creatorId = await door.seedAgent(creatorBody());
+      const input = { body: draftBody(SPECIALIST, ['crm']) };
+      const run = await approvedSaveRun(door, creatorId, input);
+      const saved = await door.call(run.token, 'draft_save', input, {}, 'save-1');
+      const specialistId = String(saved.result['agentId']);
+      const journaled = door.journal.length;
+      const portCalls = door.portCalls.length;
+      const own = await door.start({ role: 'builder' }, 'scripted:none', undefined, specialistId);
+
+      // The same `POST /api/builder/mcp` handler the creator's tool calls went through: the
+      // specialist's run token is accepted as a caller, and the door refuses the agent-made agent.
+      await expect(
+        door.call(own.token, 'catalog_list', { kinds: ['engines'] }),
+      ).resolves.toMatchObject({ status: 403, result: { code: 'not_allowed_to_build' } });
+      expect(door.journal).toHaveLength(journaled);
+      expect(door.portCalls).toHaveLength(portCalls);
+    }
   });
 });
 

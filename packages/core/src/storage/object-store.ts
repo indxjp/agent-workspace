@@ -137,6 +137,15 @@ export interface ByteRange {
   readonly end?: number;
 }
 
+interface ReadOptions {
+  readonly range?: ByteRange;
+  /**
+   * Stops the read once aborted: before it returns, it rejects with the signal's reason; after,
+   * the body errors with it. Passed to the store's SDK where it takes one.
+   */
+  readonly signal?: AbortSignal;
+}
+
 /** What `read` returns: the whole object's meta, and the requested bytes as a stream. */
 export interface ObjectStream {
   readonly meta: ObjectMeta;
@@ -148,6 +157,11 @@ export interface ObjectStream {
 /** At most one precondition: `ifNoneMatch` and `ifMatch` together could never both hold. */
 export type WriteOptions = {
   readonly contentType?: string | null;
+  /**
+   * Stops the write once aborted: it rejects with the signal's reason, the body is cancelled, and
+   * nothing is written, as for a body that errors. Passed to the store's SDK where it takes one.
+   */
+  readonly signal?: AbortSignal;
 } & (
   | {
       /** `'*'`: write only if the key does not exist. */
@@ -163,7 +177,8 @@ export type WriteOptions = {
 
 /**
  * The key `toKey` returns for a write, refusing both preconditions at once with
- * {@link ObjectConflictError}. On either refusal the body is cancelled: it will never be read.
+ * {@link ObjectConflictError}, and a write whose signal has already aborted with its reason. On
+ * any refusal the body is cancelled: it will never be read.
  */
 export async function validatedWriteKey(
   body: ReadableStream<Uint8Array> | Uint8Array,
@@ -171,6 +186,7 @@ export async function validatedWriteKey(
   toKey: () => string,
 ): Promise<string> {
   try {
+    options.signal?.throwIfAborted();
     if (options.ifNoneMatch !== undefined && options.ifMatch !== undefined) {
       throw new ObjectConflictError('A write takes ifNoneMatch or ifMatch, not both.');
     }
@@ -188,6 +204,12 @@ export interface ListPageOptions {
   readonly limit?: number;
   /** Stops the listing once aborted; a backend whose SDK takes no signal checks it between calls. */
   readonly signal?: AbortSignal;
+  /**
+   * `true`: each file's content type. A store whose listing does not carry it (S3) asks for it once
+   * per file, so only a caller that reads `contentType` sets this; without it, such a store reports
+   * `null`. Every other store reports what it holds either way.
+   */
+  readonly contentTypes?: boolean;
 }
 
 /** One page of a listing; `cursor` is `null` on the last page, otherwise pass it back. */
@@ -292,7 +314,7 @@ export interface ObjectStore {
   /** Size, content type and etag of the object at `key`, or `null` if there is none. */
   head(key: string): Promise<ObjectMeta | null>;
   /** Stream the object (or a byte range of it), or `null` if there is none. */
-  read(key: string, options?: { readonly range?: ByteRange }): Promise<ObjectStream | null>;
+  read(key: string, options?: ReadOptions): Promise<ObjectStream | null>;
   /**
    * Write `body` at `key`, replacing whatever was there unless a precondition says otherwise; a
    * failed precondition rejects with {@link ObjectConflictError}. Streams are never buffered whole.
@@ -361,7 +383,6 @@ export class InvalidWorkspaceIdError extends Error {
  * root directory; for a future S3 backend, the object key). `createScopedObjectStore` is
  * the only thing that turns a workspace id plus a caller's relative key into one of these.
  */
-// storage-bridge(#1699): legacy scoped keys for rows without an object ID
 function workspaceKeyPrefix(workspaceId: string): string {
   return `workspaces/${workspaceId}`;
 }

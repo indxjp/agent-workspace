@@ -19,8 +19,10 @@
  * Synchronous, so it is bounded: at most `EVALUATION_CASE_LIMIT` cases and
  * {@link EVALUATION_DEADLINE_MS} for all of them, the running case and its judge included.
  */
-import { log } from '../telemetry/logger';
 import { randomUUID } from 'node:crypto';
+
+import { log } from '../telemetry/logger';
+import { errorNameOf } from '../telemetry/safe-error';
 
 import {
   createProviderRegistry,
@@ -56,7 +58,7 @@ import type {
 import { startRunOnSession } from '../runs/service';
 import { isTerminalRunStatus } from '../runs/store';
 import { JUDGE_SYSTEM, judgePrompt, parseJudgeVerdict } from './judge';
-import { checkCase, finalAnswer, pausedCall, score, toolCalls } from './score';
+import { checkCase, pausedCall, score, toolCalls, turnAnswer } from './score';
 
 /**
  * The server's budget for one evaluation request: the ACA session-run cap, under ACA's 240 s
@@ -120,6 +122,10 @@ export async function evaluateAgentVersion(
     );
   }
 
+  // Under the Builder's limits a case run that cannot be stopped could later continue past them,
+  // so nothing starts without a way to stop it.
+  if (limits !== undefined && runs.interruptRun === undefined) return notStoppedProblem();
+
   const found = await store.find(agentId, version);
   if (found === null) return agentVersionNotFound(version);
   const agent = await runs.findAgent(principal, agentId);
@@ -138,7 +144,9 @@ export async function evaluateAgentVersion(
       ...(limits === undefined ? {} : { limits }),
     });
     if (outcome.kind === 'refused') {
-      if (results.length === 0) return problem(outcome.status, outcome.code, outcome.message);
+      if (outcome.abort === true || results.length === 0) {
+        return problem(outcome.status, outcome.code, outcome.message);
+      }
       results.push({ name: evalCase.name, passed: false, runId: null, failures: [outcome.code] });
       continue;
     }
@@ -189,7 +197,29 @@ export type CaseOutcome =
       readonly status: number;
       readonly code: string;
       readonly message: string;
+      /** The evaluation ends with this refusal and stores nothing, whichever case it came from. */
+      readonly abort?: true;
     };
+
+/**
+ * The Builder's code for a run that could not be stopped (`BUILDER_REFUSAL_CODES.trial_not_stopped`):
+ * a run left going or paused would continue under the full policy budget if it were approved later,
+ * because a continuation does not inherit lowered limits.
+ */
+const NOT_STOPPED = 'trial_not_stopped';
+
+const NOT_STOPPED_MESSAGE = 'A case run could not be stopped, so the evaluation is not accepted.';
+
+const notStoppedProblem = (): ApiResult => problem(409, NOT_STOPPED, NOT_STOPPED_MESSAGE);
+
+/** The refusal that ends an evaluation run under limits when a case run could not be stopped. */
+const NOT_STOPPED_OUTCOME = {
+  kind: 'refused',
+  status: 409,
+  code: NOT_STOPPED,
+  message: NOT_STOPPED_MESSAGE,
+  abort: true,
+} as const satisfies CaseOutcome;
 
 function failed(
   evalCase: EvalCase,
@@ -216,26 +246,45 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
   });
   const started = await beforeDeadline(starting, deadline);
   if (started === 'deadline') {
-    // A start that lands after the deadline launches a run nobody waits for: stop it.
+    // A start that lands after the deadline launches a run nobody waits for: stop it. The
+    // response has gone by then, so this one stays in the background and a failure is logged.
     void starting.then(
       (late) => {
-        if (late.kind === 'started') stopAbandonedRun(runs, principal, late.run.id);
+        if (late.kind === 'started') void stopRun(runs, principal, late.run.id);
       },
       (cause: unknown) => {
-        log.error('[evaluations] a case run started after the deadline failed', { error: cause });
+        log.error('[evaluations] a case run started after the deadline failed', {
+          errorName: errorNameOf(cause),
+        });
       },
     );
     return failed(evalCase, null, [DEADLINE_EXCEEDED]);
   }
   if (started.kind === 'refused') return started;
   const runId = started.run.id;
-
-  const frames = await framesUntil(runs, runId, deadline);
-  if (frames === 'deadline') {
-    stopAbandonedRun(runs, principal, runId);
-    return failed(evalCase, runId, [DEADLINE_EXCEEDED]);
+  try {
+    return await settleCase(evalCase, context, runId);
+  } catch (cause) {
+    // A read that threw leaves the run going: stop it before the failure propagates.
+    await stopRun(runs, principal, runId);
+    throw cause;
   }
-  if (frames === 'failed') return failed(evalCase, runId, [RUN_STREAM_FAILED]);
+}
+
+/** Waits for case `runId`, scores it and stops whatever is left of it. */
+async function settleCase(
+  evalCase: EvalCase,
+  context: CaseContext,
+  runId: string,
+): Promise<CaseOutcome> {
+  const { runs, principal, agent, versionId, deadline } = context;
+  const frames = await framesUntil(runs, runId, deadline);
+  if (frames === 'deadline' || frames === 'failed') {
+    // Nobody is waiting for the run any more: it must not keep spending.
+    const unstopped = await stopOrRefuse(context, runId);
+    if (unstopped !== null) return unstopped;
+    return failed(evalCase, runId, [frames === 'deadline' ? DEADLINE_EXCEEDED : RUN_STREAM_FAILED]);
+  }
   const run = await runs.store.get(runId);
   const status = run?.status ?? 'missing';
   const awaitsApproval = evalCase.expect.awaitsApproval === true;
@@ -248,7 +297,10 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
   // An evaluation never approves (D2.5). A run left paused (or still running) would continue
   // under the full policy budget if someone approved it later, because continuations do not
   // inherit lowered limits: stop it whatever the case expected. A terminal run is left alone.
-  if (status !== 'completed') stopAbandonedRun(runs, principal, runId);
+  if (status !== 'completed') {
+    const unstopped = await stopOrRefuse(context, runId);
+    if (unstopped !== null) return unstopped;
+  }
   if (status !== 'completed' && !paused) {
     // A failed run whose error carries a contract code (`model_credential_rejected`, …) reports
     // that code, so the cause is not lost behind `run_failed` (issue #661).
@@ -256,7 +308,7 @@ export async function runCase(evalCase: EvalCase, context: CaseContext): Promise
     return failed(evalCase, runId, [coded ?? `run_${status}`]);
   }
 
-  const answer = finalAnswer(frames);
+  const answer = turnAnswer(frames);
   const calls = paused
     ? [...toolCalls(frames), ...pausedCall(run?.pendingApproval)]
     : toolCalls(frames);
@@ -293,7 +345,9 @@ async function framesUntil(
     } catch (cause) {
       // A failed read fails this case only; the store's text stays in the log.
       const when = abandoned ? 'after it was abandoned ' : '';
-      log.error(`[evaluations] reading run ${runId} ${when}failed`, { error: cause });
+      log.error(`[evaluations] reading run ${runId} ${when}failed`, {
+        errorName: errorNameOf(cause),
+      });
       return 'failed' as const;
     }
   })();
@@ -322,21 +376,53 @@ async function beforeDeadline<T>(pending: Promise<T>, deadline: number): Promise
 }
 
 /**
- * Interrupt a case's run the handler stopped waiting for, so it does not keep spending model
- * tokens after its case was failed. Best effort and in the background: the response does not wait
- * for it, and a failure is logged.
+ * How long a response waits for an interrupt to finish. The response is already late (the
+ * deadline has passed), ACA's ingress cuts it at 240 s and {@link EVALUATION_DEADLINE_MS} leaves 15 s
+ * of that, so an interrupt that has not finished by then is reported as not having stopped the run.
  */
-function stopAbandonedRun(runs: RunApiEnvironment, principal: RunPrincipal, runId: string): void {
+const STOP_WAIT_MS = 10_000;
+
+/**
+ * Interrupt a case's run the handler stopped waiting for, so it does not keep spending model
+ * tokens after its case was failed, and read it again: `true` when it is terminal (or gone),
+ * `false` when the run API cannot interrupt, the interrupt threw or took too long, or the run is
+ * still not terminal after it. The failure is logged by its class name only.
+ */
+async function stopRun(
+  runs: RunApiEnvironment,
+  principal: RunPrincipal,
+  runId: string,
+): Promise<boolean> {
   const interrupt = runs.interruptRun;
-  if (interrupt === undefined) return;
-  const stopping = async () => {
+  if (interrupt === undefined) return false;
+  const stopping = (async () => {
     const run = await runs.store.get(runId);
-    if (run === null || isTerminalRunStatus(run.status)) return;
+    if (run === null || isTerminalRunStatus(run.status)) return true;
     await interrupt(principal, run);
-  };
-  void stopping().catch((cause: unknown) => {
-    log.error(`[evaluations] interrupting abandoned run ${runId} failed`, { error: cause });
+    const after = await runs.store.get(runId);
+    return after !== null && isTerminalRunStatus(after.status);
+  })().catch((cause: unknown) => {
+    log.error(`[evaluations] interrupting abandoned run ${runId} failed`, {
+      errorName: errorNameOf(cause),
+    });
+    return false;
   });
+  const stopped = await beforeDeadline(stopping, Date.now() + STOP_WAIT_MS);
+  if (stopped === 'deadline' || !stopped) {
+    log.error(`[evaluations] abandoned run ${runId} was not stopped`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * {@link stopRun}, answering the refusal that ends the evaluation when it failed under the
+ * Builder's limits (`limits` set), `null` otherwise. The console route has no such limits, and a
+ * run it could not stop is only logged.
+ */
+async function stopOrRefuse(context: CaseContext, runId: string): Promise<CaseOutcome | null> {
+  const stopped = await stopRun(context.runs, context.principal, runId);
+  return stopped || context.limits === undefined ? null : NOT_STOPPED_OUTCOME;
 }
 
 async function judgeFailures(
@@ -359,7 +445,9 @@ async function judgeFailures(
     // Cut off by the request's deadline, not a provider outage.
     if (signal.aborted) return [DEADLINE_EXCEEDED];
     // The provider's text stays in the log: it can name an endpoint or echo a credential.
-    log.error(`[evaluations] the judge call for agent ${agent.id} failed`, { error: cause });
+    log.error(`[evaluations] the judge call for agent ${agent.id} failed`, {
+      errorName: errorNameOf(cause),
+    });
     return [JUDGE_UNAVAILABLE];
   }
   const verdict = parseJudgeVerdict(reply.text);

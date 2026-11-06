@@ -77,7 +77,7 @@ import {
 } from './workspace.js';
 
 /** The pinned Mastra release. `engine.test.ts` holds it to this package's manifest. */
-export const MASTRA_CORE_VERSION = '1.79.0';
+export const MASTRA_CORE_VERSION = '1.81.0';
 
 /**
  * What the runner process's environment must say before Mastra loads (ADR-0084 D4). Each is read
@@ -507,7 +507,6 @@ type RunState = {
   steps: number;
   lastStepReason: unknown;
   usage: MastraUsage | null;
-  limit: 'max_budget' | null;
   finish: unknown;
   errored: boolean;
   /** Set when an error chunk is the provider refusing the key (issue #690). */
@@ -536,9 +535,9 @@ function outputSchemaUnsatisfied(): Error {
   return new Error(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`);
 }
 
-/** Fold one chunk into the run's state. Answers `true` when the budget cap has been reached. */
-function observe(state: RunState, chunk: unknown, compiled: MastraCompiled): boolean {
-  if (!isRecord(chunk)) return false;
+/** Fold one chunk into the run's state. */
+function observe(state: RunState, chunk: unknown): void {
+  if (!isRecord(chunk)) return;
   const payload = isRecord(chunk['payload']) ? chunk['payload'] : {};
   if (chunk['type'] === 'error') {
     state.errored = true;
@@ -548,29 +547,23 @@ function observe(state: RunState, chunk: unknown, compiled: MastraCompiled): boo
   if (chunk['type'] === 'object-result') state.object = { value: chunk['object'] };
   if (chunk['type'] === 'finish') state.finish = chunk;
   if (chunk['type'] === 'tool-output') {
-    // A subagent's chunks arrive wrapped in its tool call's output. Its steps cost money, so they
-    // count against the cap and the usage; they are not the run's own steps, so `steps` and the
-    // `maxSteps` reading stay the parent's.
+    // A subagent's chunks arrive wrapped in its tool call's output. Its steps are reported usage;
+    // they are not the run's own steps, so `steps` and the `maxSteps` reading stay the parent's.
     const inner = payload['output'];
-    if (!isRecord(inner) || inner['type'] !== 'step-finish') return false;
-    return meterStep(state, isRecord(inner['payload']) ? inner['payload'] : {}, compiled);
+    if (!isRecord(inner) || inner['type'] !== 'step-finish') return;
+    meterStep(state, isRecord(inner['payload']) ? inner['payload'] : {});
+    return;
   }
-  if (chunk['type'] !== 'step-finish') return false;
+  if (chunk['type'] !== 'step-finish') return;
   state.steps += 1;
   state.lastStepReason = isRecord(payload['stepResult']) ? payload['stepResult']['reason'] : null;
-  return meterStep(state, payload, compiled);
+  meterStep(state, payload);
 }
 
-/** Price one `step-finish` payload into the run's usage. Answers `true` when the cap is reached. */
-function meterStep(
-  state: RunState,
-  payload: Record<string, unknown>,
-  compiled: MastraCompiled,
-): boolean {
+/** Add one `step-finish` payload's usage to the run's. The gateway prices it (ADR-0162). */
+function meterStep(state: RunState, payload: Record<string, unknown>): void {
   const output = isRecord(payload['output']) ? payload['output'] : {};
-  const budget = compiled.limits.budget;
-  state.usage = addMastraUsage(state.usage, output['usage'], budget?.price ?? null);
-  return budget !== null && (state.usage?.costUsd ?? 0) >= budget.maxBudgetUsd;
+  state.usage = addMastraUsage(state.usage, output['usage']);
 }
 
 /** What {@link mastraStopReason} reads of a drained run. Plain data. */
@@ -581,22 +574,17 @@ export type MastraStopInput = {
   readonly lastStepReason: unknown;
   /** The compiled `limits.maxSteps`; `null` is Mastra's own default. */
   readonly maxSteps: number | null;
-  /** `max_budget` once the priced usage reached the cap. */
-  readonly limit: 'max_budget' | null;
   /** The caller interrupted the run. */
   readonly interrupted: boolean;
 };
 
 /**
- * The run's stop reason, once the stream has drained without an `error` chunk. The budget cap
- * wins, then the caller's interrupt; otherwise a run whose last allowed step still asked for tools
+ * The run's stop reason, once the stream has drained without an `error` chunk. The caller's
+ * interrupt wins; otherwise a run whose last allowed step still asked for tools
  * was cut short (`max_turns`) and any other ends `end_turn` — including one that used exactly
  * `maxSteps` steps and stopped on its own.
  */
-export function mastraStopReason(
-  input: MastraStopInput,
-): 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled' {
-  if (input.limit !== null) return input.limit;
+export function mastraStopReason(input: MastraStopInput): 'end_turn' | 'max_turns' | 'cancelled' {
   if (input.interrupted) return 'cancelled';
   const cutShort =
     input.maxSteps !== null &&
@@ -610,15 +598,14 @@ function stopReasonOf(
   state: RunState,
   compiled: MastraCompiled,
   interrupted: boolean,
-): 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled' {
+): 'end_turn' | 'max_turns' | 'cancelled' {
   const input: MastraStopInput = {
     steps: state.steps,
     lastStepReason: state.lastStepReason,
     maxSteps: compiled.limits.maxSteps,
-    limit: state.limit,
     interrupted,
   };
-  if (input.limit === null && !interrupted && state.finish === null) {
+  if (!interrupted && state.finish === null) {
     throw new Error("Mastra's stream ended without a finish chunk.");
   }
   return mastraStopReason(input);
@@ -703,9 +690,9 @@ async function release(
 /**
  * Run one compiled agent on Mastra, yielding its chunks and, last, `run_completed`.
  *
- * `max_turns` (the last allowed step still asked for tools), `max_budget` (the priced usage
- * reaching the cap, which aborts the stream) and `cancelled` (the caller's interrupt) each end the
- * run with a terminal event. A Mastra `error` chunk is forwarded — it is the run's `agent.result
+ * `max_turns` (the last allowed step still asked for tools) and `cancelled` (the caller's
+ * interrupt) each end the run with a terminal event; a spend ceiling is the gateway's (ADR-0162),
+ * whose refused call arrives here as a Mastra `error` chunk. A Mastra `error` chunk is forwarded — it is the run's `agent.result
  * { stopReason: 'error' }` — and no second result follows it. A failure to release the workspace
  * or a connector is thrown after the run's own outcome, beside the run's own error if it had one.
  */
@@ -747,7 +734,6 @@ export async function* startMastraRun(
     steps: 0,
     lastStepReason: null,
     usage: null,
-    limit: null,
     finish: null,
     errored: false,
     rejection: null,
@@ -825,14 +811,10 @@ export async function* startMastraRun(
     for await (const typed of output.fullStream) {
       // Read as data from here on: the frame mapper, not Mastra's types, decides what a chunk is.
       const chunk: unknown = typed;
-      const overBudget = observe(state, chunk, compiled);
+      observe(state, chunk);
       // `finish` is carried by `run_completed` below, which knows why the run ended.
       if (isRecord(chunk) && chunk['type'] === 'finish') continue;
       yield { kind: 'mastra', chunk };
-      if (overBudget && state.limit === null) {
-        state.limit = 'max_budget';
-        abort.abort(new Error('the run reached its maxBudgetUsd cap'));
-      }
     }
     if (state.errored) {
       // No `run_completed` follows an error, so a `finish` Mastra sent after it would otherwise

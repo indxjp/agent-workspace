@@ -9,6 +9,9 @@ import type { ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
 
 import {
   decideToolPermission,
+  normalise,
+  normaliseMirrored,
+  RESULT_LINGER_MS,
   startRun,
   structuredOutputFailure,
   toSdkOptions,
@@ -66,6 +69,16 @@ describe('toSdkOptions outputFormat', () => {
     const options = toSdkOptions({ ...compiled, outputFormat: { type: 'json_schema', schema } });
     expect(options['outputFormat']).toEqual({ type: 'json_schema', schema });
     expect((options['outputFormat'] as { schema: unknown }).schema).not.toBe(schema);
+  });
+
+  it("drops the schema's top-level $schema, which Claude Code's validator cannot resolve", () => {
+    const named = { $schema: 'https://json-schema.org/draft/2020-12/schema', ...schema };
+    const options = toSdkOptions({
+      ...compiled,
+      outputFormat: { type: 'json_schema', schema: named },
+    });
+    expect(options['outputFormat']).toEqual({ type: 'json_schema', schema });
+    expect(named.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
   });
 
   it('sets no outputFormat unless one was compiled', () => {
@@ -338,5 +351,115 @@ describe('decideToolPermission (ADR-0145)', () => {
     ).toMatchObject({
       behavior: 'deny',
     });
+  });
+});
+
+describe('normalise: a run ends with its result (issue #2076)', () => {
+  const failedCall = {
+    type: 'user',
+    message: {
+      content: [{ type: 'tool_result', content: 'ECONNREFUSED', is_error: true, tool_use_id: 't' }],
+    },
+  };
+  const result = { type: 'result', subtype: 'success', result: 'done' };
+
+  /** `messages`, then a read that never settles; it records each `return()`. */
+  function lingeringStream(messages: readonly unknown[]) {
+    const seen = { returned: 0 };
+    let index = 0;
+    const iterator: AsyncIterator<unknown> = {
+      next: () =>
+        index < messages.length
+          ? Promise.resolve({ done: false, value: messages[index++] })
+          : new Promise<IteratorResult<unknown>>(() => undefined),
+      return: () => {
+        seen.returned += 1;
+        return Promise.resolve({ done: true, value: undefined });
+      },
+    };
+    return { source: { [Symbol.asyncIterator]: () => iterator }, seen };
+  }
+
+  async function kindsOf(events: AsyncGenerator<ClassifiedSdkEvent, void, void>) {
+    const kinds: string[] = [];
+    for await (const event of events) kinds.push(event.kind);
+    return kinds;
+  }
+
+  it('ends a run whose tool call failed and whose stream stays open after its result', async () => {
+    const { source, seen } = lingeringStream([failedCall, result]);
+    const aborts: Error[] = [];
+    const started = Date.now();
+
+    const kinds = await kindsOf(
+      normalise(source, { ms: 20, abort: (reason) => void aborts.push(reason) }),
+    );
+
+    expect(kinds).toStrictEqual(['event', 'result']);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(aborts.map((reason) => reason.message)).toStrictEqual([
+      "the SDK stream stayed open 20 ms after the run's result",
+    ]);
+    expect(seen.returned).toBe(1);
+  });
+
+  it('waits for a slow result, and aborts nothing when the stream closes', async () => {
+    async function* slow() {
+      yield failedCall;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      yield result;
+    }
+    const aborts: Error[] = [];
+
+    const kinds = await kindsOf(
+      normalise(slow(), { ms: 10, abort: (reason) => void aborts.push(reason) }),
+    );
+
+    expect(kinds).toStrictEqual(['event', 'result']);
+    expect(aborts).toStrictEqual([]);
+  });
+
+  /** A mirror that keeps nothing; each run below hands it one batch, as the SDK would. */
+  const mirror = {
+    append: () => Promise.resolve(),
+    load: () => Promise.resolve(null),
+  };
+  const key = { projectKey: 'tenant-a', sessionId: 'session-1' };
+
+  it('never calls a session durable once the stream was aborted after its result', async () => {
+    const { source } = lingeringStream([failedCall, result]);
+    const run = normaliseMirrored(source, { ms: 20, abort: () => undefined }, mirror);
+    await run.sessionStore.append(key, []);
+
+    expect(await kindsOf(run.events)).toStrictEqual(['event', 'result']);
+    expect(run.sessionDurability()).toStrictEqual({
+      durable: false,
+      reason:
+        "the SDK stream was aborted after the run's result because it stayed open past the linger window, so the CLI may have been stopped before its last transcript batch was mirrored.",
+    });
+  });
+
+  it('calls the same mirrored run durable when its stream closes on its own', async () => {
+    const messages: readonly unknown[] = [failedCall, result];
+    let index = 0;
+    const closes: AsyncIterable<unknown> = {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          Promise.resolve<IteratorResult<unknown>>(
+            index < messages.length
+              ? { done: false, value: messages[index++] }
+              : { done: true, value: undefined },
+          ),
+      }),
+    };
+    const run = normaliseMirrored(closes, { ms: 20, abort: () => undefined }, mirror);
+    await run.sessionStore.append(key, []);
+
+    expect(await kindsOf(run.events)).toStrictEqual(['event', 'result']);
+    expect(run.sessionDurability()).toStrictEqual({ durable: true, mirroredBatches: 1 });
+  });
+
+  it('gives a lingering stream seconds, far below a run credential lifetime', () => {
+    expect(RESULT_LINGER_MS).toBeLessThanOrEqual(10_000);
   });
 });

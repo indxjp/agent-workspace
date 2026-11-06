@@ -5,9 +5,8 @@
  * selector component that treats `(connectionId, providerModelId)` as a single value drawn from
  * `#129`'s catalog, and is reused at every layer."
  *
- * A value is encoded onto the `<select>` element as `${connectionId}::${providerModelId}` — the
- * DOM has no way to carry a pair natively — and decoded back on every change; nothing here ever
- * stores or compares a display label.
+ * Nothing here ever stores or compares a display label: the model control carries the provider
+ * model id and the connection control the connection id.
  */
 import { useEffect, useState } from 'react';
 
@@ -58,17 +57,6 @@ export function useModelCatalog(): ModelCatalogState {
 const CONTROL =
   'h-[27px] rounded-[999px] border border-border-strong bg-surface px-2.5 text-[12.5px] text-text-2 disabled:opacity-60';
 
-function encode(entry: Pick<CatalogModel, 'connectionId' | 'providerModelId'>): string {
-  return `${entry.connectionId}::${entry.providerModelId}`;
-}
-
-function decode(raw: string): ModelSelectionValue {
-  if (raw === '') return null;
-  const separator = raw.indexOf('::');
-  if (separator < 0) return null;
-  return { connectionId: raw.slice(0, separator), model: raw.slice(separator + 2) };
-}
-
 export interface ModelSelectorProps {
   readonly id: string;
   readonly label: string;
@@ -85,11 +73,12 @@ export interface ModelSelectorProps {
 }
 
 /**
- * Grouped by connection (`<optgroup>`), so two connections offering a model of the same display
- * name are never ambiguous in the list. A connection with nothing to select is never rendered as a
- * choosable group — it is named, with its reason, in the unavailable notice beneath the control
- * (see `<ModelUnavailableNotice>` below) instead of as a disabled option a screen reader announces
- * without saying why.
+ * Each model is listed once, however many connections offer it (UX-22). The value is still the
+ * `(connectionId, model)` pair, because two connections carry different keys and limits: when the
+ * chosen model is offered by more than one connection, a second control picks the connection, and
+ * changing the model keeps the current connection when it offers the new one. A connection with
+ * nothing to select is named, with its reason, in `<ModelUnavailableNotice>` below the control,
+ * never as a disabled option a screen reader announces without saying why.
  */
 export function ModelSelector({
   id,
@@ -101,45 +90,77 @@ export function ModelSelector({
   disabled = false,
   ariaDescribedBy,
 }: Readonly<ModelSelectorProps>) {
-  const byConnection = new Map<string, { name: string; entries: CatalogModel[] }>();
+  const byModel = new Map<string, CatalogModel[]>();
   for (const entry of models) {
-    const group = byConnection.get(entry.connectionId);
-    if (group === undefined) {
-      byConnection.set(entry.connectionId, { name: entry.connectionName, entries: [entry] });
-    } else {
-      group.entries.push(entry);
-    }
+    const offering = byModel.get(entry.providerModelId);
+    if (offering === undefined) byModel.set(entry.providerModelId, [entry]);
+    else offering.push(entry);
   }
-  const selectedValue =
-    value === null
-      ? ''
-      : encode({ connectionId: value.connectionId, providerModelId: value.model });
+  // Without connection groups, two different models with one display name would read the same.
+  const nameCounts = new Map<string, number>();
+  for (const [model, entries] of byModel) {
+    const name = entries[0]?.displayName ?? model;
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+  const optionLabel = (model: string, entries: readonly CatalogModel[]): string => {
+    const name = entries[0]?.displayName ?? model;
+    return (nameCounts.get(name) ?? 0) > 1 ? `${name} (${model})` : name;
+  };
+  const offering = value === null ? [] : (byModel.get(value.model) ?? []);
+  function chooseModel(model: string): void {
+    const entries = model === '' ? [] : (byModel.get(model) ?? []);
+    const entry =
+      entries.find((candidate) => candidate.connectionId === value?.connectionId) ?? entries[0];
+    onChange(
+      entry === undefined
+        ? null
+        : { connectionId: entry.connectionId, model: entry.providerModelId },
+    );
+  }
   return (
-    <label className="inline-flex items-center gap-1.5" htmlFor={id}>
-      <span className="text-[12.5px] text-text-2">{label}</span>
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <label className="text-[12.5px] text-text-2" htmlFor={id}>
+        {label}
+      </label>
       <select
         id={id}
         className={CONTROL}
-        value={selectedValue}
+        value={value?.model ?? ''}
         disabled={disabled || models.length === 0}
         aria-describedby={ariaDescribedBy}
-        onChange={(event) => onChange(decode(event.target.value))}
+        onChange={(event) => chooseModel(event.target.value)}
       >
         {inheritLabel === undefined ? null : <option value="">{inheritLabel}</option>}
         {models.length === 0 && inheritLabel === undefined ? (
           <option value="">No models available</option>
         ) : null}
-        {[...byConnection.entries()].map(([connectionId, group]) => (
-          <optgroup key={connectionId} label={group.name}>
-            {group.entries.map((entry) => (
-              <option key={encode(entry)} value={encode(entry)}>
-                {entry.displayName}
-              </option>
-            ))}
-          </optgroup>
+        {[...byModel.entries()].map(([model, entries]) => (
+          <option key={model} value={model}>
+            {optionLabel(model, entries)}
+          </option>
         ))}
       </select>
-    </label>
+      {value === null || offering.length < 2 ? null : (
+        <>
+          <label className="text-[12.5px] text-text-2" htmlFor={`${id}-connection`}>
+            Connection
+          </label>
+          <select
+            id={`${id}-connection`}
+            className={CONTROL}
+            value={value.connectionId}
+            disabled={disabled}
+            onChange={(event) => onChange({ connectionId: event.target.value, model: value.model })}
+          >
+            {offering.map((entry) => (
+              <option key={entry.connectionId} value={entry.connectionId}>
+                {entry.connectionName}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+    </span>
   );
 }
 

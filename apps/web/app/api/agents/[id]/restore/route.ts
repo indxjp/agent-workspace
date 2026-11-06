@@ -1,6 +1,6 @@
 /**
  * `POST /api/agents/:id/restore` (issue #1851): un-archive an agent, with no request body.
- * Who may: the Owner, an Admin, or the agent's owner — the same decision as any agent write.
+ * Who may: the Owner, an Admin, or the Builder who owns the agent — the same decision as any agent write.
  */
 import { restoreAgent } from '../../../../../server/agents/handlers';
 import {

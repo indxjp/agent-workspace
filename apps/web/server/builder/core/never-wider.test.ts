@@ -6,7 +6,11 @@ import {
   AgentVersionBodySchema,
   type AgentVersionBody,
 } from '@indx-workspace/contracts/agent-versions';
-import type { AgentPermissions, AgentPolicy } from '@indx-workspace/contracts/agents';
+import type {
+  AgentPermissionKey,
+  AgentPermissions,
+  AgentPolicy,
+} from '@indx-workspace/contracts/agents';
 
 import {
   FIXTURE_PERMISSIONS,
@@ -56,7 +60,7 @@ const limited = (maxTurns: number | null, maxBudgetUsd: number | null): AgentPol
 });
 
 const openAi = (
-  extra: { withheldPermissions?: readonly (keyof AgentPermissions)[] } = {},
+  extra: { withheldPermissions?: readonly AgentPermissionKey[] } = {},
 ): AgentPolicy => ({
   engine: 'openai-agents',
   skills: { mode: 'all' },

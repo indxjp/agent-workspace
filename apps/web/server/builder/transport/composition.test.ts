@@ -94,7 +94,7 @@ describe('productionBuilderPorts', () => {
       'missing',
     );
     await expect(
-      ports.runner.evaluate(callContextOf(WORKSPACE, null), 'agent-1', 1),
+      ports.runner.evaluate(callContextOf(WORKSPACE, null), 'agent-1', 1, 0.3),
     ).resolves.toMatchObject({ ok: false, code: 'no_caller' });
   });
 

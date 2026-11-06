@@ -103,6 +103,7 @@ describe('admitSurfaceVisitorWrite, the run API hook (issue #622)', () => {
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: () => Promise.reject(new Error('the hook never resolves a name')),
           open: () => Promise.reject(new Error('the hook never opens a session')),
           checkModel: () => Promise.reject(new Error('the hook never checks a model')),
@@ -131,6 +132,29 @@ describe('admitSurfaceVisitorWrite, the run API hook (issue #622)', () => {
     const turn = () => admitSurfaceVisitorWrite(WORKSPACE, SESSION, 'turn', client('203.0.113.7'));
     await expect(turn()).resolves.toBeNull();
     await expect(turn()).resolves.toMatchObject({ code: 'surface_turn_limit_reached' });
+  });
+
+  it('identifies the client by the installed runtime’s environment', async () => {
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          env: () => PROXIED,
+          resolve: () => Promise.reject(new Error('the hook never resolves a name')),
+          open: () => Promise.reject(new Error('the hook never opens a session')),
+          checkModel: () => Promise.reject(new Error('the hook never checks a model')),
+          visitorSurface: () => Promise.resolve({ surface: PLAIN }),
+          servedSurfaces: () => Promise.reject(new Error('the limits never list surfaces')),
+        },
+      },
+    });
+    const turn = () =>
+      admitSurfaceVisitorWrite(WORKSPACE, crypto.randomUUID(), 'turn', client('203.0.113.7'));
+    for (let sent = 0; sent < SURFACE_RATE_LIMITS.turnsPerClient; sent += 1) {
+      await expect(turn()).resolves.toBeNull();
+    }
+    // Without the trusted proxy hops it would count against the shared bucket, ten times larger.
+    await expect(turn()).resolves.toMatchObject({ code: 'surface_rate_limited' });
   });
 
   it('caps a visitor of a surface that is no longer served at the default', () => {

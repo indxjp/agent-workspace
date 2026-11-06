@@ -2,7 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ModelConnectionConfigField } from '@indx-workspace/contracts/models';
+import {
+  VERTEX_LOCATIONS,
+  isKeylessProvider,
+  type ModelConnectionConfigField,
+} from '@indx-workspace/contracts/models';
 import { useState, type FormEvent } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
@@ -31,7 +35,15 @@ const initialValues = (provider: ProviderId): ProviderFormValues => ({
   baseUrl: '',
   deployment: '',
   apiVersion: '',
+  projectId: '',
+  location: 'global',
 });
+
+const LOCATION_LABEL: Readonly<Record<(typeof VERTEX_LOCATIONS)[number], string>> = {
+  global: 'Global (recommended)',
+  us: 'United States',
+  eu: 'European Union',
+};
 
 export function AddProviderScreen({
   initialProvider = 'anthropic',
@@ -69,6 +81,7 @@ export function AddProviderScreen({
   }
 
   const fields = editableConfigFields(values.provider);
+  const keyless = isKeylessProvider(values.provider);
   const required = requiredConfigFields(values.provider);
   const optional = (field: ModelConnectionConfigField) =>
     required.includes(field) ? '' : ' (optional)';
@@ -139,20 +152,55 @@ export function AddProviderScreen({
               />
             </label>
           ) : null}
-          <label className="block text-[13px] font-semibold">
-            API Key
-            <input
-              className={`${CONTROL} mt-1 font-mono`}
-              type="password"
-              {...CREDENTIAL_INPUT_PROPS}
-              value={values.apiKey}
-              onChange={(event) => set('apiKey', event.target.value)}
-            />
-            <span className="mt-1 block text-[11.5px] font-normal text-muted">
-              Stored encrypted. After saving, this secret is write-only and is never displayed
-              again.
-            </span>
-          </label>
+          {keyless ? (
+            <>
+              <label className="block text-[13px] font-semibold">
+                Google Cloud project (optional)
+                <input
+                  className={`${CONTROL} mt-1 font-mono`}
+                  value={values.projectId}
+                  onChange={(event) => set('projectId', event.target.value)}
+                />
+                <span className="mt-1 block text-[11.5px] font-normal text-muted">
+                  Leave empty to use this install&apos;s project. No API key is needed: Claude is
+                  reached through this install&apos;s Google Cloud sign-in.
+                </span>
+              </label>
+              <label className="block text-[13px] font-semibold">
+                Location
+                <select
+                  className={`${CONTROL} mt-1`}
+                  value={values.location}
+                  onChange={(event) => set('location', event.target.value)}
+                >
+                  {VERTEX_LOCATIONS.map((location) => (
+                    <option key={location} value={location}>
+                      {LOCATION_LABEL[location]}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11.5px] font-normal text-muted">
+                  United States and European Union keep your data in that region, and cost 10 % more
+                  than Global.
+                </span>
+              </label>
+            </>
+          ) : (
+            <label className="block text-[13px] font-semibold">
+              API Key
+              <input
+                className={`${CONTROL} mt-1 font-mono`}
+                type="password"
+                {...CREDENTIAL_INPUT_PROPS}
+                value={values.apiKey}
+                onChange={(event) => set('apiKey', event.target.value)}
+              />
+              <span className="mt-1 block text-[11.5px] font-normal text-muted">
+                Stored encrypted. After saving, this secret is write-only and is never displayed
+                again.
+              </span>
+            </label>
+          )}
           {fields.includes('deployment') && fields.includes('apiVersion') ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block text-[13px] font-semibold">

@@ -23,7 +23,10 @@ import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { browserLocale } from './attach-messages';
 import { loadRunDetail, type DetailLoad } from './run-requests-model';
+import { runHref, teamRows, treeCostDisplay, type RunTree } from './run-tree-model';
 import { StatusBadge } from './run-view';
 import {
   badgeForRunStatus,
@@ -41,10 +44,20 @@ import {
   type ResourceReference,
   type RunListItem,
 } from './history';
+import {
+  spendCeilingAmount,
+  spendCeilingNotice,
+  spendCeilingStrings,
+  type SpendCeilingNotice,
+  type SpendCeilingStrings,
+} from './spend-ceiling-model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 const CARD = 'rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
 const CALLOUT_DANGER =
   'flex items-start gap-[11px] rounded-(--radius) border border-danger bg-danger-soft p-[14px] text-[13px] text-danger';
+const CALLOUT_WARNING =
+  'flex items-start gap-[11px] rounded-(--radius) border border-border bg-surface-2 p-[14px] text-[13px] text-text-2';
 const DETAIL_KV =
   'm-0 grid grid-cols-1 gap-x-4 gap-y-[11px] text-[13.5px] sm:grid-cols-[140px_minmax(0,1fr)] [&>dd]:m-0 [&>dd]:min-w-0 [&>dd]:[overflow-wrap:anywhere]';
 
@@ -64,6 +77,8 @@ export interface RunDetailPanelProps {
 
 export function RunDetailPanel({ runId, backHref, catalogs }: RunDetailPanelProps) {
   const [state, setState] = useState<DetailLoad>({ kind: 'loading' });
+  const [locale, setLocale] = useState<VersionsLocale>('en');
+  useEffect(() => setLocale(browserLocale(navigator.languages)), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +93,7 @@ export function RunDetailPanel({ runId, backHref, catalogs }: RunDetailPanelProp
           ? {
               kind: 'loaded',
               run: reconcileDurableRun(current.kind === 'loaded' ? current.run : null, result.run),
+              tree: result.tree,
             }
           : result,
       );
@@ -138,7 +154,9 @@ export function RunDetailPanel({ runId, backHref, catalogs }: RunDetailPanelProp
         </div>
       ) : null}
 
-      {state.kind === 'loaded' ? <LoadedRun run={state.run} catalogs={catalogs} /> : null}
+      {state.kind === 'loaded' ? (
+        <RunDetailBody run={state.run} tree={state.tree} catalogs={catalogs} locale={locale} />
+      ) : null}
     </div>
   );
 }
@@ -197,10 +215,36 @@ function ExactTimestamp({ iso }: Readonly<{ iso: string | null }>) {
   );
 }
 
-function LoadedRun({
-  run,
-  catalogs,
-}: Readonly<{ run: RunListItem; catalogs: RunDetailPanelCatalogs }>) {
+export interface RunDetailBodyProps {
+  readonly run: RunListItem;
+  /** The run's children and tree cost (ADR-0104); empty for a run that is not a lead. */
+  readonly tree: RunTree;
+  readonly catalogs: RunDetailPanelCatalogs;
+  readonly locale: VersionsLocale;
+}
+
+/** Why a run stopped at its spend ceiling, or why its ceiling could not apply (ADR-0162). */
+function SpendCeilingCallout({
+  notice,
+  strings,
+}: Readonly<{ notice: SpendCeilingNotice; strings: SpendCeilingStrings }>) {
+  return (
+    <div
+      role="status"
+      data-testid="run-spend-ceiling-notice"
+      className={notice.kind === 'stopped' ? `${CALLOUT_DANGER} mb-4` : `${CALLOUT_WARNING} mb-4`}
+    >
+      {notice.kind === 'stopped' ? strings.stopped(notice.amount) : strings.unmeasured}
+    </div>
+  );
+}
+
+/** A loaded run: what the panel shows once `GET /api/runs/:id` has answered. */
+export function RunDetailBody({ run, tree, catalogs, locale }: RunDetailBodyProps) {
+  const strings = teamStrings(locale);
+  const ceilingStrings = spendCeilingStrings(locale);
+  const ceilingNotice = spendCeilingNotice(run);
+  const treeCost = treeCostDisplay(run, tree);
   const agent = resolveResourceReference(run.agentId, catalogs.agents);
   const project = resolveResourceReference(run.projectId, catalogs.projects);
   const user = resolveResourceReference(run.initiatingUserId, catalogs.users);
@@ -224,15 +268,48 @@ function LoadedRun({
           session data
         </Link>
         <span className="ml-1 text-[12px]">
-          (raw — no session viewer is built yet; see this task's ADR)
+          (raw data — there is no viewer for it on this screen yet)
         </span>
       </p>
+      {run.parentRunId === null ? null : (
+        <ParentRunNotice parentRunId={run.parentRunId} strings={strings} />
+      )}
+      {ceilingNotice === null ? null : (
+        <SpendCeilingCallout notice={ceilingNotice} strings={ceilingStrings} />
+      )}
 
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Duration" value={formatDuration(run.durationMs, run.status)} />
         <StatCard label="Total tokens" value={formatTokenCount(run.usage.totalTokens)} />
         <StatCard label="Tool calls" value={formatTokenCount(run.usage.toolCalls)} />
-        <StatCard label="Cost" value={<CostValue run={run} />} />
+        <StatCard
+          label="Cost"
+          value={
+            <>
+              <CostValue run={run} />
+              {run.spendCeilingUsd === null ? null : (
+                <div
+                  className="mt-1 text-[12.5px] font-normal text-text-2"
+                  data-testid="run-spend-ceiling"
+                >
+                  {ceilingStrings.spendCeiling}:{' '}
+                  <b className="font-semibold">{spendCeilingAmount(run.spendCeilingUsd)} USD</b>
+                </div>
+              )}
+              {treeCost === null ? null : (
+                <div
+                  className="mt-1 text-[12.5px] font-normal text-text-2"
+                  data-testid="run-tree-cost"
+                >
+                  {strings.treeCost}: <b className="font-semibold">{treeCost.amount}</b>
+                  {treeCost.settled ? null : (
+                    <span className="text-muted"> · {strings.treeCostUnsettled}</span>
+                  )}
+                </div>
+              )}
+            </>
+          }
+        />
       </div>
 
       <div className={`${CARD} mb-5`}>
@@ -284,6 +361,10 @@ function LoadedRun({
         </div>
       </div>
 
+      {tree.children.length === 0 ? null : (
+        <TeamCard tree={tree} agents={catalogs.agents} strings={strings} />
+      )}
+
       <h2 className="mb-3 text-[16px]">Technical details</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         <section className={CARD} aria-labelledby="run-usage-heading">
@@ -300,6 +381,12 @@ function LoadedRun({
               <dd>
                 <CostValue run={run} />
               </dd>
+              {run.spendCeilingUsd === null ? null : (
+                <>
+                  <dt>{ceilingStrings.spendCeiling}</dt>
+                  <dd>{spendCeilingAmount(run.spendCeilingUsd)} USD</dd>
+                </>
+              )}
               <dt>Input tokens</dt>
               <dd>{formatTokenCount(run.usage.inputTokens)}</dd>
               <dt>Output tokens</dt>
@@ -355,7 +442,11 @@ function LoadedRun({
               {run.error === null ? null : (
                 <>
                   <dt>Error</dt>
-                  <dd className="text-danger">{run.error}</dd>
+                  <dd className="text-danger">
+                    {ceilingNotice?.kind === 'stopped'
+                      ? ceilingStrings.stopped(ceilingNotice.amount)
+                      : run.error}
+                  </dd>
                 </>
               )}
             </dl>
@@ -363,5 +454,81 @@ function LoadedRun({
         </section>
       </div>
     </div>
+  );
+}
+
+/** A child run's link back to the lead run that started it (ADR-0104). */
+function ParentRunNotice({
+  parentRunId,
+  strings,
+}: Readonly<{ parentRunId: string; strings: TeamStrings }>) {
+  return (
+    <p className="mt-0 mb-4 text-[13px] text-text-2" data-testid="run-parent">
+      {strings.partOfTeamRun}
+      {' · '}
+      <Link href={runHref(parentRunId)} className="text-accent no-underline hover:underline">
+        {strings.openLeadRun}
+      </Link>
+    </p>
+  );
+}
+
+/**
+ * The Team card: one collapsible row per child run, oldest first. A row is a native
+ * `<details>`/`<summary>`, so it is reachable with Tab and toggled with Enter or Space, and its
+ * summary is its accessible name (member, status, cost).
+ */
+function TeamCard({
+  tree,
+  agents,
+  strings,
+}: Readonly<{ tree: RunTree; agents: CatalogState; strings: TeamStrings }>) {
+  return (
+    <section className={`${CARD} mb-5`} aria-labelledby="run-team-heading" data-testid="run-team">
+      <div className="border-b border-border px-4 py-3">
+        <h2 id="run-team-heading" className="m-0 text-[14px] font-semibold">
+          {strings.team}
+        </h2>
+        <p className="mt-1 mb-0 text-[12.5px] text-muted">{strings.teamDescription}</p>
+      </div>
+      <ul className="m-0 list-none p-0">
+        {teamRows(tree).map((row) => {
+          const agent = resolveResourceReference(row.agentId, agents);
+          const name = agent.kind === 'resolved' ? agent.label : strings.unknownAgent;
+          return (
+            <li key={row.id} className="border-b border-border last:border-b-0">
+              <details className="group">
+                <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 px-4 py-3 text-[13.5px] before:text-[10px] before:text-muted before:content-['▸'] group-open:before:content-['▾'] focus-visible:outline-2 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+                  <span className="font-semibold">{name}</span>
+                  <StatusBadge badge={row.badge} />
+                  <span className="ml-auto text-[12.5px] text-text-2 [font-variant-numeric:tabular-nums]">
+                    {row.cost}
+                  </span>
+                </summary>
+                <div className="px-4 pb-3">
+                  <dl className={DETAIL_KV}>
+                    <dt>{strings.member}</dt>
+                    <dd>{name}</dd>
+                    <dt>{strings.status}</dt>
+                    <dd>{row.status}</dd>
+                    <dt>{strings.duration}</dt>
+                    <dd>{formatDuration(row.durationMs, row.status)}</dd>
+                    <dt>{strings.cost}</dt>
+                    <dd>{row.cost}</dd>
+                  </dl>
+                  <Link
+                    href={row.href}
+                    className="mt-3 inline-block text-[13px] text-accent no-underline hover:underline"
+                    aria-label={`${strings.openChildRun}: ${name}`}
+                  >
+                    {strings.openChildRun} →
+                  </Link>
+                </div>
+              </details>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

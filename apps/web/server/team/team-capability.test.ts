@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { NO_INVITATION_CAPABILITY } from '../../contracts/invitations';
 import { NO_MEMBERSHIP_CAPABILITY } from '../../contracts/team';
 import { createMemoryDirectory } from '../rbac/memory-directory';
-import { ROLES, type Role } from '../rbac/roles';
+import { ROLES, type Role } from '../rbac/core/roles';
 import { invitationCapabilityForViewer } from './invitation-capability';
 import { membershipCapabilityForViewer } from './membership-capability';
 import { NO_TEAM_CAPABILITY, resolveTeamCapability, teamCapabilityFor } from './team-capability';

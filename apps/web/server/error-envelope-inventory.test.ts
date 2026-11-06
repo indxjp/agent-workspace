@@ -279,7 +279,7 @@ describe('the sweep covers the whole declared API surface', () => {
     const sources = [
       ...trackedFiles('apps/web/app/api'),
       ...trackedFiles('apps/web/server'),
-    ].filter((file) => /\.(ts|tsx|mts)$/u.test(file) && !/\.test\.tsx?$/u.test(file));
+    ].filter((file) => /\.(ts|tsx|mts)$/u.test(file) && !/\.test(?:-support)?\.tsx?$/u.test(file));
     const spelled = sources
       .filter((file) => BARE_CODE_BODY.test(readFileSync(path.join(REPO_ROOT, file), 'utf8')))
       .sort();

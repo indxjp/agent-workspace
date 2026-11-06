@@ -12,7 +12,7 @@
  * /api/connectors/:id` are not (§34's own introduction is "Examples:", not the closed set —
  * ADR-0026), so each carries a `mandate` in `tests/route-declarations/W2-CP-05.ts` citing §8.
  * `test-connection` under `:id` is additionally a sub-resource §34 does not print, so it is also
- * declared in `apps/web/server/rbac/declarations/W2-CP-05.ts` (ADR-0040).
+ * declared in `apps/web/server/rbac/core/declarations/W2-CP-05.ts` (ADR-0040).
  *
  * ## Why the wizard's PRE-save Test Connection is a flag on `POST /api/connectors`, not its own route
  *
@@ -21,7 +21,7 @@
  * segment with no id first (`/api/connectors/test-connection`, this file's first draft) is refused
  * as "a second resource... not named" the moment it carries a mandate rather than being printed by
  * §34. Declaring `test-connection` as a resource of its own would need four roles' grants written
- * into `apps/web/server/rbac/permissions.ts`'s `RESOURCES`/`POLICY` — W2-CP-06's file, not this
+ * into `apps/web/server/rbac/core/permissions.ts`'s `RESOURCES`/`POLICY` — W2-CP-06's file, not this
  * task's to add a resource to. So the wizard's pre-save probe rides the one route that is already
  * shape-legal and already gated on workspace membership: `createConnector` reads a `dryRun` flag
  * out of the SAME body `POST /api/connectors` already validates, and when it is `true`, runs the

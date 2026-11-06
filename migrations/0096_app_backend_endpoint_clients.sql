@@ -1,0 +1,11 @@
+-- safe: re-added below, widened with 'user-token-exchanged' (ADR-0161 D11); no row is narrowed
+ALTER TABLE "audit_events" DROP CONSTRAINT "audit_events_action_valid";--> statement-breakpoint
+-- safe: re-added below, widened with 'app-backend' (ADR-0161 D4); no row is narrowed
+ALTER TABLE "endpoint_clients" DROP CONSTRAINT "endpoint_clients_kind_valid";--> statement-breakpoint
+ALTER TABLE "endpoint_clients" ADD COLUMN "oidc_audience" text;--> statement-breakpoint
+-- safe: a superset of the dropped CHECK; every existing row already satisfies it
+ALTER TABLE "audit_events" ADD CONSTRAINT "audit_events_action_valid" CHECK ("audit_events"."action" in ('user-created', 'user-deleted', 'agent-changed', 'agent-created', 'provider-credential-changed', 'api-key-created', 'api-key-revoked', 'connector-changed', 'permission-changed', 'runtime-profile-changed', 'project-created', 'project-deleted', 'project-archived', 'project-restored', 'session-published', 'public-link-revoked', 'runnable-link-stopped', 'public-sharing-policy-changed', 'invitation-created', 'invitation-resent', 'invitation-revoked', 'invitation-accepted', 'endpoint-client-created', 'endpoint-client-changed', 'endpoint-client-revoked', 'endpoint-tool-called', 'oauth-client-secret-rotated', 'oauth-grant-issued', 'oauth-grant-revoked', 'file-uploaded', 'file-downloaded', 'file-link-created', 'file-moved', 'file-deleted', 'storage-connection-created', 'storage-connection-updated', 'storage-connection-deleted', 'storage-connection-credential-changed', 'storage-connection-tested', 'storage-connection-written', 'storage-grant-changed', 'workspace-features-changed', 'user-token-exchanged'));--> statement-breakpoint
+-- safe: no app-backend row exists yet and oidc_audience was added NULL, so every row satisfies it
+ALTER TABLE "endpoint_clients" ADD CONSTRAINT "endpoint_clients_oidc_audience_app_backend" CHECK (("endpoint_clients"."kind" = 'app-backend') = ("endpoint_clients"."oidc_audience" is not null));--> statement-breakpoint
+-- safe: a superset of the dropped CHECK; every existing row already satisfies it
+ALTER TABLE "endpoint_clients" ADD CONSTRAINT "endpoint_clients_kind_valid" CHECK ("endpoint_clients"."kind" in ('mcp-project', 'a2a-agent', 'builder', 'app-backend'));

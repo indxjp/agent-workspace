@@ -31,9 +31,9 @@ import {
 import type { ConnectorAuthType } from '@indx-workspace/contracts/connectors';
 import { fileRouteId } from '@indx-workspace/contracts/files';
 
-const CARD = 'rounded-(--radius) border border-border bg-surface p-5 shadow-(--shadow)';
-const INPUT = 'rounded border border-border-strong bg-bg px-3 py-2 text-sm text-text';
-const BUTTON = 'rounded border border-border-strong px-3 py-2 text-sm font-medium';
+import { FileSearch, useFileSearch } from './files-search';
+import { filesSearchStrings, type FilesSearchLocale } from './files-search-messages';
+import { BUTTON, CARD, INPUT } from './resource-styles';
 
 function title(name: string, description: string, action?: React.ReactNode) {
   return (
@@ -167,11 +167,11 @@ function Status({ problem }: { problem: string | null }) {
  * ends up in the visible address bar and in `GET /api/files?path=…` is the same string a person
  * screen-sharing this page would see leave. {@link canonicalizeFolderPath} is therefore a second,
  * independent guard, and it resolves rather than refuses: unlike the server's filter, it clamps
- * an out-of-bounds `..` at the root instead of rejecting the whole path, and a folder canonicalised
- * this way that no longer exists renders as the ordinary empty-folder state (see below) rather
- * than a distinct "not found" one — this table has no independent notion of a folder's existence
- * apart from what is listed under it. Recorded as a decision in
- * `docs/adr/W9-FILES-132-client-side-path-canonicalisation.md`.
+ * an out-of-bounds `..` at the root instead of rejecting the whole path. A folder canonicalised
+ * this way that does not exist is told apart from an empty one by its parent's listing
+ * ({@link emptyFolderText}; the amendment in
+ * `docs/adr/W9-FILES-132-a-canonicalised-folder-with-nothing-under-it-is-just-empty.md`).
+ * Recorded as a decision in `docs/adr/W9-FILES-132-client-side-path-canonicalisation.md`.
  */
 export function canonicalizeFolderPath(raw: string | null | undefined): string {
   if (raw === null || raw === undefined || raw === '') return '';
@@ -215,6 +215,31 @@ function parentPath(path: string): string {
 function fileName(path: string): string {
   const index = path.lastIndexOf('/');
   return index < 0 ? path : path.slice(index + 1);
+}
+
+/**
+ * The folders a rename can move a row into without typing (UX-27 in #2086): Home, every folder on
+ * the breadcrumb, the open folder and its subfolders. These are only the folders the screen
+ * already knows; a typed path still reaches any other. A folder being moved is not offered as its
+ * own destination (the listed folders are its siblings and ancestors, never its descendants).
+ */
+export function moveFolderChoices(
+  path: string,
+  rows: readonly FileRow[],
+  moving: string,
+): string[] {
+  const known = [
+    '',
+    ...breadcrumbSegments(path).map((crumb) => crumb.path),
+    ...rows.filter((row) => row.kind === 'folder').map((row) => row.path),
+  ];
+  return [...new Set(known)].filter((folder) => folder !== moving);
+}
+
+/** `path` with its folder part replaced by `folder`, keeping the name; an empty name keeps `name`. */
+function moveInto(folder: string, path: string, name: string): string {
+  const typed = fileName(path.trim());
+  return joinPath(folder, typed === '' ? name : typed);
 }
 
 /** Preview metadata (spec §16) formatted for the table: size, in the smallest unit that reads as a single decimal. */
@@ -303,6 +328,55 @@ function useFilesState(path: string): FilesFetchState {
     void reload().catch((error: unknown) => setProblem(errorText(error)));
   }, [reload]);
   return { value, problem, loading: value === null && problem === null, reload, setProblem };
+}
+
+const EMPTY_FOLDER = 'This folder is empty.';
+
+/**
+ * What an empty listing of `path` means, read from its parent's rows. `GET /api/files` answers an
+ * empty list for a folder that does not exist exactly as for an empty one, so a deep link to a
+ * moved folder, or to a file, said "This folder is empty." (UX-20 in #2086).
+ */
+export function emptyFolderText(
+  path: string,
+  parentRows: readonly { readonly path: string; readonly kind: 'file' | 'folder' }[],
+): string {
+  const row = parentRows.find((candidate) => candidate.path === path);
+  if (row?.kind === 'folder') return EMPTY_FOLDER;
+  if (row?.kind === 'file') {
+    return `"${path}" is a file, not a folder. Go up one folder to see it.`;
+  }
+  return `There is no folder "${path}". It may have been moved, renamed or deleted.`;
+}
+
+/**
+ * {@link emptyFolderText} for the current folder. The parent is asked only when a non-root listing
+ * is empty, and until it answers the sentence is blank rather than "This folder is empty.", which
+ * would be wrong for a missing folder.
+ */
+function useEmptyFolderText(path: string, empty: boolean): string {
+  const [answer, setAnswer] = useState<{ readonly path: string; readonly text: string } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!empty || path === '') return undefined;
+    let current = true;
+    const slash = path.lastIndexOf('/');
+    listFiles(browserClient(), slash === -1 ? '' : path.slice(0, slash)).then(
+      (rows) => {
+        if (current) setAnswer({ path, text: emptyFolderText(path, rows) });
+      },
+      // The listing itself already loaded; a failed second look keeps the plain sentence.
+      () => {
+        if (current) setAnswer({ path, text: EMPTY_FOLDER });
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [path, empty]);
+  if (path === '') return EMPTY_FOLDER;
+  return answer?.path === path ? answer.text : '';
 }
 
 /** The current folder, deep-linked through `?path=` (see this section's header), plus its listing. */
@@ -395,10 +469,14 @@ interface FileTableProps {
   readonly onRenameChange?: (value: string) => void;
   readonly onRenameSave?: (row: FileRow) => void;
   readonly onRenameCancel?: () => void;
+  /** The open folder, whose breadcrumb and subfolders the rename row offers as destinations. */
+  readonly folderPath?: string;
   readonly selection?: {
     readonly selected: ReadonlySet<string>;
     readonly onToggle: (row: FileRow) => void;
   };
+  /** What an empty listing says; {@link emptyFolderText} tells an empty folder from a missing one. */
+  readonly emptyText?: string;
 }
 
 /**
@@ -416,10 +494,17 @@ export function FileTable({
   onRenameChange,
   onRenameSave,
   onRenameCancel,
+  folderPath = '',
   selection,
+  emptyText = EMPTY_FOLDER,
 }: FileTableProps) {
   if (fileRows.length === 0) {
-    return <p className="text-sm text-muted">This folder is empty.</p>;
+    // A status region: the sentence can change once the parent folder has been checked.
+    return (
+      <p className="text-sm text-muted" role="status">
+        {emptyText}
+      </p>
+    );
   }
   const hasActions = onRenameStart !== undefined || onDelete !== undefined;
   const columnCount = 5 + (selection === undefined ? 0 : 1) + (hasActions ? 1 : 0);
@@ -445,25 +530,48 @@ export function FileTable({
           {fileRows.map((row) => {
             const name = fileName(row.path);
             if (renaming != null && renaming.id === row.id) {
+              const choices = moveFolderChoices(folderPath, fileRows, row.path);
+              const typedFolder = parentPath(renaming.value.trim());
+              // A typed folder the screen does not know is still shown as the current choice.
+              const options = choices.includes(typedFolder) ? choices : [...choices, typedFolder];
               return (
                 <tr key={row.id}>
                   <td className={TD} colSpan={columnCount}>
                     <form
-                      className="flex flex-wrap items-center gap-2"
+                      className="flex flex-wrap items-end gap-2"
                       onSubmit={(event) => {
                         event.preventDefault();
                         onRenameSave?.(row);
                       }}
                     >
-                      <label className="sr-only" htmlFor={`rename-${row.id}`}>
-                        New path for {name}
+                      {/* The name stays visible while it is edited (UX-27 in #2086). */}
+                      <div className="flex flex-col gap-1 text-sm">
+                        <label htmlFor={`rename-${row.id}`}>
+                          New path for <strong className="break-all">{name}</strong>
+                        </label>
+                        <input
+                          className={INPUT}
+                          id={`rename-${row.id}`}
+                          onChange={(event) => onRenameChange?.(event.target.value)}
+                          value={renaming.value}
+                        />
+                      </div>
+                      <label className="flex flex-col gap-1 text-sm">
+                        Move to folder
+                        <select
+                          className={INPUT}
+                          onChange={(event) =>
+                            onRenameChange?.(moveInto(event.target.value, renaming.value, name))
+                          }
+                          value={typedFolder}
+                        >
+                          {options.map((folder) => (
+                            <option key={folder} value={folder}>
+                              {folder === '' ? 'Home' : folder}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                      <input
-                        className={INPUT}
-                        id={`rename-${row.id}`}
-                        onChange={(event) => onRenameChange?.(event.target.value)}
-                        value={renaming.value}
-                      />
                       <button className={BUTTON} type="submit">
                         Save
                       </button>
@@ -534,11 +642,19 @@ export function FileTable({
   );
 }
 
-export function FilesScreen() {
+/** Said after an action's reason when the listing could not be read again after it. */
+const STALE_LIST = 'The list could not be refreshed, so it may be out of date.';
+
+export function FilesScreen({ locale = 'en' }: { readonly locale?: FilesSearchLocale } = {}) {
   const browser = useFileBrowser();
+  const search = useFileSearch();
   const [renaming, setRenaming] = useState<FileTableRenameState | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const fileRows = sortedRows(browser.state.value === null ? [] : browser.state.value.files);
+  const emptyText = useEmptyFolderText(
+    browser.path,
+    browser.state.value !== null && browser.state.value.files.length === 0,
+  );
 
   const createFolderFrom = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -558,7 +674,13 @@ export function FilesScreen() {
     const element = event.currentTarget;
     const form = new FormData(element);
     const file = form.get('file');
-    if (!(file instanceof File) || file.size === 0) return;
+    if (!(file instanceof File)) return;
+    if (file.size === 0) {
+      // Said rather than skipped in silence (UX-19 in #2086).
+      browser.state.setProblem(`"${file.name}" is empty (0 bytes), so it was not uploaded.`);
+      element.reset();
+      return;
+    }
     setUploading(file.name);
     try {
       await uploadFile(browserClient(), joinPath(browser.path, file.name), file);
@@ -567,6 +689,20 @@ export function FilesScreen() {
     }
     element.reset();
     await browser.state.reload();
+  };
+
+  /**
+   * Reload the listing, then show why the action failed. In this order because `reload` clears the
+   * status line first: the other way round, the message vanished as soon as it was shown (#2088).
+   * A reload that fails too is not thrown on: the action's reason comes first, and the sentence
+   * after it says the listing kept its last rows, which may no longer be true.
+   */
+  const reloadThenShow = async (error: unknown) => {
+    const refreshed = await browser.state.reload().then(
+      () => true,
+      () => false,
+    );
+    browser.state.setProblem(refreshed ? errorText(error) : `${errorText(error)} ${STALE_LIST}`);
   };
 
   const saveRename = async (row: FileRow) => {
@@ -581,8 +717,7 @@ export function FilesScreen() {
       setRenaming(null);
       await browser.state.reload();
     } catch (error) {
-      browser.state.setProblem(errorText(error));
-      await browser.state.reload();
+      await reloadThenShow(error);
     }
   };
 
@@ -598,16 +733,20 @@ export function FilesScreen() {
       );
       await browser.state.reload();
     } catch (error) {
-      browser.state.setProblem(errorText(error));
       // Never remove the row optimistically: reload and let the server's own listing say what is
       // actually still there, which is what keeps a `partial` result from looking like success.
-      await browser.state.reload();
+      await reloadThenShow(error);
     }
   };
 
   return (
     <>
       {title('Files', 'Browse workspace folders, upload inputs, and manage stored outputs.')}
+      <FileSearch
+        onOpenFolder={browser.navigateTo}
+        search={search}
+        strings={filesSearchStrings(locale)}
+      />
       <Status problem={browser.state.problem} />
       <Breadcrumbs onNavigate={browser.navigateTo} path={browser.path} />
       {browser.state.loading ? (
@@ -655,7 +794,7 @@ export function FilesScreen() {
           Create folder here
         </button>
       </form>
-      {browser.state.value === null ? null : (
+      {search.active || browser.state.value === null ? null : (
         <div className={CARD}>
           <FileTable
             onDelete={(row) => void handleDelete(row)}
@@ -666,8 +805,10 @@ export function FilesScreen() {
             }
             onRenameSave={(row) => void saveRename(row)}
             onRenameStart={(row) => setRenaming({ id: row.id, value: row.path })}
+            folderPath={browser.path}
             renaming={renaming}
             rows={fileRows}
+            emptyText={emptyText}
           />
         </div>
       )}
@@ -1174,7 +1315,26 @@ export function ApiKeysScreen() {
   );
 }
 
-export function SettingsScreen() {
+/**
+ * The Settings heading and, for an Owner or Admin, the subsystem status card. The card probes
+ * manager-only routes, so a Builder or Viewer saw raw `403`s there (UX-12 in #2086); they still
+ * get the page for its Features card.
+ */
+export function SettingsScreen({ managers }: { readonly managers: boolean }) {
+  return (
+    <>
+      {title(
+        'Settings',
+        managers
+          ? 'Deployment subsystem status. Secrets and agent configuration stay out of this page.'
+          : 'The features of this workspace.',
+      )}
+      {managers ? <SubsystemStatus /> : null}
+    </>
+  );
+}
+
+function SubsystemStatus() {
   const endpoints = SETTINGS_ENDPOINTS;
   const [statuses, setStatuses] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -1182,10 +1342,6 @@ export function SettingsScreen() {
   }, []);
   return (
     <>
-      {title(
-        'Settings',
-        'Deployment subsystem status. Secrets and agent configuration stay out of this page.',
-      )}
       <div className={CARD}>
         {endpoints.map((endpoint) => (
           <div className="flex border-b border-border py-3 text-sm last:border-0" key={endpoint}>

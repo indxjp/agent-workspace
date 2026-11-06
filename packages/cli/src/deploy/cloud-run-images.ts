@@ -34,6 +34,19 @@ export interface ImageCopyRequest {
   /** The label `imagetools create` requires; the deployment never reads it. */
   readonly tag: string;
   readonly ownerEmail: string;
+  /**
+   * Set by the managed Google Cloud deploy: the destination registry, computed from the module's
+   * own `image_registry` formula so no state is needed, and the signal that docker needs
+   * credentials for its host (`gcloud auth configure-docker`) before the first copy. Unset, the
+   * registry is read from the Terraform state, and the Owner's own docker login is used.
+   */
+  readonly registry?: string;
+  /**
+   * With `registry`: where each image comes from when the state pins one in that registry which is
+   * no longer there (a plan pinned destinations it never copied, or `destroy` deleted the
+   * repository). Without it, a pin already in Artifact Registry is trusted.
+   */
+  readonly sources?: () => CloudRunImageReferences;
 }
 
 function digestOf(reference: string): string {
@@ -57,7 +70,7 @@ function manifestDigest(output: string): string | null {
 }
 
 /** The first line of Terraform's stderr with text on it, without its `╷ │ ╵` box drawing. */
-function firstStderrLine(stderr: string): string {
+export function firstStderrLine(stderr: string): string {
   for (const line of stderr.split('\n')) {
     const text = line.replace(/^[\s╷│╵]+/u, '').trim();
     if (text !== '') return text;
@@ -112,9 +125,10 @@ async function isPresent(context: DeployContext, destination: string): Promise<b
 /**
  * The references Cloud Run will pull: those already in Artifact Registry as they are, the rest
  * as `<image_registry>/<name>@<same digest>`. A copy is pending while `imagetools inspect` does
- * not find that destination at its digest. With pending copies the result is `null` and Terraform
- * must not run: without `apply` they are only listed; with it they are copied and verified, and
- * the Owner is sent back to `--plan`, so the first apply is one a plan showed (ADR-0094).
+ * not find that destination at its digest. With `apply` they are copied and verified, and the
+ * references are returned (a request without `registry` stops there and returns `null`, so the
+ * next full apply follows a plan). Without it they are only listed, and the result is `null` (Terraform
+ * must not run) unless the request computed its `registry`, whose plan can show the destinations.
  *
  * @throws {Error} naming the exact `docker buildx imagetools create` commands when a copy fails,
  * and the one `terraform apply -target` command when the repository does not exist yet.
@@ -122,18 +136,36 @@ async function isPresent(context: DeployContext, destination: string): Promise<b
 export async function copyImagesToArtifactRegistry(
   request: ImageCopyRequest,
 ): Promise<CloudRunImageReferences | null> {
-  const { context, references, apply, tag } = request;
-  const outside = CLOUD_RUN_IMAGES.filter((name) => !isArtifactRegistryImage(references[name]));
-  if (outside.length === 0) return references;
+  const { context, apply, tag, sources } = request;
+  const origins: Record<CloudRunImage, string> = { ...request.references };
+  const outside: CloudRunImage[] = [];
+  for (const name of CLOUD_RUN_IMAGES) {
+    const reference = origins[name];
+    if (!isArtifactRegistryImage(reference)) {
+      outside.push(name);
+    } else if (
+      request.registry !== undefined &&
+      sources !== undefined &&
+      reference.startsWith(`${request.registry}/`) &&
+      !(await isPresent(context, reference))
+    ) {
+      const source = sources()[name];
+      if (!isArtifactRegistryImage(source)) {
+        origins[name] = source;
+        outside.push(name);
+      }
+    }
+  }
+  if (outside.length === 0) return request.references;
 
-  const registry = await imageRegistry(request);
-  const copied: Record<CloudRunImage, string> = { ...references };
+  const registry = request.registry ?? (await imageRegistry(request));
+  const copied: Record<CloudRunImage, string> = { ...request.references };
   const copies: { name: CloudRunImage; source: string; destination: string }[] = [];
   for (const name of outside) {
-    const destination = `${registry}/${name}@${digestOf(references[name])}`;
+    const destination = `${registry}/${name}@${digestOf(origins[name])}`;
     copied[name] = destination;
     if (!(await isPresent(context, destination))) {
-      copies.push({ name, source: references[name], destination });
+      copies.push({ name, source: origins[name], destination });
     }
   }
   if (copies.length === 0) return copied;
@@ -142,20 +174,40 @@ export async function copyImagesToArtifactRegistry(
     for (const { source, destination } of copies) {
       context.out(`Would copy ${source} to ${destination}; re-run with --yes to copy.\n`);
     }
-    return null;
+    // With a computed registry the plan that follows names these destinations, so it is the real one.
+    return request.registry === undefined ? null : copied;
   }
 
   try {
-    for (const { name, source, destination } of copies) {
+    if (request.registry !== undefined) {
       await runStep(
         context,
-        'docker',
-        ['buildx', 'imagetools', 'create', '--tag', `${registry}/${name}:${tag}`, source],
-        { show: true },
+        'gcloud',
+        ['auth', 'configure-docker', registry.slice(0, registry.indexOf('/')), '--quiet'],
+        { show: false },
       );
-      if (!(await isPresent(context, destination))) {
-        throw new Error(`${destination} is not the release's digest after the copy`);
-      }
+    }
+    // The copies are independent registry-to-registry transfers, so they run together: one at a time
+    // the web image alone took over three minutes. Their docker output would interleave, so each
+    // prints one line when it is done (a failure still prints its own stderr).
+    const settled = await Promise.allSettled(
+      copies.map(async ({ name, source, destination }) => {
+        await runStep(
+          context,
+          'docker',
+          ['buildx', 'imagetools', 'create', '--tag', `${registry}/${name}:${tag}`, source],
+          { show: false },
+        );
+        if (!(await isPresent(context, destination))) {
+          throw new Error(`${destination} is not the release's digest after the copy`);
+        }
+        context.out(`Copied ${name}.\n`);
+      }),
+    );
+    // Every copy has finished by now; the first failure, in image order, is the one reported.
+    const failed = settled.find((outcome) => outcome.status === 'rejected');
+    if (failed !== undefined) {
+      throw failed.reason instanceof Error ? failed.reason : new Error(String(failed.reason));
     }
   } catch (error) {
     const host = registry.slice(0, registry.indexOf('/'));
@@ -169,8 +221,13 @@ export async function copyImagesToArtifactRegistry(
       { cause: error },
     );
   }
-  context.out('Images copied. Run --plan to review, then --yes.\n');
-  return null;
+  if (request.registry === undefined) {
+    // The legacy and --infra path: the first full apply is one a plan has shown.
+    context.out('Images copied. Run --plan to review, then --yes.\n');
+    return null;
+  }
+  context.out('Images copied.\n');
+  return copied;
 }
 
 /** A context for the steps that run before the deployment's own `.env` exists. */

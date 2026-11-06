@@ -34,6 +34,19 @@ describe('AgentsListScreen', () => {
     // has not been earned by an actual response yet.
     expect(html).toContain('Loading');
   });
+
+  it('lets the page head wrap on a phone and keeps the Japanese label on one line (UX-10)', () => {
+    const html = renderToStaticMarkup(createElement(AgentsListScreen, { locale: 'ja' }));
+    const classOf = (pattern: RegExp) => (pattern.exec(html)?.[1] ?? '').split(' ');
+
+    // The head row, then the actions group, then the label, in document order.
+    expect(classOf(/<div class="([^"]*)"><div><h1/u)).toContain('flex-wrap');
+    expect(classOf(/<div class="([^"]*)"><label/u)).toContain('flex-wrap');
+    expect(classOf(/<label class="([^"]*)" lang="ja">/u)).toContain('whitespace-nowrap');
+    expect(html).toContain('アーカイブ済みを表示');
+    // The 32px page margin alone took 64px of a 390px screen; a phone gets 16px.
+    expect(classOf(/<main class="([^"]*)"/u)).toContain('px-4');
+  });
 });
 
 describe('AgentDetailScreen', () => {

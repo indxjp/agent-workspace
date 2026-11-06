@@ -34,6 +34,7 @@
      "tokens",
      "triggers",
      "users",
+     "webhooks",
      "workspaces"]}},
   {"witnesses": ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decision_vocabularies_match_typescript"],
    "input": {"enum": "ROLES"},
@@ -56,6 +57,7 @@
    "id": "enum/sub-resources",
    "expected":
    {"workspaces": ["features"],
+    "webhooks": [],
     "users": [],
     "triggers": ["secret"],
     "tool-bundles": [],

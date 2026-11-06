@@ -321,9 +321,87 @@ describe('aw agents new --from-prompt', () => {
       `Evaluation of agent "Refunds" (${IDS.agent}) version 1: 2 case(s)`,
     );
     // A name is quoted, so a newline in it cannot forge a Budget or Warning line.
-    expect(run.stdout).toContain('  - "refund small"\n  - "refund big\\nBudget: $0.00"\n');
+    expect(run.stdout).toContain(
+      '  - "refund small" with input "a" expecting {"tool":"x"}\n' +
+        '  - "refund big\\nBudget: $0.00" with input "a" expecting {"tool":"x"}\n',
+    );
     expect(run.stdout).toContain(`Budget: ${CAP} per case`);
     expect(decisions(run)).toEqual([{ decision: 'reject' }]);
+  });
+
+  it('[US-BLD-06][api][cli] shows each check in full: name, the whole input, the expectation', async () => {
+    const long = `${'a'.repeat(300)}${'b'.repeat(25)}`;
+    const cases = [
+      { name: 'long', input: long, expect: { tool: 'x' } },
+      { name: 'hidden', input: 'Refund\u200B 12', expect: { contains: ['ok\u200B'] } },
+    ];
+    const { run } = await ask(call('evals_run', { agentId: IDS.agent, version: 1, cases }), []);
+    expect(run.stdout).toContain(`with input "${long}" expecting {"tool":"x"}`);
+    expect(run.stdout).not.toContain('not shown');
+    expect(run.stdout).toContain(
+      'with input "Refund<U+200B> 12" expecting {"contains":["ok<U+200B>"]}',
+    );
+  });
+
+  it('[US-BLD-06][api][cli] shows a rule with a no-break space differently from the ASCII one', async () => {
+    const base = bodyOf('Never run git status.');
+    const spaced = bodyOf('Never run git\u00A0status.');
+    const { run } = await ask(
+      call('draft_save', { agentId: IDS.agent, baseVersion: 1, body: spaced }),
+      [],
+      { versions: [base] },
+    );
+    expect(run.stdout).toContain('"Never run git status." -> "Never run git<U+00A0>status."');
+  });
+
+  it('[US-BLD-06][api][cli] shows two rules that differ only by a zero-width space differently', async () => {
+    const plain = bodyOf('Never approve a refund over 100 EUR.');
+    const hidden = bodyOf('Never approve a refund\u200B over 100 EUR.');
+    const { run } = await ask(
+      call('draft_save', { agentId: IDS.agent, baseVersion: 1, body: hidden }),
+      [],
+      {
+        versions: [plain],
+      },
+    );
+    expect(run.stdout).toContain('Never approve a refund over 100 EUR.');
+    expect(run.stdout).toContain('Never approve a refund<U+200B> over 100 EUR.');
+  });
+
+  it('[US-BLD-06][api][cli] finds a base version among many saved versions', async () => {
+    const versions = Array.from({ length: 150 }, (_unused, index) =>
+      bodyOf(`rule ${String(index + 1)}`),
+    );
+    const { run } = await ask(
+      call('draft_save', { agentId: IDS.agent, baseVersion: 150, body: bodyOf('rule 151') }),
+      [],
+      { versions },
+    );
+    expect(run.stdout).toContain('Save changes to agent');
+    expect(run.stdout).toContain('"rule 150" -> "rule 151"');
+  });
+
+  it('[US-BLD-06][api][cli] asks again when the Builder repeats an identical trial run', async () => {
+    const trial = { agentId: IDS.agent, version: 1, input: 'Refund 12 EUR' };
+    const { run, asked } = await ask(call('trial_run', trial), ['y', 'n'], {
+      then: call('trial_run', trial),
+    });
+    expect(asked).toEqual(['Run this trial? [y/N] ', 'Run this trial? [y/N] ']);
+    expect(decisions(run)).toEqual([{ decision: 'approve' }, { decision: 'reject' }]);
+  });
+
+  it('[US-BLD-06][api][cli] interrupts the run when Ctrl-C arrives while typed-ahead keys are dropped', async () => {
+    const run = await runCli(ARGV, {
+      ...TERMINAL,
+      discardInput: () => Promise.reject(new InterruptedError()),
+      prompt: () => Promise.resolve('y'),
+      route: builder(call('draft_save', { body: bodyOf('x') })),
+    });
+    expect(run.code).toBe(EXIT_CODE.interrupted);
+    expect(decisions(run)).toEqual([]);
+    expect(
+      run.calls.some((request) => request.url.pathname === `/api/runs/${IDS.run}/interrupt`),
+    ).toBe(true);
   });
 
   it('[US-BLD-06][api][cli] warns when a trial names an agent this session did not save', async () => {
@@ -373,7 +451,7 @@ describe('aw agents new --from-prompt', () => {
     expect(decisions(run)).toEqual([{ decision: 'reject' }]);
   });
 
-  it('[US-BLD-06][api][cli] strips control sequences from the agent name and the trial', async () => {
+  it('[US-BLD-06][api][cli] reveals control sequences in the agent name and the trial, never deleting them', async () => {
     const hostile = 'Re\x1b]0;pwned\x07fu\x9b31mnds\x7f';
     const evalCase = { name: `${hostile}\x1b]0;never ended`, input: 'a', expect: { tool: 'x' } };
     const target = { agentId: IDS.agent, version: 1 };
@@ -382,9 +460,21 @@ describe('aw agents new --from-prompt', () => {
       call('evals_run', { ...target, cases: [evalCase] }),
     ]) {
       const { run } = await ask(pending, [], { agentName: hostile });
-      expect(run.stdout).toContain('"Refu31mnds"');
+      expect(run.stdout).toContain('"Re<U+001B>]0;pwned<U+0007>fu<U+009B>31mnds<U+007F>"');
       expect(controls(run.stdout)).toEqual([]);
     }
+  });
+
+  it('[US-BLD-06][api][cli] shows an unterminated escape and its payload instead of deleting them', async () => {
+    const evalCase = { name: 'ok\x1b]0;never ended', input: 'a\x1b[', expect: { tool: 'x' } };
+    const { run } = await ask(
+      call('evals_run', { agentId: IDS.agent, version: 1, cases: [evalCase] }),
+      [],
+    );
+    expect(run.stdout).toContain(
+      '"ok<U+001B>]0;never ended" with input "a<U+001B>[" expecting {"tool":"x"}',
+    );
+    expect(controls(run.stdout)).toEqual([]);
   });
 
   it('keeps the session across the chat turns and ends on an empty line', async () => {
@@ -446,7 +536,7 @@ describe('aw agents new --from-prompt', () => {
     );
   });
 
-  it('[US-BLD-06][api][cli] strips control sequences from everything the model wrote', async () => {
+  it('[US-BLD-06][api][cli] drops control sequences from streamed text and reveals them on the approval', async () => {
     const hostile =
       'safe\x1b[2Jtext\x1b]0;pwned\x07 and \x1b]8;;http://evil\x1b\\link\x1b]8;;\x1b\\ \x1bZ\x9b31m end\x00\x7f\u200b\u202e\u2066\u200fX';
     const toolStep = agentFrame(1, {
@@ -459,9 +549,14 @@ describe('aw agents new --from-prompt', () => {
     const { run } = await ask(call('draft_save', { body: bodyOf(hostile) }), [], {
       before: message(hostile) + toolStep,
     });
-    expect(run.stdout).toContain('"safetext and link 31m endX"');
-    expect(run.stdout).toContain('safetext and link 31m endX\n');
-    expect(run.stdout).toContain('tool safetext and link 31m endX (other) {"command":');
+    const shown = 'safetext and link 31m end<U+200B><U+202E><U+2066><U+200F>X';
+    // The approval deletes nothing: an escape, its payload and the controls around it stay visible.
+    const approved =
+      'safe<U+001B>[2Jtext<U+001B>]0;pwned<U+0007> and <U+001B>]8;;http://evil<U+001B>\\\\link' +
+      '<U+001B>]8;;<U+001B>\\\\ <U+001B>Z<U+009B>31m end<U+0000><U+007F><U+200B><U+202E><U+2066><U+200F>X';
+    expect(run.stdout).toContain(`"${approved}"`);
+    expect(run.stdout).toContain(`${shown}\n`);
+    expect(run.stdout).toContain(`tool ${shown} (other) {"command":`);
     expect(run.stdout).not.toMatch(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/u);
     expect(controls(run.stdout)).toEqual([]);
   });
@@ -546,7 +641,7 @@ describe('aw agents new --from-prompt', () => {
     expect(run.stderr).toContain(DISABLED);
   });
 
-  it('[US-BLD-06][api][cli] strips nested diff values and keys, DEL and C1 included', async () => {
+  it('[US-BLD-06][api][cli] reveals nested diff values and keys, DEL and C1 included', async () => {
     const hostile = 'a\x1b]0;x\x07b\x7fc\x9b31md';
     // The shared diff lists scalars today; a section it gains later may carry arrays and objects.
     vi.mocked(diffBodies).mockReturnValueOnce([
@@ -558,10 +653,11 @@ describe('aw agents new --from-prompt', () => {
       },
     ]);
     const { run } = await ask(call('draft_save', { body: bodyOf('x') }), []);
-    expect(run.stdout).toContain('"tools[abc31md]"');
-    // A key is only escaped by JSON: ESC prints as the text \u001b, DEL and C1 go.
-    expect(run.stdout).toContain('"ka\\u001b]0;x\\u0007bc31md":["abc31md"]} -> ');
-    expect(run.stdout).toContain('[{"nested":"abc31md"},"abc31md"]');
+    const shown = 'a<U+001B>]0;x<U+0007>b<U+007F>c<U+009B>31md';
+    expect(run.stdout).toContain(`"tools[${shown}]"`);
+    // A key is escaped by JSON (ESC and BEL print as \u001b and \u0007); the final pass reveals DEL and C1.
+    expect(run.stdout).toContain('"ka\\u001b]0;x\\u0007b<U+007F>c<U+009B>31md":[');
+    expect(run.stdout).toContain(`[{"nested":"${shown}"},"${shown}"]`);
     expect(controls(run.stdout)).toEqual([]);
   });
 

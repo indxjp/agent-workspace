@@ -21,7 +21,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       (github.event.repository.visibility == 'public' || vars.ENABLE_GITHUB_ADVANCED_SECURITY == 'true')
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
@@ -38,7 +38,7 @@ jobs:
     if: >-
       github.event.repository.visibility != 'public' &&
       vars.ENABLE_GITHUB_ADVANCED_SECURITY != 'true'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - run: |
           echo "::warning title=CodeQL and dependency review did not run::GitHub Advanced Security is not enabled for this private repository (set the ENABLE_GITHUB_ADVANCED_SECURITY variable to true once it is). Only gitleaks, osv-scanner and pnpm audit cover this change."
@@ -46,7 +46,7 @@ jobs:
   # GitHub's runner for all three jobs: none of them is on ci-success's path (see ci.yml's header
   # for the runner rule).
   dependency-audit:
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -68,7 +68,7 @@ jobs:
     if: >-
       github.event.repository.visibility == 'public' ||
       vars.ENABLE_GITHUB_ADVANCED_SECURITY == 'true'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write

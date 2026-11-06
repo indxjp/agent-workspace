@@ -16,7 +16,7 @@ import {
 } from '@agent-workspace/core/db';
 
 import { SKILL_DELETE_PREFIX, skillDeleteMarkerKey, skillMetaKey } from './keys';
-import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
+import { listAll, readWhole } from '../storage/objects';
 import type { SkillObjects } from '../storage/store';
 
 /**
@@ -58,11 +58,13 @@ export async function pendingSkillDelete(
   catalog: ResourceCatalogRepository,
   name: string,
 ): Promise<PendingSkillDelete | null> {
-  const row = (await catalog.listSkills()).find((skill) => skill.name === name);
+  // Read by name: a sync or an adopt asks this once per skill, so listing every row here would
+  // make a pass over n skills read the whole table n times (#1925 item 5).
+  const row = await catalog.getSkill(name);
   const marked = row?.pendingDelete ?? null;
   if (marked !== null) return marked;
   const legacy = await readLegacyPendingSkillDelete(store, name);
-  if (legacy === null || row === undefined) return legacy;
+  if (legacy === null || row === null) return legacy;
   return (await catalog.backfillSkillPendingDelete(name, legacy)) ? legacy : null;
 }
 

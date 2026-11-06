@@ -29,6 +29,7 @@ import { listAll } from '@agent-workspace/core/storage/streams';
 import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import { skillRowFolder } from './keys';
 import { createSkillRowsWorld, ROWS_WORKSPACE_ID as WORKSPACE_ID } from './rows-fixture';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 let rootDir: string;
 let store: ObjectStore;
@@ -211,7 +212,7 @@ describe('importSkill', () => {
     expect((result.body as { error: { code: string } }).error.code).toBe('inadmissible_path');
     // Nothing was written at all: not even the well-formed SKILL.md entry that preceded the bad one.
     expect(await listAll(store, '')).toEqual([]);
-    expect(await catalog.listFiles()).toEqual([]);
+    expect(await listCatalogFiles(catalog)).toEqual([]);
   });
 
   it('refuses every character-class alias that defeated round 1 and round 2 (ADR-0044, B1/B2)', async () => {

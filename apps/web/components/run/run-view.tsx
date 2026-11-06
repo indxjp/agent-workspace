@@ -38,10 +38,22 @@
  *      and the transcript takes the full width; no SDK events renders the tab's empty line rather
  *      than an empty log. §43 asks for calm and sparse, and a framed empty container is furniture.
  */
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { AssistantProse } from '@indx-workspace/react';
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { AssistantProse, sendsOnEnter } from '@indx-workspace/react';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { withSetupWizardLink } from '../setup/setup-wizard-link';
 import { ShareDialog, type ShareSubject } from '../shares/share-dialog';
 import { AttachControl, type AttachedFile } from './attach-control';
+import { browserLocale } from './attach-messages';
+import {
+  matchMemberCalls,
+  memberNameOfTool,
+  runHref,
+  type ChildRunLink,
+  type MemberCall,
+} from './run-tree-model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 import {
   type ActivityStep,
@@ -119,6 +131,42 @@ export interface RunViewProps {
   readonly prefill?: ComposerPrefill | undefined;
   /** Rendered under the transcript: a caller's own prompt, such as the Builder's approval card. */
   readonly approval?: ReactNode;
+  /**
+   * The run's place in a run tree (ADR-0104): its lead run, when it is a member's child run, and
+   * its child runs, which its `agent__<name>` activity rows link to. Absent for a run outside one.
+   */
+  readonly tree?: RunViewTree | undefined;
+  /** `false` hides **Attach file**: the workspace has Files switched off (UX-21 in #2086). */
+  readonly filesEnabled?: boolean | undefined;
+  /** `false` inside another screen's `<main>`: a `<div>` and an `<h2>` (see HomeChatProps). */
+  readonly landmark?: boolean;
+}
+
+/** What the run view knows of a run tree: the lead run's id, or the child runs to link to. */
+export interface RunViewTree {
+  readonly parentRunId: string | null;
+  readonly children: readonly ChildRunLink[];
+}
+
+/** The member calls of a run's activity rows, and the child run each one started. */
+interface TeamLinks {
+  readonly matched: ReadonlyMap<string, ChildRunLink>;
+  readonly strings: TeamStrings;
+}
+
+/** Every activity step that calls a tool, in transcript order. */
+function toolCallsOf(messages: Run['messages']): readonly MemberCall[] {
+  return messages.flatMap((message) =>
+    message.kind === 'agent'
+      ? message.blocks.flatMap((block) =>
+          block.kind === 'activity'
+            ? block.steps.flatMap((step) =>
+                step.tool === null ? [] : [{ stepId: step.id, toolName: step.tool }],
+              )
+            : [],
+        )
+      : [],
+  );
 }
 
 /** Text a caller asks a composer to hold; a new `nonce` is a new request, the same one is not. */
@@ -166,8 +214,20 @@ export function RunView({
   onFollowUp,
   prefill,
   approval,
+  tree,
+  filesEnabled = true,
+  landmark = true,
 }: RunViewProps) {
   const { heading, messages, technical, rail, followUp, failure } = run;
+  const [locale, setLocale] = useState<VersionsLocale>('en');
+  useEffect(() => setLocale(browserLocale(navigator.languages)), []);
+  const team = useMemo<TeamLinks>(
+    () => ({
+      matched: matchMemberCalls(toolCallsOf(messages), tree?.children ?? []),
+      strings: teamStrings(locale),
+    }),
+    [messages, tree, locale],
+  );
   const shareSubject = shareSubjectForSession(sessionId, heading.title);
   const [followUpDraft, setFollowUpDraft] = useState('');
   const followUpRef = useRef<HTMLTextAreaElement>(null);
@@ -193,13 +253,27 @@ export function RunView({
     );
   };
 
+  const Landmark = landmark ? 'main' : 'div';
+  const Heading = landmark ? 'h1' : 'h2';
   return (
-    <main className="w-full max-w-[1320px] px-5 pt-5 pb-[90px] sm:px-8">
+    <Landmark className="w-full max-w-[1320px] px-5 pt-5 pb-[90px] sm:px-8">
       <div className="mx-auto mb-8 flex max-w-[900px] items-center gap-4 border-b border-border pb-4">
         <div className="min-w-0">
-          <h1 className="truncate text-[17px] font-semibold">{heading.title}</h1>
+          <Heading className="truncate text-[17px] font-semibold">{heading.title}</Heading>
           {heading.subtitle === '' ? null : (
             <div className="mt-0.5 truncate text-[12px] text-muted">{heading.subtitle}</div>
+          )}
+          {tree === undefined || tree.parentRunId === null ? null : (
+            <div className="mt-0.5 text-[12px] text-text-2" data-testid="run-parent">
+              {team.strings.partOfTeamRun}
+              {' · '}
+              <Link
+                href={runHref(tree.parentRunId)}
+                className="text-accent no-underline hover:underline"
+              >
+                {team.strings.openLeadRun}
+              </Link>
+            </div>
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -222,7 +296,7 @@ export function RunView({
         <div className="min-w-0">
           <div aria-live="polite" className="flex flex-col gap-8">
             {messages.map((message) => (
-              <MessageBlock key={message.id} message={message} />
+              <MessageBlock key={message.id} message={message} team={team} />
             ))}
             {assistantIsWorking ? <PendingAssistant name={heading.title} /> : null}
             {failure === null ? null : <FailureNotice failure={failure} />}
@@ -238,19 +312,21 @@ export function RunView({
               value={followUpDraft}
               onChange={(event) => setFollowUpDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.shiftKey) return;
+                if (!sendsOnEnter(event)) return;
                 event.preventDefault();
                 submitFollowUp();
               }}
             />
             <div className="flex flex-wrap items-center gap-2">
-              <AttachControl
-                sessionId={sessionId}
-                files={attached}
-                onAttached={(file) => setAttached((current) => [...current, file])}
-                buttonClass={`${BTN} ${BTN_SM} ${BTN_GHOST}`}
-                disabledClass={BTN_DISABLED}
-              />
+              {filesEnabled ? (
+                <AttachControl
+                  sessionId={sessionId}
+                  files={attached}
+                  onAttached={(file) => setAttached((current) => [...current, file])}
+                  buttonClass={`${BTN} ${BTN_SM} ${BTN_GHOST}`}
+                  disabledClass={BTN_DISABLED}
+                />
+              ) : null}
               {followUp.actions
                 .filter((action) => action.id !== 'attach')
                 .map((action) => (
@@ -293,7 +369,7 @@ export function RunView({
           </aside>
         )}
       </div>
-    </main>
+    </Landmark>
   );
 }
 
@@ -324,14 +400,14 @@ export function FailureNotice({ failure }: { readonly failure: RunFailureNotice 
         )}
       </div>
       <p data-testid="run-failure-message" className="mt-1 text-text-2 [overflow-wrap:anywhere]">
-        {failure.message}
+        {withSetupWizardLink(failure.message)}
       </p>
     </div>
   );
 }
 
 /** One `.msg`. Total over the two arms; there is no third kind of speaker. */
-function MessageBlock({ message }: { readonly message: Message }) {
+function MessageBlock({ message, team }: { readonly message: Message; readonly team: TeamLinks }) {
   switch (message.kind) {
     case 'user':
       return (
@@ -350,7 +426,7 @@ function MessageBlock({ message }: { readonly message: Message }) {
           <div className="min-w-0 flex-1 pt-0.5 text-[15px] leading-7 [&_p:last-child]:mb-0">
             <div className="mb-2 text-[13px] font-semibold text-text-2">{message.speaker.name}</div>
             {message.blocks.map((block, index) => (
-              <BlockView key={index} block={block} />
+              <BlockView key={index} block={block} team={team} />
             ))}
           </div>
         </div>
@@ -449,7 +525,7 @@ function Runs({ paragraph }: { readonly paragraph: Paragraph }) {
 }
 
 /** Prose, or the activity bracket beside it. Total over {@link TurnBlock}. */
-function BlockView({ block }: { readonly block: TurnBlock }) {
+function BlockView({ block, team }: { readonly block: TurnBlock; readonly team: TeamLinks }) {
   switch (block.kind) {
     case 'prose':
       return (
@@ -467,7 +543,7 @@ function BlockView({ block }: { readonly block: TurnBlock }) {
       return (
         <div className="my-3 flex flex-col gap-[7px] border-l-2 border-border pl-[14px]">
           {block.steps.map((step) => (
-            <ActivityRow key={step.id} step={step} />
+            <ActivityRow key={step.id} step={step} team={team} />
           ))}
         </div>
       );
@@ -485,7 +561,8 @@ function BlockView({ block }: { readonly block: TurnBlock }) {
  * happens to be present. A running step legitimately has no duration and would otherwise be drawn
  * as finished.
  */
-function ActivityRow({ step }: { readonly step: ActivityStep }) {
+function ActivityRow({ step, team }: { readonly step: ActivityStep; readonly team: TeamLinks }) {
+  const member = step.tool === null ? null : memberNameOfTool(step.tool);
   return (
     <div className="flex items-center gap-2 text-[13px] text-text-2">
       {step.state === 'done' ? (
@@ -499,11 +576,39 @@ function ActivityRow({ step }: { readonly step: ActivityStep }) {
       {step.label}
       {step.tool === null ? null : (
         <span className="rounded-[4px] border border-border bg-surface-2 px-1.5 py-px font-mono text-[12px]">
-          {step.tool}
+          {member ?? step.tool}
         </span>
+      )}
+      {member === null ? null : (
+        <MemberRunLink child={team.matched.get(step.id)} member={member} strings={team.strings} />
       )}
       <span className="ml-auto text-[12px] text-muted">{step.duration}</span>
     </div>
+  );
+}
+
+/** An `agent__<name>` row's link to the child run the call started, or why there is none yet. */
+function MemberRunLink({
+  child,
+  member,
+  strings,
+}: {
+  readonly child: ChildRunLink | undefined;
+  readonly member: string;
+  readonly strings: TeamStrings;
+}) {
+  if (child === undefined) {
+    return <span className="text-[12px] text-muted">{strings.childRunPending}</span>;
+  }
+  return (
+    <Link
+      href={runHref(child.id)}
+      className="text-[12px] text-accent no-underline hover:underline"
+      aria-label={`${strings.openChildRun}: ${member}`}
+      data-testid="run-member-link"
+    >
+      {strings.openChildRun} →
+    </Link>
   );
 }
 

@@ -1,5 +1,5 @@
-import type { Role } from '../../rbac/roles';
-import type { WorkspaceSharing } from '../core/runtime';
+import type { Role } from '../../rbac/core/roles';
+import type { WorkspaceSharing } from '../runtime';
 import { DomainError } from '../../errors';
 
 export function isPublicSharingEnabled(sharing: WorkspaceSharing): Promise<boolean> {

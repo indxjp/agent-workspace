@@ -3,6 +3,8 @@
  * The port, the record types and the shared constants live in `./store`; the PostgreSQL adapter
  * is `./repository-store`. `store.test.ts` runs one conformance suite against both.
  */
+import { RUN_CHILDREN_MAX } from '@indx-workspace/contracts/runs';
+
 import {
   classifyEventName,
   classifyPlatformEventName,
@@ -12,6 +14,8 @@ import {
 } from './sse';
 import {
   ApprovalDecisionError,
+  ChildRunLimitError,
+  ParentRunStoppedError,
   eventRetentionLimit,
   isTerminalRunStatus,
   MAX_RUN_LIST_LIMIT,
@@ -221,6 +225,23 @@ class RunEventLog {
   }
 }
 
+/** A new run's place in a run tree: a continuation stays in its paused run's, as the repository keeps it. */
+function treeOf(
+  input: CreateRunInput,
+  paused: RunRecord | undefined,
+): Pick<RunRecord, 'parentRunId' | 'agentTeamVersionId'> {
+  if (paused !== undefined) {
+    return {
+      parentRunId: paused.parentRunId ?? null,
+      agentTeamVersionId: paused.agentTeamVersionId ?? null,
+    };
+  }
+  return {
+    parentRunId: input.parent?.runId ?? null,
+    agentTeamVersionId: input.agentTeamVersionId ?? null,
+  };
+}
+
 export interface InMemoryRunStoreOptions {
   readonly maxEventsPerRun?: number;
   readonly now?: () => Date;
@@ -290,6 +311,8 @@ export class InMemoryRunStore implements RunStore {
     if (idempotency !== undefined && keySlot !== null && this.#keys.has(keySlot)) {
       return Promise.reject(new IdempotencyKeyTakenError(idempotency.key));
     }
+    const overLimit = this.#childLimitRefusal(input.parent, paused);
+    if (overLimit !== null) return Promise.reject(overLimit);
     if (paused !== undefined) {
       // The repository store writes the same `completed` status event into the paused run's log.
       this.#events.reopen(paused.id);
@@ -321,6 +344,7 @@ export class InMemoryRunStore implements RunStore {
       cacheCreationInputTokens: 0,
       toolCalls: 0,
       costUsd: '0.000000',
+      spendCeilingUsd: input.spendCeilingUsd ?? null,
       costCurrency: 'USD',
       priceTableVersion: null,
       error: null,
@@ -329,9 +353,11 @@ export class InMemoryRunStore implements RunStore {
       output: null,
       outputSchema: input.outputSchema ?? null,
       subject: input.subject ?? null,
+      limitsOverride: input.limitsOverride ?? null,
       pendingApproval: null,
       approvedToolCalls: input.approvedToolCalls ?? [],
       approvalsConsumedAt: null,
+      ...treeOf(input, paused),
       projectId: input.projectId ?? null,
       agentVersion: input.agentVersion ?? null,
       // `exactOptionalPropertyTypes` refuses an explicit `undefined` for an optional `string`
@@ -473,6 +499,66 @@ export class InMemoryRunStore implements RunStore {
     return Promise.resolve(this.#events.stream(runId, after));
   }
 
+  /**
+   * The repository's fan-out guard: a `parent` that is no longer `running` (a member call only),
+   * or a root that already has `maxChildren` children. A child's continuation (`paused`, a run
+   * with a parent) counts against `RUN_CHILDREN_MAX` children of its root.
+   */
+  #childLimitRefusal(
+    parent: CreateRunInput['parent'],
+    paused: RunRecord | undefined,
+  ): ChildRunLimitError | ParentRunStoppedError | null {
+    let target: { readonly runId: string; readonly maxChildren: number } | null = null;
+    if (paused !== undefined) {
+      const root = paused.parentRunId ?? null;
+      if (root !== null) target = { runId: root, maxChildren: RUN_CHILDREN_MAX };
+    } else if (parent !== undefined) {
+      if (this.#records.get(parent.runId)?.status !== 'running') {
+        return new ParentRunStoppedError(parent.runId);
+      }
+      target = parent;
+    }
+    if (target === null) return null;
+    const { runId, maxChildren } = target;
+    const children = [...this.#records.values()].filter((run) => run.parentRunId === runId);
+    return children.length >= maxChildren ? new ChildRunLimitError(runId) : null;
+  }
+
+  listChildren(
+    workspaceId: string,
+    parentRunId: string,
+    limit: number,
+  ): Promise<readonly RunRecord[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RUN_LIST_LIMIT) {
+      return Promise.reject(
+        new Error(`listChildren limit must be an integer from 1 to ${String(MAX_RUN_LIST_LIMIT)}`),
+      );
+    }
+    // Oldest first, `id` breaking a tie: the repository's `ORDER BY created_at, id`.
+    const children = [...this.#records.values()]
+      .filter((run) => run.workspaceId === workspaceId && run.parentRunId === parentRunId)
+      .sort((a, b) => {
+        const byTime = a.createdAt.getTime() - b.createdAt.getTime();
+        if (byTime !== 0) return byTime;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+    return Promise.resolve(children.slice(0, limit));
+  }
+
+  /**
+   * Make the stored run `runId` a child of `parentRunId`, with `costUsd` when given: the state a
+   * team's member call leaves (ADR-0104), without starting it through a member call. Tests only.
+   */
+  seedChildForTests(runId: string, parentRunId: string, costUsd?: string): void {
+    const record = this.#records.get(runId);
+    if (record === undefined) throw new Error(`run ${runId} does not exist`);
+    this.#records.set(runId, {
+      ...record,
+      parentRunId,
+      ...(costUsd === undefined ? {} : { costUsd, accountingState: 'complete' }),
+    });
+  }
+
   listRuns(workspaceId: string, input: ListRunsInput): Promise<RunListPage> {
     if (!Number.isSafeInteger(input.limit) || input.limit < 1) {
       return Promise.reject(new Error('listRuns limit must be a safe positive integer'));
@@ -490,6 +576,7 @@ export class InMemoryRunStore implements RunStore {
       if (run.workspaceId !== workspaceId) return false;
       if (filter.status !== undefined && run.status !== filter.status) return false;
       if (filter.agentId !== undefined && run.agentId !== filter.agentId) return false;
+      if (filter.agentIds !== undefined && !filter.agentIds.includes(run.agentId)) return false;
       if (filter.projectId !== undefined && run.projectId !== filter.projectId) return false;
       if (filter.provider !== undefined && run.provider !== filter.provider) return false;
       if (filter.model !== undefined && run.model !== filter.model) return false;

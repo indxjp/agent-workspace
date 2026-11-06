@@ -11,4 +11,5 @@
 export const PACKAGE_NAME = '@agent-workspace/core';
 
 export * from './net/egress-policy.js';
+export * from './net/outbound-proxy.js';
 export * from './cleanup.js';

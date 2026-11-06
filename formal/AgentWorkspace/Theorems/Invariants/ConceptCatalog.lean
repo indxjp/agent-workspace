@@ -86,7 +86,7 @@ private theorem fk_parent {S : Schema} {st : State} (hc : Er.Core.consistent S s
 /-- In a consistent state, a row whose foreign key is set names exactly one parent row, provided
 the key targets an exact key of the parent. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem reference_names_one_parent (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) {t : TableName} {fk : ForeignKey}
     (hfk : fk ∈ (S t).foreignKeys) (hk : targetIsExactKey S fk = true) {r : Row} (hr : r ∈ st t)
@@ -99,7 +99,7 @@ theorem reference_names_one_parent (S : Schema) (st : State)
 
 /-- In a consistent state, a foreign key over `NOT NULL` columns is set on every row. -/
 @[aw_spec (tier := T2) (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem mandatory_reference_is_set (S : Schema) (st : State)
     (hc : Er.Core.consistent S st = true) (t : TableName) (fk : ForeignKey)
     (hm : fk.columns.all (S t).isNotNull = true) {r : Row} (hr : r ∈ st t) :
@@ -219,7 +219,7 @@ elab "aw_catalog_key_theorems" : command => do
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T2)) (doc := $(Syntax.mkStrLit erDoc)) (ts := $fkTs)
-        (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+        (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
       theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : AgentWorkspace.Er.Current.Catalog.consistent st = true) {r r' : AgentWorkspace.Er.Core.Row}
           (href : References catalogue st $tIdent (fk $tIdent $nameLit) r r') :
           tenantOf catalogue $tIdent r = tenantOf catalogue (fk $tIdent $nameLit).refTable r' :=
@@ -956,7 +956,7 @@ theorem rename_by_prefix_keeps_every_identity (old new : String) (fs : List File
 
 /-- A subtree move leaves every row outside the prefix exactly as it was. -/
 @[aw_spec (tier := T2)
-  (ts := "packages/core/src/db/repositories/resource-catalogs.ts#pathUnderPrefix")]
+  (ts := "packages/core/src/db/repositories/resource-catalogs-sql.ts#pathUnderPrefix")]
 theorem rename_by_prefix_leaves_other_rows_alone (old new : String) (fs : List File.File)
     (f : File.File) (hf : f ∈ fs) (hout : File.underPrefix old f.path = false) :
     f ∈ File.renameByPrefix old new fs := by
@@ -992,7 +992,7 @@ theorem rename_by_prefix_moves_the_rows_under_it (old new : String) (fs : List F
 
 /-- A subtree delete keeps exactly the rows outside the prefix. -/
 @[aw_spec (tier := T2)
-  (ts := "packages/core/src/db/repositories/resource-catalogs.ts#pathUnderPrefix")]
+  (ts := "packages/core/src/db/repositories/resource-catalogs-sql.ts#pathUnderPrefix")]
 theorem delete_by_prefix_keeps_exactly_the_other_rows (pre : String) (fs : List File.File)
     (f : File.File) :
     f ∈ File.deleteByPrefix pre fs ↔ f ∈ fs ∧ File.underPrefix pre f.path = false := by

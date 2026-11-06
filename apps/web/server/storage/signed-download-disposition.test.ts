@@ -87,7 +87,7 @@ describe('a signed download link always names its Content-Disposition (#1746)', 
       .split('\n')
       .filter((file) => file !== '');
 
-    expect(files).toContain('apps/web/server/storage/service.ts');
+    expect(files).toContain('apps/web/server/storage/service-downloads.ts');
     for (const file of files) {
       expect(
         signedGetsWithoutDisposition(file, readFileSync(`${REPO_ROOT}/${file}`, 'utf8')),

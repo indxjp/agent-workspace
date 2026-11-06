@@ -145,6 +145,13 @@ describe('aw (entry behaviour)', () => {
     const local = COMMANDS.filter((command) => command.controlPlane === 'none');
     expect(local.map((command) => command.path.join(' '))).toEqual([
       'init',
+      'generate app',
+      'generate resource',
+      'generate agent',
+      'generate page',
+      'generate recipe',
+      'generate channel',
+      'destroy',
       'dev',
       'dev status',
       'dev stop',
@@ -156,6 +163,10 @@ describe('aw (entry behaviour)', () => {
       'platforms publish',
       'platforms import',
       'platforms doctor',
+      'blueprint add',
+      'blueprint list',
+      'blueprint diff',
+      'blueprint update',
     ]);
     const init = local.find((command) => command.path.join(' ') === 'init');
     expect(init === undefined ? [] : [...supportedFlags(init)].sort()).toEqual(

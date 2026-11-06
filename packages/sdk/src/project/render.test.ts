@@ -141,6 +141,8 @@ describe('renderProjectFiles', () => {
       `# The Agent Workspace project file: what \`aw dev\` runs, and where.
 # No secret belongs in this file; it is meant to be committed.
 # \`aw dev\` reads the model key from ANTHROPIC_API_KEY in its own environment.
+# To deploy to your Google Cloud project: add this under environments, then \`aw deploy production\`.
+#   production: { target: gcp-cloudrun, url: https://<host>, gcp: { project: <id>, region: asia-northeast1 } }
 apiVersion: agentworkspace.dev/v2
 kind: Project
 name: my-project
@@ -674,7 +676,7 @@ describe('renderProjectShell', () => {
     "@indx-workspace/aw": "0.3.0",
     "@indx-workspace/embedded": "0.3.0",
     "@indx-workspace/sdk": "0.3.0",
-    "@anthropic-ai/claude-agent-sdk": "0.3.310",
+    "@anthropic-ai/claude-agent-sdk": "0.3.316",
     "@anthropic-ai/sdk": "1.3.0"
   },
   "devDependencies": {
@@ -702,7 +704,8 @@ describe('renderProjectShell', () => {
     "@modelcontextprotocol/client@>=2.0.0 <2.3.0": "^2.3.0",
     "@modelcontextprotocol/core@>=2.0.0 <2.3.0": "^2.3.0",
     "@modelcontextprotocol/node@>=2.0.0 <2.1.0": "2.1.1",
-    "@hono/node-server@>=1.19.10 <2.1.3": "^2.1.3"
+    "@hono/node-server@>=1.19.10 <2.1.3": "^2.1.3",
+    "minimatch@>=10.0.0 <11.0.1": "^11.0.3"
   }
 }
 `,
@@ -734,6 +737,7 @@ overrides:
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': '^2.3.0'
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': '2.1.1'
   '@hono/node-server@>=1.19.10 <2.1.3': '^2.1.3'
+  'minimatch@>=10.0.0 <11.0.1': '^11.0.3'
 `,
     );
     expect(contentsOf(files, '.gitignore')).toBe('node_modules/\n.agent-workspace/\n.aw/\n.env\n');

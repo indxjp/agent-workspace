@@ -2,7 +2,7 @@ import { log } from '../../telemetry/logger';
 import type { DatabaseRoot } from '@agent-workspace/core/db';
 import { after } from 'next/server';
 
-import { readRuntimeSettings } from '../../compose/run-request';
+import { meetRunCeiling, readRuntimeSettings } from '../../compose/run-request';
 import { createRunPreflight } from '../../compose/run-preflight';
 import {
   createRunTokenIssuer,
@@ -252,6 +252,25 @@ export async function wireRunRuntime({
       files,
     );
 
+  // ADR-0162 decision 2: the limit the run composes with, read from the version it will run (the
+  // session's pin, the version a new session is asked to pin, or `local`'s) and met with the
+  // deployment ceiling by the same rule compose applies.
+  const spendLimitFor: NonNullable<RunApiEnvironment['spendLimitFor']> = async (
+    principal,
+    agent,
+    sessionId,
+    agentVersionId,
+  ) => {
+    const pinned = agentVersionId ?? (await sessionPin(principal.workspaceId, agent.id, sessionId));
+    const scope =
+      pinned === null && sessionId === null
+        ? await scopes.forWorkspaceId(principal.workspaceId)
+        : null;
+    const versionId = pinned ?? (scope === null ? null : await pinnedVersionFor(scope, agent.id));
+    const { agent: record } = await readRunAgent(principal.workspaceId, agent.id, versionId);
+    return meetRunCeiling(record, record.permissions, null, policyCeiling).met.limits.maxBudgetUsd;
+  };
+
   return {
     runtime,
     gatewaySettings,
@@ -264,6 +283,7 @@ export async function wireRunRuntime({
     sessionPin,
     preflightAgainst,
     runStartPreflight,
+    spendLimitFor,
   };
 }
 

@@ -21,7 +21,7 @@ import { POST as createProject } from '../../app/api/projects/route';
 import { DELETE as revokeShare } from '../../app/api/shares/[id]/route';
 import { GET as listShares, POST as publishShare } from '../../app/api/shares/route';
 import { PATCH as patchSharingPolicy } from '../../app/api/sharing-policies/route';
-import type { WorkspaceSharing } from '../shares/core/runtime';
+import type { WorkspaceSharing } from '../shares/runtime';
 import { clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { encodeFileId } from '../files/file-id';

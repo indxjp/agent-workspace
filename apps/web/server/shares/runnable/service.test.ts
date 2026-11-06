@@ -1,7 +1,7 @@
 import type { ShareRecord } from '@agent-workspace/core/db';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkspaceSharing } from '../core/runtime';
+import type { WorkspaceSharing } from '../runtime';
 import { publicPermissions, RunnableShareService, visitorSessionId } from './service';
 
 const share: ShareRecord = {

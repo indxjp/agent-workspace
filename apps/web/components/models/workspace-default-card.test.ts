@@ -14,4 +14,10 @@ describe('WorkspaceModelDefaultCard', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('<button');
   });
+
+  it('explains the default in plain words, without internal terms', () => {
+    const html = renderToStaticMarkup(createElement(WorkspaceModelDefaultCard));
+    expect(html).toContain('when neither the agent nor its project picks one');
+    expect(html).not.toMatch(/ladder|rung|API route|layer/u);
+  });
 });

@@ -30,8 +30,9 @@ private def run : JValue := .obj
    ("model", .null), ("provider", .null), ("modelConnectionId", .null),
    ("engine", .str "claude-agent-sdk"), ("engineVersion", .null),
    ("usage", usage), ("cost", cost (.str "0.000000") (.str "USD")),
+   ("spendCeilingUsd", .null),
    ("error", .null), ("output", .null), ("accountingState", .str "pending"),
-   ("accountingError", .null), ("pendingApproval", .null)]
+   ("accountingError", .null), ("pendingApproval", .null), ("parentRunId", .null)]
 
 private def session : JValue := .obj
   [("id", .str "session"), ("workspaceId", .str "ws"), ("agentId", .str "agent"),

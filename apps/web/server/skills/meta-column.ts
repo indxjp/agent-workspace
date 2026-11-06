@@ -15,13 +15,7 @@
  *   a leftover object would bring it back. Removing the legacy objects of skills that are not
  *   being deleted is the finalize step's job (#1676).
  */
-import {
-  bytesToStream,
-  listAll,
-  listPageFrom,
-  readWhole,
-  streamToBytes,
-} from '@agent-workspace/core/storage/streams';
+import { bytesToStream, listAll, listPageFrom, readWhole, streamToBytes } from '../storage/objects';
 import type { SkillObjectEntry, SkillObjects } from '../storage/store';
 
 import { skillMetaKey, skillNameFromMetaKey, SKILL_META_PREFIX } from './keys';

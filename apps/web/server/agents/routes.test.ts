@@ -40,7 +40,7 @@ import { type WorkspaceResolution } from './runtime';
 import { clearEnginesRegisteredForTests, registerEngineForTests } from '../engines/registry';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';

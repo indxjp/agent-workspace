@@ -40,7 +40,7 @@ export const CLOUD_RUN_RUNTIME_CAPABILITIES: CloudRunRuntimeCapabilities = {
   persistentFilesystem: false,
   sessionAffinity: true,
   maxSessionSeconds: 3600,
-  networkPolicies: ['none', 'open'],
+  networkPolicies: ['none'],
   execCommands: true,
   gpu: false,
   managedByProvider: true,
@@ -48,14 +48,17 @@ export const CLOUD_RUN_RUNTIME_CAPABILITIES: CloudRunRuntimeCapabilities = {
   fileTransfer: 'push-archive',
 };
 
+/** Network tag the VPC firewall matches to deny sandbox egress. */
+const SANDBOX_NETWORK_TAG = 'aw-sandbox';
+
 export type CloudRunServiceSpec = Readonly<{
   serviceId: string;
   image: string;
   region: string;
   project: string;
   serviceAccount: string;
-  vpcConnector?: string;
-  egress: 'none' | 'open';
+  network: string;
+  subnetwork: string;
   cpu?: number;
   memoryMb?: number;
   timeoutSeconds?: number;
@@ -115,25 +118,35 @@ export function createCloudRunAdminClient(options: {
           method: 'POST',
           body: JSON.stringify({
             labels: spec.labels,
-            ingress: 'INGRESS_TRAFFIC_ALL',
+            ingress: 'INGRESS_TRAFFIC_INTERNAL_ONLY',
             template: {
               serviceAccount: spec.serviceAccount,
               timeout: `${String(spec.timeoutSeconds ?? 3600)}s`,
               executionEnvironment: 'EXECUTION_ENVIRONMENT_GEN2',
               maxInstanceRequestConcurrency: 1,
               scaling: { minInstanceCount: 0, maxInstanceCount: 1 },
-              ...(spec.vpcConnector === undefined
-                ? {}
-                : {
-                    vpcAccess: {
-                      connector: spec.vpcConnector,
-                      egress: spec.egress === 'open' ? 'ALL_TRAFFIC' : 'PRIVATE_RANGES_ONLY',
-                    },
-                  }),
+              vpcAccess: {
+                networkInterfaces: [
+                  {
+                    network: spec.network,
+                    subnetwork: spec.subnetwork,
+                    tags: [SANDBOX_NETWORK_TAG],
+                  },
+                ],
+                egress: 'ALL_TRAFFIC',
+              },
               containers: [
                 {
                   image: spec.image,
                   ports: [{ containerPort: 8080 }],
+                  // /ping, never /healthz: Google's edge reserves /healthz (see the ADR).
+                  // 2 s x 50 attempts stays under the driver's 120 s readyTimeoutMs.
+                  startupProbe: {
+                    httpGet: { path: '/ping', port: 8080 },
+                    periodSeconds: 2,
+                    failureThreshold: 50,
+                    timeoutSeconds: 1,
+                  },
                   resources: {
                     limits: {
                       cpu: String(spec.cpu ?? 1),
@@ -193,8 +206,9 @@ export type CloudRunDriverOptions<TRequest, TEvent> = Readonly<{
   region: string;
   serviceAccount: string;
   startAgent: CloudRunAgentStarter<TRequest, TEvent>;
-  vpcConnector?: string;
-  egress?: 'none' | 'open';
+  /** VPC network and subnetwork every sandbox joins; the firewall on that network denies egress. */
+  network: string;
+  subnetwork: string;
   client?: CloudRunResourceClient;
   /** Production managers set this so mutable tags cannot cross the runtime boundary. */
   requireDigest?: boolean;
@@ -224,14 +238,14 @@ function assertCompatibleRunSpec(spec: RuntimeRunSpec | undefined): void {
   if (spec.driver !== 'cloud-run-service') {
     throw new Error(`cloud-run runtime: run spec selects incompatible driver ${spec.driver}.`);
   }
-  if (spec.networkPolicy === 'restricted') {
+  if (spec.networkPolicy === 'restricted' || spec.networkPolicy === 'open') {
     throw new Error(
-      'cloud-run runtime: restricted network policy requires an allowlist proxy, which this driver does not run (ADR-0117 decision 7).',
+      `cloud-run runtime: ${spec.networkPolicy} network policy is not available on Cloud Run yet: it needs the sandbox egress proxy, and the gcp.sandboxInternet option that adds it arrives in a later release. Cloud Run sandboxes support only none in this release.`,
     );
   }
   if (spec.allowedDomains !== undefined && spec.allowedDomains.length > 0) {
     throw new Error(
-      'cloud-run runtime: allowedDomains requires restricted proxy enforcement, which this driver does not run (ADR-0117 decision 7).',
+      'cloud-run runtime: allowedDomains is not available on Cloud Run yet: it needs the sandbox egress proxy, and the gcp.sandboxInternet option that adds it arrives in a later release.',
     );
   }
   if (spec.persistPaths !== undefined && spec.persistPaths.length > 0) {
@@ -258,6 +272,9 @@ export function createCloudRunDriver<TRequest, TEvent>(
   const project = requireValue(options.project, 'project');
   const region = requireValue(options.region, 'region');
   const serviceAccount = requireValue(options.serviceAccount, 'serviceAccount');
+  // Fail closed: a sandbox without a network interface would have public egress.
+  const network = requireValue(options.network, 'network');
+  const subnetwork = requireValue(options.subnetwork, 'subnetwork');
   const client =
     options.client ??
     (() => {
@@ -296,8 +313,8 @@ export function createCloudRunDriver<TRequest, TEvent>(
         region,
         project,
         serviceAccount,
-        egress: spec?.networkPolicy === 'open' ? 'open' : (options.egress ?? 'none'),
-        ...(options.vpcConnector === undefined ? {} : { vpcConnector: options.vpcConnector }),
+        network,
+        subnetwork,
         ...(spec?.cpu === undefined ? {} : { cpu: spec.cpu }),
         ...(spec?.memoryMb === undefined ? {} : { memoryMb: spec.memoryMb }),
         ...(spec?.timeoutSeconds === undefined ? {} : { timeoutSeconds: spec.timeoutSeconds }),

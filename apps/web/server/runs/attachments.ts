@@ -22,10 +22,11 @@ import { isUnderSessionPrefix } from '../files/handlers';
 import { applicationContext } from '../application-context';
 import { encodeFileId } from '../files/file-id';
 import { decide } from '../rbac/decide';
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
-import { parseRole } from '../rbac/roles';
+import { ownerPrincipalIdOf } from '../rbac/core/owner-principal';
+import { parseRole } from '../rbac/core/roles';
 import type { RunPrincipal } from './environment';
 import { apiError } from './http';
+import { listCatalogFiles } from '../storage/store';
 
 /** An attachment after authorisation: the catalogue row id the grant path resolves, and its path. */
 export interface ResolvedAttachment {
@@ -89,7 +90,7 @@ export async function resolveRunAttachments(
       ),
     };
   }
-  const rows = await (await catalogs.forWorkspace(principal.workspaceId)).listFiles();
+  const rows = await listCatalogFiles(await catalogs.forWorkspace(principal.workspaceId));
   const role = parseRole(principal.role);
   const attachable = await attachableSession(principal, runSessionId);
   const files: ResolvedAttachment[] = [];

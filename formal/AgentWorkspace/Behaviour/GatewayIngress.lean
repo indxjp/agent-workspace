@@ -728,7 +728,7 @@ def settle (protocol : WireProtocol) (m : Measurement) : Settlement :=
 
 /-- The accounting state a settled row leaves the run in: an unmetered row carries no price, so
 the ledger reads `unavailable`; a measured one that priced reads `complete`. -/
-@[aw_spec (ts := "packages/core/src/db/repositories/runs.ts#pricedCount")
+@[aw_spec (ts := "packages/core/src/db/repositories/runs/accounting.ts#pricedCount")
   (ts := "packages/gateway/src/database.ts#createDatabaseUsageRecorder")]
 def settledAccounting : Settlement → AccountingState
   | .recorded _ true => .complete

@@ -6,6 +6,8 @@
 
 import { ComponentType } from 'react';
 import { ReactNode } from 'react';
+import { RunApprovalCall } from '@indx-workspace/contracts/runs';
+import { RunApprovalDecision } from '@indx-workspace/contracts/runs';
 import type { RunFeedbackRating } from '@indx-workspace/contracts/feedback';
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 import type { SurfaceDensity } from '@indx-workspace/contracts/surfaces';
@@ -26,11 +28,62 @@ interface ActivityStep {
     readonly tool: string | null;
 }
 
+// @public
+export function ApprovalPrompt(input: ApprovalPromptProps): ReactNode;
+
+// @public
+export interface ApprovalPromptProps {
+    readonly call: RunApprovalCall;
+    readonly classNames?: {
+        readonly root?: string | undefined;
+        readonly heading?: string | undefined;
+        readonly call?: string | undefined;
+        readonly label?: string | undefined;
+        readonly comment?: string | undefined;
+        readonly actions?: string | undefined;
+        readonly button?: string | undefined;
+        readonly approve?: string | undefined;
+        readonly problem?: string | undefined;
+    } | undefined;
+    readonly onDecide: (decision: RunApprovalDecision, comment: string | undefined) => void;
+    readonly pending: boolean;
+    readonly problem?: string | null | undefined;
+    readonly strings: ApprovalPromptStrings;
+}
+
+// @public
+export interface ApprovalPromptStrings {
+    readonly approvalComment: string;
+    readonly approvalNeeded: (toolName: string) => string;
+    readonly approve: string;
+    readonly reject: string;
+}
+
 // @public (undocumented)
 export function AssistantProse(input: {
     readonly text: string;
     readonly className?: string;
 }): ReactNode;
+
+// @public
+export function AttachmentChips(input: AttachmentChipsProps): ReactNode;
+
+// @public
+export interface AttachmentChipsProps {
+    readonly classNames?: {
+        readonly chip?: string;
+        readonly remove?: string;
+    } | undefined;
+    readonly disabled?: boolean | undefined;
+    readonly items: readonly {
+        readonly id: string;
+        readonly name: string;
+    }[];
+    readonly onRemove?: ((id: string) => void) | undefined;
+    readonly removeGlyph?: string | undefined;
+    readonly removeLabel?: ((name: string) => string) | undefined;
+    readonly removeTitle?: string | undefined;
+}
 
 // @public
 interface Badge {
@@ -178,6 +231,9 @@ export interface MessageProps {
 type Paragraph = readonly Inline[];
 
 // @public
+export function prepareAttachment(file: File): Promise<File>;
+
+// @public
 type RailCard = {
     readonly kind: 'facts';
     readonly id: string;
@@ -272,6 +328,16 @@ interface RunHeading {
 }
 
 // @public
+export function sendsOnEnter(event: {
+    readonly key: string;
+    readonly shiftKey: boolean;
+    readonly nativeEvent: {
+        readonly isComposing: boolean;
+        readonly keyCode: number;
+    };
+}): boolean;
+
+// @public
 export interface Speaker {
     readonly initials: string;
     // (undocumented)
@@ -288,6 +354,52 @@ export const SURFACE_DEFAULTS: {
     readonly layout: SurfaceLayout;
     readonly toolTrace: SurfaceToolTraceMode;
 };
+
+// @public
+interface SurfaceStrings {
+    readonly agentSwitcherLabel: string;
+    readonly approvalAlreadyDecided: string;
+    readonly approvalComment: string;
+    readonly approvalExpired: string;
+    readonly approvalFailed: string;
+    readonly approvalNeeded: (toolName: string) => string;
+    readonly approvalNotAwaiting: string;
+    readonly approve: string;
+    readonly attachFiles: string;
+    readonly disclaimerLabel: string;
+    readonly earlierMessage: string;
+    readonly feedbackDown: string;
+    readonly feedbackFailed: string;
+    readonly feedbackUp: string;
+    readonly handedOff: string;
+    readonly launcherLabel: (title: string) => string;
+    readonly messageLabel: (agentName: string) => string;
+    readonly rateLimited: (retryAfterSeconds: number | null) => string;
+    readonly reject: string;
+    readonly removeFile: (name: string) => string;
+    readonly send: string;
+    readonly suggestedPromptsLabel: string;
+    readonly toolActivity: (count: number) => string;
+    readonly toolInput: string;
+    readonly toolOutput: string;
+    // (undocumented)
+    readonly tryCopied: string;
+    readonly tryCopy: string;
+    readonly tryEmbed: string;
+    readonly tryGetKey: string;
+    readonly tryHeading: (title: string) => string;
+    readonly tryKeyHeading: string;
+    readonly tryKeyOrPaste: string;
+    readonly tryKeyThenRun: string;
+    readonly tryModelHeading: string;
+    readonly tryModelKeyFix: (secrets: readonly string[]) => string;
+    readonly tryModelReachFix: string;
+    readonly tryNotPromoted: string;
+    readonly trySnippetCaption: string;
+    readonly turnLimitReached: string;
+    readonly unavailable: string;
+    readonly unreachable: string;
+}
 
 // @public
 interface SurfaceToolStep {
@@ -335,6 +447,21 @@ export interface ToolResultProps {
     readonly component: SurfaceToolResultComponent;
     // (undocumented)
     readonly output: string;
+}
+
+// @public
+export function ToolTrace(input: ToolTraceProps): ReactNode;
+
+// @public (undocumented)
+export interface ToolTraceProps {
+    // (undocumented)
+    readonly mode: SurfaceToolTraceMode;
+    // (undocumented)
+    readonly steps: readonly SurfaceToolStep[];
+    // Warning: (ae-forgotten-export) The symbol "SurfaceStrings" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly strings: Pick<SurfaceStrings, 'toolActivity' | 'toolInput' | 'toolOutput'>;
 }
 
 // @public

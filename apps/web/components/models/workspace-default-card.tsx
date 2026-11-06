@@ -32,11 +32,9 @@ export function WorkspaceModelDefaultCard() {
         Workspace default model
       </h2>
       <p className="text-[13px] text-muted">
-        The last rung of the resolution ladder, below the project default and the agent override.
-        Setting it from this screen is not available yet — this deployment has no API route to
-        change it, only to read it during a run. Until one lands, unset it stays{' '}
-        <code>not set</code>, and a run with no project or agent default configured is refused with
-        the reason named at the layer that failed, rather than silently guessing.
+        The model a run uses when neither the agent nor its project picks one. It cannot be changed
+        from this screen yet. While it is <code>not set</code>, a run whose agent and project pick
+        no model does not start, and says which setting is missing instead of guessing.
       </p>
     </section>
   );

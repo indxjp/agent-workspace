@@ -1,0 +1,40 @@
+{
+  "resource_changes": [
+    {
+      "address": "google_sql_database_instance.main",
+      "type": "google_sql_database_instance",
+      "name": "main",
+      "change": {
+        "actions": ["delete", "create"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_storage_bucket.objects",
+      "type": "google_storage_bucket",
+      "name": "objects",
+      "change": {
+        "actions": ["delete"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    },
+    {
+      "address": "google_cloud_run_v2_service.web",
+      "type": "google_cloud_run_v2_service",
+      "name": "web",
+      "change": {
+        "actions": ["update"],
+        "before": null,
+        "after": {
+          "password": "plan-time-secret-value"
+        }
+      }
+    }
+  ]
+}

@@ -127,6 +127,9 @@ export const AgentVersionBodySchema: z.ZodReadonly<z.ZodObject<{
             permissions: z.ZodReadonly<z.ZodObject<{
                 readFiles: z.ZodBoolean;
                 writeFiles: z.ZodBoolean;
+                memory: z.ZodOptional<z.ZodEnum<{
+                    agent: "agent";
+                }>>;
                 runCommands: z.ZodBoolean;
                 unrestrictedNetwork: z.ZodBoolean;
             }, z.core.$strict>>;
@@ -357,6 +360,9 @@ export const AgentVersionDraftSchema: z.ZodReadonly<z.ZodObject<{
                 permissions: z.ZodReadonly<z.ZodObject<{
                     readFiles: z.ZodBoolean;
                     writeFiles: z.ZodBoolean;
+                    memory: z.ZodOptional<z.ZodEnum<{
+                        agent: "agent";
+                    }>>;
                     runCommands: z.ZodBoolean;
                     unrestrictedNetwork: z.ZodBoolean;
                 }, z.core.$strict>>;
@@ -605,6 +611,9 @@ export const AgentVersionListResponseSchema: z.ZodReadonly<z.ZodObject<{
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -883,6 +892,9 @@ export const AgentVersionResourceSchema: z.ZodReadonly<z.ZodObject<{
                 permissions: z.ZodReadonly<z.ZodObject<{
                     readFiles: z.ZodBoolean;
                     writeFiles: z.ZodBoolean;
+                    memory: z.ZodOptional<z.ZodEnum<{
+                        agent: "agent";
+                    }>>;
                     runCommands: z.ZodBoolean;
                     unrestrictedNetwork: z.ZodBoolean;
                 }, z.core.$strict>>;
@@ -1150,6 +1162,9 @@ export const CreateAgentFromVersionRequestSchema: z.ZodReadonly<z.ZodObject<{
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -1378,6 +1393,9 @@ export const CreateAgentFromVersionResponseSchema: z.ZodReadonly<z.ZodObject<{
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;
@@ -1417,6 +1435,9 @@ export const CreateAgentFromVersionResponseSchema: z.ZodReadonly<z.ZodObject<{
                     permissions: z.ZodReadonly<z.ZodObject<{
                         readFiles: z.ZodBoolean;
                         writeFiles: z.ZodBoolean;
+                        memory: z.ZodOptional<z.ZodEnum<{
+                            agent: "agent";
+                        }>>;
                         runCommands: z.ZodBoolean;
                         unrestrictedNetwork: z.ZodBoolean;
                     }, z.core.$strict>>;
@@ -1643,6 +1664,9 @@ export const CreateAgentVersionRequestSchema: z.ZodReadonly<z.ZodObject<{
                 permissions: z.ZodReadonly<z.ZodObject<{
                     readFiles: z.ZodBoolean;
                     writeFiles: z.ZodBoolean;
+                    memory: z.ZodOptional<z.ZodEnum<{
+                        agent: "agent";
+                    }>>;
                     runCommands: z.ZodBoolean;
                     unrestrictedNetwork: z.ZodBoolean;
                 }, z.core.$strict>>;
@@ -1906,6 +1930,9 @@ export const SetAgentPointerResponseSchema: z.ZodReadonly<z.ZodObject<{
         permissions: z.ZodReadonly<z.ZodObject<{
             readFiles: z.ZodBoolean;
             writeFiles: z.ZodBoolean;
+            memory: z.ZodOptional<z.ZodEnum<{
+                agent: "agent";
+            }>>;
             runCommands: z.ZodBoolean;
             unrestrictedNetwork: z.ZodBoolean;
         }, z.core.$strict>>;

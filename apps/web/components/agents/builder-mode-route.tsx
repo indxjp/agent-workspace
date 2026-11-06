@@ -10,8 +10,9 @@ import { BuilderMode } from './builder-mode';
 /**
  * `/agents/new`: the form screen with the Builder chat mounted, joined here so neither imports the
  * other. The Chat option follows the caller's `/api/me` `builder` feature, off until it is known.
+ * `filesEnabled` is the workspace's Files switch, read by the server page.
  */
-export function NewAgentRoute() {
+export function NewAgentRoute({ filesEnabled }: Readonly<{ filesEnabled: boolean }>) {
   const [builderOn, setBuilderOn] = useState(false);
   useEffect(() => {
     let active = true;
@@ -25,7 +26,7 @@ export function NewAgentRoute() {
   return (
     <NewAgentScreen
       chatEnabled={builderOn}
-      chat={(modeSwitch) => <BuilderMode modeSwitch={modeSwitch} />}
+      chat={(modeSwitch) => <BuilderMode modeSwitch={modeSwitch} filesEnabled={filesEnabled} />}
     />
   );
 }

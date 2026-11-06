@@ -1,0 +1,160 @@
+---
+title: "Start a portal"
+description: "npm create --template portal: a Next.js app over your project with dashboard, chat, files and runs pages, its own CI that allows only published packages, and what sign-in needs."
+---
+
+`--template portal` writes the project `npm create` always writes, plus a portal app over it: a
+Next.js app built with `@indx-workspace/app` whose pages show what the signed-in person may see in
+Agent Workspace. `npm run dev` runs both: `aw dev` starts the agent's runtime and the app.
+
+```sh claim="run"
+npm create @indx-workspace@latest portal -- --template portal --yes
+cd portal
+npm install
+npm run dev
+```
+
+`--template` is a different choice from `--theme`: the theme picks the agent's starter, and the
+template adds an app. It cannot be combined with `--cloud`, because a deployment project has no
+app. An unknown template is refused, and the refusal names the templates there are.
+
+## What it writes
+
+```text
+app/page.tsx  the dashboard: recent runs and the file count
+app/chat/page.tsx  the chat with the project's main surface
+app/files/page.tsx  the files, as a table
+app/runs/page.tsx  the runs
+app/runs/[id]/page.tsx  one run, followed until it ends
+app/api/browser-token/route.ts  a browser token for one run or session, minted as the person
+app/sign-in/page.tsx  the sign-in page, with what went wrong when a sign-in was refused
+app/api/sign-in/route.ts  starts a sign-in at the app's OpenID Connect issuer
+app/api/sign-in/callback/route.ts  finishes it: the token exchange, then the person's cookie
+app/api/sign-out/route.ts  signs the person out
+app/theme.ts  the look and the language (en or ja) of every page
+app/nav.ts  the navigation, each entry naming the workspace feature it needs
+app/strings.ts  every word the pages show, in English and Japanese
+.github/workflows/app-ci.yml  the app's own CI
+aw-generated.json  what was generated, so aw destroy app removes exactly that
+```
+
+Under these are the files `aw generate app` writes: `app.config.ts`, the app's MCP route, its
+first migration and `dependency-cruiser.config.mjs`. `package.json` gains the app kit and the
+Next.js, React, Drizzle and PostgreSQL versions it is tested with, each pinned exactly. The
+`@indx-workspace/*` packages are pinned at the version of `create` you ran.
+
+## Templates
+
+`portal` is the base. The other four are presets over it: each writes everything `portal` writes,
+the recipe pages (`/recipes`, a run list, and `/recipes/<id>`, a run's step graph with Approve and
+Reject) with their four routes, and a small overlay of its own. A preset starts the agent from the
+`blank` theme unless `--theme` names another. The app is always named after the directory you
+create, never after the template: `npm create @indx-workspace service-desk -- --template desk`
+makes the app `service-desk`, whose data lives in the schema `app_service_desk`.
+
+| Template | What it ships beyond the portal | The next commands |
+| --- | --- | --- |
+| `portal` | the dashboard, chat, files and runs pages | `npx aw generate resource <name> <field:type>...` |
+| `chat` | a home page that links to the channels once a `channel` resource exists, and says which command adds it until then | `channel` and `message` resources, `aw generate channel message`, an agent and an `on-mention` recipe |
+| `wiki` | the `space` and `page` resources (pages nest, keep a rich-text body and a revision per save), their migration and routes, `/wiki` (a space's page tree), `/wiki/<id>` (one page and its revisions) and the space pages | `npx aw generate agent writer --tools page` |
+| `crm` | its navigation and theme tokens | `company`, `contact` and `deal` resources, an `enrich-contact` recipe and an agent |
+| `desk` | the dashboard (`/dashboard`, which the home page opens), as `aw generate page dashboard --kind dashboard` writes it | `ticket` and `kb_article` resources, two recipes and two agents |
+
+Each preset's `README.md` lists its commands with `npx aw` (`aw` is a dependency of the project,
+not a global command), every argument holding `(`, `)`, `*` or a space in single quotes, so they
+paste into `sh` as they are:
+
+```sh title="illustrative" claim="illustrative"
+npm create @indx-workspace@latest crm -- --template crm --yes
+cd crm
+npx aw generate resource deal name:text 'amount:money(JPY)' 'stage:enum(lead,qualified,proposal,won,lost)' owner:person --board stage
+```
+
+`aw-generated.json` records every file a preset writes under the generator that would have
+written it: the wiki's resources as `resource:space` and `resource:page`, the desk's dashboard as
+`page:dashboard`, the rest as `app:<name>`, and the project's own files as `project:<name>`. So
+`aw destroy resource page` removes the wiki's pages as it would remove a generated resource.
+
+The recipe webhook route answers `503` until `AW_APP_WEBHOOK_SECRET` holds the `whsec_` secret
+Agent Workspace returned for the app; until then a recipe's runner follows each run instead.
+
+## Sign in
+
+Every page calls Agent Workspace **as the signed-in person**, with that person's own token from the
+app's cookie and never with an API key, so a page shows only what the person may see. Nobody
+signed in sees a page that says sign-in is required, with a **Sign in** link to `/sign-in` that
+brings them back to the page afterwards.
+
+A person signs in to an app through your workspace's OpenID Connect issuer: the app's backend
+exchanges the person's ID token for a short-lived access token
+([ADR-0161](https://github.com/indxjp/agent-workspace/blob/main/docs/adr/0161-an-app-backend-acts-as-the-signed-in-person-by-token-exchange.md)).
+A deployment without an OIDC issuer has no person sign-in for apps. The three sign-in routes are
+one line each over `signInRoutes()` from `@indx-workspace/app/server`:
+
+1. `/sign-in` links to `GET /api/sign-in?next=<page>`. It reads the issuer's discovery document
+   and redirects to its sign-in, with a `state`, a `nonce` and an S256 PKCE challenge. Those and
+   the page to return to are kept in a signed `HttpOnly` cookie for ten minutes.
+2. The issuer redirects back to `GET /api/sign-in/callback`. It checks that cookie and the
+   `state`, redeems the code at the issuer's token endpoint with the app's client secret
+   (`client_secret_basic`), checks the ID token's `nonce`, and calls `aw.auth.exchange` with the
+   app's `app-backend` client. Agent Workspace verifies the ID token and that the person is a
+   member.
+3. The access token goes into the app's `aw_user_token` cookie (`HttpOnly`, `SameSite=Lax`,
+   `Secure` on https) for as long as it lives, and the person lands on the page they asked for.
+
+A refusal sends the person back to `/sign-in?error=<code>`, which says what happened in English or
+Japanese: for example `subject_not_member` when the person is not a member of the workspace. A
+caller that does not ask for a page gets the same code in the error envelope. A missing or invalid
+variable is `503 sign_in_not_configured`, naming the variable and never its value. The issuer must
+be `https:`; plain `http:` is accepted only on `127.0.0.1` or `localhost` when `NODE_ENV` is not
+`production`, which is how `aw dev`'s issuer is reached.
+
+The access token lasts five minutes and has no refresh (ADR-0161 D2). After that the pages show
+the sign-in notice again. The issuer keeps its own session, so signing in again is one round
+trip. **Sign out** in the navigation clears the app's cookie. The token itself still expires on
+its own five-minute clock.
+
+Under `aw dev` you set nothing. When no `OIDC_*` variable is set, `aw dev` runs a development
+OIDC issuer on `127.0.0.1` (from the web port + 200) for as long as it runs, and the local console
+and your app both sign in there. Its form asks for a member's email and the local console
+password, the same one `aw dev` names on its ready screen. `aw dev` registers the app at the issuer
+with the callback `<app origin>/api/sign-in/callback`, makes the app's `app-backend` endpoint
+client for the project's agents, and gives the app the five variables below. Their secrets change
+with every `aw dev` and are never printed or written to a file. A production deployment refuses
+this issuer: under the production posture an `OIDC_ISSUER_URL` that is not `https:` stops the
+control plane at boot (`oidc_issuer_not_https`).
+
+In production, set these five for the app yourself:
+
+| Variable | What it holds |
+| --- | --- |
+| `AW_OIDC_ISSUER_URL` | your identity provider, the same issuer as the control plane's `OIDC_ISSUER_URL` |
+| `AW_OIDC_CLIENT_ID` | the app's client id at that provider, which its ID tokens carry as `aud` |
+| `AW_OIDC_CLIENT_SECRET` | the app's client secret at that provider |
+| `AW_APP_CLIENT_ID` | the id of the app's `app-backend` endpoint client, made in the console |
+| `AW_APP_CLIENT_SECRET` | that client's secret, from its **Rotate secret** |
+
+With your own identity provider under `aw dev` (all four `OIDC_*` set), `aw dev` runs no issuer
+and sets no `AW_OIDC_*` name: register the app at your provider and set them, and `aw dev` makes the
+`app-backend` client when `AW_OIDC_CLIENT_ID` is in its environment. `aw dev` binds the agents to
+that client when it starts; an agent added later is bound at the next `aw dev`.
+
+That access token reaches only the routes ADR-0161 lists: `GET /api/me`, starting a bound agent's
+run, reading, following, stopping and approving one run, and listing runs, narrowed to the agents
+the app's client binds. So with it the dashboard's recent runs and the runs page list the person's
+runs and the run page follows one. The dashboard's file count and the files page say that Agent
+Workspace does not serve them to the portal's sign-in yet, with a link back home, because file
+reads are outside those routes. The chat page still talks to the project's main surface rather
+than as the signed-in person, because minting a browser token is outside those routes too.
+
+## Published packages only
+
+An app is built only from what is on npm. The generated `.github/workflows/app-ci.yml` runs on a
+GitHub-hosted `ubuntu-latest` runner in a few minutes:
+
+1. `npm ci` installs from the lockfile.
+2. `depcruise` refuses any import of the platform's applications (`apps/*`) or of its private
+   packages, which are not published (the `app-imports-only-published-packages` rule in
+   `dependency-cruiser.config.mjs`).
+3. A one-line `node` check refuses a dependency in `package.json` from that private scope, or one
+   on a `workspace:` version.

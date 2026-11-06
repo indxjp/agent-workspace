@@ -19,8 +19,13 @@ import {
   type Ownership,
   type TokenScope,
 } from '../server/rbac/decide';
-import { grantsFor, RESOURCES, SUB_RESOURCES, type Resource } from '../server/rbac/permissions';
-import { parseRole, ROLES, type Role } from '../server/rbac/roles';
+import {
+  grantsFor,
+  RESOURCES,
+  SUB_RESOURCES,
+  type Resource,
+} from '../server/rbac/core/permissions';
+import { parseRole, ROLES, type Role } from '../server/rbac/core/roles';
 import { readDeclarationFiles, requireString } from '../../../tests/inventory-support';
 import { asRecord, asString, loadVectors, type FormalVector } from '../../../tests/formal/vectors';
 

@@ -23,13 +23,13 @@ import {
   type WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import { SESSION_STATE_BLOB_MAX_BYTES } from '@agent-workspace/engine';
-import { bytesToStream, readBytes } from '@agent-workspace/core/storage/streams';
-import type { ObjectStoreProvider } from '@agent-workspace/core/storage';
+import { readBytes } from '../storage/objects';
 
 import type { StorageService } from '../storage/service';
 import {
   type SessionStateBlobContent,
   type SessionStateBlobRef,
+  type SessionStateBlobTooLarge,
   type SessionStateBlobsUnavailable,
   type SessionStateEntryPayload,
   type SessionStateEntryRecord,
@@ -142,12 +142,14 @@ export class DatabaseTranscriptStore implements TranscriptStore {
  * were and what they hashed to. The bytes are saved through the one storage service, under a new
  * object ID in the `session-state` area (the storage design, §04).
  *
- * ## Bytes first, then the row
+ * ## A pending row, then the bytes, then the confirm
  *
- * `putBlob` writes the object and only then records it. The two orders fail differently and only one
- * of them fails safely: a row written before its bytes is a store that says a snapshot exists and
- * cannot produce it, while an object written before its row is an orphan the cleanup job reclaims
- * and nothing ever reads. The second is the one this code can survive.
+ * `putBlob` takes the four steps every save takes: a `pending` row under a new object id, which no
+ * read serves but which holds the object against the cleanup job; the body streamed to that object
+ * and measured on the way, never held whole; one transaction that confirms the row against its
+ * reservation token; and last the replaced blob's object, then its row. A crash at any step leaves
+ * a row the cleanup job finishes, never an object nothing names and never a served row without its
+ * bytes.
  *
  * ## The digest is verified on the way out
  *
@@ -163,10 +165,9 @@ export class DatabaseTranscriptStore implements TranscriptStore {
 export interface SessionStateStoreDeps {
   readonly repositories: SessionStateRepositoryProvider;
   readonly scopes: WorkspaceScopeResolver;
-  /** The one storage service: new blobs are saved through it, and rows are opened and deleted by it. */
-  readonly storage?: Pick<StorageService, 'saveSessionState' | 'open' | 'deleteObject'> | undefined;
-  /** storage-bridge(#1699): the old per-area store, read and purged for rows with no object id; never written. */
-  readonly blobs?: ObjectStoreProvider | undefined;
+  /** The one storage service: blobs are saved through it, and rows are opened and deleted by it. */
+  readonly storage?:
+    Pick<StorageService, 'saveSessionState' | 'open' | 'discardSessionState'> | undefined;
 }
 
 const BLOBS_NOT_CONFIGURED: SessionStateBlobsUnavailable = {
@@ -181,6 +182,8 @@ const BLOBS_NOT_CONFIGURED: SessionStateBlobsUnavailable = {
 function sha256Of(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
+
+const TOO_LARGE: SessionStateBlobTooLarge = { ok: false, code: 'too_large' };
 
 export class DatabaseSessionStateStore implements SessionStateStore {
   public constructor(private readonly deps: SessionStateStoreDeps) {}
@@ -243,32 +246,30 @@ export class DatabaseSessionStateStore implements SessionStateStore {
 
   async putBlob(
     ref: SessionStateBlobRef,
-    bytes: Uint8Array,
-  ): Promise<{ readonly ok: true } | SessionStateBlobsUnavailable> {
+    body: ReadableStream<Uint8Array>,
+  ): Promise<{ readonly ok: true } | SessionStateBlobTooLarge | SessionStateBlobsUnavailable> {
     const { storage } = this.deps;
-    // Without the storage service a blob would be saved with no object id; the old area store is
-    // only read from now on.
-    if (storage === undefined) return BLOBS_NOT_CONFIGURED;
-    if (bytes.byteLength > SESSION_STATE_BLOB_MAX_BYTES) {
-      // The route refuses an over-cap body while reading it, so reaching this line means a caller
-      // inside the process bypassed that check. A throw, because it is a programming fault and not
-      // a request this store should quietly store anyway.
-      throw new Error(
-        `a session-state blob of ${String(bytes.byteLength)} bytes exceeds the cap of ${String(SESSION_STATE_BLOB_MAX_BYTES)}.`,
-      );
+    // Without the storage service there is nowhere to save a blob.
+    if (storage === undefined) {
+      await body.cancel().catch(() => undefined);
+      return BLOBS_NOT_CONFIGURED;
     }
-    const saved = await storage.saveSessionState(ref, ref, bytesToStream(bytes));
-    // The route refuses an over-cap body first; reaching this is the same programming fault.
-    if (!saved.ok)
-      throw new Error('a session-state blob was refused as too large after the cap check.');
-    return { ok: true };
+    const saved = await storage.saveSessionState(ref, ref, body);
+    if (saved.ok) return { ok: true };
+    if (saved.code === 'too_large') return TOO_LARGE;
+    // Retention purged the reservation, or the session went, while the bytes were written: the
+    // object is gone and nothing was saved. Not an answer this store can compute (ADR-0015).
+    throw new Error(
+      `the reservation for session-state blob ${ref.blobKey} of session ${ref.sessionId} was ` +
+        `removed while its bytes were written; nothing was saved.`,
+    );
   }
 
   /**
    * Retention (`./retention.ts`): every stream, entry and blob of one workspace last written before
-   * `before`. The rows go first and the bytes second — the order `putBlob`'s header argues for, in
-   * reverse: an object left behind by a failed delete is an orphan nothing reads, while a row left
-   * behind would be a snapshot the store claims and cannot produce.
+   * `before`. The blob rows are marked `deleting` first, then each object is deleted and its row
+   * forgotten; a failed delete leaves the row `deleting` for the cleanup job, so no row is ever
+   * served without its bytes and no object is left that no row names.
    */
   async purgeBefore(
     workspaceId: string,
@@ -281,11 +282,12 @@ export class DatabaseSessionStateStore implements SessionStateStore {
     const scope = await this.deps.scopes.forWorkspaceId(workspaceId);
     if (scope === null) return { entries: 0, blobs: 0, sessionIds: [] };
     const purged = await this.deps.repositories.forScope(scope).purgeBefore(before);
-    const { storage, blobs } = this.deps;
+    const { storage } = this.deps;
     for (const blob of purged.blobs) {
-      const row = { area: 'session-state' as const, ...blob };
-      if (storage !== undefined) await storage.deleteObject({ workspaceId }, row);
-      else await blobs?.forWorkspace(workspaceId).delete(blob.storageKey);
+      // Without the storage service no blob was ever saved, so no row names an object to delete.
+      if (storage !== undefined) {
+        await storage.discardSessionState({ workspaceId }, blob);
+      }
     }
     return { entries: purged.entries, blobs: purged.blobs.length, sessionIds: purged.sessionIds };
   }
@@ -296,25 +298,17 @@ export class DatabaseSessionStateStore implements SessionStateStore {
     | { readonly ok: true; readonly content: SessionStateBlobContent | null }
     | SessionStateBlobsUnavailable
   > {
-    const { storage, blobs } = this.deps;
-    if (storage === undefined && blobs === undefined) return BLOBS_NOT_CONFIGURED;
+    const { storage } = this.deps;
+    if (storage === undefined) return BLOBS_NOT_CONFIGURED;
     const repository = await this.#repository(ref.workspaceId);
     let record = await repository.getBlob(ref.sessionId, ref.engine, ref.blobKey);
     if (record === null) return { ok: true, content: null };
     const read = async (row: StoredSessionStateBlob) => {
-      // storage-bridge(#1699): a row with no object id is read at its old key from the old store
-      const stream =
-        storage !== undefined
-          ? await storage.open(ref, { area: 'session-state', ...row })
-          : row.objectId === null
-            ? await blobs?.forWorkspace(ref.workspaceId).read(row.storageKey)
-            : null;
-      return stream === null || stream === undefined
-        ? null
-        : readBytes(stream.body, SESSION_STATE_BLOB_MAX_BYTES);
+      const stream = await storage.open(ref, { area: 'session-state', ...row });
+      return stream === null ? null : readBytes(stream.body, SESSION_STATE_BLOB_MAX_BYTES);
     };
     let bytes = await read(record);
-    if (bytes === null && record.objectId !== null) {
+    if (bytes === null) {
       // A save that confirmed between the read of the row and the open deletes the object this row
       // named; the row it confirmed names the new one.
       const current = await repository.getBlob(ref.sessionId, ref.engine, ref.blobKey);

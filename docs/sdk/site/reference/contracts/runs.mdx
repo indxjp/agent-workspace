@@ -84,6 +84,12 @@ The most paths one run's `fileScope` may name (issue #1539).
 
 Value: `100`
 
+## MAX_SPEND_CEILING_USD
+
+The highest `spendCeilingUsd` one run start may ask for (ADR-0162).
+
+Value: `1_000_000`
+
 ## MODEL_PROVIDERS
 
 The **model** provider families a model connection can name — who serves the model. Matches
@@ -93,11 +99,15 @@ Not the engine. The harness that runs the agent loop is `RunResourceSchema`'s `e
 (`EngineId`, `./engines.ts`); this list is who answered the model call it made. One run has both,
 and they are independent: a `claude-agent-sdk` run can be served by `openai`.
 
+`vertex` is Claude served by Vertex AI in the operator's own Google Cloud project. It is keyless:
+the gateway authenticates with the workload identity, so the connection stores no credential.
+
 - `'anthropic'`
 - `'anthropic-compatible'`
 - `'openai'`
 - `'azure-openai'`
 - `'openai-compatible'`
+- `'vertex'`
 
 ## ModelProvider
 
@@ -106,6 +116,7 @@ and they are independent: a `claude-agent-sdk` run can be served by `openai`.
 - `"openai"`
 - `"azure-openai"`
 - `"openai-compatible"`
+- `"vertex"`
 
 ## OUTPUT_SCHEMA_DIALECT
 
@@ -224,6 +235,23 @@ The refusals of `POST /api/runs/:id/approval` beyond the common ones, with their
 | `run_not_awaiting_approval` | `409` |
 | `approval_already_decided` | `409` |
 | `approval_expired` | `409` |
+
+## RUN_BUDGET_REACHED
+
+The run-failure code of a run the gateway stopped at its spend ceiling (ADR-0162). The stored
+`error` is `run_budget_reached: The run stopped at its spend ceiling of <n> USD.`, `<n>` being
+`RunResource.spendCeilingUsd`; a client names the ceiling from that field, never from the
+message. Not a start refusal, and so not in `RUN_START_PROBLEM_CODES`: no start can have
+spent its ceiling. Not retryable as is: the same prompt under the same ceiling will likely stop
+again.
+
+Value: `'run_budget_reached'`
+
+## RUN_CHILDREN_MAX
+
+The most child runs one root run has, so the most `children` a detail carries (ADR-0104).
+
+Value: `16`
 
 ## RUN_FILE_CORRUPT
 
@@ -485,6 +513,95 @@ the same session, and where to stream it from.
 | `currency` | `string` | Yes |  |
 | `priceTableVersion` | `null \| string` | Yes |  |
 
+## RunDetail
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `projectId` | `null \| string` | Yes |  |
+| `initiatingUserId` | `null \| string` | Yes | Legacy human attribution; `null` for a run started with an API key. |
+| `sessionId` | `string` | Yes |  |
+| `agentVersion` | `null \| number` | Yes | The number of the agent version this run's session pins (#612, ADR-0101): the version the run executed, whose definition names the skill revisions it applied. `null` for a legacy session created before versions existed. Server-set and read-only. |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `startedAt` | `null \| string` | Yes |  |
+| `endedAt` | `null \| string` | Yes |  |
+| `durationMs` | `null \| number` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row nobody ever wrote an engine onto, rather than a backfilled guess. |
+| `engineVersion` | `null \| string` | Yes | The adapter's and third-party SDK's version, as the runner reported it. Opaque to the platform: recorded for support, never compared. `null` for a historic run. |
+| `usage` | `RunUsage` | Yes |  |
+| `cost` | `RunCost` | Yes |  |
+| `spendCeilingUsd` | `null \| string` | Yes | The run's spend ceiling in USD (ADR-0162), a decimal string like `cost.amount`, or `null` when the run has none. It is the lowest of the agent's `limits.maxBudgetUsd`, the deployment ceiling's and the start's `StartRunRequest.spendCeilingUsd`, fixed when the run starts. The gateway refuses the run's next model call once `cost.amount` reaches it, and the run ends `failed` with the failure code `RUN_BUDGET_REACHED`. A run on a model the gateway cannot price is recorded at cost 0 (`accountingState: 'unavailable'`), so its ceiling is never reached. |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
+| `output` | `null \| RunOutput` | Yes | The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. |
+| `pendingApproval` | `null \| RunApprovalCall` | Yes | The call the run is waiting for a decision on while `status` is `awaiting_approval`, and `null` in every other status (once decided, the continuation run carries the approved call). |
+| `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
+| `accountingError` | `null \| string` | Yes |  |
+| `parentRunId` | `null \| string` | Yes | The lead run that started this one through an agent team's member tool (ADR-0104 acceptance, spec 04 §5.12 "Run trees"), or `null` for a root run. The depth is at most 1, so a run whose `parentRunId` is set has no children. |
+| `children` | `undefined \| readonly RunResource[]` | No |  |
+| `treeCost` | `undefined \| RunTreeCost` | No |  |
+
+## RunDetailResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunDetail` | Yes |  |
+
+## RunDetailResponseSchema
+
+The body of `GET /api/runs/:id`: the run with its children and tree cost (ADR-0104).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `run` | `RunDetail` | Yes |  |
+
+## RunDetailSchema
+
+One run as `GET /api/runs/:id` renders it (spec 04 §5.12 "Run trees"): the run resource plus
+`children`, the runs whose `parentRunId` is this run (at most `RUN_CHILDREN_MAX`, oldest
+first; always empty for a child), and `treeCost`, the read-time sum of `cost` over the root and
+those children. Lists never carry either field.
+
+This release's control plane always sends both on the read. They are optional here, on the read
+alone, so a client reading a control plane or a test double that answers the plain resource
+still parses it (the field may be absent, never `null` or malformed).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `projectId` | `null \| string` | Yes |  |
+| `initiatingUserId` | `null \| string` | Yes | Legacy human attribution; `null` for a run started with an API key. |
+| `sessionId` | `string` | Yes |  |
+| `agentVersion` | `null \| number` | Yes | The number of the agent version this run's session pins (#612, ADR-0101): the version the run executed, whose definition names the skill revisions it applied. `null` for a legacy session created before versions existed. Server-set and read-only. |
+| `status` | `"completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `startedAt` | `null \| string` | Yes |  |
+| `endedAt` | `null \| string` | Yes |  |
+| `durationMs` | `null \| number` | Yes |  |
+| `model` | `null \| string` | Yes |  |
+| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
+| `modelConnectionId` | `null \| string` | Yes |  |
+| `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row nobody ever wrote an engine onto, rather than a backfilled guess. |
+| `engineVersion` | `null \| string` | Yes | The adapter's and third-party SDK's version, as the runner reported it. Opaque to the platform: recorded for support, never compared. `null` for a historic run. |
+| `usage` | `RunUsage` | Yes |  |
+| `cost` | `RunCost` | Yes |  |
+| `spendCeilingUsd` | `null \| string` | Yes | The run's spend ceiling in USD (ADR-0162), a decimal string like `cost.amount`, or `null` when the run has none. It is the lowest of the agent's `limits.maxBudgetUsd`, the deployment ceiling's and the start's `StartRunRequest.spendCeilingUsd`, fixed when the run starts. The gateway refuses the run's next model call once `cost.amount` reaches it, and the run ends `failed` with the failure code `RUN_BUDGET_REACHED`. A run on a model the gateway cannot price is recorded at cost 0 (`accountingState: 'unavailable'`), so its ceiling is never reached. |
+| `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
+| `output` | `null \| RunOutput` | Yes | The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. |
+| `pendingApproval` | `null \| RunApprovalCall` | Yes | The call the run is waiting for a decision on while `status` is `awaiting_approval`, and `null` in every other status (once decided, the continuation run carries the approved call). |
+| `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
+| `accountingError` | `null \| string` | Yes |  |
+| `parentRunId` | `null \| string` | Yes | The lead run that started this one through an agent team's member tool (ADR-0104 acceptance, spec 04 §5.12 "Run trees"), or `null` for a root run. The depth is at most 1, so a run whose `parentRunId` is set has no children. |
+| `children` | `undefined \| readonly RunResource[]` | No |  |
+| `treeCost` | `undefined \| RunTreeCost` | No |  |
+
 ## RunFailure
 
 A run's stored `error`, split into its safe code and its message.
@@ -499,7 +616,7 @@ for an error that carries no recognised code (a runtime failure, an older run).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `code` | `null \| "agent_archived" \| "policy_cannot_widen" \| "builder_model_unavailable" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_attachments_unreadable" \| "run_attachments_too_large" \| "run_attachments_unsupported_runtime" \| "run_attachments_untranscribable" \| "run_files_too_large" \| "run_storage_grant_unavailable" \| "run_subject_forbidden" \| "run_file_scope_not_granted" \| "daily_cost_cap_reached" \| "daily_cost_unavailable" \| "output_schema_unsatisfied" \| "run_file_corrupt" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
+| `code` | `null \| "agent_archived" \| "policy_cannot_widen" \| "builder_model_unavailable" \| "engine_model_protocol_unsupported" \| "agent_runtime_profile_missing" \| "model_connection_unresolved" \| "model_connection_failed" \| "model_unavailable" \| "model_credential_rejected" \| "network_policy_unenforceable" \| "run_deadline_exceeds_host" \| "runtime_connection_missing" \| "runtime_connection_credential_unavailable" \| "runtime_not_verified" \| "run_attachments_unreadable" \| "run_attachments_too_large" \| "run_attachments_unsupported_runtime" \| "run_attachments_untranscribable" \| "run_files_too_large" \| "run_storage_grant_unavailable" \| "run_subject_forbidden" \| "run_file_scope_not_granted" \| "daily_cost_cap_reached" \| "daily_cost_unavailable" \| "output_schema_unsatisfied" \| "run_budget_reached" \| "run_file_corrupt" \| "run_preparation_failed" \| "runtime_capacity_exhausted"` | Yes |  |
 | `message` | `string` | Yes |  |
 
 ## RunListQuery
@@ -514,7 +631,7 @@ caller whose grant covers the whole workspace (Owner or Admin) and is otherwise 
 | `status` | `undefined \| "completed" \| "failed" \| "queued" \| "running" \| "awaiting_approval" \| "cancelled"` | No |  |
 | `agent` | `undefined \| string` | No |  |
 | `project` | `undefined \| string` | No |  |
-| `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | No |  |
+| `provider` | `undefined \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | No |  |
 | `model` | `undefined \| string` | No |  |
 | `from` | `undefined \| string` | No |  |
 | `to` | `undefined \| string` | No |  |
@@ -580,23 +697,25 @@ the request's `outputSchema` (`null` when the request carried none).
 | `endedAt` | `null \| string` | Yes |  |
 | `durationMs` | `null \| number` | Yes |  |
 | `model` | `null \| string` | Yes |  |
-| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
+| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
 | `modelConnectionId` | `null \| string` | Yes |  |
 | `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row nobody ever wrote an engine onto, rather than a backfilled guess. |
 | `engineVersion` | `null \| string` | Yes | The adapter's and third-party SDK's version, as the runner reported it. Opaque to the platform: recorded for support, never compared. `null` for a historic run. |
 | `usage` | `RunUsage` | Yes |  |
 | `cost` | `RunCost` | Yes |  |
+| `spendCeilingUsd` | `null \| string` | Yes | The run's spend ceiling in USD (ADR-0162), a decimal string like `cost.amount`, or `null` when the run has none. It is the lowest of the agent's `limits.maxBudgetUsd`, the deployment ceiling's and the start's `StartRunRequest.spendCeilingUsd`, fixed when the run starts. The gateway refuses the run's next model call once `cost.amount` reaches it, and the run ends `failed` with the failure code `RUN_BUDGET_REACHED`. A run on a model the gateway cannot price is recorded at cost 0 (`accountingState: 'unavailable'`), so its ceiling is never reached. |
 | `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
 | `output` | `null \| RunOutput` | Yes | The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. |
 | `pendingApproval` | `null \| RunApprovalCall` | Yes | The call the run is waiting for a decision on while `status` is `awaiting_approval`, and `null` in every other status (once decided, the continuation run carries the approved call). |
 | `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
 | `accountingError` | `null \| string` | Yes |  |
+| `parentRunId` | `null \| string` | Yes | The lead run that started this one through an agent team's member tool (ADR-0104 acceptance, spec 04 §5.12 "Run trees"), or `null` for a root run. The depth is at most 1, so a run whose `parentRunId` is set has no children. |
 
 ## RunResourceSchema
 
-One run as `GET /api/runs/:id`, every item of `GET /api/runs`, and the `202` of
-`POST /api/agents/:id/runs` render it. Dates are ISO-8601 strings; `durationMs` is `null` until
-both `startedAt` and `endedAt` exist.
+One run as every item of `GET /api/runs` and the `202` of `POST /api/agents/:id/runs` render
+it; `GET /api/runs/:id` renders the `RunDetailSchema` that extends it. Dates are ISO-8601
+strings; `durationMs` is `null` until both `startedAt` and `endedAt` exist.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -613,21 +732,23 @@ both `startedAt` and `endedAt` exist.
 | `endedAt` | `null \| string` | Yes |  |
 | `durationMs` | `null \| number` | Yes |  |
 | `model` | `null \| string` | Yes |  |
-| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
+| `provider` | `null \| "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"` | Yes | The **model** provider that served the call, never the engine. See `MODEL_PROVIDERS`. |
 | `modelConnectionId` | `null \| string` | Yes |  |
 | `engine` | `null \| "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra"` | Yes | The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row nobody ever wrote an engine onto, rather than a backfilled guess. |
 | `engineVersion` | `null \| string` | Yes | The adapter's and third-party SDK's version, as the runner reported it. Opaque to the platform: recorded for support, never compared. `null` for a historic run. |
 | `usage` | `RunUsage` | Yes |  |
 | `cost` | `RunCost` | Yes |  |
+| `spendCeilingUsd` | `null \| string` | Yes | The run's spend ceiling in USD (ADR-0162), a decimal string like `cost.amount`, or `null` when the run has none. It is the lowest of the agent's `limits.maxBudgetUsd`, the deployment ceiling's and the start's `StartRunRequest.spendCeilingUsd`, fixed when the run starts. The gateway refuses the run's next model call once `cost.amount` reaches it, and the run ends `failed` with the failure code `RUN_BUDGET_REACHED`. A run on a model the gateway cannot price is recorded at cost 0 (`accountingState: 'unavailable'`), so its ceiling is never reached. |
 | `error` | `null \| string` | Yes | The safe public failure text, or `null` while the run is live or ended well. |
 | `output` | `null \| RunOutput` | Yes | The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. |
 | `pendingApproval` | `null \| RunApprovalCall` | Yes | The call the run is waiting for a decision on while `status` is `awaiting_approval`, and `null` in every other status (once decided, the continuation run carries the approved call). |
 | `accountingState` | `"failed" \| "pending" \| "partial" \| "unavailable" \| "complete"` | Yes |  |
 | `accountingError` | `null \| string` | Yes |  |
+| `parentRunId` | `null \| string` | Yes | The lead run that started this one through an agent team's member tool (ADR-0104 acceptance, spec 04 §5.12 "Run trees"), or `null` for a root run. The depth is at most 1, so a run whose `parentRunId` is set has no children. |
 
 ## RunResponseSchema
 
-The body of `GET /api/runs/:id`.
+A body that carries one run resource: a trigger fire's `202` (ADR-0144).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -681,6 +802,23 @@ offer to send the message again.
 
 Value: `'runtime_capacity_exhausted'`
 
+## RunTreeCost
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `amount` | `string` | Yes | A decimal string, never a float, at the scale of the runs' own amounts. |
+| `currency` | `string` | Yes |  |
+
+## RunTreeCostSchema
+
+A tree's cost: the exact decimal sum of `cost.amount` over the root and its children, summed at
+read time (there is no stored total, so it cannot disagree with its parts).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `amount` | `string` | Yes | A decimal string, never a float, at the scale of the runs' own amounts. |
+| `currency` | `string` | Yes |  |
+
 ## RunUsage
 
 | Name | Type | Required | Description |
@@ -703,6 +841,14 @@ Value: `'runtime_capacity_exhausted'`
 | `totalTokens` | `number` | Yes | Derived by the server: the sum of the four counters above. |
 | `toolCalls` | `number` | Yes |  |
 
+## SpendCeilingUsdSchema
+
+A run start's spend ceiling in USD (ADR-0162 decision 2): positive, finite, at most
+`MAX_SPEND_CEILING_USD`, and at most six decimal places, so it is stored in
+`runs.spend_ceiling_usd` (`numeric(14,6)`) exactly as it was sent.
+
+`number`
+
 ## StartRunRequest
 
 | Name | Type | Required | Description |
@@ -716,6 +862,7 @@ Value: `'runtime_capacity_exhausted'`
 | `subject` | `undefined \| string` | No | The person an API-key caller acts for: opaque, 1 to 256 characters (ADR-0142 D2). It becomes the `sub` of the identity assertion. Any other caller is refused `403 run_subject_forbidden`. |
 | `fileScope` | `undefined \| string[]` | No |  |
 | `outputSchema` | `undefined \| Record<string, unknown>` | No |  |
+| `spendCeilingUsd` | `undefined \| number` | No |  |
 
 ## StartRunRequestSchema
 
@@ -753,6 +900,12 @@ agent's grants.
 `RunResource.output.structured`. It must satisfy `outputSchemaViolation`, and an engine
 that cannot honour it is refused with `422 engine_capability_unsupported`.
 
+`spendCeilingUsd` lowers the run's spend ceiling (ADR-0162): positive, finite, at most
+`MAX_SPEND_CEILING_USD` and at most six decimal places. It only narrows: a value above the
+agent's or the deployment ceiling's `limits.maxBudgetUsd` is refused `403 policy_cannot_widen`
+with the path `spendCeilingUsd`. The run's `RunResource.spendCeilingUsd` is the lowest of
+the three.
+
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `prompt` | `string` | Yes |  |
@@ -764,6 +917,7 @@ that cannot honour it is refused with `422 engine_capability_unsupported`.
 | `subject` | `undefined \| string` | No | The person an API-key caller acts for: opaque, 1 to 256 characters (ADR-0142 D2). It becomes the `sub` of the identity assertion. Any other caller is refused `403 run_subject_forbidden`. |
 | `fileScope` | `undefined \| string[]` | No |  |
 | `outputSchema` | `undefined \| Record<string, unknown>` | No |  |
+| `spendCeilingUsd` | `undefined \| number` | No |  |
 
 ## StartRunResponse
 

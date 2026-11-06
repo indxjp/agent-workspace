@@ -24,6 +24,19 @@ section: Added
 `CHANGELOG.md`, unless its branch is `release/*`. A branch that forked before the gate existed
 only gets a warning until it merges `main`.
 
+The one exception is a new package: every published tarball must carry a `CHANGELOG.md`, so the
+pull request that creates a package may add its changelog holding nothing but its title and an
+empty `## Unreleased`:
+
+```md
+# Changelog — `@indx-workspace/<name>`
+
+## Unreleased
+```
+
+Its first entries are fragments (`changelog: <name>`), like everyone else's. An added changelog
+with anything more in it, or an edit to an existing one, still fails.
+
 The release pull request (branch `release/<version>`) runs `pnpm changes:collect`, which appends
 every fragment, in file-name order, to its section under `## Unreleased` in its changelog and
 deletes the fragment; then the release renames `## Unreleased` to the version heading

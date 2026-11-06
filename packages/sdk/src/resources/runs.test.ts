@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import {
@@ -50,12 +50,21 @@ const run = (status: string, output: unknown = null) => ({
     toolCalls: 0,
   },
   cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+  spendCeilingUsd: null,
   error: null,
   output,
   pendingApproval:
     status === 'awaiting_approval' ? { toolName: 'send_email', canonicalCall: '{}' } : null,
   accountingState: 'pending',
   accountingError: null,
+  parentRunId: null,
+});
+
+/** A run as `GET /api/runs/:id` answers it: with its tree (ADR-0104), here a lone root. */
+const detail = <Run extends { readonly cost: { amount: string; currency: string } }>(of: Run) => ({
+  ...of,
+  children: [],
+  treeCost: { amount: of.cost.amount, currency: of.cost.currency },
 });
 
 function client(route: (request: RecordedRequest) => Response | Promise<Response>): {
@@ -120,6 +129,16 @@ describe('RunsClient.start', () => {
     await runs.start(AGENT, { prompt: 'Hello' });
     expect(calls[0]?.json).toMatchObject({ fileScope: ['docs/alice', 'docs/b.md'] });
     expect(calls[1]?.json).not.toHaveProperty('fileScope');
+  });
+
+  it('sends the spend ceiling a run is narrowed to, and only when given (ADR-0162)', async () => {
+    const { runs, calls } = client(() =>
+      json(202, { run: run('queued'), events: `/api/runs/${RUN}/events` }),
+    );
+    await runs.start(AGENT, { prompt: 'Hello', spendCeilingUsd: 0.25 });
+    await runs.start(AGENT, { prompt: 'Hello' });
+    expect(calls[0]?.json).toMatchObject({ spendCeilingUsd: 0.25 });
+    expect(calls[1]?.json).not.toHaveProperty('spendCeilingUsd');
   });
 
   it('sends idempotencyKey as the Idempotency-Key header, not in the body, and only when given (ADR-0151)', async () => {
@@ -293,10 +312,10 @@ describe('runFailure', () => {
   it('reads the code a queued run was refused with back out of its error', async () => {
     const { runs } = client(() =>
       json(200, {
-        run: {
+        run: detail({
           ...run('failed'),
           error: 'model_connection_unresolved: no workspace default is configured.',
-        },
+        }),
       }),
     );
     expect(runFailure(await runs.get(RUN))).toEqual({
@@ -305,11 +324,28 @@ describe('runFailure', () => {
     });
   });
 
+  it('reads run_budget_reached, and the ceiling from the run, not the message (ADR-0162)', async () => {
+    const { runs } = client(() =>
+      json(200, {
+        run: detail({
+          ...run('failed'),
+          spendCeilingUsd: '0.500000',
+          error: 'run_budget_reached: The run stopped at its spend ceiling of 0.5 USD.',
+        }),
+      }),
+    );
+    const stopped = await runs.get(RUN);
+    expect(runFailure(stopped)?.code).toBe('run_budget_reached');
+    expect(stopped.spendCeilingUsd).toBe('0.500000');
+  });
+
   it('answers null for a run that did not fail, and no code for an uncoded failure', async () => {
-    const { runs } = client(() => json(200, { run: { ...run('completed') } }));
+    const { runs } = client(() => json(200, { run: detail(run('completed')) }));
     expect(runFailure(await runs.get(RUN))).toBeNull();
     const failed = client(() =>
-      json(200, { run: { ...run('failed'), error: 'The workspace could not be prepared.' } }),
+      json(200, {
+        run: detail({ ...run('failed'), error: 'The workspace could not be prepared.' }),
+      }),
     );
     expect(runFailure(await failed.runs.get(RUN))).toEqual({
       code: null,
@@ -657,12 +693,187 @@ describe('RunsClient.follow', () => {
   });
 });
 
+describe('RunsClient.follow backoff (issue #250, K-3)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * A client whose n-th connection is answered by `answers[n]` (the last repeats), recording when
+   * each connection was opened on the fake clock.
+   */
+  function timed(answers: readonly (() => Response)[]): {
+    readonly runs: RunsClient;
+    readonly opened: number[];
+  } {
+    const opened: number[] = [];
+    const { runs } = client(() => {
+      opened.push(Date.now());
+      const answer = answers[Math.min(opened.length, answers.length) - 1];
+      if (answer === undefined) throw new Error('no answers');
+      return answer();
+    });
+    return { runs, opened };
+  }
+
+  const gaps = (opened: readonly number[]): number[] =>
+    opened.slice(1).map((at, index) => at - (opened[index] ?? 0));
+
+  /** Follow to the end on the fake clock, failing the test rather than hanging. */
+  async function followed(
+    runs: RunsClient,
+    options: Parameters<RunsClient['follow']>[1] = {},
+  ): Promise<void> {
+    const result = drain(runs.follow(RUN, options));
+    await vi.advanceTimersByTimeAsync(600_000);
+    await result;
+  }
+
+  const event = (id: number): string => `event: sdk-event\nid: ${String(id)}\ndata: {}\n\n`;
+  const done = (): Response => stream('event: done\n\n');
+
+  it('waits for the jittered retry: the stream sent, not the default, before reconnecting', async () => {
+    vi.useFakeTimers();
+    for (const [random, floor] of [
+      [0, 5000],
+      [0.999_999, 9999],
+    ] as const) {
+      vi.spyOn(Math, 'random').mockReturnValue(random);
+      const { runs, opened } = timed([() => dropped(`retry: 10000\n\n${event(1)}`), done]);
+      const result = drain(runs.follow(RUN));
+      // `[d / 2, d]` with d = 10000: never before half of the server's value, always by all of it.
+      await vi.advanceTimersByTimeAsync(floor - 1);
+      expect(opened, `random ${String(random)}`).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(10_000 - floor + 1);
+      expect(opened).toHaveLength(2);
+      await result;
+    }
+  });
+
+  it('doubles the pause while reconnects keep failing, up to maxReconnectDelayMs', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const { runs, opened } = timed([
+      () => dropped(event(1)),
+      () => stream(''),
+      () => stream(''),
+      () => stream(''),
+      done,
+    ]);
+    await followed(runs, { reconnectDelayMs: 1000, maxReconnectDelayMs: 4000 });
+    // d = 1000, 2000, 4000, 4000 (capped); each pause is 3/4 of d at random() = 0.5.
+    expect(gaps(opened)).toEqual([750, 1500, 3000, 3000]);
+  });
+
+  it('caps a retry: above the ceiling, and the jitter never passes the ceiling', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.999_999);
+    const { runs, opened } = timed([() => dropped(`retry: 60000\n\n${event(1)}`), done]);
+    await followed(runs);
+    const [gap] = gaps(opened);
+    expect(gap).toBeGreaterThanOrEqual(15_000);
+    expect(gap).toBeLessThanOrEqual(30_000);
+  });
+
+  it('waits exactly the Retry-After a 503 names, uncapped and unjittered, over the retry: schedule', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const { runs, opened } = timed([
+      () => dropped(`retry: 10000\n\n${event(1)}`),
+      () => json(503, { error: { code: 'busy', message: 'restarting' } }, { 'retry-after': '60' }),
+      done,
+    ]);
+    await followed(runs);
+    expect(gaps(opened)).toEqual([7500, 60_000]);
+  });
+
+  it('starts the backoff again after a connection that delivered an event', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const { runs, opened } = timed([
+      () => dropped(event(1)),
+      () => stream(''),
+      () => dropped(event(2)),
+      done,
+    ]);
+    await followed(runs, { reconnectDelayMs: 1000 });
+    expect(gaps(opened)).toEqual([750, 1500, 750]);
+  });
+
+  it('keeps the retry: base across connections that do not repeat it', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const { runs, opened } = timed([
+      () => dropped(`retry: 2000\n\n${event(1)}`),
+      () => stream(''),
+      done,
+    ]);
+    await followed(runs);
+    expect(gaps(opened)).toEqual([1500, 3000]);
+  });
+
+  it('is still an aborted TransportError when the signal aborts during a backoff wait', async () => {
+    vi.useFakeTimers();
+    const between = new AbortController();
+    const { runs, opened } = timed([() => dropped(`retry: 10000\n\n${event(1)}`)]);
+    const failure = drain(runs.follow(RUN, { signal: between.signal })).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(1000);
+    between.abort();
+    const caught = await failure;
+    expect(caught).toBeInstanceOf(TransportError);
+    expect((caught as TransportError).aborted).toBe(true);
+    expect(opened).toHaveLength(1);
+  });
+
+  it('refuses reconnect bounds that are negative, not finite, or inverted, before any request', async () => {
+    const { runs, calls } = client(() => stream('event: done\n\n'));
+    for (const options of [
+      { reconnectDelayMs: -1 },
+      { reconnectDelayMs: Number.NaN },
+      { maxReconnectDelayMs: Number.POSITIVE_INFINITY },
+      { reconnectDelayMs: 5000, maxReconnectDelayMs: 1000 },
+      // The default base, 3000, is above this ceiling.
+      { maxReconnectDelayMs: 1000 },
+    ]) {
+      const failure = await drain(runs.follow(RUN, options)).catch((e: unknown) => e);
+      expect(failure, JSON.stringify(options)).toBeInstanceOf(TypeError);
+    }
+    expect(calls).toHaveLength(0);
+    await drain(runs.follow(RUN, { reconnectDelayMs: 0, maxReconnectDelayMs: 0 }));
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe('RunsClient.get (ADR-0104 run trees)', () => {
+  it('returns parentRunId, the children and the tree cost the read carries', async () => {
+    const child = { ...run('completed'), id: AGENT.replace('1111', '7777'), parentRunId: RUN };
+    const body = {
+      ...run('completed'),
+      children: [child],
+      treeCost: { amount: '0.000000', currency: 'USD' },
+    };
+    const { runs } = client(() => json(200, { run: body }));
+    const read = await runs.get(RUN);
+    expect(read.parentRunId).toBeNull();
+    expect(read.children).toEqual([child]);
+    expect(read.treeCost).toEqual({ amount: '0.000000', currency: 'USD' });
+  });
+
+  it('refuses more than sixteen children as a contract violation', async () => {
+    const child = { ...run('completed'), parentRunId: RUN };
+    const body = { ...detail(run('completed')), children: Array.from({ length: 17 }, () => child) };
+    const { runs } = client(() => json(200, { run: body }));
+    await expect(runs.get(RUN)).rejects.toBeInstanceOf(ContractViolationError);
+  });
+});
+
 describe('RunsClient.waitForOutcome', () => {
   it('follows to done and returns the settled record', async () => {
     const { runs } = client((call) =>
       call.url.pathname.endsWith('/events')
         ? stream('event: done\n\n')
-        : json(200, { run: run('completed') }),
+        : json(200, { run: detail(run('completed')) }),
     );
     const settled = await runs.waitForOutcome(RUN);
     expect(settled.status).toBe('completed');
@@ -672,7 +883,7 @@ describe('RunsClient.waitForOutcome', () => {
     const { runs } = client((call) =>
       call.url.pathname.endsWith('/events')
         ? stream('event: done\n\n')
-        : json(200, { run: run('running') }),
+        : json(200, { run: detail(run('running')) }),
     );
     await expect(runs.waitForOutcome(RUN)).rejects.toBeInstanceOf(ContractViolationError);
   });
@@ -780,7 +991,7 @@ describe('RunsClient.approve and reject (ADR-0145, P5-4)', () => {
     const { runs } = client((request) =>
       request.url.pathname.endsWith('/events')
         ? stream('event: done\n\n')
-        : json(200, { run: run('awaiting_approval') }),
+        : json(200, { run: detail(run('awaiting_approval')) }),
     );
     const paused = await runs.waitForOutcome(RUN);
     expect(paused.status).toBe('awaiting_approval');
@@ -820,7 +1031,7 @@ describe('RunsClient.result (ADR-0143)', () => {
     client((call) =>
       call.url.pathname.endsWith('/events')
         ? stream('event: done\n\n')
-        : json(200, { run: run(status, output) }),
+        : json(200, { run: detail(run(status, output)) }),
     ).runs;
 
   it('returns the text and the structured output of a completed run', async () => {

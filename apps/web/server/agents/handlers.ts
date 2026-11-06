@@ -38,6 +38,7 @@ import type {
   WorkspaceAgentStore,
 } from './store';
 import { problem, type ApiResult } from '../http/result';
+import { decide } from '../rbac/decide';
 import type { Principal } from '../rbac/principal';
 
 /**
@@ -365,4 +366,27 @@ export function refuseBuiltinWrite(
     'builtin_agent_read_only',
     'This is a built-in agent; the platform manages it and it cannot be changed.',
   );
+}
+
+/**
+ * {@link refuseBuiltinWrite} for an ownership resolver, which knows who is asking. A credential
+ * that could not read the agent at all (a run-, session- or endpoint-scoped one) is answered the
+ * concealed `404` a missing agent gets, so the refusal never tells it that this id is the platform's
+ * built-in; anyone who can read it is told why the write is refused.
+ */
+export function refuseBuiltinWriteFor(
+  principal: Pick<Principal, 'role' | 'scope' | 'ownerPrincipalId'>,
+  agent: Pick<AgentRecord, 'id' | 'builtin' | 'ownerPrincipalId'>,
+  operation: BuiltinAgentOperation,
+): ApiResult | null {
+  const refusal = refuseBuiltinWrite(agent, operation);
+  if (refusal === null) return null;
+  const reading = decide({
+    role: principal.role,
+    method: 'GET',
+    path: `/api/agents/${agent.id}`,
+    ownership: principal.ownerPrincipalId === agent.ownerPrincipalId ? 'own' : 'other',
+    scope: principal.scope,
+  });
+  return reading.effect === 'allow' ? refusal : agentNotFound();
 }

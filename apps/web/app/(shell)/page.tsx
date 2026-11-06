@@ -53,12 +53,12 @@
  *
  * ## What this file still does not build
  *
- * `WorkspaceAgentStore.list()` returns `AgentRecord`s, and this wave's schema gives an agent no file
- * or connector catalogue at all — the same absence `components/agents/agents-list.tsx`'s own header
- * records for the list screen's missing columns. `composerAgentFromRecord` below reflects that
- * honestly: `files: []` and `connectors: []` are not a placeholder for content nobody built, they are
- * §19.5.1 rule 2's narrowing applied to an agent that, in this wave, is permitted none because none
- * exist to be permitted.
+ * `composerAgentFromRecord` below still answers `files: []` and `connectors: []`. That is no longer
+ * because an agent has none: agents now have file grants (`agent_files`, `agent_storage_grants`) and
+ * connectors, read through `agentResources`. Listing them here, with names, and sending the picked
+ * ones with the first message is RF-502 (the refactoring plan; scheduling asked in #1484). Until
+ * then the pickers say in words that the list is not shown, and every run still receives all of the
+ * agent's grants (#2089).
  *
  * ## Recent
  *
@@ -87,11 +87,14 @@ import { registeredEngine } from '../../server/engines/registry';
 import { providersReachableBy } from '../../server/engines/protocol';
 import { engineForStoredPolicy } from '../../server/engines/session-engine';
 import { applicationContext } from '../../server/application-context';
+import { featureGate } from '../../server/features/console';
 import {
   getRunApi,
   type RunTargetDescription,
   type RunTargetDescriptions,
 } from '../../server/runs/environment';
+
+import { switchedOffPanel } from './feature-gate';
 
 // W1-UI-04: without this, Next prerenders this route once at BUILD TIME — before
 // the application context is installed — and serves that one render to every request forever
@@ -130,9 +133,8 @@ async function requestCarryingThisSessionCookie(): Promise<Request> {
 }
 
 /**
- * §19.5.1 rule 2's narrowing, applied to a record this wave's schema actually has. See this file's
- * own header for why `files` and `connectors` are `[]` for a real agent rather than a fixture's
- * demonstration rows.
+ * §19.5.1 rule 2's narrowing, applied to an agent record. `files` and `connectors` stay `[]` until
+ * RF-502 (see this file's header).
  */
 function composerAgentFromRecord(agent: AgentRecord, targets: ComposerRunTargets): ComposerAgent {
   const { runTarget, runTargetByProject } = targets;
@@ -159,8 +161,6 @@ function composerAgentFromRecord(agent: AgentRecord, targets: ComposerRunTargets
     drivableProviders: providersReachableBy(
       registeredEngine(engine)?.capabilities.wireProtocols ?? [],
     ),
-    // #2012: listed like any agent, but never the composer's default.
-    ...(agent.builtin === undefined ? {} : { builtin: agent.builtin }),
   };
 }
 
@@ -267,7 +267,9 @@ async function composerAgents(): Promise<ComposerAgents> {
     case 'forbidden':
       return { kind: 'no-agents', reason: NO_MEMBERSHIP };
     case 'workspace': {
-      const records = await runtime.agents.forWorkspace(resolution.workspaceId).list();
+      const listed = await runtime.agents.forWorkspace(resolution.workspaceId).list();
+      // The built-in Builder has its own chat under New Agent, so the picker does not offer it.
+      const records = listed.filter((record) => record.builtin === undefined);
       const mapped = await Promise.all(
         records.map(async (record) =>
           composerAgentFromRecord(
@@ -319,11 +321,14 @@ export default async function HomePage({
 }: {
   searchParams: Promise<{ agent?: string | string[]; version?: string | string[] }>;
 }) {
-  const [agents, user, modelConnections, pinned] = await Promise.all([
+  const off = await switchedOffPanel('chat');
+  if (off !== null) return off;
+  const [agents, user, modelConnections, pinned, files] = await Promise.all([
     composerAgents(),
     composerUser(),
     composerModelConnections(),
     searchParams.then(pinnedAgentFrom),
+    featureGate('files'),
   ]);
   return (
     <HomeChat
@@ -331,6 +336,7 @@ export default async function HomePage({
       modelConnections={modelConnections}
       recent={RECENT}
       user={user}
+      filesEnabled={files.enabled}
       {...(pinned === null
         ? {}
         : { agent: { id: pinned.agentId, locked: true as const }, version: pinned.version })}

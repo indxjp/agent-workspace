@@ -12,6 +12,14 @@ import {
   CreateAgentWithAssignmentsResponseSchema,
 } from './agents.js';
 import {
+  AgentTeamListResponseSchema,
+  AgentTeamResourceSchema,
+  AgentTeamVersionListResponseSchema,
+  AgentTeamVersionSchema,
+  CreateAgentTeamRequestSchema,
+  CreateAgentTeamVersionRequestSchema,
+} from './agent-teams.js';
+import {
   AgentPointerMoveResponseSchema,
   AgentVersionCheckResponseSchema,
   AgentVersionListResponseSchema,
@@ -112,6 +120,7 @@ import {
   RevokeRunTokensResponseSchema,
   RunApprovalRequestSchema,
   RunApprovalResponseSchema,
+  RunDetailResponseSchema,
   RunListResponseSchema,
   RunResponseSchema,
   StartRunRequestSchema,
@@ -140,6 +149,7 @@ import {
   TranscriptSubkeysResponseSchema,
 } from './sessions.js';
 import { ShareListResponseSchema, ShareResourceSchema } from './shares.js';
+import { TokenExchangeRequestSchema, TokenExchangeResponseSchema } from './token-exchange.js';
 import { SurfaceAttachmentResponseSchema } from './surfaces.js';
 import {
   PublishSkillRevisionRequestSchema,
@@ -166,6 +176,11 @@ import {
   UpdateTriggerRequestSchema,
   ZoomUrlValidationResponseSchema,
 } from './triggers.js';
+import {
+  CreateWebhookRequestSchema,
+  CreateWebhookResponseSchema,
+  WebhookListResponseSchema,
+} from './webhooks.js';
 import {
   SharingPolicySchema,
   WorkspaceListResponseSchema,
@@ -210,6 +225,10 @@ export const API_SCHEMAS = {
   AgentResourceAssignmentsResponseSchema,
   AgentResourceAssignmentsSchema,
   AgentResourceSchema,
+  AgentTeamListResponseSchema,
+  AgentTeamResourceSchema,
+  AgentTeamVersionListResponseSchema,
+  AgentTeamVersionSchema,
   AgentVersionCheckResponseSchema,
   AgentVersionListResponseSchema,
   AgentVersionResourceSchema,
@@ -222,6 +241,8 @@ export const API_SCHEMAS = {
   ConnectorListResponseSchema,
   ConnectorResourceSchema,
   CreateAgentFromVersionResponseSchema,
+  CreateAgentTeamRequestSchema,
+  CreateAgentTeamVersionRequestSchema,
   CreateAgentVersionRequestSchema,
   CreateAgentWithAssignmentsResponseSchema,
   CreateEndpointClientRequestSchema,
@@ -229,6 +250,8 @@ export const API_SCHEMAS = {
   CreateEvaluationRunRequestSchema,
   CreateTriggerRequestSchema,
   CreateTriggerResponseSchema,
+  CreateWebhookRequestSchema,
+  CreateWebhookResponseSchema,
   CreatedUserResponseSchema,
   DeleteModelConnectionResponseSchema,
   DiscoveredModelsResponseSchema,
@@ -276,6 +299,7 @@ export const API_SCHEMAS = {
   RunFeedbackListResponseSchema,
   RunFeedbackRequestSchema,
   RunListResponseSchema,
+  RunDetailResponseSchema,
   RunResponseSchema,
   RunStatusEventDataSchema,
   RunTelemetryListResponseSchema,
@@ -312,6 +336,8 @@ export const API_SCHEMAS = {
   StreamResetFrameDataSchema,
   SurfaceAttachmentResponseSchema,
   TestConnectionOutcomeSchema,
+  TokenExchangeRequestSchema,
+  TokenExchangeResponseSchema,
   ToolBundleResponseSchema,
   TranscriptResponseSchema,
   TranscriptSubkeysResponseSchema,
@@ -324,6 +350,7 @@ export const API_SCHEMAS = {
   UploadToolBundleRequestSchema,
   UploadToolBundleResponseSchema,
   UserListResponseSchema,
+  WebhookListResponseSchema,
   WorkspaceFeaturesSchema,
   WorkspaceListResponseSchema,
   WorkspaceMembershipResponseSchema,
@@ -372,6 +399,16 @@ export interface ApiMultipartPart {
   readonly description: string;
 }
 
+/**
+ * One request header a route reads beyond the ones every route shares (the contracts version and
+ * the credential). The header's value is a string; its rules and refusals are in `description`.
+ */
+export interface ApiRequestHeader {
+  readonly name: string;
+  readonly required: boolean;
+  readonly description: string;
+}
+
 /** One success answer of a route. Failures are the standard envelope and are not listed per route. */
 export interface ApiSuccess {
   readonly status: number;
@@ -395,6 +432,8 @@ export interface ApiRoute {
   readonly summary: string;
   /** Absent when the request carries no body. */
   readonly request?: ApiBody;
+  /** Request headers this route reads beyond the shared ones; absent when it reads none. */
+  readonly headers?: readonly ApiRequestHeader[];
   /**
    * Older request bodies the route still accepts beside `request`, each on its own media type,
    * kept for one release and then removed (04 §4). The OpenAPI document marks them deprecated.
@@ -494,6 +533,12 @@ export const API_ROUTE_EXCLUSIONS: readonly {
     path: '/api/builder/mcp',
     feature: 'builder',
     because: 'run-caller route (per-run token, aw-control tools)',
+  },
+  {
+    method: 'POST',
+    path: '/api/runs/:id/members/mcp',
+    feature: 'core',
+    because: "lead-run route (the lead run's own token, agent-team member tools; ADR-0104)",
   },
   { method: 'GET', path: '/p/:token', feature: 'sharing', because: 'a public share page (04 §1)' },
   {
@@ -773,6 +818,18 @@ export const API_ROUTES: readonly ApiRoute[] = [
     summary: 'Revoke the presented user token (`aw logout`)',
     success: NO_CONTENT,
     security: 'user-token',
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/token-exchange',
+    operationId: 'auth.exchange',
+    tag: 'auth',
+    feature: 'core',
+    summary:
+      "Exchange the signed-in person's OIDC ID token for a short-lived access token of an app-backend endpoint client (ADR-0161)",
+    request: json('TokenExchangeRequestSchema'),
+    success: ok(json('TokenExchangeResponseSchema')),
+    security: 'none',
   },
   {
     method: 'GET',
@@ -1083,6 +1140,38 @@ export const API_ROUTES: readonly ApiRoute[] = [
       { status: 200, body: json('ZoomUrlValidationResponseSchema') },
     ],
     security: 'none',
+  },
+
+  // §5.17 — run-outcome webhooks (N-3, issue #250, ADR-SDK-18-N3-250)
+  {
+    method: 'GET',
+    path: '/api/webhooks',
+    operationId: 'webhooks.list',
+    tag: 'webhooks',
+    feature: 'runs',
+    summary: "List the workspace's webhooks (at most 10, unpaginated); the secret is never listed",
+    success: ok(json('WebhookListResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/webhooks',
+    operationId: 'webhooks.create',
+    tag: 'webhooks',
+    feature: 'runs',
+    summary:
+      'Register a webhook for terminal run outcomes. The URL must pass the egress policy; the ' +
+      'whsec_ signing secret is returned once, in this answer',
+    request: json('CreateWebhookRequestSchema'),
+    success: created(json('CreateWebhookResponseSchema')),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/webhooks/:id',
+    operationId: 'webhooks.remove',
+    tag: 'webhooks',
+    feature: 'runs',
+    summary: 'Remove a webhook, its pending deliveries and its signing secret',
+    success: NO_CONTENT,
   },
 
   // §5.3 — model connections and models
@@ -1885,6 +1974,86 @@ export const API_ROUTES: readonly ApiRoute[] = [
     success: ok(json('RunFeedbackListResponseSchema')),
   },
 
+  // §5.18 — agent teams (ADR-0104 acceptance, issue #1516). Authorised as the `agents` resource.
+  {
+    method: 'GET',
+    path: '/api/agent-teams',
+    operationId: 'agentTeams.list',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: "List the workspace's agent teams, newest first, cursor paged",
+    success: ok(json('AgentTeamListResponseSchema')),
+  },
+  {
+    method: 'POST',
+    path: '/api/agent-teams',
+    operationId: 'agentTeams.create',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: 'Create an agent team, with its first version when the body carries one',
+    request: json('CreateAgentTeamRequestSchema'),
+    success: created(json('AgentTeamResourceSchema')),
+  },
+  {
+    method: 'GET',
+    path: '/api/agent-teams/:id',
+    operationId: 'agentTeams.get',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: 'Read one agent team with its newest version',
+    success: ok(json('AgentTeamResourceSchema')),
+  },
+  {
+    method: 'DELETE',
+    path: '/api/agent-teams/:id',
+    operationId: 'agentTeams.remove',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: 'Delete an agent team; its name becomes free again',
+    success: NO_CONTENT,
+  },
+  {
+    method: 'POST',
+    path: '/api/agent-teams/:id/versions',
+    operationId: 'agentTeams.versions.create',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: "Save a team's next immutable version, pinning the lead's and each member's version",
+    request: json('CreateAgentTeamVersionRequestSchema'),
+    success: created(json('AgentTeamVersionSchema')),
+  },
+  {
+    method: 'GET',
+    path: '/api/agent-teams/:id/versions',
+    operationId: 'agentTeams.versions.list',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: "List a team's versions, newest first, cursor paged",
+    success: ok(json('AgentTeamVersionListResponseSchema')),
+  },
+  // ADR-0104 acceptance decisions 4 and 11 (issue #1517): a run of the team's newest version on
+  // its lead, decided as the `run` verb on the lead agent.
+  {
+    method: 'POST',
+    path: '/api/agent-teams/:id/runs',
+    operationId: 'agentTeams.run',
+    tag: 'agentTeams',
+    feature: 'core',
+    summary: "Run an agent team: start its newest version's lead, which calls the members",
+    request: json('StartRunRequestSchema'),
+    headers: [
+      {
+        name: 'Idempotency-Key',
+        required: false,
+        description:
+          'Makes a retried team run safe exactly as on `POST /api/agents/:id/runs` (S-6, ' +
+          'ADR-0151): the same key with the same request returns the run the first start ' +
+          'queued; the same key with a different request answers `409 run_idempotency_conflict`.',
+      },
+    ],
+    success: [{ status: 202, body: json('StartRunResponseSchema') }],
+  },
+
   // §5.10 — projects
   {
     method: 'GET',
@@ -2027,6 +2196,18 @@ export const API_ROUTES: readonly ApiRoute[] = [
     feature: 'core',
     summary: 'Start a run of an agent',
     request: json('StartRunRequestSchema'),
+    headers: [
+      {
+        name: 'Idempotency-Key',
+        required: false,
+        description:
+          'Makes a retried start safe (S-6, ADR-0151, spec §5.12): 1–255 characters after ' +
+          'trimming, scoped to the calling principal. The same key with the same request returns ' +
+          'the run the first start queued; the same key with a different request answers ' +
+          '`409 run_idempotency_conflict`; a blank or longer key answers ' +
+          '`400 invalid_idempotency_key`.',
+      },
+    ],
     success: [{ status: 202, body: json('StartRunResponseSchema') }],
   },
   {
@@ -2044,8 +2225,10 @@ export const API_ROUTES: readonly ApiRoute[] = [
     operationId: 'runs.get',
     tag: 'runs',
     feature: 'core',
-    summary: 'Read one run',
-    success: ok(json('RunResponseSchema')),
+    summary:
+      'Read one run, with its child runs (at most 16, oldest first) and treeCost, the read-time ' +
+      'sum of cost over the run and its children (ADR-0104)',
+    success: ok(json('RunDetailResponseSchema')),
   },
   {
     method: 'POST',

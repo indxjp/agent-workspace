@@ -11,7 +11,7 @@ import type {
   WireProtocol,
   WireProtocolForwarder,
 } from './types.js';
-import { ModelConnectionIncompleteError } from './types.js';
+import { ModelConnectionIncompleteError, ModelCredentialUnavailableError } from './types.js';
 import { protocolNotSupported } from './providers/passthrough.js';
 import { z } from 'zod';
 
@@ -48,6 +48,7 @@ type GatewayErrorType =
   | 'invalid_request_error'
   | 'method_not_allowed'
   | 'model_connection_incomplete'
+  | 'model_credential_unavailable'
   | 'not_found_error'
   | 'provider_not_registered'
   | 'provider_operation_not_supported';
@@ -410,6 +411,10 @@ export function createRouter(providers: readonly ModelProvider[]): GatewayRouter
       } catch (error) {
         if (error instanceof ModelConnectionIncompleteError) {
           return problem(409, 'model_connection_incomplete', error.message, context);
+        }
+        // A keyless token the retry after a `401` could not renew.
+        if (error instanceof ModelCredentialUnavailableError) {
+          return problem(503, 'model_credential_unavailable', error.message, context);
         }
         throw error;
       }

@@ -64,6 +64,21 @@ export interface SkillsAdoptReport {
 
 type Counts = { -readonly [K in keyof SkillsAdoptReport]: number };
 
+/**
+ * Whether `latest`, the latest recorded skills pass, proved that no old skill form is left: the
+ * proof the upgrade guard (migration 0093) requires, with no failed workspace. No release since
+ * 0.6.11 writes an old form, so after it a pass has nothing to move and only walks every skill.
+ */
+export function skillsAdoptProven(latest: Awaited<ReturnType<MigrationRuns['latest']>>): boolean {
+  return (
+    latest !== null &&
+    latest.proofVersion === SKILLS_PROOF_VERSION &&
+    latest.clean === true &&
+    latest.legacyRows === 0 &&
+    latest.mismatches === 0
+  );
+}
+
 /** The keys of the files under `prefix` that `counted` accepts, listed a page at a time. */
 async function fileKeys(
   objects: SkillObjects,
@@ -157,15 +172,19 @@ async function adoptSkill(
   return moved;
 }
 
-/** One workspace: list its skills (which gives each a row), then move every live skill's bytes. */
+/**
+ * One workspace: list its skills (which gives each a row), then move every live skill's bytes.
+ * Answers whether the list succeeded; a refused list does not stop the move of the rows there are.
+ */
 async function adoptWorkspace(
   deps: SkillsAdoptDependencies,
   workspaceId: string,
   report: Counts,
-): Promise<void> {
+): Promise<boolean> {
   const objects = deps.objects(workspaceId);
   const catalog = await deps.catalog(workspaceId);
   const owner = await deps.ownerPrincipalId(workspaceId);
+  let listedAll = true;
   if (owner !== null) {
     const principal = { ownerPrincipalId: owner, userId: null };
     // Gives every listed skill its row and fills its record column from the old object.
@@ -174,7 +193,7 @@ async function adoptWorkspace(
       workspaceId,
     });
     if (listed.status !== 200) {
-      report.failed += 1;
+      listedAll = false;
       deps.log.warn('[storage] adopting legacy skills failed for a workspace', {
         stage: 'skills',
         code: problemCode(listed) ?? 'unknown',
@@ -225,6 +244,7 @@ async function adoptWorkspace(
       orphans: counted.orphans,
     });
   }
+  return listedAll;
 }
 
 // @story US-STO-13
@@ -254,17 +274,19 @@ export async function runSkillsAdoptStage(
   try {
     for (const workspaceId of await deps.workspaceIds()) {
       report.workspaces += 1;
+      // A workspace counts as failed once, however many of its steps failed.
+      let succeeded = false;
       try {
-        await adoptWorkspace(deps, workspaceId, report);
+        succeeded = await adoptWorkspace(deps, workspaceId, report);
       } catch (error) {
         // A workspace that is gone, or a store that fails, must not stop the others. Only the error
         // name is logged: the message can carry connection text.
-        report.failed += 1;
         log.warn('[storage] adopting legacy skills failed for a workspace', {
           stage: 'skills',
           name: error instanceof Error ? error.name : 'unknown',
         });
       }
+      if (!succeeded) report.failed += 1;
     }
   } catch (error) {
     // The pass itself failed: record it, so an older clean row is never mistaken for its result.

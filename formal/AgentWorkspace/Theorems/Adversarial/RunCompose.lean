@@ -50,7 +50,7 @@ theorem selected_skill_has_positive_witness :
 
 /-- A run that wins the session lock first prevents a later project reassignment. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/projects.ts#moveSession")
-  (ts := "packages/core/src/db/repositories/runs.ts#create")]
+  (ts := "packages/core/src/db/repositories/runs/creation.ts#create")]
 theorem run_before_project_move_keeps_attribution (source target : String) :
     (moveSessionProject (createRunInSession { projectId := source }) target).projectId =
       source := by
@@ -58,7 +58,7 @@ theorem run_before_project_move_keeps_attribution (source target : String) :
 
 /-- A move that wins first leaves the new project attached when the next run is created. -/
 @[aw_spec (tier := T3) (ts := "packages/core/src/db/repositories/projects.ts#moveSession")
-  (ts := "packages/core/src/db/repositories/runs.ts#create")]
+  (ts := "packages/core/src/db/repositories/runs/creation.ts#create")]
 theorem project_move_before_run_uses_new_attribution (source target : String) :
     (createRunInSession (moveSessionProject { projectId := source } target)).projectId =
       target := by

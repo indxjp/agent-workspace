@@ -67,7 +67,7 @@ import {
 } from './handlers';
 import type { ApiResult } from '../http/result';
 import { createMemoryDirectory } from './memory-directory';
-import { ROLES, type Role } from './roles';
+import { ROLES, type Role } from './core/roles';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
 import { clearApplicationContext } from '../application-context';
 

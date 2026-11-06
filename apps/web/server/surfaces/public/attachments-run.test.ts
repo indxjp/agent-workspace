@@ -135,6 +135,7 @@ function install(world: RunWorld) {
     surfaces: {
       kind: 'serving',
       runtime: {
+        env: () => process.env,
         resolve: () => Promise.reject(new Error('unused')),
         open: () => Promise.reject(new Error('unused')),
         checkModel: () => Promise.reject(new Error('unused')),

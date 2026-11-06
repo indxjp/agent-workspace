@@ -7,11 +7,16 @@ import {
   AgentVersionBodySchema,
   type AgentVersionBody,
 } from '@indx-workspace/contracts/agent-versions';
-import type { AgentVersionToolBundle } from '@indx-workspace/contracts/agent-versions';
 import type { EngineId } from '@indx-workspace/contracts/engines';
 import type { EvalCaseFile } from '@indx-workspace/contracts/evaluations';
 import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 import * as define from '@indx-workspace/sdk/define';
+import {
+  AGENT_MARKDOWN_SUFFIX,
+  defineAgentFromPortable,
+  parseAgentMarkdown,
+  type PortableAgentContext,
+} from '@indx-workspace/sdk/portable';
 import { ProjectFileError, readEvalCaseFile } from '@indx-workspace/sdk/project';
 import type { z } from 'zod';
 
@@ -72,6 +77,13 @@ export interface LoadProjectOptions {
   readonly defaultEngine?: EngineId | undefined;
   /** More variables to keep out of the child: the project's secret names (SD17). */
   readonly withheld?: readonly string[] | undefined;
+  /** The project file's `models`, which an `.agent.md` model is matched to (ADR-0166 D12). */
+  readonly models?: PortableAgentContext['models'];
+  /**
+   * Whether `agents/*.agent.md` files are read as agents (ADR-0166 D12); default `true`. Only
+   * `aw platforms`, which reads them itself through the SDK without converting, turns it off.
+   */
+  readonly agentMarkdown?: boolean | undefined;
 }
 
 /** One agent the project defines, with its surfaces, ready to be checked or saved. */
@@ -92,9 +104,6 @@ export interface LoadedTool {
   readonly definition: define.ToolDefinition;
 }
 
-/** A code tool's declaration as a version's `toolBundles` entry holds it. */
-type PinnedDeclaration = Omit<AgentVersionToolBundle, 'tool' | 'digest'>;
-
 /** One code tool of the project (`defineTool()`, ADR-0115): served by the tool host, not stored. */
 export interface LoadedCodeTool {
   readonly file: string;
@@ -102,7 +111,7 @@ export interface LoadedCodeTool {
   /** The project-relative run file the tool declares; `aw push` bundles it (ADR-0118 TS1). */
   readonly run: string;
   /** What `aw push` pins beside the bundle's digest for a hosted tool sandbox (ADR-0118 TS4). */
-  readonly pinned?: PinnedDeclaration;
+  readonly pinned?: define.PinnedToolDeclaration;
 }
 
 /** What the loader found: the agents that loaded cleanly, and every problem. */
@@ -132,6 +141,29 @@ function isDefinitionName(name: string): boolean {
   return name.endsWith('.ts') && !name.endsWith('.d.ts');
 }
 
+function isAgentMarkdownName(name: string): boolean {
+  return name.endsWith(AGENT_MARKDOWN_SUFFIX) && name.length > AGENT_MARKDOWN_SUFFIX.length;
+}
+
+/** `agents/<name>.agent.md`, with the same name rule as a file handed to the child. */
+const AGENT_MARKDOWN_FILE = /^agents\/[^/\\:\p{Cc}\p{Cf}]+\.agent\.md$/u;
+
+/** Which files of a directory are definition files, and which of their names may be loaded. */
+interface DefinitionKind {
+  readonly isName: (name: string) => boolean;
+  readonly isFileName: (file: string) => boolean;
+}
+
+const TYPESCRIPT_FILES: DefinitionKind = {
+  isName: isDefinitionName,
+  isFileName: isDefinitionFileName,
+};
+
+const AGENT_MARKDOWN_FILES: DefinitionKind = {
+  isName: isAgentMarkdownName,
+  isFileName: (file) => AGENT_MARKDOWN_FILE.test(file),
+};
+
 /** Whether `relative` (from `path.relative`) leaves the directory it is relative to. */
 export function escapes(relative: string): boolean {
   return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative);
@@ -155,14 +187,16 @@ function byName(left: { readonly name: string }, right: { readonly name: string 
 }
 
 /**
- * `<directory>/<name>.ts` for every TypeScript file directly in `directory`, sorted. A symbolic
- * link is followed when its target is a file inside the project and refused otherwise, and a name
- * the loader cannot be handed is refused, each as a problem of that file.
+ * `<directory>/<name>.ts` for every TypeScript file directly in `directory` (or, with `kind`, every
+ * file of that kind), sorted. A symbolic link is followed when its target is a file inside the
+ * project and refused otherwise, and a name the loader cannot be handed is refused, each as a
+ * problem of that file.
  */
 async function definitionFiles(
   root: string,
   rootReal: string,
   directory: string,
+  kind: DefinitionKind = TYPESCRIPT_FILES,
 ): Promise<DefinitionFiles> {
   let entries;
   try {
@@ -176,11 +210,11 @@ async function definitionFiles(
   const files: string[] = [];
   const problems: ProjectProblem[] = [];
   const candidates = entries
-    .filter((entry) => isDefinitionName(entry.name) && (entry.isFile() || entry.isSymbolicLink()))
+    .filter((entry) => kind.isName(entry.name) && (entry.isFile() || entry.isSymbolicLink()))
     .sort(byName);
   for (const entry of candidates) {
     const file = `${directory}/${entry.name}`;
-    if (!isDefinitionFileName(file)) {
+    if (!kind.isFileName(file)) {
       problems.push(
         localProblem(file, 'file_name_unsupported', [
           'the name must not contain a control or format character, a backslash or a colon',
@@ -335,25 +369,6 @@ function bodyProblems(agent: LoadedAgent, error: z.ZodError): readonly ProjectPr
   }));
 }
 
-/** The declaration of a code tool, in the shape a version's `toolBundles` entry holds it. */
-function pinnedOf(tool: {
-  readonly description: string;
-  readonly inputSchema: Readonly<Record<string, unknown>>;
-  readonly outputSchema?: Readonly<Record<string, unknown>> | undefined;
-  readonly limits: { readonly timeoutMs: number };
-  readonly secrets?: readonly string[] | undefined;
-  readonly allowedDomains?: readonly string[] | undefined;
-}): PinnedDeclaration {
-  return {
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-    ...(tool.outputSchema === undefined ? {} : { outputSchema: tool.outputSchema }),
-    timeoutMs: tool.limits.timeoutMs,
-    ...(tool.secrets === undefined ? {} : { secrets: tool.secrets }),
-    ...(tool.allowedDomains === undefined ? {} : { allowedDomains: tool.allowedDomains }),
-  };
-}
-
 type LoadedAgentEntry = Extract<LoadedMessage['files'][number], { readonly tools: unknown }>;
 
 /**
@@ -376,6 +391,132 @@ function catalogTools(entry: LoadedAgentEntry): readonly LoadedTool[] {
     if (definition === undefined) throw new Error('toolDefinitionsOf() dropped a tool');
     return { file: wire.file, definition };
   });
+}
+
+/** One `agents/<name>.agent.md` (ADR-0166 D12): the agent it defines, or why it is refused. */
+type MarkdownAgent =
+  | { readonly kind: 'agent'; readonly entry: LoadedAgentEntry }
+  | { readonly kind: 'problem'; readonly problem: ProjectProblem };
+
+function definitionIssues(error: define.DefinitionError): readonly string[] {
+  return error.issues.map((issue) => `${issue.path}: ${issue.message}`);
+}
+
+/**
+ * Read one `agents/<name>.agent.md` here, never in the child: the file is data, not code. It is
+ * parsed with `parseAgentMarkdown` and made through `defineAgentFromPortable`, so every check
+ * `defineAgent()` makes applies, then becomes a version body as an `agents/<name>.ts` would. A file
+ * whose agent is not named like it, and a conversion that drops anything (ADR-0133 D5), are
+ * refused: what is pushed is exactly what the file says.
+ */
+async function markdownAgent(
+  root: string,
+  file: string,
+  options: LoadProjectOptions,
+): Promise<MarkdownAgent> {
+  const refuse = (code: string, details: readonly string[]): MarkdownAgent => ({
+    kind: 'problem',
+    problem: localProblem(file, code, details),
+  });
+  let text: string;
+  try {
+    text = await readFile(path.join(root, ...file.split('/')), 'utf8');
+  } catch {
+    return refuse('agent_markdown_invalid', ['the file could not be read']);
+  }
+  try {
+    const portable = parseAgentMarkdown(text, file);
+    const expected = `agents/${portable.name}${AGENT_MARKDOWN_SUFFIX}`;
+    if (file !== expected) {
+      return refuse('agent_markdown_invalid', [
+        `the file defines the agent ${portable.name}; name it ${expected}`,
+      ]);
+    }
+    const conversion = defineAgentFromPortable(
+      portable,
+      options.models === undefined ? {} : { models: options.models },
+    );
+    if (conversion.dropped.length > 0) {
+      return refuse(
+        'agent_conversion_lossy',
+        conversion.dropped.map((drop) => `${drop.path}: ${drop.reason}`),
+      );
+    }
+    const agent = conversion.value;
+    const body = define.toAgentVersionBody(
+      agent,
+      options.defaultEngine === undefined ? {} : { defaultEngine: options.defaultEngine },
+    );
+    const secrets = define
+      .toolDefinitionsOf(agent)
+      .flatMap((tool) => (tool.credential === undefined ? [] : [tool.credential.secret]));
+    const tools = (agent.tools ?? []).flatMap((tool) =>
+      define.isOpenApiTool(tool) ? [{ file, kind: 'openapi' as const, tool: { ...tool } }] : [],
+    );
+    return {
+      kind: 'agent',
+      entry: { file, kind: 'agent', name: agent.name, body, secrets: [...new Set(secrets)], tools },
+    };
+  } catch (error) {
+    if (error instanceof ProjectFileError) return refuse('agent_markdown_invalid', [error.message]);
+    if (error instanceof define.DefinitionError) {
+      return {
+        kind: 'problem',
+        problem: {
+          file,
+          status: 400,
+          code: 'invalid_agent_version',
+          details: definitionIssues(error),
+        },
+      };
+    }
+    throw error;
+  }
+}
+
+/** The stem of an agent file: `support` for `agents/support.ts` and `agents/support.agent.md`. */
+function agentStem(file: string): string {
+  const name = file.slice('agents/'.length);
+  return name.endsWith(AGENT_MARKDOWN_SUFFIX)
+    ? name.slice(0, -AGENT_MARKDOWN_SUFFIX.length)
+    : name.slice(0, -'.ts'.length);
+}
+
+/**
+ * The project's `agents/*.agent.md` agents (ADR-0166 D12). A name a `.ts` file also defines is
+ * refused on the `.agent.md` file: ADR-0133 D3 allows one definition per name.
+ */
+async function markdownAgents(
+  root: string,
+  rootReal: string,
+  typescript: DefinitionFiles,
+  options: LoadProjectOptions,
+): Promise<{
+  readonly entries: readonly LoadedAgentEntry[];
+  readonly problems: readonly ProjectProblem[];
+}> {
+  if (options.agentMarkdown === false) return { entries: [], problems: [] };
+  const listed = await definitionFiles(root, rootReal, 'agents', AGENT_MARKDOWN_FILES);
+  const typed = new Set(
+    [...typescript.files, ...typescript.problems.map((problem) => problem.file)].map(agentStem),
+  );
+  const entries: LoadedAgentEntry[] = [];
+  const problems: ProjectProblem[] = [...listed.problems];
+  for (const file of listed.files) {
+    const stem = agentStem(file);
+    if (typed.has(stem)) {
+      problems.push(
+        localProblem(file, 'agent_defined_twice', [
+          `agents/${stem}.ts also defines ${stem}; keep one of the two files`,
+        ]),
+      );
+      continue;
+    }
+    const read = await markdownAgent(root, file, options);
+    if (read.kind === 'agent') entries.push(read.entry);
+    else problems.push(read.problem);
+  }
+  return { entries, problems };
 }
 
 interface PendingAgent {
@@ -424,7 +565,7 @@ function assemble(reply: LoadedMessage, agentRefused: boolean): ProjectLoad {
                   file: wire.file,
                   name: wire.tool.name,
                   run: wire.tool.run,
-                  pinned: pinnedOf(wire.tool),
+                  pinned: define.pinnedOf(wire.tool),
                 },
               ]
             : [],
@@ -514,8 +655,11 @@ function answersRequest(reply: LoadedMessage, request: LoadMessage): boolean {
  * root, outside any `node_modules` (ADR-0111 and its slice-2 amendment), then the answers are
  * checked and grouped here.
  *
- * Refuses with {@link CommandRefusedError} when there is no `agents/*.ts` at all, or when the child
- * fails without an answer. Every per-file refusal is a {@link ProjectProblem} instead.
+ * `agents/*.agent.md` files are read here, without the child, and join as agents (ADR-0166 D12).
+ *
+ * Refuses with {@link CommandRefusedError} when there is no `agents/*.ts` or `agents/*.agent.md` at
+ * all, or when the child fails without an answer. Every per-file refusal is a
+ * {@link ProjectProblem} instead.
  */
 export async function loadProject(options: LoadProjectOptions): Promise<ProjectLoad> {
   const features = options.features ?? process.features;
@@ -534,12 +678,23 @@ export async function loadProject(options: LoadProjectOptions): Promise<ProjectL
   }
   const rootReal = await realpath(options.root);
   const agents = await definitionFiles(options.root, rootReal, 'agents');
-  if (agents.files.length === 0 && agents.problems.length === 0) {
-    throw new CommandRefusedError('no agents/*.ts in this directory', 'aw init --yes');
+  const markdown = await markdownAgents(options.root, rootReal, agents, options);
+  if (
+    agents.files.length === 0 &&
+    agents.problems.length === 0 &&
+    markdown.entries.length === 0 &&
+    markdown.problems.length === 0
+  ) {
+    throw new CommandRefusedError(
+      options.agentMarkdown === false
+        ? 'no agents/*.ts in this directory'
+        : 'no agents/*.ts or agents/*.agent.md in this directory',
+      'aw init --yes',
+    );
   }
   const surfaces = await definitionFiles(options.root, rootReal, 'surfaces');
-  const refused = [...agents.problems, ...surfaces.problems];
-  if (agents.files.length === 0)
+  const refused = [...agents.problems, ...markdown.problems, ...surfaces.problems];
+  if (agents.files.length === 0 && markdown.entries.length === 0)
     return { agents: [], problems: refused, secrets: [], tools: [], codeTools: [] };
   const request: LoadMessage = {
     type: 'load',
@@ -548,48 +703,64 @@ export async function loadProject(options: LoadProjectOptions): Promise<ProjectL
     surfaces: surfaces.files,
     ...(options.defaultEngine === undefined ? {} : { defaultEngine: options.defaultEngine }),
   };
-  const timeoutMs = options.timeoutMs ?? LOADER_TIMEOUT_MS;
-  const env = await childEnv(options.io, options.withheld);
-  const outcome = await runChild(request, options, env, timeoutMs);
-  if (outcome.kind === 'timeout') {
-    return {
-      agents: [],
-      problems: [
-        ...refused,
-        localProblem(outcome.file ?? PROJECT_FILE, 'loader_timeout', [
-          `the definition files did not finish loading within ${String(timeoutMs)} ms`,
-        ]),
-      ],
-      secrets: [],
-      tools: [],
-      codeTools: [],
-    };
+  let answered: LoadedMessage;
+  if (request.agents.length === 0 && request.surfaces.length === 0) {
+    // Only `.agent.md` agents, which are read here: there is no code to run.
+    answered = { type: 'loaded', files: [] };
+  } else {
+    const timeoutMs = options.timeoutMs ?? LOADER_TIMEOUT_MS;
+    const env = await childEnv(options.io, options.withheld);
+    const outcome = await runChild(request, options, env, timeoutMs);
+    if (outcome.kind === 'timeout') {
+      return {
+        agents: [],
+        problems: [
+          ...refused,
+          localProblem(outcome.file ?? PROJECT_FILE, 'loader_timeout', [
+            `the definition files did not finish loading within ${String(timeoutMs)} ms`,
+          ]),
+        ],
+        secrets: [],
+        tools: [],
+        codeTools: [],
+      };
+    }
+    if (outcome.kind === 'unfinished') {
+      return {
+        agents: [],
+        problems: [
+          ...refused,
+          localProblem(outcome.file, 'module_unfinished', [
+            `the loader exited (code ${String(outcome.code)}) while this file was evaluating: a top-level await that never settles, or process.exit()`,
+          ]),
+        ],
+        secrets: [],
+        tools: [],
+        codeTools: [],
+      };
+    }
+    const reply = LoadedMessageSchema.safeParse(outcome.message);
+    if (!reply.success || !answersRequest(reply.data, request)) throw malformedReply();
+    answered = reply.data;
   }
-  if (outcome.kind === 'unfinished') {
-    return {
-      agents: [],
-      problems: [
-        ...refused,
-        localProblem(outcome.file, 'module_unfinished', [
-          `the loader exited (code ${String(outcome.code)}) while this file was evaluating: a top-level await that never settles, or process.exit()`,
-        ]),
-      ],
-      secrets: [],
-      tools: [],
-      codeTools: [],
-    };
-  }
-  const malformed = new CommandRefusedError('the project loader answered with a malformed message');
-  const reply = LoadedMessageSchema.safeParse(outcome.message);
-  if (!reply.success || !answersRequest(reply.data, request)) throw malformed;
+  // The `.agent.md` agents join after the `.ts` ones and before the surfaces that may name them.
+  const agentEntries = answered.files.filter((entry) => entry.kind === 'agent');
+  const surfaceEntries = answered.files.filter((entry) => entry.kind === 'surface');
   let load: ProjectLoad;
   try {
-    load = assemble(reply.data, agents.problems.length > 0);
+    load = assemble(
+      { type: 'loaded', files: [...agentEntries, ...markdown.entries, ...surfaceEntries] },
+      agents.problems.length > 0 || markdown.problems.length > 0,
+    );
   } catch (error) {
-    if (error instanceof define.DefinitionError) throw malformed;
+    if (error instanceof define.DefinitionError) throw malformedReply();
     throw error;
   }
   return { ...load, problems: [...refused, ...load.problems] };
+}
+
+function malformedReply(): CommandRefusedError {
+  return new CommandRefusedError('the project loader answered with a malformed message');
 }
 
 /** The directory of a project's evaluation case files, one `<agent>.yaml` per agent (issue #618). */

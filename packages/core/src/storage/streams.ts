@@ -115,6 +115,76 @@ export function countedBody(body: ReadableStream<Uint8Array> | Uint8Array): {
   return { body: counted, sizeBytes: () => size };
 }
 
+/** Why `signal` aborted, as the error a stopped read or write rejects with. */
+function abortReason(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  return reason instanceof Error
+    ? reason
+    : new DOMException('The operation was aborted.', 'AbortError');
+}
+
+/**
+ * `body`, erroring with the signal's reason once `signal` aborts, even while it waits for a chunk
+ * that never comes; the source is then cancelled. `body` itself without a signal, or for bytes.
+ * Every backend writes nothing for a body that errors, so this is what stops any write.
+ */
+export function abortableBody(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+): ReadableStream<Uint8Array>;
+export function abortableBody(
+  body: ReadableStream<Uint8Array> | Uint8Array,
+  signal: AbortSignal | undefined,
+): ReadableStream<Uint8Array> | Uint8Array;
+export function abortableBody(
+  body: ReadableStream<Uint8Array> | Uint8Array,
+  signal: AbortSignal | undefined,
+): ReadableStream<Uint8Array> | Uint8Array {
+  if (signal === undefined || body instanceof Uint8Array) return body;
+  const reader = body.getReader();
+  let stop: (() => void) | undefined;
+  const release = (): void => {
+    if (stop !== undefined) signal.removeEventListener('abort', stop);
+  };
+  return new ReadableStream<Uint8Array>(
+    {
+      start(controller) {
+        stop = () => {
+          const reason = abortReason(signal);
+          controller.error(reason);
+          reader.cancel(reason).catch((cancelError: unknown) => {
+            process.emitWarning('An aborted object body could not cancel its source.', {
+              code: 'AW_OBJECT_BODY_CANCEL',
+              detail: cancelError instanceof Error ? cancelError.name : 'unknown',
+            });
+          });
+        };
+        if (signal.aborted) stop();
+        else signal.addEventListener('abort', stop, { once: true });
+      },
+      async pull(controller) {
+        try {
+          const next = await reader.read();
+          // Already errored by the abort while this read waited.
+          if (signal.aborted) return;
+          if (next.done) {
+            release();
+            controller.close();
+          } else controller.enqueue(next.value);
+        } catch (error) {
+          release();
+          if (!signal.aborted) controller.error(error);
+        }
+      },
+      cancel(reason) {
+        release();
+        return reader.cancel(reason);
+      },
+    },
+    { highWaterMark: 0 },
+  );
+}
+
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
@@ -169,8 +239,11 @@ export function toWebStream(source: Readable): ReadableStream<Uint8Array> {
           source.destroy(error);
         }
       },
-      cancel(reason) {
-        source.destroy(reason instanceof Error ? reason : undefined);
+      // Destroyed without the reason: a consumer that stops reading is not a failure of the
+      // source, and a `Readable` destroyed with an error that nothing listens for crashes the
+      // process (`abortableBody` cancels with the abort's reason).
+      cancel() {
+        source.destroy();
       },
     },
     { highWaterMark: 0 },
@@ -220,21 +293,24 @@ function cursorPosition(cursor: string): { readonly key: string; readonly kind: 
  */
 type ListedEntries = Promise<readonly ObjectListEntry[]> | AsyncIterable<ObjectListEntry>;
 
+/** The opaque cursor of a page that ended on `entry`: its kind and its key. */
+export function cursorAfter(entry: ObjectListEntry): string {
+  return `${entry.kind}:${entry.key}`;
+}
+
 /**
- * `listPage` for a backend with no native paging (memory, local filesystem, folder) that lists a
- * whole level (`level`) or tree (`tree`) in one call. The cursor is `<kind>:<key>` of the last entry
- * returned, so a page ending on a file does not skip the folder of the same name.
+ * The entries of a listing in page order from just past `options.cursor`: a backend with no native
+ * paging (memory, local filesystem, folder) lists a whole level (`level`) or tree (`tree`) in one
+ * call, and this sorts an array, drops the prefix itself from a tree and skips up to the cursor.
  */
-export async function listPageFrom(
+export async function* listedEntries(
   listing: {
     level(prefix: string, after: string | undefined): ListedEntries;
     tree(prefix: string, after: string | undefined): ListedEntries;
   },
   prefix: string,
   options: ListPageOptions | undefined,
-): Promise<ObjectPage> {
-  options?.signal?.throwIfAborted();
-  const limit = clampListLimit(options?.limit);
+): AsyncGenerator<ObjectListEntry> {
   const after = options?.cursor === undefined ? undefined : cursorPosition(options.cursor);
   const recursive = options?.recursive === true;
   // Strictly beneath the prefix: a file named exactly `prefix` is not "under" it.
@@ -246,15 +322,34 @@ export async function listPageFrom(
       : [...(await listed)].sort((left, right) =>
           compareKeyKind(left.key, left.kind, right.key, right.kind),
         );
-  const entries: ObjectListEntry[] = [];
   for await (const entry of ordered) {
     if (entry.key === self) continue;
     if (after !== undefined && compareKeyKind(entry.key, entry.kind, after.key, after.kind) <= 0) {
       continue;
     }
+    yield entry;
+  }
+}
+
+/**
+ * `listPage` over {@link listedEntries}. The cursor is `<kind>:<key>` of the last entry returned,
+ * so a page ending on a file does not skip the folder of the same name.
+ */
+export async function listPageFrom(
+  listing: {
+    level(prefix: string, after: string | undefined): ListedEntries;
+    tree(prefix: string, after: string | undefined): ListedEntries;
+  },
+  prefix: string,
+  options: ListPageOptions | undefined,
+): Promise<ObjectPage> {
+  options?.signal?.throwIfAborted();
+  const limit = clampListLimit(options?.limit);
+  const entries: ObjectListEntry[] = [];
+  for await (const entry of listedEntries(listing, prefix, options)) {
     if (entries.length === limit) {
       const last = entries[limit - 1];
-      return { entries, cursor: last === undefined ? null : `${last.kind}:${last.key}` };
+      return { entries, cursor: last === undefined ? null : cursorAfter(last) };
     }
     entries.push(entry);
   }

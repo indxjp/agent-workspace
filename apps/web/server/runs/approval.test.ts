@@ -71,6 +71,7 @@ async function pausedRun(
   id = crypto.randomUUID(),
   outputSchema?: Readonly<Record<string, unknown>>,
   subject?: string,
+  limitsOverride?: NonNullable<RunRecord['limitsOverride']>,
 ): Promise<RunRecord> {
   await store.create({
     engine: 'claude-agent-sdk',
@@ -82,6 +83,7 @@ async function pausedRun(
     ownerPrincipalId: PRINCIPAL.principalId,
     ...(outputSchema === undefined ? {} : { outputSchema }),
     ...(subject === undefined ? {} : { subject }),
+    ...(limitsOverride === undefined ? {} : { limitsOverride }),
   });
   await store.markRunning(id);
   await store.awaitApproval(id, CALL);
@@ -238,6 +240,31 @@ describe('POST /api/runs/:id/approval (ADR-0145 D2, issue #1301)', () => {
     expect(launched[0]?.subject).toBe('user-4711');
   });
 
+  it('the continuation of a run started under a lower-only cap keeps the cap (#1963, SPD-01)', async () => {
+    const { store, launched } = install();
+    const approved = await pausedRun(store, WORKSPACE, crypto.randomUUID(), undefined, undefined, {
+      maxBudgetUsd: 0.3,
+      maxTurns: 4,
+    });
+    await decideRunApproval(decision(approved.id, { decision: 'approve' }), approved.id);
+    expect(launched[0]?.limits).toEqual({ maxBudgetUsd: 0.3, maxTurns: 4 });
+    // The cap is on the continuation's own row too, so a second pause carries it on again.
+    expect(launched[0]?.run.limitsOverride).toEqual({ maxBudgetUsd: 0.3, maxTurns: 4 });
+    const rejected = await pausedRun(store, WORKSPACE, crypto.randomUUID(), undefined, undefined, {
+      maxBudgetUsd: 0.3,
+    });
+    await decideRunApproval(decision(rejected.id, { decision: 'reject' }), rejected.id);
+    expect(launched[1]?.limits).toEqual({ maxBudgetUsd: 0.3 });
+  });
+
+  it('a run started with no cap continues with none', async () => {
+    const { store, launched } = install();
+    const paused = await pausedRun(store);
+    await decideRunApproval(decision(paused.id, { decision: 'approve' }), paused.id);
+    expect(launched[0]?.limits).toBeUndefined();
+    expect(launched[0]?.run.limitsOverride).toBeNull();
+  });
+
   it('a run with no subject continues with none', async () => {
     const { store, launched } = install();
     const paused = await pausedRun(store);
@@ -301,6 +328,63 @@ describe('POST /api/runs/:id/approval (ADR-0145 D2, issue #1301)', () => {
     expect(response.status).toBe(403);
     expect(launched).toHaveLength(0);
     expect((await store.get(paused.id))?.status).toBe('awaiting_approval');
+  });
+
+  it('lets an app backend decide a run of a bound agent, and refuses one of an agent it does not bind (ADR-0161, issue #1509)', async () => {
+    const appBackend = (agentIds: readonly string[]): RunPrincipal => ({
+      ...PRINCIPAL,
+      scope: { kind: 'app-backend', id: 'client-1', agentIds },
+    });
+    const refused = install({ authenticate: () => Promise.resolve(appBackend([SESSION])) });
+    const other = await pausedRun(refused.store);
+    const response = await decideRunApproval(decision(other.id, { decision: 'approve' }), other.id);
+    expect(response.status).toBe(403);
+    expect(await errorCode(response)).toBe('token_out_of_scope');
+    expect(refused.launched).toHaveLength(0);
+    expect((await refused.store.get(other.id))?.status).toBe('awaiting_approval');
+
+    const admitted = install({
+      authenticate: () => Promise.resolve(appBackend([AGENT.toUpperCase()])),
+    });
+    const bound = await pausedRun(admitted.store);
+    const approved = await decideRunApproval(decision(bound.id, { decision: 'approve' }), bound.id);
+    expect(approved.status).toBe(202);
+    expect(admitted.launched).toHaveLength(1);
+  });
+
+  it("refuses a scoped credential's decision on a team lead run, so its member calls never act for an unattenuated role (ADR-0104)", async () => {
+    const sessionScoped: RunPrincipal = {
+      ...PRINCIPAL,
+      via: 'session',
+      kind: 'membership',
+      scope: { kind: 'session', id: SESSION },
+    };
+    let caller = sessionScoped;
+    const { store, launched } = install({ authenticate: () => Promise.resolve(caller) });
+    const lead = crypto.randomUUID();
+    await store.create({
+      engine: 'claude-agent-sdk',
+      id: lead,
+      workspaceId: WORKSPACE,
+      agentId: AGENT,
+      sessionId: SESSION,
+      initiatingUserId: PRINCIPAL.userId,
+      ownerPrincipalId: PRINCIPAL.principalId,
+      agentTeamVersionId: '99999999-9999-4999-8999-999999999999',
+    });
+    await store.markRunning(lead);
+    await store.awaitApproval(lead, CALL);
+    const response = await decideRunApproval(decision(lead, { decision: 'approve' }), lead);
+    expect(response.status).toBe(403);
+    expect(await errorCode(response)).toBe('token_out_of_scope');
+    expect(launched).toHaveLength(0);
+    expect((await store.get(lead))?.status).toBe('awaiting_approval');
+
+    // The person's own unscoped credential decides it.
+    caller = { ...sessionScoped, scope: null };
+    const approved = await decideRunApproval(decision(lead, { decision: 'approve' }), lead);
+    expect(approved.status).toBe(202);
+    expect(launched).toHaveLength(1);
   });
 
   it('an interrupt of a paused run cancels it, and a decision after it is 409', async () => {

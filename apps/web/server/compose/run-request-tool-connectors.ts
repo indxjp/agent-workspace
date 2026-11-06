@@ -1,3 +1,4 @@
+import { AGENT_TEAM_MEMBER_TOOL_PREFIX } from '@indx-workspace/contracts/agent-teams';
 import type { AgentToolPolicy } from '@indx-workspace/contracts/agents';
 import { BUILDER_REFUSAL_CODES, type BuilderRefusalCode } from '@indx-workspace/contracts/builder';
 import { ENGINE_CATALOGUE, isEngineId, mcpToolName } from '@indx-workspace/contracts/engines';
@@ -23,6 +24,7 @@ import { DomainError } from '../errors';
 import type { RunAgent } from '../agent-versions/session-version';
 import { CONNECTOR_IDENTITY_UNSUPPORTED } from '../connectors/identity';
 import type { RunCaller } from '../runs/caller';
+import type { LaunchContext } from '../runs/environment';
 import type { RuntimeSettings } from './run-request-runtime-settings';
 import type { AgentRunResourceSelection, PendingToolConnector } from './resource-loader';
 
@@ -306,4 +308,86 @@ export function toolMcpServersFor(
       },
     ]),
   );
+}
+
+/**
+ * The MCP server key a team lead's member tools are served under (ADR-0104 acceptance decision 3):
+ * the Claude engine names member `x` `mcp__agent__x`, and the neutral name is `agent__x`.
+ */
+export const AGENT_TEAM_MEMBER_SERVER_KEY = 'agent';
+
+/**
+ * A team lead run's members, as compose needs them: `url` is
+ * `<control-plane origin>/api/runs/<runId>/members/mcp`, and `names` each member's team-local name,
+ * which the lead calls as `agent__<name>`.
+ */
+export type RunTeamMembers = NonNullable<LaunchContext['team']>;
+
+/** One rule written against the neutral `agent__<name>`, in the Claude engine's spelling. */
+function claudeMemberRule(rule: string): string {
+  return rule.startsWith(AGENT_TEAM_MEMBER_TOOL_PREFIX)
+    ? `mcp__${AGENT_TEAM_MEMBER_SERVER_KEY}__${rule.slice(AGENT_TEAM_MEMBER_TOOL_PREFIX.length)}`
+    : rule;
+}
+
+/**
+ * A stored Claude tool policy with every rule written against a member tool's neutral name,
+ * `agent__<name>`, in the form the Claude engine shows it, `mcp__agent__<name>` (ADR-0104
+ * acceptance decision 3), as {@link withRunConnectorKeys} points connector rules at their run key.
+ * Any other rule is left as it is.
+ */
+export function withMemberToolRules<T extends AgentToolPolicy>(tools: T): T {
+  const rewrite = (rules: readonly string[]): readonly string[] => rules.map(claudeMemberRule);
+  return {
+    ...tools,
+    base: tools.base === 'claude_code_preset' ? tools.base : rewrite(tools.base),
+    autoApprove: rewrite(tools.autoApprove),
+    deny: rewrite(tools.deny),
+  };
+}
+
+/** `requireApproval` rules with each neutral member tool name in the Claude engine's spelling. */
+export function withMemberApprovalRules(rules: readonly string[]): readonly string[] {
+  return rules.map(claudeMemberRule);
+}
+
+/**
+ * The lead run's member server (ADR-0104 acceptance decisions 3, 4 and 6): one `http` MCP server
+ * keyed `agent` at the lead run's member endpoint, with the run token as its only credential. A
+ * child run (`parentRunId` set) and a run of no team get none, so the depth stays at most 1. The
+ * key must not already be a server of the run, and every member's tool name must fit
+ * {@link TOOL_NAME_MAX_LENGTH} on the run's engine, or the run is refused before it is posted.
+ */
+export function teamMemberServerFor(
+  team: RunTeamMembers | null | undefined,
+  run: { readonly parentRunId?: string | null },
+  composedKeys: readonly string[],
+  engineId: string,
+  token: string,
+): Record<string, { type: 'http'; url: string; headers: Record<string, string> }> {
+  if (team === null || team === undefined) return {};
+  if (run.parentRunId !== null && run.parentRunId !== undefined) return {};
+  const form = isEngineId(engineId) ? ENGINE_CATALOGUE[engineId].mcpToolName : 'tool';
+  const tooLong = team.names.find(
+    (name) =>
+      mcpToolName(form, AGENT_TEAM_MEMBER_SERVER_KEY, name).length > TOOL_NAME_MAX_LENGTH ||
+      `mcp__${AGENT_TEAM_MEMBER_SERVER_KEY}__${name}`.length > TOOL_NAME_MAX_LENGTH,
+  );
+  if (composedKeys.includes(AGENT_TEAM_MEMBER_SERVER_KEY) || tooLong !== undefined) {
+    throw new DomainError({
+      category: 'validation',
+      code: 'connector_tool_name_collision',
+      publicMessage:
+        'connector_tool_name_collision: the team member tools collide with a connector named ' +
+        `${JSON.stringify(AGENT_TEAM_MEMBER_SERVER_KEY)}, or a member's tool is longer than ` +
+        `${String(TOOL_NAME_MAX_LENGTH)} characters on engine ${engineId}`,
+    });
+  }
+  return {
+    [AGENT_TEAM_MEMBER_SERVER_KEY]: {
+      type: 'http',
+      url: team.url,
+      headers: { authorization: `Bearer ${token}` },
+    },
+  };
 }

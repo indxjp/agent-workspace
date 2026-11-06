@@ -2,7 +2,7 @@
  * S1-21 (issue #500), ADR-0109 as amended: the local runtime's workspace API key may do what
  * `aw dev` needs and nothing that outlives the run.
  *
- * The key is `admin`, because model connections are an Admin grant (`rbac/permissions.ts`). Admin
+ * The key is `admin`, because model connections are an Admin grant (`rbac/core/permissions.ts`). Admin
  * also administers API keys, users and memberships, and a key minted through `POST /api/api-keys`
  * with the local key would keep working after the runtime revoked its own key on stop. So every
  * write on those three collections refuses a principal whose API key carries
@@ -24,7 +24,7 @@ import type { Principal } from '../rbac/principal';
 import { LOCAL_RUNTIME_API_KEY_NAME_PREFIX } from './local-credential';
 
 /** Whether `principal` authenticated with a key the local runtime issued. */
-async function isLocalRuntimeKey(
+export async function isLocalRuntimeKey(
   principal: Principal,
   directory: WorkspaceDirectory,
 ): Promise<boolean> {

@@ -285,35 +285,32 @@ theorem the_step_limit_is_max_turns {r : Request} {c : Compiled} (h : compile r 
   obtain ⟨grants, b, t, w, p, names, tid, _, _, _, _, _, _, _, rfl⟩ := compile_ok_shape h
   rfl
 
-/-- The boundary's verdict on a drained run: the budget cap wins over everything, an interrupt over
-the step limit, and otherwise the run ends `max_turns` exactly when it reached `maxSteps` with its
+/-- The boundary's verdict on a drained run: an interrupt wins over the step limit, and otherwise the run ends `max_turns` exactly when it reached `maxSteps` with its
 last step still asking for tools — so a run that used exactly `maxSteps` steps and stopped on its
 own ends `end_turn` — and `end_turn` with no limit. -/
 @[aw_spec (tier := T2) (doc := "docs/formal/units/engine-mastra.md#steps")
   (ts := "packages/engine-mastra/src/boundary.ts#mastraStopReason")]
 theorem the_stop_reason_follows_the_precedence (steps : Nat) (last : Option String)
-    (maxSteps : Option Nat) (interrupted : Bool) :
-    stopReason steps last maxSteps true interrupted = .maxBudget ∧
-      stopReason steps last maxSteps false true = .cancelled ∧
-      stopReason steps last none false false = .endTurn ∧
-      ∀ m, (stopReason steps last (some m) false false = .maxTurns ↔
+    (maxSteps : Option Nat) :
+    stopReason steps last maxSteps true = .cancelled ∧
+      stopReason steps last none false = .endTurn ∧
+      ∀ m, (stopReason steps last (some m) false = .maxTurns ↔
         m ≤ steps ∧ last = some "tool-calls") ∧
-        (stopReason steps last (some m) false false = .endTurn ↔
+        (stopReason steps last (some m) false = .endTurn ↔
           ¬(m ≤ steps ∧ last = some "tool-calls")) := by
-  refine ⟨rfl, rfl, rfl, fun m => ⟨?_, ?_⟩⟩
+  refine ⟨rfl, rfl, fun m => ⟨?_, ?_⟩⟩
   · unfold stopReason
     by_cases hm : m ≤ steps <;> by_cases hl : last = some "tool-calls" <;> simp [hm, hl]
   · unfold stopReason
     by_cases hm : m ≤ steps <;> by_cases hl : last = some "tool-calls" <;> simp [hm, hl]
 
 /-- Witness: at the limit, a last step that asked for tools is `max_turns` and one that stopped on
-its own is `end_turn`; below the limit a tool step is `end_turn`; the cap and an interrupt win. -/
+its own is `end_turn`; below the limit a tool step is `end_turn`; an interrupt wins. -/
 example :
-    stopReason 2 (some "tool-calls") (some 2) false false = .maxTurns ∧
-      stopReason 2 (some "stop") (some 2) false false = .endTurn ∧
-      stopReason 1 (some "tool-calls") (some 2) false false = .endTurn ∧
-      stopReason 2 (some "tool-calls") (some 2) true true = .maxBudget ∧
-      stopReason 2 (some "tool-calls") (some 2) false true = .cancelled := by
+    stopReason 2 (some "tool-calls") (some 2) false = .maxTurns ∧
+      stopReason 2 (some "stop") (some 2) false = .endTurn ∧
+      stopReason 1 (some "tool-calls") (some 2) false = .endTurn ∧
+      stopReason 2 (some "tool-calls") (some 2) true = .cancelled := by
   decide +kernel
 
 /-- The adapter never takes more than `limits.maxTurns` steps. -/

@@ -26,7 +26,7 @@ import {
   resetTestRunApi,
 } from '../application-context-fixtures';
 import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
-import { conferredBy } from '../rbac/conferral';
+import { conferredBy } from '../rbac/core/conferral';
 import { Principal } from '../rbac/principal';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../rbac/testing';
 import type { AgentRef, LaunchContext, RunApiEnvironment } from '../runs/environment';

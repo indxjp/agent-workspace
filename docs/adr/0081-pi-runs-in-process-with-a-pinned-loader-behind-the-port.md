@@ -105,6 +105,12 @@ cannot price is refused. The table moved from the OpenAI adapter into the port
 names are unchanged. Billing stays the gateway's `run_usage_records`; `agent.result.engineCostUsd`
 is `null`.
 
+**Amendment (2026-11-01).** The `maxBudgetUsd` half of this section is retired by
+[ADR-0162](0162-the-gateway-stops-a-run-at-its-spend-ceiling.md) (#342, built by U5.4b, #1524): the
+gateway stops a run at its spend ceiling, priced from the deployment's catalogue. The port's
+`prices.ts` and `provisionalBudget` are removed, pi's model keeps its own listed `cost`, a cap on any
+model compiles, and the adapter has no budget stop. The turn limit above is unchanged.
+
 <a id="d7--sessions"></a>
 
 ### D7 — pi's JSONL tree is one store stream per session

@@ -1,8 +1,11 @@
+import { isUuid } from '@indx-workspace/contracts';
+import { StorageConnectionNameSchema } from '@indx-workspace/contracts/storage-connections';
 import {
   ApiProblemError,
   type CreateStorageConnectionInput,
   type StorageConnectionCredential,
   type StorageConnectionResource,
+  type StorageConnectionTestOutcome,
   type UpdateStorageConnectionPatch,
 } from '@indx-workspace/sdk';
 
@@ -77,6 +80,21 @@ export function credentialFor(
     case 'file':
       return undefined;
   }
+}
+
+/**
+ * What is wrong with a connection name, before it is sent. The server's refusal is a generic
+ * `invalid_storage_connection`, which the screen could only show as "could not be saved"
+ * (UX-08 in #2086), so the form checks the same rule the contract does and names the problem.
+ */
+export function connectionNameProblem(name: string): string | null {
+  const trimmed = name.trim();
+  if (!StorageConnectionNameSchema.safeParse(trimmed).success) {
+    return 'Name: use lowercase letters, digits and hyphens, starting with a letter, up to 63 characters. For example: sales-reports.';
+  }
+  return isUuid(trimmed)
+    ? 'Name: that looks like a connection ID. Choose a name made of words, for example: sales-reports.'
+    : null;
 }
 
 /** S3 needs both halves of a key pair or neither; the server's refusal would not say which. */
@@ -162,10 +180,14 @@ export function storageProblemMessage(error: unknown, fallback: string): string 
   return error.status === 403 ? 'You don’t have access to connected storage.' : fallback;
 }
 
-export function testOutcomeMessage(
-  outcome: { readonly ok: true } | { readonly ok: false; readonly code: string },
-): string {
-  if (outcome.ok) return 'Connection OK';
+export function testOutcomeMessage(outcome: StorageConnectionTestOutcome): string {
+  if (outcome.ok) {
+    // A bucket cannot tell a missing folder from an empty one, so this is a warning, not a failure.
+    const empty = outcome.emptyFolders ?? [];
+    return empty.length === 0
+      ? 'Connection OK'
+      : `Connection OK, but no files found under: ${empty.join(', ')}. Check the folder names.`;
+  }
   switch (outcome.code) {
     case 'forbidden':
       return 'The storage refused the credential or the endpoint.';

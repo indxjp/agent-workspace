@@ -1,16 +1,32 @@
 /**
- * The share wire mapper, the published-content builder and the list visibility filter (W2-4,
- * F-05). They lived in `app/api/shares/route.ts`, which made tests and the SDK conformance suite
- * import a route file; the route now only wires them.
+ * The share wire mapper and the list visibility filter (W2-4, F-05). They lived in
+ * `app/api/shares/route.ts`, which made tests and the SDK conformance suite import a route file;
+ * the route now only wires them. The published-content builder reads other domains, so it is in
+ * `../publish-request.ts`.
  */
-import type { Role } from '../../rbac/roles';
-import { exportAgentDefinition } from '../agent-definition/definition';
-import { sessionTranscriptSnapshot, type SharedRun } from '../session-snapshot/snapshot';
-import type { PublishShareRequest } from './input';
-import type { ShareRecord } from '../store';
+
+/** The stored share fields the wire mapper reads; the store's `ShareRecord` has them all. */
+export interface ShareWireFields {
+  readonly id: string;
+  readonly token: string;
+  readonly subjectType: string;
+  readonly subjectId: string;
+  readonly subjectLabel: string;
+  readonly visibility: string;
+  readonly mode: string | null;
+  readonly snapshot: unknown;
+  readonly include: unknown;
+  readonly budgetCapUsd: string | null;
+  readonly spentUsd: string;
+  readonly stopped: boolean;
+  readonly expiresAt: Date | null;
+  readonly revokedAt: Date | null;
+  readonly suspendedAt: Date | null;
+  readonly createdAt: Date;
+}
 
 /** Explicit wire allowlist: persistence-only hashes and future columns cannot leak by spreading. */
-export function toShareResource(share: ShareRecord, viewCount?: number) {
+export function toShareResource<Share extends ShareWireFields>(share: Share, viewCount?: number) {
   return {
     id: share.id,
     subjectType: share.subjectType,
@@ -32,34 +48,10 @@ export function toShareResource(share: ShareRecord, viewCount?: number) {
   };
 }
 
-/**
- * The content a share publishes, always through the server's secret masking: a session's
- * transcript, copied from the runs the caller chose (ADR-0158), or an agent's definition. A
- * caller-authored raw `snapshot` is never stored — it would skip the masking. The definition is
- * still caller-authored until RF-103 builds it from the stored subject.
- */
-export async function publishedSnapshot(
-  body: PublishShareRequest,
-  materials: { readonly values: readonly string[]; readonly referenceIds: readonly string[] },
-  sessionRuns: (runIds: readonly string[]) => Promise<readonly (SharedRun | null)[]>,
-): Promise<unknown> {
-  if (body.subjectType === 'session' && body.transcript !== undefined) {
-    return sessionTranscriptSnapshot(
-      body.subjectId,
-      await sessionRuns(body.transcript.runIds),
-      materials.values,
-    );
-  }
-  if (body.subjectType === 'agent' && body.definition) {
-    return exportAgentDefinition(body.definition, materials.values, materials.referenceIds);
-  }
-  return undefined;
-}
-
 /** The shares a caller may list: every share for an owner or admin, otherwise only their own. */
-export function visibleShares<T extends Pick<ShareRecord, 'publisherPrincipalId'>>(
+export function visibleShares<T extends { readonly publisherPrincipalId: string }>(
   shares: readonly T[],
-  viewer: { readonly role: Role; readonly ownerPrincipalId: string },
+  viewer: { readonly role: string; readonly ownerPrincipalId: string },
 ): T[] {
   return shares.filter(
     (share) =>

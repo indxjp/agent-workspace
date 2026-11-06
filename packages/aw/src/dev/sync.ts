@@ -30,6 +30,7 @@ import {
   type LoadedTool,
   type PushReport,
 } from '../project/index.js';
+import type { LoadProjectOptions } from '../project/load.js';
 import { madeByAwDev } from '../project/tool-host.js';
 import {
   EDITED_IN_UI_CODE,
@@ -128,8 +129,9 @@ function namedLateLine(name: string): string {
 
 /**
  * Issue #695: the keys of `agent-workspace.yaml` only a new runtime takes, as one line each: the
- * port, the runtime driver, the default engine and the policy, which the runtime reads when it
- * starts. Compared with the file as `aw dev` started, so a pending change is said once.
+ * port, the runtime driver, the default engine, the policy and the features (#1495), which the
+ * runtime reads when it starts. Compared with the file as `aw dev` started, so a pending change is
+ * said once.
  */
 function restartLines(before: ProjectRead, after: ProjectRead): readonly string[] {
   if (before.lifted || after.lifted) return [];
@@ -138,6 +140,7 @@ function restartLines(before: ProjectRead, after: ProjectRead): readonly string[
     'environments.local.runtime': read.project.environments.local?.runtime,
     engine: read.project.engine,
     policy: read.project.policy,
+    features: read.project.features,
   });
   const was = keys(before);
   const now = keys(after);
@@ -166,6 +169,8 @@ export interface DevSyncOptions {
   readonly debounceMs?: number;
   /** The project file's `engine`, for an agent that names none (C12). */
   readonly defaultEngine?: EngineId | undefined;
+  /** The project file's `models`, which an `.agent.md` model is matched to (ADR-0166 D12). */
+  readonly models?: LoadProjectOptions['models'];
   /** The secret names withheld from the runtime when it was forked (SD17). */
   readonly forkWithheld: readonly string[];
   /** The project file as planned at start: its `connectors` names are not a tool's (SD1). */
@@ -245,7 +250,7 @@ function isRecoverable(error: unknown, root: string): error is Error {
  * transaction; ADR-0101 declares that race until V-2.
  */
 export function startDevSync(options: DevSyncOptions): DevSync {
-  const { client, root, io, signal, origin, defaultEngine, onFatal } = options;
+  const { client, root, io, signal, origin, defaultEngine, models, onFatal } = options;
   let project = options.project;
   const debounceMs = options.debounceMs ?? DEV_SYNC_DEBOUNCE_MS;
   const printed = new Set(options.announcedSurfaces);
@@ -387,6 +392,7 @@ export function startDevSync(options: DevSyncOptions): DevSync {
           yes: true,
           onEdited: 'refuse',
           defaultEngine,
+          models,
           withheld: [...withheld],
           toolStep,
         }),

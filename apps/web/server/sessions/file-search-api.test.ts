@@ -19,6 +19,7 @@ import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import type { SessionApiPrincipal } from './environment';
 import { InMemoryTranscriptStore } from './memory-store';
 import { createRepositorySessionsStoreProvider } from './store';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const WORKSPACE = 'c8b1f0de-6a2e-4a1f-9d3b-000000000001';
 const SESSION = '11111111-2222-4333-8444-555555555555';
@@ -92,10 +93,9 @@ beforeEach(async () => {
   const rows = catalog.forWorkspaceSync(WORKSPACE);
   const FILES = await Promise.all(
     PATHS.map((path) =>
-      rows.putFile({
+      seedCatalogFile(rows, {
         path,
         kind: 'file',
-        storageKey: path,
         sizeBytes: 1,
         contentType: 'application/pdf',
         ownerPrincipalId: USER.principalId,

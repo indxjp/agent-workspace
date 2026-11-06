@@ -8,6 +8,7 @@ import {
   createDatabaseSessionStateRepositoryProvider,
   createDatabaseWorkspaceScopeResolver,
   createInMemoryCatalog,
+  createInMemorySessionStateBlobs,
   createIsolatedTestDatabase,
   memberships,
   sessions,
@@ -17,11 +18,7 @@ import {
   workspaces,
   type IsolatedTestDatabase,
 } from '@agent-workspace/core/db/unscoped';
-import {
-  createInMemoryStorageMigrationRuns,
-  type CatalogPort,
-  type ResourceCatalogRepository,
-} from '@agent-workspace/core/db';
+import { type CatalogPort, type ResourceCatalogRepository } from '@agent-workspace/core/db';
 import {
   createInMemoryObjectStore,
   storageObjectName,
@@ -31,7 +28,6 @@ import {
 import type { Logger } from '@agent-workspace/core/telemetry';
 
 import { CLEANUP_MIN_AGE_MS, runCleanupPass, type CleanupDependencies } from './cleanup';
-import { runAdoptStage } from './migrate-naming';
 
 const PREFIX = 'files/workspaces';
 
@@ -48,17 +44,22 @@ interface Fixture {
 
 function memoryFixture(): Promise<Fixture> {
   const provider = createInMemoryCatalog();
-  const held = new Set<string>();
+  const blobs = createInMemorySessionStateBlobs();
   return Promise.resolve({
     workspace: () => Promise.resolve({ id: crypto.randomUUID(), principalId: crypto.randomUUID() }),
     catalog: (workspaceId) => Promise.resolve(provider.forWorkspace(workspaceId)),
-    sessionState: () =>
-      Promise.resolve({
-        referencedObjectIds: (ids) => Promise.resolve(ids.filter((id) => held.has(id))),
-      }),
-    stateBlob: (_workspaceId, objectId) => {
-      held.add(objectId);
-      return Promise.resolve();
+    sessionState: (workspaceId) => Promise.resolve(blobs.forWorkspace(workspaceId)),
+    stateBlob: async (workspaceId, objectId, status) => {
+      const rows = blobs.forWorkspace(workspaceId);
+      const pending = await rows.reserveBlob(crypto.randomUUID(), {
+        engine: 'claude-agent-sdk',
+        objectId,
+        storageKey: storageObjectName(workspaceId, 'session-state', objectId),
+      });
+      if (status === 'deleting') await rows.claimBlob(pending);
+      if (status !== 'ready') return;
+      const blob = { blobKey: crypto.randomUUID(), sizeBytes: 7, sha256: '0'.repeat(64) };
+      await rows.confirmBlob(pending, blob);
     },
   });
 }
@@ -150,7 +151,6 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
     async function harness() {
       const f = await setup();
       const objects = createInMemoryObjectStore();
-      const legacyObjects = createInMemoryObjectStore();
       const lines: { message: string; fields: unknown }[] = [];
       const log: Logger = {
         info: (message, fields) => lines.push({ message, fields }),
@@ -164,24 +164,17 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         owners.set(created.id, created.principalId);
         return created;
       };
-      /** An object the old layout wrote: raw bytes under the legacy prefix, no catalog row. */
-      const legacyObject = (workspaceId: string, path: string) =>
-        legacyObjects.write(`${PREFIX}/${workspaceId}/${path}`, new Uint8Array(7), {
-          contentType: null,
-        });
       // The objects were just written; the clock is far enough ahead for them to be old enough.
       const later = () => new Date(Date.now() + 2 * CLEANUP_MIN_AGE_MS);
       interface RunOptions {
         readonly pageSize?: number;
         readonly now?: () => Date;
         readonly objects?: ObjectStore;
-        readonly legacy?: ObjectStore;
         readonly catalogs?: (workspaceId: string) => Promise<CatalogPort>;
       }
       const run = (mode: 'report' | 'delete', options: RunOptions = {}) =>
         runCleanupPass({
           objects: options.objects ?? objects,
-          legacy: { objects: options.legacy ?? legacyObjects, prefix: PREFIX },
           catalogs: options.catalogs ?? f.catalog,
           sessionState: f.sessionState,
           workspaceIds: () => Promise.resolve([...owners.keys()]),
@@ -211,7 +204,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
           ownerPrincipalId: ws.principalId,
           sizeBytes: input.sizeBytes ?? 0,
           contentType: 'text/plain',
-          ...(input.objectId === undefined ? {} : { objectId: input.objectId }),
+          objectId: input.objectId ?? crypto.randomUUID(),
           ...(input.uploadMode === undefined ? {} : { uploadMode: input.uploadMode }),
         });
         if (reserved.kind !== 'reserved') throw new Error(`${path} was already taken`);
@@ -231,90 +224,52 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         if (done === null) throw new Error(`${path} vanished before confirm`);
         return done.row;
       };
-      const adopt = () =>
-        runAdoptStage({
-          objects: legacyObjects,
-          prefix: PREFIX,
-          catalog: f.catalog,
-          ownerPrincipalId: (id) => Promise.resolve(owners.get(id) ?? null),
-          runs: createInMemoryStorageMigrationRuns(),
-          log,
-        });
       return {
         f,
         known,
-        legacyObject,
         newObject,
         newName,
         reserveRow,
         readyRow,
         run,
-        adopt,
         lines,
         objects,
-        legacyObjects,
       };
     }
 
     // @story US-STO-14
-    it('[US-STO-14][unit][sdk] an old-style file with a legacy row is never reported as an orphan', async () => {
-      const { known, legacyObject, adopt, run } = await harness();
-      const ws = await known();
-      await legacyObject(ws.id, 'a.txt');
-      await adopt();
-
-      await expect(run('report')).resolves.toMatchObject({ scanned: 1, orphans: 0, deleted: 0 });
-    });
-
-    // @story US-STO-14
-    it('[US-STO-14][unit][sdk] cleanup finds orphans in both namings and removes only new-naming ones', async () => {
+    it('[US-STO-14][unit][sdk] cleanup finds an orphan and removes it only in delete mode', async () => {
       const h = await harness();
       const ws = await h.known();
       const kept = crypto.randomUUID();
       const orphan = crypto.randomUUID();
-      await h.legacyObject(ws.id, 'a.txt');
-      await h.adopt();
-      await h.legacyObject(ws.id, 'dir/b.txt');
       await h.readyRow(ws, 'new.txt', { objectId: kept });
       await h.newObject(ws.id, kept);
       await h.newObject(ws.id, orphan);
 
       await expect(h.run('report')).resolves.toMatchObject({
-        scanned: 4,
-        orphans: 2,
-        legacyOrphans: 1,
+        scanned: 2,
+        orphans: 1,
         deleted: 0,
       });
       await expect(h.objects.head(h.newName(ws.id, orphan))).resolves.not.toBeNull();
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/dir/b.txt`)).resolves.not.toBeNull();
 
-      await expect(h.run('delete')).resolves.toMatchObject({
-        orphans: 2,
-        legacyOrphans: 1,
-        deleted: 1,
-      });
+      await expect(h.run('delete')).resolves.toMatchObject({ orphans: 1, deleted: 1 });
       await expect(h.objects.head(h.newName(ws.id, orphan))).resolves.toBeNull();
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/dir/b.txt`)).resolves.not.toBeNull();
       await expect(h.objects.head(h.newName(ws.id, kept))).resolves.not.toBeNull();
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/a.txt`)).resolves.not.toBeNull();
     });
 
     // @story US-STO-14
-    it('[US-STO-14][unit][sdk] a legacy-naming orphan is never deleted in delete mode', async () => {
+    it('[US-STO-14][unit][sdk] an object of the old per-area layout is neither scanned nor deleted', async () => {
       const h = await harness();
       const ws = await h.known();
-      await h.legacyObject(ws.id, 'unadopted.txt');
+      const old = `${PREFIX}/${ws.id}/unadopted.txt`;
+      await h.objects.write(old, new Uint8Array(7), { contentType: null });
 
       for (const mode of ['report', 'delete'] as const) {
-        await expect(h.run(mode)).resolves.toMatchObject({
-          orphans: 1,
-          legacyOrphans: 1,
-          deleted: 0,
-        });
+        await expect(h.run(mode)).resolves.toMatchObject({ scanned: 0, orphans: 0, deleted: 0 });
       }
-      await expect(
-        h.legacyObjects.head(`${PREFIX}/${ws.id}/unadopted.txt`),
-      ).resolves.not.toBeNull();
+      await expect(h.objects.head(old)).resolves.not.toBeNull();
     });
 
     // @story US-STO-14
@@ -322,15 +277,17 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const h = await harness();
       const ws = await h.known();
       const catalog = await h.f.catalog(ws.id);
+      const goneId = crypto.randomUUID();
+      const keptId = crypto.randomUUID();
       const replacement = crypto.randomUUID();
       const pendingId = crypto.randomUUID();
-      // a removed old-style file whose row still waits for its delete
-      await h.legacyObject(ws.id, 'gone.txt');
-      await h.readyRow(ws, 'gone.txt', { sizeBytes: 7 });
+      // a removed file whose row still waits for its delete
+      await h.readyRow(ws, 'gone.txt', { sizeBytes: 7, objectId: goneId });
+      await h.newObject(ws.id, goneId);
       await catalog.remove('gone.txt');
       // a replacement waiting at a side path
-      await h.legacyObject(ws.id, 'kept.txt');
-      await h.readyRow(ws, 'kept.txt', { sizeBytes: 7 });
+      await h.readyRow(ws, 'kept.txt', { sizeBytes: 7, objectId: keptId });
+      await h.newObject(ws.id, keptId);
       await h.reserveRow(ws, 'kept.txt', { objectId: replacement });
       await h.newObject(ws.id, replacement);
       // an upload still waiting for its completion
@@ -346,6 +303,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const ws = await h.known();
       const ready = crypto.randomUUID();
       const deleting = crypto.randomUUID();
+      const pending = crypto.randomUUID();
       const orphan = crypto.randomUUID();
       const stateObject = (objectId: string) =>
         h.objects.write(storageObjectName(ws.id, 'session-state', objectId), new Uint8Array(7), {
@@ -354,18 +312,57 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       for (const [objectId, status] of [
         [ready, 'ready'],
         [deleting, 'deleting'],
+        [pending, 'pending'],
       ] as const) {
         await stateObject(objectId);
         await h.f.stateBlob(ws.id, objectId, status);
       }
       await stateObject(orphan);
 
-      await expect(h.run('report')).resolves.toMatchObject({ scanned: 3, orphans: 1, deleted: 0 });
-      await expect(h.run('delete')).resolves.toMatchObject({ orphans: 1, deleted: 1 });
+      await expect(h.run('report')).resolves.toMatchObject({
+        scanned: 4,
+        orphans: 1,
+        deleted: 0,
+        deletingFinished: 1,
+        stalePendingDeleted: 1,
+      });
       const name = (objectId: string) => storageObjectName(ws.id, 'session-state', objectId);
+      await expect(h.objects.head(name(deleting))).resolves.not.toBeNull();
+      await expect(h.objects.head(name(pending))).resolves.not.toBeNull();
+
+      // A deleting row and an abandoned reservation are finished first: object, then row. Only
+      // then is anything an orphan, and a row in any status keeps its object until it is gone.
+      await expect(h.run('delete')).resolves.toMatchObject({
+        orphans: 1,
+        deleted: 1,
+        deletingFinished: 1,
+        stalePendingDeleted: 1,
+      });
       await expect(h.objects.head(name(orphan))).resolves.toBeNull();
       await expect(h.objects.head(name(ready))).resolves.not.toBeNull();
-      await expect(h.objects.head(name(deleting))).resolves.not.toBeNull();
+      await expect(h.objects.head(name(deleting))).resolves.toBeNull();
+      await expect(h.objects.head(name(pending))).resolves.toBeNull();
+      const rows = await h.f.sessionState(ws.id);
+      await expect(rows.unsettledBlobs(new Date(Date.now() + 60_000))).resolves.toEqual([]);
+      await expect(rows.referencedObjectIds([ready, deleting, pending])).resolves.toEqual([ready]);
+    });
+
+    // @story US-STO-09
+    it('[US-STO-09][contract][run] a session-state reservation younger than the minimum age is left alone', async () => {
+      const h = await harness();
+      const ws = await h.known();
+      const young = crypto.randomUUID();
+      await h.objects.write(storageObjectName(ws.id, 'session-state', young), new Uint8Array(7), {
+        contentType: null,
+      });
+      await h.f.stateBlob(ws.id, young, 'pending');
+
+      await expect(h.run('delete', { now: () => new Date() })).resolves.toMatchObject({
+        stalePendingDeleted: 0,
+        deleted: 0,
+      });
+      const rows = await h.f.sessionState(ws.id);
+      await expect(rows.referencedObjectIds([young])).resolves.toEqual([young]);
     });
 
     // @story US-STO-08
@@ -394,19 +391,17 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const ws = await h.known();
       const id = crypto.randomUUID();
       await h.newObject(ws.id, id);
-      await h.legacyObject(ws.id, 'fresh.txt');
       const options = { now: () => new Date() };
 
       for (const mode of ['report', 'delete'] as const) {
         await expect(h.run(mode, options)).resolves.toMatchObject({
-          scanned: 2,
-          skippedYoung: 2,
+          scanned: 1,
+          skippedYoung: 1,
           orphans: 0,
           deleted: 0,
         });
       }
       await expect(h.objects.head(h.newName(ws.id, id))).resolves.not.toBeNull();
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/fresh.txt`)).resolves.not.toBeNull();
     });
 
     // @story US-STO-14
@@ -419,13 +414,10 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await h.newObject(first.id, kept);
       await h.newObject(first.id, crypto.randomUUID());
       await h.newObject(second.id, crypto.randomUUID());
-      await h.legacyObject(second.id, 'x.txt');
-      await h.legacyObject(second.id, 'y/z.txt');
 
       await expect(h.run('delete', { pageSize: 1 })).resolves.toMatchObject({
-        scanned: 5,
-        orphans: 4,
-        legacyOrphans: 2,
+        scanned: 3,
+        orphans: 2,
         deleted: 2,
       });
       await expect(h.objects.head(h.newName(first.id, kept))).resolves.not.toBeNull();
@@ -443,22 +435,6 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
         deleted: 1001,
       });
       expect((await h.objects.listPage('', { recursive: true })).entries).toEqual([]);
-    });
-
-    // @story US-STO-02
-    it('[US-STO-02][unit][sdk] a signed-link upload without complete becomes ready', async () => {
-      const h = await harness();
-      const ws = await h.known();
-      const catalog = await h.f.catalog(ws.id);
-      await h.reserveRow(ws, 'up.bin', { sizeBytes: 7 });
-      await h.legacyObject(ws.id, 'up.bin');
-
-      await expect(h.run('report')).resolves.toMatchObject({ stalePendingReady: 1 });
-      await expect(catalog.get('up.bin')).resolves.toBeNull();
-
-      await expect(h.run('delete')).resolves.toMatchObject({ stalePendingReady: 1, orphans: 0 });
-      await expect(catalog.get('up.bin')).resolves.toMatchObject({ status: 'ready', sizeBytes: 7 });
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/up.bin`)).resolves.not.toBeNull();
     });
 
     // @story US-STO-02
@@ -651,21 +627,16 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await h.reserveRow(ws, 'relay.bin', { objectId: relay });
       await h.newObject(ws.id, relay, 4);
       await h.reserveRow(ws, 'missing.bin', { sizeBytes: 5, objectId: missing });
-      await h.reserveRow(ws, 'legacy-wrong.bin', { sizeBytes: 5 });
-      await h.legacyObject(ws.id, 'legacy-wrong.bin');
-      await h.reserveRow(ws, 'legacy-missing.bin', { sizeBytes: 5 });
 
       await expect(h.run('delete')).resolves.toMatchObject({
         stalePendingReady: 0,
-        stalePendingDeleted: 5,
+        stalePendingDeleted: 3,
       });
       const later = new Date(Date.now() + CLEANUP_MIN_AGE_MS * 4);
       await expect(catalog.stalePending(later)).resolves.toEqual([]);
-      await expect(catalog.get('legacy-wrong.bin')).resolves.toBeNull();
-      await expect(catalog.get('legacy-missing.bin')).resolves.toBeNull();
+      await expect(catalog.get('missing.bin')).resolves.toBeNull();
       await expect(h.objects.head(h.newName(ws.id, wrong))).resolves.toBeNull();
       await expect(h.objects.head(h.newName(ws.id, relay))).resolves.toBeNull();
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/legacy-wrong.bin`)).resolves.toBeNull();
     });
 
     // @story US-STO-04
@@ -674,12 +645,13 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const ws = await h.known();
       const catalog = await h.f.catalog(ws.id);
       const objectId = crypto.randomUUID();
+      const otherId = crypto.randomUUID();
       await h.readyRow(ws, 'new.txt', { objectId });
       await h.newObject(ws.id, objectId);
-      await h.legacyObject(ws.id, 'old.txt');
-      await h.readyRow(ws, 'old.txt', { sizeBytes: 7 });
+      await h.readyRow(ws, 'other.txt', { objectId: otherId });
+      await h.newObject(ws.id, otherId);
       await catalog.remove('new.txt');
-      await catalog.remove('old.txt');
+      await catalog.remove('other.txt');
 
       await expect(h.run('report')).resolves.toMatchObject({ deletingFinished: 2 });
       await expect(catalog.deleting()).resolves.toHaveLength(2);
@@ -687,7 +659,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       await expect(h.run('delete')).resolves.toMatchObject({ deletingFinished: 2, orphans: 0 });
       await expect(catalog.deleting()).resolves.toEqual([]);
       await expect(h.objects.head(h.newName(ws.id, objectId))).resolves.toBeNull();
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/old.txt`)).resolves.toBeNull();
+      await expect(h.objects.head(h.newName(ws.id, otherId))).resolves.toBeNull();
     });
 
     // @story US-STO-04
@@ -695,36 +667,21 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const h = await harness();
       const ws = await h.known();
       const catalog = await h.f.catalog(ws.id);
-      await h.legacyObject(ws.id, 'old.txt');
-      await h.readyRow(ws, 'old.txt', { sizeBytes: 7 });
+      const objectId = crypto.randomUUID();
+      await h.readyRow(ws, 'old.txt', { sizeBytes: 7, objectId });
+      await h.newObject(ws.id, objectId);
       await catalog.remove('old.txt');
       const failing: ObjectStore = {
-        ...h.legacyObjects,
+        ...h.objects,
         delete: () => Promise.reject(new Error('the store is down')),
       };
 
-      await expect(h.run('delete', { legacy: failing })).resolves.toMatchObject({
+      await expect(h.run('delete', { objects: failing })).resolves.toMatchObject({
         deletingFinished: 0,
       });
       await expect(catalog.deleting()).resolves.toHaveLength(1);
       await expect(h.run('delete')).resolves.toMatchObject({ deletingFinished: 1 });
       await expect(catalog.deleting()).resolves.toEqual([]);
-    });
-
-    // @story US-STO-04
-    it('[US-STO-04][unit][sdk] a deleting row whose key a live row now holds only drops the row', async () => {
-      const h = await harness();
-      const ws = await h.known();
-      const catalog = await h.f.catalog(ws.id);
-      await h.legacyObject(ws.id, 'again.txt');
-      await h.readyRow(ws, 'again.txt', { sizeBytes: 7 });
-      await catalog.remove('again.txt');
-      await h.readyRow(ws, 'again.txt', { sizeBytes: 7 });
-
-      await expect(h.run('delete')).resolves.toMatchObject({ deletingFinished: 1, orphans: 0 });
-      await expect(catalog.deleting()).resolves.toEqual([]);
-      await expect(h.legacyObjects.head(`${PREFIX}/${ws.id}/again.txt`)).resolves.not.toBeNull();
-      await expect(catalog.get('again.txt')).resolves.toMatchObject({ status: 'ready' });
     });
 
     // @story US-STO-14
@@ -736,7 +693,6 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const stale = crypto.randomUUID();
       const gone = crypto.randomUUID();
       await h.newObject(ws.id, orphan);
-      await h.legacyObject(ws.id, 'orphan.txt');
       await h.reserveRow(ws, 'stale.bin', { sizeBytes: 5, objectId: stale });
       await h.newObject(ws.id, stale, 5);
       await h.readyRow(ws, 'gone.bin', { objectId: gone });
@@ -755,12 +711,11 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
 
       const report = await h.run('report', {
         objects: readOnly(h.objects),
-        legacy: readOnly(h.legacyObjects),
         catalogs: async (id) => readOnly(await h.f.catalog(id)),
       });
 
       expect(report).toMatchObject({
-        orphans: 2,
+        orphans: 1,
         stalePendingReady: 1,
         deletingFinished: 1,
         deleted: 0,
@@ -768,7 +723,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       expect(h.lines.filter((line) => line.message.includes('failed'))).toEqual([]);
       expect(h.lines.find((line) => line.message === 'storage cleanup')?.fields).toMatchObject({
         mode: 'report',
-        orphans: 2,
+        orphans: 1,
       });
       await expect(catalog.deleting()).resolves.toHaveLength(1);
       await expect(h.objects.head(h.newName(ws.id, orphan))).resolves.not.toBeNull();

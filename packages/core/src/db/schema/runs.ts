@@ -30,8 +30,10 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { ProjectPolicyLimits } from '@indx-workspace/contracts/policy-ceiling';
 import { RUN_STATUSES } from '@indx-workspace/contracts/runs';
 
+import { agentTeamVersions } from './agent-team-versions.js';
 import { engineIds } from './agents.js';
 import { createdAt, primaryKeyId, updatedAt } from './columns.js';
 import { modelConnections, modelProviders } from './model-connections.js';
@@ -209,6 +211,23 @@ export const runs = pgTable(
      */
     continuesRunId: uuid('continues_run_id'),
     /**
+     * The lead run that started this one as an agent-team member's child run (ADR-0104 acceptance
+     * decisions 5 and 7), or NULL for a root run and for every run recorded before migration 0097.
+     * Written once, when the child is created, and never changed. The depth is at most 1, which the
+     * runner holds (a member run gets no member tools); the schema holds that it is a run of this
+     * workspace (`runs_parent_workspace_fk`) and not the run itself (`runs_parent_not_self`).
+     */
+    parentRunId: uuid('parent_run_id'),
+    /**
+     * The agent-team version a team run's lead runs (ADR-0104 acceptance decisions 4 and 11; the
+     * API specification §5.18): written once, when `POST /api/agent-teams/:id/runs` creates the
+     * root run, and never changed. It is what the member endpoint reads to serve the lead its
+     * `agent__<member>` tools, and what composition reads to give the lead the member server.
+     * NULL for every other run, child runs included (depth at most 1), and for every run recorded
+     * before migration 0098. Tenant-paired, declared below as `runs_agent_team_version_workspace_fk`.
+     */
+    agentTeamVersionId: uuid('agent_team_version_id'),
+    /**
      * When this continuation's approved calls were used up (ADR-0151, RF-303): stamped by the same
      * update that moves the run out of `queued`, which happens once and before the runner is sent
      * anything, so the approval is consumed durably before any approved call can execute. NULL for
@@ -251,6 +270,14 @@ export const runs = pgTable(
      * float on its way to a workspace budget (§20.6.3).
      */
     costUsd: numeric('cost_usd', { precision: 14, scale: 6 }).notNull().default('0'),
+    /**
+     * The run's spend ceiling in USD (ADR-0162 decision 2): the lowest of the agent's
+     * `limits.maxBudgetUsd`, the deployment ceiling's and the start's `spendCeilingUsd`, written
+     * once when the run is inserted and never changed. The gateway refuses the run's next model
+     * call once {@link costUsd} reaches it. `numeric(14,6)` like `cost_usd`, so the two compare
+     * without a float. NULL means no ceiling, and is every run recorded before migration 0099.
+     */
+    spendCeilingUsd: numeric('spend_ceiling_usd', { precision: 14, scale: 6 }),
     /** ISO 4217 settlement currency. 0.1.0 pricing is USD-only and says so explicitly. */
     costCurrency: text('cost_currency').notNull().default('USD'),
     /** Immutable catalogue version used to calculate the accumulated cost. */
@@ -276,6 +303,15 @@ export const runs = pgTable(
      * string a trigger stores, never rendered on the run resource.
      */
     subject: text('subject'),
+    /**
+     * The lower-only limits this run was started under (#1963, SPD-01): `{ maxTurns?, maxBudgetUsd? }`
+     * as a trusted in-process caller (a Builder trial, an evaluation) set them, written once when the
+     * run is created. The composer takes the lower of each against the agent's policy and the
+     * deployment ceiling, so it can never raise a limit. An approval continuation is built from the
+     * stored row, so this column is how the cap survives a pause. NULL for a run started with none
+     * and for every run recorded before migration 0093. Validated on write and on read.
+     */
+    limitsOverride: jsonb('limits_override').$type<ProjectPolicyLimits>(),
     /**
      * The run's final answer, `{ text, structured }` (ADR-0143), written in the same transaction
      * that moves the run to `completed` and at no other time. NULL until then, for a failed or
@@ -309,6 +345,10 @@ export const runs = pgTable(
     uniqueIndex('runs_continues_run_id_unique')
       .on(table.continuesRunId)
       .where(sql`${table.continuesRunId} is not null`),
+    // A root's children, for the run tree's read (`children`, `treeCost`; ADR-0104 decision 7).
+    index('runs_parent_idx').on(table.parentRunId),
+    // The runs of a team version, so the version's foreign key is checked by an index.
+    index('runs_agent_team_version_idx').on(table.agentTeamVersionId),
     // §25, and the reason `session_id` above carries no reference of its own. The file header
     // refuses to store `agent_id` because "a second copy could disagree with sessions.agent_id
     // and nothing in the schema would stop it". `workspace_id` IS a second copy, of
@@ -338,6 +378,22 @@ export const runs = pgTable(
       foreignColumns: [table.id, table.workspaceId],
       name: 'runs_continues_run_workspace_fk',
     }),
+    // A child run's parent is a run of its own workspace (ADR-0104 decision 1). No `.onDelete()`
+    // action, for `runs_continues_run_workspace_fk`'s reason: nothing deletes a single run, and the
+    // cascades that delete runs (a session's, a workspace's) finish within one statement.
+    foreignKey({
+      columns: [table.parentRunId, table.workspaceId],
+      foreignColumns: [table.id, table.workspaceId],
+      name: 'runs_parent_workspace_fk',
+    }),
+    // A team run runs a team version of its own workspace (ADR-0104 decision 1). No `.onDelete()`
+    // action: a team version is immutable and only a workspace's cascade removes it, together
+    // with the workspace's runs.
+    foreignKey({
+      columns: [table.agentTeamVersionId, table.workspaceId],
+      foreignColumns: [agentTeamVersions.id, agentTeamVersions.workspaceId],
+      name: 'runs_agent_team_version_workspace_fk',
+    }),
     oneOf('runs_status_valid', table.status, runStatuses, { snake: true }),
     oneOf('runs_provider_valid', table.provider, modelProviders),
     oneOf('runs_engine_valid', table.engine, engineIds),
@@ -362,6 +418,7 @@ export const runs = pgTable(
       'runs_consumed_approvals_never_queued',
       sql`${table.approvalsConsumedAt} is null or ${table.status} <> 'queued'`,
     ),
+    check('runs_parent_not_self', sql`${table.parentRunId} <> ${table.id}`),
     check(
       'runs_idempotency_key_has_hash',
       sql`(${table.idempotencyKey} is null) = (${table.idempotencyRequestHash} is null)`,
@@ -379,6 +436,10 @@ export const runs = pgTable(
       sql`${table.inputTokens} >= 0 and ${table.outputTokens} >= 0 and ${table.cacheReadInputTokens} >= 0 and ${table.cacheCreationInputTokens} >= 0 and ${table.toolCalls} >= 0 and ${table.costUsd} >= 0`,
     ),
     check('runs_cost_currency_usd', sql`${table.costCurrency} = 'USD'`),
+    check(
+      'runs_spend_ceiling_positive',
+      sql`${table.spendCeilingUsd} is null or ${table.spendCeilingUsd} > 0`,
+    ),
     check(
       'runs_price_version_matches_accounting_state',
       sql`(${table.accountingState} in ('complete', 'partial')) = (${table.priceTableVersion} is not null)`,

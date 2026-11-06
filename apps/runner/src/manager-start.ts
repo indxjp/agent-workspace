@@ -304,7 +304,26 @@ function cloudRunDriverOptions(env: Readonly<Record<string, string | undefined>>
   const project = env['GCP_PROJECT'] ?? '';
   const region = env['GCP_REGION'] ?? '';
   const serviceAccount = env['RUNTIME_SERVICE_ACCOUNT'] ?? '';
-  const vpcConnector = env['RUNTIME_VPC_CONNECTOR'];
+  const network = (env['RUNTIME_NETWORK'] ?? '').trim();
+  const subnetwork = (env['RUNTIME_SUBNETWORK'] ?? '').trim();
+  if (network === '' || subnetwork === '') {
+    throw new Error(
+      'RUNTIME_DRIVER=cloud-run-service needs RUNTIME_NETWORK and RUNTIME_SUBNETWORK: every sandbox joins that VPC network, whose firewall denies its egress.',
+    );
+  }
+  for (const [legacy, replacement] of [
+    ['RUNTIME_VPC_CONNECTOR', 'RUNTIME_NETWORK and RUNTIME_SUBNETWORK'],
+    [
+      'RUNTIME_EGRESS',
+      'RUNTIME_NETWORK and RUNTIME_SUBNETWORK (Cloud Run sandboxes support only none; the gcp.sandboxInternet option arrives in a later release)',
+    ],
+  ] as const) {
+    if ((env[legacy] ?? '').trim() !== '') {
+      throw new Error(
+        `${legacy} is no longer supported for cloud-run-service; use ${replacement} instead.`,
+      );
+    }
+  }
   const client = createCloudRunAdminClient({ accessToken: fetchCloudRunAccessToken });
   return {
     driver: createCloudRunDriver<never, never>({
@@ -313,8 +332,8 @@ function cloudRunDriverOptions(env: Readonly<Record<string, string | undefined>>
       region,
       serviceAccount,
       requireDigest: env['NODE_ENV'] === 'production',
-      egress: env['RUNTIME_EGRESS'] === 'open' ? 'open' : 'none',
-      ...(vpcConnector === undefined ? {} : { vpcConnector }),
+      network,
+      subnetwork,
       client,
       startAgent: noAgentStart,
     }),
@@ -323,7 +342,7 @@ function cloudRunDriverOptions(env: Readonly<Record<string, string | undefined>>
     runtimeAuthHeaders: async (handle) => ({
       authorization: `Bearer ${await fetchCloudRunIdentityToken(handle.externalId)}`,
     }),
-    configurationFingerprint: `cloud-run-service:${imagesFingerprint(images)}`,
+    configurationFingerprint: `cloud-run-service:${imagesFingerprint(images)}:${network}:${subnetwork}`,
     // Google Cloud's edge intercepts the literal path `/healthz` on a *.a.run.app default domain
     // and never reaches the container — see `readinessPath` on `RunnerManagerOptions` and
     // docs/adr/ADR-cloud-run-service-driver.md. `/ping` is the same liveness handler, mounted at a

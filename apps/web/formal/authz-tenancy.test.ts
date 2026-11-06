@@ -19,9 +19,9 @@ import { mintSessionToken, newSessionClaims, verifySessionToken } from '../serve
 import type { ApiKeyIdentity } from '../server/rbac/directory';
 import { createMemoryDirectory } from '../server/rbac/memory-directory';
 import { Principal } from '../server/rbac/principal';
-import type { Role } from '../server/rbac/roles';
+import type { Role } from '../server/rbac/core/roles';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from '../server/rbac/testing';
-import type { TokenScope } from '../server/rbac/token-scope';
+import type { TokenScope } from '../server/rbac/core/token-scope';
 import { requireResourceAccess } from '../server/resources/authorise';
 import { interruptRun, readRun, revokeRunTokens, streamRunEvents } from '../server/runs/api';
 import type { RunPrincipal, RunApiEnvironment } from '../server/runs/environment';

@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "entries": {
+    "agent:sales-assistant": {
+      "files": {
+        "agents/sales-assistant.ts": "8894ec3f879330dd66aae6507bc5582cb361dec3f059eca2f31af985b4ad70ff"
+      },
+      "edits": []
+    },
+    "app:crm": {
+      "files": {
+        ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+        ".github/workflows/app-ci.yml": "521f831b19ff32022d2510bebb78eaaa624da166161832901204298b5a14fcf0",
+        "Dockerfile": "bbfea425d5275eba32e4226886515c359af967125f7023943d1b34e0e9bad820",
+        "README.md": "fd5b80baec07e670557c6651b9e788ae298be3d72e769249105e0af8cf42692f",
+        "app.config.ts": "11c2da33f514bd0901eb20d5f50ec4e8a5b512486d8682783a36b8127e40816b",
+        "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+        "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+        "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+        "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+        "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+        "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+        "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+        "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+        "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+        "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+        "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+        "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+        "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+        "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+        "app/layout.tsx": "0451bcd869dc253f3a65e6e0ac3fa14c82716087bb21028b051d01824e9ca4f1",
+        "app/nav.ts": "1a62f828b1be50eb5f1ffa6dc101a74ac708c82d69f1565242c643fee43545c7",
+        "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+        "app/page.tsx": "f2c836895900d6adab4171c68164c300ad798dc7188b7de30d4f612c4ebaf5f5",
+        "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+        "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+        "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+        "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+        "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+        "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+        "app/strings.ts": "7619cfe0c7618d365be87aeb9b0c7917f2fb52c4aed78d53d56e2ed1dd31e03f",
+        "app/theme.ts": "e1dd47eea94d840ed343ae41e0fc2e30b9ab88046cdb4cc6abae04f114762c54",
+        "db/migrations/0000_app_kit.sql": "6e35fcaa0421531a3a13055361b305f46a2008c73247b9b66be6ea4081e3c3cc",
+        "db/migrations/0001_app_kit_recipes.sql": "bc3ff4c7f1baa6363ea684bb562e8b04fe0ec1f27a4bb53936a39c2e2495a21b",
+        "db/migrations/0002_app_kit_channels.sql": "aab91114cf9367e9ab40f5f9184cca0a3f4deef0b8cdc48e3527a81b7cd4f03d",
+        "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+        "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+        "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+        "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+        "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470"
+      },
+      "edits": [
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/app\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"drizzle-orm\":\"0.45.4\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"pg\":\"8.23.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react-dom\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"devDependencies\":{\"dependency-cruiser\":\"18.7.0\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/contracts\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/react\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"build\":\"next build\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"image\":\"docker build -t crm .\"}}"
+        }
+      ]
+    },
+    "project:crm": {
+      "files": {
+        ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+        "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+        "agent-workspace.yaml": "0e82a64bac3627493bb8ce0c09c414a93749cd98c0daf995268ac788322beb40",
+        "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+        "package.json": "82343c0ede6b9c5fe9bcd1a44e3cab150ea7437ae9e8b2e9349e6df57f6e38d7",
+        "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+        "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48"
+      },
+      "edits": []
+    },
+    "recipe:enrich-contact": {
+      "files": {
+        "recipes/enrich-contact.ts": "05f66e75e5d626172f9771e76c3ac04ae8d611addf780b1f9d932f9422d5fe7e",
+        "tests/recipes/enrich-contact.test.ts": "105e054ed0b9a4dd3c0d4fa662e6df1b14e9406fa8f7f0814bca2dfde7cd31c0"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import enrichContactRecipe from './recipes/enrich-contact.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    enrichContactRecipe,"
+        }
+      ]
+    },
+    "resource:company": {
+      "files": {
+        "app/api/companys/[id]/route.ts": "f25d3673d690377f9944485682a5dc4a2096ede73660380001f5984415be80c7",
+        "app/api/companys/route.ts": "977edb694e85693323e97de5d6c006723c505fe8ad5253047d9c40a63ec6303a",
+        "app/companys/[id]/edit/page.tsx": "a57eefe69b5500401f8b680ef268647f9dcf9e514074f42ab2d1c4d4e4cc73ce",
+        "app/companys/[id]/page.tsx": "423ee1b21a6298789bdf50faec80e21b0b11c6fe94b3ffe678ad8d42d337c7ca",
+        "app/companys/new/page.tsx": "a6e27a83b8b78bc59659b4e386adee1c9410b85f992e5039dedd4bf74e9260e3",
+        "app/companys/page.tsx": "065b36a467191e68a3b2e357502a8089b2bcdf300a0c96de14382032c957d311",
+        "db/migrations/0003_create_companys.sql": "43bbee88bcb6dc13b30b5013aece9015b775b729d9d110ecb43ee30fd612410b",
+        "resources/company.ts": "0a5508573b610ed0e7ecb9944024db591d8b437185b2cc12f4bf5e078fd901de",
+        "tests/company.test.ts": "d2cdda3d272da8e62abe9ae966e0fd3a8943f32cfe6495080866be5859b6fbba"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import company from './resources/company.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    company,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":3,\"version\":\"7\",\"when\":1767225600003,\"tag\":\"0003_create_companys\",\"breakpoints\":true}"
+        }
+      ]
+    },
+    "resource:contact": {
+      "files": {
+        "app/api/contacts/[id]/route.ts": "60337d385d4269c0ca0fa87e42c51e726cacc13316e85f31d03302598b35b143",
+        "app/api/contacts/route.ts": "046a0a514dbd1238467efbb290325cb5fa4b396d1cf5e42201e775efa673cfcd",
+        "app/contacts/[id]/edit/page.tsx": "e325fd34a5714511d1fba0fcc7efe54a68c7fea6e9f8d3f705e020063efc7f4d",
+        "app/contacts/[id]/page.tsx": "f09c873406a906c9af6d3afaf3d3ec6073d121eafec256d38dd520a69071873a",
+        "app/contacts/new/page.tsx": "e200cd17d0f2cc61314c707dca4f3e65353acc2b68db54e1174d9d4499acfbc7",
+        "app/contacts/page.tsx": "10fac47a85a0c4765881f663c60ed091976912ba7d011d6724786c3144d5e3b9",
+        "db/migrations/0004_create_contacts.sql": "c97f2d77e4edfa8a1ffdd5dedef0d1018e6f780a7735beb7f1efc83479f4df9d",
+        "resources/contact.ts": "2a8f29d5c248d150722d5c03e7a3d806804ac75fb8d5445a20550bfd79d63653",
+        "tests/contact.test.ts": "f924db236c205e6ee574f3ef8952d281cc2b79d7e0e6e8e64c320d070a7b0c3c"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import contact from './resources/contact.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    contact,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":4,\"version\":\"7\",\"when\":1767225600004,\"tag\":\"0004_create_contacts\",\"breakpoints\":true}"
+        }
+      ]
+    },
+    "resource:deal": {
+      "files": {
+        "app/api/deals/[id]/route.ts": "e1c3808f085aa24c76203542953528a84b459b09a0a0af91ec7b348ffa74afd8",
+        "app/api/deals/route.ts": "7f6e462fbfba0bec9431d7d96de131ef58752194dc8e636ccf1d5bc767bd632e",
+        "app/deals/[id]/edit/page.tsx": "a5f9de682fb8a31ee71236a794efc0d29042cb21c20078724682194a56ffcbdc",
+        "app/deals/[id]/page.tsx": "8cc0f0423e9af01ce830db2348ed7370bcfdf18a23ad9a3c5a07a9d0d5379908",
+        "app/deals/new/page.tsx": "77045fc84f0f1bfe0fcd93fd25989312f697fb00f5351f4a9a69e90354fea828",
+        "app/deals/page.tsx": "acd8f6489c3ba0f7dd2120ea8911881590eade434b5088bfa3be1741ab063e37",
+        "db/migrations/0005_create_deals.sql": "91b159efaa5b36f4dc8303fe4e7349aba0f75e57af88739a87e72ff07d8ddb9f",
+        "resources/deal.ts": "6d702d8e818d54110c1d08089524e6aaed16208351d0e2aec6ea25bd9b48c2ee",
+        "tests/deal.test.ts": "ace0b82d2f4a4dca1fe665668d8cf16f82b9d3ea9609f782d986b3188b842ab8"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import deal from './resources/deal.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    deal,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":5,\"version\":\"7\",\"when\":1767225600005,\"tag\":\"0005_create_deals\",\"breakpoints\":true}"
+        }
+      ]
+    }
+  }
+}

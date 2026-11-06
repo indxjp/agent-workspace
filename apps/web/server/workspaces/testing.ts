@@ -11,7 +11,7 @@
  * test can prove issue #119's "failed creation leaves no orphan workspace" the same way
  * `packages/core/src/db/repositories/workspaces.test.ts` proves it against real PostgreSQL.
  */
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 import type { WorkspaceRepositoryPort } from './runtime';
 
 interface WorkspaceRow {

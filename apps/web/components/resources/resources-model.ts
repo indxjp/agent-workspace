@@ -3,7 +3,11 @@
  * functions over an SDK client so they are testable with the SDK's `fetchDouble`. The client
  * validates every answer against the contracts, so a screen never reads an unchecked body.
  */
-import type { FileResource } from '@indx-workspace/contracts/files';
+import {
+  MAX_SEARCH_LIMIT,
+  type FileResource,
+  type FileSearchResponse,
+} from '@indx-workspace/contracts/files';
 import type { ConnectorAuthType, CreateConnectorInput } from '@indx-workspace/contracts/connectors';
 import { MEMBERSHIP_ROLES } from '@indx-workspace/contracts/team';
 import {
@@ -47,6 +51,21 @@ export function listFiles(
   path: string,
 ): Promise<readonly FileResource[]> {
   return client.files.list({ path });
+}
+
+/** The text search of the workspace's files, as many passages as one answer may carry. */
+export function searchFiles(
+  client: AgentWorkspaceClient,
+  query: string,
+): Promise<FileSearchResponse> {
+  return client.files.search(query, { limit: MAX_SEARCH_LIMIT });
+}
+
+/** The status and code of a refused call, or `null` when it failed some other way. */
+export function problemOf(
+  error: unknown,
+): { readonly status: number; readonly code: string } | null {
+  return error instanceof ApiProblemError ? { status: error.status, code: error.code } : null;
 }
 
 export async function createFolder(client: AgentWorkspaceClient, path: string): Promise<void> {

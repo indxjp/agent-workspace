@@ -353,6 +353,15 @@ function pinnedTarget(decision: EgressAllowed): string {
   return pinned.toString();
 }
 
+const realNetworkTransports = new WeakSet<typeof fetch>();
+
+/** Declare that `transport` sends over the real network (a logging wrapper around the global
+ * `fetch`), so {@link guardedFetch} pins an `http:` target for it exactly as it does for `fetch`. */
+export function markRealNetworkTransport(transport: typeof fetch): typeof fetch {
+  realNetworkTransports.add(transport);
+  return transport;
+}
+
 /**
  * The one call site every probe and every gateway provider adapter routes an outbound request
  * through. Refuses (throws, with a redacted message) anything {@link checkEgress} refuses, then
@@ -376,8 +385,9 @@ export async function guardedFetch(
       decision.reason === DNS_FAILED_REASON,
     );
   }
-  if (transport !== fetch) {
+  if (transport !== fetch && !realNetworkTransports.has(transport)) {
     return transport(rawUrl, { ...init, redirect: 'error' });
   }
-  return fetch(pinnedTarget(decision), { ...init, redirect: 'error' });
+  // A marked wrapper (the gateway's logging fetch) is called, not bypassed, so its side effects run.
+  return transport(pinnedTarget(decision), { ...init, redirect: 'error' });
 }

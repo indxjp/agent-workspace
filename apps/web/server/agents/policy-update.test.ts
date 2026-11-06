@@ -2,6 +2,7 @@
  * The policy use cases called directly, without the route (W2-4): the results they return before
  * the route wrapper turns them into responses.
  */
+import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { FIXTURE_POLICY } from '../agent-versions/fixtures';
@@ -11,7 +12,6 @@ import { installTestDomains } from '../application-context-fixtures';
 import type { ApiResult } from '../http/result';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { createInMemoryAgentStoreProvider } from './memory-store';
 import { getAgentPolicy, updateAgentPolicy } from './policy-update';
 import type { AgentStoreProvider } from './store';
@@ -37,10 +37,8 @@ function install(options: { readonly policyConfigured: boolean }): void {
               }),
             },
             skillCatalog: {
-              forWorkspace: () =>
-                Promise.resolve({ listSkills: () => Promise.resolve([]) } as unknown as Awaited<
-                  ReturnType<ResourceCatalogStoreProvider['forWorkspace']>
-                >),
+              forWorkspace: (workspaceId) =>
+                Promise.resolve(createInMemoryCatalog().forWorkspace(workspaceId)),
             },
           }
         : {}),

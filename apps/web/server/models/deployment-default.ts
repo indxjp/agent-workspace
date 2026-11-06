@@ -37,6 +37,7 @@ const deploymentDefaultModelsShape = {
   openai: DeploymentDefaultModelIdSchema.optional(),
   'azure-openai': DeploymentDefaultModelIdSchema.optional(),
   'openai-compatible': DeploymentDefaultModelIdSchema.optional(),
+  vertex: DeploymentDefaultModelIdSchema.optional(),
 } satisfies Record<ModelProvider, z.ZodOptional<typeof DeploymentDefaultModelIdSchema>>;
 
 const DeploymentDefaultModelsSchema = z.strictObject(deploymentDefaultModelsShape);

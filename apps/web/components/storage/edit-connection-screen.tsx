@@ -371,7 +371,8 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
             Allow writing
           </label>
           <p className="-mt-2 text-[11.5px] text-muted">
-            Off by default. Grants stay read-only until write-back ships.
+            Off by default. With a read/write grant, a run&apos;s new and changed files are written
+            back; nothing is deleted.
           </p>
         </div>
 

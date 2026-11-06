@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { lowerLimits } from '../../../compose/run-request';
 import { InMemoryRunStore } from '../../../runs/memory-store';
 import { callContextOf } from '../../testing/context';
 import { draftBody } from '../../adapters/checker/checker.contract';
@@ -25,15 +26,29 @@ const scopes = () => createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug
 const PERSON = callContextOf(WORKSPACE, 'builder', 'principal-builder', 'user-builder');
 const SAVE = { body: draftBody('Order desk', ['crm']) };
 
+/** The draft with its own `policy.limits.maxBudgetUsd`, the way a person caps what the agent may spend per run. */
+function savedWithBudget(maxBudgetUsd: number | null) {
+  const { definition } = SAVE.body;
+  return {
+    body: {
+      ...SAVE.body,
+      definition: {
+        ...definition,
+        policy: { ...definition.policy, limits: { maxTurns: null, maxBudgetUsd } },
+      },
+    },
+  };
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
 /** A Builder run that has called `tool` and stopped at the gate, over a workspace with one saved agent. */
-async function pausedOn(tool: GatedTool) {
+async function pausedOn(tool: GatedTool, save: typeof SAVE = SAVE) {
   const runStore = new InMemoryRunStore();
   const door = builderDoor({ scopes: scopes(), runStore });
-  const saved = await door.ports.store.save(PERSON, SAVE);
+  const saved = await door.ports.store.save(PERSON, save);
   if (!saved.ok) throw new Error('the fixture agent was not saved');
   const input = gatedInputs(saved)[tool];
   const script = { turns: [{ toolUses: [toolUse(tool, input)] }, { text: 'Done.' }] };
@@ -59,6 +74,14 @@ async function pausedOn(tool: GatedTool) {
     versionsSaved: () => door.versions.versionCount() - saves,
     auditsWritten: () => door.auditEvents.length - audits,
     launches: () => door.launched.filter((launch) => launch.limits !== undefined),
+    /** What each of those runs is held to: the agent's stored limits, lowered by the start's override (`lowerLimits`). */
+    budgets: async () => {
+      const agent = await door.agent(saved.agentId);
+      const stored = agent?.policy?.limits ?? { maxTurns: null, maxBudgetUsd: null };
+      return door.launched
+        .filter((launch) => launch.limits !== undefined)
+        .map((launch) => lowerLimits(stored, launch.limits).maxBudgetUsd);
+    },
     rowsOf: (name: string) => door.journal.filter((row) => row.tool === name),
   };
 }
@@ -107,6 +130,33 @@ describe('[US-BLD-04][api][run] trial_run and evals_run stop for the person', ()
     ]);
     expect(paused.launches().map((launch) => launch.limits?.maxBudgetUsd)).toEqual([0.3]);
   });
+});
+
+describe('[US-BLD-04][api][run] the agent’s own lower budget holds (SPD-03)', () => {
+  // The trial override is the policy's $0.30; an agent capped below it keeps its own cap, and an
+  // agent with no cap, or a higher one, is held to the override.
+  it.each(['trial_run', 'evals_run'] as const)(
+    '%s runs an agent whose policy budget is $0.10 under $0.10, not the $0.30 trial budget',
+    async (tool) => {
+      const paused = await pausedOn(tool, savedWithBudget(0.1));
+
+      await paused.decide('approve');
+
+      expect(paused.launches().map((launch) => launch.limits?.maxBudgetUsd)).toEqual([0.3]);
+      expect(await paused.budgets()).toEqual([0.1]);
+    },
+  );
+
+  it.each([null, 0.5])(
+    'trial_run runs an agent whose policy budget is %s under the $0.30 trial budget',
+    async (budget) => {
+      const paused = await pausedOn('trial_run', savedWithBudget(budget));
+
+      await paused.decide('approve');
+
+      expect(await paused.budgets()).toEqual([0.3]);
+    },
+  );
 });
 
 describe('[US-BLD-03][api][run] a rejection writes nothing', () => {

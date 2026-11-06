@@ -729,7 +729,9 @@ describe('startDevSync (issue #453)', () => {
   it('says a directory with no agents and syncs once one appears', async () => {
     const harness = await start({});
     await until(harness, () => harness.output().stderr.includes('sync: '));
-    expect(harness.output().stderr).toBe('sync: no agents/*.ts in this directory\n');
+    expect(harness.output().stderr).toBe(
+      'sync: no agents/*.ts or agents/*.agent.md in this directory\n',
+    );
 
     await tempFile(harness.root, 'agents/assistant.ts', AGENT);
     await until(harness, () => synced(harness) === 1);

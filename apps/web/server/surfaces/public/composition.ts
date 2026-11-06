@@ -54,6 +54,7 @@ import type { AgentRecord } from '../../agents/contract';
 import type { WorkspaceAgentStore } from '../../agents/store';
 import { readDeploymentWorkspaceSlug } from '../../auth/session';
 import { engineForStoredPolicy } from '../../engines/session-engine';
+import { randomIds, type IdGenerator } from '../../ids';
 import { hashApiKeySecret, hashesEqual, randomToken } from '../../rbac/api-key';
 import { Principal } from '../../rbac/principal';
 import type { AgentRef, RunApiEnvironment } from '../../runs/environment';
@@ -159,6 +160,8 @@ export interface SurfaceSessionsDependencies {
   ) => ReturnType<NonNullable<RunApiEnvironment['preflight']>>;
   /** The installed `POST /api/tokens` runtime, whose `issue` mints the session's token. */
   readonly tokens: () => Pick<TokensRuntime, 'issue'> | null;
+  /** Where a new session's id comes from. Defaults to {@link randomIds}. */
+  readonly ids?: IdGenerator;
 }
 
 const GONE: SurfaceSessionOpening = { kind: 'gone' };
@@ -321,6 +324,7 @@ export function createSurfaceSessionsRuntime(
     );
   }
   const runtime: SurfaceSessionsRuntime = {
+    env: dependencies.env,
     async resolve(name: string, mode: SurfaceMode): Promise<ResolvedSurface | null> {
       const scope = await resolveDeploymentScope(dependencies.env(), dependencies.scopes);
       if (scope === null) return null;
@@ -411,7 +415,7 @@ export function createSurfaceSessionsRuntime(
       let resumeKey: string | null = null;
       if (resume === undefined) {
         const outcome = await dependencies.sessions.forScope(scope).ensure({
-          id: crypto.randomUUID(),
+          id: (dependencies.ids ?? randomIds).newId(),
           agentId: agent.id,
           ownerPrincipalId: publisher.ownerPrincipalId,
           userId: publisher.userId,

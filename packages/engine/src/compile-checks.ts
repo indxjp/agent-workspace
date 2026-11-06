@@ -16,11 +16,6 @@ import type {
   EngineRunRequest,
   EngineSessionSelector,
 } from './port.js';
-import {
-  PROVISIONAL_PRICES_CHECKED_ON,
-  provisionalPriceFor,
-  type ProvisionalModelPrice,
-} from './prices.js';
 import { sandboxEnvironmentVerdict } from './sandbox-env.js';
 
 export function refuse(code: EngineRefusalCode, reason: string): EngineRefusal {
@@ -169,29 +164,6 @@ export function subagentsRefusal(
   );
 }
 
-/**
- * `engine_capability_unsupported` naming each subagent that runs on a model other than the one the
- * cap is priced with, else `null`: the provisional cap meters every step with the parent model's
- * rates (ADR-0074 D7), so a delegate on another model would be metered wrongly, not refused.
- */
-export function subagentBudgetRefusal(
-  engine: string,
-  model: string,
-  maxBudgetUsd: number | null,
-  subagents: readonly { readonly name: string; readonly model: string | null }[] | undefined,
-): EngineRefusal | null {
-  if (maxBudgetUsd === null) return null;
-  const other = (subagents ?? []).filter(
-    (subagent) => subagent.model !== null && subagent.model !== model,
-  );
-  if (other.length === 0) return null;
-  const names = other.map((subagent) => JSON.stringify(subagent.name)).join(', ');
-  return refuse(
-    'engine_capability_unsupported',
-    `${engine} prices a maxBudget cap with the agent's model ${JSON.stringify(model)} alone (ADR-0074 D7), so the subagent(s) ${names} on another model cannot be metered. Run them on the agent's model or remove the cap.`,
-  );
-}
-
 /** The longest function name the providers accept (`^[a-zA-Z0-9_-]{1,64}$`). */
 export const PROVIDER_TOOL_NAME_MAX_LENGTH = 64;
 
@@ -226,27 +198,4 @@ export function subagentToolNames<Subagent extends { readonly name: string }>(
     named.push({ ...subagent, toolName: name });
   }
   return { ok: true, named };
-}
-
-/**
- * ADR-0074 D7 provisional cap: `null` (no cap), the budget, or `engine_capability_unsupported` for a
- * model the provisional price table cannot price.
- */
-export function provisionalBudget(
-  engine: string,
-  model: string,
-  maxBudgetUsd: number | null,
-):
-  | { readonly maxBudgetUsd: number; readonly model: string; readonly price: ProvisionalModelPrice }
-  | null
-  | EngineRefusal {
-  if (maxBudgetUsd === null) return null;
-  const price = provisionalPriceFor(model);
-  if (price === null) {
-    return refuse(
-      'engine_capability_unsupported',
-      `${engine} enforces maxBudget from a provisional price table (ADR-0074 D7, checked ${PROVISIONAL_PRICES_CHECKED_ON}) which has no row for ${JSON.stringify(model)}, so a ${String(maxBudgetUsd)} USD cap cannot be enforced. Choose a priced model or remove the cap.`,
-    );
-  }
-  return { maxBudgetUsd, model, price };
 }

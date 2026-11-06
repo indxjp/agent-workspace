@@ -147,7 +147,12 @@ aw storage ls acme-data/reports/
 ```
 
 `--allow reports` is the only folder agents may be given. `test` reaches the bucket with the stored
-key; `ls` shows what an agent will see. The credential is stored encrypted and is never printed.
+key and looks into each allowed folder; `ls` shows what an agent will see. The credential is stored
+encrypted and is never printed.
+
+A bucket has no real folders, only file names that share a prefix, so a folder that does not exist
+and an empty one look the same. When `test` finds nothing under an allowed folder, it still answers
+`ok: true` and names that folder in `emptyFolders`. Check the spelling of those folders.
 
 You can do the same in the console under **Administration → Storage**.
 
@@ -223,6 +228,21 @@ aw storage ls acme-data/reports/
 
 To ship it to a deployment, see [Deploy](/guides/deploy). The run sees `reports/` as a directory in
 its sandbox; `aw storage ls` afterwards shows what it wrote back.
+
+## Narrow a connection later
+
+Changing a connection's allowed folders or turning its writes off does not touch the agents that
+already grant it: their saved grants stay as they are, and nothing is flagged. Every run reads the
+connection as it is when the run starts, and the write-back reads it again when the run ends, so the
+narrower setting applies from the next run on:
+
+- **A folder you no longer allow** is refused when the next run starts, with
+  `422 run_storage_grant_unavailable`, before anything is queued. Allow the folder again, or change
+  the agent's grant and save it again.
+- **Writes turned off**: the next run gets the folder read-only and writes nothing back, even for a
+  `read-write` grant.
+- **A run already running** when you narrow the connection writes nothing back to a folder that is
+  no longer allowed or no longer writable; its audit row records the refusal.
 
 ## Security notes
 

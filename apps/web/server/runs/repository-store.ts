@@ -8,6 +8,7 @@ import type {
   WorkspaceScopeResolver as CoreWorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 
+import { RunId, WorkspaceId } from '../newtypes';
 import {
   classifyEventName,
   classifyPlatformEventName,
@@ -16,6 +17,8 @@ import {
 } from './sse';
 import {
   ApprovalDecisionError,
+  ChildRunLimitError,
+  ParentRunStoppedError,
   eventRetentionLimit,
   IdempotencyKeyTakenError,
   isStoppedRunStatus,
@@ -107,16 +110,23 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
   /**
    * The workspace a run belongs to, remembered once this process has looked it up. Bounded, oldest
    * first out, so a long-lived replica does not keep one entry per run it ever served; a forgotten
-   * run costs one `findRunWorkspace` on its next use.
+   * run costs one `findRunWorkspace` on its next use. Only ids the database has confirmed go in, and
+   * `remember` takes them as branded ids, so the two cannot be swapped.
    */
-  const workspaceOfRun = new Map<string, string>();
-  const remember = (runId: string, workspaceId: string): void => {
+  const workspaceOfRun = new Map<string, WorkspaceId>();
+  const remember = (runId: RunId, workspaceId: WorkspaceId): void => {
     workspaceOfRun.delete(runId);
     workspaceOfRun.set(runId, workspaceId);
     if (workspaceOfRun.size > REMEMBERED_RUN_WORKSPACES) {
       const oldest = workspaceOfRun.keys().next();
       if (oldest.done !== true) workspaceOfRun.delete(oldest.value);
     }
+  };
+
+  /** `findRunWorkspace`, with its answer branded: it reads the `runs.workspace_id` `uuid` column. */
+  const findWorkspaceOfRun = async (runId: string): Promise<WorkspaceId | null> => {
+    const found = await dependencies.findRunWorkspace(runId);
+    return found === null ? null : WorkspaceId.fromStore(found);
   };
 
   /** The scope for a workspace id, or a thrown error naming the workspace that is gone. */
@@ -134,11 +144,12 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
   const repositoriesForRun = async (
     runId: string,
   ): Promise<{ runs: CoreRunRepository; events: CoreRunEventRepository } | null> => {
-    const workspaceId = workspaceOfRun.get(runId) ?? (await dependencies.findRunWorkspace(runId));
+    const workspaceId = workspaceOfRun.get(runId) ?? (await findWorkspaceOfRun(runId));
     // The explicit else: no workspace means no run, and every caller turns that into the same
     // answer the in-memory store gives for an id it has never seen.
     if (workspaceId === null) return null;
-    remember(runId, workspaceId);
+    // The database has a run with this id, so it is a stored id.
+    remember(RunId.fromStore(runId), workspaceId);
     const scope = await scopeFor(workspaceId);
     return {
       runs: dependencies.repositories.forScope(scope),
@@ -179,6 +190,8 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
         prompt: input.prompt ?? null,
         outputSchema: input.outputSchema ?? null,
         subject: input.subject ?? null,
+        limitsOverride: input.limitsOverride ?? null,
+        spendCeilingUsd: input.spendCeilingUsd ?? null,
         ...(input.idempotency === undefined ? {} : { idempotency: input.idempotency }),
         ...(input.approvedToolCalls === undefined
           ? {}
@@ -186,6 +199,10 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
         ...(input.decides === undefined
           ? {}
           : { decides: { runId: input.decides, statusEventMaxEvents: maxEvents } }),
+        ...(input.parent === undefined ? {} : { parent: input.parent }),
+        ...(input.agentTeamVersionId === undefined
+          ? {}
+          : { agentTeamVersionId: input.agentTeamVersionId }),
       });
       if (outcome.kind === 'duplicate-id') {
         // The same message the in-memory store rejects with, because `api.ts` and the conformance
@@ -193,6 +210,8 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
         throw new Error(`run ${input.id} already exists`);
       }
       if (outcome.kind === 'session-busy') throw new SessionBusyError(input.sessionId);
+      if (outcome.kind === 'child-limit') throw new ChildRunLimitError(outcome.runId);
+      if (outcome.kind === 'parent-stopped') throw new ParentRunStoppedError(outcome.runId);
       if (outcome.kind === 'idempotency-key-taken') throw new IdempotencyKeyTakenError(outcome.key);
       if (outcome.kind === 'already-decided') {
         throw new ApprovalDecisionError(outcome.runId, 'already-decided');
@@ -207,7 +226,7 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
           `no session ${input.sessionId} in workspace ${input.workspaceId}; a run row references its session (runs_session_workspace_fk)`,
         );
       }
-      remember(input.id, input.workspaceId);
+      remember(RunId.fromStore(outcome.run.id), WorkspaceId.fromStore(input.workspaceId));
       // A decision completed the paused run in the same commit; its open streams may end now.
       if (input.decides !== undefined) wake(input.decides);
       // `agentId` comes back from the session the run belongs to, never from the caller: the
@@ -226,7 +245,7 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
       const repository = dependencies.repositories.forScope(await scopeFor(workspaceId));
       const found = await repository.findByIdempotencyKey(principalId, key);
       if (found === null) return null;
-      remember(found.run.id, workspaceId);
+      remember(RunId.fromStore(found.run.id), WorkspaceId.fromStore(workspaceId));
       return { run: found.run, requestHash: found.requestHash };
     },
 
@@ -396,6 +415,15 @@ export function createRepositoryRunStore(dependencies: RepositoryRunStoreDepende
       const repository = dependencies.repositories.forScope(await scopeFor(workspaceId));
       const page = await repository.listRuns(input);
       return { items: page.items, nextCursor: page.nextCursor };
+    },
+
+    async listChildren(
+      workspaceId: string,
+      parentRunId: string,
+      limit: number,
+    ): Promise<readonly RunRecord[]> {
+      const repository = dependencies.repositories.forScope(await scopeFor(workspaceId));
+      return repository.listChildren(parentRunId, limit);
     },
   };
 }

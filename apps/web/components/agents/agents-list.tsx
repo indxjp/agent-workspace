@@ -46,7 +46,6 @@ import {
 } from './model';
 import { loadAgents } from './agent-requests-model';
 import { ArchivedBadge } from './agent-archived';
-import { BuiltinBadge } from './builtin-badge';
 import { versionsStrings, type VersionsLocale } from './versions-messages';
 
 // ── Transcribed class strings ───────────────────────────────────────────────────────────────────
@@ -100,9 +99,10 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
 
     void loadAgents(browserClient(), { includeArchived }).then((result) => {
       if (cancelled) return;
+      // The built-in Builder is not one of the person's agents; it is reached from New Agent.
       setState(
         result.ok
-          ? { kind: 'loaded', agents: result.value }
+          ? { kind: 'loaded', agents: result.value.filter((agent) => agent.builtin === undefined) }
           : { kind: 'problem', problem: result.problem },
       );
     });
@@ -116,8 +116,9 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
   const visible = state.kind === 'loaded' ? filterAgentsByName(state.agents, query) : [];
 
   return (
-    <main className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">
-      <div className="mb-[22px] flex items-start gap-4">
+    <main className="w-full max-w-[1120px] px-4 pt-[26px] pb-[90px] sm:px-8">
+      {/* Wraps on a phone (UX-10 in #2086): a row that cannot wrap scrolled the page sideways. */}
+      <div className="mb-[22px] flex flex-wrap items-start gap-4">
         <div>
           <h1 className="text-[21px]">Agents</h1>
           {total === null ? null : (
@@ -126,8 +127,9 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
             </div>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[13px]" lang={locale}>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* No wrap: as a shrinking flex item, the Japanese label broke after every character. */}
+          <label className="flex items-center gap-1.5 text-[13px] whitespace-nowrap" lang={locale}>
             <input
               type="checkbox"
               checked={includeArchived}
@@ -211,7 +213,6 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
                           >
                             {agent.name}
                           </Link>
-                          <BuiltinBadge builtin={agent.builtin} />
                           {agent.archivedAt === undefined ? null : (
                             <ArchivedBadge archivedAt={agent.archivedAt} locale={locale} />
                           )}

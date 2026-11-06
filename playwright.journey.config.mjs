@@ -14,7 +14,9 @@ import { defineConfig, devices } from '@playwright/test';
  * `feedback.e2e.mjs` (80-13, issue #620), untimed, rates an answer down in the widget and turns it
  * into an eval case that `aw eval` fails; `files.e2e.mjs` (STO-407, issue #1687), untimed, uploads
  * a file in Files, grants it to the demo agent, runs the agent from the console and finds its output
- * in Files; `first-hour.e2e.mjs` (FH-13, issue #700), run by
+ * in Files; `portal.e2e.mjs` (J1, issue #1510), picked with `--grep`, signs in to a portal made by
+ * `npm create --template portal` as the last step of J1's timed block, then, untimed, checks the
+ * console shows only the chosen features; `first-hour.e2e.mjs` (FH-13, issue #700), run by
  * `run.mjs --first-hour` in place of the journey, times the first hour. Running it directly fails on the first missing
  * `JOURNEY_*` variable.
  */
@@ -29,6 +31,7 @@ export default defineConfig({
     'release.e2e.mjs',
     'feedback.e2e.mjs',
     'files.e2e.mjs',
+    'portal.e2e.mjs',
     'first-hour.e2e.mjs',
   ],
   fullyParallel: false,

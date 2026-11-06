@@ -7,14 +7,14 @@
    "input": {"enum": "provider"},
    "id": "enum/provider",
    "expected":
-   {"values": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"],
-    "ddl": "('anthropic', 'anthropic-compatible', 'openai', 'azure-openai', 'openai-compatible')"}},
+   {"values": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"],
+    "ddl": "('anthropic', 'anthropic-compatible', 'openai', 'azure-openai', 'openai-compatible', 'vertex')"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.config_field_wires",
     "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.cluster_value_lists_pass_the_ddl_gate"],
    "input": {"enum": "config-field"},
    "id": "enum/config-field",
-   "expected": {"values": ["baseUrl", "deployment", "apiVersion"], "ddl": null}},
+   "expected": {"values": ["baseUrl", "deployment", "apiVersion", "projectId", "location"], "ddl": null}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.driver_wires",
     "AgentWorkspace.Theorems.WellFormed.ConceptConfiguration.driver_check_is_the_driver_enum",

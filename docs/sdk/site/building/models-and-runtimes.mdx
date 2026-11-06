@@ -45,7 +45,7 @@ aw models discover                                                  # models eac
 ```
 
 `connection.json` names the connection and its `provider`: `anthropic`, `anthropic-compatible`,
-`openai`, `azure-openai` or `openai-compatible`. A connection is `ready` once it has a credential and
+`openai`, `azure-openai`, `openai-compatible` or `vertex`. A connection is `ready` once it has a credential and
 the config its provider needs:
 
 | Provider                                      | `config`                              | Required for `ready`         |
@@ -53,6 +53,32 @@ the config its provider needs:
 | `anthropic`, `anthropic-compatible`, `openai` | `baseUrl` optional                    | Just a credential            |
 | `openai-compatible`                           | `baseUrl`                             | `baseUrl` and a credential   |
 | `azure-openai`                                | `baseUrl`, `apiVersion`, `deployment` | All three, plus a credential |
+
+### Claude on Google Cloud (Vertex AI)
+
+The provider `vertex` runs Claude on Vertex AI in your own Google Cloud project, with no API key.
+The gateway signs each request with its own Google Cloud identity, so the connection stores no
+credential and is `ready` as soon as it has a `projectId`. That identity needs the
+`roles/aiplatform.user` role on the project; a deployment made by `aw deploy` on
+Google Cloud Run grants it.
+
+| Setting     | Meaning                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `projectId` | The Google Cloud project that serves the model. Defaults to the project this install runs in. |
+| `location`  | `global` (recommended), `us` or `eu`. The `eu` location costs 10 % more than `global`.        |
+
+The model list is fixed, not discovered: `claude-opus-5-5`, `claude-sonnet-5-5`,
+`claude-haiku-5-5` and `claude-fable-5-1`. Enable the Claude model you use in Model Garden first.
+
+Vertex AI does not offer every Anthropic feature. The gateway refuses these with the error code
+`vertex_unsupported_feature` instead of forwarding them: the Files API and URL sources, code
+execution, web fetch, the advisor tool, the MCP connector and fallbacks. Message batches and the
+Models API are not offered.
+
+<Note>
+  **Today:** a `vertex` connection is made on the Models screen or through the API. A project file's
+  `models` block and `aw init` cannot name it yet.
+</Note>
 
 The key is write-only: `hasCredential` says whether one is stored, no field returns it, and
 `aw models connections rotate-credential <id> --value-stdin` is the only way to change it. Model

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { conferredBy } from '../rbac/conferral';
+import { conferredBy } from '../rbac/core/conferral';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 
 const TARGET = 'workspace-a';

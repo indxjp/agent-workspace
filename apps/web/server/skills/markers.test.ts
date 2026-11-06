@@ -44,6 +44,7 @@ import {
   type SkillPrincipal,
 } from './service';
 import type { SkillRowsAccess } from './tree';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const noLog = { info() {}, warn() {}, error() {}, child: () => noLog };
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
@@ -221,7 +222,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>, ready: boolean
         if (!saved.ok) throw new Error(`save refused: ${saved.code}`);
       };
       const skillRowPaths = async (): Promise<string[]> =>
-        (await catalog.listFiles())
+        (await listCatalogFiles(catalog))
           .filter((row) => row.kind === 'file' && row.path.startsWith('.skills/'))
           .map((row) => row.path)
           .sort();

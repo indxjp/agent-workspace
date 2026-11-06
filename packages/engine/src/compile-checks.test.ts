@@ -11,11 +11,9 @@ import {
   normaliseRequestGrants,
   outputSchemaRefusal,
   parsePolicyArm,
-  provisionalBudget,
   refuse,
   requireGateway,
   sandboxRefusal,
-  subagentBudgetRefusal,
   subagentsRefusal,
   subagentToolNames,
   PROVIDER_TOOL_NAME_MAX_LENGTH,
@@ -193,29 +191,6 @@ describe('subagentsRefusal', () => {
   });
 });
 
-describe('subagentBudgetRefusal', () => {
-  const subagents = [
-    { name: 'same', model: 'gpt-5' },
-    { name: 'inherits', model: null },
-    { name: 'other', model: 'gpt-5-mini' },
-  ];
-
-  it('refuses, by name, a subagent on another model when a cap is set', () => {
-    expect(subagentBudgetRefusal('mastra', 'gpt-5', 1, subagents)).toEqual({
-      ok: false,
-      code: 'engine_capability_unsupported',
-      reason:
-        'mastra prices a maxBudget cap with the agent\'s model "gpt-5" alone (ADR-0074 D7), so the subagent(s) "other" on another model cannot be metered. Run them on the agent\'s model or remove the cap.',
-    });
-  });
-
-  it('lets any model through without a cap, and the parent model or an inherited one with it', () => {
-    expect(subagentBudgetRefusal('mastra', 'gpt-5', null, subagents)).toBeNull();
-    expect(subagentBudgetRefusal('mastra', 'gpt-5', 1, subagents.slice(0, 2))).toBeNull();
-    expect(subagentBudgetRefusal('mastra', 'gpt-5', 1, undefined)).toBeNull();
-  });
-});
-
 describe('forkRefusal', () => {
   it('refuses a fork on an engine that declares fork: false', () => {
     expect(
@@ -264,26 +239,6 @@ describe('approvalsRefusal', () => {
   it('lets a request through with no rules, or on an engine with approvals', () => {
     expect(approvalsRefusal('pi', false, [])).toBeNull();
     expect(approvalsRefusal('claude-agent-sdk', true, ['Write'])).toBeNull();
-  });
-});
-
-describe('provisionalBudget', () => {
-  it('has no budget without a cap', () => {
-    expect(provisionalBudget('demo', 'claude-sonnet-4-5', null)).toBeNull();
-  });
-
-  it('prices a cap for a known model', () => {
-    const budget = provisionalBudget('demo', 'claude-sonnet-4-5', 2);
-    expect(budget).toMatchObject({ maxBudgetUsd: 2, model: 'claude-sonnet-4-5' });
-    expect(budget !== null && !('ok' in budget)).toBe(true);
-  });
-
-  it('refuses a cap on a model the table cannot price', () => {
-    const budget = provisionalBudget('demo', 'no-such-model', 2);
-    expect(budget).toMatchObject({ ok: false, code: 'engine_capability_unsupported' });
-    expect(budget !== null && 'reason' in budget ? budget.reason : '').toContain(
-      'demo enforces maxBudget from a provisional price table (ADR-0074 D7, checked',
-    );
   });
 });
 

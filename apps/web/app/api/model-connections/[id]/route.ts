@@ -25,7 +25,12 @@ export async function PATCH(request: Request, context: Context): Promise<Respons
     async (models) => {
       const body = await readJsonBody(request);
       if (!body.ok) return body.result;
-      const updated = await updateModelConnection(models.store, id, body.value);
+      const updated = await updateModelConnection(
+        models.store,
+        id,
+        body.value,
+        models.vertexDefaults,
+      );
       if (updated.status === 200) {
         const resource = updated.body as { id: string; name: string };
         await models.audit({ subjectId: resource.id, subjectLabel: resource.name });

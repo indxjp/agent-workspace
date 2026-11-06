@@ -83,6 +83,19 @@ describe('renderTable / renderRecord / renderHuman', () => {
   });
 });
 
+describe('renderHuman: text a model or a server wrote', () => {
+  const hostile = 'a\x1b[2Jb\x1b]0;pwned\x07c\x9b31md\x7fe';
+  it('drops control sequences from a string cell, a record value, a scalar and a JSON value', () => {
+    expect(renderHuman([{ error: hostile }], ['error'])).toBe('error\n--------\nabc31mde');
+    expect(renderHuman({ error: hostile }, undefined)).toBe('error  abc31mde');
+    expect(renderHuman(hostile, undefined)).toBe('abc31mde');
+    expect(renderHuman([{ detail: { text: hostile } }], ['detail']).split('\n')[2]).toBe(
+      '{"text":"a\\u001b[2Jb\\u001b]0;pwned\\u0007c31mde"}',
+    );
+    expect(renderHuman(['x\ty', hostile], undefined)).toBe('x\ty\nabc31mde');
+  });
+});
+
 describe('writeResult', () => {
   it('prints exactly the value as JSON with --json and one row per line with --jsonl', () => {
     const rows = [{ id: 1 }, { id: 2 }];

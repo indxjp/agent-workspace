@@ -34,6 +34,7 @@ import { createAgentRunResourceLoader, type RunFileSource } from './resource-loa
 import type { LaunchContext } from '../runs/environment';
 import type { RuntimeLaunchTarget } from './runtime-profile';
 import { createRuntimeWorkspaceLifecycle, runOutputKey } from './workspace-lifecycle';
+import { listCatalogFiles } from '@agent-workspace/core/db';
 
 const context = {
   run: { id: 'run-1' },
@@ -347,7 +348,9 @@ describe('promoting runtime outputs through the catalog service', () => {
     });
     /** Every file row the catalog holds, whatever its area. */
     const paths = async () =>
-      (await m.catalog.listFiles()).filter((row) => row.kind === 'file').map((row) => row.path);
+      (await listCatalogFiles(m.catalog))
+        .filter((row) => row.kind === 'file')
+        .map((row) => row.path);
     const text = async (path: string) => {
       const row = await m.storage.get(m.ctx, 'files', path);
       const opened = row === null ? null : await m.storage.open(m.ctx, row);
@@ -601,7 +604,7 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
             .filter((row) => row.kind === 'file')
             .map((r) => r.path),
           service: listed.rows.map((row) => row.path),
-          search: (await f.catalog.listFiles())
+          search: (await listCatalogFiles(f.catalog))
             .filter((row) => row.kind === 'file')
             .map((row) => row.path),
         };

@@ -83,11 +83,13 @@ function run(patch: Partial<RunListItem> = {}): unknown {
       toolCalls: 5,
     },
     cost,
+    spendCeilingUsd: null,
     error: null,
     output: null,
     pendingApproval: null,
     accountingState,
     accountingError,
+    parentRunId: null,
     ...patch,
   };
 }
@@ -346,6 +348,15 @@ describe('parseRunResource', () => {
       ).toThrow(MalformedRunError);
     },
   );
+
+  it('reads a spend ceiling as its six-place decimal, and refuses one that is not (ADR-0162)', () => {
+    expect(parseRunResource(run({ spendCeilingUsd: '0.500000' })).spendCeilingUsd).toBe('0.500000');
+    for (const spendCeilingUsd of [0.5, '0.5', '-1.000000']) {
+      expect(() => parseRunResource({ ...(run() as object), spendCeilingUsd })).toThrow(
+        MalformedRunError,
+      );
+    }
+  });
 
   it("refuses a cost currency other than the durable API's USD", () => {
     expect(() =>

@@ -10,14 +10,14 @@ import type { EngineId } from '@indx-workspace/contracts/engines';
  */
 export const ENGINE_PACKAGES: Readonly<Record<EngineId, Readonly<Record<string, string>>>> = {
   'claude-agent-sdk': {
-    '@anthropic-ai/claude-agent-sdk': '0.3.310',
+    '@anthropic-ai/claude-agent-sdk': '0.3.316',
     '@anthropic-ai/sdk': '1.3.0',
   },
   'openai-agents': {
-    '@ai-sdk/anthropic': '4.0.85',
+    '@ai-sdk/anthropic': '4.0.94',
     '@openai/agents': '0.21.0',
     '@openai/agents-extensions': '0.21.0',
-    ws: '8.22.0',
+    ws: '8.22.1',
   },
   pi: {
     '@earendil-works/pi-agent-core': '1.4.0',
@@ -29,11 +29,11 @@ export const ENGINE_PACKAGES: Readonly<Record<EngineId, Readonly<Record<string, 
     '@earendil-works/pi-tui': '1.4.0',
   },
   mastra: {
-    '@ai-sdk/anthropic': '4.0.85',
-    '@ai-sdk/openai': '4.0.99',
-    '@mastra/core': '1.79.0',
-    '@mastra/mcp': '2.5.0',
-    '@mastra/memory': '1.39.0',
+    '@ai-sdk/anthropic': '4.0.94',
+    '@ai-sdk/openai': '4.0.106',
+    '@mastra/core': '1.81.0',
+    '@mastra/mcp': '2.7.0',
+    '@mastra/memory': '1.40.0',
   },
 };
 

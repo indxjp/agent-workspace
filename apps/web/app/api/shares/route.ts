@@ -3,14 +3,13 @@ import {
   shareJson,
   shareProblem,
   withShares,
-} from '../../../server/shares/core/http';
-import { ownerPrincipalIdOf } from '../../../server/rbac/owner-principal';
-import { parsePublishShareRequest } from '../../../server/shares/core/input';
+} from '../../../server/shares/http';
+import { ownerPrincipalIdOf } from '../../../server/rbac/core/owner-principal';
 import {
+  parsePublishShareRequest,
   publishedSnapshot,
-  toShareResource,
-  visibleShares,
-} from '../../../server/shares/core/resource';
+} from '../../../server/shares/publish-request';
+import { toShareResource, visibleShares } from '../../../server/shares/core/resource';
 import { requireResourceAccess } from '../../../server/resources/authorise';
 import { errorResponse } from '../../../server/http/error-response';
 export const dynamic = 'force-dynamic';

@@ -14,9 +14,11 @@ import {
   eventStreamResponse,
   fetchDouble,
 } from '@indx-workspace/sdk/testing';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { followRunInto } from './home-chat';
+import { ComposerChips, followRunInto } from './home-chat';
 import {
   beginRun,
   userMessage,
@@ -298,5 +300,25 @@ describe('the chat screen over the end of a stream', () => {
     expect(run.technical.sdkEvents).toHaveLength(3);
     expect(run.technical.runtimeEvents.map((line) => line.event)).toEqual(['transport.error']);
     expect(requests).toBe(1);
+  });
+});
+
+describe('the composer chips over the shared AttachmentChips part (R-F5a, #1489)', () => {
+  it('draws the same markup as before the lift: Tailwind classes, ✕, title and label', () => {
+    const html = renderToStaticMarkup(
+      createElement(ComposerChips, {
+        chips: [
+          { id: 'file-1', name: 'notes.md' },
+          { id: 'conn-1', name: 'GitHub' },
+        ],
+        onRemove: () => undefined,
+      }),
+    );
+    const chip = (name: string): string =>
+      '<span class="inline-flex h-6 items-center gap-1.5 rounded-[999px] bg-surface-3 px-[9px] text-[12px] text-text-2">' +
+      `${name}<button type="button" aria-label="Remove ${name}" class="cursor-pointer opacity-55 hover:opacity-100" title="Remove">✕</button></span>`;
+    expect(html).toBe(
+      `<div class="flex flex-wrap items-center gap-1.5">${chip('notes.md')}${chip('GitHub')}</div>`,
+    );
   });
 });

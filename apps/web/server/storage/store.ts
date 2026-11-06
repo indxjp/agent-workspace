@@ -22,18 +22,26 @@ import type {
   ObjectStoreProvider,
 } from '@agent-workspace/core/storage';
 
-export { renamedKey } from '@agent-workspace/core/db';
+export { listCatalogFiles } from '@agent-workspace/core/db';
 
 export type { CatalogFile, CatalogPort, CatalogSkill, LockOutcome } from '@agent-workspace/core/db';
 
-/** The one catalog write the old-naming migration needs. */
-export type LegacyAdopter = Pick<ResourceCatalogRepository, 'adoptLegacyFiles'>;
+export type { SessionStateBlobClaim } from '@agent-workspace/core/db';
 
-/** What the copy stage needs of the file catalog: the work list and the conditional switch. */
-export type LegacyCopier = Pick<ResourceCatalogRepository, 'list' | 'switchObject'>;
+/**
+ * What a session-state save and the deletes after it need of the blob rows: reserve, confirm and
+ * forget on the reservation token, and read the row a resume serves.
+ */
+export type SessionStateBlobCatalog = Pick<
+  SessionStateRepository,
+  'reserveBlob' | 'confirmBlob' | 'forgetBlob' | 'getBlob'
+>;
 
-/** What the copy stage needs of the session-state blob rows. */
-export type LegacyBlobCopier = Pick<SessionStateRepository, 'listLegacyBlobs' | 'switchBlobObject'>;
+/** What the cleanup job needs of the session-state blob rows. */
+export type SessionStateBlobSettler = Pick<
+  SessionStateRepository,
+  'referencedObjectIds' | 'unsettledBlobs' | 'claimBlob' | 'forgetBlob'
+>;
 
 /** A reserve met a pending upload of another owner (the storage design, §04). */
 export function isPathPending(error: unknown): boolean {
@@ -45,19 +53,10 @@ export function isPathTaken(error: unknown): boolean {
   return error instanceof CatalogPathTakenError;
 }
 
-/** What the finalize stage needs of the file catalog (the whole repository: it also reads skills). */
-export type FinalizeCatalog = ResourceCatalogRepository;
-
 /** What the skills adopt stage needs of the catalog: it lists skills and fills their rows. */
 export type SkillsAdoptCatalog = ResourceCatalogRepository;
 
-/** What the finalize stage needs of the session-state blob rows. */
-export type FinalizeBlobCatalog = Pick<
-  SessionStateRepository,
-  'countLegacyBlobs' | 'listObjectBlobs' | 'legacyBlobKeysHeld'
->;
-
-/** The log of verify passes. */
+/** The log of the skills adopt passes. */
 export type MigrationRuns = StorageMigrationRunRepository;
 
 /** A listed skill object. */

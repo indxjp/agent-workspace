@@ -37,6 +37,13 @@ describe('surfaceStrings (S1-18, #456)', () => {
       'toolOutput',
       'earlierMessage',
       'turnLimitReached',
+      'approve',
+      'reject',
+      'approvalComment',
+      'approvalExpired',
+      'approvalAlreadyDecided',
+      'approvalNotAwaiting',
+      'approvalFailed',
     ];
     for (const key of fixed) {
       expect(Reflect.get(ja, key)).not.toBe(Reflect.get(en, key));
@@ -47,6 +54,8 @@ describe('surfaceStrings (S1-18, #456)', () => {
     expect(ja.launcherLabel('Help')).toBe('Helpを開く');
     expect(ja.tryHeading('Help')).toBe('Helpを試す');
     expect(ja.tryModelKeyFix(['MAIN_MODEL_KEY'])).not.toBe(en.tryModelKeyFix(['MAIN_MODEL_KEY']));
+    expect(ja.approvalNeeded('send_mail')).toContain('send_mail');
+    expect(ja.approvalNeeded('send_mail')).not.toBe(en.approvalNeeded('send_mail'));
   });
 });
 

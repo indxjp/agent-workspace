@@ -51,7 +51,7 @@ revoked gateway run tokens at the same transition. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#from-start-to-a-terminal-status")
   (ts := "apps/web/server/runs/memory-store.ts#InMemoryRunStore")
-  (ts := "packages/core/src/db/repositories/runs.ts#finish")]
+  (ts := "packages/core/src/db/repositories/runs/lifecycle.ts#finish")]
 theorem every_sequence_closes_at_terminal (actions : List RunAction) :
     let s := runActions ({} : RunState) actions
     s.endedAt.isSome = s.status.isTerminal ∧
@@ -63,7 +63,7 @@ theorem every_sequence_closes_at_terminal (actions : List RunAction) :
 /-- Every accepted new response recomputes the state from the complete response ledger. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem new_settlement_recomputes_state (a : RunAccounting) (priced : Bool) :
     (recordAccounting a priced true).state =
       accountingFromLedger (a.ledger ++ [priced]) := by
@@ -72,7 +72,7 @@ theorem new_settlement_recomputes_state (a : RunAccounting) (priced : Bool) :
 /-- A duplicate provider response leaves both the ledger and aggregate accounting unchanged. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem duplicate_settlement_is_noop (a : RunAccounting) (priced : Bool) :
     recordAccounting a priced false = a := by
   simp [recordAccounting]
@@ -80,7 +80,7 @@ theorem duplicate_settlement_is_noop (a : RunAccounting) (priced : Bool) :
 /-- A failed settlement cannot overwrite an accounting state already derived from responses. -/
 @[aw_spec (tier := T2)
   (doc := "docs/sdk/site/concepts/run-lifecycle.mdx#usage-cost-and-accounting")
-  (ts := "packages/core/src/db/repositories/runs.ts#markAccountingFailed")]
+  (ts := "packages/core/src/db/repositories/runs/accounting.ts#markAccountingFailed")]
 theorem failure_preserves_settled_accounting (a : RunAccounting)
     (h : a.state ≠ .pending) : failAccounting a = a := by
   simp [failAccounting, h]

@@ -168,3 +168,6 @@ with the acceptance "the RF-303 `it.fails` flips; a model-based test is green".
   a control-plane transition; #261 extends it across replicas.
 - Issues #250 (idempotency keys on run start), #261 (cross-replica interrupt), #1299 / PR #1348
   (the `awaiting_approval` status), #1301 (P5-4, public contract).
+- Amended by [ADR-0151-FU-1440](ADR-0151-FU-1440-a-cancelled-run-is-stopped-by-its-holder-and-the-lease-renews-on-the-same-watch.md)
+  (proposed): the _Interrupt_ bullet is met through the run row's committed stopped status, not
+  the attempt row; that record answers the #1440 lease questions Q1–Q6.

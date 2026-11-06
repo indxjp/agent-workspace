@@ -67,6 +67,84 @@ agents.example.com
 reverse_proxy 127.0.0.1:3000
 ```
 
+## Apps
+
+A portal app the project generated (`aw generate app <name>`) runs beside the platform when
+`environments.production.apps` lists it (ADR-0103's production-apps amendment). Each entry names
+the app's image, pinned by digest, and the https origin it is served at:
+
+```yaml
+environments:
+  production:
+    target: single-vm
+    url: https://agents.example.com
+    apps:
+      desk:
+        image: ghcr.io/acme/desk@sha256:<64 hex>
+        url: https://desk.example.com
+```
+
+`aw deploy production` refuses a project whose `aw-generated.json` has an app this map does not
+list. It does not build the image. Build it from the app's directory, push it, and copy the
+pushed digest into `image`:
+
+```sh
+npm run image                                  # docker build -t desk .
+docker tag desk ghcr.io/acme/desk:1 && docker push ghcr.io/acme/desk:1
+docker inspect --format '{{index .RepoDigests 0}}' ghcr.io/acme/desk:1
+```
+
+**What `aw deploy` writes.** Beside the state's `compose.yaml` it writes `compose.apps.yaml`
+(`0600`), which it overwrites on every run. It also sets `COMPOSE_FILE=compose.yaml:compose.apps.yaml`
+in `.env`, so `docker compose` in that directory reads both files. Each app gets two services:
+
+- `app-<name>-role` runs once, with the pinned PostgreSQL image's `psql`. It creates the database
+  role `app_<name>` (hyphens become underscores) and the schema `app_<name>`, which that role
+  owns. It also sets the role's password from `.env` on every run.
+- `app-<name>` runs the image. Its `DATABASE_URL` is for that role, never the platform's: the app
+  can read and write its own schema and no platform table. It migrates its schema as it starts
+  (`AW_APP_MIGRATE_ON_START=1`) and is published on `127.0.0.1:<3100 + i>` only. Apps are numbered
+  in name order, so `crm` gets 3100 and `desk` 3101.
+
+The role also holds `CREATE` on the database. The app's migrations run `CREATE SCHEMA IF NOT
+EXISTS`, and PostgreSQL checks that privilege even when the schema exists. The grant lets the app
+create a schema; it reads no platform table.
+
+The first run generates `AW_APP_<NAME>_DB_PASSWORD` and `AW_APP_<NAME>_IDENTITY_SECRET` into `.env`.
+`<NAME>` is the app name in upper case with underscores, such as `DESK`. Later runs never
+regenerate them. Removing an app from `apps` empties `compose.apps.yaml` and drops `COMPOSE_FILE`.
+The secrets stay in `.env`, and the app's container keeps running, because `aw deploy` never
+removes anything. Stop it with `docker compose rm --stop app-<name>` in the state directory.
+
+**The Caddy host.** Each app needs a DNS record and a Caddy site, like the platform. `caddy
+reverse-proxy` serves one site, so with apps use a Caddyfile that lists them all:
+
+```text
+agents.example.com {
+	reverse_proxy 127.0.0.1:3000
+}
+desk.example.com {
+	reverse_proxy 127.0.0.1:3100
+}
+```
+
+**Connecting the app.** Until these steps are done, the app answers its API with
+`app_misconfigured`, and `/api/health` still answers 200:
+
+1. Sign in (`aw login --url https://agents.example.com`). Create an Admin API key, and note the
+   workspace id.
+2. Store the identity secret as a workspace secret. Copy the value of `AW_APP_DESK_IDENTITY_SECRET`
+   from `.env`; `AW_` names are reserved, so the secret gets another name:
+   `aw secrets create --name APP_DESK_IDENTITY --value-stdin`.
+3. Register the app's MCP connector. It goes through the app's public https origin, because the
+   gateway's egress policy refuses a plain-http private host:
+   `aw connectors create --file desk-connector.json`. In that file, `transport` is `http`, `url`
+   is `https://desk.example.com/api/mcp` and `identity` is `{ "secret": "APP_DESK_IDENTITY" }`.
+4. Set `AW_APP_DESK_API_KEY`, `AW_APP_DESK_WORKSPACE_ID` and `AW_APP_DESK_CONNECTOR_ID` in `.env`.
+   Then run `aw deploy production --yes` again, which recreates the app with them.
+
+`aw deploy --yes` prints these steps for each app, with the state's `.env` path.
+
 ## The deployment profile
 
 The supported way to produce this deployment's settings is the generator, which writes one

@@ -140,6 +140,39 @@ describe('Docker command construction', () => {
     expect(includesSequence(args, ['--label', 'agent-workspace.session-id=session-1'])).toBe(true);
   });
 
+  it('keeps the validated run spec when its caller replaces it during network inspection', async () => {
+    const calls: string[][] = [];
+    const config = {
+      sessionId: 'validated-spec',
+      engine: 'claude-agent-sdk',
+      workspacePath: '/workspace/validated-spec',
+      runSpec: runSpec({ cpu: 2, memoryMb: 512, diskMb: 128, filesystem: 'read-only' }),
+    };
+    const docker: DockerCommand = async (args) => {
+      calls.push([...args]);
+      if (args[0] === 'network' && args[1] === 'inspect') {
+        await Promise.resolve();
+        config.runSpec = runSpec({ cpu: -1, memoryMb: 1, diskMb: 1 });
+        return networkInspection('agent-egress');
+      }
+      return commandResult(0, args[0] === 'run' ? 'validated-container' : '');
+    };
+    const driver = createDockerDriver<never, never>({
+      images: new Map([['claude-agent-sdk', 'alpine:3.20']]),
+      workspaceStorage: 'anonymous-volume',
+      docker,
+      startAgent: () => {
+        throw new Error('not used');
+      },
+    });
+    const handle = await driver.create(config);
+    await driver.destroy(handle);
+    const run = calls.find((call) => call[0] === 'run') ?? [];
+    expect(includesSequence(run, ['--cpus', '2'])).toBe(true);
+    expect(includesSequence(run, ['--memory', '640m'])).toBe(true);
+    expect(run).toContain('/workspace:ro,exec,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700');
+  });
+
   it('starts exactly one container per handle and removes that container on destroy', async () => {
     const calls: string[][] = [];
     let nextContainer = 0;

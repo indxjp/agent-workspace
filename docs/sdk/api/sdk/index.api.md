@@ -15,6 +15,10 @@ import { AgentPolicy } from '@indx-workspace/contracts/agents';
 import { AgentResource } from '@indx-workspace/contracts/agents';
 import { AgentResourceAssignments } from '@indx-workspace/contracts/agents';
 import { AgentResourceAssignmentsInput } from '@indx-workspace/contracts/agents';
+import { AgentTeamListResponse } from '@indx-workspace/contracts/agent-teams';
+import { AgentTeamResource } from '@indx-workspace/contracts/agent-teams';
+import { AgentTeamVersion } from '@indx-workspace/contracts/agent-teams';
+import { AgentTeamVersionListResponse } from '@indx-workspace/contracts/agent-teams';
 import { AgentVersionCheckResponse } from '@indx-workspace/contracts/agent-versions';
 import { AgentVersionDraftInput } from '@indx-workspace/contracts/agent-versions';
 import { AgentVersionListResponse } from '@indx-workspace/contracts/agent-versions';
@@ -31,6 +35,8 @@ import { CreateAgentFromVersionRequestInput } from '@indx-workspace/contracts/ag
 import { CreateAgentFromVersionResponse } from '@indx-workspace/contracts/agent-versions';
 import { CreateAgentInput } from '@indx-workspace/contracts/agents';
 import { CreateAgentOptions } from '@indx-workspace/contracts/agents';
+import { CreateAgentTeamRequest } from '@indx-workspace/contracts/agent-teams';
+import { CreateAgentTeamVersionRequest } from '@indx-workspace/contracts/agent-teams';
 import { CreateAgentWithAssignmentsResponse } from '@indx-workspace/contracts/agents';
 import { CreateApiKeyInput } from '@indx-workspace/contracts/api-keys';
 import { CreateConnectorInput } from '@indx-workspace/contracts/connectors';
@@ -49,6 +55,8 @@ import { CreateStorageConnectionInput } from '@indx-workspace/contracts/storage-
 import { CreateTriggerRequest } from '@indx-workspace/contracts/triggers';
 import { CreateTriggerResponse } from '@indx-workspace/contracts/triggers';
 import { CreateUserInput } from '@indx-workspace/contracts/team';
+import { CreateWebhookRequest } from '@indx-workspace/contracts/webhooks';
+import { CreateWebhookResponse } from '@indx-workspace/contracts/webhooks';
 import { CreateWorkspaceInput } from '@indx-workspace/contracts/workspaces';
 import { DeleteModelConnectionResponse } from '@indx-workspace/contracts/models';
 import { DeviceAuthorizationResponse } from '@indx-workspace/contracts/cli-auth';
@@ -94,6 +102,7 @@ import { RevokeRunTokensResponse } from '@indx-workspace/contracts/runs';
 import { RollbackAgentRequestInput } from '@indx-workspace/contracts/agent-versions';
 import { RotateEndpointClientSecretResponse } from '@indx-workspace/contracts/endpoint-clients';
 import { RunApprovalResponse } from '@indx-workspace/contracts/runs';
+import { RunDetail } from '@indx-workspace/contracts/runs';
 import { RunFailedFrameData } from '@indx-workspace/contracts/run-events';
 import { RunFailure } from '@indx-workspace/contracts/runs';
 import { RunFeedbackItem } from '@indx-workspace/contracts/feedback';
@@ -128,6 +137,7 @@ import { StorageConnectionTestOutcome } from '@indx-workspace/contracts/storage-
 import { StreamResetFrameData } from '@indx-workspace/contracts/run-events';
 import { SurfaceAttachmentResponse } from '@indx-workspace/contracts/surfaces';
 import { TestConnectionOutcome } from '@indx-workspace/contracts/connectors';
+import { TokenExchangeResponse } from '@indx-workspace/contracts/token-exchange';
 import { TokenScope } from '@indx-workspace/contracts/tokens';
 import { ToolBundle } from '@indx-workspace/contracts/agent-versions';
 import { TranscriptEntry } from '@indx-workspace/contracts/sessions';
@@ -148,6 +158,9 @@ import { UploadToolBundleRequest } from '@indx-workspace/contracts/agent-version
 import { UploadToolBundleResponse } from '@indx-workspace/contracts/agent-versions';
 import { UserResource } from '@indx-workspace/contracts/team';
 import { verifyIdentity } from '@indx-workspace/contracts/identity-assertion';
+import { WebhookEndpoint } from '@indx-workspace/contracts/webhooks';
+import { WebhookEvent } from '@indx-workspace/contracts/webhooks';
+import { WebhookEventType } from '@indx-workspace/contracts/webhooks';
 import { WorkspaceFeatures } from '@indx-workspace/contracts/features';
 import { WorkspaceMembershipView } from '@indx-workspace/contracts/workspaces';
 import { WorkspaceResource } from '@indx-workspace/contracts/workspaces';
@@ -201,6 +214,37 @@ export class AgentsClient {
 }
 
 // @public
+export interface AgentTeamListQuery {
+    // (undocumented)
+    readonly cursor?: string;
+    // (undocumented)
+    readonly limit?: number;
+}
+
+// @public
+export type AgentTeamRunInput = Omit<StartRunInput, 'version'>;
+
+// @public
+export class AgentTeamsClient {
+    constructor(http: HttpClient);
+    create(input: CreateAgentTeamRequest, options?: RequestOptions): Promise<AgentTeamResource>;
+    get(id: string, options?: RequestOptions): Promise<AgentTeamResource>;
+    list(query?: AgentTeamListQuery, options?: RequestOptions): Promise<AgentTeamListResponse>;
+    listAll(query?: AgentTeamListQuery, options?: RequestOptions): AsyncGenerator<AgentTeamResource, void, undefined>;
+    remove(id: string, options?: RequestOptions): Promise<void>;
+    run(id: string, input: AgentTeamRunInput, options?: RequestOptions): Promise<StartRunResponse>;
+    // (undocumented)
+    readonly versions: AgentTeamVersionsClient;
+}
+
+// @public
+export class AgentTeamVersionsClient {
+    constructor(http: HttpClient);
+    create(teamId: string, input: CreateAgentTeamVersionRequest, options?: RequestOptions): Promise<AgentTeamVersion>;
+    list(teamId: string, query?: AgentTeamListQuery, options?: RequestOptions): Promise<AgentTeamVersionListResponse>;
+}
+
+// @public
 export class AgentVersionsClient {
     constructor(http: HttpClient);
     check(agentId: string, draft: AgentVersionDraftInput, options?: RequestOptions): Promise<AgentVersionCheckResponse>;
@@ -212,6 +256,7 @@ export class AgentVersionsClient {
 export interface AgentWorkspaceClient {
     // (undocumented)
     readonly agents: AgentsClient;
+    readonly agentTeams: AgentTeamsClient;
     readonly auth: AuthClient;
     // (undocumented)
     readonly connectors: ConnectorsClient;
@@ -245,6 +290,7 @@ export interface AgentWorkspaceClient {
     readonly tokens: TokensClient;
     readonly toolBundles: ToolBundlesClient;
     readonly triggers: TriggersClient;
+    readonly webhooks: WebhooksClient;
     // (undocumented)
     readonly workspaces: WorkspacesClient;
 }
@@ -295,6 +341,7 @@ export class AuditClient {
 // @public
 export class AuthClient {
     constructor(http: HttpClient);
+    exchange(input: TokenExchangeInput, options?: RequestOptions): Promise<TokenExchangeResponse>;
     pollToken(deviceCode: string, options?: RequestOptions): Promise<CliTokenResponse>;
     revoke(options?: RequestOptions): Promise<void>;
     startDevice(options?: RequestOptions): Promise<DeviceAuthorizationResponse>;
@@ -319,6 +366,9 @@ export type ClientAuth = {
     readonly token: string;
 } | {
     readonly kind: 'user-token';
+    readonly token: string;
+} | {
+    readonly kind: 'access-token';
     readonly token: string;
 };
 
@@ -396,6 +446,15 @@ type CreateTriggerInput = CreateTriggerRequest extends infer Wire ? Wire extends
     readonly outputSchema?: TriggerOutputSchema;
 } : never : never;
 
+// @public
+export type CreateWebhookInput = Omit<CreateWebhookRequest, 'events'> & {
+    readonly events?: readonly WebhookEventType[];
+};
+
+export { CreateWebhookRequest }
+
+export { CreateWebhookResponse }
+
 // @public (undocumented)
 export interface DownloadUrlInput {
     // (undocumented)
@@ -468,6 +527,7 @@ export class FilesClient {
 
 // @public (undocumented)
 export interface FollowRunOptions extends RunEventsOptions {
+    readonly maxReconnectDelayMs?: number;
     readonly maxReconnects?: number;
     readonly reconnectDelayMs?: number;
 }
@@ -750,8 +810,7 @@ export class RunsClient {
     }, options?: RequestOptions): Promise<RunApprovalResponse>;
     events(runId: string, options?: RunEventsOptions): AsyncGenerator<RunEventFrame, RunStreamEnd, void>;
     follow(runId: string, options?: FollowRunOptions): AsyncGenerator<RunEventFrame, RunStreamEnd, void>;
-    // (undocumented)
-    get(runId: string, options?: RequestOptions): Promise<RunResource>;
+    get(runId: string, options?: RequestOptions): Promise<RunDetail>;
     interrupt(runId: string, options?: RequestOptions): Promise<RunResource>;
     list(query?: RunListQuery, options?: RequestOptions): Promise<RunListResponse>;
     outputs(runId: string, options?: RequestOptions): Promise<readonly RunOutputFile[]>;
@@ -931,6 +990,7 @@ export interface StartRunInput {
     // (undocumented)
     readonly prompt: string;
     readonly sessionId?: string | null;
+    readonly spendCeilingUsd?: number;
     readonly subject?: string;
     readonly version?: number;
 }
@@ -981,6 +1041,13 @@ export class TeamClient {
     readonly members: MembersClient;
     // (undocumented)
     readonly users: UsersClient;
+}
+
+// @public
+export interface TokenExchangeInput {
+    readonly clientId: string;
+    readonly clientSecret: string;
+    readonly idToken: string;
 }
 
 // @public
@@ -1067,6 +1134,46 @@ export class UsersClient {
 }
 
 export { verifyIdentity }
+
+// @public
+export function verifyWebhookSignature(input: VerifyWebhookSignatureInput): Promise<WebhookEvent>;
+
+// @public (undocumented)
+export interface VerifyWebhookSignatureInput {
+    readonly body: string;
+    // (undocumented)
+    readonly headers: WebhookHeaders;
+    readonly now?: Date;
+    readonly secret: string;
+    readonly toleranceSeconds?: number;
+}
+
+export { WebhookEndpoint }
+
+export { WebhookEvent }
+
+export { WebhookEventType }
+
+// @public
+export type WebhookHeaders = Headers | Readonly<Record<string, string | readonly string[] | undefined>>;
+
+// @public
+export class WebhooksClient {
+    constructor(http: HttpClient);
+    create(input: CreateWebhookInput, options?: RequestOptions): Promise<CreateWebhookResponse>;
+    list(options?: RequestOptions): Promise<readonly WebhookEndpoint[]>;
+    remove(id: string, options?: RequestOptions): Promise<void>;
+}
+
+// @public
+export class WebhookVerificationError extends Error {
+    constructor(code: WebhookVerificationErrorCode, message: string);
+    // (undocumented)
+    readonly code: WebhookVerificationErrorCode;
+}
+
+// @public
+export type WebhookVerificationErrorCode = 'missing_header' | 'invalid_secret' | 'timestamp_out_of_tolerance' | 'signature_mismatch' | 'invalid_payload';
 
 // @public
 export class WorkspaceFeaturesClient {

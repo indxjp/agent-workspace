@@ -1,0 +1,5 @@
+web: https://aw-web-abc123-an.a.run.app
+sign-in: Owner password (set gcp.oidc for single sign-on)
+model: Claude on Vertex AI (global), using this install's Google Cloud identity
+owner: admin@localhost.test
+owner password: aw deploy production --show-owner-password

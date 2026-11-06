@@ -88,6 +88,7 @@ const PACKAGES: Package[] = [
   },
   { tarball: '/t/indx-workspace-sdk-0.1.0.tgz', name: '@indx-workspace/sdk', version: '0.1.0' },
   { tarball: '/t/indx-workspace-react-0.1.0.tgz', name: '@indx-workspace/react', version: '0.1.0' },
+  { tarball: '/t/indx-workspace-app-0.1.0.tgz', name: '@indx-workspace/app', version: '0.1.0' },
   { tarball: '/t/indx-workspace-aw-0.1.0.tgz', name: '@indx-workspace/aw', version: '0.1.0' },
   { tarball: '/t/indx-workspace-cli-0.1.0.tgz', name: '@indx-workspace/cli', version: '0.1.0' },
   {
@@ -165,6 +166,7 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
       '@indx-workspace/platforms@0.1.0',
       '@indx-workspace/sdk@0.1.0',
       '@indx-workspace/react@0.1.0',
+      '@indx-workspace/app@0.1.0',
       '@indx-workspace/aw@0.1.0',
       '@indx-workspace/cli@0.1.0',
       '@indx-workspace/embedded@0.1.0',
@@ -179,7 +181,7 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
     const { npm } = fakeNpm(['@indx-workspace/contracts@0.1.0'], { viewExit: 1 });
     const result = await publishAll(PACKAGES, { provenance: false, npm, wait: noWait });
     expect(result.skipped).toEqual(['@indx-workspace/contracts@0.1.0']);
-    expect(result.published).toHaveLength(7);
+    expect(result.published).toHaveLength(8);
   });
 
   it('skips only the exact version: an older cli on npm does not skip this one', async () => {
@@ -189,7 +191,7 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
     expect(result.published).toContain('@indx-workspace/cli@0.1.0');
   });
 
-  it('fails unless npm serves all eight, the last one included', async () => {
+  it('fails unless npm serves all nine, the last one included', async () => {
     const { npm } = fakeNpm([]);
     const lost = (args: readonly string[]) =>
       args[0] === 'view' && args[1] === '@indx-workspace/create@0.1.0'
@@ -215,7 +217,7 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
       return npm(args);
     };
     const result = await publishAll(PACKAGES, { provenance: false, npm: lagging, ...clock });
-    expect(result.published).toHaveLength(8);
+    expect(result.published).toHaveLength(9);
     expect(clock.waits).toEqual([10_000, 20_000, 40_000, 60_000]);
   });
 
@@ -230,7 +232,7 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
     await expect(failure).rejects.toThrow(
       'npm does not serve @indx-workspace/sdk@0.1.0, @indx-workspace/create@0.1.0 after 15 min ' +
         '(served: @indx-workspace/contracts@0.1.0, @indx-workspace/platforms@0.1.0, ' +
-        '@indx-workspace/react@0.1.0, ' +
+        '@indx-workspace/react@0.1.0, @indx-workspace/app@0.1.0, ' +
         '@indx-workspace/aw@0.1.0, @indx-workspace/cli@0.1.0, ' +
         '@indx-workspace/embedded@0.1.0; ' +
         'still pending: @indx-workspace/sdk@0.1.0, @indx-workspace/create@0.1.0)',
@@ -238,14 +240,15 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
     expect(clock.waits.reduce((sum, ms) => sum + ms, 0)).toBe(SERVE_TIMEOUT_MS);
   });
 
-  it('accepts only all eight packages, contracts first, embedded after cli and create last, at one version', () => {
+  it('accepts only all nine packages, contracts first, embedded after cli and create last, at one version', () => {
     expect(checkPublishOrder(PACKAGES)).toEqual([]);
     const withoutEmbedded = PACKAGES.filter(({ name }) => name !== '@indx-workspace/embedded');
     expect(checkPublishOrder(withoutEmbedded)).toEqual([
       'the tarballs are @indx-workspace/contracts, @indx-workspace/platforms, @indx-workspace/sdk, ' +
-        '@indx-workspace/react, @indx-workspace/aw, @indx-workspace/cli, @indx-workspace/create, not ' +
+        '@indx-workspace/react, @indx-workspace/app, @indx-workspace/aw, @indx-workspace/cli, ' +
+        '@indx-workspace/create, not ' +
         '@indx-workspace/contracts, @indx-workspace/platforms, @indx-workspace/sdk, ' +
-        '@indx-workspace/react, @indx-workspace/aw, ' +
+        '@indx-workspace/react, @indx-workspace/app, @indx-workspace/aw, ' +
         '@indx-workspace/cli, @indx-workspace/embedded, @indx-workspace/create',
     ]);
     expect(checkPublishOrder(PACKAGES.slice(0, 3))).toHaveLength(1);
@@ -343,7 +346,7 @@ describe('publishing the tarballs (issue #246, ADR-0082)', () => {
     };
     const result = await publishAll(PACKAGES, { provenance: false, npm, registry, wait: noWait });
     expect(looked).toEqual(PACKAGES.map(({ name }) => name));
-    expect(result.published).toHaveLength(8);
+    expect(result.published).toHaveLength(9);
   });
 
   it('reads npm view <name> versions --json: E404 or none is never published, an error is unreachable', () => {

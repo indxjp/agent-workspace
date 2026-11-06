@@ -54,7 +54,7 @@ import {
   type Decision,
   type TokenScopeKind,
 } from './decide';
-import { isEndpointScope } from './token-scope';
+import { isEndpointScope, type TokenScope } from './core/token-scope';
 
 /** The directory ADR-0025 partitions the inventory into — the same one `authorisation-matrix.test.ts` reads. */
 const ROUTE_DECLARATIONS = 'tests/route-declarations';
@@ -100,6 +100,10 @@ const IN_GRAMMAR: Readonly<Record<TokenScopeKind, ReadonlySet<string>>> = {
     'GET /api/runs/:id',
     'GET /api/runs/:id/events',
     'POST /api/agents/:id/runs',
+    // Issue #1517: `decide()` reads `agent-teams` as `agents` (ADR-0104 acceptance decision 10),
+    // so a team run has the shape of an agent run; the team run handler refuses every scoped
+    // credential itself (`agent-teams/team-run.ts`), a row fact like a session's identity.
+    'POST /api/agent-teams/:id/runs',
     'POST /api/runs/:id/feedback',
     // Issue #251 (N-4): a session token reads its own attachments straight from the object store;
     // it mints no upload URL (issue #1574).
@@ -108,11 +112,32 @@ const IN_GRAMMAR: Readonly<Record<TokenScopeKind, ReadonlySet<string>>> = {
     'POST /api/sessions/:engineSessionId/attachments',
   ]),
   // ADR-0134: an endpoint-scoped API key reaches one agent's run route, or nothing at all.
-  'a2a-agent': new Set(['POST /api/agents/:id/runs']),
+  'a2a-agent': new Set(['POST /api/agents/:id/runs', 'POST /api/agent-teams/:id/runs']),
   'mcp-project': new Set(),
   // Slice 5a: a builder token reaches `/mcp/builder` only, outside `/api/`.
   builder: new Set(),
+  // ADR-0161 D8: an app backend acting as a person runs a bound agent, reads and stops one run,
+  // lists the person's runs of its bound agents (issue #1530), decides a paused run's approval
+  // (issue #1509), and reads who it acts as.
+  'app-backend': new Set([
+    'POST /api/agents/:id/runs',
+    'POST /api/agent-teams/:id/runs',
+    'GET /api/runs',
+    'GET /api/runs/:id',
+    'GET /api/runs/:id/events',
+    'POST /api/runs/:id/interrupt',
+    'POST /api/runs/:id/approval',
+    'GET /api/me',
+  ]),
 };
+
+/**
+ * The scope a credential of `kind` carries, naming `id` as its row. An app-backend scope's row is
+ * its client, and the agents it binds ride on it (ADR-0161 D8), so `id` is the one bound agent.
+ */
+function scopeOf(kind: TokenScopeKind, id: string): TokenScope {
+  return kind === 'app-backend' ? { kind, id: 'client-1', agentIds: [id] } : { kind, id };
+}
 
 /** Every kind a `Principal` can carry: the browser-token kinds and the endpoint-key kinds. */
 const SCOPE_KINDS: readonly TokenScopeKind[] = [...TOKEN_SCOPE_KINDS, ...ENDPOINT_SCOPE_KINDS];
@@ -181,7 +206,7 @@ function routeCells(kind: TokenScopeKind, route: MatrixRoute): void {
       method: route.method,
       path: withId(route.path, MATCHING_ID),
       ownership,
-      scope: { kind, id: MATCHING_ID },
+      scope: scopeOf(kind, MATCHING_ID),
     });
     if (!isRealDecision(before)) {
       // Outside §21's table entirely (public surface, or an unclassified path) — a scope cannot
@@ -207,7 +232,7 @@ function routeCells(kind: TokenScopeKind, route: MatrixRoute): void {
       method: route.method,
       path: withId(route.path, MATCHING_ID),
       ownership,
-      scope: { kind, id: OTHER_ID },
+      scope: scopeOf(kind, OTHER_ID),
     });
     if (!isRealDecision(before)) {
       expect(decision).toEqual(before);
@@ -222,7 +247,8 @@ function routeCells(kind: TokenScopeKind, route: MatrixRoute): void {
     // An a2a-agent scope names the agent the same way, on its one in-grammar route.
     const isRunIdentityCell =
       (kind === 'run' && routeKey.startsWith('GET /api/runs/')) ||
-      (kind === 'a2a-agent' && routeKey === 'POST /api/agents/:id/runs') ||
+      (kind === 'a2a-agent' && routeKey.endsWith('/:id/runs')) ||
+      (kind === 'app-backend' && routeKey.endsWith('/:id/runs')) ||
       (kind === 'session' && routeKey === 'POST /api/sessions/:engineSessionId/attachments');
     if (!inGrammar || isRunIdentityCell) {
       expect(decision.effect, decision.because).toBe('deny');

@@ -16,6 +16,9 @@
  * - **Diffing.** {@link diffBodies} lists what one version body changes relative to another, section
  *   by section; the console and `aw agents new` print the same list, and {@link uncoveredKeys}
  *   names what changes outside it.
+ * - **Showing.** {@link stripControlSequences} and {@link revealInvisible} make model-written text
+ *   safe to show where a person approves something: no terminal action, and no character left
+ *   unseen.
  * - **Loading.** {@link loadPortableProject} assembles a `PortableProject` from a project's agents
  *   and the skill, knowledge and OpenAPI bytes a caller-injected {@link PortableProjectSource} reads.
  * - **Types.** `PortableAgent` and `PortableProject` are re-exported from the contracts, so an
@@ -40,6 +43,7 @@ export {
   type DefinitionChange,
   type DefinitionSection,
 } from './diff.js';
+export { revealInvisible, stripControlSequences } from './inert-text.js';
 export { AGENT_MARKDOWN_SUFFIX, formatAgentMarkdown, parseAgentMarkdown } from './markdown.js';
 export {
   PrintError,

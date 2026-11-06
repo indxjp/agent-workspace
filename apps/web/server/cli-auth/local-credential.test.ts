@@ -17,11 +17,11 @@ import type {
   DirectoryApiKeyRecord,
 } from '@agent-workspace/core/db';
 
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 
 import { fixedClock } from '../clock';
-import { conferRole } from '../rbac/conferral';
-import { ROLES } from '../rbac/roles';
+import { conferRole } from '../rbac/core/conferral';
+import { ROLES } from '../rbac/core/roles';
 import {
   issueLocalApiKey,
   LOCAL_RUNTIME_API_KEY_NAME_PREFIX,
@@ -87,6 +87,7 @@ function fakeDirectory(seed: readonly DirectoryApiKeyRecord[] = []): FakeDirecto
         })),
       );
     },
+    findMembershipByPrincipal: unused,
     createMembership: unused,
     changeMembershipRole: unused,
     deleteMembership: unused,

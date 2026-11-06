@@ -17,8 +17,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { EngineListResponseSchema } from '@indx-workspace/contracts/engines';
 
-import { conferredBy } from '../../../server/rbac/conferral';
-import { ROLES, type Role } from '../../../server/rbac/roles';
+import { conferredBy } from '../../../server/rbac/core/conferral';
+import { ROLES, type Role } from '../../../server/rbac/core/roles';
 import {
   installRbacHarness,
   TEST_WORKSPACE_ID,

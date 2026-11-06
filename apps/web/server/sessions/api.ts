@@ -68,7 +68,7 @@
  * `sessions.id` first and `sessions.engine_session_id` second — the order `canAccessSession` uses —
  * and that one row decides both the archived refusal and the stream.
  */
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../rbac/core/owner-principal';
 import { featureRefusalResponse } from '../features/guard';
 import { apiError, isUuid, json, readJsonBody } from '../runs/http';
 import type { EngineId } from '@indx-workspace/contracts/engines';

@@ -4,6 +4,14 @@
  * an S3 or Azure endpoint is checked against the egress policy and the client then connects only to the
  * addresses that were checked; a `file` connection stays under the operator's listed roots.
  *
+ * Behind an outbound proxy (`options.proxy`, the deployment's `HTTPS_PROXY`, `HTTP_PROXY` and
+ * `NO_PROXY`) the check still runs first, on the endpoint's name and every address it resolves
+ * to, so a refused target never reaches the proxy. An allowed one is then tunnelled through the
+ * proxy with `CONNECT` instead of being pinned: the proxy resolves the name itself, so the pinning
+ * is replaced by the proxy's own resolution. A `NO_PROXY` target keeps the pinned sockets. A GCS
+ * connection dials Google's fixed API host with the SDK's own transport, which follows the same
+ * variables by itself.
+ *
  * Every refusal to open is a {@link ConnectionStoreError} whose message is its stable code: it
  * carries no `cause`, so neither the URL nor a credential can reach a log through it. Opening an S3
  * or GCS connection sends no request, so the bucket's own refusal (a key it denies, a bucket that
@@ -14,7 +22,7 @@
  * `objects/` tree.
  */
 import { realpath } from 'node:fs/promises';
-import type { LookupFunction } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 
 import {
   StorageConnectionCredentialSchema,
@@ -29,7 +37,16 @@ import {
   type EgressResolvedAddress,
   type EgressResolver,
 } from '../net/egress-policy.js';
-import { createFolderObjectStore, isInside, type FolderSkipCounts } from './folder-store.js';
+import { outboundProxyFor, type OutboundProxyConfig } from '../net/outbound-proxy.js';
+import type { ConnectionTransport } from './connection-transport.js';
+import {
+  createFolderObjectStore,
+  FolderPathError,
+  FolderStoreError,
+  FolderWalkLimitError,
+  isInside,
+  type FolderSkipCounts,
+} from './folder-store.js';
 import type { GcsObjectStoreConfig } from './gcs-store.js';
 import type { ObjectStore } from './object-store.js';
 
@@ -61,6 +78,11 @@ export interface ConnectionStoreOptions {
   readonly fileRoots: readonly string[];
   /** The deployment's egress policy; the caller reads it from the environment. */
   readonly egress: EgressPolicyConfig;
+  /**
+   * The deployment's outbound proxy; the caller reads it from the environment
+   * (`loadOutboundProxyFromEnv`). Absent means no proxy: every S3 and Azure socket is pinned.
+   */
+  readonly proxy?: OutboundProxyConfig;
   /**
    * The process's `STORAGE_EMULATOR_HOST`, which `@google-cloud/storage` reads by itself and then
    * dials instead of Google. A GCS connection is refused while it is set.
@@ -115,7 +137,29 @@ export function storageProviderStatus(error: unknown): number | null {
 /** How a connection's operation failed, from the provider's status alone. */
 export type StorageRefusalClass = 'forbidden' | 'not_found' | 'unreachable';
 
+/** How a `file` connection's folder failed, from the error's class and errno code alone. */
+export interface FolderFailure {
+  readonly refusal: StorageRefusalClass;
+  /** `outside_root`, `walk_limit`, or the errno code. Never a key or a path. */
+  readonly reason: string;
+}
+
+/** A `file` connection's own failure (`folder-store.ts`), or `null` for any other error. */
+export function folderFailure(error: unknown): FolderFailure | null {
+  if (error instanceof FolderPathError) return { refusal: 'forbidden', reason: 'outside_root' };
+  if (error instanceof FolderWalkLimitError) {
+    return { refusal: 'unreachable', reason: 'walk_limit' };
+  }
+  if (!(error instanceof FolderStoreError)) return null;
+  const { code } = error;
+  if (code === 'EACCES' || code === 'EPERM') return { refusal: 'forbidden', reason: code };
+  if (code === 'ENOENT' || code === 'ENOTDIR') return { refusal: 'not_found', reason: code };
+  return { refusal: 'unreachable', reason: code };
+}
+
 export function storageRefusalClass(error: unknown): StorageRefusalClass {
+  const folder = folderFailure(error);
+  if (folder !== null) return folder.refusal;
   const status = storageProviderStatus(error);
   if (status === 401 || status === 403) return 'forbidden';
   if (status === 404) return 'not_found';
@@ -208,16 +252,70 @@ function familyOf(family: number | 'IPv4' | 'IPv6' | undefined): 4 | 6 | undefin
   return undefined;
 }
 
+/** Through the proxy that applies to `target`, else on sockets pinned to the checked `addresses`. */
+function transportFor(
+  target: URL,
+  addresses: readonly EgressResolvedAddress[],
+  proxy: OutboundProxyConfig | undefined,
+): ConnectionTransport {
+  const proxyUrl = proxy === undefined ? null : outboundProxyFor(target, proxy);
+  return proxyUrl === null
+    ? { kind: 'pinned', lookup: pinnedLookup(addresses) }
+    : { kind: 'proxy', proxyUrl };
+}
+
+/**
+ * AWS's own S3 host for a URL without an endpoint, as the SDK dials it, for the `NO_PROXY` decision
+ * only: there is no operator-chosen address there to check or pin.
+ */
+function awsS3Host(location: Extract<StorageLocation, { kind: 's3' }>, region: string): URL {
+  const domain = region.startsWith('cn-') ? 'amazonaws.com.cn' : 'amazonaws.com';
+  const virtualHosted = !location.forcePathStyle && !location.bucket.includes('.');
+  return new URL(`https://${virtualHosted ? `${location.bucket}.` : ''}s3.${region}.${domain}`);
+}
+
+/**
+ * The `<bucket>.<host>` URL the S3 client dials for a custom endpoint, or null when it addresses
+ * the bucket in the path: path style forced, a bucket name with a dot, or an address literal.
+ */
+function virtualHostUrl(
+  endpoint: URL,
+  location: Extract<StorageLocation, { kind: 's3' }>,
+): string | null {
+  if (location.forcePathStyle || location.bucket.includes('.') || isIP(endpoint.hostname) !== 0) {
+    return null;
+  }
+  if (endpoint.hostname.startsWith('[')) return null;
+  const dialled = new URL(endpoint.toString());
+  dialled.hostname = `${location.bucket}.${endpoint.hostname}`;
+  return dialled.toString();
+}
+
 async function openS3(
   location: Extract<StorageLocation, { kind: 's3' }>,
   credential: Extract<ConnectionCredential, { provider: 's3' }>,
   options: ConnectionStoreOptions,
 ): Promise<ObjectStore> {
-  let lookup: LookupFunction | undefined;
+  const region = location.region ?? 'us-east-1';
+  let transport: ConnectionTransport | undefined;
   if (location.endpoint !== undefined) {
     const decision = await checkEgress(location.endpoint, options.egress, options.resolve);
     if (!decision.ok) throw new ConnectionStoreError('storage_connection_endpoint_forbidden');
-    lookup = pinnedLookup(decision.addresses);
+    transport = transportFor(decision.url, decision.addresses, options.proxy);
+    // Pinned, every name the client dials answers with the checked addresses. Through the proxy,
+    // the bucket's virtual host is resolved by the proxy, so that name is checked as well.
+    const bucketHost = transport.kind === 'proxy' ? virtualHostUrl(decision.url, location) : null;
+    if (bucketHost !== null) {
+      const bucketDecision = await checkEgress(bucketHost, options.egress, options.resolve);
+      if (!bucketDecision.ok)
+        throw new ConnectionStoreError('storage_connection_endpoint_forbidden');
+    }
+  } else {
+    const proxyUrl =
+      options.proxy === undefined
+        ? null
+        : outboundProxyFor(awsS3Host(location, region), options.proxy);
+    if (proxyUrl !== null) transport = { kind: 'proxy', proxyUrl };
   }
   // Nothing here dials the public endpoint, but a signed link names it and whatever fetches the
   // link (a browser, a runner) would, so it may not point at a private address either. A link
@@ -230,7 +328,7 @@ async function openS3(
     const { createS3ObjectStoreFromConfig } = await import('./s3-store.js');
     return await createS3ObjectStoreFromConfig({
       bucket: location.bucket,
-      region: location.region ?? 'us-east-1',
+      region,
       ...(location.endpoint === undefined ? {} : { endpoint: location.endpoint }),
       ...(location.publicEndpoint === undefined ? {} : { publicEndpoint: location.publicEndpoint }),
       accessKeyId: credential.accessKeyId,
@@ -241,7 +339,7 @@ async function openS3(
       // The guide's key lists only under its folder, so it cannot pass a `HeadBucket`.
       checkBucketOnOpen: false,
       keyPrefix: location.prefix,
-      ...(lookup === undefined ? {} : { lookup }),
+      ...(transport === undefined ? {} : { transport }),
     });
   } catch {
     // The SDK's error can echo request details, so it is dropped rather than chained.
@@ -342,7 +440,7 @@ async function openAzblob(
   // fixed, but what the operator's resolver answers for it is not.
   const decision = await checkEgress(location.serviceUrl, options.egress, options.resolve);
   if (!decision.ok) throw new ConnectionStoreError('storage_connection_endpoint_forbidden');
-  const lookup = pinnedLookup(decision.addresses);
+  const transport = transportFor(decision.url, decision.addresses, options.proxy);
   try {
     const {
       AzureAccountKeyConnection,
@@ -357,7 +455,7 @@ async function openAzblob(
         'accountKey' in credential
           ? new AzureAccountKeyConnection(location.account, credential.accountKey)
           : new AzureSasTokenConnection(location.account, credential.sasToken),
-      ...(lookup === undefined ? {} : { lookup }),
+      transport,
     });
   } catch {
     throw new ConnectionStoreError('storage_connection_unreachable');
@@ -392,7 +490,8 @@ async function openLocation(
 
 /**
  * Open the store `url` names with `credential`. Read-only unless `options.writable`. S3 and Azure
- * sockets are pinned to the addresses the endpoint check saw.
+ * sockets are pinned to the addresses the endpoint check saw, or tunnelled through the outbound
+ * proxy that applies to the endpoint once it has passed that check.
  */
 // @story US-STO-12
 export async function openConnectionStore(

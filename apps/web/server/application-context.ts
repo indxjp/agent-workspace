@@ -13,6 +13,7 @@
  * registries, per-run telemetry attributes, the held composition, detection and cron caches).
  */
 import type { A2a } from './a2a/env';
+import type { AgentTeamsRuntime } from './agent-teams/runtime';
 import type { AgentVersionsRuntime } from './agent-versions/runtime';
 import type { AgentsRuntime } from './agents/runtime';
 import type { AuditRuntime } from './audit/runtime';
@@ -32,19 +33,22 @@ import type { Runtimes } from './runtimes/runtime';
 import type { Secrets } from './secrets/runtime';
 import type { SessionApiEnvironment } from './sessions/environment';
 import type { Setup } from './setup/runtime';
-import type { SharesRuntime } from './shares/core/runtime';
+import type { SharesRuntime } from './shares/runtime';
 import type { Skills } from './skills/runtime';
 import type { StorageConnections } from './storage-connections/runtime';
 import type { PublicSurfaces } from './surfaces/public/runtime';
 import type { Tokens } from './tokens/runtime';
 import type { ToolEndpoint } from './tool-endpoint/env';
 import type { Triggers } from './triggers/runtime';
+import type { Webhooks } from './webhooks/runtime';
 import type { WorkspaceFeaturesRuntime } from './workspaces/features-runtime';
 import type { WorkspacesRuntime } from './workspaces/runtime';
 
 /** Every domain the composition root has collected, each fully built. */
 export interface ApplicationContext {
   readonly a2a: A2a;
+  /** Agent teams (ADR-0104 acceptance, issue #1516): the team repository and its audit trail. */
+  readonly agentTeams: AgentTeamsRuntime;
   readonly agents: AgentsRuntime;
   readonly agentVersions: AgentVersionsRuntime;
   readonly audit: AuditRuntime;
@@ -71,6 +75,8 @@ export interface ApplicationContext {
   readonly tokens: Tokens;
   readonly toolEndpoint: ToolEndpoint;
   readonly triggers: Triggers;
+  /** Run-outcome webhooks (N-3, ADR-SDK-18-N3-250): `unavailable` with no secrets service. */
+  readonly webhooks: Webhooks;
   readonly workspaceFeatures: WorkspaceFeaturesRuntime;
   readonly workspaces: WorkspacesRuntime;
 }

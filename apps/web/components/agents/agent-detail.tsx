@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { createElement, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 
 import type {
-  AgentPermissions,
+  AgentPermissionKey,
   AgentResource,
   AgentResourceAssignments,
 } from '../../contracts/agents';
@@ -249,7 +249,7 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
       model: value === null ? null : value.model,
     });
   };
-  const changePermission = (key: keyof AgentPermissions, value: boolean) => {
+  const changePermission = (key: AgentPermissionKey, value: boolean) => {
     if (loaded === null) return;
     changeAgent({ permissions: { ...loaded.agent.permissions, [key]: value } });
   };
@@ -318,7 +318,7 @@ export function AgentDetailScreen({ agentId }: Readonly<{ agentId: string }>) {
     return <main className="px-8 pt-[26px] text-muted">Loading agent…</main>;
   }
 
-  const permissionLabels: ReadonlyArray<[keyof AgentPermissions, string]> = [
+  const permissionLabels: ReadonlyArray<[AgentPermissionKey, string]> = [
     ['readFiles', 'Read assigned files and folders'],
     ['writeFiles', 'Write to read/write assignments'],
     ['runCommands', 'Run commands in the selected runtime'],

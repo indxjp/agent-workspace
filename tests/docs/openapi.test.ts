@@ -77,12 +77,15 @@ const PLATFORM_CRON_JOB = 'platform cron job (CRON_SECRET bearer)';
 const PLATFORM_READINESS_PROBE = 'platform readiness probe (no credential)';
 /** The Builder's `aw-control` MCP door: called by the gateway with a run token, never by an SDK client (#1846). */
 const RUN_CALLER_ROUTE = 'run-caller route (per-run token, aw-control tools)';
+/** A team lead run's member tools (ADR-0104 decision 4): only the lead run's engine calls them. */
+const LEAD_RUN_ROUTE =
+  "lead-run route (the lead run's own token, agent-team member tools; ADR-0104)";
 
 /** The OAuth 2.1 server's protocol endpoints (ADR-0134 part 3): specified by an RFC, not by this API. */
 const OAUTH_PROTOCOL_ROUTE = /\(RFC \d+\)/u;
 
 describe('route coverage', () => {
-  it('excludes only browser journeys, private runner routes, OAuth protocol endpoints, the platform cron job, the readiness probe and the run-caller route', () => {
+  it('excludes only browser journeys, private runner routes, OAuth protocol endpoints, the platform cron job, the readiness probe, the run-caller route and the lead-run route', () => {
     const reasons = API_ROUTE_EXCLUSIONS.filter(
       (route) =>
         !BROWSER_JOURNEY.test(route.because) &&
@@ -90,7 +93,8 @@ describe('route coverage', () => {
         route.because !== PRIVATE_RUNNER_ROUTE &&
         route.because !== PLATFORM_CRON_JOB &&
         route.because !== PLATFORM_READINESS_PROBE &&
-        route.because !== RUN_CALLER_ROUTE,
+        route.because !== RUN_CALLER_ROUTE &&
+        route.because !== LEAD_RUN_ROUTE,
     );
     const oauthOnly = API_ROUTE_EXCLUSIONS.filter((route) =>
       OAUTH_PROTOCOL_ROUTE.test(route.because),
@@ -121,6 +125,10 @@ describe('route coverage', () => {
       (route) => route.because === RUN_CALLER_ROUTE,
     ).map((route) => key(route.method, route.path));
     expect(runCallerOnly).toEqual(['POST /api/builder/mcp']);
+    const leadRunOnly = API_ROUTE_EXCLUSIONS.filter(
+      (route) => route.because === LEAD_RUN_ROUTE,
+    ).map((route) => key(route.method, route.path));
+    expect(leadRunOnly).toEqual(['POST /api/runs/:id/members/mcp']);
     expect(reasons, 'an exclusion that is neither kind').toEqual([]);
     const runnerOnly = API_ROUTE_EXCLUSIONS.filter(
       (route) => route.because === PRIVATE_RUNNER_ROUTE,
@@ -213,6 +221,19 @@ describe('the emitted document', () => {
       Record<string, Record<string, unknown>>
     >;
     expect(Object.keys(events['200']?.['content'] ?? {})).toEqual(['text/event-stream']);
+  });
+
+  it('emits a route’s declared request headers as header parameters (S-6, #250)', async () => {
+    const built = await buildOpenApiDocument(repoRoot);
+    const paths = built['paths'] as Record<string, Record<string, Record<string, unknown>>>;
+    const start = paths['/api/agents/{id}/runs']?.['post']?.['parameters'] as readonly Record<
+      string,
+      unknown
+    >[];
+    const headers = start.filter((parameter) => parameter['in'] === 'header');
+    expect(headers.map(({ name, required }) => ({ name, required }))).toEqual([
+      { name: 'Idempotency-Key', required: false },
+    ]);
   });
 });
 

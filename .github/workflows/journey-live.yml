@@ -81,11 +81,11 @@ jobs:
         timeout-minutes: 8
         run: pnpm install --frozen-lockfile
 
-      # Only the eight packages scripts/release/pack-packages.mjs packs, on the local Nx cache.
+      # Only the nine packages scripts/release/pack-packages.mjs packs, on the local Nx cache.
       - name: Build the published packages
         id: build
         timeout-minutes: 25
-        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/app,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
 
       - name: Wait for the freed disk
         uses: ./.github/actions/free-disk
@@ -200,7 +200,7 @@ jobs:
       - name: Build the published packages
         if: steps.scope.outputs.applies == 'true'
         timeout-minutes: 25
-        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/app,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
 
       - name: Wait for the freed disk
         uses: ./.github/actions/free-disk
@@ -277,7 +277,7 @@ jobs:
       - name: Build the published packages
         if: steps.scope.outputs.applies == 'true'
         timeout-minutes: 25
-        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/app,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
 
       - name: Wait for the freed disk
         uses: ./.github/actions/free-disk
@@ -340,7 +340,7 @@ jobs:
 
       - name: Build the published packages
         timeout-minutes: 25
-        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
+        run: scripts/ci/nx.sh run-many -t build --projects=@indx-workspace/contracts,@indx-workspace/platforms,@indx-workspace/sdk,@indx-workspace/react,@indx-workspace/app,@indx-workspace/aw,@indx-workspace/cli,@indx-workspace/embedded,@indx-workspace/create --parallel=6 --output-style=static
 
       # A pinned release tarball checked against a sha256 recorded here (the linux_amd64 line of
       # ant_<version>_checksums.txt of the release), instead of a new third-party action

@@ -24,14 +24,14 @@
 import { applicationContext } from '../application-context';
 import type { AgentRecord } from './contract';
 import { isBuilderAgent } from '../builder/agent/is-builder-agent';
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../rbac/core/owner-principal';
 import type { Ownership } from '../rbac/decide';
 
 /** The facts `runs/environment.ts`'s own `RunPrincipal` already carries that this needs. */
 export interface RunOwnershipPrincipal {
   readonly workspaceId: string;
   readonly principalId: string;
-  /** Who owns what this caller writes (`rbac/owner-principal.ts`, issue #509). */
+  /** Who owns what this caller writes (`rbac/core/owner-principal.ts`, issue #509). */
   readonly ownerPrincipalId: string;
   readonly userId: string | null;
 }

@@ -36,6 +36,7 @@ import { createDatabaseSessionRepositoryProvider } from './runs.js';
 import { createDatabaseShareRepositoryProvider } from './shares.js';
 import { createDatabaseWorkspaceScopeResolver } from './scope.js';
 import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = (process.env['TEST_DATABASE_URL'] ?? '').trim() !== '';
 
@@ -170,10 +171,9 @@ describe.skipIf(!hasDatabase)('local runtime key ownership (issue #509, S1-24)',
       });
     if (agent.kind !== 'created') throw new Error(agent.kind);
     const catalog = createDatabaseResourceCatalogRepositoryProvider(isolated.db).forScope(scope);
-    await catalog.putFile({
+    await seedCatalogFile(catalog, {
       path: `file-${suffix}.txt`,
       kind: 'file',
-      storageKey: `file-${suffix}.txt`,
       sizeBytes: 1,
       contentType: 'text/plain',
       ownerPrincipalId,

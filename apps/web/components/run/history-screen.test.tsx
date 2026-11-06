@@ -26,6 +26,10 @@ describe('RunsHistoryScreen', () => {
     const html = renderToStaticMarkup(<RunsHistoryScreen />);
     expect(html).toContain('Runs');
     expect(html).toContain('Loading runs');
+    expect(html).toContain(
+      'Every run in this workspace that your role lets you see, newest first.',
+    );
+    expect(html).not.toContain('API');
     expect(html).toContain('Status');
     expect(html).toContain('Search this page');
     expect(html).toContain('Agent');

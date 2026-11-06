@@ -71,6 +71,7 @@ import type { WorkspaceModelsStore } from '../models/store';
 import type { RunTokenIssuer } from '../gateway/issuer';
 import { runCallerOf } from '../runs/caller';
 import type { LaunchContext, ModelSelection } from '../runs/environment';
+import { withMemoryFiles } from './agent-memory';
 import {
   assertRunFilesFit,
   loadAttachedFiles,
@@ -95,8 +96,11 @@ import {
   awControlServerFor,
   assertToolNamesFit,
   codeToolsServedBySandbox,
+  teamMemberServerFor,
   toolMcpServersFor,
   withIdentityHeaders,
+  withMemberApprovalRules,
+  withMemberToolRules,
   withRunConnectorKeys,
   withToolHostRunHeaders,
 } from './run-request-tool-connectors';
@@ -116,7 +120,11 @@ export {
   readRuntimeSettings,
   type RuntimeSettings,
 } from './run-request-runtime-settings';
-export { assertToolNamesFit, withToolHostRunHeaders } from './run-request-tool-connectors';
+export {
+  assertToolNamesFit,
+  withToolHostRunHeaders,
+  type RunTeamMembers,
+} from './run-request-tool-connectors';
 
 /** Records the run's tool connector ids before the request is posted (C16). Throws on failure. */
 export type RunToolSnapshot = (runId: string, connectorIds: readonly string[]) => Promise<void>;
@@ -353,16 +361,20 @@ function enginePolicyArmFor(
   if (policy !== null && isWithholdingEngine(policy.engine)) return engineSettingsOf(policy);
   // Every write operation of an openapi tool is implicitly `requireApproval` (ADR-0113 SD4); the
   // rules carry the run's own server keys, so they are added here rather than stored on the policy.
+  // A rule written against a member tool's neutral name, `agent__<member>`, is given the engine's
+  // spelling, `mcp__agent__<member>` (ADR-0104 acceptance decision 3).
   const requireApproval = [
     ...new Set([
-      ...(policy !== null && 'tools' in policy ? (policy.requireApproval ?? []) : []),
+      ...withMemberApprovalRules(
+        policy !== null && 'tools' in policy ? (policy.requireApproval ?? []) : [],
+      ),
       ...(resources.toolConnectors ?? []).flatMap((connector) => connector.approvalRules ?? []),
     ]),
   ];
   return {
     tools:
       policy !== null && 'tools' in policy
-        ? withRunConnectorKeys(policy.tools, resources.connectorKeys ?? {})
+        ? withMemberToolRules(withRunConnectorKeys(policy.tools, resources.connectorKeys ?? {}))
         : null,
     fileGrantDeny: applyFileGrantPolicy(cwd, resources.files),
     // Left out when empty, so a run without a gate sends the arm an older runner image accepts.
@@ -443,6 +455,18 @@ export function sandboxFor(
 const lowest = (resolved: number | null, cap: number | undefined): number | null =>
   cap === undefined ? resolved : resolved === null ? cap : Math.min(resolved, cap);
 
+/**
+ * The met limits under every override a launch carries: the caller's, in this context, and the one
+ * the run row stores. A launch built from the row alone (an approval continuation, a requeue) has
+ * only the second. Both lower and neither raises, so applying both is the lower of them.
+ */
+export function launchLimits(
+  limits: PortableAgentConfig['limits'],
+  context: Pick<LaunchContext, 'limits' | 'run'>,
+): PortableAgentConfig['limits'] {
+  return lowerLimits(lowerLimits(limits, context.limits), context.run.limitsOverride ?? undefined);
+}
+
 /** The met limits under one run's override: the lower of each, so an override never raises a limit. */
 export function lowerLimits(
   limits: PortableAgentConfig['limits'],
@@ -452,6 +476,20 @@ export function lowerLimits(
     maxTurns: lowest(limits.maxTurns, override?.maxTurns),
     maxBudgetUsd: lowest(limits.maxBudgetUsd, override?.maxBudgetUsd),
   };
+}
+
+/**
+ * A run's composed limits: the met limits under its overrides ({@link launchLimits}), then under the spend ceiling stored
+ * on the run (ADR-0162 decision 2), so the engine's own cap is never looser than the gateway's.
+ */
+function runLimitsFor(
+  met: PortableAgentConfig['limits'],
+  context: LaunchContext,
+): PortableAgentConfig['limits'] {
+  const ceiling = context.run.spendCeilingUsd;
+  return lowerLimits(launchLimits(met, context), {
+    ...(ceiling === undefined || ceiling === null ? {} : { maxBudgetUsd: Number(ceiling) }),
+  });
 }
 
 /**
@@ -570,12 +608,13 @@ export function narrowedToFileScope<R extends { readonly files: readonly Granted
 
 /**
  * The `/run` body's `resources.files`: the run's grants, already narrowed by
- * {@link narrowedToFileScope}, with its attachments after them. Exported so the delivery tests'
- * runner double receives the body this composes.
+ * {@link narrowedToFileScope}, with its attachments after them, then its memory folder in place of
+ * anything else under `memory/` (ADR-0163). Exported so the delivery tests' runner double receives
+ * the body this composes.
  */
 export async function attachedRunFiles(
   context: LaunchContext,
-  resources: Pick<AgentRunResourceSelection, 'files' | 'skills'>,
+  resources: Pick<AgentRunResourceSelection, 'files' | 'skills' | 'memoryFiles'>,
   resourceLoader: AgentRunResourceLoader | undefined,
 ): Promise<AgentRunResourceSelection['files']> {
   // Each attachment is also a `read` reference in `resources.files`, so the runner checks it like
@@ -584,7 +623,10 @@ export async function attachedRunFiles(
   const attached = await atStep('resources', () =>
     loadAttachedFiles(resourceLoader, context.principal.workspaceId, context.attachments ?? []),
   );
-  const runFiles = withAttachedFiles(resources.files, attached.files);
+  const runFiles = withMemoryFiles(
+    withAttachedFiles(resources.files, attached.files),
+    resources.memoryFiles,
+  );
   // The total after the scope narrowed the grants and the attachments joined them; the input
   // archive judged the same total before the sandbox, so this is the backstop.
   // @story US-STO-06
@@ -764,6 +806,19 @@ export async function buildRunRequestFor(
       ...awControlServerFor(agent, ceiling, gateway.baseUrl, token),
     },
   };
+  // ADR-0104 acceptance decisions 3, 4 and 6: a team lead's members, served as one `agent` MCP
+  // server at the lead run's member endpoint; every other run, a child run included, gets none.
+  const memberServer = teamMemberServerFor(
+    context.team,
+    context.run,
+    Object.keys(composedResources.mcpServers),
+    engineId,
+    token,
+  );
+  const runResources: AgentRunResourceSelection = {
+    ...composedResources,
+    mcpServers: { ...composedResources.mcpServers, ...memberServer },
+  };
 
   // ADR-0146 Decisions 2 and 3: an attachment is a read-only grant whose bytes never ride in this
   // request (the runner's `POST /files` hydrate writes them), so the shell removal a read grant
@@ -791,11 +846,11 @@ export async function buildRunRequestFor(
         agent,
         portablePermissions,
         projectInstructions,
-        composedResources,
+        runResources,
         model,
         runAgent.subagents,
       ),
-      limits: lowerLimits(met.limits, context.limits),
+      limits: runLimitsFor(met.limits, context),
     },
     // The engine-native arm, forwarded rather than computed (ENG-04b). Everything that used to be
     // derived here — the Claude tool names a permission switch removes, the `mcp__<server>__*`

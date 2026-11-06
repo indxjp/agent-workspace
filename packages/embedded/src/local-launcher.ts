@@ -25,11 +25,19 @@
  *
  * The key travels only over the channel. It is never passed to a writer, a log or a file.
  * Every effect is injected, so the tests drive the whole sequence with fakes.
+ *
+ * `ready` also names the workspace's database when it is a loopback PostgreSQL (issue #1506), for
+ * `aw dev` to migrate and run a generated app on.
  */
 import { statSync } from 'node:fs';
 import path from 'node:path';
 
 import { CONTRACTS_VERSION } from '@indx-workspace/contracts';
+import {
+  LocalRuntimeDatabaseUrlSchema,
+  type LocalRuntimeReadyMessage,
+  type LocalRuntimeStartMessage,
+} from '@indx-workspace/contracts/local-runtime';
 import type { MembershipRoleName } from '@indx-workspace/contracts/team';
 
 import { LAUNCHER_SIGNALS, type LauncherSignal } from './launcher-signals.js';
@@ -52,6 +60,34 @@ import {
   sendChildMessage,
 } from './runtime-messages.js';
 import type { WorkspaceOptions } from './workspace.js';
+
+/**
+ * Issue #1506: the database `ready` names for a local app — the `DATABASE_URL` the workspace runs on
+ * (the embedded PostgreSQL's, set by `startWorkspace`) when it is a loopback PostgreSQL URL, and
+ * nothing for any other, so a runtime never hands `aw` a remote database.
+ */
+export function localDatabaseUrl(
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const url = env['DATABASE_URL'];
+  return url !== undefined && LocalRuntimeDatabaseUrlSchema.safeParse(url).success
+    ? url
+    : undefined;
+}
+
+/** The `ready` message: the workspace's URL, this contracts version, and its local database. */
+function readyMessage(
+  url: string,
+  env: Readonly<Record<string, string | undefined>>,
+): LocalRuntimeReadyMessage {
+  const databaseUrl = localDatabaseUrl(env);
+  return {
+    type: 'ready',
+    url,
+    contractsVersion: CONTRACTS_VERSION,
+    ...(databaseUrl === undefined ? {} : { databaseUrl }),
+  };
+}
 
 // `launch.ts` reaches this module through its one dynamic import of the launcher; the preparation
 // imports only types from core, so re-exporting it adds no server code to the bundle's entry.
@@ -199,6 +235,15 @@ export interface LocalLauncherDeps<
     root: Root,
     driver: LocalRuntimeProfileDriver,
   ) => Promise<LauncherRuntimeProfileOutcome>;
+  /**
+   * ADR-0161 amendment DI8 (issue #2075): link the development issuer's `(issuer, subject)` to the
+   * bootstrap Owner, idempotently (`directory.linkIdentity`). Runs only when `start` carries
+   * `devIssuer`, in the local posture, after the membership check.
+   */
+  readonly linkIdentity: (
+    root: Root,
+    identity: { readonly issuer: string; readonly subject: string; readonly userId: string },
+  ) => Promise<void>;
   /** Mints the local workspace API key (`issueLocalApiKey`); the key's `revoke` withdraws it. */
   readonly issueLocalCredential: (
     input: LauncherCredentialSubject,
@@ -225,6 +270,26 @@ export interface LocalLauncherDeps<
   readonly stopGraceMs?: number;
   /** The project's runtime pid file (issue #560); `createRuntimeLock()` by default. */
   readonly runtimeLock?: RuntimeLock;
+}
+
+/**
+ * ADR-0161 amendment DI8: link the development issuer's `(issuer, ownerSubject)` to the bootstrap
+ * Owner, so an app's token exchange finds them before anyone signed in to the console. Only when
+ * `start` carries `devIssuer`, in the local posture.
+ */
+async function linkDevIssuerOwner<Directory, Root extends LauncherDatabaseRoot<Directory>>(
+  deps: LocalLauncherDeps<Directory, Root>,
+  database: Root,
+  start: LocalRuntimeStartMessage,
+  userId: string,
+): Promise<void> {
+  const { devIssuer } = start.environment;
+  if (devIssuer === undefined || deps.env['AW_DEPLOYMENT_POSTURE'] !== 'local') return;
+  await deps.linkIdentity(database, {
+    issuer: devIssuer.issuer,
+    subject: devIssuer.ownerSubject,
+    userId,
+  });
 }
 
 function assertProjectDirectory(projectDir: string): void {
@@ -491,13 +556,7 @@ export async function runLocalLauncher<
       throw new LocalLauncherError('contracts_skew', { cause: error });
     }
 
-    await step(
-      sendChildMessage(deps.channel, {
-        type: 'ready',
-        url: workspace.url,
-        contractsVersion: CONTRACTS_VERSION,
-      }),
-    );
+    await step(sendChildMessage(deps.channel, readyMessage(workspace.url, deps.env)));
 
     const database = await step(
       deps.openDatabaseRoot(deps.env).then((value) => {
@@ -514,6 +573,7 @@ export async function runLocalLauncher<
     ) {
       throw new LocalLauncherError('workspace_mismatch');
     }
+    await step(linkDevIssuerOwner(deps, database, start, workspace.seed.adminUserId));
 
     let profile: LauncherRuntimeProfileOutcome;
     try {

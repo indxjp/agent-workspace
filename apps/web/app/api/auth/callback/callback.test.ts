@@ -17,7 +17,7 @@ import {
   verifyInvitationIdentityToken,
   verifySessionToken,
 } from '../../../../server/auth';
-import { conferredBy } from '../../../../server/rbac/conferral';
+import { conferredBy } from '../../../../server/rbac/core/conferral';
 import { createMemoryDirectory } from '../../../../server/rbac/memory-directory';
 
 import { handleCallback, type CallbackDeps } from './route';

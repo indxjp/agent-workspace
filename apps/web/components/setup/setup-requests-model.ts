@@ -79,3 +79,8 @@ export async function detectionOf(response: Response): Promise<RuntimeDetection 
   const parsed = RuntimeDetectionSchema.safeParse(await response.json().catch(() => null));
   return parsed.success ? parsed.data : null;
 }
+
+/** The key `POST /api/setup` is sent: none for the keyless provider, whatever was typed before switching. */
+export function setupProviderApiKey(provider: string, typed: string): string {
+  return provider === 'vertex' ? '' : typed;
+}

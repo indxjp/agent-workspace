@@ -180,3 +180,82 @@ describe("readiness — derived from hasCredential plus the provider's required 
     ).toBe(true);
   });
 });
+
+describe('keyless vertex connections', () => {
+  const vertex = { name: 'v', provider: 'vertex', config: { projectId: 'my-project-123' } };
+
+  it('accepts a vertex connection with no apiKey and refuses one with a key', async () => {
+    const accepted = await parseCreateModelConnection(vertex, ALLOW);
+    expect(accepted.ok).toBe(true);
+    if (accepted.ok) expect(accepted.value).not.toHaveProperty('apiKey');
+    const refused = await parseCreateModelConnection({ ...vertex, apiKey: 'k' }, ALLOW);
+    expect(refused).toEqual({
+      ok: false,
+      errors: ["apiKey is not used: vertex uses this install's Google Cloud identity."],
+    });
+  });
+
+  it("refuses a projectId other than the install's own when the install names one", async () => {
+    const foreign = await parseCreateModelConnection(vertex, ALLOW, 'install-project-1');
+    expect(foreign).toEqual({
+      ok: false,
+      errors: ["config.projectId must be this install's Google Cloud project."],
+    });
+    const own = await parseCreateModelConnection(vertex, ALLOW, 'my-project-123');
+    expect(own.ok).toBe(true);
+    const update = await parseUpdateModelConnection(
+      { config: { projectId: 'my-project-123' } },
+      'vertex',
+      ALLOW,
+      'install-project-1',
+    );
+    expect(update.ok).toBe(false);
+  });
+
+  it('still requires an apiKey for an api-key provider', async () => {
+    const result = await parseCreateModelConnection({ name: 'x', provider: 'anthropic' }, ALLOW);
+    expect(result).toEqual({ ok: false, errors: ['apiKey is required.'] });
+  });
+
+  it('validates projectId and location', async () => {
+    const bad = await parseCreateModelConnection(
+      { ...vertex, config: { projectId: 'Bad_Project', location: 'moon' } },
+      ALLOW,
+    );
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.errors).toContain('config.projectId must be a Google Cloud project id.');
+      expect(bad.errors.join(' ')).toMatch(/config\.location must be one of: global, us, eu/);
+    }
+    const good = await parseCreateModelConnection(
+      { ...vertex, config: { projectId: 'my-project-123', location: 'eu' } },
+      ALLOW,
+    );
+    expect(good.ok).toBe(true);
+  });
+
+  it('refuses an apiKey on update', async () => {
+    const result = await parseUpdateModelConnection({ apiKey: 'k' }, 'vertex', ALLOW);
+    expect(result.ok).toBe(false);
+  });
+
+  it('is ready on config alone, without a credential', () => {
+    const row = {
+      id: 'i',
+      name: 'v',
+      provider: 'vertex' as const,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    const ready = toModelConnectionResource(
+      { ...row, config: { projectId: 'my-project-123' } },
+      false,
+    );
+    expect(ready.ready).toBe(true);
+    expect(ready.hasCredential).toBe(false);
+    expect(toModelConnectionResource({ ...row, config: {} }, false).ready).toBe(false);
+    expect(
+      toModelConnectionResource({ ...row, provider: 'anthropic', config: {} }, false).ready,
+    ).toBe(false);
+  });
+});

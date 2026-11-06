@@ -38,11 +38,11 @@ import type {
   RevokeApiKeyOutcome,
   WorkspaceDirectory,
 } from './directory';
-import { conferRole, type ConferredRole } from './conferral';
+import { conferRole, type ConferredRole } from './core/conferral';
 import type { ApiResult } from '../http/result';
 import { problem } from './http';
 import type { Principal, PrincipalKind } from './principal';
-import { ROLES, type Role } from './roles';
+import { ROLES, type Role } from './core/roles';
 
 function publicMembership(membership: MembershipSummary) {
   return {
@@ -261,7 +261,7 @@ export function wireKind(kind: PrincipalKind): WirePrincipalKind {
  * `Principal` this is built from also carries `actor`, `via` and `apiKeyId`, and a
  * spread-and-serialise implementation would publish all three. A field added to `Principal`
  * tomorrow is invisible to this type by construction, and `me.test.ts` plus
- * `sdk-conformance.test.ts` scan the rendered JSON rather than trusting the annotation.
+ * `sdk-conformance.*.test.ts` scan the rendered JSON rather than trusting the annotation.
  */
 export interface MePrincipal {
   readonly principalId: string;

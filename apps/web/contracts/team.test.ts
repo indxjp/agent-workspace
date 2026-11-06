@@ -1,14 +1,14 @@
 /**
  * The team capability contract — issue #185.
  *
- * The load-bearing test here is the one that reads `apps/web/server/rbac/roles.ts`. A contract
+ * The load-bearing test here is the one that reads `apps/web/server/rbac/core/roles.ts`. A contract
  * module may not import a server one, so `MEMBERSHIP_ROLES` is written out; ADR-0016 forbids
  * leaving a duplicated list to a comment, so the duplication is gated instead. A fifth role, or a
  * rename, fails this file rather than shipping a members table that silently cannot offer it.
  */
 import { describe, expect, it } from 'vitest';
 
-import { ROLES, type Role } from '../server/rbac/roles';
+import { ROLES, type Role } from '../server/rbac/core/roles';
 import {
   MEMBERSHIP_ROLES,
   MembershipListResponseSchema,

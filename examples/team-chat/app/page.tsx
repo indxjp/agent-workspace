@@ -1,0 +1,39 @@
+// The chat app's home: its channels once `channel` is one of the app's resources, and until then
+// the command that adds it, so this page builds before any of the README's commands has run.
+import app from '@/app.config';
+
+import { theme } from './theme';
+
+const WORDS = {
+  en: {
+    channels: 'Open the channels',
+    none: 'This app has no channels yet. Add the channel resource with this command:',
+  },
+  ja: {
+    channels: 'チャンネルを開く',
+    none: 'チャンネルはまだありません。次のコマンドでチャンネルのリソースを追加します。',
+  },
+} as const;
+
+const resources: readonly { readonly name: string }[] = app.resources;
+
+export default function HomePage() {
+  const words = WORDS[theme.locale];
+  return (
+    <main>
+      <h1>team-chat</h1>
+      {resources.some((resource) => resource.name === 'channel') ? (
+        <p>
+          <a href="/channels">{words.channels}</a>
+        </p>
+      ) : (
+        <>
+          <p>{words.none}</p>
+          <pre>
+            <code>npx aw generate resource channel name:text &apos;kind:enum(public,private,dm)&apos;</code>
+          </pre>
+        </>
+      )}
+    </main>
+  );
+}

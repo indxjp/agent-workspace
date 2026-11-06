@@ -9,7 +9,7 @@ It is the human half of a principal: a membership principal *is* a membership ac
 workspace. A membership carries the role; the user carries none.
 
 **Roles.** Spec §21's four, in its order of presentation — which is **not** a privilege order
-(`apps/web/server/rbac/roles.ts`). The same four values are `MEMBERSHIP_ROLES` on the wire,
+(`apps/web/server/rbac/core/roles.ts`). The same four values are `MEMBERSHIP_ROLES` on the wire,
 `membershipRoles` in the schema (the `role` column of `memberships`, `api_keys` and `invitations`)
 and `ROLES` in the server. `Role` is defined here because the concept layer is the first to need
 it; the contracts unit of Phase 2 mirrors the same wire enumeration.
@@ -22,7 +22,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Concepts.Workspace
 /-- Spec §21's four roles, in `MEMBERSHIP_ROLES` order. -/
 @[aw_spec (ts := "packages/contracts/src/team.ts#MEMBERSHIP_ROLES")
   (ts := "packages/core/src/db/schema/memberships.ts#membershipRoles")
-  (ts := "apps/web/server/rbac/roles.ts#ROLES")
+  (ts := "apps/web/server/rbac/core/roles.ts#ROLES")
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#membership-roles")]
 inductive Role where
   | owner
@@ -49,7 +49,7 @@ instance : WireEnum Role where
 
 /-- `parseRole`: a role, or `none` for anything that is not exactly one of the four spellings
 (no default, no case folding). -/
-@[aw_spec (ts := "apps/web/server/rbac/roles.ts#parseRole")]
+@[aw_spec (ts := "apps/web/server/rbac/core/roles.ts#parseRole")]
 def parseRole (s : String) : Option Role := WireEnum.ofWire? s
 
 /-- A membership: one user in one workspace, with one role. -/

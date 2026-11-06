@@ -16,8 +16,8 @@
  *    `setTracingDisabled(true)` precedes the run;
  *  * a write under a read-only grant is refused by our Editor and the file is unchanged;
  *  * a second run on the session sees the first run's items;
- *  * `maxTurns: 2` ends a looping agent with `stopReason: 'max_turns'`, and a spent provisional
- *    budget ends one with `stopReason: 'max_budget'`.
+ *  * `maxTurns: 2` ends a looping agent with `stopReason: 'max_turns'`, and a `maxBudgetUsd` cap
+ *    stops nothing here: the gateway enforces it (ADR-0162), so the adapter has no budget stop.
  *
  * That the **gateway** records `wire_protocol` for each request is the gateway's own suite
  * (`packages/gateway`, ADR-0068 D5); here it is enough that each request arrives on the route that
@@ -618,10 +618,10 @@ describe('the real SDK behind the adapter', () => {
     expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'max_turns' });
   });
 
-  // The provisional budget cap (ADR-0074 D7, #342). Every scripted response reports 10 input
-  // tokens (2 cached) and 5 output tokens; on gpt-5's provisional rates that is 60.25 micro-dollars
-  // a response, so a 100 micro-dollar cap is reached by the second response.
-  it('stops a looping agent with stopReason max_budget once the reported usage reaches the cap', async () => {
+  // ADR-0162 (#342): the spend ceiling is the gateway's. Every scripted response reports 10 input
+  // tokens and 5 output tokens, far past a 100 micro-dollar cap on any price, and the adapter still
+  // runs the loop to its turn limit: no budget stop is left in the adapter.
+  it('has no budget stop of its own: a spent cap runs on to maxTurns', async () => {
     const cwd = workspace({ 'a.md': 'x\n' });
     gateway.script([], { call: { name: 'read_file', args: { path: 'a.md' } } });
 
@@ -630,20 +630,12 @@ describe('the real SDK behind the adapter', () => {
         cwd,
         'openai-responses',
         {},
-        { model: 'gpt-5', limits: { maxTurns: 10, maxBudgetUsd: 0.0001 } },
+        { model: 'gpt-5', limits: { maxTurns: 3, maxBudgetUsd: 0.0001 } },
       ),
     );
 
-    expect(gateway.requests).toHaveLength(2);
-    expect(frames.at(-1)).toMatchObject({
-      frame: 'agent.result',
-      stopReason: 'max_budget',
-      turns: 2,
-    });
-    expect(frames.find((frame) => frame.frame === 'agent.usage')).toMatchObject({
-      inputTokens: 20,
-      outputTokens: 10,
-    });
+    expect(gateway.requests).toHaveLength(3);
+    expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'max_turns' });
   });
 
   describe('subagents, as Agent.asTool', () => {
@@ -687,9 +679,13 @@ describe('the real SDK behind the adapter', () => {
       expect(JSON.stringify(gateway.requests[1]?.body)).toContain('Read a.md.');
     });
 
-    it('counts the subagent’s usage against the cap and stops the run', async () => {
+    it('adds the subagent’s usage to the run’s, and stops nothing at a cap', async () => {
       const cwd = workspace({ 'a.md': 'x\n' });
-      gateway.script([], { call: { name: 'subagent_researcher', args: { input: 'Read a.md.' } } });
+      gateway.script([
+        { call: { name: 'subagent_researcher', args: { input: 'Read a.md.' } } },
+        { text: 'Found.' },
+        { text: 'Done.' },
+      ]);
 
       const frames = await run(
         requestFor(
@@ -704,21 +700,21 @@ describe('the real SDK behind the adapter', () => {
         ),
       );
 
-      // The parent's call is one response, the subagent's first step the second: that reaches the cap.
-      expect(gateway.requests).toHaveLength(2);
+      // Two of the parent's responses and one of the subagent's: all reported, none stopped.
+      expect(gateway.requests).toHaveLength(3);
       expect(frames.at(-1)).toMatchObject({
         frame: 'agent.result',
-        stopReason: 'max_budget',
-        turns: 1,
+        stopReason: 'end_turn',
+        turns: 2,
       });
       expect(frames.find((frame) => frame.frame === 'agent.usage')).toMatchObject({
-        inputTokens: 20,
-        outputTokens: 10,
+        inputTokens: 30,
+        outputTokens: 15,
       });
     });
   });
 
-  it('runs to end_turn when the reported usage stays under the cap', async () => {
+  it('runs to end_turn with a cap set', async () => {
     const cwd = workspace({ 'a.md': 'x\n' });
     gateway.script([{ call: { name: 'read_file', args: { path: 'a.md' } } }, { text: 'Done.' }]);
 

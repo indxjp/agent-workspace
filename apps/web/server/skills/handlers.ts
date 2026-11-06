@@ -20,7 +20,7 @@
  *     carries all three rather than three routes each doing a third of the job.
  *   - `GET /api/skills/:name` is "selecting a skill" (plain) and "export it" (`?export=true`) —
  *     one route, two response shapes, chosen so this task never depends on a classification
- *     `apps/web/server/rbac/permissions.ts` (W2-CP-06's) would otherwise have to add for a fifth,
+ *     `apps/web/server/rbac/core/permissions.ts` (W2-CP-06's) would otherwise have to add for a fifth,
  *     `/:name/export`-shaped route. `apps/web/app/api/skills/[name]/route.ts`'s own header has the
  *     full reasoning; `docs/adr/W2-CP-04-skill-storage-keys.md`'s Decision 6 is the record.
  *
@@ -61,7 +61,7 @@ import {
 } from './keys';
 import { extractSkillInstructions, parseSkillFrontmatter } from './frontmatter';
 import { UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
-import { listAll, readWhole } from '@agent-workspace/core/storage/streams';
+import { listAll, readWhole } from '../storage/objects';
 import type { SkillObjects } from '../storage/store';
 import type { ApiResult } from '../http/result';
 import { json, problem } from './result';

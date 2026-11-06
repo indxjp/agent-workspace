@@ -23,6 +23,7 @@ import {
   createIsolatedTestDatabase,
   type IsolatedTestDatabase,
 } from './testing.js';
+import { seedCatalogFile } from './catalog-fixtures.js';
 
 const hasDatabase = Boolean(process.env['TEST_DATABASE_URL']?.trim());
 
@@ -101,7 +102,9 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   it('[US-STO-14][contract][sdk] 20 concurrent reserves of one path give one winner and 19 taken', async () => {
     const input = { ownerPrincipalId: principalId, sizeBytes: 1, contentType: null };
     const outcomes = await Promise.all(
-      Array.from({ length: 20 }, () => catalog.reserve('reserve-race/a.bin', input)),
+      Array.from({ length: 20 }, () =>
+        catalog.reserve('reserve-race/a.bin', { ...input, objectId: crypto.randomUUID() }),
+      ),
     );
 
     const winners = outcomes.filter((outcome) => outcome.kind === 'reserved');
@@ -114,21 +117,6 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: winnerId, status: 'pending' });
     expect(await rowsAt('reserve-race')).toHaveLength(1);
-  });
-
-  // @story US-STO-14
-  it('[US-STO-14][contract][sdk] 20 concurrent putFile calls on one path leave one ready row', async () => {
-    const sizes = Array.from({ length: 20 }, (_, index) => index + 1);
-    const saved = await Promise.all(
-      sizes.map((size) => catalog.putFile(putInput('put-race/a.bin', size))),
-    );
-
-    expect(new Set(saved.map((row) => row.id)).size).toBe(1);
-    const rows = await rowsAt('put-race/a.bin');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ status: 'ready' });
-    expect(sizes).toContain(rows[0]?.sizeBytes);
-    expect(await rowsAt('put-race')).toHaveLength(1);
   });
 
   // @story US-STO-14
@@ -162,7 +150,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     const input = { ownerPrincipalId: principalId, sizeBytes: 1, contentType: null };
     for (const first of ['confirm', 'remove'] as const) {
       const path = `confirm-race/${first}-first.bin`;
-      const outcome = await catalog.reserve(path, input);
+      const outcome = await catalog.reserve(path, { ...input, objectId: crypto.randomUUID() });
       expect(outcome.kind).toBe('reserved');
 
       // Both writers queue behind the held path lock in a known order, then run one after the other.
@@ -212,42 +200,23 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 10 concurrent renames onto one path: exactly one wins', async () => {
     const sources = Array.from({ length: 10 }, (_, index) => `rename-race/from-${index}.bin`);
-    for (const path of sources) await catalog.putFile(putInput(path, 1));
+    const seeded = new Map<string, string>();
+    for (const path of sources) {
+      seeded.set(path, (await seedCatalogFile(catalog, putInput(path, 1))).id);
+    }
 
     const settled = await Promise.allSettled(
-      sources.map((path) =>
-        catalog.renameFile(path, {
-          path: 'rename-race/to.bin',
-          kind: 'file',
-          storageKey: 'rename-race/to.bin',
-          sizeBytes: 1,
-          contentType: null,
-        }),
-      ),
+      sources.map((path) => catalog.rename(path, 'rename-race/to.bin')),
     );
 
-    const won = settled.flatMap((result) =>
-      result.status === 'fulfilled' && result.value !== null ? [result.value] : [],
-    );
+    const won = sources.filter((_, index) => {
+      const result = settled[index];
+      return result?.status === 'fulfilled' && result.value.rows === 1;
+    });
     expect(won).toHaveLength(1);
     const rows = await rowsAt('rename-race/to.bin');
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.id).toBe(won[0]?.id);
-  });
-
-  // @story US-STO-04
-  it('[US-STO-04][contract][sdk] a putFile racing a remove of one path leaves one row', async () => {
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const path = `put-remove-race/${attempt}.bin`;
-      await catalog.putFile(putInput(path, 1));
-
-      await Promise.all([catalog.putFile(putInput(path, 2)), catalog.remove(path)]);
-
-      // The remove moves the old row aside; a put that follows it adds a ready row at the path.
-      const statuses = (await rowsFor(path)).map((row) => row.status).sort();
-      expect([['deleting'], ['deleting', 'ready']]).toContainEqual(statuses);
-      expect((await rowsAt(path)).length).toBeLessThanOrEqual(1);
-    }
+    expect(rows[0]?.id).toBe(seeded.get(won[0] ?? ''));
   });
 
   // @story US-STO-14
@@ -256,7 +225,9 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     const path = 'round-race/a.bin';
     for (let round = 0; round < 20; round += 1) {
       const outcomes = await Promise.all(
-        Array.from({ length: 20 }, () => catalog.reserve(path, input)),
+        Array.from({ length: 20 }, () =>
+          catalog.reserve(path, { ...input, objectId: crypto.randomUUID() }),
+        ),
       );
       const winners = outcomes.filter((outcome) => outcome.kind === 'reserved');
       expect(winners).toHaveLength(1);
@@ -367,19 +338,19 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     sql`select pg_advisory_xact_lock(hashtextextended(${workspaceId}::text || ':' || ${path}, 0))`;
 
   // @story US-STO-14
-  it('[US-STO-14][contract][sdk] putFile and renameFile wait for the lock of the path they write', async () => {
+  it('[US-STO-14][contract][sdk] a file write waits for the lock of the path it writes', async () => {
     await expectWaitsFor(pathLock('lock-wait/a.bin'), () =>
-      catalog.putFile(putInput('lock-wait/a.bin', 1)),
+      seedCatalogFile(catalog, putInput('lock-wait/a.bin', 1)),
     );
-    await catalog.putFile(putInput('lock-wait/from.bin', 1));
-    await expectWaitsFor(pathLock('lock-wait/to.bin'), () =>
-      catalog.renameFile('lock-wait/from.bin', {
-        path: 'lock-wait/to.bin',
-        kind: 'file',
-        storageKey: 'lock-wait/to.bin',
-        sizeBytes: 1,
-        contentType: null,
-      }),
+    expect(await rowsAt('lock-wait/a.bin')).toHaveLength(1);
+  });
+
+  // @story US-STO-14
+  it('[US-STO-14][contract][sdk] a rename waits for a single-path writer of its workspace', async () => {
+    await seedCatalogFile(catalog, putInput('lock-wait/from.bin', 1));
+    await expectWaitsFor(
+      sql`select pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`,
+      () => catalog.rename('lock-wait/from.bin', 'lock-wait/to.bin'),
     );
     expect(await rowsAt('lock-wait/to.bin')).toHaveLength(1);
   });
@@ -388,30 +359,24 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   it('[US-STO-14][contract][sdk] a single-path writer waits for a prefix writer of its workspace', async () => {
     await expectWaitsFor(
       sql`select pg_advisory_xact_lock(hashtextextended(${workspaceId}::text, 0))`,
-      () => catalog.putFile(putInput('workspace-wait/a.bin', 1)),
+      () => seedCatalogFile(catalog, putInput('workspace-wait/a.bin', 1)),
     );
   });
 
   // @story US-STO-14
-  it('[US-STO-14][contract][sdk] 20 mixed renameFile and renameFilesByPrefix calls never deadlock', async () => {
+  it('[US-STO-14][contract][sdk] 20 mixed file and folder renames never deadlock', async () => {
     const indexes = Array.from({ length: 20 }, (_, index) => index);
     for (const index of indexes) {
-      await catalog.putFile(putInput(`mix-a/d/f${index}.bin`, 1));
-      await catalog.putFile(putInput(`mix-b/d/f${index}.bin`, 1));
+      await seedCatalogFile(catalog, putInput(`mix-a/d/f${index}.bin`, 1));
+      await seedCatalogFile(catalog, putInput(`mix-b/d/f${index}.bin`, 1));
     }
 
     const settled = await Promise.allSettled(
       indexes.map((index) => {
         const [from, to] = index % 4 < 2 ? ['mix-a', 'mix-b'] : ['mix-b', 'mix-a'];
-        if (index % 2 === 0) return catalog.renameFilesByPrefix(`${from}/d`, `${to}/d${index}`);
+        if (index % 2 === 0) return catalog.rename(`${from}/d`, `${to}/d${index}`);
         const target = `${to}/f${index}.bin`;
-        return catalog.renameFile(`${from}/d/f${index}.bin`, {
-          path: target,
-          kind: 'file',
-          storageKey: target,
-          sizeBytes: 1,
-          contentType: null,
-        });
+        return catalog.rename(`${from}/d/f${index}.bin`, target);
       }),
     );
 
@@ -436,7 +401,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] concurrent replacements of one file leave one ready row and the rest deleting', async () => {
     const path = 'replace-race/a.bin';
-    const first = await catalog.putFile(putInput(path, 1));
+    const first = await seedCatalogFile(catalog, putInput(path, 1));
 
     const confirmed = await Promise.all(
       Array.from({ length: 10 }, async () => {
@@ -460,7 +425,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] 20 concurrent replacements of one ready file give one pending winner', async () => {
     const path = 'replace-reserve-race/a.bin';
-    await catalog.putFile(putInput(path, 1));
+    await seedCatalogFile(catalog, putInput(path, 1));
 
     const outcomes = await Promise.all(
       Array.from({ length: 20 }, () => catalog.reserve(path, replacing())),
@@ -474,7 +439,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
   // @story US-STO-14
   it('[US-STO-14][contract][sdk] reserve, confirm and forget wait for the lock of the path they write', async () => {
     const path = 'lock-proof/a.bin';
-    await catalog.putFile(putInput(path, 1));
+    await seedCatalogFile(catalog, putInput(path, 1));
     await expectWaitsFor(pathLock(path), () => catalog.reserve(path, replacing()));
     const [pending] = (await rowsFor(path)).filter((row) => row.status === 'pending');
     if (pending === undefined) throw new Error('the reserve did not land');
@@ -485,84 +450,23 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
     expect((await rowsFor(path)).filter((row) => row.status === 'deleting')).toHaveLength(1);
 
     const other = 'lock-proof/b.bin';
-    await catalog.putFile(putInput(other, 1));
+    await seedCatalogFile(catalog, putInput(other, 1));
     const reserved = await catalog.reserve(other, replacing());
     await expectWaitsFor(pathLock(other), () => catalog.forget(reserved.row));
     expect((await rowsFor(other)).map((row) => row.status)).toEqual(['ready']);
   });
 
-  // @story US-STO-14
-  it('[US-STO-14][contract][sdk] a confirm racing a renameFile swaps the replacement in at the new path', async () => {
-    const from = 'confirm-rename/a.bin';
-    const to = 'confirm-rename/b.bin';
-    const old = await catalog.putFile(putInput(from, 1));
-    const reserved = await catalog.reserve(from, replacing());
-    expect(reserved.kind).toBe('reserved');
-
-    // The rename takes the lock of `from`, then waits on `to`, which the test holds. The confirm
-    // reads the row (still standing for `from`) and waits on `from`. Releasing `to` lets the
-    // rename move the file and its pending replacement before the confirm takes the path lock.
-    let held = (): void => undefined;
-    let release = (): void => undefined;
-    const lockHeld = new Promise<void>((resolve) => (held = resolve));
-    const released = new Promise<void>((resolve) => (release = resolve));
-    const holder = isolated.db.transaction(async (tx) => {
-      await tx.execute(pathLock(to));
-      held();
-      await released;
-    });
-    await lockHeld;
-    let confirming: Promise<unknown> = Promise.resolve();
-    try {
-      const renaming = catalog.renameFile(from, {
-        path: to,
-        kind: 'file',
-        storageKey: to,
-        sizeBytes: 1,
-        contentType: null,
-      });
-      // The rename holds `from` and waits on `to`; then the confirm, past its first read, waits on
-      // `from`.
-      await lockWaiters(1, renaming);
-      let done = false;
-      confirming = catalog
-        .confirm(reserved.row, { sizeBytes: 2, contentType: null })
-        .finally(() => (done = true));
-      await lockWaiters(2, Promise.race([renaming, confirming]));
-      expect(done).toBe(false);
-      release();
-      await holder;
-      await expect(renaming).resolves.toMatchObject({ id: old.id, path: to });
-      await expect(confirming).resolves.toMatchObject({
-        row: { id: reserved.row.id, path: to, status: 'ready' },
-        replaced: { id: old.id, status: 'deleting', targetPath: to },
-      });
-    } finally {
-      release();
-      await holder;
-      await confirming.catch(() => undefined);
-    }
-    expect(await rowsFor(from)).toEqual([]);
-    const at = await rowsFor(to);
-    expect(at.map((row) => [row.id, row.status]).sort()).toEqual(
-      [
-        [old.id, 'deleting'],
-        [reserved.row.id, 'ready'],
-      ].sort(),
-    );
-  });
-
   // @story US-STO-04
   it('[US-STO-04][contract][sdk] removing one file waits for its path lock but runs beside other single-path writers', async () => {
     const path = 'lock-proof/remove.bin';
-    await catalog.putFile(putInput(path, 1));
+    await seedCatalogFile(catalog, putInput(path, 1));
     await expectWaitsFor(pathLock(path), () => catalog.remove(path));
     expect((await rowsFor(path)).map((row) => row.status)).toEqual(['deleting']);
 
     // A shared workspace lock is what every single-path writer holds, so a one-file remove takes
     // it too and does not wait; only a prefix writer would.
     const other = 'lock-proof/remove-beside.bin';
-    await catalog.putFile(putInput(other, 1));
+    await seedCatalogFile(catalog, putInput(other, 1));
     const shared = sql`select pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`;
     await expectRunsBeside(shared, () => catalog.remove(other));
     expect((await rowsFor(other)).map((row) => row.status)).toEqual(['deleting']);
@@ -570,7 +474,7 @@ describe.skipIf(!hasDatabase)('the PostgreSQL catalog under concurrent requests'
 
   // @story US-STO-04
   it('[US-STO-04][contract][sdk] removing a folder waits for a single-path writer of its workspace', async () => {
-    await catalog.putFile(putInput('lock-proof/dir/a.bin', 1));
+    await seedCatalogFile(catalog, putInput('lock-proof/dir/a.bin', 1));
     const shared = sql`select pg_advisory_xact_lock_shared(hashtextextended(${workspaceId}::text, 0))`;
     await expectWaitsFor(shared, () => catalog.remove('lock-proof/dir'));
     expect((await rowsFor('lock-proof/dir/a.bin')).map((row) => row.status)).toEqual(['deleting']);

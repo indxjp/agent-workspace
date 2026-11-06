@@ -1,4 +1,4 @@
-import type { WorkspaceSharing } from '../core/runtime';
+import type { WorkspaceSharing } from '../runtime';
 import { describe, expect, it, vi } from 'vitest';
 
 import { isPublicSharingEnabled, setPublicSharingPolicy } from './service';

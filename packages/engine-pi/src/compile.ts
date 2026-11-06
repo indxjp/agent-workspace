@@ -17,7 +17,7 @@
  * | file grants                       | `workspace.grants`, enforced by the tool guard           |
  * | granted skills                    | `resources.skills` — the only skills the loader returns  |
  * | `limits.maxTurns`                 | `limits.maxTurns`, counted on `turn_end` by the adapter  |
- * | `limits.maxBudgetUsd`             | `limits.budget`, priced by the port's provisional table  |
+ * | `limits.maxBudgetUsd`             | nothing: enforced by the gateway (ADR-0162)              |
  * | the gateway connection            | `connection` — base URL, bearer header, placeholder key  |
  *
  * ## What is refused, by code
@@ -25,8 +25,8 @@
  * * `engine_policy_invalid` — an arm `PiRunPolicy` cannot read; a grant that does not normalise
  *   or lands in {@link PI_PROTECTED_CONFIG_DIRECTORY}.
  * * `engine_capability_unsupported` — a connector (`mcp: false`: pi has no MCP client, and a
- *   bridge would be an emulation, ADR-0081), a `maxBudgetUsd` on a model the provisional price
- *   table cannot price (ADR-0074 D7), or a wire protocol other than Anthropic Messages.
+ *   bridge would be an emulation, ADR-0081) or a wire protocol other than Anthropic Messages. A
+ *   `maxBudgetUsd` is never refused: the gateway enforces it for every engine (ADR-0162).
  * * `engine_credential_refused` — no gateway connection, or a credential-shaped variable in the
  *   environment that is not this run's token (spec A.11).
  *
@@ -44,7 +44,6 @@ import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import {
   normaliseRequestGrants,
   parsePolicyArm,
-  provisionalBudget,
   refuse,
   requireGateway,
   sandboxRefusal,
@@ -52,7 +51,6 @@ import {
   type EngineCompileResult,
   type EngineRefusal,
   type EngineRunRequest,
-  type ProvisionalModelPrice,
 } from '@agent-workspace/engine';
 
 import { PiRunPolicy } from './policy.js';
@@ -109,13 +107,6 @@ export type PiModelConnection = {
   readonly apiKey: typeof PI_GATEWAY_API_KEY_PLACEHOLDER;
 };
 
-/** A compiled cap: the limit, and the rates pi prices each response with. JSON, so it compiles. */
-export type PiBudget = {
-  readonly maxBudgetUsd: number;
-  readonly model: string;
-  readonly price: ProvisionalModelPrice;
-};
-
 /** The compiled configuration. JSON by construction. */
 export type PiCompiled = {
   readonly engine: typeof PI_ENGINE_ID;
@@ -131,8 +122,6 @@ export type PiCompiled = {
   readonly networkEgress: boolean;
   readonly limits: {
     readonly maxTurns: number | null;
-    /** The provisional cap and its rates, or `null` when the run carries no cap (ADR-0074 D7). */
-    readonly budget: PiBudget | null;
   };
   readonly workspace: PiWorkspace;
   /**
@@ -231,10 +220,6 @@ export function compilePiRun(request: EngineRunRequest): EngineCompileResult<PiC
   if (subagents !== null) return subagents;
 
   const model = request.portable.model ?? PI_DEFAULT_ANTHROPIC_MODEL;
-  // ADR-0074 D7, provisional (#342), shared with pi by ADR-0081: the cap is enforced from the usage
-  // of each response, priced with the port's table. A cap this adapter cannot price is refused.
-  const budget = provisionalBudget(PI_ENGINE_ID, model, request.portable.limits.maxBudgetUsd);
-  if (budget !== null && 'ok' in budget) return budget;
 
   const connection = requireGateway(PI_ENGINE_ID, request, PI_WIRE_PROTOCOLS);
   if (!connection.ok) return connection;
@@ -266,7 +251,7 @@ export function compilePiRun(request: EngineRunRequest): EngineCompileResult<PiC
       },
       connection: piModelConnection(gateway),
       networkEgress: plan.networkEgress,
-      limits: { maxTurns: request.portable.limits.maxTurns, budget },
+      limits: { maxTurns: request.portable.limits.maxTurns },
       workspace: {
         cwd: request.cwd.replace(/\/+$/u, ''),
         grants: grants.grants,

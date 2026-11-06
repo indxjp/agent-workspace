@@ -319,7 +319,9 @@ test('[US-STO-12][browser][web] edit a connection: folders, write, and a moved e
   await expect(page.getByLabel('Allowed folders')).toHaveValue('reports');
   await expect(page.getByLabel('Allow writing')).not.toBeChecked();
   await expect(
-    page.getByText('Off by default. Grants stay read-only until write-back ships.'),
+    page.getByText(
+      "Off by default. With a read/write grant, a run's new and changed files are written back; nothing is deleted.",
+    ),
   ).toBeVisible();
 
   await test.step('change the folders and the write switch', async () => {

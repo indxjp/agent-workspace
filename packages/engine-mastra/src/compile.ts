@@ -18,7 +18,7 @@
  * | granted skills                    | `skills` — the workspace skill directories                |
  * | connectors                        | `mcpServers` — `MCPClient` server definitions             |
  * | `limits.maxTurns`                 | `limits.maxSteps`, Mastra's native `maxSteps`             |
- * | `limits.maxBudgetUsd`             | `limits.budget`, priced by the port's provisional table   |
+ * | `limits.maxBudgetUsd`             | nothing: enforced by the gateway (ADR-0162)               |
  * | the gateway connection            | `connection` — an explicit AI SDK provider at the gateway |
  * | the session                       | `memory` — one thread over the platform's store           |
  *
@@ -27,9 +27,9 @@
  * * `engine_policy_invalid` — an arm `MastraRunPolicy` cannot read; a grant that does not
  *   normalise or lands in {@link MASTRA_PROTECTED_CONFIG_DIRECTORY}; a connector record this
  *   adapter cannot read.
- * * `engine_capability_unsupported` — a fork (`fork: false`), a `maxBudgetUsd` on a model the
- *   provisional price table cannot price (ADR-0074 D7), a wire protocol this engine does not speak,
- *   or a connector tool whose policy asks for a human approval (no HITL, ADR-0065 D9).
+ * * `engine_capability_unsupported` — a fork (`fork: false`), a wire protocol this engine does not
+ *   speak, or a connector tool whose policy asks for a human approval (no HITL, ADR-0065 D9). A
+ *   `maxBudgetUsd` is never refused: the gateway enforces it for every engine (ADR-0162).
  * * `engine_credential_refused` — no gateway connection, a credential-shaped variable in the
  *   environment that is not this run's token (spec A.11), or a database connection variable
  *   (ADR-0084 D2: the sandbox has no database).
@@ -54,18 +54,15 @@ import {
   forkRefusal,
   normaliseRequestGrants,
   parsePolicyArm,
-  provisionalBudget,
   refuse,
   requireGateway,
   sandboxRefusal,
   skillScriptSetup,
-  subagentBudgetRefusal,
   subagentsRefusal,
   subagentToolNames,
   type EngineCompileResult,
   type EngineRefusal,
   type EngineRunRequest,
-  type ProvisionalModelPrice,
   type SkillScriptSetup,
 } from '@agent-workspace/engine';
 import { z } from 'zod';
@@ -96,8 +93,7 @@ export type MastraWireProtocol = (typeof MASTRA_WIRE_PROTOCOLS)[number];
 
 /**
  * The model a run that names none is given, per protocol family. Mastra has no default model of
- * its own (an `Agent` requires one), so the adapter names one; both are rows of the provisional
- * price table, so a cap on a run that names no model can still be enforced.
+ * its own (an `Agent` requires one), so the adapter names one.
  */
 export const MASTRA_DEFAULT_MODELS: Readonly<Record<'anthropic' | 'openai', string>> = {
   anthropic: 'claude-sonnet-4-5',
@@ -145,13 +141,6 @@ export type MastraMcpServer =
       readonly blockedTools: readonly string[];
     };
 
-/** A compiled cap: the limit, and the rates each step's usage is priced with. JSON, so it compiles. */
-export type MastraBudget = {
-  readonly maxBudgetUsd: number;
-  readonly model: string;
-  readonly price: ProvisionalModelPrice;
-};
-
 /**
  * The prefix Mastra puts before a sub-agent's `agents` key to name its delegation tool. Not in the
  * declarations; `boundary.test.ts` asserts it at runtime.
@@ -189,8 +178,6 @@ export type MastraCompiled = {
   readonly limits: {
     /** Mastra's `maxSteps`; `null` is its own default. */
     readonly maxSteps: number | null;
-    /** The provisional cap and its rates, or `null` when the run carries no cap (ADR-0074 D7). */
-    readonly budget: MastraBudget | null;
   };
   readonly workspace: MastraWorkspace;
   /** The skill directories the workspace discovers `SKILL.md` in, one per granted skill. */
@@ -427,15 +414,6 @@ export function compileMastraRun(request: EngineRunRequest): EngineCompileResult
   const model =
     request.portable.model ??
     MASTRA_DEFAULT_MODELS[protocol === 'anthropic-messages' ? 'anthropic' : 'openai'];
-  const budget = provisionalBudget(MASTRA_ENGINE_ID, model, request.portable.limits.maxBudgetUsd);
-  if (budget !== null && 'ok' in budget) return budget;
-  const mispriced = subagentBudgetRefusal(
-    MASTRA_ENGINE_ID,
-    model,
-    request.portable.limits.maxBudgetUsd,
-    request.portable.subagents,
-  );
-  if (mispriced !== null) return mispriced;
 
   const env = { ...request.env };
   const connectors = compileConnectors(request.portable.mcpServers, env);
@@ -481,7 +459,7 @@ export function compileMastraRun(request: EngineRunRequest): EngineCompileResult
       connection: mastraModelConnection(gateway, protocol),
       networkEgress: plan.networkEgress,
       mcpServers: connectors.servers,
-      limits: { maxSteps: request.portable.limits.maxTurns, budget },
+      limits: { maxSteps: request.portable.limits.maxTurns },
       workspace: {
         cwd: request.cwd.replace(/\/+$/u, ''),
         grants: grants.grants,

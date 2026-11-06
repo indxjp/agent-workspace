@@ -154,7 +154,7 @@ export function RunsHistoryScreen() {
       <div className="mb-5">
         <h1 className="text-[21px]">Runs</h1>
         <p className="text-[13px] text-muted">
-          Every run this workspace's history API answers for your role, newest first.
+          Every run in this workspace that your role lets you see, newest first.
         </p>
       </div>
 

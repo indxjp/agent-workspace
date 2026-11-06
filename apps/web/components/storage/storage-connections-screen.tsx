@@ -119,7 +119,7 @@ export function StorageConnectionsScreen() {
           {testMessage === null ? null : (
             <div
               role="status"
-              className="border-t border-border bg-surface-2 px-4 py-2 text-[12px]"
+              className="border-t border-border bg-surface-2 px-4 py-2 text-[12px] break-words"
             >
               {testMessage}
             </div>

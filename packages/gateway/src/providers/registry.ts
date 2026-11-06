@@ -1,6 +1,8 @@
 import {
   MODEL_PROVIDER_CONFIG_RULES,
+  VERTEX_LOCATIONS,
   type ModelConnectionConfig,
+  type VertexLocation,
 } from '@indx-workspace/contracts/models';
 import type { ModelProvider as ConnectionProvider } from '@indx-workspace/contracts/runs';
 import { ModelConnectionIncompleteError } from '../types.js';
@@ -23,6 +25,7 @@ import {
 } from './openai-compatible.js';
 import { createOpenAIProvider, OPENAI_CAPABILITIES } from './openai.js';
 import { OPENAI_WIRE_PROTOCOLS } from './passthrough.js';
+import { vertexModels, vertexTarget } from './vertex.js';
 import { scriptedModelsFromEnv, type ScriptedModels } from './scripted.js';
 
 // Re-exported so a consumer of this subpath (issue #129's control-plane discovery module) needs
@@ -37,7 +40,13 @@ export {
   OPENAI_COMPATIBLE_CAPABILITIES,
 };
 
-export const PROVIDER_IDS = ['anthropic', 'openai', 'azure-openai', 'openai-compatible'] as const;
+export const PROVIDER_IDS = [
+  'anthropic',
+  'openai',
+  'azure-openai',
+  'openai-compatible',
+  'vertex',
+] as const;
 
 export type RegisteredProviderId = (typeof PROVIDER_IDS)[number];
 
@@ -194,6 +203,10 @@ function forwardingRow(
   };
 }
 
+function isVertexLocation(value: string): value is VertexLocation {
+  return VERTEX_LOCATIONS.some((location) => location === value);
+}
+
 /** The complete and closed Wave 4 provider table, in stable display order. */
 export function createProviderRegistry(
   options: ProviderRegistryOptions = {},
@@ -251,5 +264,18 @@ export function createProviderRegistry(
         }),
       scripted,
     ),
+    row('vertex', ANTHROPIC_CAPABILITIES, (context) => {
+      const location = optionalSetting(context, 'location') ?? 'global';
+      if (!isVertexLocation(location))
+        throw new ModelConnectionIncompleteError('vertex', 'location');
+      return createAnthropicProvider({
+        models: vertexModels(),
+        target: vertexTarget({
+          projectId: requiredSetting(context, 'projectId', 'vertex'),
+          location,
+        }),
+        ...(request === undefined ? {} : { fetch: request }),
+      });
+    }),
   ];
 }

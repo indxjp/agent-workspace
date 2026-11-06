@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 
 import { eq } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { agents } from '../schema/agents.js';
 import { auditEvents } from '../schema/audit-events.js';
@@ -276,5 +276,47 @@ describe.skipIf(!hasDatabase)('AgentRepository archive against PostgreSQL (issue
 
     expect(await repository.archive([id], new Date())).toEqual([]);
     expect((await repository.get(id))?.archivedAt).toBeUndefined();
+  });
+  it("plans the sweep's restore lookup through audit_events_agent_restore_idx under the driver's own parameters (B3-05)", async () => {
+    const pool = isolated.db.$client;
+    const query = vi.spyOn(pool, 'query');
+    try {
+      await repository.listArchiveCandidates({
+        createdBefore: new Date(Date.now() - 30 * DAY_MS),
+        notRestoredSince: new Date(Date.now() - 30 * DAY_MS),
+        afterId: null,
+        limit: 10,
+      });
+      // The statement exactly as drizzle sent it, with the values it bound.
+      const sent = query.mock.calls.flatMap(([config, values]) => {
+        const text = typeof config === 'string' ? config : (config as { text?: unknown }).text;
+        return typeof text === 'string' && text.includes('"audit_events"') && Array.isArray(values)
+          ? [{ text, values: values as unknown[] }]
+          : [];
+      });
+      expect(sent).toHaveLength(1);
+      const statement = sent[0];
+      if (statement === undefined) throw new Error('the lookup was not captured');
+      query.mockRestore();
+
+      const client = await pool.connect();
+      try {
+        // Seeded rows are too few for the planner to prefer an index; what is asserted is that the
+        // index is usable for the predicate as bound by the driver (an unnamed statement, planned
+        // with the actual values).
+        await client.query('set enable_seqscan = off');
+        const plan = await client.query<{ 'QUERY PLAN': string }>({
+          text: `explain ${statement.text}`,
+          values: statement.values,
+        });
+        expect(plan.rows.map((row) => row['QUERY PLAN']).join('\n')).toContain(
+          'audit_events_agent_restore_idx',
+        );
+      } finally {
+        client.release();
+      }
+    } finally {
+      query.mockRestore();
+    }
   });
 });

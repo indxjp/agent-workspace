@@ -1,6 +1,6 @@
 import { refuseIfFeatureDisabled } from '../features/guard';
 import { noStoreResultResponse, problemBody } from '../http/result';
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../rbac/core/owner-principal';
 import { requireResourceAccess, type ResourceAccess } from '../resources/authorise';
 import type { ProjectCreateInput, ProjectPatchInput } from '../../contracts/projects';
 import { DomainError } from '../errors';

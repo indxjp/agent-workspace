@@ -71,7 +71,7 @@
      {"type": "timestamp with time zone", "notNull": true, "name": "created_at"},
      {"type": "timestamp with time zone", "notNull": true, "name": "updated_at"}],
     "checks":
-    [{"values": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"],
+    [{"values": ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"],
       "name": "model_connections_provider_valid",
       "column": "provider"}]}},
   {"witnesses":

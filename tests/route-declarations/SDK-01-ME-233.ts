@@ -20,7 +20,7 @@
  * This same entry is what `apps/web/server/rbac/authorisation-matrix.test.ts` crosses with §21's
  * four roles and every ownership answer. It is not in that file's `IDENTITY_ONLY_ROUTES`: that set
  * is for callers who have no workspace `Principal` at all, and a `me` caller by definition has
- * one. `apps/web/server/rbac/permissions.ts` classifies `me` as read-only for every role.
+ * one. `apps/web/server/rbac/core/permissions.ts` classifies `me` as read-only for every role.
  */
 import type { RouteDeclaration } from '../inventory-support.js';
 

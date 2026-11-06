@@ -98,6 +98,8 @@
               "building/frontend",
               "building/embedding",
               "building/react",
+              "building/portal",
+              "building/blueprints",
               "building/backend",
               "building/http-api",
               "guides/streaming",
@@ -178,6 +180,7 @@
             "group": "Resource guides",
             "pages": [
               "resources/agents",
+              "resources/agent-teams",
               "resources/runs",
               "resources/sessions",
               "resources/projects",
@@ -187,7 +190,8 @@
               "resources/engines",
               "resources/models",
               "resources/runtimes",
-              "resources/triggers"
+              "resources/triggers",
+              "resources/webhooks"
             ]
           },
           {
@@ -219,6 +223,7 @@
               "reference/sdk/define",
               "reference/sdk/project",
               "reference/sdk/agents",
+              "reference/sdk/agentTeams",
               "reference/sdk/runs",
               "reference/sdk/sessions",
               "reference/sdk/projects",
@@ -238,7 +243,8 @@
               "reference/sdk/runtimes",
               "reference/sdk/secrets",
               "reference/sdk/storage",
-              "reference/sdk/triggers"
+              "reference/sdk/triggers",
+              "reference/sdk/webhooks"
             ]
           },
           {
@@ -246,6 +252,7 @@
             "pages": [
               "reference/contracts/index",
               "reference/contracts/a2a",
+              "reference/contracts/agent-teams",
               "reference/contracts/agent-versions",
               "reference/contracts/agents",
               "reference/contracts/api-keys",
@@ -283,9 +290,11 @@
               "reference/contracts/storage-url",
               "reference/contracts/surfaces",
               "reference/contracts/team",
+              "reference/contracts/token-exchange",
               "reference/contracts/tokens",
               "reference/contracts/tool-connectors",
               "reference/contracts/triggers",
+              "reference/contracts/webhooks",
               "reference/contracts/workspaces"
             ]
           },

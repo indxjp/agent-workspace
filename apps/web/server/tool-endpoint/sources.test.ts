@@ -199,6 +199,10 @@ describe('createToolEndpointSources', () => {
     // The harness answers every name, as though the connection's secret were set.
     const secret = endpointToolSecretSource(deps.secrets, scope);
     await expect(secret('STORAGE_CONNECTION_77777777777747778777777777777777')).resolves.toBeNull();
+    // A webhook's signing secret is platform-owned in the same way.
+    await expect(
+      secret('WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET'),
+    ).resolves.toBeNull();
     expect(secretReads).toEqual([]);
     await expect(secret('TICKETS_TOKEN')).resolves.toBe('token-value');
   });

@@ -39,8 +39,8 @@ export type WireProtocol = (typeof WIRE_PROTOCOLS)[number];
 export const WireProtocolSchema = z.enum(WIRE_PROTOCOLS);
 
 /**
- * Who enforces a limit: the engine itself (`native`) or the platform's adapter around it
- * (`adapter`). `maxBudget` adds `none` because an engine may offer no place to enforce a budget at
+ * Who enforces a limit: the engine itself (`native`) or the platform around it (`adapter`: the
+ * adapter for `maxTurns`; the gateway for `maxBudget` since ADR-0162). `maxBudget` adds `none` because an engine may offer no place to enforce a budget at
  * all, in which case the cap is a workspace-level refusal rather than a per-run one.
  */
 export const ENGINE_LIMIT_ENFORCEMENTS = ['native', 'adapter'] as const;

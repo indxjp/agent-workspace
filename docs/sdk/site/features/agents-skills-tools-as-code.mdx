@@ -496,9 +496,8 @@ flowchart TD
   tool in its own session's sandbox. The sandbox is off by default
   (`AGENT_WORKSPACE_TOOL_HOST_IMAGE`) and shares one network across sessions until #841.
 - **`openapiTool()` only reads.** `GET` and `HEAD`; writes go through your backend.
-- **No webhooks.** Your backend polls or streams, and a retried start is safe only with an
-  `idempotencyKey` ([N-3](/concepts/roadmap#n-3-webhooks-for-run-outcomes),
-  [S-6](/concepts/roadmap#s-6-idempotency-keys)).
+- **A retried start is safe only with an `idempotencyKey`**
+  ([Retries and idempotency](/guides/retries-and-idempotency#make-runs-start-idempotent-with-a-key)).
 - **No retrieval.** There is no vector index or RAG pipeline, and none is on the roadmap; search is
   your own MCP server.
 - **Creating an agent saves no version** (V-2), and the browser has no skill import or export.

@@ -22,7 +22,7 @@ concurrency:
 jobs:
   helm:
     name: Helm lint and render
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
@@ -70,3 +70,28 @@ jobs:
           grep -q 'cert-manager.io/cluster-issuer: "letsencrypt"' rendered-ingress.yaml
           grep -q 'cidr: 10.0.0.0/8' rendered-ingress.yaml
           grep -q 'AW_DEPLOYMENT_POLICY' rendered-ingress.yaml
+      # Issue #1512: an app from environments.production.apps is a Deployment, a Service, an Ingress rule and its
+      # NetworkPolicies, reading only its own operator-created Secret.
+      - run: |
+          helm template agent-workspace infra/helm/agent-workspace \
+            --set ingress.enabled=true \
+            --set ingress.host=aw.example.com \
+            --set ingress.tls.clusterIssuer=letsencrypt \
+            --set-string publicUrl=https://aw.example.com \
+            --set-string 'apps[0].name=desk' \
+            --set-string 'apps[0].image=registry.example/desk@sha256:0000000000000000000000000000000000000000000000000000000000000000' \
+            --set-string 'apps[0].host=desk.example.com' \
+            --set-string 'apps[0].schema=app_desk' \
+            --set-string images.web=registry.example/agent-workspace/web@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.gateway=registry.example/agent-workspace/gateway@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.runnerManager=registry.example/agent-workspace/runner@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string images.runtime=registry.example/agent-workspace/runtime@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            > rendered-apps.yaml
+          grep -q 'name: agent-workspace-app-desk' rendered-apps.yaml
+          grep -q 'secretRef: { name: agent-workspace-app-desk }' rendered-apps.yaml
+          grep -q 'host: desk.example.com' rendered-apps.yaml
+          grep -q 'hosts: \["aw.example.com", "desk.example.com"\]' rendered-apps.yaml
+          grep -q 'agent-workspace.io/database-schema: "app_desk"' rendered-apps.yaml
+          grep -q 'name: apps-from-ingress' rendered-apps.yaml
+          grep -q 'name: apps-database' rendered-apps.yaml
+          if grep -q 'agent-workspace-app-' rendered.yaml; then echo 'default render must not contain an app' >&2; exit 1; fi

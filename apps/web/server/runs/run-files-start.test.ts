@@ -31,6 +31,7 @@ import type { AgentRef, RunPrincipal, SessionRef } from './environment';
 import { createRunnerLauncher } from './launcher';
 import { InMemoryRunStore } from './memory-store';
 import { runnableAgent, startPreflight } from './run-delivery-fixtures';
+import { seedCatalogFile } from '@agent-workspace/core/db';
 
 const MiB = 1024 * 1024;
 
@@ -106,11 +107,11 @@ async function seedRows(world: World) {
     contentType: kind === 'folder' ? null : 'application/octet-stream',
     ownerPrincipalId: world.principal.ownerPrincipalId,
   });
-  const folder = await catalog.putFile(row('big', 'folder', 0));
+  const folder = await seedCatalogFile(catalog, row('big', 'folder', 0));
   for (let index = 0; index < 8; index += 1) {
-    await catalog.putFile(row(`big/part-${String(index)}.bin`, 'file', 15 * MiB));
+    await seedCatalogFile(catalog, row(`big/part-${String(index)}.bin`, 'file', 15 * MiB));
   }
-  const attachment = await catalog.putFile(row('notes/extra.bin', 'file', 9 * MiB));
+  const attachment = await seedCatalogFile(catalog, row('notes/extra.bin', 'file', 9 * MiB));
   return { folderId: folder.id, attachmentId: attachment.id, total: 129 * MiB };
 }
 

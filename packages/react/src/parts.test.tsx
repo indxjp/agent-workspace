@@ -2,8 +2,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { surfaceStrings } from './locale.js';
+import { ApprovalPrompt } from './approval-prompt.js';
 import {
   AgentSwitcher,
+  AttachmentChips,
   FeedbackButtons,
   SuggestedPrompts,
   SurfaceDisclaimer,
@@ -111,6 +113,61 @@ describe('the surface parts (S1-18, #456)', () => {
   });
 });
 
+describe('the attachment chips (R-F5a, #1489)', () => {
+  const ITEMS = [
+    { id: 'f1', name: 'orders.csv' },
+    { id: 'f2', name: '<b>x</b>.txt' },
+  ];
+
+  it('renders one aw-chip per item, with no wrapper, and names each remove button', () => {
+    const html = renderToStaticMarkup(
+      <AttachmentChips
+        items={ITEMS}
+        removeLabel={surfaceStrings('en').removeFile}
+        onRemove={ignore}
+      />,
+    );
+    expect(html).toBe(
+      '<span class="aw-chip">orders.csv<button type="button" aria-label="Remove orders.csv">×</button></span>' +
+        '<span class="aw-chip">&lt;b&gt;x&lt;/b&gt;.txt<button type="button" aria-label="Remove &lt;b&gt;x&lt;/b&gt;.txt">×</button></span>',
+    );
+  });
+
+  it('takes the host look: class names, glyph and title, and a localised label', () => {
+    const html = renderToStaticMarkup(
+      <AttachmentChips
+        items={ITEMS.slice(0, 1)}
+        removeLabel={surfaceStrings('ja').removeFile}
+        onRemove={ignore}
+        disabled
+        classNames={{ chip: 'chip-class', remove: 'remove-class' }}
+        removeGlyph="✕"
+        removeTitle="Remove"
+      />,
+    );
+    expect(html).toBe(
+      '<span class="chip-class">orders.csv<button type="button" aria-label="orders.csvを削除" class="remove-class" title="Remove" disabled="">✕</button></span>',
+    );
+  });
+
+  it('draws no remove button when read-only, with no onRemove (#1508)', () => {
+    expect(renderToStaticMarkup(<AttachmentChips items={ITEMS.slice(0, 1)} />)).toBe(
+      '<span class="aw-chip">orders.csv</span>',
+    );
+    expect(
+      renderToStaticMarkup(
+        <AttachmentChips items={ITEMS.slice(0, 1)} removeLabel={String} disabled />,
+      ),
+    ).not.toContain('<button');
+  });
+
+  it('renders nothing for no items', () => {
+    expect(
+      renderToStaticMarkup(<AttachmentChips items={[]} removeLabel={String} onRemove={ignore} />),
+    ).toBe('');
+  });
+});
+
 describe('tool results (#540)', () => {
   it('renders a JSON array of objects as a table', () => {
     const html = renderToStaticMarkup(<ToolResult output='[{"a":1}]' component="table" />);
@@ -179,5 +236,127 @@ describe('the agent switcher and the feedback buttons (#540)', () => {
     expect(rated).toContain('aria-label="Good answer" aria-pressed="true"');
     expect(rated).toContain('aria-label="Bad answer" aria-pressed="false"');
     expect(rated).toContain('The rating could not be sent.');
+  });
+});
+
+describe('the approval prompt (#1490, ADR-0145)', () => {
+  const call = { toolName: 'send_mail', canonicalCall: '{"to":"<b>boss</b>"}' };
+
+  it('names the tool and shows the canonical call as text, never as markup', () => {
+    const html = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        onDecide={ignore}
+      />,
+    );
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-label="The agent is waiting for your approval to use send_mail"');
+    expect(html).toContain('{&quot;to&quot;:&quot;&lt;b&gt;boss&lt;/b&gt;&quot;}');
+    expect(html).not.toContain('<b>boss</b>');
+  });
+
+  it('gives both decisions accessible names in each language, and caps the comment', () => {
+    const en = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        onDecide={ignore}
+      />,
+    );
+    expect(en).toContain('>Approve</button>');
+    expect(en).toContain('>Reject</button>');
+    expect(en).toContain('maxLength="1000"');
+    const ja = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('ja')}
+        pending={false}
+        onDecide={ignore}
+      />,
+    );
+    expect(ja).toContain('>承認</button>');
+    expect(ja).toContain('>却下</button>');
+  });
+
+  it('disables both decisions and the comment while one is in flight', () => {
+    const idle = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        onDecide={ignore}
+      />,
+    );
+    expect(idle).not.toContain('disabled');
+    const busy = renderToStaticMarkup(
+      <ApprovalPrompt call={call} strings={surfaceStrings('en')} pending onDecide={ignore} />,
+    );
+    expect(busy.match(/disabled=""/gu)).toHaveLength(3);
+  });
+
+  it('shows a refusal as an alert, and nothing when there is none', () => {
+    const quiet = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        onDecide={ignore}
+      />,
+    );
+    expect(quiet).not.toContain('role="alert"');
+    const refused = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        problem="This request has already been decided."
+        onDecide={ignore}
+      />,
+    );
+    expect(refused).toContain('role="alert"');
+    expect(refused).toContain('This request has already been decided.');
+  });
+
+  it('uses the host classes in place of the aw- ones when given', () => {
+    const html = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        onDecide={ignore}
+        classNames={{ root: 'host-root', button: 'host-button', approve: 'host-approve' }}
+      />,
+    );
+    expect(html).toContain('class="host-root"');
+    expect(html).toContain('class="host-approve"');
+    expect(html).toContain('class="host-button"');
+    expect(html).not.toContain('aw-approval-button');
+  });
+
+  it('lets a host style every element, so a host without styles.css needs no aw- class', () => {
+    const html = renderToStaticMarkup(
+      <ApprovalPrompt
+        call={call}
+        strings={surfaceStrings('en')}
+        pending={false}
+        problem="Refused."
+        onDecide={ignore}
+        classNames={{
+          root: 'r',
+          heading: 'h',
+          call: 'c',
+          label: 'l',
+          comment: 'm',
+          actions: 'a',
+          button: 'b',
+          approve: 'p',
+          problem: 'x',
+        }}
+      />,
+    );
+    expect(html).not.toContain('aw-');
   });
 });

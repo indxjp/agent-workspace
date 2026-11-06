@@ -289,9 +289,8 @@ describe('a paged walk resumes at its cursor instead of walking from the start',
       expect(keys).toHaveLength(3000);
       expect(keys).toEqual([...keys].sort());
       expect(pages).toBe(3);
-      // `p` once a page, each of its 30 folders once, and two folders again at each page boundary:
-      // the cursor's own and the one the previous page peeked into. A walk from the start is 93.
-      expect(readdirs).toBe(3 + 30 + 2 * 2);
+      // One walk carried from page to page: `p` and each of its 30 folders once (#1835).
+      expect(readdirs).toBe(1 + 30);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

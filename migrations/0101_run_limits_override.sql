@@ -1,0 +1,4 @@
+CREATE INDEX "audit_events_agent_restore_idx" ON "audit_events" USING btree ("workspace_id","subject_id","created_at") WHERE "audit_events"."action" = 'agent-changed' and "audit_events"."details"->>'archived' = 'false';--> statement-breakpoint
+CREATE INDEX "run_usage_records_workspace_created_idx" ON "run_usage_records" USING btree ("workspace_id","created_at");--> statement-breakpoint
+-- Last on purpose: a nullable column with no default is a catalog-only change, and running after the index builds keeps the ACCESS EXCLUSIVE lock on "runs" brief.
+ALTER TABLE "runs" ADD COLUMN "limits_override" jsonb;

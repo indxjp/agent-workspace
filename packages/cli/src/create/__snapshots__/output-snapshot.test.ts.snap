@@ -19,13 +19,13 @@ exports[`create output > automation theme with an openapi tool 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "a10a0fc563790043845b3159a4f43f1c67f350d582e78abd79cbe5573db7b066",
     "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/automation.ts": "0c73c9be1b16bc63f38b6b2d935f606a9ee40c14c9b6f8c20ae194e4a5d2870f",
     "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
     "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
     "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
     "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
     "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
@@ -224,7 +224,7 @@ exports[`create output > cloud local, SeaweedFS 1`] = `
     ".env": "87d80f63a2b523922e212214633a51569df2ae0447bf53c115fd976d34d0e11a",
     ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
     "agent-workspace.yaml": "b95bd4ea1ec9bcc0ddec2f2d6b756bbe61375d5161beb0f649a19356088314af",
-    "compose.yaml": "660cab896c2d50b9b390b9d9a410cb49838b84784bb0bd53b8a7739a7167e0c9",
+    "compose.yaml": "c43bbefb55358dcfd604ab81c0200f085357b5d8df07cec6c03c5c0d63596a93",
     "package.json": "d0cd399ea523f16ca5a0daac82c46d8afdec9dab8eaba72b207514d23d99f96e",
     "pnpm-workspace.yaml": "b379483d4293500af8e9d3e8d83b4b5a2ad1e844911cd7be7f7e274e4bb80666",
   },
@@ -257,7 +257,7 @@ exports[`create output > cloud local, default answers 1`] = `
     ".env": "8c9cbcadff17c1689a347b5b867cbaa1c1d9c039dc4f8f65c11df2cb6c85bf4d",
     ".gitignore": "c16f9ba94511a35255e485b32c17a66600e63e4ae03a4fa8c1cd2064a9151657",
     "agent-workspace.yaml": "4c2ca21396a2d97b6ec30a29e81a31bb5113bb982a65f8bc0aec9e7c82987b0f",
-    "compose.yaml": "660cab896c2d50b9b390b9d9a410cb49838b84784bb0bd53b8a7739a7167e0c9",
+    "compose.yaml": "c43bbefb55358dcfd604ab81c0200f085357b5d8df07cec6c03c5c0d63596a93",
     "package.json": "d0cd399ea523f16ca5a0daac82c46d8afdec9dab8eaba72b207514d23d99f96e",
     "pnpm-workspace.yaml": "b379483d4293500af8e9d3e8d83b4b5a2ad1e844911cd7be7f7e274e4bb80666",
   },
@@ -331,11 +331,11 @@ exports[`create output > every permission 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "1186483f776950bd0fca82d956dddf68bf8b1b714d60492bfe27af853038ca6a",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -382,6 +382,12 @@ Options:
   --install / --no-install   install the dependencies after writing (asked on a terminal)
   --start / --no-start       run \`dev\` after installing (asked on a terminal); it stays in
                              the foreground until Ctrl-C and create exits with its code
+  --template <portal | chat | wiki | crm | desk>
+              also write an app (not with --cloud): portal adds a Next.js app with dashboard,
+              chat, files and runs pages; chat, wiki, crm and desk are presets over it with
+              the recipe pages, the wiki its spaces and pages, the desk its dashboard; a
+              preset takes --theme blank unless --theme is given; the README lists the
+              commands that build the app on
   --help      print this text
 
 With no terminal, or with CI set, nothing is asked: flags, --answers and defaults are used.
@@ -440,11 +446,11 @@ exports[`create output > provider anthropic 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -487,11 +493,11 @@ exports[`create output > provider anthropic-compatible 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "e77ed616b1dd2518119a828b8e2fa2b395c91616b849190ba200298c00c0f629",
+    "agent-workspace.yaml": "e2f42d9558dfa0637bd5108937a1c88283ef29046236dd0abc33f3cfa3cbe3e0",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -534,11 +540,11 @@ exports[`create output > provider azure-openai 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "738268a4af8182ddeee2c28f2554a06364c1c9f65927cfc3efb1cef5c8b25fe2",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "8fe9bc36c730dc67f841f4e873950ecea4088e584dd38e7ea8d0ccd42e8411ad",
+    "agent-workspace.yaml": "369a880a909834f11b13ae963edbc3c3085d64f959b7fad0b69dc2ec98f436d4",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -579,11 +585,11 @@ exports[`create output > provider openai 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "4b9eabe459081e600e9c3e0798d2014ff13e618e87128a4b77ebb5527d78f225",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "543e77bec2c3c3ae8cff1fdd29d1a9b1eb0442ed6a88343016ca2cebbde2ca1b",
+    "agent-workspace.yaml": "9ac3746705045318ca18ce07368a2ac52f6071c8017483476204f888203870e0",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -626,11 +632,11 @@ exports[`create output > provider openai-compatible 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "4b9eabe459081e600e9c3e0798d2014ff13e618e87128a4b77ebb5527d78f225",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "6ab1590b44c03b304c46043bfa40e97227c9e9d78190716ca64dccdee31290d4",
+    "agent-workspace.yaml": "cc3eca2a00ee6965ac3b0ef9cc3adf284d74d95a9299e8476759ecd21eab1d47",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -673,6 +679,40 @@ exports[`create output > refusal: --cloud azure --yes 1`] = `
 }
 `;
 
+exports[`create output > refusal: --template portal --cloud local 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "portal",
+    "--cloud",
+    "local",
+  ],
+  "exit": 2,
+  "exitCode": undefined,
+  "files": {},
+  "stderr": "--template writes an app over the project create writes without --cloud; a deployment project has no app. Pass one or the other.
+",
+  "stdout": "",
+}
+`;
+
+exports[`create output > refusal: unknown template 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "nope",
+  ],
+  "exit": 2,
+  "exitCode": undefined,
+  "files": {},
+  "stderr": "Unknown --template "nope". Choose one of portal, chat, wiki, crm, desk.
+",
+  "stdout": "",
+}
+`;
+
 exports[`create output > refusal: unknown theme 1`] = `
 {
   "argv": [
@@ -704,11 +744,11 @@ exports[`create output > sandbox auto 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -749,11 +789,11 @@ exports[`create output > sandbox local 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "a2449b8476316432d4dd42c097325b63c89679df3b7c7d8a34e20f6ba468d5b0",
+    "agent-workspace.yaml": "7f108ace0cd6e82f5b62d86a3706d9250d5c576507bf219742849174a5cca9f6",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -794,11 +834,11 @@ exports[`create output > sandbox sandbox-runtime 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "a2449b8476316432d4dd42c097325b63c89679df3b7c7d8a34e20f6ba468d5b0",
+    "agent-workspace.yaml": "7f108ace0cd6e82f5b62d86a3706d9250d5c576507bf219742849174a5cca9f6",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -824,6 +864,740 @@ Next steps:
 }
 `;
 
+exports[`create output > template chat 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "chat",
+    "--yes",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+    ".github/workflows/app-ci.yml": "151390fe3b326d4b53c8a1852f6ff1a4edaf1fddf1e7d0a41f207a0cd7fc22c0",
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "Dockerfile": "a72a382086c201f02420168851b619ad6dca73f6a8982d78233161a1f429987e",
+    "README.md": "c672d65b174e60e051e945dad3a6623414e568d26f493255aa92464b16453260",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
+    "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+    "app.config.ts": "bd5aa23d2a1cd65c550c6f6db9ebb9281791992e220db111e17e7492809dcf36",
+    "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+    "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+    "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+    "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+    "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+    "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+    "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+    "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+    "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+    "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+    "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+    "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+    "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+    "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+    "app/layout.tsx": "ad95fe22ddd8decf9dcdf5306d9dfbb46d8577e3025ee0722e067f14123abfdb",
+    "app/nav.ts": "1a62f828b1be50eb5f1ffa6dc101a74ac708c82d69f1565242c643fee43545c7",
+    "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+    "app/page.tsx": "3d95e3c369057690aa321c12f9211d910030cb01954f589a47fe76928441947f",
+    "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+    "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+    "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+    "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+    "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+    "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+    "app/strings.ts": "f2a00a9509c52d2db7b2050335bb4cceefd507cc1322e887a647429b08013f2e",
+    "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+    "aw-generated.json": "80d6c95515662d7d6699ddfd74a42035a5e3de00ee7f47e614808078f1833f68",
+    "db/migrations/0000_app_kit.sql": "6fc1ebc1880406145a370ab1e73d15dfada07b9ed33f5746af7b8f53ead85470",
+    "db/migrations/0001_app_kit_recipes.sql": "bd8d55887d36db4bdfa84b31229f0289055457afdbe68edc554df295d0982e3e",
+    "db/migrations/0002_app_kit_channels.sql": "43f416dc4ba490f89bdced784c0b993271d69c1449123b2ccf722bc1cde2da53",
+    "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+    "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+    "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+    "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+    "package.json": "6abe3836d0ab09cf4d36f4a1815e70df17e9d0f6a3742f2beeae96a0679a28c0",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+    "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+  .dockerignore
+  .github/workflows/app-ci.yml
+  Dockerfile
+  README.md
+  app.config.ts
+  app/api/browser-token/route.ts
+  app/api/health/route.ts
+  app/api/mcp/route.ts
+  app/api/recipes/runs/[id]/route.ts
+  app/api/recipes/runs/[id]/steps/[key]/decision/route.ts
+  app/api/recipes/runs/route.ts
+  app/api/recipes/slots/route.ts
+  app/api/recipes/webhook/route.ts
+  app/api/sign-in/callback/route.ts
+  app/api/sign-in/route.ts
+  app/api/sign-out/route.ts
+  app/chat/chat-panel.tsx
+  app/chat/page.tsx
+  app/files/page.tsx
+  app/layout.tsx
+  app/nav.ts
+  app/notices.tsx
+  app/page.tsx
+  app/portal.ts
+  app/recipes/[id]/page.tsx
+  app/recipes/page.tsx
+  app/runs/[id]/page.tsx
+  app/runs/page.tsx
+  app/sign-in/page.tsx
+  app/strings.ts
+  app/theme.ts
+  db/migrations/0000_app_kit.sql
+  db/migrations/0001_app_kit_recipes.sql
+  db/migrations/0002_app_kit_channels.sql
+  db/migrations/meta/_journal.json
+  dependency-cruiser.config.mjs
+  instrumentation.ts
+  next.config.ts
+  tsconfig.json
+  aw-generated.json
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm run dev
+",
+}
+`;
+
+exports[`create output > template crm 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "crm",
+    "--yes",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+    ".github/workflows/app-ci.yml": "151390fe3b326d4b53c8a1852f6ff1a4edaf1fddf1e7d0a41f207a0cd7fc22c0",
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "Dockerfile": "a72a382086c201f02420168851b619ad6dca73f6a8982d78233161a1f429987e",
+    "README.md": "264d2257116b6b385783b2d10869b125f3d12b515267563b99378508c2ba9078",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
+    "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+    "app.config.ts": "bd5aa23d2a1cd65c550c6f6db9ebb9281791992e220db111e17e7492809dcf36",
+    "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+    "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+    "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+    "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+    "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+    "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+    "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+    "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+    "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+    "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+    "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+    "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+    "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+    "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+    "app/layout.tsx": "ad95fe22ddd8decf9dcdf5306d9dfbb46d8577e3025ee0722e067f14123abfdb",
+    "app/nav.ts": "1a62f828b1be50eb5f1ffa6dc101a74ac708c82d69f1565242c643fee43545c7",
+    "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+    "app/page.tsx": "f2c836895900d6adab4171c68164c300ad798dc7188b7de30d4f612c4ebaf5f5",
+    "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+    "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+    "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+    "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+    "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+    "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+    "app/strings.ts": "f2a00a9509c52d2db7b2050335bb4cceefd507cc1322e887a647429b08013f2e",
+    "app/theme.ts": "e1dd47eea94d840ed343ae41e0fc2e30b9ab88046cdb4cc6abae04f114762c54",
+    "aw-generated.json": "d81b26ffa5a9962c227e1eea3758fdde9965f63dc9a650a9133c929201f7312a",
+    "db/migrations/0000_app_kit.sql": "6fc1ebc1880406145a370ab1e73d15dfada07b9ed33f5746af7b8f53ead85470",
+    "db/migrations/0001_app_kit_recipes.sql": "bd8d55887d36db4bdfa84b31229f0289055457afdbe68edc554df295d0982e3e",
+    "db/migrations/0002_app_kit_channels.sql": "43f416dc4ba490f89bdced784c0b993271d69c1449123b2ccf722bc1cde2da53",
+    "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+    "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+    "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+    "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+    "package.json": "6abe3836d0ab09cf4d36f4a1815e70df17e9d0f6a3742f2beeae96a0679a28c0",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+    "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+  .dockerignore
+  .github/workflows/app-ci.yml
+  Dockerfile
+  README.md
+  app.config.ts
+  app/api/browser-token/route.ts
+  app/api/health/route.ts
+  app/api/mcp/route.ts
+  app/api/recipes/runs/[id]/route.ts
+  app/api/recipes/runs/[id]/steps/[key]/decision/route.ts
+  app/api/recipes/runs/route.ts
+  app/api/recipes/slots/route.ts
+  app/api/recipes/webhook/route.ts
+  app/api/sign-in/callback/route.ts
+  app/api/sign-in/route.ts
+  app/api/sign-out/route.ts
+  app/chat/chat-panel.tsx
+  app/chat/page.tsx
+  app/files/page.tsx
+  app/layout.tsx
+  app/nav.ts
+  app/notices.tsx
+  app/page.tsx
+  app/portal.ts
+  app/recipes/[id]/page.tsx
+  app/recipes/page.tsx
+  app/runs/[id]/page.tsx
+  app/runs/page.tsx
+  app/sign-in/page.tsx
+  app/strings.ts
+  app/theme.ts
+  db/migrations/0000_app_kit.sql
+  db/migrations/0001_app_kit_recipes.sql
+  db/migrations/0002_app_kit_channels.sql
+  db/migrations/meta/_journal.json
+  dependency-cruiser.config.mjs
+  instrumentation.ts
+  next.config.ts
+  tsconfig.json
+  aw-generated.json
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm run dev
+",
+}
+`;
+
+exports[`create output > template desk 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "desk",
+    "--yes",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+    ".github/workflows/app-ci.yml": "151390fe3b326d4b53c8a1852f6ff1a4edaf1fddf1e7d0a41f207a0cd7fc22c0",
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "Dockerfile": "a72a382086c201f02420168851b619ad6dca73f6a8982d78233161a1f429987e",
+    "README.md": "f49a3a21ee04a22ceccf4c7b0c7c8bfc105e215f95f7da9b85a99bf447c1a061",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
+    "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+    "app.config.ts": "bd5aa23d2a1cd65c550c6f6db9ebb9281791992e220db111e17e7492809dcf36",
+    "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+    "app/api/dashboard/route.ts": "ebde066eca18cd62a3e8046d7af38aeb93b5dcf5e0161432d7a75bfea55aaa15",
+    "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+    "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+    "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+    "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+    "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+    "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+    "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+    "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+    "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+    "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+    "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+    "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+    "app/dashboard/page.tsx": "3a6f0cdea7b6f4ca53b3c29d155b5b251f2fbec4b10f0d2f5b6240fbabe7e12a",
+    "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+    "app/layout.tsx": "ad95fe22ddd8decf9dcdf5306d9dfbb46d8577e3025ee0722e067f14123abfdb",
+    "app/nav.ts": "ca980d76fee72c240831f2f48b512123bcaad272c1fa230a902bf4e503288614",
+    "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+    "app/page.tsx": "66ddab6e498ef7418a811145b6b9647e610eccbf7649663b2b1a1dc64912791f",
+    "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+    "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+    "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+    "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+    "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+    "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+    "app/strings.ts": "82ab6d775d7f463fa8fe396d6c6a7723fc421e887ff94272535446115e9aa448",
+    "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+    "aw-generated.json": "5f4bd66061b488a097ef32dee75df9e38b69b470ff098207e954a571d701cb4e",
+    "db/migrations/0000_app_kit.sql": "6fc1ebc1880406145a370ab1e73d15dfada07b9ed33f5746af7b8f53ead85470",
+    "db/migrations/0001_app_kit_recipes.sql": "bd8d55887d36db4bdfa84b31229f0289055457afdbe68edc554df295d0982e3e",
+    "db/migrations/0002_app_kit_channels.sql": "43f416dc4ba490f89bdced784c0b993271d69c1449123b2ccf722bc1cde2da53",
+    "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+    "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+    "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+    "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+    "package.json": "6abe3836d0ab09cf4d36f4a1815e70df17e9d0f6a3742f2beeae96a0679a28c0",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+    "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+  .dockerignore
+  .github/workflows/app-ci.yml
+  Dockerfile
+  README.md
+  app.config.ts
+  app/api/browser-token/route.ts
+  app/api/dashboard/route.ts
+  app/api/health/route.ts
+  app/api/mcp/route.ts
+  app/api/recipes/runs/[id]/route.ts
+  app/api/recipes/runs/[id]/steps/[key]/decision/route.ts
+  app/api/recipes/runs/route.ts
+  app/api/recipes/slots/route.ts
+  app/api/recipes/webhook/route.ts
+  app/api/sign-in/callback/route.ts
+  app/api/sign-in/route.ts
+  app/api/sign-out/route.ts
+  app/chat/chat-panel.tsx
+  app/chat/page.tsx
+  app/dashboard/page.tsx
+  app/files/page.tsx
+  app/layout.tsx
+  app/nav.ts
+  app/notices.tsx
+  app/page.tsx
+  app/portal.ts
+  app/recipes/[id]/page.tsx
+  app/recipes/page.tsx
+  app/runs/[id]/page.tsx
+  app/runs/page.tsx
+  app/sign-in/page.tsx
+  app/strings.ts
+  app/theme.ts
+  db/migrations/0000_app_kit.sql
+  db/migrations/0001_app_kit_recipes.sql
+  db/migrations/0002_app_kit_channels.sql
+  db/migrations/meta/_journal.json
+  dependency-cruiser.config.mjs
+  instrumentation.ts
+  next.config.ts
+  tsconfig.json
+  aw-generated.json
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm run dev
+",
+}
+`;
+
+exports[`create output > template desk in service-desk 1`] = `
+{
+  "argv": [
+    "<parent>/service-desk",
+    "--template",
+    "desk",
+    "--yes",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+    ".github/workflows/app-ci.yml": "1351ce208591ff3fea19117a91070c4c40e34f4a76f1149dc7e9e69a97286e9a",
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "Dockerfile": "30309d19f3c7b7f7633c4934e0696572dd425d86bec5dfeb49309fb1bc0aa1e7",
+    "README.md": "d9a99571c5467476f95bf87e14ae407c8a91013f0f726028ed52644a15a34821",
+    "agent-workspace.yaml": "0ea67251e38b434b34172f81cb9aaf500802441c451c53580ce956643c6d0580",
+    "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+    "app.config.ts": "be27c2caf7ca8fef5efaf01ba1f79aa6f0a2a36963848a67b0456e5ad64efe01",
+    "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+    "app/api/dashboard/route.ts": "ebde066eca18cd62a3e8046d7af38aeb93b5dcf5e0161432d7a75bfea55aaa15",
+    "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+    "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+    "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+    "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+    "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+    "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+    "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+    "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+    "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+    "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+    "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+    "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+    "app/dashboard/page.tsx": "3a6f0cdea7b6f4ca53b3c29d155b5b251f2fbec4b10f0d2f5b6240fbabe7e12a",
+    "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+    "app/layout.tsx": "7cc9c42f4b69be54e289bfb9ccd77bdab45ea5b142d68ef10b4efcb51f29c8dd",
+    "app/nav.ts": "ca980d76fee72c240831f2f48b512123bcaad272c1fa230a902bf4e503288614",
+    "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+    "app/page.tsx": "66ddab6e498ef7418a811145b6b9647e610eccbf7649663b2b1a1dc64912791f",
+    "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+    "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+    "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+    "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+    "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+    "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+    "app/strings.ts": "83056d677b12647eb0ecf44f4b87e3f643a605bf56aa322992a5cfecdf6d61a0",
+    "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+    "aw-generated.json": "8cc31c6941c16037ded4ae83a9c32850e3f37bbd760229b1ad9383221e5eaa59",
+    "db/migrations/0000_app_kit.sql": "780714a44abc602845d9c0ca611fa6d2cdd0238dff2a763d48bcac7bc79cc73a",
+    "db/migrations/0001_app_kit_recipes.sql": "2d1b2c913fb167c61fe3dc843290ec4589b2b22da4ab12026cb4e4ebd470c18a",
+    "db/migrations/0002_app_kit_channels.sql": "bc868954d597ffc2ab56c44268b6ed049b3239532649251a1498c3d7199a1451",
+    "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+    "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+    "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+    "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+    "package.json": "32d6e5b196920a69b4d5194c5e8f7aeba5503f1fd626c5c75e5d35fc916b4399",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+    "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/service-desk
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+  .dockerignore
+  .github/workflows/app-ci.yml
+  Dockerfile
+  README.md
+  app.config.ts
+  app/api/browser-token/route.ts
+  app/api/dashboard/route.ts
+  app/api/health/route.ts
+  app/api/mcp/route.ts
+  app/api/recipes/runs/[id]/route.ts
+  app/api/recipes/runs/[id]/steps/[key]/decision/route.ts
+  app/api/recipes/runs/route.ts
+  app/api/recipes/slots/route.ts
+  app/api/recipes/webhook/route.ts
+  app/api/sign-in/callback/route.ts
+  app/api/sign-in/route.ts
+  app/api/sign-out/route.ts
+  app/chat/chat-panel.tsx
+  app/chat/page.tsx
+  app/dashboard/page.tsx
+  app/files/page.tsx
+  app/layout.tsx
+  app/nav.ts
+  app/notices.tsx
+  app/page.tsx
+  app/portal.ts
+  app/recipes/[id]/page.tsx
+  app/recipes/page.tsx
+  app/runs/[id]/page.tsx
+  app/runs/page.tsx
+  app/sign-in/page.tsx
+  app/strings.ts
+  app/theme.ts
+  db/migrations/0000_app_kit.sql
+  db/migrations/0001_app_kit_recipes.sql
+  db/migrations/0002_app_kit_channels.sql
+  db/migrations/meta/_journal.json
+  dependency-cruiser.config.mjs
+  instrumentation.ts
+  next.config.ts
+  tsconfig.json
+  aw-generated.json
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/service-desk
+  npm run dev
+",
+}
+`;
+
+exports[`create output > template portal 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "portal",
+    "--yes",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+    ".github/workflows/app-ci.yml": "151390fe3b326d4b53c8a1852f6ff1a4edaf1fddf1e7d0a41f207a0cd7fc22c0",
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "Dockerfile": "a72a382086c201f02420168851b619ad6dca73f6a8982d78233161a1f429987e",
+    "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
+    "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
+    "app.config.ts": "bd5aa23d2a1cd65c550c6f6db9ebb9281791992e220db111e17e7492809dcf36",
+    "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+    "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+    "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+    "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+    "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+    "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+    "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+    "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+    "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+    "app/layout.tsx": "ad95fe22ddd8decf9dcdf5306d9dfbb46d8577e3025ee0722e067f14123abfdb",
+    "app/nav.ts": "954cc1e71aee7ce91b65c522a94cc42f9d8e4d23a3a4b29d5670e39945af7c43",
+    "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+    "app/page.tsx": "f2c836895900d6adab4171c68164c300ad798dc7188b7de30d4f612c4ebaf5f5",
+    "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+    "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+    "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+    "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+    "app/strings.ts": "92a27c8253204d06b0d0504ba916d7465a88bf4f8063f15ec76de507d6a2de9d",
+    "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+    "aw-generated.json": "e66d33781e88bada13d1352b1a2ae6037f29094110f2a0f8bdc4d91d1f015f77",
+    "db/migrations/0000_app_kit.sql": "6fc1ebc1880406145a370ab1e73d15dfada07b9ed33f5746af7b8f53ead85470",
+    "db/migrations/0001_app_kit_recipes.sql": "bd8d55887d36db4bdfa84b31229f0289055457afdbe68edc554df295d0982e3e",
+    "db/migrations/0002_app_kit_channels.sql": "43f416dc4ba490f89bdced784c0b993271d69c1449123b2ccf722bc1cde2da53",
+    "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+    "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+    "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
+    "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+    "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+    "package.json": "6abe3836d0ab09cf4d36f4a1815e70df17e9d0f6a3742f2beeae96a0679a28c0",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+    "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
+    "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
+    "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  README.md
+  evals/assistant.yaml
+  AGENTS.md
+  skills/refund-policy/SKILL.md
+  .dockerignore
+  .github/workflows/app-ci.yml
+  Dockerfile
+  app.config.ts
+  app/api/browser-token/route.ts
+  app/api/health/route.ts
+  app/api/mcp/route.ts
+  app/api/sign-in/callback/route.ts
+  app/api/sign-in/route.ts
+  app/api/sign-out/route.ts
+  app/chat/chat-panel.tsx
+  app/chat/page.tsx
+  app/files/page.tsx
+  app/layout.tsx
+  app/nav.ts
+  app/notices.tsx
+  app/page.tsx
+  app/portal.ts
+  app/runs/[id]/page.tsx
+  app/runs/page.tsx
+  app/sign-in/page.tsx
+  app/strings.ts
+  app/theme.ts
+  db/migrations/0000_app_kit.sql
+  db/migrations/0001_app_kit_recipes.sql
+  db/migrations/0002_app_kit_channels.sql
+  db/migrations/meta/_journal.json
+  dependency-cruiser.config.mjs
+  instrumentation.ts
+  next.config.ts
+  tsconfig.json
+  aw-generated.json
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm run dev
+",
+}
+`;
+
+exports[`create output > template wiki 1`] = `
+{
+  "argv": [
+    "<parent>/acme-ai",
+    "--template",
+    "wiki",
+    "--yes",
+  ],
+  "exit": 0,
+  "exitCode": undefined,
+  "files": {
+    ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+    ".github/workflows/app-ci.yml": "151390fe3b326d4b53c8a1852f6ff1a4edaf1fddf1e7d0a41f207a0cd7fc22c0",
+    ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+    "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+    "Dockerfile": "a72a382086c201f02420168851b619ad6dca73f6a8982d78233161a1f429987e",
+    "README.md": "7059585055b281114e62d4e05bfdf3dcaedcb8ac6d34a8228d6fc4fce6af861b",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
+    "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+    "app.config.ts": "537e74c37db2a719400a26e45d682f8eab45d55e342145ef380bd7a938554b1d",
+    "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+    "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+    "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+    "app/api/pages/[id]/move/route.ts": "0063107faef7a1a77f23b6b43fa755ba1c6fa08bb771a50b76e26d589bdc7aa8",
+    "app/api/pages/[id]/restore/route.ts": "86fa2cc9a7ca9db54e366f8a5bf24bc0bc41673dda16c40a15b5325f776e9e69",
+    "app/api/pages/[id]/revisions/route.ts": "caca0a0490a19d689d8eb20b7d880b7dd04a9b92ac7c95b84a5d55cd586628f2",
+    "app/api/pages/[id]/route.ts": "800a5212b0a2a046589a50f8a995a6e1ab0ce372b81abd04011d3b95f5b0be01",
+    "app/api/pages/children/route.ts": "a7b0748ae89bb9e6b6cb8f021f895223da300be490829473e3ba42f9c8dce57a",
+    "app/api/pages/route.ts": "7d5e3722fb1602ca897bad32bdba0e8465377efdbf97cefeb845a13a36fe6928",
+    "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+    "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+    "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+    "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+    "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+    "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+    "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+    "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+    "app/api/spaces/[id]/route.ts": "dacd1903b2a9ce98686402b2968a84a966c960b073832954a56e4cceac858b41",
+    "app/api/spaces/route.ts": "082c99a5afec614bbd0363c5179a7852e22376b583b5c6adb96edb0a48844be4",
+    "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+    "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+    "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+    "app/layout.tsx": "ad95fe22ddd8decf9dcdf5306d9dfbb46d8577e3025ee0722e067f14123abfdb",
+    "app/nav.ts": "76d736ac995493bfd8103e32bd3130f31211925ee4f083baf5ee4807bd41a984",
+    "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+    "app/page.tsx": "f2c836895900d6adab4171c68164c300ad798dc7188b7de30d4f612c4ebaf5f5",
+    "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+    "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+    "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+    "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+    "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+    "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+    "app/spaces/[id]/edit/page.tsx": "fd678f19b9ce3e132ae6fbc6919d846d5c13039a90f5dd32e6fc4fdcd68c881b",
+    "app/spaces/[id]/page.tsx": "62c7430c7d441d43c22722757a0b0503a2438ef280151bafe76d9adc792c4576",
+    "app/spaces/new/page.tsx": "9eb73276c33bc1c23a2065b8d8a08fc52a7c73b94702c7674b05426cb9b615d8",
+    "app/spaces/page.tsx": "52157a7c1a56e0ef4c739fee3b7ae2f923722557c1ab97c6e085fc5093a5a8aa",
+    "app/strings.ts": "e8d4a2d09fc1409f02b1918991e77a9cc5240aec129dbacf8d4ad2d188e6c218",
+    "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+    "app/wiki/[id]/page.tsx": "b5ced633aeb1293d1fbac7657f03d6ec8a15fcc6e2ce06e197391cf08643b24b",
+    "app/wiki/page.tsx": "cece2643bfccf4f8ffb5a6aaa0b09368e4a01e4afc26734f4bb5e3cbbe54b0b7",
+    "aw-generated.json": "b21e7e72c688bbc9769017a6e6ade8a62cd8ac548e2974cdcfaf4301f5fa1c51",
+    "db/migrations/0000_app_kit.sql": "6fc1ebc1880406145a370ab1e73d15dfada07b9ed33f5746af7b8f53ead85470",
+    "db/migrations/0001_app_kit_recipes.sql": "bd8d55887d36db4bdfa84b31229f0289055457afdbe68edc554df295d0982e3e",
+    "db/migrations/0002_app_kit_channels.sql": "43f416dc4ba490f89bdced784c0b993271d69c1449123b2ccf722bc1cde2da53",
+    "db/migrations/0003_wiki.sql": "bb6d21c026fbec405d0fd0fcac92a88485c0fda78828ea79abf8ffa24b9e91e3",
+    "db/migrations/meta/_journal.json": "1f5e9c33e92ee02de64dda6696302ad1363e8147d1515a14ab0a50821553c661",
+    "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+    "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+    "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+    "package.json": "6abe3836d0ab09cf4d36f4a1815e70df17e9d0f6a3742f2beeae96a0679a28c0",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+    "resources/page.ts": "f1cecc1a56ff209b540b56841017f66a93416297668b4b87a3a8c6eed8f311c9",
+    "resources/space.ts": "e198cbeb82c4a314a75bd2eab9bff3a10b8133ed583b09a67dcc1f5d8935951d",
+    "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
+    "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+  },
+  "stderr": "",
+  "stdout": "
+Created <parent>/acme-ai
+  package.json
+  pnpm-workspace.yaml
+  .gitignore
+  agent-workspace.yaml
+  agents/assistant.ts
+  surfaces/main.ts
+  AGENTS.md
+  .dockerignore
+  .github/workflows/app-ci.yml
+  Dockerfile
+  README.md
+  app.config.ts
+  app/api/browser-token/route.ts
+  app/api/health/route.ts
+  app/api/mcp/route.ts
+  app/api/pages/[id]/move/route.ts
+  app/api/pages/[id]/restore/route.ts
+  app/api/pages/[id]/revisions/route.ts
+  app/api/pages/[id]/route.ts
+  app/api/pages/children/route.ts
+  app/api/pages/route.ts
+  app/api/recipes/runs/[id]/route.ts
+  app/api/recipes/runs/[id]/steps/[key]/decision/route.ts
+  app/api/recipes/runs/route.ts
+  app/api/recipes/slots/route.ts
+  app/api/recipes/webhook/route.ts
+  app/api/sign-in/callback/route.ts
+  app/api/sign-in/route.ts
+  app/api/sign-out/route.ts
+  app/api/spaces/[id]/route.ts
+  app/api/spaces/route.ts
+  app/chat/chat-panel.tsx
+  app/chat/page.tsx
+  app/files/page.tsx
+  app/layout.tsx
+  app/nav.ts
+  app/notices.tsx
+  app/page.tsx
+  app/portal.ts
+  app/recipes/[id]/page.tsx
+  app/recipes/page.tsx
+  app/runs/[id]/page.tsx
+  app/runs/page.tsx
+  app/sign-in/page.tsx
+  app/spaces/[id]/edit/page.tsx
+  app/spaces/[id]/page.tsx
+  app/spaces/new/page.tsx
+  app/spaces/page.tsx
+  app/strings.ts
+  app/theme.ts
+  app/wiki/[id]/page.tsx
+  app/wiki/page.tsx
+  db/migrations/0000_app_kit.sql
+  db/migrations/0001_app_kit_recipes.sql
+  db/migrations/0002_app_kit_channels.sql
+  db/migrations/0003_wiki.sql
+  db/migrations/meta/_journal.json
+  dependency-cruiser.config.mjs
+  instrumentation.ts
+  next.config.ts
+  resources/page.ts
+  resources/space.ts
+  tsconfig.json
+  aw-generated.json
+aw dev reads ANTHROPIC_API_KEY from its environment; no key is written to a file.
+Next steps:
+  cd <parent>/acme-ai
+  npm run dev
+",
+}
+`;
+
 exports[`create output > theme automation with engine claude-age… 1`] = `
 {
   "argv": [
@@ -841,13 +1615,13 @@ exports[`create output > theme automation with engine claude-age… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/automation.ts": "93811f9406117a6d0f1656cb53a4b9a3443d0a0cd30a09bbf22edcadef6313bb",
     "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
     "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
     "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
     "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
     "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
@@ -896,13 +1670,13 @@ exports[`create output > theme automation with engine mastra 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/automation.ts": "919f00f3e969a16e81d0d010c24133440f066dcfa6b2460049dcaf81d3d7c061",
     "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
     "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
     "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
-    "package.json": "675e7f4b8f191f80585cb503a24675ca22eeb867ead7f50736c13536b5ea65da",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "b000c36fd903b83113938c9b18fcbc692f92ffa039195ddd3e5659d7387c0fe1",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
     "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
     "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
@@ -951,13 +1725,13 @@ exports[`create output > theme automation with engine openai-age… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/automation.ts": "fb3ac236a1ff522824cec42e886c3b9419099368d82496a764bb5bbbf980bd9a",
     "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
     "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
     "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
-    "package.json": "62eb02d4d961e4b80b4644178acf0de77fed5f60b0f1b6ab417430c1c6e677c2",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "7a3323a5c375d9da9c2a778c1e915955193872cf59ec62565bbfa30369c1ad50",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
     "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
     "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
@@ -1006,13 +1780,13 @@ exports[`create output > theme automation with engine pi 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "c8b85a5105a4525694182360ce8c824fe0e80ad2d18973f34219833296f0abd0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/automation.ts": "9009a46f3451c2885d2a4abf7e5194a4dacaf324ab9145ec8a6ba723b3c38845",
     "evals/automation.yaml": "521dba2c69b2deffe7901ec939f319a568b82a6c6ca1c22bb857d2cff284c2e8",
     "fake-api/openapi.json": "d6ab815284e55206b64156bf4290d8ef9a43225773b566ef1feeefefaeb42a9d",
     "fake-api/server.ts": "10986179b7df45b025a6ac2ec48a93c1a8d2c16eea86503d9f5ab16d106dd52d",
-    "package.json": "0516debcaacbfe4e83eef6740c93fdc989c1565735c54d514f7720c53e73be97",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "98d694298b29873cab809af4b2a366e33bb1211338f05abb90da560fd1cfe259",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "12a3b438bfccffbdea260d2c4205c13260c04fe209fb2b72721dc117ebe1b259",
     "tools/delivery-estimate.run.ts": "13c5f75b6147c712a037328f29faa16431569d774125a5d7ed76b83b843b421a",
     "tools/delivery-estimate.ts": "9ab01465c3a2adb0e4a16c5e0fac2b565b88c1a03574e9dd647897344beffff9",
@@ -1060,10 +1834,10 @@ exports[`create output > theme blank with engine claude-agent-sdk 1`] = `
   "files": {
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
   },
   "stderr": "",
@@ -1101,10 +1875,10 @@ exports[`create output > theme blank with engine mastra 1`] = `
   "files": {
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "f301ac7ab6e6e46aee125643e9eb70a62cb662d537ec764900ffc7bc9585b0db",
-    "package.json": "675e7f4b8f191f80585cb503a24675ca22eeb867ead7f50736c13536b5ea65da",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "b000c36fd903b83113938c9b18fcbc692f92ffa039195ddd3e5659d7387c0fe1",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
   },
   "stderr": "",
@@ -1142,10 +1916,10 @@ exports[`create output > theme blank with engine openai-agents 1`] = `
   "files": {
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "2e74f22a1b95f367d2a15c9eeb4aa1327b120ba2a02773c2de0e0eb66ae3a439",
-    "package.json": "62eb02d4d961e4b80b4644178acf0de77fed5f60b0f1b6ab417430c1c6e677c2",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "7a3323a5c375d9da9c2a778c1e915955193872cf59ec62565bbfa30369c1ad50",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
   },
   "stderr": "",
@@ -1183,10 +1957,10 @@ exports[`create output > theme blank with engine pi 1`] = `
   "files": {
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "d7b94f1be2b3ca5cf7f26a06fcda68035690794a4c6caa72449d7bc5486a658f",
-    "package.json": "0516debcaacbfe4e83eef6740c93fdc989c1565735c54d514f7720c53e73be97",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "98d694298b29873cab809af4b2a366e33bb1211338f05abb90da560fd1cfe259",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48",
   },
   "stderr": "",
@@ -1225,11 +1999,11 @@ exports[`create output > theme copilot with engine claude-agent-… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/copilot.ts": "a965c9ed1b6c8f9e7971831834a0cff93d312e9913dff4e1af671de7eebd8d5d",
     "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
     "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
     "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
@@ -1278,11 +2052,11 @@ exports[`create output > theme copilot with engine mastra 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/copilot.ts": "ea6bb0db90a8e1cc8dc191819b6f2fa69a7f8b16c86e66a6ce437bebb9383e25",
     "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
-    "package.json": "675e7f4b8f191f80585cb503a24675ca22eeb867ead7f50736c13536b5ea65da",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "b000c36fd903b83113938c9b18fcbc692f92ffa039195ddd3e5659d7387c0fe1",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
     "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
     "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
@@ -1331,11 +2105,11 @@ exports[`create output > theme copilot with engine openai-agents 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/copilot.ts": "5e9a3d286f431f37581b706df877f0ee499d46376a4ace3e0d18849847262ab3",
     "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
-    "package.json": "62eb02d4d961e4b80b4644178acf0de77fed5f60b0f1b6ab417430c1c6e677c2",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "7a3323a5c375d9da9c2a778c1e915955193872cf59ec62565bbfa30369c1ad50",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
     "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
     "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
@@ -1384,11 +2158,11 @@ exports[`create output > theme copilot with engine pi 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "dce284635dd7d5e463d3ec9c537e4a0f89404597575b1d135c17bf68a92cc60c",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/copilot.ts": "1a97831adea74db29ce377da35950bbecfb2b3ac749d4257456882b77f41fd2c",
     "evals/copilot.yaml": "dd81c8eac8a104c1a9ec8fcfd04b00ba2bfaaf27dfac3cc6dfb7fc5e02bd7a5f",
-    "package.json": "0516debcaacbfe4e83eef6740c93fdc989c1565735c54d514f7720c53e73be97",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "98d694298b29873cab809af4b2a366e33bb1211338f05abb90da560fd1cfe259",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "5262404efb39671f917a8e61e9c1efc1df59a5a57ec430b4b89921ba0c75ac20",
     "web/index.html": "397936610e696f215d8e93c7f41b1f44635ed9d68f4f6004dd81d2fed5c89618",
     "web/main.jsx": "e02cd0987f4e7638e6111af651c592ab16b6fceec44ca81ddfb83f4a84530bd4",
@@ -1437,11 +2211,11 @@ exports[`create output > theme knowledge with engine claude-agen… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/knowledge.ts": "8342fb6aa534af2febf0c768245028a30db5f7360bc123ff0b82744605766722",
     "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
     "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
   },
@@ -1484,11 +2258,11 @@ exports[`create output > theme knowledge with engine mastra 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/knowledge.ts": "8e229bcfce99f6e3ee3501fb6e5aaccd1dd2bcce13fe8cec6667791e54b93637",
     "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
-    "package.json": "675e7f4b8f191f80585cb503a24675ca22eeb867ead7f50736c13536b5ea65da",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "b000c36fd903b83113938c9b18fcbc692f92ffa039195ddd3e5659d7387c0fe1",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
     "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
   },
@@ -1531,11 +2305,11 @@ exports[`create output > theme knowledge with engine openai-agen… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/knowledge.ts": "709c1e23eb1620aaddd2bfc21e5f1bfbd8733cc715620c4a8da400d517da057b",
     "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
-    "package.json": "62eb02d4d961e4b80b4644178acf0de77fed5f60b0f1b6ab417430c1c6e677c2",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "7a3323a5c375d9da9c2a778c1e915955193872cf59ec62565bbfa30369c1ad50",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
     "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
   },
@@ -1578,11 +2352,11 @@ exports[`create output > theme knowledge with engine pi 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "740cf860f4c6d416e6f77dbbfe93fc90c3199be0c579ad530919363a36e773df",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/knowledge.ts": "f5c10dd154366e074250975791664bc4c053d8f705f14a4901ef5d80e0039da6",
     "evals/knowledge.yaml": "26ea5500325624d2186d97a97b0c7017efde3fe65418bd61635dc1c38de7aa64",
-    "package.json": "0516debcaacbfe4e83eef6740c93fdc989c1565735c54d514f7720c53e73be97",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "98d694298b29873cab809af4b2a366e33bb1211338f05abb90da560fd1cfe259",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/cite-sources/SKILL.md": "e315445f3bbf16f6406c929fd031f840bada25a92229c94867bc96d3b355f68f",
     "surfaces/main.ts": "a19096c663747675b0d4266557d9e91834c6fbafe406c18a76cbd59ee2925816",
   },
@@ -1625,11 +2399,11 @@ exports[`create output > theme review with engine claude-agent-s… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/reviewer.ts": "681d4ee382cf416ecfdd3ee76de556fd2dc9e42121b0f6d92b25f73e28ef9372",
     "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
   },
   "stderr": "",
@@ -1670,11 +2444,11 @@ exports[`create output > theme review with engine mastra 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/reviewer.ts": "7def38c49aaf6206ea7900883b5005db473c786f614fef2942ef14389e78acd7",
     "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
-    "package.json": "675e7f4b8f191f80585cb503a24675ca22eeb867ead7f50736c13536b5ea65da",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "b000c36fd903b83113938c9b18fcbc692f92ffa039195ddd3e5659d7387c0fe1",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
   },
   "stderr": "",
@@ -1715,11 +2489,11 @@ exports[`create output > theme review with engine openai-agents 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/reviewer.ts": "adc40356cd8d404480e266786ebf061480c31ae22a120e2152c230c2cbb896ee",
     "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
-    "package.json": "62eb02d4d961e4b80b4644178acf0de77fed5f60b0f1b6ab417430c1c6e677c2",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "7a3323a5c375d9da9c2a778c1e915955193872cf59ec62565bbfa30369c1ad50",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
   },
   "stderr": "",
@@ -1760,11 +2534,11 @@ exports[`create output > theme review with engine pi 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "d5c7a2c327a7b0a7310fa340fb9fd5f96de0f372c293eec66e4eb2b0d45d3a33",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/reviewer.ts": "64ae9ef91bcd5ed781987ec90b7694c1b27f4d6b671081d7f394f400000a97b1",
     "evals/reviewer.yaml": "c19029e9986ba2f208817354fd27c6d74ad0ee7133fbbca56ad6b06c7a06a46c",
-    "package.json": "0516debcaacbfe4e83eef6740c93fdc989c1565735c54d514f7720c53e73be97",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "98d694298b29873cab809af4b2a366e33bb1211338f05abb90da560fd1cfe259",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "surfaces/main.ts": "82613f8a694a50345aa74c2a8ba2dfcd0d2bf146028568a2f277b9e9772714c4",
   },
   "stderr": "",
@@ -1805,11 +2579,11 @@ exports[`create output > theme support with engine claude-agent-… 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "a1219b4df21ed312b247812426408994c80ea61114522f8e909618465de7add1",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -1852,11 +2626,11 @@ exports[`create output > theme support with engine mastra 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "068d6f5b16dee92f35c78a7a828f97074623f52a6ba5b03c725aff454c8e63af",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "675e7f4b8f191f80585cb503a24675ca22eeb867ead7f50736c13536b5ea65da",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "b000c36fd903b83113938c9b18fcbc692f92ffa039195ddd3e5659d7387c0fe1",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -1899,11 +2673,11 @@ exports[`create output > theme support with engine openai-agents 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "1fba95f1b551c0b5201df361a1a7ae96eac914881d2e35ee507ba9ba8926129a",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "62eb02d4d961e4b80b4644178acf0de77fed5f60b0f1b6ab417430c1c6e677c2",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "7a3323a5c375d9da9c2a778c1e915955193872cf59ec62565bbfa30369c1ad50",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -1946,11 +2720,11 @@ exports[`create output > theme support with engine pi 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "34b5bf3348cbce0a7dc3ae357ff883c3f77025fae65dbf9d098a19dbb3897361",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "0516debcaacbfe4e83eef6740c93fdc989c1565735c54d514f7720c53e73be97",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "98d694298b29873cab809af4b2a366e33bb1211338f05abb90da560fd1cfe259",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
   },
@@ -1993,11 +2767,11 @@ exports[`create output > tools openapi and postgres 1`] = `
     ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
     "AGENTS.md": "9c6b08efa8b08c5104d80fe30d99d66bfbba4630fe80f346f241211c2ecdf5fe",
     "README.md": "2d49d93d3062315dd7a44a112fca8acdfaabf0c2d0b88023bd53531d053bbbb0",
-    "agent-workspace.yaml": "7917865acebf9d0f670f872f1706cda59fca3e055b4c8b2dbbd811bc5689a7ab",
+    "agent-workspace.yaml": "0dbbd4e24232d29be94ad89d50ff6f895cc85b9f000d1418a88ac5da9db580da",
     "agents/assistant.ts": "0c0e42e95e1ddb14ae1423f7ffab7e0833f5a0695894bbd3b44303a9ce64e2a4",
     "evals/assistant.yaml": "9580ee564923cd7a5f98ea4688b87c4e4c64eefeaa092633e46c9b136b779481",
-    "package.json": "1c17427b5efcfca6f56fe7df49645d568dda7b05eb27f94559eeeb55d353c465",
-    "pnpm-workspace.yaml": "f5dbb49a4ba41c9719c304c56fbc447737380d9b1ae19d9204ec249ae2f06ae8",
+    "package.json": "e7df195f7c9c4ef82be62d99fe8af000ff77d4b795d5b8e7636235320acf08e5",
+    "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
     "skills/refund-policy/SKILL.md": "2927bdc4aa155c9873e4a45c7bcfb660a2bae79b189a5f0e37eac4c3d0c94160",
     "surfaces/main.ts": "52fc111f2ead4d825d40d0f9dabd997f59d678cddbfdf90fb0188280cd19af39",
     "tools/openapi.ts": "044482b126a6d63a084f917fe331765e8fd25e1401c1033bdc673e780b35cdc6",

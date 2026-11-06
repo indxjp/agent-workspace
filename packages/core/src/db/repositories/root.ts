@@ -155,6 +155,18 @@ import {
   type TriggerRepositoryProvider,
 } from './triggers.js';
 import {
+  createDatabaseAgentTeamRepositoryProvider,
+  type AgentTeamRepositoryProvider,
+} from './agent-teams.js';
+import {
+  createDatabaseWebhookDeliveryRepository,
+  type WebhookDeliveryRepository,
+} from './webhook-deliveries.js';
+import {
+  createDatabaseWebhookRepositoryProvider,
+  type WebhookRepositoryProvider,
+} from './webhooks.js';
+import {
   createDatabaseAgentVersionEvaluationRepositoryProvider,
   type AgentVersionEvaluationRepositoryProvider,
 } from './agent-version-evaluations.js';
@@ -250,6 +262,8 @@ export interface DatabaseRoot {
    * each environment runs (#442, S1-04, ADR-0101; C7 and C9 are enforced inside it).
    */
   readonly agentVersions: AgentVersionRepositoryProvider;
+  /** Agent teams and their immutable versions, scoped by workspace (ADR-0104, issue #1516). */
+  readonly agentTeams: AgentTeamRepositoryProvider;
   readonly resourceCatalogs: ResourceCatalogRepositoryProvider;
   /** `file_texts` — the text a file search extracted, cached with its `tsvector` (ADR-0147). */
   readonly fileTexts: FileTextRepositoryProvider;
@@ -268,6 +282,14 @@ export interface DatabaseRoot {
   readonly endpointClients: EndpointClientRepositoryProvider;
   /** Inbound triggers and their delivery claims, scoped by workspace (ADR-0144). */
   readonly triggers: TriggerRepositoryProvider;
+  /** Run-outcome webhook endpoints, scoped by workspace (N-3, ADR-SDK-18-N3-250). */
+  readonly webhooks: WebhookRepositoryProvider;
+  /**
+   * The webhook delivery outbox as the delivery worker claims and settles it. Unscoped for the
+   * reason {@link listStaleRunIds} is: the worker acts as no one workspace, and it sees ids, a URL
+   * and attempt bookkeeping only (ADR-SDK-18-N3-250 D4).
+   */
+  readonly webhookDeliveries: WebhookDeliveryRepository;
   /** Append-only scored evaluations of an agent version, scoped by workspace (issue #618). */
   readonly agentVersionEvaluations: AgentVersionEvaluationRepositoryProvider;
   /** Issued browser-token digests and revocation state, scoped by workspace (issue #236). */
@@ -413,7 +435,10 @@ export interface DatabaseRoot {
    * duration, and is released however `work` ends.
    */
   withNamedLock<T>(name: string, work: () => Promise<T>): Promise<LockOutcome<T>>;
-  /** Append one immutable §36 row without exposing the unscoped database handle. */
+  /**
+   * Append one immutable §36 row without exposing the unscoped database handle. An event that names
+   * its `id` is written once: the same id again is a no-op, so a retried write is idempotent.
+   */
   recordAuditEvent(event: RootAuditEvent): Promise<void>;
   /** Release every pooled connection. Idempotent. */
   close(): Promise<void>;
@@ -492,6 +517,7 @@ export async function openDatabaseRoot(
     agentGrants: createDatabaseAgentGrantRepositoryProvider(db),
     agentResources: createDatabaseAgentResourceRepositoryProvider(db),
     agentVersions: createDatabaseAgentVersionRepositoryProvider(db),
+    agentTeams: createDatabaseAgentTeamRepositoryProvider(db),
     resourceCatalogs: createDatabaseResourceCatalogRepositoryProvider(db),
     fileTexts: createDatabaseFileTextRepositoryProvider(db),
     storageMigrationRuns: createDatabaseStorageMigrationRunRepository(db),
@@ -502,6 +528,8 @@ export async function openDatabaseRoot(
     builderToolCalls: createDatabaseBuilderToolCallRepositoryProvider(db),
     endpointClients: createDatabaseEndpointClientRepositoryProvider(db),
     triggers: createDatabaseTriggerRepositoryProvider(db),
+    webhooks: createDatabaseWebhookRepositoryProvider(db),
+    webhookDeliveries: createDatabaseWebhookDeliveryRepository(db),
     agentVersionEvaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(db),
     browserTokens: createDatabaseBrowserTokenRepositoryProvider(db),
     oauthTokens: createDatabaseOAuthTokenRepositoryProvider(db),
@@ -688,7 +716,12 @@ export async function openDatabaseRoot(
       return withAdvisoryLock(pool, `agent-workspace:lock:${name}`, 0, work);
     },
     async recordAuditEvent(event: RootAuditEvent): Promise<void> {
-      await db.insert(auditEvents).values(checkedAuditEvent(event));
+      const insert = db.insert(auditEvents).values(checkedAuditEvent(event));
+      // A caller that names the id names the event: writing it again (a retry after a lost reply)
+      // is the same row, not a second one.
+      await (event.id === undefined
+        ? insert
+        : insert.onConflictDoNothing({ target: auditEvents.id }));
     },
     async close(): Promise<void> {
       if (closed) return;

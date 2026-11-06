@@ -46,29 +46,46 @@ export type JudgeVerdict =
   | { readonly kind: 'verdict'; readonly pass: boolean; readonly reason: string }
   | { readonly kind: 'invalid' };
 
+type Verdict = Extract<JudgeVerdict, { kind: 'verdict' }>;
+
+/** What may follow the verdict: whitespace and the closing fence of a code block, nothing else. */
+const AFTER_VERDICT = /^\s*(?:```\s*)?$/u;
+
 /**
  * The verdict in `text`, so a reply wrapped in a code fence or a sentence, or one that quotes
- * another object or a stray brace first, still parses. Every object in the reply that is a verdict
- * counts: the judge can quote the agent's answer or write an example before its own verdict, and
- * the answer is attacker-chosen, so a reply whose verdicts disagree on `pass` is `invalid` (the
- * case fails closed). Otherwise the last verdict is the judge's. `invalid` when there is none.
+ * another object or a stray brace first, still parses. The verdict is the reply's last JSON object
+ * and the last thing in it (EVL-03): the answer is attacker-chosen and the judge can quote it, so a
+ * reply whose last object is not a verdict, or a verdict followed by more text or objects, holds no
+ * verdict of the judge's own, and the case fails closed. Every verdict-shaped object counts as
+ * well: a reply whose verdicts disagree on `pass` is `invalid` too. `invalid` when there is none.
  */
 export function parseJudgeVerdict(text: string): JudgeVerdict {
   // ponytail: tries every `}` after every `{`, cubic in the reply in the worst case; the reply is
   // capped by the judge call's max_tokens, so a brace-matching scanner is not worth its code.
-  const verdicts: Extract<JudgeVerdict, { kind: 'verdict' }>[] = [];
-  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
-    const verdict = verdictAt(text, start);
-    if (verdict !== null) verdicts.push(verdict);
+  const verdicts: { readonly verdict: Verdict; readonly end: number }[] = [];
+  let start = text.indexOf('{');
+  while (start !== -1) {
+    const found = verdictAt(text, start);
+    // A verdict's own text is not searched for more: what it quotes is a string in it, not a reply.
+    start = text.indexOf('{', found === null ? start + 1 : found.end);
+    if (found !== null) verdicts.push(found);
   }
   const last = verdicts.at(-1);
   if (last === undefined) return { kind: 'invalid' };
-  if (verdicts.some((verdict) => verdict.pass !== last.pass)) return { kind: 'invalid' };
-  return last;
+  if (!AFTER_VERDICT.test(text.slice(last.end))) return { kind: 'invalid' };
+  if (verdicts.some(({ verdict }) => verdict.pass !== last.verdict.pass))
+    return { kind: 'invalid' };
+  return last.verdict;
 }
 
-/** The verdict whose object starts at `text[start]`, or `null` when that object is not one. */
-function verdictAt(text: string, start: number): Extract<JudgeVerdict, { kind: 'verdict' }> | null {
+/**
+ * The verdict whose object starts at `text[start]`, and the index just past it, or `null` when that
+ * object is not one.
+ */
+function verdictAt(
+  text: string,
+  start: number,
+): { readonly verdict: Verdict; readonly end: number } | null {
   for (let end = text.indexOf('}', start); end !== -1; end = text.indexOf('}', end + 1)) {
     let candidate: unknown;
     try {
@@ -77,12 +94,15 @@ function verdictAt(text: string, start: number): Extract<JudgeVerdict, { kind: '
       continue;
     }
     // Once a slice from this `{` parses, no longer one can: a non-verdict sends the search on.
-    const verdict = VerdictSchema.safeParse(candidate);
-    if (!verdict.success) return null;
+    const parsed = VerdictSchema.safeParse(candidate);
+    if (!parsed.success) return null;
     return {
-      kind: 'verdict',
-      pass: verdict.data.pass,
-      reason: verdict.data.reason.slice(0, JUDGE_REASON_MAX_LENGTH),
+      end: end + 1,
+      verdict: {
+        kind: 'verdict',
+        pass: parsed.data.pass,
+        reason: parsed.data.reason.slice(0, JUDGE_REASON_MAX_LENGTH),
+      },
     };
   }
   return null;

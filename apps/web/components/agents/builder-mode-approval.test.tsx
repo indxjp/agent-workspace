@@ -3,6 +3,7 @@ import { act, type ComponentProps } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ApiProblemError } from '@indx-workspace/sdk';
 import type { AgentEvent } from '@indx-workspace/sdk/events';
 
 import type { HomeChat } from '../composer/home-chat';
@@ -103,15 +104,34 @@ describe('BuilderChat approval', () => {
     expect(homeChat.props?.follow).toEqual({ runId: 'run-3', nonce: 1 });
   });
 
-  it('keeps the card and shows a code when the server refuses the decision', async () => {
+  it('keeps the card and says why when the decision does not reach the server', async () => {
     client.approve.mockRejectedValue(new Error('offline'));
     await pause();
     await act(async () => {
       button('Approve')?.click();
       await Promise.resolve();
     });
-    expect(container.textContent).toContain('request_failed');
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'The decision was not accepted. The decision did not reach the server. Check your connection and try again. Code: request_failed',
+    );
     expect(homeChat.props?.follow).toBeUndefined();
+  });
+
+  it("shows the server's own sentence when it refuses the decision (UX-11)", async () => {
+    client.approve.mockRejectedValue(
+      new ApiProblemError({
+        status: 409,
+        problem: { code: 'run_not_awaiting_approval', message: 'This run is no longer waiting.' },
+      }),
+    );
+    await pause();
+    await act(async () => {
+      button('Approve')?.click();
+      await Promise.resolve();
+    });
+    const alert = container.querySelector('[role="alert"]')?.textContent;
+    expect(alert).toContain('This run is no longer waiting.');
+    expect(alert).toContain('Code: run_not_awaiting_approval');
   });
 
   describe('after a save', () => {

@@ -95,9 +95,13 @@ export const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 
 const JSON_MEDIA_TYPE = 'application/json';
 
-/** Read a JSON body, bounded, or the problem that stopped it. */
+/**
+ * Read a JSON body, bounded, or the problem that stopped it. `maxBytes` defaults to
+ * {@link MAX_REQUEST_BODY_BYTES}; a route whose contract admits a larger field passes its own.
+ */
 export async function readJsonBody(
   request: Request,
+  maxBytes: number = MAX_REQUEST_BODY_BYTES,
 ): Promise<{ ok: true; value: unknown } | { ok: false; result: ApiResult }> {
   const contentType = request.headers.get('content-type');
   const mediaType =
@@ -116,13 +120,13 @@ export async function readJsonBody(
   let text: string;
   try {
     const buffer = await request.arrayBuffer();
-    if (buffer.byteLength > MAX_REQUEST_BODY_BYTES) {
+    if (buffer.byteLength > maxBytes) {
       return {
         ok: false,
         result: problemWithDetail(
           413,
           'request_body_too_large',
-          `This route reads at most ${String(MAX_REQUEST_BODY_BYTES)} bytes of request body.`,
+          `This route reads at most ${String(maxBytes)} bytes of request body.`,
         ),
       };
     }

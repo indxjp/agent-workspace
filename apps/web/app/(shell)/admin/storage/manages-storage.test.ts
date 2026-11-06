@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { decide } from '../../../../server/rbac/decide';
-import { ROLES } from '../../../../server/rbac/roles';
+import { ROLES } from '../../../../server/rbac/core/roles';
 
 import { roleManagesStorage } from './manages-storage';
 

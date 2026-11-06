@@ -6,6 +6,7 @@
  * one `ceilingFor` on the agents runtime, the version runtime and the run API.
  */
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
+import { createInMemoryCatalog } from '@agent-workspace/core/db';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { POST as postAgents } from '../../app/api/agents/route';
@@ -31,7 +32,6 @@ import type { AgentStoreProvider } from '../agents/store';
 import { setupCeilingRefusal } from '../composition/setup';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
 import { startRun } from '../runs/api';
 import { InMemoryRunStore } from '../runs/memory-store';
 import { recordingCeilingFor, type RecordingCeiling } from './fixtures';
@@ -103,10 +103,8 @@ function install(ceiling: boolean): void {
         }),
       },
       skillCatalog: {
-        forWorkspace: () =>
-          Promise.resolve({ listSkills: () => Promise.resolve([]) } as unknown as Awaited<
-            ReturnType<ResourceCatalogStoreProvider['forWorkspace']>
-          >),
+        forWorkspace: (workspaceId) =>
+          Promise.resolve(createInMemoryCatalog().forWorkspace(workspaceId)),
       },
       resolveWorkspace: () => Promise.resolve({ kind: 'workspace', workspaceId: WORKSPACE }),
       ceiling: deploymentCeiling,

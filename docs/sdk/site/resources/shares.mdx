@@ -223,7 +223,7 @@ Reference: [`SHARES_PROBLEM_CODES`](/reference/contracts/shares#shares_problem_c
 - Resolving a public `/p/<token>` link (an unauthenticated visitor opening the share) is a
   separate, unauthenticated route this SDK does not expose a method for at all — it is outside
   `aw.shares`. Its own problem codes (`share_unavailable` 404, `invalid_passphrase` 403, both in
-  `apps/web/server/shares/core/service.ts`) are not part of the SDK-facing surface documented here
+  `apps/web/server/shares/service.ts`) are not part of the SDK-facing surface documented here
   and are left out on that basis, not overlooked.
 - `list`'s `forbidden` and `publish`'s `forbidden` both come from the same generic RBAC check
   (`requireResourceAccess`) rather than a shares-specific code; the contract's own

@@ -1,5 +1,5 @@
 /**
- * Migration 0051 — the parent folder rows `putFile` now writes (issue #899), against a real
+ * Migration 0051 — the parent folder rows every catalog write now adds (issue #899), against a real
  * PostgreSQL.
  *
  * The shape is `./engine-migration.test.ts`'s: migrate to the state before the change, write the
@@ -21,7 +21,11 @@ import { memberships } from '../schema/memberships.js';
 import { users } from '../schema/users.js';
 import { workspacePrincipals } from '../schema/workspace-principals.js';
 import { workspaces } from '../schema/workspaces.js';
-import { createIsolatedTestDatabase, type IsolatedTestDatabase } from './testing.js';
+import {
+  createIsolatedTestDatabase,
+  runMigrationsPastStorageProof,
+  type IsolatedTestDatabase,
+} from './testing.js';
 
 const databaseUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = Boolean(databaseUrl?.trim());
@@ -140,7 +144,7 @@ describe.skipIf(!hasDatabase)('0051 backfill of parent folder rows', () => {
     );
     await runMigrations({ url: isolated.url, maxConnections: 4 }, priorMigrationsDir);
     await isolated.db.execute(sql`update files set object_id = id where kind = 'file'`);
-    await runMigrations({ url: isolated.url, maxConnections: 4 }, migrationsDir);
+    await runMigrationsPastStorageProof(isolated.url, migrationsDir);
   }, 180_000);
 
   afterAll(async () => {

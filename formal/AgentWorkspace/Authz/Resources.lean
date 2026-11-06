@@ -3,7 +3,7 @@ import AgentWorkspace.Prelude.WireEnum
 /-!
 # Resources and sub-resources
 
-`RESOURCES` (`apps/web/server/rbac/resources.ts`) is the closed list of top-level segments that
+`RESOURCES` (`apps/web/server/rbac/core/resources.ts`) is the closed list of top-level segments that
 `decide()` classifies under `/api/<resource>`. `SUB_RESOURCES` (`permissions.ts`) is the per-resource
 list of `<sub>` segments `/api/<resource>/:id/<sub>` may carry: spec §34's three
 (`SPEC_34_SUB_RESOURCES`) followed by every task's declaration
@@ -27,14 +27,14 @@ instance decidableForallWireEnum {α : Type} [WireEnum α] (p : α → Prop) [De
   decidable_of_iff (∀ a ∈ (WireEnum.all : List α), p a)
     ⟨fun h a => h a (WireEnum.complete a), fun h a _ => h a⟩
 
-/-- `RESOURCES`: the 31 top-level resources, in the `as const` order of `resources.ts`. -/
-@[aw_spec (ts := "apps/web/server/rbac/resources.ts#RESOURCES")
+/-- `RESOURCES`: the 32 top-level resources, in the `as const` order of `resources.ts`. -/
+@[aw_spec (ts := "apps/web/server/rbac/core/resources.ts#RESOURCES")
   (doc := "docs/sdk/04-api-specification.md#33-roles")]
 inductive Resource where
   | agents | apiKeys | auditEvents | connectors | endpointClients | engines | files | invitations
   | me | memberships | metrics | modelConnections | models | platforms | projects | runs
   | runtimeConnections | runtimeProfiles | runtimes | secrets | sessions | shares | sharingPolicies | skills | setup
-  | storageConnections | toolBundles | tokens | triggers | users | workspaces
+  | storageConnections | toolBundles | tokens | triggers | users | webhooks | workspaces
   deriving DecidableEq, Repr, Inhabited
 
 /-- The path segment of a resource. -/
@@ -51,14 +51,15 @@ def Resource.toWire : Resource → String
   | .sessions => "sessions" | .shares => "shares" | .sharingPolicies => "sharing-policies"
   | .skills => "skills" | .setup => "setup" | .storageConnections => "storage-connections"
   | .toolBundles => "tool-bundles" | .tokens => "tokens"
-  | .triggers => "triggers" | .users => "users" | .workspaces => "workspaces"
+  | .triggers => "triggers" | .users => "users" | .webhooks => "webhooks"
+  | .workspaces => "workspaces"
 
 /-- Every resource, in `RESOURCES` order. -/
 def Resource.all : List Resource :=
   [.agents, .apiKeys, .auditEvents, .connectors, .endpointClients, .engines, .files, .invitations,
     .me, .memberships, .metrics, .modelConnections, .models, .platforms, .projects, .runs,
     .runtimeConnections, .runtimeProfiles, .runtimes, .secrets, .sessions, .shares, .sharingPolicies, .skills, .setup,
-    .storageConnections, .toolBundles, .tokens, .triggers, .users, .workspaces]
+    .storageConnections, .toolBundles, .tokens, .triggers, .users, .webhooks, .workspaces]
 
 instance : WireEnum Resource where
   all := Resource.all
@@ -70,8 +71,31 @@ instance : WireEnum Resource where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- `parseResource`: a resource, or `none` for any segment that is not exactly one spelling. -/
-@[aw_spec (ts := "apps/web/server/rbac/resources.ts#parseResource")]
+@[aw_spec (ts := "apps/web/server/rbac/core/resources.ts#parseResource")]
 def parseResource (s : String) : Option Resource := WireEnum.ofWire? s
+
+/-- `RESOURCE_ALIASES`: path segments decided as another resource. `agent-teams` is decided as
+`agents` (ADR-0104 acceptance decision 10): no new resource and no new grants exist for it. -/
+@[aw_spec (ts := "apps/web/server/rbac/core/resources.ts#RESOURCE_ALIASES")
+  (doc := "docs/adr/0104-a-team-is-a-resource.md#acceptance-u42a-2026-10-31")]
+def resourceAliases : List (String × Resource) := [("agent-teams", .agents)]
+
+/-- `resourceOfSegment`: the resource a `/api/<segment>` path is decided as — the segment's own
+resource, else its alias target, else `none`. -/
+@[aw_spec (ts := "apps/web/server/rbac/core/resources.ts#resourceOfSegment")]
+def resourceOfSegment (s : String) : Option Resource :=
+  match parseResource s with
+  | some r => some r
+  | none => (resourceAliases.find? (·.1 == s)).map (·.2)
+
+/-- A resource's own spelling is decided as that resource: an alias never shadows one. -/
+theorem resourceOfSegment_toWire (r : Resource) : resourceOfSegment r.toWire = some r := by
+  have h : parseResource r.toWire = some r := WireEnum.ofWire?_toWire r
+  simp [resourceOfSegment, h]
+
+/-- No alias is itself a resource's spelling, so an alias adds a path and never redirects one. -/
+theorem alias_is_no_resource : ∀ p ∈ resourceAliases, parseResource p.1 = none := by
+  decide +kernel
 
 /-! ## Sub-resources -/
 
@@ -79,7 +103,7 @@ def parseResource (s : String) : Option Resource := WireEnum.ofWire? s
 abbrev SubTable := Resource → List String
 
 /-- `SPEC_34_SUB_RESOURCES`: the three pairs spec §34 prints. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#SPEC_34_SUB_RESOURCES")
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#SPEC_34_SUB_RESOURCES")
   (doc := "docs/spec.md#34-api-design")]
 def spec34SubResources : SubTable
   | .agents => ["runs"]
@@ -96,7 +120,7 @@ structure SubDeclaration where
 
 /-- `DECLARED_SUB_RESOURCES`: every declaration, in the import order of
 `declared-sub-resources.ts` and, within a file, the file's order. -/
-@[aw_spec (ts := "apps/web/server/rbac/declared-sub-resources.ts#DECLARED_SUB_RESOURCES")
+@[aw_spec (ts := "apps/web/server/rbac/core/declared-sub-resources.ts#DECLARED_SUB_RESOURCES")
   (doc := "docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision")]
 def declaredSubResources : List SubDeclaration :=
   [ ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", .workspaces, "features"⟩,
@@ -168,7 +192,7 @@ theorem composeAux_seen (t : SubTable) (seen : List (Resource × String)) (d : S
 
 /-- `composeSubResources`: the base table plus the declarations; `error d` is the throw naming
 the first duplicate declaration. -/
-@[aw_spec (ts := "apps/web/server/rbac/declared-sub-resources.ts#composeSubResources")
+@[aw_spec (ts := "apps/web/server/rbac/core/declared-sub-resources.ts#composeSubResources")
   (doc := "docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision")]
 def composeSubResources (base : SubTable) (decls : List SubDeclaration) :
     Except SubDeclaration SubTable :=
@@ -176,14 +200,14 @@ def composeSubResources (base : SubTable) (decls : List SubDeclaration) :
 
 /-- `SUB_RESOURCES`, as `permissions.ts` composes it (the empty table if the composition threw,
 which the theorems show it does not). -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#SUB_RESOURCES")]
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#SUB_RESOURCES")]
 def subResources : SubTable :=
   match composeSubResources spec34SubResources declaredSubResources with
   | .ok t => t
   | .error _ => fun _ => []
 
 /-- `parseSub`: the segment, when it is one `subResources` classifies under `resource`. -/
-@[aw_spec (ts := "apps/web/server/rbac/permissions.ts#parseSub")]
+@[aw_spec (ts := "apps/web/server/rbac/core/permissions.ts#parseSub")]
 def parseSub (resource : Resource) (segment : String) : Option String :=
   (subResources resource).find? (· == segment)
 

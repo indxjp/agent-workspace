@@ -25,12 +25,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
+import {
+  createInMemorySessionStateBlobs,
+  createInMemoryWorkspaceScopeResolver,
+} from '@agent-workspace/core/db';
 import type {
-  SessionStateBlobInput,
   SessionStateRepository,
   SessionStateRepositoryProvider,
-  StoredSessionStateBlob,
 } from '@agent-workspace/core/db';
 import {
   agents,
@@ -73,67 +74,41 @@ afterAll(() => {
 });
 
 /**
- * A repository that keeps rows in memory.
+ * A repository whose blob rows are the shared in-memory rows (held to the database's contract).
  *
  * Only the blob half is used below; the stream half throws, so a case that reached it by accident
  * fails loudly instead of quietly testing the wrong store (ADR-0015).
  */
 function fakeRepositoryProvider(): {
   provider: SessionStateRepositoryProvider;
-  rows: Map<string, StoredSessionStateBlob>;
+  repository: SessionStateRepository;
 } {
-  const rows = new Map<string, StoredSessionStateBlob>();
   const unreachable = (): never => {
     throw new Error('this suite drives only the blob half of the database store');
   };
   const repository: SessionStateRepository = {
+    ...createInMemorySessionStateBlobs().forWorkspace(WORKSPACE),
     append: () => unreachable(),
     list: () => unreachable(),
     deleteLast: () => unreachable(),
     replaceAll: () => unreachable(),
     deleteStream: () => unreachable(),
     listStreams: () => unreachable(),
-    putBlob: (sessionId: string, blob: SessionStateBlobInput) => {
-      rows.set(`${sessionId}/${blob.engine}/${blob.blobKey}`, {
-        blobKey: blob.blobKey,
-        objectId: blob.objectId ?? null,
-        storageKey: blob.storageKey,
-        sizeBytes: blob.sizeBytes,
-        sha256: blob.sha256,
-      });
-      return Promise.resolve({ replaced: null });
-    },
-    getBlob: (sessionId, engine, blobKey) =>
-      Promise.resolve(rows.get(`${sessionId}/${engine}/${blobKey}`) ?? null),
-    listBlobs: () => Promise.resolve([...rows.values()]),
-    listLegacyBlobs: () => unreachable(),
-    countLegacyBlobs: () => unreachable(),
-    listObjectBlobs: () => unreachable(),
-    legacyBlobKeysHeld: () => unreachable(),
-    switchBlobObject: () => unreachable(),
-    referencedObjectIds: () => Promise.resolve([]),
-    // Every row this fake holds counts as expired: the cutoff itself is the repository's concern
-    // and is proved against PostgreSQL in `packages/core`.
-    purgeBefore: () => {
-      const blobs = [...rows.values()];
-      rows.clear();
-      return Promise.resolve({ streams: 0, entries: 0, blobs, sessionIds: [] });
-    },
   };
-  return { provider: { forScope: () => repository }, rows };
+  return { provider: { forScope: () => repository }, repository };
 }
 
-function databaseStore(options: { readonly blobs?: boolean } = {}) {
+/** A store with no storage service, as a deployment without `AW_STORAGE_URL` builds it. */
+function databaseStore() {
   const root = mkdtempSync(path.join(tmpdir(), 'aw-session-state-'));
   roots.push(root);
-  const { provider, rows } = fakeRepositoryProvider();
+  const { provider, repository } = fakeRepositoryProvider();
   const objects = createLocalFilesystemObjectStoreProvider(root);
   const store = new DatabaseSessionStateStore({
     repositories: provider,
     scopes: createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]),
-    ...((options.blobs ?? true) ? { blobs: objects } : {}),
   });
-  return { store, rows, objects };
+  return { store, repository, objects };
 }
 
 const BLOB = {
@@ -515,37 +490,19 @@ describe.skipIf(!hasDatabase)('the PostgreSQL session-state store', () => {
   );
 });
 
-/** A snapshot an earlier release saved: the bytes at the old key in the old store, and a row with no object id. */
-async function seedLegacyBlob(
-  { rows, objects }: ReturnType<typeof databaseStore>,
-  bytes: Uint8Array,
-): Promise<string> {
-  const storageKey = `session-state/${SESSION}/${BLOB.engine}/${BLOB.blobKey}`;
-  await objects
-    .forWorkspace(WORKSPACE)
-    .write(storageKey, bytesToStream(bytes), { contentType: 'application/octet-stream' });
-  rows.set(`${SESSION}/${BLOB.engine}/${BLOB.blobKey}`, {
-    blobKey: BLOB.blobKey,
-    objectId: null,
-    storageKey,
-    sizeBytes: bytes.byteLength,
-    sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
-  });
-  return storageKey;
-}
-
 describe('DatabaseSessionStateStore — the blob half, which is only this file’s', () => {
   // @story US-STO-13
   it('[US-STO-13][unit][cli] a blob is never saved without the storage service', async () => {
     const h = databaseStore();
 
-    const put = await h.store.putBlob(BLOB, new Uint8Array([1, 2, 3]));
+    const put = await h.store.putBlob(BLOB, bytesToStream(new Uint8Array([1, 2, 3])));
 
-    expect(put.ok).toBe(false);
+    if (put.ok || !('reason' in put)) throw new Error('the blob was not refused as unavailable');
     // Both causes are named: the variable may be set while the storage service failed to open.
-    expect(put.ok ? '' : put.reason).toMatch(/AW_STORAGE_URL is not set/u);
-    expect(put.ok ? '' : put.reason).toMatch(/storage service failed to open/u);
-    expect(h.rows.size).toBe(0);
+    expect(put.reason).toMatch(/AW_STORAGE_URL is not set/u);
+    expect(put.reason).toMatch(/storage service failed to open/u);
+    await expect(h.repository.listBlobs(SESSION)).resolves.toEqual([]);
+    await expect(h.repository.unsettledBlobs(new Date(Date.now() + 60_000))).resolves.toEqual([]);
     await expect(
       h.objects
         .forWorkspace(WORKSPACE)
@@ -553,53 +510,13 @@ describe('DatabaseSessionStateStore — the blob half, which is only this file�
     ).resolves.toBeNull();
   });
 
-  it('round-trips a snapshot an earlier release saved and reports the digest it recorded', async () => {
-    const h = databaseStore();
-    await seedLegacyBlob(h, new Uint8Array([7, 7, 7, 7]));
-    const read = await h.store.getBlob(BLOB);
-    expect(read.ok).toBe(true);
-    if (!read.ok) return;
-    expect(Uint8Array.from(read.content?.bytes ?? [])).toEqual(new Uint8Array([7, 7, 7, 7]));
-    expect(read.content?.sha256).toMatch(/^[0-9a-f]{64}$/u);
-  });
-
-  it('answers a blob that was never written as absent, not as an error', async () => {
-    const { store } = databaseStore();
-    await expect(store.getBlob(BLOB)).resolves.toEqual({ ok: true, content: null });
-  });
-
-  it('refuses to hand back bytes that are not the ones it recorded', async () => {
-    const h = databaseStore();
-    const storageKey = await seedLegacyBlob(h, new Uint8Array([1, 2, 3]));
-    // Somebody else wrote over the object. A recorded digest that is only ever *reported* proves
-    // nothing about the bytes a caller was handed; it is the check that makes the claim.
-    await h.objects
-      .forWorkspace(WORKSPACE)
-      .write(storageKey, bytesToStream(new Uint8Array([9, 9, 9])), {
-        contentType: 'application/octet-stream',
-      });
-    await expect(h.store.getBlob(BLOB)).rejects.toThrow(/Refusing to replay a snapshot/u);
-  });
-
   it('reports "no blob backend" rather than pretending to have stored something', async () => {
-    const { store } = databaseStore({ blobs: false });
-    const put = await store.putBlob(BLOB, new Uint8Array([1]));
-    expect(put.ok).toBe(false);
-    expect(put.ok ? '' : put.reason).toMatch(/AW_STORAGE_URL/u);
+    const { store } = databaseStore();
+    const put = await store.putBlob(BLOB, bytesToStream(new Uint8Array([1])));
+    if (put.ok || !('reason' in put)) throw new Error('the blob was not refused as unavailable');
+    expect(put.reason).toMatch(/AW_STORAGE_URL/u);
     const read = await store.getBlob(BLOB);
     expect(read.ok).toBe(false);
-  });
-
-  it('purges a blob row and then its bytes, and reports the counts', async () => {
-    const h = databaseStore();
-    const storageKey = await seedLegacyBlob(h, new Uint8Array([1, 2, 3]));
-    await expect(h.store.purgeBefore(WORKSPACE, new Date())).resolves.toEqual({
-      entries: 0,
-      blobs: 1,
-      sessionIds: [],
-    });
-    await expect(h.store.getBlob(BLOB)).resolves.toEqual({ ok: true, content: null });
-    await expect(h.objects.forWorkspace(WORKSPACE).head(storageKey)).resolves.toBeNull();
   });
 });
 

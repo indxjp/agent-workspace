@@ -69,8 +69,17 @@ import {
   RunRequest,
   type SdkSettingSource,
 } from '@agent-workspace/run-protocol';
-import { sandboxEnvironmentVerdict } from '@agent-workspace/engine';
-import { claudeDeniedToolsFor, type AgentToolPolicy } from '@indx-workspace/contracts/agents';
+import {
+  QUIET_CLAUDE_ENVIRONMENT,
+  quietEnvironmentVerdict,
+  sandboxEnvironmentVerdict,
+} from '@agent-workspace/engine';
+import {
+  AGENT_MEMORY_FILE,
+  agentMemoryEnabled,
+  claudeDeniedToolsFor,
+  type AgentToolPolicy,
+} from '@indx-workspace/contracts/agents';
 
 import { CLAUDE_HANDOFF_TOOL } from './handoff.js';
 import type {
@@ -88,6 +97,23 @@ import {
   splitApprovals,
   unapprovableRules,
 } from './tools.js';
+
+/**
+ * The one system-prompt line a run that keeps a memory folder is given (ADR-0163): it names the
+ * file and nothing else. The engine reads and writes the file with its own tools; the platform
+ * searches, ranks and injects nothing.
+ */
+export const CLAUDE_MEMORY_INSTRUCTION =
+  `Keep durable facts for later sessions in ${AGENT_MEMORY_FILE}: read it before you start, ` +
+  'and update it when you learn something worth remembering.';
+
+/** The instructions the system prompt appends: the agent's, then the memory line when it is on. */
+function appendedInstructions(portable: RunRequest['portable']): string {
+  if (!agentMemoryEnabled(portable.permissions)) return portable.instructions;
+  return portable.instructions.trim().length === 0
+    ? CLAUDE_MEMORY_INSTRUCTION
+    : `${portable.instructions}\n\n${CLAUDE_MEMORY_INSTRUCTION}`;
+}
 
 /**
  * `settingSources` for every platform-launched run.
@@ -185,6 +211,7 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
   // The Claude tool policy, compiled from the portable permissions, the stored arm, the grant
   // denials and the assigned connectors. `./tools.ts` documents the order, which is the surface
   // ENG-04b's refinement theorem is about.
+  const appended = appendedInstructions(portable);
   const tools = compileClaudeToolPolicy(portable.permissions, {
     stored: policy.tools,
     fileGrantDeny: policy.fileGrantDeny,
@@ -209,8 +236,8 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
 
   // `options.env` REPLACES the subprocess environment — it is not merged with `process.env`
   // (R-01 §3, a breaking change in SDK 0.2.113). `parsed.env` is therefore the complete
-  // environment the runner decided on, and this function adds four derived values on top: the
-  // two-variable tenant session scope `RunEnvironment` already refuses to let the caller set for
+  // environment the runner decided on, and this function adds derived values on top: the three quiet
+  // flags (D-13, so a caller cannot turn them off), the two-variable tenant session scope `RunEnvironment` already refuses to let the caller set for
   // itself, plus A.11's `AGENT_WORKSPACE_RUN_ID` / `AGENT_WORKSPACE_SESSION_ID`, read off this
   // same `RunRequest`'s own `runId` / `sessionId` fields rather than copied from `parsed.env`
   // (which cannot set them: they are derived, always last, so they always win).
@@ -221,6 +248,7 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
     // every connector tool is sent up front instead, as before. The runner may still override it.
     ENABLE_TOOL_SEARCH: 'false',
     ...parsed.env,
+    ...QUIET_CLAUDE_ENVIRONMENT,
     [CLAUDE_CONFIG_DIR_ENV]: scope.configDir,
     [CLAUDE_CODE_PROJECT_DIR_NAME_ENV]: scope.projectKey,
     [AGENT_WORKSPACE_RUN_ID_ENV]: parsed.runId,
@@ -243,6 +271,10 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
   const sandbox = sandboxEnvironmentVerdict(env, runToken);
   if (!sandbox.ok) {
     throw new Error(`compileRunRequest: refusing to compile this run — ${sandbox.reason}`);
+  }
+  const quiet = quietEnvironmentVerdict(env);
+  if (!quiet.ok) {
+    throw new Error(`compileRunRequest: refusing to compile this run — ${quiet.reason}`);
   }
 
   const mcpServers: Record<string, CompiledMcpServerConfig> = { ...portable.mcpServers };
@@ -286,14 +318,15 @@ export function compileRunRequest(request: RunRequest): CompiledClaudeRun {
     // replacement: a tenant writing "You help employees answer questions..." is not asking for
     // an agent that has forgotten how to use its tools. R-01 §3 option 63 gives the preset
     // shape that appends. An empty instructions field emits nothing at all rather than an
-    // empty append, matching what the `agents.instructions` column means by "".
-    ...(portable.instructions.trim().length === 0
+    // empty append, matching what the `agents.instructions` column means by "". A run that keeps
+    // a memory folder appends one more line naming its file (ADR-0163).
+    ...(appended.trim().length === 0
       ? {}
       : {
           systemPrompt: {
             type: 'preset' as const,
             preset: 'claude_code' as const,
-            append: portable.instructions,
+            append: appended,
           },
         }),
     ...(portable.limits.maxTurns === null ? {} : { maxTurns: portable.limits.maxTurns }),

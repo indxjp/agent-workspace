@@ -290,3 +290,28 @@ describe('writeCredential — repairs a connection whose secret is gone (issue #
     expect(await store.writeCredential('99999999-9999-4999-8999-999999999999', 'sk-x')).toBe(false);
   });
 });
+
+describe('keyless vertex connections', () => {
+  const input = {
+    name: 'v',
+    provider: 'vertex' as const,
+    config: { projectId: 'my-project-123' },
+  };
+
+  it('writes no secret, resolves with an empty credential and refuses credential writes', async () => {
+    const { store, scopes, secrets } = harness();
+    const created = await store.create(input);
+    if (created.kind !== 'created') throw new Error('fixture setup failed');
+    const id = created.connection.id;
+    const scope = await scopes.forWorkspaceId(WORKSPACE_ID);
+    if (scope === null) throw new Error('fixture scope');
+    expect(await secrets.list(scope)).toHaveLength(0);
+    expect((await store.resolve(id))?.credential).toBe('');
+    expect(await store.replaceCredential(id, 'sk-x')).toBe(false);
+    expect(await store.writeCredential(id, 'sk-x')).toBe(false);
+    expect(await secrets.list(scope)).toHaveLength(0);
+    const resource = await store.get(id);
+    expect(resource?.hasCredential).toBe(false);
+    expect(resource?.ready).toBe(true);
+  });
+});

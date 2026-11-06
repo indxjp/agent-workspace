@@ -90,7 +90,7 @@ test.describe('the Builder chat journey', () => {
 
     await expect(
       page.getByRole('alert').filter({ hasText: 'agent_definition_references_missing' }),
-    ).toContainText('connector:erp', { timeout: RUN_TIMEOUT });
+    ).toContainText('Connector: erp', { timeout: RUN_TIMEOUT });
 
     await page.getByLabel('Ask a follow-up').fill('yes');
     await page.getByRole('button', { name: 'Send' }).click();
@@ -100,10 +100,25 @@ test.describe('the Builder chat journey', () => {
       { timeout: RUN_TIMEOUT },
     );
     const approval = page.getByRole('region', { name: 'The Builder is waiting for your decision' });
-    // The diff names the connector the script swapped in, not just any change.
+    // The diff names the connector the script swapped in, not just any change, in words.
+    await expect(approval.getByRole('definition').filter({ hasText: 'Added' }).first()).toBeVisible(
+      {
+        timeout: RUN_TIMEOUT,
+      },
+    );
+    await expect(approval.getByRole('term').filter({ hasText: 'Connector: crm' })).toBeVisible();
+    // The exact fields stay one click away.
+    await approval.getByText('Show the exact fields').click();
     await expect(
-      approval.getByRole('row').filter({ hasText: 'resources' }).filter({ hasText: 'crm' }),
-    ).toBeVisible({ timeout: RUN_TIMEOUT });
+      approval.getByRole('row').filter({ hasText: 'definition.resources.connectors["crm"]' }),
+    ).toBeVisible();
+    // While the save waits for approval, no check has failed (UX-11): the paused call has no answer.
+    await expect(page.getByRole('alert').filter({ hasText: 'unreadable_result' })).toHaveCount(0);
+    await expect(page.getByText(/Step \d ·/u)).toHaveCount(0);
+    // The save repeats the body just checked; the panel still marks what changed since erp.
+    await expect(page.locator('[data-section="resources"][data-changed="true"]')).toContainText(
+      'Connector: crm',
+    );
     await approval.getByRole('button', { name: 'Approve' }).click();
 
     const saved = page.getByRole('status').filter({ hasText: 'Saved as version 1 on local' });

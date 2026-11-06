@@ -5,6 +5,7 @@
  * It imports nothing from Vitest, so any test can use it.
  */
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer, request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Readable } from 'node:stream';
@@ -61,11 +62,33 @@ export function newSpaceCredit(baseline: NewSpace, now: NewSpace): number {
   return growth;
 }
 
+/**
+ * The memory the process holds (bytes): on Linux its anonymous and shared-memory pages, resident or
+ * swapped (`RssAnon + RssShmem + VmSwap` in `/proc/self/status`); elsewhere `process.memoryUsage().rss`.
+ *
+ * Plain RSS falls when the kernel reclaims pages, so under memory pressure a consumer that holds
+ * its whole body can read as flat: the full parallel `pnpm test` read 30.8 MiB for the 64 MiB the
+ * formData() negative control holds, and the same test under a 150 MiB cgroup `MemoryHigh` read 0
+ * while 69 MiB sat in swap. A swapped page is still held, so it is counted. File-backed pages
+ * (the node binary and the modules it maps) are left out: the kernel drops them under pressure
+ * without swapping, and no consumer holds a body in them.
+ */
+export function heldMemory(): number {
+  if (process.platform !== 'linux') return process.memoryUsage().rss;
+  const status = readFileSync('/proc/self/status', 'utf8');
+  const kilobytes = (field: string): number => {
+    const match = new RegExp(`^${field}:\\s+(\\d+) kB$`, 'm').exec(status);
+    if (match?.[1] === undefined) throw new Error(`flat-memory: /proc/self/status has no ${field}`);
+    return Number(match[1]) * 1024;
+  };
+  return kilobytes('RssAnon') + kilobytes('RssShmem') + kilobytes('VmSwap');
+}
+
 /** A {@link measureRssGrowth} reading: the peak RSS growth and the new-space growth it subtracted. */
 export type RssReading = Readonly<{ growth: number; newSpaceGrowth: number }>;
 
 /**
- * Peak RSS growth (bytes) while `work` runs, and the most new-space growth it subtracted; forces GC before the baseline and before each sample.
+ * Peak RSS growth (bytes) while `work` runs, read as {@link heldMemory} so reclaimed pages still count, and the most new-space growth it subtracted; forces GC before the baseline and before each sample.
  * Call `sample()` inside `work` while the data is still referenced; the trailing sample alone
  * cannot see memory `work` has already released. Sample at least every bound/16 of payload (every
  * 4 MiB for a 64 MiB bound): V8 lets uncollected socket-read buffers reach about 64 MiB of external
@@ -85,7 +108,7 @@ export async function measureRssGrowth(
   work: (sample: () => void) => Promise<void>,
 ): Promise<RssReading> {
   collect();
-  const baseline = process.memoryUsage().rss;
+  const baseline = heldMemory();
   const newSpaceBaseline = newSpace();
   let peak = 0;
   let newSpacePeak = 0;
@@ -93,7 +116,7 @@ export async function measureRssGrowth(
     collect();
     const newSpaceGrowth = newSpaceCredit(newSpaceBaseline, newSpace());
     newSpacePeak = Math.max(newSpacePeak, newSpaceGrowth);
-    peak = Math.max(peak, process.memoryUsage().rss - baseline - newSpaceGrowth);
+    peak = Math.max(peak, heldMemory() - baseline - newSpaceGrowth);
   };
   await work(sample);
   sample();

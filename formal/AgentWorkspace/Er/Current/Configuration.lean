@@ -48,7 +48,7 @@ def inbound (S : Schema) (target : TableName) : List (TableName × ForeignKey) :
 target table): the cluster's own references to the root and to `secrets`, and every reference
 from elsewhere into a cluster table. -/
 @[aw_spec (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 def clusterForeignKeys : List (TableName × String × TableName) :=
   [(.modelConnections, "model_connections_workspace_id_workspaces_id_fk", .workspaces),
    (.runtimeProfiles, "runtime_profiles_workspace_id_workspaces_id_fk", .workspaces),
@@ -193,7 +193,9 @@ def secretRow (s : Secret.Secret) : Row :=
 def configJson (c : ModelConnection.Config) : String :=
   "{" ++ ", ".intercalate (optCells [("\"baseUrl\"", c.baseUrl.map (s!"\"{·}\"")),
     ("\"deployment\"", c.deployment.map (s!"\"{·}\"")),
-    ("\"apiVersion\"", c.apiVersion.map (s!"\"{·}\""))] |>.map fun (k, v) => k ++ ": " ++ v) ++ "}"
+    ("\"apiVersion\"", c.apiVersion.map (s!"\"{·}\"")),
+    ("\"projectId\"", c.projectId.map (s!"\"{·}\"")),
+    ("\"location\"", c.location.map (s!"\"{·}\""))] |>.map fun (k, v) => k ++ ": " ++ v) ++ "}"
 
 /-- A model connection as a `model_connections` row. -/
 def modelConnectionRow (m : ModelConnection.ModelConnection) : Row :=

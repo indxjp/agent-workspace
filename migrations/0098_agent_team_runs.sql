@@ -1,0 +1,3 @@
+ALTER TABLE "runs" ADD COLUMN "agent_team_version_id" uuid;--> statement-breakpoint
+ALTER TABLE "runs" ADD CONSTRAINT "runs_agent_team_version_workspace_fk" FOREIGN KEY ("agent_team_version_id","workspace_id") REFERENCES "public"."agent_team_versions"("id","workspace_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "runs_agent_team_version_idx" ON "runs" USING btree ("agent_team_version_id");

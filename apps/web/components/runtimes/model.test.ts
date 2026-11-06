@@ -35,6 +35,12 @@ describe('runtime picker transcription', () => {
     expect(RUNTIME_OPTIONS.map((option) => option.label)).toEqual(parsed);
   });
 
+  it('describes every runtime without pointing the reader at internal design records', () => {
+    for (const option of RUNTIME_OPTIONS) {
+      expect(`${option.description} ${option.defaultReason ?? ''}`).not.toMatch(/ADR|docs\//u);
+    }
+  });
+
   it('uses the two disabled reasons from the mockup, not shortened spec variants', () => {
     const agentCore = RUNTIME_OPTIONS.find((option) => option.id === 'aws-agentcore');
     const ecs = RUNTIME_OPTIONS.find((option) => option.id === 'aws-ecs');

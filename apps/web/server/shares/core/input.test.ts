@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { parsePublishShareRequest } from './input';
+import { parsePublishShareRequest } from '../publish-request';
 
 const RUN = '11111111-1111-4111-8111-111111111111';
 

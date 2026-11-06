@@ -9,7 +9,7 @@
 // @story US-STO-12
 import { createHash } from 'node:crypto';
 
-import { ObjectConflictError, toObjectKey } from '@agent-workspace/core/storage';
+import { toObjectKey } from '@agent-workspace/core/storage/keys';
 import {
   readUstarStream,
   RUN_FILES_MAX_BYTES,
@@ -23,6 +23,7 @@ import type { RunAgent } from '../agent-versions/session-version';
 import type { StorageGrantRef } from '../agent-versions/store';
 import { DomainError } from '../errors';
 import type { LaunchContext } from '../runs/environment';
+import { ObjectConflictError } from '../storage/objects';
 import { log } from '../telemetry/logger';
 import type {
   DeliveredStorageFolder,
@@ -392,7 +393,7 @@ async function saveFile(
     let options: { ifNoneMatch: '*' } | { ifMatch: string } = { ifNoneMatch: '*' };
     if (item.delivered !== undefined) {
       // Last write wins unless the bucket moved on: the object must still be the delivered one.
-      const current = await unlessAborted(store.read(key), signal);
+      const current = await unlessAborted(store.read(key, { signal }), signal);
       if (
         current === null ||
         (await sha256Of(untilAborted(current.body, signal))) !== item.delivered
@@ -413,7 +414,7 @@ async function saveFile(
       store.write(
         key,
         verified(streamOf(body), { size: item.size, sha256: item.sha256 }, corrupt),
-        options,
+        { ...options, signal },
       ),
       signal,
     );
@@ -608,7 +609,11 @@ async function writeBackFolder(
 
   try {
     const store = await unlessAborted(
-      scope.deps.connections.openWritable(run.context.principal.workspaceId, target.connectionId),
+      scope.deps.connections.openWritable(
+        run.context.principal.workspaceId,
+        target.connectionId,
+        scope.signal,
+      ),
       scope.signal,
     );
     const archive = await unlessAborted(run.collect(path), scope.signal);

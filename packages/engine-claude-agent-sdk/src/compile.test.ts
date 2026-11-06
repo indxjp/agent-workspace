@@ -6,6 +6,7 @@ import { AGENT_TOOL_PERMISSION_MODES } from '@indx-workspace/contracts/agents';
 import {
   A11_IDENTITY_ENV_VARS,
   ANTHROPIC_API_KEY_ENV,
+  CLAUDE_MEMORY_INSTRUCTION,
   PLATFORM_SETTING_SOURCES,
   PLATFORM_STRICT_MCP_CONFIG,
   SESSION_SCOPE_ENV_VARS,
@@ -238,6 +239,9 @@ describe('the session scope reaches the subprocess as env, and only from one pla
       ENABLE_TOOL_SEARCH: 'false',
       PATH: '/usr/bin',
       HOME: '/home/agent',
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      DISABLE_TELEMETRY: '1',
+      DISABLE_ERROR_REPORTING: '1',
       CLAUDE_CONFIG_DIR: '/run/claude/.claude',
       CLAUDE_CODE_PROJECT_DIR_NAME: 'tenant-a',
       AGENT_WORKSPACE_RUN_ID: canonicalRunRequest.runId,
@@ -248,6 +252,35 @@ describe('the session scope reaches the subprocess as env, and only from one pla
     // these would be caught by `toEqual` above rather than only by this membership check.
     for (const key of [...SESSION_SCOPE_ENV_VARS, ...A11_IDENTITY_ENV_VARS]) {
       expect(key in options.env).toBe(true);
+    }
+  });
+
+  it('always compiles the three quiet flags to 1, whatever the request env says (D-13)', () => {
+    const quiet = [
+      'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+      'DISABLE_TELEMETRY',
+      'DISABLE_ERROR_REPORTING',
+    ];
+    const omitted = compileRunRequest(request);
+    const disabled = compileRunRequest(
+      RunRequest.parse({
+        ...canonicalRunRequest,
+        env: {
+          ...canonicalRunRequest.env,
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '',
+          DISABLE_TELEMETRY: '',
+          DISABLE_ERROR_REPORTING: '',
+        },
+      }),
+    );
+    const zeroed = compileRunRequest(
+      RunRequest.parse({
+        ...canonicalRunRequest,
+        env: { ...canonicalRunRequest.env, DISABLE_TELEMETRY: '0' },
+      }),
+    );
+    for (const options of [omitted, disabled, zeroed]) {
+      for (const key of quiet) expect(options.env[key]).toBe('1');
     }
   });
 
@@ -544,5 +577,65 @@ describe('requireApproval (ADR-0145)', () => {
 
   it('allows any permissionMode when nothing requires approval', () => {
     expect(() => compileRunRequest(request)).not.toThrow();
+  });
+});
+
+describe('the memory folder line (ADR-0163)', () => {
+  const withPermissions = (permissions: Record<string, unknown>, instructions?: string) =>
+    RunRequest.parse({
+      ...canonicalRunRequest,
+      portable: {
+        ...canonicalAgent,
+        permissions: { ...canonicalAgent.permissions, ...permissions },
+        ...(instructions === undefined ? {} : { instructions }),
+      },
+    });
+
+  it('leaves the compiled options of a run without memory exactly as they were', () => {
+    const compiled = compileRunRequest(request);
+    expect(compiled.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: canonicalAgent.instructions,
+    });
+    expect(JSON.stringify(compiled)).not.toContain('MEMORY.md');
+    expect(compileRunRequest(withPermissions({}))).toEqual(compiled);
+  });
+
+  it('adds one prompt line naming memory/MEMORY.md, and changes nothing else', () => {
+    const compiled = compileRunRequest(request);
+    const remembering = compileRunRequest(withPermissions({ memory: 'agent' }));
+    expect(remembering).toEqual({
+      ...compiled,
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: `${canonicalAgent.instructions}\n\n${CLAUDE_MEMORY_INSTRUCTION}`,
+      },
+    });
+    expect(CLAUDE_MEMORY_INSTRUCTION).toContain('memory/MEMORY.md');
+    expect(CLAUDE_MEMORY_INSTRUCTION.split('\n')).toHaveLength(1);
+  });
+
+  it('gives an agent with no instructions the memory line alone', () => {
+    expect(compileRunRequest(withPermissions({ memory: 'agent' }, '  ')).systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: CLAUDE_MEMORY_INSTRUCTION,
+    });
+  });
+
+  it('adds no line when a file switch is off, because the run keeps no memory then', () => {
+    const readOnly = withPermissions({ memory: 'agent', writeFiles: false });
+    expect(compileRunRequest(readOnly).systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: canonicalAgent.instructions,
+    });
+  });
+
+  it('compiles no engine-native memory: no agent-memory or auto-memory option', () => {
+    const text = JSON.stringify(compileRunRequest(withPermissions({ memory: 'agent' })));
+    expect(text).not.toMatch(/autoMemory|agent-memory|"memory":/u);
   });
 });

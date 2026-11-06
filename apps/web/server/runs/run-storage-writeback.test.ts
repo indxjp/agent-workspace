@@ -9,9 +9,9 @@
  */
 // @story US-STO-12
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { loadEgressPolicyFromEnv } from '@agent-workspace/core';
@@ -208,9 +208,22 @@ describe.each([
     readonly duringRun?: (world: World) => Promise<void>;
     /** Runs once the write-back has started; `post` sends the session a second message. */
     readonly duringWriteBack?: (post: () => Promise<Response>) => Promise<void>;
+    /**
+     * A `local-disk` runtime: the launcher extracts the folder into a workspace root on this host,
+     * the agent leaves `after` there, and the write-back reads it back from disk, not `/files`.
+     */
+    readonly localDisk?: true;
   }) {
     const connectionId = randomUUID();
     const backend = await makeBackend();
+    const workspaceRoot =
+      options.localDisk === true ? await mkdtemp(join(tmpdir(), 'aw-sto12-wb-local-')) : undefined;
+    if (workspaceRoot !== undefined) {
+      backends.push({
+        open: () => Promise.reject(new Error('the workspace root is not a connection')),
+        teardown: () => rm(workspaceRoot, { recursive: true, force: true }),
+      });
+    }
     backends.push(backend);
     const bucket = await backend.open(true);
     await bucket.write('reports/2026/q3.csv', new Blob([CSV]).stream(), {});
@@ -343,10 +356,21 @@ describe.each([
       sessionId,
       preflight: startPreflight(preflight),
       runnerFiles: (path) =>
-        path === folder
+        workspaceRoot === undefined && path === folder
           ? (options.tar?.(folder) ?? encodeUstar(filesIn(folder, options.after ?? {})))
           : null,
-      onRun: () => options.duringRun?.(state) ?? Promise.resolve(),
+      onRun: async () => {
+        // On a local-disk runtime the agent edits the extracted folder in place.
+        if (workspaceRoot !== undefined) {
+          for (const [name, content] of Object.entries(options.after ?? {})) {
+            const target = join(workspaceRoot, folder, name);
+            await mkdir(dirname(target), { recursive: true });
+            await writeFile(target, content);
+          }
+        }
+        await options.duringRun?.(state);
+      },
+      ...(workspaceRoot === undefined ? {} : { localDiskRoot: workspaceRoot }),
       storageWriteback: async (writeBack) => {
         await options.duringWriteBack?.(post);
         return writeBackStorage(writeBack, {
@@ -375,6 +399,17 @@ describe.each([
   it('[US-STO-12][api][run] a write grant saves a file the agent created', async () => {
     const saved = await run({ after: { '2026/q3.csv': CSV, 'summary.md': '# Q3\n' } });
     expect(await saved.text('reports/summary.md')).toBe('# Q3\n');
+  });
+
+  it('[US-STO-12][api][run] on a local-disk runtime, a write grant saves what the agent left in the extracted folder', async () => {
+    const saved = await run({
+      localDisk: true,
+      after: { '2026/q3.csv': 'q3,43\n', 'summary.md': '# Q3\n' },
+    });
+    expect(await saved.text('reports/summary.md')).toBe('# Q3\n');
+    expect(await saved.text('reports/2026/q3.csv')).toBe('q3,43\n');
+    expect(await saved.text('reports/2026/q2.csv')).toBe('q2,40\n');
+    expect(saved.uploads.sort()).toEqual(['reports/2026/q3.csv', 'reports/summary.md']);
   });
 
   it('[US-STO-12][api][run] a write grant replaces a changed file and deletes nothing', async () => {

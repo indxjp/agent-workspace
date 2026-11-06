@@ -3,7 +3,7 @@ import { builderAllows } from '@indx-workspace/contracts/policy-ceiling';
 import { BUILTIN_AGENT_PROBLEM_CODES, type BuiltinAgentProblemCode } from '../../contracts/agents';
 import { problem, type ApiResult } from '../http/result';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../rbac/core/roles';
 
 const RESERVED_CODE = 'builder_name_reserved' satisfies BuiltinAgentProblemCode;
 

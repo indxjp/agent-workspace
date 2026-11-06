@@ -13,7 +13,10 @@ name: Builder evals
 # It needs the repository secret ANTHROPIC_API_KEY, passed only to the setup step and, redacted, to
 # the failure log step. The key is never echoed. The Owner's session cookie is masked and kept in a
 # mode-600 file outside the uploaded directory. The eval report and each case run's events are
-# scanned for `sk-ant-` before they are uploaded.
+# scanned for key-shaped text (Anthropic and other providers' keys, this product's API keys and
+# session, tokens, private key blocks: tests/docs-claims/scan-secrets.mjs) before they are uploaded.
+# The case runs' events are read in their own step with their own timeout, after the evals whatever
+# their exit code, so a failed or gated run still leaves its transcripts.
 #
 # The web server provisions the built-in Builder at start-up (#1848 slice 1c), after the image's
 # seed creates the first workspace; if it is missing, the setup step fails with a named error rather
@@ -39,7 +42,7 @@ jobs:
     # The live key and this runner exist only in INDXDev; the public export and forks never start it.
     if: github.repository_owner == 'INDXDev'
     runs-on: [self-hosted, ms-a2]
-    # install (8) + build (25) + sandbox images (15) + stack (15) + 24 live cases (45) + upload, inside 120.
+    # install (8) + build (25) + sandbox images (15) + stack (15) + 24 live cases (45) + transcripts (8) + upload, inside 120.
     timeout-minutes: 120
     env:
       COMPOSE_PROJECT_NAME: builder-evals-${{ github.run_id }}
@@ -140,8 +143,7 @@ jobs:
           BASE_URL="http://127.0.0.1:$WEB_PORT" node apps/web/server/builder/agent/evals/live-stack.mjs
           echo "AGENT_WORKSPACE_URL=http://127.0.0.1:$WEB_PORT" >> "$GITHUB_ENV"
 
-      # `aw eval builder --json --min-score 0 --junit …` in process, as the setup Owner's session;
-      # then each case run's events beside the report, in transcripts/<runId>.json.
+      # `aw eval builder --json --min-score 0 --junit …` in process, as the setup Owner's session.
       - name: Run the evals against the pinned model
         id: evals
         timeout-minutes: 60
@@ -149,6 +151,20 @@ jobs:
           OWNER_SESSION_FILE: ${{ runner.temp }}/builder-evals-owner.session
           OUT_DIR: ${{ runner.temp }}/builder-evals
         run: node apps/web/server/builder/agent/evals/run-evals.mjs
+
+      # Each case run's events beside the report, in transcripts/<runId>.json, from the report the
+      # evals wrote. It runs when the evals failed or timed out too (a run is most worth reading then),
+      # and has its own 12 minutes: the script's own budget is 8, and the evals' 60 are not shared. A
+      # transcript is a diagnostic, so its failure (warned in the log) never hides the gate below.
+      - name: Keep each case run's transcript
+        id: transcripts
+        if: always() && steps.evals.outcome != 'skipped'
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          OWNER_SESSION_FILE: ${{ runner.temp }}/builder-evals-owner.session
+          OUT_DIR: ${{ runner.temp }}/builder-evals
+        run: node apps/web/server/builder/agent/evals/run-evals.mjs --transcripts
 
       - name: Apply the gate (score and every injection case)
         run: |

@@ -7,11 +7,11 @@ import {
   BTN_DEFAULT,
   CARD,
   ModelStep,
-  PERMISSION_CHOICES,
   PermissionsStep,
   ResourcesStep,
   RuntimeProfileStep,
 } from './agent-form';
+import { changeInWords } from './builder-approval-words';
 import {
   diffBodies,
   type DefinitionChange,
@@ -50,13 +50,11 @@ const PREVIEW_ORDER = (Object.keys(SECTION_RANK) as DefinitionSection[]).sort(
 );
 
 const IGNORE = () => undefined;
+const WORKSPACE_DEFAULT = 'Workspace default';
 
+/** What changed, in the words the approval card uses. */
 function changeLabel(change: DefinitionChange): string {
-  const key = change.path.slice(change.path.lastIndexOf('.') + 1);
-  const choice = PERMISSION_CHOICES.find(([permission]) => permission === key);
-  return change.section === 'permissions' && choice !== undefined
-    ? choice[1]
-    : change.path.replace(/^definition\./u, '');
+  return changeInWords(change).label;
 }
 
 function SectionFrame({
@@ -137,18 +135,23 @@ export function DefinitionPreview({
         }
         onSelect={IGNORE}
         readOnly
+        title={SECTION_TITLES.model}
       />
     ),
     runtime: (
       <RuntimeProfileStep
-        profiles={
-          agent.runtimeProfileName === null
-            ? []
-            : [{ id: agent.runtimeProfileName, name: agent.runtimeProfileName, driver: '' }]
-        }
-        selectedId={agent.runtimeProfileName}
+        // No name means the workspace's default profile, not none (the contract's own words).
+        profiles={[
+          {
+            id: agent.runtimeProfileName ?? '',
+            name: agent.runtimeProfileName ?? WORKSPACE_DEFAULT,
+            driver: '',
+          },
+        ]}
+        selectedId={agent.runtimeProfileName ?? ''}
         onSelect={IGNORE}
         readOnly
+        title={SECTION_TITLES.runtime}
       />
     ),
     resources: (
@@ -165,9 +168,17 @@ export function DefinitionPreview({
         onSkill={IGNORE}
         onConnector={IGNORE}
         readOnly
+        title={SECTION_TITLES.resources}
       />
     ),
-    permissions: <PermissionsStep permissions={agent.permissions} onChange={IGNORE} readOnly />,
+    permissions: (
+      <PermissionsStep
+        permissions={agent.permissions}
+        onChange={IGNORE}
+        readOnly
+        title={SECTION_TITLES.permissions}
+      />
+    ),
     tools: (
       <TextSection
         title="Tools"

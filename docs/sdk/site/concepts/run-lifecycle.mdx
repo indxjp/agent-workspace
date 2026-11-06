@@ -97,6 +97,33 @@ An accounting state of `'failed'` is not final: if usage arrives later, settleme
 state and can clear `accountingError` (F-099). Consumers that need a settled amount should wait for
 `'complete'` or handle a later update to the record.
 
+### Spend ceiling
+
+A run can carry a **spend ceiling** in USD, and the model gateway enforces it for every engine
+(ADR-0162). The run's `spendCeilingUsd` (a decimal string like `cost.amount`, or `null` for none)
+is fixed when the run starts, as the lowest of:
+
+- the agent's `limits.maxBudgetUsd`;
+- the deployment policy ceiling's `limits.maxBudgetUsd`;
+- the start's own `spendCeilingUsd`: `aw.runs.start(agentId, { prompt, spendCeilingUsd: 0.5 })`, or
+  `aw runs start <agent> --prompt <text> --spend-ceiling-usd 0.5`.
+
+The start's value may only lower the ceiling. A value above the agent's or the deployment's limit
+is refused `403 policy_cannot_widen` with the detail `spendCeilingUsd`, and no run is created. It
+must be positive, at most `1000000`, with at most six decimal places; anything else is
+`400 invalid_body`.
+
+The gateway checks the ceiling before each model call: once the run's `cost.amount` has reached
+`spendCeilingUsd`, it refuses the call, and the run ends `failed` with the failure code
+`run_budget_reached`, read with `runFailure(run)`. A call that starts below the ceiling is
+answered in full, so a run can overshoot its ceiling by the cost of the response that crossed it.
+The engine is given the same value as its own budget, so an engine with a native cap may stop
+first. The console's run view says "Stopped at its spend ceiling (0.5 USD)".
+
+A run whose model has no price in the gateway's catalogue is recorded at cost 0 with
+`accountingState: 'unavailable'`, so its ceiling is never reached; the run view says the ceiling
+could not be enforced. A ceiling over a whole session or over a team run's tree is not built yet.
+
 ## Sessions group runs
 
 A **session** is not a run; it is the continuity between runs. From the resource model in the API
@@ -206,8 +233,9 @@ Two frames need care, because their names are easy to misread:
 Every durable frame's `id:` is a resume cursor. Reconnect by sending it back as the `Last-Event-ID`
 request header (or the SDK's `after` option) — `aw.runs.events(id, { after: lastEventId })`.
 `aw.runs.follow(id)` does this automatically whenever the underlying connection drops before
-`done`: it reconnects up to `maxReconnects` times (default 5), waiting `reconnectDelayMs` between
-attempts (default 3000, matching the server's own SSE `retry:` value). `follow` does **not**
+`done`: it reconnects up to `maxReconnects` times in a row (default 5), backing off from the
+stream's own SSE `retry:` value (or `reconnectDelayMs`, default 3000, before one arrives) up to
+`maxReconnectDelayMs` (default 30000), each pause jittered. `follow` does **not**
 reconnect on a `ContractViolationError` (the server broke its own contract; retrying will not fix
 that) or on an abort of the caller's own `signal` — only a dropped connection is treated as
 transient. See [Streaming](/guides/streaming) for the full consumption pattern and

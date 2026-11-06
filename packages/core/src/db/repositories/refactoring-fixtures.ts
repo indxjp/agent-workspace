@@ -251,6 +251,7 @@ export async function installRf001LegacyFixture(db: Database): Promise<Rf001Lega
     path: 'legacy/report.txt',
     kind: 'file',
     storageKey: catalogStorageKey,
+    objectId: crypto.randomUUID(),
     sizeBytes: 9,
     contentType: 'text/plain',
     createdBy: ownerUserId,

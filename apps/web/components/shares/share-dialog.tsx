@@ -3,7 +3,13 @@ import type { ShareExpiry, ShareVisibility } from '@indx-workspace/contracts/sha
 import { useEffect, useRef, useState } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
-import { publishShare, sharePublishCommand, type ShareSubject } from './share-dialog-model';
+import {
+  absoluteShareUrl,
+  publishButtonLabel,
+  publishShare,
+  sharePublishCommand,
+  type ShareSubject,
+} from './share-dialog-model';
 
 export type { ShareSubject } from './share-dialog-model';
 
@@ -22,6 +28,8 @@ export function ShareDialog({
   const [expiry, setExpiry] = useState<ShareExpiry>('never');
   const [passphrase, setPassphrase] = useState('');
   const [result, setResult] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const publishingRef = useRef(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const firstFieldRef = useRef<HTMLSelectElement>(null);
   function close() {
@@ -40,6 +48,18 @@ export function ShareDialog({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [open]);
   async function publish() {
+    // One share per click: a second click while the first is in flight would publish a second link.
+    if (publishingRef.current) return;
+    publishingRef.current = true;
+    setPublishing(true);
+    try {
+      await publishOnce();
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
+    }
+  }
+  async function publishOnce() {
     const outcome = await publishShare(
       browserClient(),
       sharePublishCommand(subject, visibility, expiry, passphrase, runIds),
@@ -48,11 +68,11 @@ export function ShareDialog({
       setResult(outcome.problem);
       return;
     }
-    const url = outcome.url;
-    if (url === null) {
+    if (outcome.url === null) {
       setResult(visibility === 'private' ? 'Shared with you only.' : 'Shared with the workspace.');
       return;
     }
+    const url = absoluteShareUrl(outcome.url, window.location.origin);
     // The clipboard is absent on an insecure origin (the call throws) and may refuse; either way
     // the link still shows for a manual copy.
     const copied = await Promise.resolve()
@@ -139,9 +159,10 @@ export function ShareDialog({
               <button
                 type="button"
                 onClick={() => void publish()}
-                className="rounded bg-accent px-3 py-2 text-[13px] text-white"
+                disabled={publishing}
+                className="rounded bg-accent px-3 py-2 text-[13px] text-white disabled:opacity-60"
               >
-                Copy link
+                {publishButtonLabel(visibility)}
               </button>
             </div>
           </div>

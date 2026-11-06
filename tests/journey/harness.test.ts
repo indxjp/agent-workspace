@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { withRecommendedAnswers } from '@indx-workspace/contracts/setup';
 import { renderProjectFiles } from '@indx-workspace/sdk/project';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -14,6 +15,10 @@ import {
   JOURNEY_BUDGET_SECONDS,
   JOURNEY_LOOK_CHANGE_BUDGET_SECONDS,
   JOURNEY_TOOL_BUDGET_SECONDS,
+  JOURNEY_PORTAL_BUDGET_SECONDS,
+  CONSOLE_FEATURE_ENTRIES,
+  JOURNEY_FEATURE_IDS,
+  consoleEntriesFor,
   JourneyFailure,
   MIN_COMMAND_MS,
   SEALED_PATHS,
@@ -62,7 +67,13 @@ import {
   withSurfaceColour,
   workDirectoryOf,
 } from './harness.mjs';
-import { PLAYWRIGHT_IMAGE, VERDACCIO_IMAGE } from './run.mjs';
+import {
+  PLAYWRIGHT_IMAGE,
+  PORTAL_CHECKS_MS,
+  PORTAL_CREATE_ARGS,
+  PORTAL_FEATURES,
+  VERDACCIO_IMAGE,
+} from './run.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '../..');
 const HERE = import.meta.dirname;
@@ -176,6 +187,22 @@ describe('the dev lines (C5, C6)', () => {
     });
     // The password is never printed (BH061-011): the next row only names its file.
     expect(parseDevLine('            password in .agent-workspace/local-secrets.json')).toBeNull();
+  });
+
+  it('issue #1510: reads the console and app origins from the ready screen', () => {
+    expect(parseDevLine('  console   http://127.0.0.1:3000\r')).toEqual({
+      kind: 'console',
+      origin: 'http://127.0.0.1:3000',
+    });
+    expect(parseDevLine('  app       http://127.0.0.1:3100')).toEqual({
+      kind: 'app',
+      origin: 'http://127.0.0.1:3100',
+    });
+    // Neither row is a server origin the journey's B1 waits on.
+    expect(devOrigin(parseDevLine('  app       http://127.0.0.1:3100'))).toBeNull();
+    expect(parseDevLine('applied: connector portal (new)')).toBeNull();
+    expect(parseDevLine('  app       npx aw chat')).toBeNull();
+    expect(parseDevLine('  chat      npx aw chat')).toBeNull();
   });
 
   it('reads nothing from a line that is not one of them', () => {
@@ -595,14 +622,18 @@ describe('regression: the workflow that runs the journey', () => {
       expect(Number.isSafeInteger(value)).toBe(true);
     }
     // Each timed block: its budget plus run.mjs's one minute to report it — B1, then S2-08's B2,
-    // B3b and B3a — and two untimed checks caps, B1's and the ceiling and secret checks'.
+    // B3b and B3a, and J1 (issue #1510) — two untimed checks caps, B1's and the ceiling and
+    // secret checks', and J1's console check cap.
     const blockMs = (seconds: number) => (seconds + 60) * 1000;
     const timedMs =
       blockMs(JOURNEY_BUDGET_SECONDS) +
       blockMs(JOURNEY_LOOK_CHANGE_BUDGET_SECONDS) +
-      2 * blockMs(JOURNEY_TOOL_BUDGET_SECONDS);
+      2 * blockMs(JOURNEY_TOOL_BUDGET_SECONDS) +
+      blockMs(JOURNEY_PORTAL_BUDGET_SECONDS);
     const cleanupMs = 3 * 60_000;
-    expect(prepareMs + timedMs + 2 * checksMs + cleanupMs).toBeLessThanOrEqual(journey * 60_000);
+    expect(prepareMs + timedMs + 2 * checksMs + PORTAL_CHECKS_MS + cleanupMs).toBeLessThanOrEqual(
+      journey * 60_000,
+    );
     const setupAndUploads = 5;
     const firstHour = numberOf(
       /- name: Time the first hour\n(?:.*\n)*? {8}timeout-minutes: (\d+)/u,
@@ -762,6 +793,7 @@ describe('the timing record', () => {
     const report = timingsReport({ steps, wallSeconds: 165.02 });
     expect(report).toEqual({
       budgetSeconds: 600,
+      finished: true,
       totalSeconds: 165.1,
       stepsSeconds: 163.5,
       withinBudget: true,
@@ -1076,6 +1108,100 @@ describe('S2-08: the B2 and B3 budgets', () => {
     expect(unfinishedSummaryMarkdown(unfinished, 'B3b openapi tool by hand')).toContain(
       '### B3b openapi tool by hand (budget 900 s): failed',
     );
+  });
+});
+
+describe('J1 (issue #1510): the portal budget', () => {
+  const block = (seconds: number) => [{ name: 'the portal signs in', seconds }];
+
+  it('is 600 s, a declared budget of its own', () => {
+    expect(JOURNEY_PORTAL_BUDGET_SECONDS).toBe(600);
+    const at = timingsReport(
+      { steps: block(600), wallSeconds: 600 },
+      JOURNEY_PORTAL_BUDGET_SECONDS,
+    );
+    expect(at).toMatchObject({ budgetSeconds: 600, finished: true, totalSeconds: 600 });
+    expect(at.withinBudget).toBe(true);
+    expect(() => assertWithinBudget(at, JOURNEY_PORTAL_BUDGET_SECONDS)).not.toThrow();
+    expect(totalLine(at, 'J1 portal')).toBe('journey: J1 portal 600 s (budget 600 s)');
+  });
+
+  it('fails at 600.04 s (recorded 600.1 s), naming the slowest step', () => {
+    const over = timingsReport(
+      { steps: block(600.04), wallSeconds: 600.04 },
+      JOURNEY_PORTAL_BUDGET_SECONDS,
+    );
+    expect(over.totalSeconds).toBe(600.1);
+    expect(over.withinBudget).toBe(false);
+    expect(failureOf(() => assertWithinBudget(over, JOURNEY_PORTAL_BUDGET_SECONDS)).message).toBe(
+      'the journey took 600.1 s, over the 600 s budget; the slowest step was the portal signs in (600 s)',
+    );
+  });
+
+  it('records an unfinished run as finished: false, with no budget verdict', () => {
+    const unfinished = unfinishedTimingsReport(
+      { steps: block(40), failed: { name: 'npm run dev', seconds: 5 }, elapsedSeconds: 46 },
+      JOURNEY_PORTAL_BUDGET_SECONDS,
+    );
+    expect(unfinished).toMatchObject({ budgetSeconds: 600, finished: false, elapsedSeconds: 46 });
+    expect(unfinished).not.toHaveProperty('withinBudget');
+  });
+
+  it('leaves the refusal of an undeclared budget as it was', () => {
+    const unsafe: unknown = 601;
+    expect(
+      failureOf(() =>
+        timingsReport(
+          { steps: block(1), wallSeconds: 1 },
+          unsafe as Parameters<typeof timingsReport>[1],
+        ),
+      ).message,
+    ).toBe('601 s is not a journey budget; the budgets are 600, 60, 900 s');
+  });
+
+  it('times the documented portal command, with the chosen features', () => {
+    const docs = readFileSync(path.join(ROOT, 'docs/sdk/site/building/portal.mdx'), 'utf8');
+    expect(docs).toContain('npm create @indx-workspace@latest portal -- --template portal --yes');
+    expect(PORTAL_CREATE_ARGS.slice(0, 4)).toEqual(['portal', '--', '--template', 'portal']);
+    expect(PORTAL_CREATE_ARGS.at(-1)).toBe('--yes');
+    expect(PORTAL_CREATE_ARGS).toContain(PORTAL_FEATURES.join(','));
+    expect(PORTAL_FEATURES).toEqual(['chat', 'files', 'connectors']);
+  });
+});
+
+describe('J1 (issue #1510): the console shows only the chosen features', () => {
+  it('splits the sidebar entries into the chosen and the left out', () => {
+    expect(consoleEntriesFor(PORTAL_FEATURES)).toEqual({
+      shown: ['New chat', 'Files', 'Connectors'],
+      hidden: ['Projects', 'Skills', 'Runs', 'Shared links'],
+    });
+    // A feature with no sidebar entry hides none and shows none.
+    expect(consoleEntriesFor(['chat', 'surfaces']).shown).toEqual(['New chat']);
+  });
+
+  it('refuses an empty, repeated or unknown feature', () => {
+    expect(failureOf(() => consoleEntriesFor([])).message).toBe('no feature was chosen');
+    expect(failureOf(() => consoleEntriesFor(['chat', 'chat'])).message).toBe(
+      'a feature is chosen twice: chat,chat',
+    );
+    expect(failureOf(() => consoleEntriesFor(['wiki'])).message).toBe('wiki is not a feature');
+  });
+
+  it('agrees with the contracts and with the console navigation', () => {
+    expect(JOURNEY_FEATURE_IDS).toEqual(FEATURE_IDS);
+    const navigation = readFileSync(
+      path.join(ROOT, 'apps/web/components/shell/navigation.ts'),
+      'utf8',
+    );
+    const entries: Record<string, string> = {};
+    for (const [, label, feature] of navigation.matchAll(
+      /label: '([^']+)',\s*icon: '[^']+',\s*feature: '(\w+)'/gu,
+    )) {
+      if (label !== undefined && feature !== undefined && feature !== 'core') {
+        entries[feature] = label;
+      }
+    }
+    expect(entries).toEqual(CONSOLE_FEATURE_ENTRIES);
   });
 });
 

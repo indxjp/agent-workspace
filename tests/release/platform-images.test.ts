@@ -274,6 +274,41 @@ describe('the release trivy gate (#373, docs/adr/0087)', () => {
     expect(removed).toEqual(built);
   }, 60_000);
 
+  it('rebuilds every apt-get upgrade stage, so a warm cache never hides a published Debian fix', () => {
+    // CVE-2026-109518: the shared daemon replayed an upgrade layer built before apt 2.6.2 existed.
+    const bin = mkdtempSync(path.join(tmpdir(), 'aw-scan-images-'));
+    temporary.push(bin);
+    const calls = path.join(bin, 'calls.log');
+    writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\necho "$*" >> '${calls}'\nexit 0\n`, {
+      mode: 0o755,
+    });
+    writeFileSync(path.join(bin, 'trivy'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const images = ['web', 'gateway', 'egress-proxy', 'tool-host', 'runtime-pi'];
+    const result = spawnSync(
+      shell,
+      ['infra/release/scan-images.sh', ...images.flatMap((image) => ['--image', image])],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, PATH: [bin, process.env['PATH']].join(path.delimiter) },
+      },
+    );
+    if (result.error) throw result.error;
+    expect(result.status).toBe(0);
+    const filters: Record<string, string | undefined> = {};
+    for (const line of readFileSync(calls, 'utf8').split('\n')) {
+      const image = /^buildx build .*--tag agent-workspace-scan\/([^:]+):/u.exec(line)?.[1];
+      if (image) filters[image] = /--no-cache-filter (\S+)/u.exec(line)?.[1];
+    }
+    expect(filters).toEqual({
+      web: 'runtime-base',
+      gateway: 'gateway',
+      'egress-proxy': 'egress-proxy',
+      'tool-host': 'tool-host',
+      'runtime-pi': 'runtime',
+    });
+  }, 60_000);
+
   it('builds with the packageManager pnpm, and keeps npm and corepack out of every final stage', () => {
     const packageManager = /^pnpm@(\d+\.\d+\.\d+)$/u.exec(
       (JSON.parse(read('package.json')) as { packageManager: string }).packageManager,

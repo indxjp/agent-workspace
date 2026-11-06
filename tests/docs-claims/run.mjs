@@ -9,7 +9,7 @@
  * - `file` claims are compared with the repository file they copy (`static.mjs`), as is the stack
  *   builder's flag table against `SETUP_QUESTIONS` and the one install block every page shows.
  * - `run` claims execute in the journey's clean container (`tests/journey/run.mjs`: the digest-pinned
- *   Verdaccio holding this checkout's eight packages, the fake Anthropic API, a Playwright-image
+ *   Verdaccio holding this checkout's nine packages, the fake Anthropic API, a Playwright-image
  *   machine as `pwuser`), page by page in order, each page in a directory of its own, with `CI=true`
  *   and no terminal, every command under a timeout and expected to exit 0. Every command runs with
  *   `NPM_CONFIG_PREFIX=$HOME/.npm-global` and its `bin` on `PATH`, so a global `npm install` needs
@@ -812,7 +812,7 @@ async function machineRows(options, claims, work, logs, partial) {
     if (options.registry === null) {
       say(`== starting Verdaccio on ${registryUrl}`);
       await startRegistry(registry, port, deadline);
-      say('== packing and publishing the eight @indx-workspace packages');
+      say('== packing and publishing the nine @indx-workspace packages');
       await publishPackages(work, secrets, registryUrl, deadline);
     } else {
       say(`== installing from ${registryUrl}`);

@@ -685,12 +685,14 @@ console.log(process.argv[2], fs.readFileSync('contracts/signed.pdf', 'utf8'), wr
     expect(seen).toHaveLength(1);
   });
 
-  it('stops at the budget cap with max_budget', async () => {
+  // ADR-0162 (#342): the spend ceiling is the gateway's, so a cap every step overspends stops
+  // nothing in the adapter: each scripted call is sent and the run ends on its own.
+  it('has no budget stop of its own: a spent cap runs on to end_turn', async () => {
     const cwd = workspace();
     script = [
       tool('t1', 'mastra_workspace_read_file', { path: 'a.md' }),
       tool('t2', 'mastra_workspace_read_file', { path: 'a.md' }),
-      text('never sent'),
+      text('Done.'),
     ];
     const base = request(cwd);
     const frames = await drain(
@@ -700,8 +702,8 @@ console.log(process.argv[2], fs.readFileSync('contracts/signed.pdf', 'utf8'), wr
         }),
       ).frames,
     );
-    expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'max_budget' });
-    expect(seen.length).toBeLessThan(3);
+    expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'end_turn' });
+    expect(seen).toHaveLength(3);
   });
 
   it('delegates to a subagent that holds its own narrower tool set and its own instructions', async () => {
@@ -756,44 +758,7 @@ console.log(process.argv[2], fs.readFileSync('contracts/signed.pdf', 'utf8'), wr
     );
   });
 
-  it('counts the steps a subagent takes against the parent budget cap', async () => {
-    const cwd = workspace();
-    script = [
-      tool('t1', 'agent-researcher', { prompt: 'Read a.md.' }),
-      text('Found.'),
-      text('never sent'),
-    ];
-    const base = request(cwd);
-    const frames = await drain(
-      createMastraEngine().start(
-        request(cwd, {
-          portable: {
-            ...base.portable,
-            limits: { maxTurns: null, maxBudgetUsd: 0.0006 },
-            subagents: [
-              {
-                name: 'researcher',
-                description: 'Reads files and reports.',
-                instructions: 'You only research.',
-                model: 'claude-sonnet-4-5',
-                permissions: {
-                  ...base.portable.permissions,
-                  writeFiles: false,
-                  runCommands: false,
-                },
-              },
-            ],
-          },
-        }),
-      ).frames,
-    );
-    // The parent's own first step is under the cap; the subagent's step takes it over.
-    expect(frames.at(-1)).toMatchObject({ frame: 'agent.result', stopReason: 'max_budget' });
-    const metered = frames.filter((frame) => frame.frame === 'agent.usage').at(-1);
-    expect((metered as { inputTokens: number }).inputTokens).toBeGreaterThanOrEqual(200);
-  });
-
-  it("prices a subagent step into the usage without counting it as one of the run's own turns", async () => {
+  it("adds a subagent step to the usage without counting it as one of the run's own turns", async () => {
     const cwd = workspace();
     script = [
       tool('t1', 'agent-researcher', { prompt: 'Read a.md.' }),

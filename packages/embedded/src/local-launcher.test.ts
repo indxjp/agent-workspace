@@ -10,6 +10,7 @@ import { HAND_SET_POLICY_WARNING } from './local-environment.js';
 import {
   type LauncherSignal,
   type LocalLauncherDeps,
+  localDatabaseUrl,
   runLocalLauncher,
   runtimeProfileConflictWarning,
   runtimeProfileUnenforceableWarning,
@@ -106,6 +107,12 @@ function harness(overrides: Partial<LocalLauncherDeps<Directory>> = {}) {
       events.push(`prepareProfile:${workspaceId}:${root.directory.marker}`);
       return Promise.resolve({ kind: 'created' as const, profile: { driver: 'local' } });
     },
+    linkIdentity: (root, identity) => {
+      events.push(
+        `link:${identity.issuer}:${identity.subject}:${identity.userId}:${root.directory.marker}`,
+      );
+      return Promise.resolve();
+    },
     issueLocalCredential: (input, issueDeps) => {
       events.push(
         `issue:${input.workspaceId}:${input.userId}:${Object.keys(input).length}:${issueDeps.directory.marker}`,
@@ -195,6 +202,49 @@ const WORKSPACE = {
   seed: { workspaceId: WORKSPACE_ID, adminUserId: ADMIN_ID },
 };
 
+describe('the development issuer link (ADR-0161 amendment DI8, issue #2075)', () => {
+  const devIssuer = {
+    issuer: 'http://127.0.0.1:3300',
+    clientId: 'aw-local-console',
+    clientSecret: 'k'.repeat(43),
+    redirectUri: 'http://127.0.0.1:3100/api/auth/callback',
+    ownerSubject: `local:${'o'.repeat(43)}`,
+  };
+  const startWith = (environment: Record<string, unknown>) => ({
+    type: 'start',
+    projectDir,
+    environment: { port: 3100, bootstrapAdmin: 'dev@localhost.test', ...environment },
+  });
+
+  it('links the bootstrap Owner to (issuer, ownerSubject) after the membership check', async () => {
+    const h = harness();
+    await expect(h.runWith(startWith({ devIssuer }))).resolves.toBe(0);
+    const link = `link:${devIssuer.issuer}:${devIssuer.ownerSubject}:${ADMIN_ID}:directory`;
+    expect(h.events.filter((event) => event.startsWith('link:'))).toEqual([link]);
+    expect(h.events.indexOf(link)).toBeGreaterThan(
+      h.events.indexOf('resolveMembership:dev@localhost.test:default'),
+    );
+    expect(h.env['OIDC_ISSUER_URL']).toBe(devIssuer.issuer);
+    // The client secret is never written to the terminal.
+    expect([...h.stdout, ...h.stderr].join('')).not.toContain(devIssuer.clientSecret);
+  });
+
+  it('links nothing without devIssuer', async () => {
+    const h = harness();
+    await expect(h.run()).resolves.toBe(0);
+    expect(h.events.some((event) => event.startsWith('link:'))).toBe(false);
+  });
+
+  it('refuses to start when an OIDC_* variable is set beside devIssuer, and links nothing', async () => {
+    const h = harness();
+    h.env['OIDC_CLIENT_ID'] = 'hand-set';
+    await expect(h.runWith(startWith({ devIssuer }))).resolves.not.toBe(0);
+    expect(h.events.some((event) => event.startsWith('link:'))).toBe(false);
+    expect(JSON.stringify(h.sent)).toContain('OIDC_CLIENT_ID');
+    expect(JSON.stringify(h.sent)).not.toContain('hand-set');
+  });
+});
+
 describe('runLocalLauncher', () => {
   it('sends ready and then credential, in that order, with the seeded workspace', async () => {
     const h = harness();
@@ -223,6 +273,44 @@ describe('runLocalLauncher', () => {
     ]);
     expect(h.env['AW_DEPLOYMENT_POSTURE']).toBe('local');
     expect(h.env['SESSION_SECRET']).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  // Issue #1506: `aw dev` migrates and runs a generated app on the workspace's own database.
+  it('names the database the workspace runs on in ready, when it is a loopback PostgreSQL', async () => {
+    const databaseUrl =
+      'postgresql://agent_workspace:agent_workspace_local@127.0.0.1:25432/postgres';
+    const h = harness({
+      startWorkspace: () => {
+        h.env['DATABASE_URL'] = databaseUrl;
+        return Promise.resolve({ ...WORKSPACE, close: () => Promise.resolve() });
+      },
+    });
+    await expect(h.run()).resolves.toBe(0);
+    expect(h.sent[0]).toStrictEqual({
+      type: 'ready',
+      url: URL_,
+      contractsVersion: CONTRACTS_VERSION,
+      databaseUrl,
+    });
+  });
+
+  it('names no database in ready when the workspace runs on a remote DATABASE_URL', async () => {
+    const h = harness();
+    h.env['DATABASE_URL'] = 'postgresql://app:secret@db.example.com:5432/agent_workspace';
+    await expect(h.run()).resolves.toBe(0);
+    expect(h.sent[0]).toStrictEqual({
+      type: 'ready',
+      url: URL_,
+      contractsVersion: CONTRACTS_VERSION,
+    });
+  });
+
+  it('localDatabaseUrl keeps only a loopback postgres url', () => {
+    expect(localDatabaseUrl({})).toBeUndefined();
+    expect(localDatabaseUrl({ DATABASE_URL: 'postgres://u:p@localhost:5432/x' })).toBe(
+      'postgres://u:p@localhost:5432/x',
+    );
+    expect(localDatabaseUrl({ DATABASE_URL: 'postgres://u:p@10.0.0.1:5432/x' })).toBeUndefined();
   });
 
   // UX-G (#760): after SIGKILL of `aw dev` the runtime saw the channel close, began to stop, hung in

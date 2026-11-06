@@ -14,7 +14,7 @@
  *   * a route another task adds is in this matrix the moment it is committed, with no edit here;
  *   * a route that exists but is declared nowhere fails the *inventory* gate, so it cannot hide
  *     from this one by being undeclared;
- *   * and a route whose resource `apps/web/server/rbac/permissions.ts` does not classify produces
+ *   * and a route whose resource `apps/web/server/rbac/core/permissions.ts` does not classify produces
  *     `decide() → refuse`, which this file reports as a **failure, not a skip**.
  *
  * That last point is the criterion. A hand-written table of routes would have been the easy and
@@ -42,7 +42,7 @@ import {
 } from '../../../../tests/inventory-support';
 
 import { decide, OWNERSHIPS, type Decision, type Ownership } from './decide';
-import { ROLES, type Role } from './roles';
+import { ROLES, type Role } from './core/roles';
 
 /** The directory ADR-0025 partitions the inventory into. */
 const ROUTE_DECLARATIONS = 'tests/route-declarations';
@@ -146,6 +146,9 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/cli-device',
   'GET /api/auth/cli-verify',
   'POST /api/auth/cli-token',
+  // ADR-0161 D3: an app backend exchanges an ID token, authenticating its endpoint client by its
+  // secret; the token it gets acts as the person, and decide() gates every route it then reaches.
+  'POST /api/auth/token-exchange',
   // ADR-0120 clause 7: called by Vercel Cron with `CRON_SECRET` as the bearer, never by a person.
   'GET /api/cron/retention',
   // ADR-0144 D5: the schedule pass, called by the platform cron with the same `CRON_SECRET` bearer.
@@ -206,6 +209,10 @@ const IDENTITY_ONLY_ROUTES = new Set([
   // refuses every other credential, so no route-level role gate applies; the Builder tools decide
   // what the person behind the run may do.
   'POST /api/builder/mcp',
+  // Issue #1517 (ADR-0104 acceptance decision 4): a team lead run's member tools. The lead run's
+  // own token is the whole identity proof, refused for any other run; each member call is then
+  // decided as POST on that member agent's runs route for the person behind the lead run.
+  'POST /api/runs/:id/members/mcp',
 ]);
 
 const allRoutes = declaredRoutes();
@@ -234,7 +241,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
     expect(new Set(allRoutes.map(key)).size).toBe(allRoutes.length);
   });
 
-  it('keeps the pre-authentication surface to exactly these nineteen method/path pairs', () => {
+  it('keeps the pre-authentication surface to exactly these twenty method/path pairs', () => {
     const expected = [
       'GET /.well-known/oauth-authorization-server',
       'GET /.well-known/oauth-protected-resource/mcp/projects/:name',
@@ -250,6 +257,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
       'POST /api/auth/cli-device',
       'GET /api/auth/cli-verify',
       'POST /api/auth/cli-token',
+      'POST /api/auth/token-exchange',
       'GET /api/cron/retention',
       'GET /api/cron/triggers',
       'GET /api/cron/storage-cleanup',
@@ -260,7 +268,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
     expect([...PUBLIC_ROUTES].sort()).toEqual([...expected].sort());
   });
 
-  it('keeps the identity-only, not-role-gated surface to exactly these eleven routes', () => {
+  it('keeps the identity-only, not-role-gated surface to exactly these twelve routes', () => {
     const expected = [
       'DELETE /api/auth/cli-token',
       'GET /api/a2a/agents/:agentName/.well-known/agent-card.json',
@@ -270,6 +278,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
       'POST /api/auth/cli-workspace',
       'POST /api/builder/mcp',
       'POST /api/invitations/:id/accept',
+      'POST /api/runs/:id/members/mcp',
       'POST /mcp/builder',
       'POST /mcp/projects/:name',
       'POST /oauth/authorize',
@@ -293,7 +302,7 @@ describe('the authorisation matrix is derived from the route declarations', () =
       undecidedCells(cells),
       'Every one of these routes is declared in tests/route-declarations/ and served by the ' +
         'tracked tree, and spec §21’s permission split has no answer for it. Classify its ' +
-        'resource in apps/web/server/rbac/permissions.ts, citing the sentence of §21 that ' +
+        'resource in apps/web/server/rbac/core/permissions.ts, citing the sentence of §21 that ' +
         'decides the grants. An undecidable authorisation question is refused, never allowed ' +
         '(ADR-0015, ADR-0031).',
     ).toEqual([]);
@@ -447,6 +456,46 @@ describe('the matrix says what spec §21 says', () => {
     expect(decisionFor('PATCH /api/agents/:id', 'builder', 'other').effect).toBe('deny');
     // The honest answer from a handler that has not read the row denies. ADR-0031.
     expect(decisionFor('PATCH /api/agents/:id', 'builder', 'unknown').effect).toBe('deny');
+  });
+
+  it('decides the agent-team routes as the agents resource — ADR-0104 acceptance decision 10', () => {
+    const teamRoutes = [
+      ['GET /api/agent-teams', 'read'],
+      ['POST /api/agent-teams', 'write'],
+      ['GET /api/agent-teams/:id', 'read'],
+      ['DELETE /api/agent-teams/:id', 'write'],
+      ['POST /api/agent-teams/:id/versions', 'write'],
+      ['GET /api/agent-teams/:id/versions', 'read'],
+      // Issue #1517: running a team is the `run` verb on its lead agent (decision 10).
+      ['POST /api/agent-teams/:id/runs', 'run'],
+    ] as const;
+    for (const [routeKey, operation] of teamRoutes) {
+      const ownership: Ownership = routeKey.includes(':id') ? 'own' : 'not-applicable';
+      for (const role of ROLES) {
+        const decision = decisionFor(routeKey, role, ownership);
+        expect(decision.effect, `${routeKey} × ${role}`).not.toBe('refuse');
+        expect('facts' in decision ? decision.facts : null, `${routeKey} × ${role}`).toMatchObject({
+          resource: 'agents',
+          operation,
+        });
+        // The same answer as the agent route of the same shape and verb.
+        const agentKey = routeKey.replace('/api/agent-teams', '/api/agents');
+        const agentRoute =
+          agentKey === 'DELETE /api/agents/:id' ? 'PATCH /api/agents/:id' : agentKey;
+        expect(decision.effect, `${routeKey} × ${role}`).toBe(
+          decisionFor(agentRoute, role, ownership).effect,
+        );
+      }
+    }
+    // Every role reads; a Builder writes only its own teams; a Viewer writes none.
+    expect(decisionFor('GET /api/agent-teams', 'viewer', 'not-applicable').effect).toBe('allow');
+    expect(decisionFor('POST /api/agent-teams', 'viewer', 'not-applicable').effect).toBe('deny');
+    expect(decisionFor('DELETE /api/agent-teams/:id', 'builder', 'own').effect).toBe('allow');
+    expect(decisionFor('DELETE /api/agent-teams/:id', 'builder', 'other').effect).toBe('deny');
+    expect(decisionFor('DELETE /api/agent-teams/:id', 'admin', 'other').effect).toBe('allow');
+    expect(decisionFor('POST /api/agent-teams/:id/versions', 'builder', 'other').effect).toBe(
+      'deny',
+    );
   });
 
   it('never lets a lower role reach what a higher one is refused (ADR-0152)', () => {

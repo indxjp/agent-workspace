@@ -1,8 +1,8 @@
 import type { ShareRecord } from '@agent-workspace/core/db';
 import { describe, expect, it } from 'vitest';
 
-import { publishedSnapshot, toShareResource, visibleShares } from './resource';
-import { parsePublishShareRequest } from './input';
+import { parsePublishShareRequest, publishedSnapshot } from '../publish-request';
+import { toShareResource, visibleShares } from './resource';
 
 function share(visibility: ShareRecord['visibility']): ShareRecord {
   return {

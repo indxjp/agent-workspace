@@ -9,6 +9,7 @@ import type {
   WorkspaceScopeResolver,
 } from '@agent-workspace/core/db';
 import type { SecretsService } from '@agent-workspace/core/secrets';
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
 
 import type {
   CreateModelConnectionInput,
@@ -51,14 +52,15 @@ export interface WorkspaceModelsStore {
   resolve(id: string): Promise<ResolvedModelConnection | null>;
   /**
    * Replace a connection's stored credential in place: `POST /api/model-connections/:id/credential`
-   * (issue #126). `false` when the connection or its secret does not exist.
+   * (issue #126). `false` when the connection or its secret does not exist, or the connection is
+   * keyless and stores no credential.
    */
   replaceCredential(id: string, apiKey: string): Promise<boolean>;
   /**
    * Give a connection `apiKey` whether or not it still has a secret: rotate the secret it has, or
    * write a fresh one under its name when it has none (issue #415). First-run setup uses this to
    * repair its own row when that row's secret was lost, keeping the connection id. `false` when the
-   * connection does not exist.
+   * connection does not exist or is keyless.
    */
   writeCredential(id: string, apiKey: string): Promise<boolean>;
   /** List every `MODEL_CONNECTION_*` secret this workspace holds with no connection row. */
@@ -123,9 +125,18 @@ export function createRepositoryModelsStoreProvider(
         async create(input) {
           const { repository, scope } = await access();
           const id = crypto.randomUUID();
+          if (isKeylessProvider(input.provider)) {
+            // A keyless connection stores no secret: there is no pair to keep whole.
+            return repository.create({
+              id,
+              name: input.name,
+              provider: input.provider,
+              config: input.config,
+            });
+          }
           const sealed = await dependencies.secrets.create(scope, {
             name: modelConnectionSecretName(id),
-            value: Buffer.from(input.apiKey, 'utf8'),
+            value: Buffer.from(input.apiKey ?? '', 'utf8'),
           });
           if (sealed.kind !== 'created') {
             throw new Error(`fresh model-connection secret was refused: ${sealed.kind}`);
@@ -177,6 +188,7 @@ export function createRepositoryModelsStoreProvider(
           const { repository, scope } = await access();
           const connection = await repository.get(id);
           if (connection === null) return null;
+          if (isKeylessProvider(connection.provider)) return { connection, credential: '' };
           const secret = await dependencies.secrets.resolveByName(
             scope,
             modelConnectionSecretName(id),
@@ -186,7 +198,8 @@ export function createRepositoryModelsStoreProvider(
         },
         async replaceCredential(id, apiKey) {
           const { repository, scope } = await access();
-          if ((await repository.get(id)) === null) return false;
+          const connection = await repository.get(id);
+          if (connection === null || isKeylessProvider(connection.provider)) return false;
           const name = modelConnectionSecretName(id);
           const metadata = (await dependencies.secrets.list(scope)).find(
             (candidate) => candidate.name === name,
@@ -201,7 +214,8 @@ export function createRepositoryModelsStoreProvider(
         },
         async writeCredential(id, apiKey) {
           const { repository, scope } = await access();
-          if ((await repository.get(id)) === null) return false;
+          const connection = await repository.get(id);
+          if (connection === null || isKeylessProvider(connection.provider)) return false;
           const name = modelConnectionSecretName(id);
           const value = Buffer.from(apiKey, 'utf8');
           const metadata = (await dependencies.secrets.list(scope)).find(

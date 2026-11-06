@@ -5,7 +5,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { versionRequest } from '../../../agent-versions/fixtures';
-import type { Role } from '../../../rbac/roles';
+import type { Role } from '../../../rbac/core/roles';
 import type { CallContext, CheckerPort } from '../../ports';
 
 /** A valid draft named `name` that references exactly these connectors. */

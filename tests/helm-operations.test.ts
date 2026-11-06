@@ -27,6 +27,22 @@ describe('Helm production controls', () => {
     expect(deployment).toMatch(/startupProbe:\s+httpGet: \{ path: \{\{ index \$healthPaths /u);
   });
 
+  it('gives web AW_DEPLOYMENT_FEATURES only when deploymentFeatures is set (ADR-0160 D5, #1495)', () => {
+    const deployment = read('infra/helm/agent-workspace/templates/deployments.yaml');
+    const values = read('infra/helm/agent-workspace/values.yaml');
+    // The entry sits inside the web-only conditional, so an empty value renders nothing and a
+    // chart without features renders the web Deployment exactly as before.
+    expect(deployment).toContain(
+      [
+        '            {{- if and (eq $name "web") $.Values.deploymentFeatures }}',
+        '            - { name: AW_DEPLOYMENT_FEATURES, value: {{ $.Values.deploymentFeatures | quote }} }',
+        '            {{- end }}',
+      ].join('\n'),
+    );
+    expect(deployment.match(/AW_DEPLOYMENT_FEATURES/gu)).toHaveLength(1);
+    expect(values).toMatch(/^deploymentFeatures: ''$/mu);
+  });
+
   it('ships disruption budgets and opt-in CPU autoscaling', () => {
     const pdb = read('infra/helm/agent-workspace/templates/poddisruptionbudgets.yaml');
     const hpa = read('infra/helm/agent-workspace/templates/horizontalpodautoscalers.yaml');

@@ -22,7 +22,7 @@ import {
 import type { RunPrincipal, RunApiEnvironment } from '../server/runs/environment';
 import { InMemoryRunStore } from '../server/runs/memory-store';
 import { SSE_HEADERS } from '../server/runs/sse';
-import type { TokenScope } from '../server/rbac/token-scope';
+import type { TokenScope } from '../server/rbac/core/token-scope';
 import { decide } from '../server/rbac/decide';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 import { installTestRunApi, resetTestRunApi } from '../server/application-context-fixtures';

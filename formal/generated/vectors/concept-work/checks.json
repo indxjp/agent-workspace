@@ -58,7 +58,9 @@
      "runs_unpriced_cost_zero",
      "runs_output_only_when_completed",
      "runs_consumed_approvals_never_queued",
-     "runs_idempotency_key_has_hash"]}},
+     "runs_idempotency_key_has_hash",
+     "runs_parent_not_self",
+     "runs_spend_ceiling_positive"]}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
@@ -130,6 +132,36 @@
    "input": {"table": "workspace_features"},
    "id": "checks/workspace_features",
    "expected": {"otherChecks": []}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "webhooks"},
+   "id": "checks/webhooks",
+   "expected": {"otherChecks": ["webhooks_url_length", "webhooks_events_valid"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "webhook_deliveries"},
+   "id": "checks/webhook_deliveries",
+   "expected": {"otherChecks": ["webhook_deliveries_event_type_valid", "webhook_deliveries_delivered_shape"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "agent_teams"},
+   "id": "checks/agent_teams",
+   "expected": {"otherChecks": ["agent_teams_name_not_blank"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "agent_team_versions"},
+   "id": "checks/agent_team_versions",
+   "expected": {"otherChecks": ["agent_team_versions_number_positive"]}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"table": "agent_team_version_members"},
+   "id": "checks/agent_team_version_members",
+   "expected": {"otherChecks": ["agent_team_version_members_name_valid"]}},
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
@@ -220,6 +252,18 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_parent_not_self"},
+   "id": "check/runs_parent_not_self",
+   "expected": {"sql": "\"runs\".\"parent_run_id\" <> \"runs\".\"id\""}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "runs_spend_ceiling_positive"},
+   "id": "check/runs_spend_ceiling_positive",
+   "expected": {"sql": "\"runs\".\"spend_ceiling_usd\" is null or \"runs\".\"spend_ceiling_usd\" > 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "run_feedback_comment_length"},
    "id": "check/run_feedback_comment_length",
    "expected": {"sql": "\"run_feedback\".\"comment\" is null or char_length(\"run_feedback\".\"comment\") <= 1000"}},
@@ -297,6 +341,55 @@
     "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
    "input": {"name": "trigger_deliveries_key_length"},
    "id": "check/trigger_deliveries_key_length",
-   "expected": {"sql": "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"}}],
+   "expected": {"sql": "char_length(\"trigger_deliveries\".\"delivery_key\") between 1 and 255"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhooks_url_length"},
+   "id": "check/webhooks_url_length",
+   "expected": {"sql": "char_length(\"webhooks\".\"url\") between 1 and 2048"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhooks_events_valid"},
+   "id": "check/webhooks_events_valid",
+   "expected":
+   {"sql":
+    "cardinality(\"webhooks\".\"events\") between 1 and 3 and \"webhooks\".\"events\" <@ ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[]"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhook_deliveries_event_type_valid"},
+   "id": "check/webhook_deliveries_event_type_valid",
+   "expected":
+   {"sql":
+    "\"webhook_deliveries\".\"event_type\" = any(ARRAY['run.completed', 'run.failed', 'run.cancelled']::text[])"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "webhook_deliveries_delivered_shape"},
+   "id": "check/webhook_deliveries_delivered_shape",
+   "expected":
+   {"sql": "(\"webhook_deliveries\".\"state\" = 'delivered') = (\"webhook_deliveries\".\"delivered_at\" is not null)"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "agent_teams_name_not_blank"},
+   "id": "check/agent_teams_name_not_blank",
+   "expected": {"sql": "length(btrim(\"agent_teams\".\"name\")) > 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "agent_team_versions_number_positive"},
+   "id": "check/agent_team_versions_number_positive",
+   "expected": {"sql": "\"agent_team_versions\".\"number\" > 0"}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.ConceptWork.every_work_check_is_refined",
+    "AgentWorkspace.Theorems.WellFormed.ConceptWork.work_check_counts"],
+   "input": {"name": "agent_team_version_members_name_valid"},
+   "id": "check/agent_team_version_members_name_valid",
+   "expected":
+   {"sql":
+    "\"agent_team_version_members\".\"name\" ~ '^[a-z0-9][a-z0-9_-]*$' and char_length(\"agent_team_version_members\".\"name\") <= 52"}}],
  "family": "concept-work",
  "description": "The refined checks of the work tables and their exact SQL"}

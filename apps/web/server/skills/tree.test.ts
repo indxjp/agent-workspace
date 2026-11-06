@@ -286,4 +286,36 @@ describe('skillWriter', () => {
     await ensureSkillRows(store, rows, 'demo');
     expect(await names(writer)).toEqual(['SKILL.md']);
   });
+
+  // #1925 item 8: a save that throws, rather than refusing, never reads the body it was handed.
+  it('[US-STO-08][unit][sdk] ensureSkillRows releases the bare file it read when the save throws', async () => {
+    const { rows } = writerWorld();
+    await store.write('skills/demo/SKILL.md', utf8('old'), { contentType: null });
+    const cancelled: string[] = [];
+    const reading = {
+      ...store,
+      read: async (key: string) => {
+        const found = await store.read(key);
+        if (found === null) return null;
+        return {
+          ...found,
+          body: new ReadableStream<Uint8Array>({
+            start: (controller) => controller.enqueue(utf8('old')),
+            cancel: () => {
+              cancelled.push(key);
+            },
+          }),
+        };
+      },
+    };
+    const failing = {
+      ...rows,
+      storage: { ...rows.storage, save: () => Promise.reject(new Error('catalog down')) },
+    };
+
+    await expect(ensureSkillRows(reading, failing, 'demo')).rejects.toThrow('catalog down');
+
+    expect(cancelled).toEqual(['skills/demo/SKILL.md']);
+    expect(await walkFiles(store, 'skills/demo')).toHaveLength(1);
+  });
 });
