@@ -103,12 +103,12 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1156.0",
     "@google-cloud/storage": "8.4.0",
-    "@types/node": "26.6.5",
+    "@types/node": "26.6.6",
     "@types/pg": "8.23.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "ajv": "8.20.0",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   },
   "nx": {
     "targets": {
