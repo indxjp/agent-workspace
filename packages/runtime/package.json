@@ -60,9 +60,9 @@
     "vitest": "5.0.5"
   },
   "dependencies": {
-    "@azure/identity": "4.14.0",
-    "@kubernetes/client-node": "2.0.1",
-    "google-auth-library": "11.3.1"
+    "@azure/identity": "4.14.1",
+    "@kubernetes/client-node": "2.0.2",
+    "google-auth-library": "11.3.3"
   },
   "nx": {
     "targets": {
