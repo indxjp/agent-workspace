@@ -12,9 +12,12 @@ import {
 import { FEATURE_IDS } from '@indx-workspace/contracts/features';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { counterIds } from '../../ids';
+import { TOOL_ENDPOINT_RATE_LIMITS, resetToolEndpointLimits } from '../../tool-endpoint/limits';
 import { draftBody } from '../adapters/checker/checker.contract';
+import { makeMemoryPorts } from '../testing/ports';
 import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
-import { WORKSPACE, builderDoor, type Door } from './e2e/harness';
+import { WORKSPACE, builderDoor, type Door } from './e2e/harness.test-support';
 import { serveExternalBuilderMcp, toExternalCallContext, type ExternalPrincipal } from './external';
 
 const ORIGIN = 'https://aw.example.test';
@@ -320,5 +323,44 @@ describe('POST /mcp/builder and a workspace with the Builder switched off (ADR-0
     });
     expect(response.status).not.toBe(404);
     expect(asked).toEqual([WORKSPACE]);
+  });
+});
+
+describe('POST /mcp/builder takes its ids and time from the ports and the clock (refactoring plan part 07, step 8)', () => {
+  const serveWith = (ports: NonNullable<Door['ports']>) =>
+    serveExternalBuilderMcp(rpc('tools/call', { name: 'catalog_list', arguments: {} }), {
+      identify: () => Promise.resolve(builderPrincipal()),
+      ports,
+    });
+
+  beforeEach(() => {
+    vi.stubEnv('AW_PUBLIC_URL', ORIGIN);
+    resetToolEndpointLimits();
+  });
+  afterEach(() => {
+    resetToolEndpointLimits();
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("names the call and an unbound run from the ports' id generator", async () => {
+    const ports = makeMemoryPorts({ ids: counterIds() });
+    const record = vi.spyOn(ports.audit, 'record');
+    await serveWith(ports);
+    const [ctx, entry] = record.mock.calls[0] ?? [];
+    expect(entry?.callId).toBe('00000000-0000-4000-8000-000000000001');
+    expect(ctx?.runId).toBe('ext:00000000-0000-4000-8000-000000000002');
+  });
+
+  it('admits a credential again once a minute has passed on the clock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-01T00:00:00.000Z'));
+    const ports = makeMemoryPorts();
+    for (let sent = 0; sent < TOOL_ENDPOINT_RATE_LIMITS.callsPerMinute; sent += 1) {
+      expect((await serveWith(ports)).status).toBe(200);
+    }
+    expect((await serveWith(ports)).status).toBe(429);
+    vi.setSystemTime(Date.now() + 61_000);
+    expect((await serveWith(ports)).status).toBe(200);
   });
 });

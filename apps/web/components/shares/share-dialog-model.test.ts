@@ -2,7 +2,13 @@ import { createClient } from '@indx-workspace/sdk';
 import { fetchDouble, jsonResponse, type RecordedRequest } from '@indx-workspace/sdk/testing';
 import { describe, expect, it } from 'vitest';
 
-import { publishShare, sharePublishCommand, type ShareSubject } from './share-dialog-model';
+import {
+  absoluteShareUrl,
+  publishButtonLabel,
+  publishShare,
+  sharePublishCommand,
+  type ShareSubject,
+} from './share-dialog-model';
 
 const SESSION: ShareSubject = {
   type: 'session',
@@ -94,5 +100,34 @@ describe('publishShare', () => {
     expect(await publishShare(refused.client, command)).toEqual({
       problem: 'transcript.runIds[0] is not a run of this session.',
     });
+  });
+});
+
+// UX-09 (#2086): the dialog copied `/p/<token>`, which opens nothing once pasted elsewhere.
+describe('absoluteShareUrl', () => {
+  it('resolves the path the server answers against the console origin', () => {
+    expect(absoluteShareUrl('/p/pub_abcdefghijklmnopqrstuvwx', 'https://aw.example.com')).toBe(
+      'https://aw.example.com/p/pub_abcdefghijklmnopqrstuvwx',
+    );
+  });
+
+  it('keeps the port and drops nothing from the token', () => {
+    expect(absoluteShareUrl('/p/pub_a-b_c', 'http://127.0.0.1:3000')).toBe(
+      'http://127.0.0.1:3000/p/pub_a-b_c',
+    );
+  });
+
+  it('leaves a link that is already absolute as it is', () => {
+    expect(absoluteShareUrl('https://share.example.com/p/x', 'https://aw.example.com')).toBe(
+      'https://share.example.com/p/x',
+    );
+  });
+});
+
+describe('publishButtonLabel', () => {
+  it('says "Copy link" only for the choice that makes a link', () => {
+    expect(publishButtonLabel('public')).toBe('Copy link');
+    expect(publishButtonLabel('workspace')).toBe('Share');
+    expect(publishButtonLabel('private')).toBe('Share');
   });
 });

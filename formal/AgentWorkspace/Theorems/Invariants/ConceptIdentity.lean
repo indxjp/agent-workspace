@@ -234,7 +234,7 @@ elab "aw_identity_relationship_theorems" : command => do
         elabCommand (← `(command|
           $doc:docComment
           @[aw_spec (tier := $(mkIdent `T2)) (doc := $(Syntax.mkStrLit erDoc)) (ts := $(cite n))
-            (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+            (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
           theorem $thm (st : AgentWorkspace.Er.Core.State) (hc : Er.Core.consistent catalogue st = true) {r r' : Row}
               (h : References catalogue st $tT (fkOf $tT $nL) r r') :
               tenantOf catalogue $tT r = tenantOf catalogue (fkOf $tT $nL).refTable r' :=

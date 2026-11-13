@@ -129,11 +129,11 @@ server refuses it on any other subject and renders `{}` where none was given.
 | `revokedAt` | `null \| string` | Yes |  |
 | `suspendedAt` | `null \| string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
-| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
 
 ## ShareListItemSchema
 
-Every item of `GET /api/shares`: the share plus how many times it has been opened.
+Every item of `GET /api/shares`: the share plus how many times it has been opened. It never
+carries a link: a public link is shown once, in the publish response, and only its hash is kept.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -153,7 +153,6 @@ Every item of `GET /api/shares`: the share plus how many times it has been opene
 | `revokedAt` | `null \| string` | Yes |  |
 | `suspendedAt` | `null \| string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
-| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
 
 ## ShareListResponse
 
@@ -194,7 +193,7 @@ Owner or Admin.
 | `revokedAt` | `null \| string` | Yes |  |
 | `suspendedAt` | `null \| string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
-| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
+| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. This response is the only time it is shown: the server keeps only the token's hash. |
 
 ## ShareResourceSchema
 
@@ -218,7 +217,7 @@ ISO-8601 strings; money is decimal strings.
 | `revokedAt` | `null \| string` | Yes |  |
 | `suspendedAt` | `null \| string` | Yes |  |
 | `createdAt` | `string` | Yes |  |
-| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. |
+| `url` | `undefined \| string` | No | The public link, relative to the API origin (`/p/<token>`). Present exactly when `visibility` is `public`: the token of a private or workspace share never crosses the wire. This response is the only time it is shown: the server keeps only the token's hash. |
 
 ## SHARES_PROBLEM_CODES
 

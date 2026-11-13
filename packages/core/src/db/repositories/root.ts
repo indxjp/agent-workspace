@@ -48,8 +48,6 @@
  * workspace id from the slug alone would make revoking a membership do nothing until the token
  * expired.
  */
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
-
 import {
   closePool,
   createDatabase,
@@ -57,152 +55,56 @@ import {
   readDatabaseConfig,
   type Database,
 } from '../client.js';
-import { agents } from '../schema/agents.js';
 import type { MembershipRole } from '../schema/memberships.js';
-import { auditEvents, type NewAuditEvent } from '../schema/audit-events.js';
-import { workspaces } from '../schema/workspaces.js';
-import {
-  checkedAuditEvent,
-  createDatabaseAuditEventRepositoryProvider,
-  type AuditEventRepositoryProvider,
-} from './audit-events.js';
-import { createDatabaseAgentRepositoryProvider, type AgentRepositoryProvider } from './agents.js';
-import {
-  createDatabaseBuilderToolCallRepositoryProvider,
-  type BuilderToolCallRepositoryProvider,
-} from './builder-tool-calls.js';
-import {
-  createDatabaseAgentGrantRepositoryProvider,
-  type AgentGrantRepositoryProvider,
-} from './agent-grants.js';
-import {
-  createDatabaseStorageMigrationRunRepository,
-  type StorageMigrationRunRepository,
-} from './storage-migration-runs.js';
-import {
-  createDatabaseFileTextRepositoryProvider,
-  type FileTextRepositoryProvider,
-} from './file-texts.js';
-import {
-  createDatabaseResourceCatalogRepositoryProvider,
-  type ResourceCatalogRepositoryProvider,
-} from './resource-catalogs.js';
-import {
-  createDatabaseAgentResourceRepositoryProvider,
-  type AgentResourceRepositoryProvider,
-} from './agent-resources.js';
-import {
-  createDatabaseAgentVersionRepositoryProvider,
-  type AgentVersionRepositoryProvider,
-} from './agent-versions.js';
-import { createDatabaseDirectoryRoot, type DatabaseDirectoryRoot } from './directory.js';
-import {
-  createDatabaseProjectFileRepositoryProvider,
-  type ProjectFileRepositoryProvider,
-} from './project-files.js';
-import {
-  createDatabaseProjectMcpServerRepositoryProvider,
-  type ProjectMcpServerRepositoryProvider,
-} from './project-mcp-servers.js';
-import {
-  createDatabaseProjectRepositoryProvider,
-  type ProjectRepositoryProvider,
-} from './projects.js';
-import {
-  createDatabaseShareRepositoryProvider,
-  createDatabaseShareViewRepositoryProvider,
-  type ShareRepositoryProvider,
-  type ShareViewRepositoryProvider,
-} from './shares.js';
-import {
-  createDatabaseMcpServerRepositoryProvider,
-  type McpServerRepositoryProvider,
-} from './mcp-servers.js';
-import {
-  createDatabaseModelConnectionRepositoryProvider,
-  type ModelConnectionRepositoryProvider,
-} from './model-connections.js';
-import {
-  createDatabaseStorageConnectionRepositoryProvider,
-  type StorageConnectionRepositoryProvider,
-} from './storage-connections.js';
-import {
-  createDatabaseRunRepositoryProvider,
-  createDatabaseRunEventRepositoryProvider,
-  createDatabaseSessionRepositoryProvider,
-  findRunWorkspace,
-  listStaleRunIds,
-  type RunRepositoryProvider,
-  type RunEventRepositoryProvider,
-  type SessionRepositoryProvider,
+import type { NewAuditEvent } from '../schema/audit-events.js';
+import type { AuditEventRepositoryProvider } from './audit-events.js';
+import type { AgentRepositoryProvider } from './agents.js';
+import type { BuilderToolCallRepositoryProvider } from './builder-tool-calls.js';
+import type { AgentGrantRepositoryProvider } from './agent-grants.js';
+import type { StorageMigrationRunRepository } from './storage-migration-runs.js';
+import type { FileTextRepositoryProvider } from './file-texts.js';
+import type { ResourceCatalogRepositoryProvider } from './resource-catalogs.js';
+import type { AgentResourceRepositoryProvider } from './agent-resources.js';
+import type { AgentVersionRepositoryProvider } from './agent-versions.js';
+import type { DatabaseDirectoryRoot } from './directory.js';
+import type { ProjectFileRepositoryProvider } from './project-files.js';
+import type { ProjectMcpServerRepositoryProvider } from './project-mcp-servers.js';
+import type { ProjectRepositoryProvider } from './projects.js';
+import type { ShareRepositoryProvider, ShareViewRepositoryProvider } from './shares.js';
+import type { McpServerRepositoryProvider } from './mcp-servers.js';
+import type { ModelConnectionRepositoryProvider } from './model-connections.js';
+import type { StorageConnectionRepositoryProvider } from './storage-connections.js';
+import type {
+  RunRepositoryProvider,
+  RunEventRepositoryProvider,
+  SessionRepositoryProvider,
 } from './runs.js';
-import {
-  createDatabaseRunTokenRepositoryProvider,
-  type RunTokenRepositoryProvider,
-} from './run-tokens.js';
-import {
-  createDatabaseRunFeedbackRepositoryProvider,
-  type RunFeedbackRepositoryProvider,
-} from './run-feedback.js';
-import {
-  createDatabaseEndpointClientRepositoryProvider,
-  type EndpointClientRepositoryProvider,
-} from './endpoint-clients.js';
-import {
-  createDatabaseTriggerRepositoryProvider,
-  findTriggerForIngress,
-  type TriggerForIngress,
-  type TriggerRepositoryProvider,
-} from './triggers.js';
-import {
-  createDatabaseAgentVersionEvaluationRepositoryProvider,
-  type AgentVersionEvaluationRepositoryProvider,
-} from './agent-version-evaluations.js';
-import {
-  createDatabaseBrowserTokenRepositoryProvider,
-  findActiveBrowserTokenByHash,
-  type ActiveBrowserToken,
-  type BrowserTokenRepositoryProvider,
-} from './browser-tokens.js';
-import {
-  createDatabaseOAuthTokenRepositoryProvider,
-  findActiveOAuthAccessToken,
-  findOAuthClient,
-  type ActiveOAuthAccessToken,
-  type OAuthClientRecord,
-  type OAuthTokenRepositoryProvider,
+import type { RunTokenRepositoryProvider } from './run-tokens.js';
+import type { RunFeedbackRepositoryProvider } from './run-feedback.js';
+import type { EndpointClientRepositoryProvider } from './endpoint-clients.js';
+import type { TriggerForIngress, TriggerRepositoryProvider } from './triggers.js';
+import type { AgentTeamRepositoryProvider } from './agent-teams.js';
+import type { WebhookDeliveryRepository } from './webhook-deliveries.js';
+import type { WebhookRepositoryProvider } from './webhooks.js';
+import type { AgentVersionEvaluationRepositoryProvider } from './agent-version-evaluations.js';
+import type { ActiveBrowserToken, BrowserTokenRepositoryProvider } from './browser-tokens.js';
+import type {
+  ActiveOAuthAccessToken,
+  OAuthClientRecord,
+  OAuthTokenRepositoryProvider,
 } from './oauth-tokens.js';
-import {
-  createDatabaseRuntimeVerificationRepositoryProvider,
-  type RuntimeVerificationRepositoryProvider,
-} from './runtime-verifications.js';
-import {
-  createDatabaseSurfaceSessionKeyRepositoryProvider,
-  type SurfaceSessionKeyRepositoryProvider,
-} from './surface-session-keys.js';
-import { createDatabaseCliSessionRepository, type CliSessionRepository } from './cli-sessions.js';
-import {
-  createDatabaseSessionTranscriptRepositoryProvider,
-  type SessionTranscriptRepositoryProvider,
-} from './session-transcripts.js';
-import {
-  createDatabaseSessionStateRepositoryProvider,
-  type SessionStateRepositoryProvider,
-} from './session-state.js';
-// Added by W3-CP-06, outside this task's `Owns` cell — declared on its PR (see
-// `docs/adr/W3-CP-06-a-profile-reference-not-a-copy-and-the-integrator-call.md`). This file is the
-// only place `apps/web`'s composition root can obtain a scope-bound runtime-profile repository
-// without a raw `Database` handle, which `@agent-workspace/core/db` deliberately does not hand out.
-import {
-  createDatabaseRuntimeProfileRepositoryProvider,
-  type RuntimeProfileRepositoryProvider,
-} from './runtime-profiles.js';
-import { createDatabaseWorkspaceScopeResolver, type WorkspaceScopeResolver } from './scope.js';
-import {
-  createDatabaseWorkspaceFeatureRepositoryProvider,
-  type WorkspaceFeatureRepositoryProvider,
-} from './workspace-features.js';
-import { createDatabaseWorkspaceRepository, type WorkspaceRepository } from './workspaces.js';
+import type { RuntimeVerificationRepositoryProvider } from './runtime-verifications.js';
+import type { SurfaceSessionKeyRepositoryProvider } from './surface-session-keys.js';
+import type { CliSessionRepository } from './cli-sessions.js';
+import type { SessionTranscriptRepositoryProvider } from './session-transcripts.js';
+import type { SessionStateRepositoryProvider } from './session-state.js';
+import type { RuntimeProfileRepositoryProvider } from './runtime-profiles.js';
+import type { WorkspaceScopeResolver } from './scope.js';
+import type { WorkspaceFeatureRepositoryProvider } from './workspace-features.js';
+import type { WorkspaceRepository } from './workspaces.js';
+import { rootLocks } from './root-locks.js';
+import { rootQueries } from './root-queries.js';
+import { rootRepositories } from './root-repositories.js';
 
 type RootAuditEvent = Omit<NewAuditEvent, 'actorPrincipalId' | 'actorUserId'> & {
   readonly actorPrincipalId: string | null;
@@ -230,9 +132,6 @@ interface MaintenanceLease {
 export type LockOutcome<T> =
   { readonly acquired: true; readonly value: T } | { readonly acquired: false };
 
-/** How long a waiter sleeps between two tries of the setup lock: short at first, then capped. */
-const SETUP_LOCK_RETRY_MS = [25, 50, 100, 200, 250] as const;
-
 /**
  * Everything a composition root needs from PostgreSQL, and nothing that can issue a query the
  * repository layer did not build.
@@ -250,6 +149,8 @@ export interface DatabaseRoot {
    * each environment runs (#442, S1-04, ADR-0101; C7 and C9 are enforced inside it).
    */
   readonly agentVersions: AgentVersionRepositoryProvider;
+  /** Agent teams and their immutable versions, scoped by workspace (ADR-0104, issue #1516). */
+  readonly agentTeams: AgentTeamRepositoryProvider;
   readonly resourceCatalogs: ResourceCatalogRepositoryProvider;
   /** `file_texts` — the text a file search extracted, cached with its `tsvector` (ADR-0147). */
   readonly fileTexts: FileTextRepositoryProvider;
@@ -268,6 +169,14 @@ export interface DatabaseRoot {
   readonly endpointClients: EndpointClientRepositoryProvider;
   /** Inbound triggers and their delivery claims, scoped by workspace (ADR-0144). */
   readonly triggers: TriggerRepositoryProvider;
+  /** Run-outcome webhook endpoints, scoped by workspace (N-3, ADR-SDK-18-N3-250). */
+  readonly webhooks: WebhookRepositoryProvider;
+  /**
+   * The webhook delivery outbox as the delivery worker claims and settles it. Unscoped for the
+   * reason {@link listStaleRunIds} is: the worker acts as no one workspace, and it sees ids, a URL
+   * and attempt bookkeeping only (ADR-SDK-18-N3-250 D4).
+   */
+  readonly webhookDeliveries: WebhookDeliveryRepository;
   /** Append-only scored evaluations of an agent version, scoped by workspace (issue #618). */
   readonly agentVersionEvaluations: AgentVersionEvaluationRepositoryProvider;
   /** Issued browser-token digests and revocation state, scoped by workspace (issue #236). */
@@ -320,6 +229,8 @@ export interface DatabaseRoot {
   findRunWorkspace(runId: string): Promise<string | null>;
   /** Ids of runs left `running` or `queued` since before `before` — see `listStaleRunIds`. */
   listStaleRunIds(before: Date, limit?: number): Promise<readonly string[]>;
+  /** Ids of `awaiting_approval` runs whose approval deadline is before `before` — see `listExpiredApprovalRunIds`. */
+  listExpiredApprovalRunIds(before: Date, limit?: number): Promise<readonly string[]>;
   /**
    * The active browser-token row for a globally-unique hash, before the caller knows which
    * workspace it names — the same exception `findRunWorkspace` is, for the reason
@@ -350,8 +261,11 @@ export interface DatabaseRoot {
    * other way round.
    */
   readonly cliSessions: CliSessionRepository;
-  /** Resolve the tenant for a cookie-less public token without exposing any share content. */
-  findShareWorkspace(token: string): Promise<string | null>;
+  /**
+   * Resolve the tenant for a cookie-less public link, by the hash of its token
+   * (`hashApiKeySecret`), without exposing any share content.
+   */
+  findShareWorkspace(tokenHash: string): Promise<string | null>;
   /**
    * The identity a request acts under: the workspace named by the session's slug, the user named
    * by its subject, and a membership joining them. `null` unless all three rows exist.
@@ -413,47 +327,13 @@ export interface DatabaseRoot {
    * duration, and is released however `work` ends.
    */
   withNamedLock<T>(name: string, work: () => Promise<T>): Promise<LockOutcome<T>>;
-  /** Append one immutable §36 row without exposing the unscoped database handle. */
+  /**
+   * Append one immutable §36 row without exposing the unscoped database handle. An event that names
+   * its `id` is written once: the same id again is a no-op, so a retried write is idempotent.
+   */
   recordAuditEvent(event: RootAuditEvent): Promise<void>;
   /** Release every pooled connection. Idempotent. */
   close(): Promise<void>;
-}
-
-/** Try the session-level advisory lock `key` on a held pool client until `waitMs` has passed. */
-async function withAdvisoryLock<T>(
-  pool: ReturnType<typeof createPool>,
-  key: string,
-  waitMs: number,
-  work: () => Promise<T>,
-): Promise<LockOutcome<T>> {
-  const deadline = Date.now() + Math.max(0, waitMs);
-  const client = await pool.connect();
-  // Only a client whose unlock failed may still hold the lock; it is destroyed, not pooled.
-  let unlockFailure: Error | undefined;
-  try {
-    for (let attempt = 0; ; attempt += 1) {
-      const tried = await client.query<{ acquired: boolean }>(
-        'select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired',
-        [key],
-      );
-      if (tried.rows[0]?.acquired === true) break;
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) return { acquired: false };
-      const pause = SETUP_LOCK_RETRY_MS[Math.min(attempt, SETUP_LOCK_RETRY_MS.length - 1)];
-      await new Promise((resolve) => setTimeout(resolve, Math.min(pause ?? 250, remaining)));
-    }
-    try {
-      return { acquired: true, value: await work() };
-    } finally {
-      await client
-        .query('select pg_advisory_unlock(hashtextextended($1, 0))', [key])
-        .catch((error: unknown) => {
-          unlockFailure = error instanceof Error ? error : new Error(String(error));
-        });
-    }
-  } finally {
-    client.release(unlockFailure);
-  }
 }
 
 /**
@@ -470,7 +350,7 @@ async function withAdvisoryLock<T>(
  * inside the first route handler.
  */
 export async function openDatabaseRoot(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
 ): Promise<DatabaseRoot> {
   const pool = createPool(readDatabaseConfig(env));
   let db: Database;
@@ -484,212 +364,11 @@ export async function openDatabaseRoot(
     throw error;
   }
 
-  const scopes = createDatabaseWorkspaceScopeResolver(db);
   let closed = false;
   return {
-    scopes,
-    agents: createDatabaseAgentRepositoryProvider(db),
-    agentGrants: createDatabaseAgentGrantRepositoryProvider(db),
-    agentResources: createDatabaseAgentResourceRepositoryProvider(db),
-    agentVersions: createDatabaseAgentVersionRepositoryProvider(db),
-    resourceCatalogs: createDatabaseResourceCatalogRepositoryProvider(db),
-    fileTexts: createDatabaseFileTextRepositoryProvider(db),
-    storageMigrationRuns: createDatabaseStorageMigrationRunRepository(db),
-    runs: createDatabaseRunRepositoryProvider(db),
-    runEvents: createDatabaseRunEventRepositoryProvider(db),
-    runTokens: createDatabaseRunTokenRepositoryProvider(db),
-    runFeedback: createDatabaseRunFeedbackRepositoryProvider(db),
-    builderToolCalls: createDatabaseBuilderToolCallRepositoryProvider(db),
-    endpointClients: createDatabaseEndpointClientRepositoryProvider(db),
-    triggers: createDatabaseTriggerRepositoryProvider(db),
-    agentVersionEvaluations: createDatabaseAgentVersionEvaluationRepositoryProvider(db),
-    browserTokens: createDatabaseBrowserTokenRepositoryProvider(db),
-    oauthTokens: createDatabaseOAuthTokenRepositoryProvider(db),
-    surfaceSessionKeys: createDatabaseSurfaceSessionKeyRepositoryProvider(db),
-    runtimeVerifications: createDatabaseRuntimeVerificationRepositoryProvider(db),
-    sessions: createDatabaseSessionRepositoryProvider(db),
-    sessionTranscripts: createDatabaseSessionTranscriptRepositoryProvider(db),
-    sessionState: createDatabaseSessionStateRepositoryProvider(db),
-    mcpServers: createDatabaseMcpServerRepositoryProvider(db),
-    modelConnections: createDatabaseModelConnectionRepositoryProvider(db),
-    storageConnections: createDatabaseStorageConnectionRepositoryProvider(db),
-    runtimeProfiles: createDatabaseRuntimeProfileRepositoryProvider(db),
-    projects: createDatabaseProjectRepositoryProvider(db),
-    projectFiles: createDatabaseProjectFileRepositoryProvider(db),
-    projectMcpServers: createDatabaseProjectMcpServerRepositoryProvider(db),
-    shares: createDatabaseShareRepositoryProvider(db),
-    shareViews: createDatabaseShareViewRepositoryProvider(db),
-    auditEventRepository: createDatabaseAuditEventRepositoryProvider(db),
-    directory: createDatabaseDirectoryRoot(db),
-    workspaces: createDatabaseWorkspaceRepository(db),
-    workspaceFeatures: createDatabaseWorkspaceFeatureRepositoryProvider(db),
-    listWorkspaceIds: async (): Promise<readonly string[]> =>
-      (await db.query.workspaces.findMany({ columns: { id: true } })).map(({ id }) => id),
-    tryAcquireMaintenanceLease: async (
-      name: string,
-      ttlMs: number,
-    ): Promise<MaintenanceLease | null> => {
-      if (!Number.isSafeInteger(ttlMs) || ttlMs < 1) {
-        throw new Error('maintenance lease TTL must be a positive safe integer');
-      }
-      const client = await pool.connect();
-      const acquired = await client.query<{ acquired: boolean }>(
-        'select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired',
-        [name],
-      );
-      if (acquired.rows[0]?.acquired !== true) {
-        client.release();
-        return null;
-      }
-      let released = false;
-      const release = async (): Promise<void> => {
-        if (released) return;
-        released = true;
-        clearTimeout(expiry);
-        try {
-          await client.query('select pg_advisory_unlock(hashtextextended($1, 0))', [name]);
-        } finally {
-          client.release();
-        }
-      };
-      const expiry = setTimeout(() => void release(), ttlMs);
-      expiry.unref();
-      return { release };
-    },
-    findRunWorkspace: (runId: string): Promise<string | null> => findRunWorkspace(db, runId),
-    listStaleRunIds: (before: Date, limit?: number): Promise<readonly string[]> =>
-      listStaleRunIds(db, before, limit),
-    findBrowserTokenByHash: (tokenHash: string, now?: Date): Promise<ActiveBrowserToken | null> =>
-      findActiveBrowserTokenByHash(db, tokenHash, now),
-    findOAuthAccessTokenByHash: (
-      tokenHash: string,
-      now?: Date,
-    ): Promise<ActiveOAuthAccessToken | null> => findActiveOAuthAccessToken(db, tokenHash, now),
-    findOAuthClient: (clientId: string): Promise<OAuthClientRecord | null> =>
-      findOAuthClient(db, clientId),
-    findTriggerForIngress: (triggerId: string): Promise<TriggerForIngress | null> =>
-      findTriggerForIngress(db, triggerId),
-    cliSessions: createDatabaseCliSessionRepository(db),
-    findShareWorkspace: async (token: string): Promise<string | null> =>
-      (
-        await db.query.shares.findFirst({
-          columns: { workspaceId: true },
-          // This unscoped lookup is used only by the anonymous /p surface. Workspace/private
-          // shares must never disclose even which tenant owns their otherwise-valid token.
-          where: (row, { and, eq }) => and(eq(row.token, token), eq(row.visibility, 'public')),
-        })
-      )?.workspaceId ?? null,
-    resolveMembership: async (
-      email: string,
-      workspaceSlug: string,
-    ): Promise<WorkspaceMembership | null> => {
-      const workspace = await db.query.workspaces.findFirst({
-        columns: { id: true },
-        where: (row, { eq }) => eq(row.slug, workspaceSlug),
-      });
-      if (workspace === undefined) return null;
-
-      const user = await db.query.users.findFirst({
-        columns: { id: true, name: true },
-        where: (row, { eq }) => eq(row.email, email),
-      });
-      if (user === undefined) return null;
-
-      const membership = await db.query.memberships.findFirst({
-        columns: { id: true, role: true },
-        where: (row, { and, eq }) =>
-          and(eq(row.workspaceId, workspace.id), eq(row.userId, user.id)),
-      });
-      // The explicit else. An identity exists because three rows were read and agreed, never
-      // because nothing objected (ADR-0015).
-      if (membership === undefined) return null;
-
-      const principal = await db.query.workspacePrincipals.findFirst({
-        columns: { id: true },
-        where: (row, { and, eq, isNull }) =>
-          and(
-            eq(row.workspaceId, workspace.id),
-            eq(row.membershipId, membership.id),
-            eq(row.kind, 'membership'),
-            isNull(row.revokedAt),
-          ),
-      });
-      if (principal === undefined) return null;
-
-      return {
-        principalId: principal.id,
-        userId: user.id,
-        userLabel: user.name,
-        workspaceId: workspace.id,
-        role: membership.role,
-      };
-    },
-    async getWorkspaceModelDefault(
-      workspaceId: string,
-    ): Promise<{ readonly connectionId: string; readonly model: string } | null> {
-      const row = await db.query.workspaces.findFirst({
-        columns: { defaultModelConnectionId: true, defaultModel: true },
-        where: (candidate, { eq: matches }) => matches(candidate.id, workspaceId),
-      });
-      if (row === undefined || row.defaultModelConnectionId === null || row.defaultModel === null) {
-        return null;
-      }
-      return { connectionId: row.defaultModelConnectionId, model: row.defaultModel };
-    },
-    async setWorkspaceModelDefault(
-      workspaceId: string,
-      value: { readonly connectionId: string; readonly model: string } | null,
-    ): Promise<boolean> {
-      const rows = await db
-        .update(workspaces)
-        .set({
-          defaultModelConnectionId: value === null ? null : value.connectionId,
-          defaultModel: value === null ? null : value.model,
-        })
-        .where(eq(workspaces.id, workspaceId))
-        .returning({ id: workspaces.id });
-      return rows.length > 0;
-    },
-    async getWorkspaceSetupAgentId(workspaceId: string): Promise<string | null> {
-      const [row] = await db
-        .select({ id: agents.id })
-        .from(agents)
-        .where(and(eq(agents.workspaceId, workspaceId), isNotNull(agents.setupConfiguredAt)))
-        .orderBy(desc(agents.setupConfiguredAt))
-        .limit(1);
-      return row?.id ?? null;
-    },
-    // `updated_at` is set to itself, overriding Drizzle's `$onUpdate`, and `materialised_version_id`
-    // is left alone: marking or clearing the setup agent is not an edit (C21, plan §4).
-    async setWorkspaceSetupAgentId(workspaceId: string, agentId: string): Promise<boolean> {
-      const rows = await db
-        .update(agents)
-        .set({ setupConfiguredAt: new Date(), updatedAt: sql`${agents.updatedAt}` })
-        .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
-        .returning({ id: agents.id });
-      return rows.length > 0;
-    },
-    async clearWorkspaceSetupAgentId(workspaceId: string, agentId: string): Promise<boolean> {
-      const rows = await db
-        .update(agents)
-        .set({ setupConfiguredAt: null, updatedAt: sql`${agents.updatedAt}` })
-        .where(and(eq(agents.workspaceId, workspaceId), eq(agents.id, agentId)))
-        .returning({ id: agents.id });
-      return rows.length > 0;
-    },
-    async withWorkspaceSetupLock<T>(
-      workspaceId: string,
-      waitMs: number,
-      work: () => Promise<T>,
-    ): Promise<LockOutcome<T>> {
-      return withAdvisoryLock(pool, `agent-workspace:setup:${workspaceId}`, waitMs, work);
-    },
-    withNamedLock<T>(name: string, work: () => Promise<T>): Promise<LockOutcome<T>> {
-      return withAdvisoryLock(pool, `agent-workspace:lock:${name}`, 0, work);
-    },
-    async recordAuditEvent(event: RootAuditEvent): Promise<void> {
-      await db.insert(auditEvents).values(checkedAuditEvent(event));
-    },
+    ...rootRepositories(db),
+    ...rootQueries(db),
+    ...rootLocks(pool),
     async close(): Promise<void> {
       if (closed) return;
       closed = true;

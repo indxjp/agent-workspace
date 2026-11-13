@@ -56,18 +56,14 @@ import { decide, OWNERSHIPS } from './decide';
 import type { WorkspaceDirectory } from './directory';
 import {
   changeMembershipRole,
-  createApiKey,
   createMembership,
-  createUser,
   deleteMembership,
-  listApiKeys,
   listMemberships,
-  listUsers,
-  revokeApiKey,
-} from './handlers';
+} from './membership-handlers';
+import { createApiKey, createUser, listApiKeys, listUsers, revokeApiKey } from './handlers';
 import type { ApiResult } from '../http/result';
 import { createMemoryDirectory } from './memory-directory';
-import { ROLES, type Role } from './roles';
+import { ROLES, type Role } from './core/roles';
 import { installRbacHarness, TEST_WORKSPACE_ID, type RbacHarness } from './testing';
 import { clearApplicationContext } from '../application-context';
 

@@ -21,7 +21,9 @@
     // Read from source, as vitest does (`vitest.config.ts`): the root has no dependency on it.
     "paths": {
       "@indx-workspace/platforms": ["../packages/platforms/src/index.ts"],
-      "@indx-workspace/platforms/testing": ["../packages/platforms/src/testing/index.ts"]
+      "@indx-workspace/platforms/testing": ["../packages/platforms/src/testing/index.ts"],
+      "@agent-workspace/egress-proxy": ["../packages/egress-proxy/src/index.ts"],
+      "@agent-workspace/gateway/settings": ["../packages/gateway/src/settings.ts"]
     }
   },
   "include": ["**/*.ts"]

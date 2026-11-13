@@ -2,6 +2,7 @@ import type { SecretsService } from '@agent-workspace/core/secrets';
 
 import { openAgentArchiveStore, type AgentArchiveRoot } from '../../agents/archive/store';
 import { createAgentArchiveSweep, startAgentArchiveScheduler } from '../../agents/archive/sweep';
+import { resolveAgentRunOwnership } from '../../agents/run-ownership';
 import type { TriggersRuntime } from '../../triggers/runtime';
 import {
   runSchedulePass,
@@ -30,7 +31,7 @@ export function wireTriggers(
   }>,
 ): TriggersRuntime {
   const { log } = options;
-  const runtime = createRepositoryTriggersRuntime(root, secretsService);
+  const runtime = createRepositoryTriggersRuntime(root, secretsService, resolveAgentRunOwnership);
   // ADR-0144 D5: Vercel Cron calls `GET /api/cron/triggers` where `CRON_SECRET` is set; a long-lived
   // server runs the same pass on an interval under the maintenance lease.
   const deps = { root, runtime, log };

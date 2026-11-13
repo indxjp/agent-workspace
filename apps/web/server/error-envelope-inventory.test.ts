@@ -279,7 +279,7 @@ describe('the sweep covers the whole declared API surface', () => {
     const sources = [
       ...trackedFiles('apps/web/app/api'),
       ...trackedFiles('apps/web/server'),
-    ].filter((file) => /\.(ts|tsx|mts)$/u.test(file) && !/\.test\.tsx?$/u.test(file));
+    ].filter((file) => /\.(ts|tsx|mts)$/u.test(file) && !/\.test(?:-support)?\.tsx?$/u.test(file));
     const spelled = sources
       .filter((file) => BARE_CODE_BODY.test(readFileSync(path.join(REPO_ROOT, file), 'utf8')))
       .sort();
@@ -316,7 +316,10 @@ describe('the edge (apps/web/proxy.ts) refuses in the standard envelope', () => 
       if (unsafe) {
         probes.push([
           'a session, a cross-origin write',
-          { cookie: `${sessionCookieName()}=${token}`, origin: 'https://elsewhere.test' },
+          {
+            cookie: `${sessionCookieName(process.env)}=${token}`,
+            origin: 'https://elsewhere.test',
+          },
         ]);
       }
       for (const [probe, headers] of probes) {

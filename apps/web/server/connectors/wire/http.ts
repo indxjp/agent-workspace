@@ -15,7 +15,8 @@ import {
   type JsonRpcResponse,
 } from './json-rpc';
 import { classifyFetchThrow } from './errno';
-import { ProbeError } from './probe-error';
+import { classifyJsonRpcError, ProbeError, type ProbeFetch } from './probe-error';
+import { splitSseFrames } from './sse-frames';
 
 export interface HttpProbeResult {
   readonly serverName: string | null;
@@ -26,9 +27,19 @@ export interface HttpProbeResult {
 const JSON_CONTENT_TYPE = 'application/json';
 const EVENT_STREAM_CONTENT_TYPE = 'text/event-stream';
 
+/** Where and how every call of one probe is sent. */
+interface HttpTarget {
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly signal: AbortSignal;
+  readonly send: ProbeFetch;
+}
+
 /** Read the first complete SSE `data:` line's JSON payload out of a response body's full text. */
 function firstSseDataPayload(text: string): unknown {
-  for (const frame of text.split('\n\n')) {
+  // The final frame may have no terminating blank line; a trailing "\n\n" flushes it.
+  const { frames } = splitSseFrames(`${text}\n\n`);
+  for (const frame of frames) {
     for (const line of frame.split('\n')) {
       const trimmed = line.trimStart();
       if (trimmed.startsWith('data:')) {
@@ -47,12 +58,11 @@ function firstSseDataPayload(text: string): unknown {
 /** POST one JSON-RPC request/notification. Returns the parsed response for a request; `null` for
  *  a notification (no id, no response expected) once the send itself succeeded. */
 async function post(
-  url: string,
-  headers: Readonly<Record<string, string>>,
+  target: HttpTarget,
   body: Record<string, unknown>,
-  signal: AbortSignal,
   sessionId: string | null,
 ): Promise<{ readonly response: Response; readonly sessionId: string | null }> {
+  const { url, headers, signal, send } = target;
   const requestHeaders: Record<string, string> = {
     ...headers,
     'content-type': JSON_CONTENT_TYPE,
@@ -62,7 +72,7 @@ async function post(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await send(url, {
       method: 'POST',
       headers: requestHeaders,
       body: JSON.stringify(body),
@@ -78,6 +88,34 @@ async function post(
   return { response, sessionId: nextSession };
 }
 
+/** Read the response body as one JSON value, whether it came as plain JSON or a one-frame event stream. */
+async function readRawFrame(response: Response, url: string): Promise<unknown> {
+  const contentType =
+    (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (contentType !== JSON_CONTENT_TYPE && contentType !== EVENT_STREAM_CONTENT_TYPE) {
+    throw new ProbeError(
+      { kind: 'not-json-rpc' },
+      `${url} answered with content-type ${JSON.stringify(contentType)}`,
+    );
+  }
+  const text = await response.text();
+  if (contentType === JSON_CONTENT_TYPE) {
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new ProbeError({ kind: 'not-json-rpc' }, `${url} did not return valid JSON`);
+    }
+  }
+  const payload = firstSseDataPayload(text);
+  if (payload === null) {
+    throw new ProbeError(
+      { kind: 'not-json-rpc' },
+      `${url} opened an event stream with no JSON-RPC frame`,
+    );
+  }
+  return payload;
+}
+
 /** Turn a non-OK response, or a JSON-RPC error body, into the right {@link ProbeError}. Returns
  *  the parsed JSON-RPC response when the call actually succeeded. */
 async function requireJsonRpcResult(
@@ -90,32 +128,7 @@ async function requireJsonRpcResult(
       `${url} -> HTTP ${String(response.status)}`,
     );
   }
-  const contentType =
-    (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
-  const text = await response.text();
-  let raw: unknown;
-  if (contentType === JSON_CONTENT_TYPE) {
-    try {
-      raw = JSON.parse(text) as unknown;
-    } catch {
-      throw new ProbeError({ kind: 'not-json-rpc' }, `${url} did not return valid JSON`);
-    }
-  } else if (contentType === EVENT_STREAM_CONTENT_TYPE) {
-    const payload = firstSseDataPayload(text);
-    if (payload === null) {
-      throw new ProbeError(
-        { kind: 'not-json-rpc' },
-        `${url} opened an event stream with no JSON-RPC frame`,
-      );
-    }
-    raw = payload;
-  } else {
-    throw new ProbeError(
-      { kind: 'not-json-rpc' },
-      `${url} answered with content-type ${JSON.stringify(contentType)}`,
-    );
-  }
-
+  const raw = await readRawFrame(response, url);
   const parsed = parseJsonRpcResponse(raw);
   if (parsed === null) {
     throw new ProbeError(
@@ -124,11 +137,7 @@ async function requireJsonRpcResult(
     );
   }
   if (parsed.kind === 'error') {
-    const { code, message } = parsed.error;
-    if (code <= -32000 && code >= -32099) {
-      throw new ProbeError({ kind: 'json-rpc-app-error', code, message }, message);
-    }
-    throw new ProbeError({ kind: 'json-rpc-protocol-error', code }, message);
+    throw classifyJsonRpcError(parsed.error.code, parsed.error.message);
   }
   return parsed;
 }
@@ -141,8 +150,10 @@ export async function probeHttp(
   url: string,
   headers: Readonly<Record<string, string>>,
   signal: AbortSignal,
+  send: ProbeFetch,
 ): Promise<HttpProbeResult> {
-  const init = await post(url, headers, buildInitializeRequest(1), signal, null);
+  const target: HttpTarget = { url, headers, signal, send };
+  const init = await post(target, buildInitializeRequest(1), null);
   const initResult = await requireJsonRpcResult(init.response, url);
   const { protocolVersion, serverName, serverVersion } = readInitializeResult(initResult.result);
   if (protocolVersion !== null && !SUPPORTED_PROTOCOL_VERSIONS.includes(protocolVersion)) {
@@ -153,11 +164,9 @@ export async function probeHttp(
   }
 
   // Fire-and-forget: a notification has no id and the server is not required to answer it.
-  await post(url, headers, buildInitializedNotification(), signal, init.sessionId).catch(
-    () => undefined,
-  );
+  await post(target, buildInitializedNotification(), init.sessionId).catch(() => undefined);
 
-  const list = await post(url, headers, buildToolsListRequest(2), signal, init.sessionId);
+  const list = await post(target, buildToolsListRequest(2), init.sessionId);
   const listResult = await requireJsonRpcResult(list.response, url);
   return { serverName, serverVersion, toolCount: readToolCount(listResult.result) };
 }

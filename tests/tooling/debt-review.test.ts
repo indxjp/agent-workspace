@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   countProposedAdrs,
@@ -43,6 +43,13 @@ function markersByGitGrep(): number {
 }
 
 describe('debt-review', () => {
+  // One walk of the tree serves every row below: each walk reads every tracked file, and six of
+  // them in a row ran past vitest's 5 s per test on a busy CI runner.
+  let measured: ReturnType<typeof measure>;
+  beforeAll(() => {
+    measured = measure('2027-01-18');
+  });
+
   it('maps a date to its quarter', () => {
     expect(quarterOf('2026-10-18')).toBe('2026-Q4');
     expect(quarterOf('2027-03-31')).toBe('2027-Q1');
@@ -81,7 +88,7 @@ describe('debt-review', () => {
     // A fixed review entry, not .osv-baseline.json's: the baseline empties as advisories are fixed
     // or withdrawn (sprintf-js's GHSA-hp3w-g68c-fv3c was withdrawn on 2026-10-22).
     const m = {
-      ...measure('2027-01-18'),
+      ...measured,
       osvReviews: [{ entry: 'example@1.0.0 GHSA-0000-0000-0000', date: '2027-01-18' }],
     };
     const body = render(m);
@@ -91,14 +98,14 @@ describe('debt-review', () => {
   });
 
   it('shows the storage story gaps row', () => {
-    const m = measure('2027-01-18');
+    const m = measured;
     expect(m.storyGaps).toBeGreaterThanOrEqual(0);
     expect(m.storyGaps).toBeLessThanOrEqual(37);
     expect(render({ ...m, storyGaps: 5 })).toContain('| storage story gaps | 5 |');
   });
 
   it('shows the storage-bridge markers row', () => {
-    const m = measure('2027-01-18');
+    const m = measured;
     // The count reaches 0 when the last bridge goes (#1703); the row stays, reading 0. It is still
     // the count of the tree's markers, so a scan that stops reading files cannot pass as 0.
     expect(m.storageBridges).toBe(markersByGitGrep());
@@ -107,7 +114,7 @@ describe('debt-review', () => {
   });
 
   it('shows the storage-limits allowlist row', () => {
-    const m = measure('2027-01-18');
+    const m = measured;
     expect(m.storageLimitsAllowlist).toBeGreaterThan(0);
     expect(render({ ...m, storageLimitsAllowlist: 4 })).toContain(
       '| storage-limits allowlist entries | 4 |',
@@ -115,15 +122,16 @@ describe('debt-review', () => {
   });
 
   it('shows the catalog-fakes allowlist row', () => {
-    const m = measure('2027-01-18');
-    expect(m.catalogFakesAllowlist).toBeGreaterThan(0);
+    const m = measured;
+    // Emptied by #1745; the row still reports it, so a regrown allowlist shows in the review.
+    expect(m.catalogFakesAllowlist).toBe(0);
     expect(render({ ...m, catalogFakesAllowlist: 6 })).toContain(
       '| catalog-fakes allowlist sites | 6 |',
     );
   });
 
   it('shows the route-error-boundary allowlist row', () => {
-    const m = measure('2027-01-18');
+    const m = measured;
     expect(m.routeBoundaryAllowlist).toBeGreaterThan(0);
     expect(render({ ...m, routeBoundaryAllowlist: 7 })).toContain(
       '| route-error-boundary allowlist entries | 7 |',

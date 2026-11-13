@@ -32,6 +32,7 @@ import {
 import { WorkspaceSwitchRequestSchema } from '@indx-workspace/contracts/workspaces';
 
 import { applicationContext } from '../application-context';
+import { systemClock } from '../clock';
 import { BoundedRecencyMap } from '../http/rate-limit';
 import { hashCliTokenSecret, mintCliToken, readBearerCliTokenAttempt } from '../rbac/cli-token';
 import type { ApiResult } from '../http/result';
@@ -88,7 +89,10 @@ export function refuseOverLimit(
 }
 
 /** `POST /api/auth/cli-device` — start a sign-in. */
-export function startDeviceAuthorization(request: Request, nowMs: number = Date.now()): ApiResult {
+export function startDeviceAuthorization(
+  request: Request,
+  nowMs: number = systemClock.now().getTime(),
+): ApiResult {
   const runtime = applicationContext()?.cliAuth ?? null;
   if (runtime === null) return notConfigured();
   const limited = refuseOverLimit('start', request, nowMs);
@@ -108,7 +112,7 @@ export function startDeviceAuthorization(request: Request, nowMs: number = Date.
 /** `POST /api/auth/cli-token` — poll; the token once the person approved. */
 export async function exchangeDeviceCode(
   request: Request,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<ApiResult> {
   const context = applicationContext();
   if (context === null) return notConfigured();
@@ -174,7 +178,7 @@ const invalidBearer = (): ApiResult =>
 /** `DELETE /api/auth/cli-token` — sign out: revoke the presented token server-side. */
 export async function revokeCliToken(
   request: Request,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<ApiResult> {
   const runtime = applicationContext()?.cliAuth ?? null;
   if (runtime === null) return notConfigured();
@@ -193,7 +197,7 @@ const workspaceNotAvailable = (): ApiResult =>
 /** `POST /api/auth/cli-workspace` — move the presented token to another of the person's workspaces. */
 export async function switchCliWorkspace(
   request: Request,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<ApiResult> {
   const context = applicationContext();
   if (context === null) return notConfigured();

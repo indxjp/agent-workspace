@@ -1,4 +1,4 @@
-import type { DatabaseRoot } from '@agent-workspace/core/db';
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
 import type { SecretsService } from '@agent-workspace/core/secrets';
 
 import type {
@@ -8,12 +8,14 @@ import type {
   UsageRecorder,
 } from './auth.js';
 import type { DailyCostLedger } from './daily-cost.js';
+import type { GatewayDailyCostStore, GatewayRunStore, GatewayUsageStore } from './ports.js';
 import { calculateUsageCost, priceFor, type ModelPrice, type PricingCatalog } from './pricing.js';
 import { registryProviderId } from './providers/registry.js';
+import { ModelCredentialUnavailableError, type TokenSource } from './types.js';
 
 /** Bind normalized gateway usage to the tenant-scoped, idempotent run repository. */
 export function createDatabaseUsageRecorder(
-  database: DatabaseRoot,
+  database: GatewayUsageStore,
   pricing: PricingCatalog,
 ): UsageRecorder {
   // Best-effort: only takes effect while the run is still `pending` (see
@@ -94,10 +96,20 @@ function modelConnectionSecretName(id: string): string {
   return `MODEL_CONNECTION_${id.replace(/-/g, '').toUpperCase()}`;
 }
 
+const NO_TOKEN_SOURCE = 'This deployment has no cloud identity for keyless model connections.';
+const FOREIGN_PROJECT = "This model connection names a project other than this deployment's own.";
+
+/** The cloud identity keyless connections use, and the one project it may act on. */
+export type KeylessIdentity = {
+  readonly tokens: TokenSource;
+  readonly projectId: string;
+};
+
 /** Resolve the token subject through tenant-scoped repositories and decrypt its one provider key. */
 export function createDatabaseGatewayRunResolver(
-  database: DatabaseRoot,
+  database: GatewayRunStore,
   secrets: SecretsService,
+  keyless?: KeylessIdentity,
 ): GatewayRunResolver {
   return {
     async resolve(claims, tokenHash): Promise<RunResolution> {
@@ -123,6 +135,36 @@ export function createDatabaseGatewayRunResolver(
         return { state: 'missing' };
       }
 
+      if (isKeylessProvider(connection.provider)) {
+        // A keyless connection stores no credential: the secret store is never read for it.
+        if (keyless === undefined) return { state: 'unavailable', message: NO_TOKEN_SOURCE };
+        // Confused deputy: the ambient identity acts only on the project the deployment configured,
+        // never on one a workspace admin typed into a connection.
+        if (connection.config['projectId'] !== keyless.projectId) {
+          return { state: 'unavailable', message: FOREIGN_PROJECT };
+        }
+        const { tokens } = keyless;
+        let credential: string;
+        try {
+          credential = await tokens.accessToken();
+        } catch (error) {
+          if (!(error instanceof ModelCredentialUnavailableError)) throw error;
+          return { state: 'unavailable', message: error.message };
+        }
+        return {
+          state: 'active',
+          providerId: registryProviderId(connection.provider),
+          connectionProvider: connection.provider,
+          credential,
+          settings: connection.config,
+          spend: { costUsd: run.costUsd, ceilingUsd: run.spendCeilingUsd ?? null },
+          refreshCredential: () => {
+            tokens.invalidate();
+            return tokens.accessToken();
+          },
+        };
+      }
+
       const secret = await secrets.resolveByName(
         scope,
         modelConnectionSecretName(claims.modelConnectionId),
@@ -134,6 +176,8 @@ export function createDatabaseGatewayRunResolver(
         connectionProvider: connection.provider,
         credential: secret.value.toString('utf8'),
         settings: connection.config,
+        // ADR-0162: the run ceiling's two decimals, from the read that found the run active.
+        spend: { costUsd: run.costUsd, ceilingUsd: run.spendCeilingUsd ?? null },
       };
     },
   };
@@ -147,8 +191,11 @@ export function createDatabaseGatewayRunResolver(
  */
 const KEEP_EVERY_EVENT = Number.MAX_SAFE_INTEGER;
 
-/** The usage ledger and run end the daily cost cap reads and writes, tenant-scoped like the rest. */
-export function createDatabaseDailyCostLedger(database: DatabaseRoot): DailyCostLedger {
+/**
+ * The usage ledger and run end the daily cost cap reads and writes, tenant-scoped like the rest.
+ * The run spend ceiling (ADR-0162) ends a run through the same `endRun`.
+ */
+export function createDatabaseDailyCostLedger(database: GatewayDailyCostStore): DailyCostLedger {
   const scopeOf = async (workspaceId: string) => {
     const scope = await database.scopes.forWorkspaceId(workspaceId);
     if (scope === null) throw new Error(`daily cost cap: workspace ${workspaceId} did not resolve`);

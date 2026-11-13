@@ -33,7 +33,7 @@ import type { MembershipRoleName } from '@indx-workspace/contracts/team';
  * row the viewer's own (`userId === viewerUserId`), and is this row the workspace's only Owner
  * (counted over the list the server just returned).
  *
- * {@link MembershipCapability.conferrableRoles} is the set `conferRole` (`server/rbac/conferral.ts`)
+ * {@link MembershipCapability.conferrableRoles} is the set `conferRole` (`server/rbac/core/conferral.ts`)
  * answers `allow` for, evaluated against the viewer's own role. It is a **grant**, not a ladder:
  * §21 does not order the four roles, so the list cannot be reconstructed from `viewerUserId` or
  * from a role name in the client.

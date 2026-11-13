@@ -61,7 +61,7 @@ export const triggerCommands: readonly Command[] = [
   command(
     'triggers update',
     '<id> [--file <json>] [--name <name>] [--prompt <text>] [--subject <caller>] [--value-stdin]',
-    'Change the name, prompt, enabled flag, output schema, run subject or Zoom secret token of a trigger',
+    "Change a trigger's name, prompt, enabled flag, output schema, run subject, Zoom secret token, or a schedule's cron and time zone",
     async (context) => ({
       value: await context.client.triggers.update(
         positional(context, 0, 'id'),

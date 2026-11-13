@@ -1,236 +1,30 @@
-/**
- * The five route handlers of spec §34, imported as Next.js will import them and driven with real
- * `Request` objects.
- *
- * Everything else in this directory tests a module the routes call. This file tests the routes
- * themselves — the exported `GET` / `POST` / `PATCH` / `DELETE` functions in
- * `apps/web/app/api/agents/route.ts` and `apps/web/app/api/agents/[id]/route.ts` — because the
- * wiring in those files is code too, and until this suite existed the only outcome anyone had
- * observed from them was `503 agents_runtime_not_configured`. A route that answers 503 in every
- * circumstance is indistinguishable from a route that does not work, and "it will work once
- * W1-CP-06 wires a session" is a claim, not a test.
- *
- * What a test can supply that production cannot yet is the runtime: `installTestDomains`
- * installs the in-memory reference store and a resolver. Everything downstream of that seam is the
- * real code path a deployed request takes.
- *
- * The one thing this file cannot exercise is Next.js's own routing — which file it picks for a URL
- * and how it fills `params`. That is what `tests/route-inventory.test.ts` covers, from the other
- * side.
- */
-import { log as webLogger } from '../telemetry/logger';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { log as webLogger } from '../telemetry/logger';
 
-import { GET as listRoute, POST as createRoute } from '../../app/api/agents/route';
 import {
   DELETE as deleteRoute,
   GET as getRoute,
   PATCH as patchRoute,
 } from '../../app/api/agents/[id]/route';
-import type { AgentResource, AgentResourceAssignments } from '../../contracts/agents';
-import {
-  createInMemoryAgentVersionStoreProvider,
-  type InMemoryAgentVersionStoreProvider,
-} from '../agent-versions/memory-store';
+import { POST as createRoute, GET as listRoute } from '../../app/api/agents/route';
+import type { AgentResource } from '../../contracts/agents';
 import { applicationContext, clearApplicationContext } from '../application-context';
 import { installTestDomains } from '../application-context-fixtures';
 import { createInMemoryAgentStoreProvider } from './memory-store';
-import type { AgentResourceStoreProvider } from './resource-store';
-import { type WorkspaceResolution } from './runtime';
-import { clearEnginesRegisteredForTests, registerEngineForTests } from '../engines/registry';
-import { createMemoryDirectory } from '../rbac/memory-directory';
-import { Principal } from '../rbac/principal';
-import type { Role } from '../rbac/roles';
 
-const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
-const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
-
-/** The workspace a request acts in, taken from a header **only in this test**. */
-const WORKSPACE_HEADER = 'x-test-workspace';
-/** issue #117: which seeded member a request authenticates as, taken from a header only here. */
-const ACTOR_HEADER = 'x-test-actor';
-
+import {
+  bodyOf,
+  CREATE_BODY,
+  createIn,
+  idContext,
+  request,
+  useMemoryRuntime,
+  WORKSPACE_A,
+  WORKSPACE_B,
+} from './routes.fixture.test-support';
 afterEach(() => {
   clearApplicationContext();
 });
-
-/**
- * Install a runtime whose resolver reads the workspace from a request header.
- *
- * A real resolver must never do this — `runtime.ts` says so, and W1-CP-06 will read a session
- * cookie instead. It is exactly what makes the isolation assertions below meaningful: the test
- * gives an attacker the strongest position there is, full control of the workspace identity, and
- * then asserts that workspace B still cannot reach workspace A's row.
- */
-function useMemoryRuntime(role: Role = 'owner'): InMemoryAgentVersionStoreProvider {
-  const assignments = new Map<string, AgentResourceAssignments>();
-  const agents = createInMemoryAgentStoreProvider({ assignments });
-  const agentResources: AgentResourceStoreProvider = {
-    forWorkspace: (workspaceId) => ({
-      get: async (agentId) => {
-        if ((await agents.forWorkspace(workspaceId).get(agentId)) === null) return null;
-        return (
-          assignments.get(`${workspaceId}:${agentId}`) ?? {
-            files: [],
-            skillIds: [],
-            connectorIds: [],
-            storageGrants: [],
-          }
-        );
-      },
-      replace: async (agentId, next) => {
-        if ((await agents.forWorkspace(workspaceId).get(agentId)) === null) {
-          return { kind: 'not-found' as const };
-        }
-        const stored = { ...next, storageGrants: next.storageGrants ?? [] };
-        assignments.set(`${workspaceId}:${agentId}`, stored);
-        return { kind: 'updated' as const, assignments: stored };
-      },
-    }),
-  };
-  installTestDomains({
-    agents: {
-      agents,
-      agentResources,
-      resolveWorkspace(request: Request): Promise<WorkspaceResolution> {
-        const workspaceId = request.headers.get(WORKSPACE_HEADER);
-        if (workspaceId === null) {
-          return Promise.resolve({ kind: 'unauthenticated', reason: 'no test workspace header' });
-        }
-        return Promise.resolve({ kind: 'workspace', workspaceId });
-      },
-    },
-  });
-  // Issue #616: a PATCH saves a version, so the version store is part of the runtime.
-  const versions = createInMemoryAgentVersionStoreProvider({ agents, resources: agentResources });
-  installTestDomains({ agentVersions: { versions } });
-  installTestDomains({
-    rbac: {
-      // Issue #117: `POST /api/agents` resolves `created_by`, falling back to the workspace's
-      // oldest Owner when the caller cannot be matched by email (true here, which authenticates as
-      // an API key) — so each fixture workspace needs at least one seeded member.
-      directory: createMemoryDirectory({
-        users: [
-          {
-            email: 'owner-a@example.test',
-            name: 'Owner A',
-            workspaceId: WORKSPACE_A,
-            role: 'owner',
-          },
-          {
-            email: 'owner-b@example.test',
-            name: 'Owner B',
-            workspaceId: WORKSPACE_B,
-            role: 'owner',
-          },
-          // Two distinct Builders of workspace A, seeded by real email — issue #117's ownership
-          // tests need two people the "own"/"other" comparison can actually tell apart, which the
-          // single fixed test actor below could not.
-          {
-            email: 'builder-a@example.test',
-            name: 'Builder A',
-            workspaceId: WORKSPACE_A,
-            role: 'builder',
-          },
-          {
-            email: 'builder-b@example.test',
-            name: 'Builder B',
-            workspaceId: WORKSPACE_A,
-            role: 'builder',
-          },
-        ],
-      }),
-      identify: (request) => {
-        const workspaceId = request.headers.get(WORKSPACE_HEADER);
-        const actor = request.headers.get(ACTOR_HEADER) ?? 'agent-route-test';
-        return Promise.resolve(
-          workspaceId === null
-            ? null
-            : Principal.fromApiKey({
-                principalId:
-                  actor === 'builder-a@example.test'
-                    ? '819aac78-a253-48ca-bb59-638a37531f1d'
-                    : actor === 'builder-b@example.test'
-                      ? '54450291-6b86-470a-819a-d242b67bcdba'
-                      : '1353503f-91fc-4c4c-89d4-e7f1dd35386c',
-                apiKeyId:
-                  actor === 'builder-a@example.test'
-                    ? '10a92952-c0a5-43e1-a7f0-901b32dcaedc'
-                    : actor === 'builder-b@example.test'
-                      ? '3d469b13-fdb5-4206-895a-37f762c28ea1'
-                      : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-                workspaceId,
-                role,
-                label:
-                  actor === 'builder-a@example.test'
-                    ? 'Builder A automation'
-                    : actor === 'builder-b@example.test'
-                      ? 'Builder B automation'
-                      : 'Agent route test key',
-              }),
-        );
-      },
-    },
-  });
-  return versions;
-}
-
-function request(
-  method: string,
-  url: string,
-  options: {
-    workspace?: string;
-    body?: string;
-    contentType?: string | null;
-    /** issue #117: which seeded member this request authenticates as, for own/other tests. */
-    actor?: string;
-  } = {},
-): Request {
-  const headers = new Headers();
-  if (options.workspace !== undefined) headers.set(WORKSPACE_HEADER, options.workspace);
-  if (options.actor !== undefined) headers.set(ACTOR_HEADER, options.actor);
-  const contentType = options.contentType === undefined ? 'application/json' : options.contentType;
-  if (contentType !== null && options.body !== undefined) headers.set('content-type', contentType);
-  return new Request(`https://example.invalid${url}`, {
-    method,
-    headers,
-    ...(options.body === undefined ? {} : { body: options.body }),
-  });
-}
-
-/** A `context` shaped the way Next.js shapes it for `app/api/agents/[id]/route.ts`. */
-function idContext(id: string): { params: Promise<{ id: string }> } {
-  return { params: Promise.resolve({ id }) };
-}
-
-const CREATE_BODY = JSON.stringify({
-  name: 'Support triage',
-  instructions: 'Answer support mail.',
-  modelConnectionId: null,
-  model: 'claude-sonnet-4-5',
-  permissions: {
-    readFiles: true,
-    writeFiles: false,
-    runCommands: false,
-    unrestrictedNetwork: false,
-  },
-});
-
-async function bodyOf(response: Response): Promise<unknown> {
-  return (await response.json()) as unknown;
-}
-
-async function createIn(workspace: string, actor?: string): Promise<AgentResource> {
-  const response = await createRoute(
-    request('POST', '/api/agents', {
-      workspace,
-      body: CREATE_BODY,
-      ...(actor === undefined ? {} : { actor }),
-    }),
-  );
-  expect(response.status, await response.clone().text()).toBe(201);
-  return (await bodyOf(response)) as AgentResource;
-}
 
 describe('the five agent routes serve real responses once a runtime is wired', () => {
   it('answers 503, not 401 and not an empty 200, while nothing is wired', async () => {
@@ -243,7 +37,9 @@ describe('the five agent routes serve real responses once a runtime is wired', (
       error: { code: 'agents_runtime_not_configured' },
     });
   });
+});
 
+describe('agent routes: creation', () => {
   it('creates an agent and returns it at 201', async () => {
     useMemoryRuntime();
     const response = await createRoute(
@@ -272,99 +68,6 @@ describe('the five agent routes serve real responses once a runtime is wired', (
     await expect(response.json()).resolves.toMatchObject({
       agent: { name: 'Support triage' },
       assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [] },
-    });
-  });
-
-  /**
-   * ADR-0065 D3 at the one-call create (#318): an agent is never *saved* with connectors or skills
-   * its engine cannot honour. A create body carries no policy, so the engine is the default arm —
-   * which is why the test descriptor is a `claude-agent-sdk` descriptor with a capability removed
-   * (see `apps/web/server/engines/registry.ts`) rather than a second engine.
-   */
-  describe('engine capability check', () => {
-    afterEach(() => {
-      clearEnginesRegisteredForTests();
-    });
-
-    function registerClaudeWithout(capability: 'mcp' | 'skills'): void {
-      registerEngineForTests({
-        id: 'claude-agent-sdk',
-        displayName: `Claude Agent SDK (test: no ${capability})`,
-        version: 'test',
-        capabilities: {
-          mcp: capability !== 'mcp',
-          skills: capability !== 'skills',
-          subagents: false,
-          resume: true,
-          fork: false,
-          interrupt: true,
-          streamingText: false,
-          reasoning: true,
-          maxTurns: 'native',
-          maxBudget: 'native',
-          wireProtocols: ['anthropic-messages'],
-        },
-      });
-    }
-
-    async function createWith(assignments: AgentResourceAssignments): Promise<Response> {
-      return createRoute(
-        request('POST', '/api/agents', {
-          workspace: WORKSPACE_A,
-          body: JSON.stringify({ agent: JSON.parse(CREATE_BODY) as unknown, assignments }),
-        }),
-      );
-    }
-
-    it('refuses a compound create assigning a connector the engine cannot speak to', async () => {
-      useMemoryRuntime();
-      registerClaudeWithout('mcp');
-
-      const response = await createWith({
-        files: [],
-        skillIds: [],
-        connectorIds: ['44444444-4444-4444-8444-444444444444'],
-        storageGrants: [],
-      });
-
-      expect(response.status).toBe(422);
-      expect(await bodyOf(response)).toMatchObject({
-        error: { code: 'engine_capability_unsupported', details: ['mcp'] },
-      });
-      // Refused before anything was written: no half-created agent is left for a retry to find.
-      const list = await listRoute(request('GET', '/api/agents', { workspace: WORKSPACE_A }));
-      expect(await bodyOf(list)).toMatchObject({ agents: [] });
-    });
-
-    it('refuses a compound create assigning a skill the engine cannot materialise', async () => {
-      useMemoryRuntime();
-      registerClaudeWithout('skills');
-
-      const response = await createWith({
-        files: [],
-        skillIds: ['55555555-5555-4555-8555-555555555555'],
-        connectorIds: [],
-        storageGrants: [],
-      });
-
-      expect(response.status).toBe(422);
-      expect(await bodyOf(response)).toMatchObject({
-        error: { code: 'engine_capability_unsupported', details: ['skills'] },
-      });
-    });
-
-    it('accepts the same create on the engine as this deployment really registers it', () => {
-      // "Nothing changes for claude-agent-sdk agents" — the assertion above is about the test
-      // descriptor, not about connectors becoming unassignable.
-      useMemoryRuntime();
-      return createWith({
-        files: [],
-        skillIds: [],
-        connectorIds: ['44444444-4444-4444-8444-444444444444'],
-        storageGrants: [],
-      }).then(async (response) => {
-        expect(response.status, JSON.stringify(await bodyOf(response))).toBe(201);
-      });
     });
   });
 
@@ -402,7 +105,9 @@ describe('the five agent routes serve real responses once a runtime is wired', (
     const list = await listRoute(request('GET', '/api/agents', { workspace: WORKSPACE_A }));
     expect(await list.json()).toEqual({ agents: [] });
   });
+});
 
+describe('agent routes: CRUD', () => {
   it('lists, reads, updates and deletes that agent through the real handlers', async () => {
     useMemoryRuntime();
     const agent = await createIn(WORKSPACE_A);
@@ -438,7 +143,9 @@ describe('the five agent routes serve real responses once a runtime is wired', (
     const afterDelete = await listRoute(request('GET', '/api/agents', { workspace: WORKSPACE_A }));
     expect(await bodyOf(afterDelete)).toEqual({ agents: [] });
   });
+});
 
+describe('agent routes: runtime switching and versioning', () => {
   it('answers 503 runtime_switch_audit_not_configured to a runtime switch with no audit sink', async () => {
     // W3-6: the sink is `null` (no runtimes API installed), not absent; the switch still refuses
     // before writing, and the agent keeps its runtime profile.
@@ -496,7 +203,9 @@ describe('the five agent routes serve real responses once a runtime is wired', (
       definition: { agent: { name: 'Renamed', instructions: 'First edit.' } },
     });
   });
+});
 
+describe('agent routes: tenant isolation', () => {
   it('does not let another workspace read, change or delete the row', async () => {
     useMemoryRuntime();
     const agent = await createIn(WORKSPACE_A);

@@ -1,15 +1,15 @@
 import crypto from 'node:crypto';
 
-import { BUILDER_DEFAULT_LIMITS } from '@indx-workspace/contracts/builder';
-
 import { agentVersionNotFound } from '../../../agent-versions/problems';
 import { isUuid } from '../../../agents/contract';
 import { agentNotFound, refuseBuiltinWrite } from '../../../agents/handlers';
 import type { RunnerPort, TrialResult } from '../../ports';
 import { mayEvaluate, mayRun } from '../checker/access';
 import {
+  budgetRefusal,
   cappedBudget,
   capOutput,
+  evalRefusalOf,
   FORBIDDEN,
   FORBIDDEN_TO_RUN,
   IDEMPOTENCY_CODES,
@@ -53,11 +53,13 @@ export class MemoryRunner implements RunnerPort {
     agent.builtin = true;
   }
 
-  evaluate: RunnerPort['evaluate'] = (ctx, agentId, version, cases) => {
+  evaluate: RunnerPort['evaluate'] = (ctx, agentId, version, budgetUsd, cases) => {
     if (ctx.caller.kind === 'none') return Promise.resolve(NO_CALLER);
     if (!isUuid(agentId)) return Promise.resolve(INVALID_AGENT_ID);
+    const invalidBudget = budgetRefusal(budgetUsd);
+    if (invalidBudget !== null) return Promise.resolve(invalidBudget);
     const agent = this.agents.get(`${ctx.workspaceId}:${agentId}`);
-    if (agent === undefined) return Promise.resolve(refusalOf(agentNotFound()));
+    if (agent === undefined) return Promise.resolve(evalRefusalOf(agentNotFound()));
     if (
       !mayEvaluate(ctx.caller.principal, { id: agentId, ownerPrincipalId: agent.ownerPrincipalId })
     ) {
@@ -66,9 +68,11 @@ export class MemoryRunner implements RunnerPort {
     if (cases === undefined) {
       return Promise.resolve({ ok: false, code: 'invalid_body', message: 'No cases.' });
     }
-    if (version > agent.versions) return Promise.resolve(refusalOf(agentVersionNotFound(version)));
+    if (version > agent.versions) {
+      return Promise.resolve(evalRefusalOf(agentVersionNotFound(version)));
+    }
     this.started += cases.length;
-    this.last = { version, overrideUsd: BUILDER_DEFAULT_LIMITS.trialBudgetUsd };
+    this.last = { version, overrideUsd: cappedBudget(budgetUsd) };
     return Promise.resolve({
       ok: true,
       evaluation: {

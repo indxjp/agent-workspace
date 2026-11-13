@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { listDiscoveredModels, updateModelConnection } from './handlers';
-import { createInMemoryModelsStoreProvider } from './memory-store';
+import { createInMemoryModelsStoreProvider } from './store';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 

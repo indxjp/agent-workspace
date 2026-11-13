@@ -38,7 +38,7 @@ import { engineIsInstalled } from './images';
  * "watched by a replay, not by a comment" rule as
  * `docs/adr/W2-CP-07-a-restatement-across-a-package-boundary-is-watched-by-a-replay-not-a-comment.md`.
  */
-export const CLAUDE_AGENT_SDK_VERSION = '0.3.310';
+export const CLAUDE_AGENT_SDK_VERSION = '0.3.316';
 
 /**
  * A descriptor as the *registry* holds one: the contract's {@link EngineDescriptor} with `id`
@@ -88,7 +88,7 @@ export const PI_CODING_AGENT_VERSION = '1.4.0';
  * The Mastra release its adapter pins (ENG-10, #309). Restated for the reason
  * {@link CLAUDE_AGENT_SDK_VERSION} is; `registry.test.ts` reads the adapter's manifest.
  */
-export const MASTRA_CORE_VERSION = '1.79.0';
+export const MASTRA_CORE_VERSION = '1.81.0';
 
 /**
  * The SDK version each adapter pins, by engine. A build fact of the adapter's manifest, which is

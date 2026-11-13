@@ -9,11 +9,8 @@ import type { GatewayRunResolver } from '../auth.js';
 import { createGatewayApplication, type GatewayApplicationDependencies } from '../index.js';
 import { createRunTokenCodec } from '../tokens/run-token.js';
 import type { ToolApproval } from './authorize.js';
-import {
-  createDatabaseAwControlResolver,
-  parseControlPlaneOrigin,
-  type AwControlResolver,
-} from './aw-control.js';
+import { createDatabaseAwControlResolver, type AwControlResolver } from './aw-control.js';
+import { parseControlPlaneOrigin } from '../settings.js';
 
 const SECRET = 'fixture-signing-secret-that-is-longer-than-32-bytes';
 const SUBJECT = {

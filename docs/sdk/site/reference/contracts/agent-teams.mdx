@@ -1,0 +1,324 @@
+---
+title: "agent-teams"
+description: "The @indx-workspace/contracts/agent-teams exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/agent-teams.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## AGENT_TEAM_CHILD_RUNS_MAX
+
+The most child runs one root run may start (ADR-0104 acceptance decision 6).
+
+Value: `16`
+
+## AGENT_TEAM_DESCRIPTION_MAX_LENGTH
+
+The longest team description, in characters.
+
+Value: `1000`
+
+## AGENT_TEAM_LIST_MAX_LIMIT
+
+The largest page `GET /api/agent-teams?limit=` and the version list serve (ADR-0079).
+
+Value: `200`
+
+## AGENT_TEAM_MEMBER_NAME_MAX_LENGTH
+
+The longest member name: `mcp__agent__<member name>`, the Claude engine's spelling of a member
+tool, must fit `TOOL_NAME_MAX_LENGTH` (ADR-0104 acceptance decision 3), so 52 characters.
+
+Value: `TOOL_NAME_MAX_LENGTH - 'mcp__agent__'.length`
+
+## AGENT_TEAM_MEMBER_NAME_PATTERN
+
+A member name is a team-local slug (decision 3).
+
+Value: `/^[a-z0-9][a-z0-9_-]*$/u`
+
+## AGENT_TEAM_MEMBER_TOOL_PREFIX
+
+The neutral prefix of a member tool: the lead calls member `x` as `agent__x` (decision 3).
+
+Value: `'agent__'`
+
+## AGENT_TEAM_MEMBERS_MAX
+
+The most members one team version holds (ADR-0104 acceptance decision 6).
+
+Value: `8`
+
+## AGENT_TEAM_MODES
+
+The team modes ADR-0104 accepts. `switcher` stays proposed (acceptance decision 2).
+
+- `'handoff'`
+
+## AGENT_TEAM_PROBLEM_CODES
+
+The problem codes the agent-team routes own, with their statuses (spec 04 §5.18). The common
+vocabulary (`invalid_body`, `forbidden`, …) is `COMMON_PROBLEM_CODES`.
+
+| Key | Value |
+| --- | --- |
+| `invalid_agent_team_id` | `400` |
+| `agent_team_not_found` | `404` |
+| `agent_team_name_taken` | `409` |
+| `agent_team_member_invalid` | `422` |
+| `agent_team_has_no_version` | `409` |
+
+## AGENT_TEAM_TOOL_ERROR_CODES
+
+The tool errors a member call returns to the lead: a tool result, never an HTTP problem
+(decisions 5 and 6). Nothing is started for `team_member_limit` (a call over 16 child runs of
+one root), `team_member_unknown` (no member of that name), `team_member_invalid_arguments` (no
+`prompt` of 1 to 100 000 characters), `team_member_forbidden` (the person the root acts for may
+not run the member, or no person is behind the root) and `team_member_refused` (the start was
+refused; `failure` carries the run-start code). A started member run that stops other than
+`completed` answers `team_member_failed` (`failure` is its public failure code, or `null`),
+`team_member_cancelled` or `team_member_paused` (it waits on an approval), and one still going
+when the root runs out of time is interrupted and answers `team_member_timeout`.
+
+- `'team_member_limit'`
+- `'team_member_unknown'`
+- `'team_member_invalid_arguments'`
+- `'team_member_forbidden'`
+- `'team_member_refused'`
+- `'team_member_failed'`
+- `'team_member_cancelled'`
+- `'team_member_paused'`
+- `'team_member_timeout'`
+
+## AgentTeamListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `readonly AgentTeamResource[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## AgentTeamListResponseSchema
+
+The body of `GET /api/agent-teams`: newest first, and the next page's cursor (ADR-0079).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `readonly AgentTeamResource[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## AgentTeamMember
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `agentVersionId` | `string` | Yes |  |
+
+## AgentTeamMemberNameSchema
+
+A member name as a request carries it.
+
+`string`
+
+## AgentTeamMemberRequestSchema
+
+One member as a version request names it; `name` defaults to the agent's name.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `agentVersionId` | `string` | Yes |  |
+| `name` | `undefined \| string` | No |  |
+
+## AgentTeamMemberSchema
+
+One member of a saved version.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `agentId` | `string` | Yes |  |
+| `agentVersionId` | `string` | Yes |  |
+
+## AgentTeamMode
+
+`"handoff"`
+
+## AgentTeamModeSchema
+
+`AGENT_TEAM_MODES` as a schema.
+
+`"handoff"`
+
+## AgentTeamNameSchema
+
+A team's name: the agent name grammar (trimmed, non-blank, at most `AGENT_NAME_MAX_LENGTH`
+characters in UTF-16 code units), unique among the workspace's teams that are not deleted.
+
+`string`
+
+## AgentTeamPin
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `agentVersionId` | `string` | Yes |  |
+
+## AgentTeamPinSchema
+
+One pinned agent version: the agent and the exact version of it that runs.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `agentId` | `string` | Yes |  |
+| `agentVersionId` | `string` | Yes |  |
+
+## AgentTeamProblemCode
+
+- `"invalid_agent_team_id"`
+- `"agent_team_not_found"`
+- `"agent_team_name_taken"`
+- `"agent_team_member_invalid"`
+- `"agent_team_has_no_version"`
+
+## AgentTeamResource
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `null \| string` | Yes |  |
+| `latestVersion` | `null \| AgentTeamVersion` | Yes |  |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `createdBy` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## AgentTeamResourceSchema
+
+An agent team as it crosses the HTTP boundary, with its newest version (spec 04 §5.18).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `name` | `string` | Yes |  |
+| `description` | `null \| string` | Yes |  |
+| `latestVersion` | `null \| AgentTeamVersion` | Yes |  |
+| `ownerPrincipalId` | `string` | Yes |  |
+| `createdBy` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+| `updatedAt` | `string` | Yes |  |
+
+## AgentTeamToolErrorCode
+
+- `"team_member_limit"`
+- `"team_member_unknown"`
+- `"team_member_invalid_arguments"`
+- `"team_member_forbidden"`
+- `"team_member_refused"`
+- `"team_member_failed"`
+- `"team_member_cancelled"`
+- `"team_member_paused"`
+- `"team_member_timeout"`
+
+## AgentTeamVersion
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `teamId` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `mode` | `"handoff"` | Yes |  |
+| `lead` | `AgentTeamPin` | Yes |  |
+| `members` | `readonly AgentTeamMember[]` | Yes |  |
+| `createdBy` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## AgentTeamVersionListResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `readonly AgentTeamVersion[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## AgentTeamVersionListResponseSchema
+
+The body of `GET /api/agent-teams/:id/versions`: newest first, cursor paged (ADR-0079).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `items` | `readonly AgentTeamVersion[]` | Yes |  |
+| `nextCursor` | `null \| string` | Yes |  |
+
+## AgentTeamVersionSchema
+
+One saved, immutable team version (spec 04 §5.18). `createdBy` is the user, as on agents.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | Yes |  |
+| `teamId` | `string` | Yes |  |
+| `workspaceId` | `string` | Yes |  |
+| `version` | `number` | Yes |  |
+| `mode` | `"handoff"` | Yes |  |
+| `lead` | `AgentTeamPin` | Yes |  |
+| `members` | `readonly AgentTeamMember[]` | Yes |  |
+| `createdBy` | `null \| string` | Yes |  |
+| `createdAt` | `string` | Yes |  |
+
+## CreateAgentTeamRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `version` | `undefined \| CreateAgentTeamVersionRequest` | No |  |
+
+## CreateAgentTeamRequestSchema
+
+The body of `POST /api/agent-teams`; `version`, when given, is saved as version 1.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `description` | `undefined \| string` | No |  |
+| `version` | `undefined \| CreateAgentTeamVersionRequest` | No |  |
+
+## CreateAgentTeamVersionRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `lead` | `AgentTeamPin` | Yes |  |
+| `members` | `readonly AgentTeamPin[]` | Yes |  |
+
+## CreateAgentTeamVersionRequestSchema
+
+The body of `POST /api/agent-teams/:id/versions`: the lead and 1–8 members, each pinned to a
+version. A member appears once, the lead is not a member, and member names do not repeat. That
+every agent and version belongs to the workspace is the server's check, answered as
+`422 agent_team_member_invalid`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `lead` | `AgentTeamPin` | Yes |  |
+| `members` | `readonly AgentTeamPin[]` | Yes |  |
+
+## defaultAgentTeamMemberName
+
+The name a member gets when its request names none: its agent's name, when that is a valid
+member name, and otherwise `null`, which the write refuses as `422 agent_team_member_invalid`
+(spec 04 §5.18).
+
+```ts
+defaultAgentTeamMemberName(agentName: string): string | null
+```
+
+## isAgentTeamMemberName
+
+Whether `name` is a valid member name: a slug of at most 52 characters.
+
+```ts
+isAgentTeamMemberName(name: string): boolean
+```

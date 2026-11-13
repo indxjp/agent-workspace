@@ -163,6 +163,128 @@ test('[US-STO-10][contract][cli] web storage access is bucket-scoped, never proj
   }
 });
 
+test('the runner manager reads the Artifact Registry repository its runtime image is in (#2108)', async () => {
+  // Cloud Run's create-service API checks that the caller can read the image, and `aw deploy`
+  // uses an image already in Artifact Registry in place (live run 42011318769: a 403 on CI's
+  // staging repository), so the stack's own repository alone is not enough.
+  for (const file of [
+    'infra/terraform/gcp-cloudrun/main.tf',
+    'packages/cli/modules/gcp-cloudrun/main.tf',
+  ]) {
+    const terraform = await read(file);
+    assert.match(
+      terraform,
+      /resource "google_artifact_registry_repository_iam_member" "runner_manager_artifact_reader" \{[^}]*repository\s*=\s*google_artifact_registry_repository\.images\.repository_id[^}]*roles\/artifactregistry\.reader/u,
+      `${file} lets the runner manager read the stack's repository`,
+    );
+    assert.match(
+      terraform,
+      /resource "google_artifact_registry_repository_iam_member" "runner_manager_runtime_image_reader" \{\n\s*count\s*=\s*local\.runtime_image_elsewhere \? 1 : 0\n\s*project\s*=\s*var\.project_id\n\s*location\s*=\s*local\.runtime_image_repository\.location\n\s*repository\s*=\s*local\.runtime_image_repository\.repository\n\s*role\s*=\s*"roles\/artifactregistry\.reader"\n\s*member\s*=\s*google_service_account\.runner_manager\.member/u,
+      `${file} lets the runner manager read only the runtime image's own repository in this project`,
+    );
+    assert.match(terraform, /regex\("[^"]*docker[^"]*", var\.images\.runtime\)/u, file);
+    // No project-wide Artifact Registry role for the runner manager.
+    const projectGrants = (
+      terraform.match(/^resource "google_project_iam_member" "[^"]+" \{[\s\S]*?^\}/gmu) ?? []
+    ).filter((block) => /roles\/artifactregistry\./u.test(block) && /runner_manager/u.test(block));
+    assert.deepEqual(
+      projectGrants,
+      [],
+      `${file} grants the runner manager no project-wide registry role`,
+    );
+  }
+  for (const file of [
+    'infra/terraform/gcp-cloudrun/network.tf',
+    'packages/cli/modules/gcp-cloudrun/network.tf',
+  ]) {
+    assert.match(
+      await read(file),
+      /resource "terraform_data" "input_checks"[\s\S]*?condition\s*=\s*local\.runtime_image_in_project/u,
+      `${file} refuses a runtime image outside this project's Artifact Registry`,
+    );
+  }
+});
+
+test('both Cloud Run module copies write the dashboard in the Monitoring API canonical form (#2105)', async () => {
+  for (const module of ['infra/terraform/gcp-cloudrun', 'packages/cli/modules/gcp-cloudrun']) {
+    const monitoring = await read(`${module}/monitoring.tf`);
+    const dashboard = monitoring.match(/^resource "google_monitoring_dashboard" "main" \{[\s\S]*?^\}/mu)?.[0];
+    assert.ok(dashboard, `${module} declares the dashboard`);
+    assert.match(dashboard, /columns = "2"/u, `${module}: gridLayout.columns is the string the API reads back`);
+    assert.doesNotMatch(dashboard, /columns = \d/u, `${module}: gridLayout.columns is not a number`);
+    const dataSets = dashboard.match(/dataSets = \[\{[\s\S]*?timeSeriesQuery/gu) ?? [];
+    assert.ok(dataSets.length > 0, `${module} has xyChart dataSets`);
+    for (const dataSet of dataSets) {
+      assert.match(dataSet, /plotType\s*= "LINE"/u, `${module}: every dataSet sets plotType LINE`);
+      assert.match(dataSet, /targetAxis\s*= "Y1"/u, `${module}: every dataSet sets targetAxis Y1`);
+    }
+  }
+});
+
+test('a Cloud Run sandbox reaches only the gateway internal load balancer, never a Google VIP (#2109)', async () => {
+  const vips = ['199.36.153.8/30', '199.36.153.4/30'];
+  for (const module of ['infra/terraform/gcp-cloudrun', 'packages/cli/modules/gcp-cloudrun']) {
+    const network = await read(`${module}/network.tf`);
+    const firewalls = network.match(/^resource "google_compute_firewall" "[^"]+" \{[\s\S]*?^\}/gmu) ?? [];
+    const sandbox = firewalls.filter((block) => /target_tags\s*=\s*\["aw-sandbox"\]/u.test(block));
+    const allows = sandbox.filter((block) => /^\s*allow \{/mu.test(block));
+    assert.equal(allows.length, 1, `${module} has exactly one aw-sandbox allow rule`);
+    for (const block of allows) {
+      assert.match(
+        block,
+        /destination_ranges\s*=\s*\["\$\{local\.sandbox_allowed_ip\}\/32"\]/u,
+        `${module}: the aw-sandbox allow rule targets the gateway's internal address only`,
+      );
+      assert.match(block, /ports\s*=\s*\["80"\]/u, `${module}: the aw-sandbox allow rule is tcp 80 only`);
+      for (const vip of vips) assert.ok(!block.includes(vip), `${module}: no aw-sandbox allow rule targets ${vip}`);
+    }
+    const vipDeny = sandbox.find((block) => /destination_ranges\s*=\s*local\.google_vip_cidrs/u.test(block));
+    assert.ok(vipDeny, `${module} denies the Google VIPs to aw-sandbox in their own rule`);
+    assert.match(vipDeny, /deny \{\s*protocol = "all"\s*\}/u, `${module}: the VIP deny covers every protocol and port`);
+    assert.match(vipDeny, /priority\s*=\s*0/u, `${module}: the VIP deny sits at priority 0`);
+    assert.match(
+      network,
+      /google_vip_cidrs = \["199\.36\.153\.8\/30", "199\.36\.153\.4\/30"\]/u,
+      `${module} names both Google VIP ranges`,
+    );
+    assert.match(
+      network,
+      /resource "google_compute_forwarding_rule" "gateway" \{[\s\S]*?load_balancing_scheme = "INTERNAL_MANAGED"/u,
+      `${module} fronts the gateway with an internal Application Load Balancer`,
+    );
+    const main = await read(`${module}/main.tf`);
+    assert.match(
+      main,
+      /name {2}= "MODEL_GATEWAY_URL"\n\s*value = local\.gateway_internal_url\n/u,
+      `${module}: web hands sandboxes the internal load balancer URL`,
+    );
+  }
+});
+
+test('web announces the Cloud Run egress proxy only when sandbox_internet is on (#2105)', async () => {
+  // network-policy.ts accepts restricted and open for cloud-run-service only when web has
+  // RUNTIME_EGRESS_PROXY_URL; the runner manager signs with the key against the same URL.
+  const webOf = (terraform) =>
+    terraform.split('resource "google_cloud_run_v2_service" "web"')[1]?.split(/^resource /mu)[0] ?? '';
+  const proxyUrl =
+    /dynamic "env" \{\n(?:\s*#.*\n)*\s*for_each = var\.sandbox_internet \? \[1\] : \[\]\n\s*content \{\n\s*name {2}= "RUNTIME_EGRESS_PROXY_URL"\n\s*value = "http:\/\/\$\{google_compute_address\.egress_proxy\[0\]\.address\}:\$\{local\.egress_proxy_port\}"\n/u;
+  for (const module of ['infra/terraform/gcp-cloudrun', 'packages/cli/modules/gcp-cloudrun']) {
+    const main = await read(`${module}/main.tf`);
+    const web = webOf(main);
+    assert.match(web, proxyUrl, `${module}: web gets the proxy URL behind sandbox_internet`);
+    assert.equal(
+      [...web.matchAll(/"RUNTIME_EGRESS_PROXY_URL"/gu)].length,
+      1,
+      `${module}: web sets RUNTIME_EGRESS_PROXY_URL once, in that block`,
+    );
+    assert.doesNotMatch(web, /RUNTIME_EGRESS_PROXY_KEY/u, `${module}: web never reads the credential key`);
+    const runnerManager =
+      main.split('resource "google_cloud_run_v2_service" "runner_manager"')[1]?.split(/^resource /mu)[0] ?? '';
+    assert.match(runnerManager, proxyUrl, `${module}: the runner manager gets the same proxy URL`);
+    assert.match(runnerManager, /name = "RUNTIME_EGRESS_PROXY_KEY"/u, `${module}: the runner manager gets the key`);
+  }
+});
+
 test('Terraform gives the gateway the web origin without a dependency cycle (#1846)', async () => {
   // The gateway section only: from its resource to the next resource.
   const gatewayOf = (terraform, type) =>
@@ -171,10 +293,17 @@ test('Terraform gives the gateway the web origin without a dependency cycle (#18
     'infra/terraform/gcp-cloudrun/main.tf',
     'packages/cli/modules/gcp-cloudrun/main.tf',
   ]) {
-    const gateway = gatewayOf(await read(file), 'google_cloud_run_v2_service');
+    const terraform = await read(file);
+    const gateway = gatewayOf(terraform, 'google_cloud_run_v2_service');
+    // The gateway reaches web at its deterministic run.app URL, even when a domain is set.
     assert.match(
       gateway,
-      /name\s*=\s*"GATEWAY_CONTROL_PLANE_ORIGIN"\n\s*value\s*=\s*"https:\/\/\$\{var\.name\}-web-\$\{data\.google_project\.current\.number\}\.\$\{var\.region\}\.run\.app"/u,
+      /name\s*=\s*"GATEWAY_CONTROL_PLANE_ORIGIN"\n(\s*#.*\n)*\s*value\s*=\s*local\.run_app_origin\n/u,
+      file,
+    );
+    assert.match(
+      terraform,
+      /run_app_origin\s*=\s*"https:\/\/\$\{var\.name\}-web-\$\{data\.google_project\.current\.number\}\.\$\{var\.region\}\.run\.app"/u,
       file,
     );
     assert.doesNotMatch(gateway, /google_cloud_run_v2_service\.web/u, file);
@@ -228,6 +357,23 @@ test('Azure preview keeps control-plane scale-to-zero and sandboxes separately i
   );
   assert.match(workflow, /uses: azure\/login@[0-9a-f]{40} # v3\./u);
   assert.doesNotMatch(workflow, /client-secret:/u);
+});
+
+test('GCP Cloud Run passes the project features to web only when set (ADR-0160 D5, #1495)', async () => {
+  const terraform = await read('infra/terraform/gcp-cloudrun/main.tf');
+  const declarations = declaredVariables(await read('infra/terraform/gcp-cloudrun/variables.tf'));
+  const declaration = declarations.get('deployment_features') ?? '';
+  const service = terraform.split('resource "google_cloud_run_v2_service" "web" {')[1] ?? '';
+  const web = service.split(/\nresource /u)[0] ?? '';
+
+  assert.match(
+    web,
+    /for_each\s*=\s*var\.deployment_features == "" \? \[\] : \[var\.deployment_features\][\s\S]{0,120}name\s*=\s*"AW_DEPLOYMENT_FEATURES"/u,
+  );
+  assert.equal((terraform.match(/"AW_DEPLOYMENT_FEATURES"/gu) ?? []).length, 1);
+  assert.match(declaration, /type\s*=\s*string/u);
+  assert.match(declaration, /default\s*=\s*""/u);
+  assert.ok(declaration.includes('can(regex("^([a-z]+(,[a-z]+)*)?$", var.deployment_features))'));
 });
 
 /**
@@ -355,6 +501,102 @@ test('every rendered Helm value is one the chart declares, and is a pinned diges
       );
     }
   }
+});
+
+/**
+ * Issue #1512: `aw deploy`'s kubernetes overlay with `environments.production.apps`, as the CLI's
+ * deploy test pins it byte for byte. Every top-level key and every `apps[]` field it writes has to
+ * be one the chart's strict schema declares, with a value its pattern takes, or `helm install`
+ * refuses the overlay.
+ */
+test('every rendered Helm value with apps is one the chart declares', async () => {
+  const schema = JSON.parse(await read('infra/helm/agent-workspace/values.schema.json'));
+  const overlay = await read('packages/cli/src/deploy/fixtures/helm-apps-values.yaml');
+
+  const keys = [...overlay.matchAll(/^([a-zA-Z][a-zA-Z0-9]*):/gmu)].map(([, key]) => key);
+  assert.deepEqual(keys, ['images', 'ingress', 'publicUrl', 'apps']);
+  for (const key of keys) assert.ok(schema.properties[key], `the chart does not declare ${key}`);
+
+  const item = schema.properties.apps.items;
+  assert.equal(schema.properties.apps.type, 'array');
+  assert.equal(item.additionalProperties, false);
+  const block = overlay.split(/^apps:\n/mu)[1] ?? '';
+  const apps = block
+    .split(/^ {2}- /mu)
+    .filter((entry) => entry.trim() !== '')
+    .map((entry) =>
+      Object.fromEntries(
+        [...entry.matchAll(/^(?: {4})?([a-zA-Z]+): (\S+)$/gmu)].map(([, key, value]) => [
+          key,
+          value,
+        ]),
+      ),
+    );
+  assert.deepEqual(
+    apps.map(({ name, schema: appSchema }) => [name, appSchema]),
+    [
+      ['desk', 'app_desk'],
+      ['service-desk', 'app_service_desk'],
+    ],
+  );
+  for (const app of apps) {
+    for (const required of item.required) assert.ok(app[required], `apps[] lacks ${required}`);
+    for (const [field, value] of Object.entries(app)) {
+      const property = item.properties[field];
+      assert.ok(property, `the chart does not declare apps[].${field}`);
+      assert.match(value, new RegExp(property.pattern, 'u'), `apps[].${field} ${value}`);
+    }
+    // The chart names an app's Service `agent-workspace-app-<name>`, a 63-character DNS label.
+    assert.ok(`agent-workspace-app-${app.name}`.length <= 63);
+  }
+  const name = new RegExp(item.properties.name.pattern, 'u');
+  assert.match('a'.repeat(43), name);
+  assert.doesNotMatch('a'.repeat(44), name);
+  assert.doesNotMatch(
+    `registry.example/desk:latest`,
+    new RegExp(item.properties.image.pattern, 'u'),
+  );
+  assert.doesNotMatch('public', new RegExp(item.properties.schema.pattern, 'u'));
+
+  const base = await read('infra/helm/agent-workspace/values.yaml');
+  assert.match(base, /^apps: \[\]$/mu);
+});
+
+/**
+ * The app workloads (issue #1512) read only their own Secret, mount no ServiceAccount token, run
+ * under the platform pods' security context, and are reached and reach out only through the
+ * policies made for them.
+ */
+test('each app is a hardened Deployment reading only its own Secret, behind its own policies', async () => {
+  const apps = await read('infra/helm/agent-workspace/templates/apps.yaml');
+  assert.match(apps, /range \$app := \.Values\.apps/u);
+  assert.match(apps, /printf "agent-workspace-app-%s" \$app\.name/u);
+  assert.match(apps, /agent-workspace\.io\/role: app/u);
+  assert.match(apps, /automountServiceAccountToken: false/u);
+  assert.doesNotMatch(apps, /serviceAccountName/u);
+  assert.match(apps, /readOnlyRootFilesystem: true/u);
+  assert.match(apps, /runAsNonRoot: true/u);
+  assert.match(apps, /AW_APP_MIGRATE_ON_START, value: "1"/u);
+  assert.equal((apps.match(/secretRef:/gu) ?? []).length, 1);
+  assert.match(apps, /- secretRef: \{ name: \{\{ \$name \}\} \}/u);
+  assert.doesNotMatch(apps, /external\.|secrets\.applicationSecret/u);
+  assert.equal((apps.match(/path: \/api\/health/gu) ?? []).length, 3);
+
+  const policy = await networkPolicy();
+  for (const name of ['apps-dns', 'apps-database', 'apps-egress-https', 'apps-from-ingress']) {
+    assert.match(
+      policy(name),
+      /podSelector: \{ matchLabels: \{ agent-workspace\.io\/role: app \} \}/u,
+      name,
+    );
+  }
+  assert.match(policy('apps-database'), /include "agent-workspace\.egressTo" \.Values\.database/u);
+  assert.match(policy('apps-egress-https'), /port: 443/u);
+  assert.match(policy('apps-from-ingress'), /ingress\.controllerNamespace/u);
+
+  const ingress = await read('infra/helm/agent-workspace/templates/ingress.yaml');
+  assert.match(ingress, /range \.Values\.apps/u);
+  assert.match(ingress, /printf "agent-workspace-app-%s" \.name/u);
 });
 
 test('the chart image pattern takes a registry with a port and still refuses a tag', async () => {
@@ -965,6 +1207,18 @@ test('the chart renders an Ingress with cert-manager TLS only when asked, and ca
   );
   assert.match(base, /^deploymentPolicy: ''$/mu);
   assert.deepEqual(schema.properties.deploymentPolicy, { type: 'string' });
+
+  // ADR-0160 D5 (#1495): the project's features, rendered only when set, so an empty value
+  // renders the web Deployment exactly as before.
+  assert.match(
+    deployments,
+    /if and \(eq \$name "web"\) \$\.Values\.deploymentFeatures[\s\S]*name: AW_DEPLOYMENT_FEATURES, value: \{\{ \$\.Values\.deploymentFeatures \| quote \}\}/u,
+  );
+  assert.match(base, /^deploymentFeatures: ''$/mu);
+  assert.deepEqual(schema.properties.deploymentFeatures, {
+    type: 'string',
+    pattern: '^([a-z]+(,[a-z]+)*)?$',
+  });
 
   assert.match(
     deployments,

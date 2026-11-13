@@ -12,6 +12,7 @@ import {
 } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
 
 import {
   CredentialInputs,
@@ -21,6 +22,7 @@ import {
   STORAGE_HELP as HELP,
   STORAGE_LABEL as LABEL,
 } from './storage-form-parts';
+import { storageStrings, type StorageStrings } from './storage-messages';
 import {
   credentialFor,
   credentialProblem,
@@ -84,9 +86,11 @@ function DeleteDialog({
   returnFocusTo,
   onCancel,
   onConfirm,
+  strings,
 }: Readonly<{
   name: string;
   busy: boolean;
+  strings: StorageStrings;
   /** Focused when the dialog closes, whichever way it closes. */
   returnFocusTo: RefObject<HTMLElement | null>;
   onCancel: () => void;
@@ -131,11 +135,10 @@ function DeleteDialog({
     >
       <div ref={panelRef} className={`${CARD} w-full max-w-[480px] p-5`}>
         <h2 id="storage-delete-title" className="text-[18px]">
-          Delete {name}?
+          {strings.deleteTitle(name)}
         </h2>
         <p id="storage-delete-description" className="mt-2 text-[13px] text-muted">
-          The connection and its stored credential are removed. The files in the bucket are not
-          touched. A connection that agents still grant cannot be deleted.
+          {strings.deleteDescription}
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -147,7 +150,7 @@ function DeleteDialog({
               if (!busy) onCancel();
             }}
           >
-            Cancel
+            {strings.cancel}
           </button>
           <button
             type="button"
@@ -157,7 +160,7 @@ function DeleteDialog({
               if (!busy) onConfirm();
             }}
           >
-            Delete connection
+            {strings.deleteConnection}
           </button>
         </div>
       </div>
@@ -165,7 +168,15 @@ function DeleteDialog({
   );
 }
 
-export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
+export function EditConnectionScreen({
+  id,
+  locale = 'en',
+}: Readonly<{
+  id: string;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
+}>) {
+  const strings = storageStrings(locale);
   const router = useRouter();
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const [connection, setConnection] = useState<StorageConnectionResource | null>(null);
@@ -191,20 +202,18 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
         },
         (error: unknown) => {
           if (active) {
-            setLoadProblem(
-              storageProblemMessage(error, 'The storage connection could not be loaded.'),
-            );
+            setLoadProblem(storageProblemMessage(error, strings.couldNotLoad, strings));
           }
         },
       );
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, strings]);
 
   const heading = (
     <div className="mb-[22px]">
-      <h1 className="text-[21px]">Edit storage connection</h1>
+      <h1 className="text-[21px]">{strings.editTitle}</h1>
       {connection === null ? null : (
         <p className="mt-[3px] text-[13px] text-muted">
           {connection.name} · {connection.provider}
@@ -215,15 +224,15 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
 
   if (connection === null || values === null) {
     return (
-      <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
+      <main lang={locale} className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
         {heading}
         {loadProblem === null ? (
-          <p className="text-[13px] text-muted">Loading the storage connection…</p>
+          <p className="text-[13px] text-muted">{strings.loadingConnection}</p>
         ) : (
           <>
             <Problem message={loadProblem} />
             <p className="mt-4 text-[13px]">
-              <Link href="/admin/storage">Back to storage</Link>
+              <Link href="/admin/storage">{strings.backToStorage}</Link>
             </p>
           </>
         )}
@@ -247,7 +256,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
     event.preventDefault();
     if (busy || connection === null || values === null) return;
     reset();
-    const refused = credentialProblem(connection.provider, credentials);
+    const refused = credentialProblem(connection.provider, credentials, strings);
     if (refused !== null) {
       setCredentialProblemText(refused);
       setCredentials(EMPTY_CREDENTIALS);
@@ -255,7 +264,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
     }
     const patch = updatePatch(connection, values, credentialFor(connection.provider, credentials));
     if (Object.keys(patch).length === 0) {
-      setSettingsProblem('Nothing has changed.');
+      setSettingsProblem(strings.nothingChanged);
       return;
     }
     setBusy(true);
@@ -263,9 +272,9 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
       const updated = await browserClient().storage.connections.update(connection.id, patch);
       setConnection(updated);
       setValues(editFormValues(updated));
-      setNotice('Changes saved.');
+      setNotice(strings.changesSaved);
     } catch (error) {
-      setSettingsProblem(storageProblemMessage(error, 'The changes could not be saved.'));
+      setSettingsProblem(storageProblemMessage(error, strings.couldNotSaveChanges, strings));
     } finally {
       // A credential is write-only: it leaves the page state whatever the outcome.
       setCredentials(EMPTY_CREDENTIALS);
@@ -276,10 +285,10 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
   async function rotate() {
     if (busy || connection === null) return;
     reset();
-    const refused = credentialProblem(connection.provider, credentials);
+    const refused = credentialProblem(connection.provider, credentials, strings);
     const credential = credentialFor(connection.provider, credentials);
     if (refused !== null || credential === undefined) {
-      setCredentialProblemText(refused ?? 'Enter the new credential.');
+      setCredentialProblemText(refused ?? strings.enterNewCredential);
       setCredentials(EMPTY_CREDENTIALS);
       return;
     }
@@ -288,11 +297,9 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
       setConnection(
         await browserClient().storage.connections.rotateCredential(connection.id, credential),
       );
-      setNotice('Credential rotated. It is stored encrypted and not shown again.');
+      setNotice(strings.credentialRotated);
     } catch (error) {
-      setCredentialProblemText(
-        storageProblemMessage(error, 'The credential could not be rotated.'),
-      );
+      setCredentialProblemText(storageProblemMessage(error, strings.couldNotRotate, strings));
     } finally {
       setCredentials(EMPTY_CREDENTIALS);
       setBusy(false);
@@ -308,14 +315,14 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
       router.push('/admin/storage');
     } catch (error) {
       setConfirmingDelete(false);
-      setDeleteProblem(storageProblemMessage(error, 'The connection could not be deleted.'));
+      setDeleteProblem(storageProblemMessage(error, strings.couldNotDelete, strings));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
       {heading}
       <form
         method="post"
@@ -326,7 +333,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
         <div className={`${CARD} space-y-4 p-4`}>
           <div>
             <label className={LABEL} htmlFor="storage-url">
-              URL
+              {strings.url}
             </label>
             <input
               id="storage-url"
@@ -337,13 +344,12 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
               onChange={(event) => setValue({ url: event.target.value })}
             />
             <p id="storage-url-help" className={HELP}>
-              For example {URL_HINTS[connection.provider]}. Moving to another endpoint, bucket or
-              account needs a new credential.
+              {strings.urlExample(URL_HINTS[connection.provider])} {strings.urlMoveNeedsCredential}
             </p>
           </div>
           <div>
             <label className={LABEL} htmlFor="storage-folders">
-              Allowed folders
+              {strings.allowedFolders}
             </label>
             <textarea
               id="storage-folders"
@@ -355,7 +361,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
               onChange={(event) => setValue({ folders: event.target.value })}
             />
             <p id="storage-folders-help" className={HELP}>
-              One folder per line, such as reports. Agents see only these.
+              {strings.foldersHelp}
             </p>
           </div>
           <label
@@ -368,11 +374,9 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
               checked={values.writeAllowed}
               onChange={(event) => setValue({ writeAllowed: event.target.checked })}
             />
-            Allow writing
+            {strings.allowWriting}
           </label>
-          <p className="-mt-2 text-[11.5px] text-muted">
-            Off by default. Grants stay read-only until write-back ships.
-          </p>
+          <p className="-mt-2 text-[11.5px] text-muted">{strings.allowWritingHelp}</p>
         </div>
 
         {connection.provider === 'file' ? null : (
@@ -381,18 +385,17 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
             aria-labelledby="storage-credential-heading"
           >
             <h2 id="storage-credential-heading" className="text-[15px] font-semibold">
-              Credential
+              {strings.credential}
             </h2>
             <p className="text-[12.5px] text-muted">
-              {connection.hasCredential
-                ? 'A credential is stored encrypted and never shown again.'
-                : 'No credential is stored; the deployment’s own identity is used.'}{' '}
-              Enter a new one to replace it.
+              {connection.hasCredential ? strings.credentialStoredHelp : strings.credentialNoneHelp}{' '}
+              {strings.enterNewToReplace}
             </p>
             <CredentialInputs
               provider={connection.provider}
               credentials={credentials}
               onChange={setCredential}
+              strings={strings}
             />
             <div>
               <button
@@ -403,7 +406,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
                   void rotate();
                 }}
               >
-                Rotate credential
+                {strings.rotateCredential}
               </button>
             </div>
             {credentialProblemText === null ? null : <Problem message={credentialProblemText} />}
@@ -418,26 +421,23 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
         )}
         <div className="mt-6 flex justify-end gap-2">
           <Link href="/admin/storage" className={`${BUTTON} bg-surface no-underline`}>
-            Back to storage
+            {strings.backToStorage}
           </Link>
           <button
             type="submit"
             disabled={busy}
             className={`${BUTTON} border-accent bg-accent text-white`}
           >
-            Save changes
+            {strings.saveChanges}
           </button>
         </div>
       </form>
 
       <section className={`${CARD} mt-8 p-4`} aria-labelledby="storage-delete-heading">
         <h2 id="storage-delete-heading" className="text-[15px] font-semibold">
-          Delete
+          {strings.deleteHeading}
         </h2>
-        <p className="mt-1 text-[12.5px] text-muted">
-          Removes the connection and its stored credential. Agents that still grant it must have
-          their grants removed first.
-        </p>
+        <p className="mt-1 text-[12.5px] text-muted">{strings.deleteHelp}</p>
         <button
           ref={deleteTriggerRef}
           type="button"
@@ -448,7 +448,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
             setConfirmingDelete(true);
           }}
         >
-          Delete this connection
+          {strings.deleteThis}
         </button>
         {deleteProblem === null ? null : <Problem message={deleteProblem} />}
       </section>
@@ -462,6 +462,7 @@ export function EditConnectionScreen({ id }: Readonly<{ id: string }>) {
           onConfirm={() => {
             void remove();
           }}
+          strings={strings}
         />
       ) : null}
     </main>

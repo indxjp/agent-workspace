@@ -1,4 +1,4 @@
-import { shareJson, shareProblem, withPublicShare } from '../../../../server/shares/core/http';
+import { shareJson, shareProblem, withPublicShare } from '../../../../server/shares/http';
 import { RunnableShareService } from '../../../../server/shares/runnable/service';
 import { runnablePublicLinksEnabled } from '../../../../server/shares/runnable/feature';
 import { resolvePublicVisitorIdentity } from '../../../../server/shares/runnable/visitor-identity';

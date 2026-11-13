@@ -51,11 +51,11 @@
 import type { VerifiedSessionClaims } from '../auth/session';
 
 import type { ApiKeyIdentity } from './directory';
-import type { Role } from './roles';
-import { isEndpointScope, type TokenScope } from './token-scope';
+import type { Role } from './core/roles';
+import { isEndpointScope, type TokenScope } from './core/token-scope';
 
-export type { TokenScope, TokenScopeKind } from './token-scope';
-export { TOKEN_SCOPE_KINDS } from './token-scope';
+export type { TokenScope, TokenScopeKind } from './core/token-scope';
+export { TOKEN_SCOPE_KINDS } from './core/token-scope';
 
 /**
  * The tenant, in both the spellings this program uses: `workspaces.id`, which scopes every row
@@ -94,7 +94,7 @@ export interface OAuthGrant {
  * The durable workspace-local identities that own rows and receive authorization decisions.
  *
  * A tuple rather than a bare union so the list is a value something can quantify over, the way
- * `roles.ts` exports `ROLES` beside `Role`. `apps/web/server/sdk-conformance.test.ts` crosses it
+ * `roles.ts` exports `ROLES` beside `Role`. `apps/web/server/sdk-conformance.*.test.ts` crosses it
  * with `@indx-workspace/contracts`'s own `PRINCIPAL_KINDS` through the mapping `GET /api/me`
  * uses, so neither vocabulary can gain, lose or rename a member alone.
  *
@@ -113,6 +113,15 @@ export interface SessionPrincipalIdentity {
   readonly principalId: string;
   readonly userId: string;
   readonly label: string;
+}
+
+/** ADR-0161 D8: an app-backend scope carries its bound agents, and no other scope carries any. */
+function carriesBoundAgentsCorrectly(scope: TokenScope | null): boolean {
+  if (scope === null) return true;
+  const bound = scope.agentIds;
+  return scope.kind === 'app-backend'
+    ? bound !== undefined && bound.length > 0
+    : bound === undefined;
 }
 
 /**
@@ -425,11 +434,13 @@ export class Principal {
         : value.via === 'oauth-token'
           ? value.scope !== null && isEndpointScope(value.scope.kind)
           : value.via === 'api-key'
-            ? // A builder scope is a consented member's, so it rides on an OAuth token only.
+            ? // A builder or app-backend scope is a person's, so it rides on an OAuth token only.
               value.scope === null ||
-              (isEndpointScope(value.scope.kind) && value.scope.kind !== 'builder')
+              (isEndpointScope(value.scope.kind) &&
+                value.scope.kind !== 'builder' &&
+                value.scope.kind !== 'app-backend')
             : value.scope === null;
-    if (!scopeInvariant) return false;
+    if (!scopeInvariant || !carriesBoundAgentsCorrectly(value.scope)) return false;
     // A grant rides on an OAuth token and on nothing else.
     if ((value.via === 'oauth-token') !== (value.oauth !== null)) return false;
     // Only an API key may act for someone else; every other principal owns what it writes.

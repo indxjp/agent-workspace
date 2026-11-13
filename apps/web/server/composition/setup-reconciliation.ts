@@ -4,6 +4,7 @@ import type {
   DatabaseRoot,
   UpdateAgentPatch,
 } from '@agent-workspace/core/db';
+import { VERTEX_DEFAULT_MODEL } from '@indx-workspace/contracts/models';
 import type { SetupProvider } from '@indx-workspace/contracts/setup';
 
 import type { ModelDiscovery } from '../models/discovery';
@@ -16,11 +17,12 @@ import type { SetupUndo } from './setup-undo';
  * First-run setup's explicit seeded default, validated against the provider connection before it
  * is stored on the initial agent.
  */
-export type SeededSetupProvider = Extract<SetupProvider, 'anthropic' | 'openai'>;
+export type SeededSetupProvider = Extract<SetupProvider, 'anthropic' | 'openai' | 'vertex'>;
 
 export const SETUP_SEEDED_MODEL: Readonly<Record<SeededSetupProvider, string>> = {
   anthropic: 'claude-sonnet-4-5',
   openai: 'gpt-5.1',
+  vertex: VERTEX_DEFAULT_MODEL,
 };
 
 /** The seeded agent's name (`packages/core/src/db/seed.ts`); the name is all that identifies it. */

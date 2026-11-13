@@ -1,6 +1,5 @@
 import type { AgentVersionBody } from '@indx-workspace/contracts/agent-versions';
 import {
-  AW_CONTROL_SERVER,
   BUILDER_REFUSAL_CODES,
   BUILDER_TOOLS,
   type BuilderApprovalQuestion,
@@ -8,6 +7,7 @@ import {
   type BuilderRefusalCode,
   type BuilderToolName,
 } from '@indx-workspace/contracts/builder';
+import { isReservedConnectorName } from '@indx-workspace/contracts/tool-connectors';
 
 import { isDraftCall, type ToolCall } from './call';
 import type { Facts } from './facts';
@@ -83,7 +83,7 @@ const checkLimit: Rule = (call, facts) =>
 
 /** A draft is untrusted output (design §08 Agent basics rule 3): it may not hand itself the Builder's own tools. */
 const noControlInDrafts: Rule = (call) =>
-  isDraftCall(call) && call.input.body.definition.resources.connectors.includes(AW_CONTROL_SERVER)
+  isDraftCall(call) && call.input.body.definition.resources.connectors.some(isReservedConnectorName)
     ? refuse('not_allowed_to_build')
     : null;
 

@@ -9,7 +9,6 @@ const SHARE_COLUMNS = [
   'expiresAt',
   'revokedAt',
   'viewCount',
-  'url',
 ];
 
 /** §5.13 — `aw shares`. `publish` waits for RF-103 (server-authored share content). */

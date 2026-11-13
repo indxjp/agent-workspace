@@ -11,6 +11,7 @@ import { USER_FILTER_PROBE_ID } from './history';
 import { loadCatalog, loadRunDetail, loadRunPage, probeUserFilter } from './run-requests-model';
 
 const RUN_ID = 'a1111111-1111-4111-8111-111111111111';
+const CHILD_ID = 'a2222222-2222-4222-8222-222222222222';
 const problem = (status: number, code: string, message: string) =>
   jsonResponse(status, { error: { code, message } });
 
@@ -97,6 +98,41 @@ describe('loadRunDetail', () => {
       ['GET', `/api/runs/${RUN_ID}`],
     ]);
     expect(load).toMatchObject({ kind: 'loaded', run: { id: RUN_ID } });
+  });
+
+  it('reads a run with its tree (ADR-0104): the children and the tree cost', async () => {
+    const root = fixtures.run({ id: RUN_ID });
+    const child = fixtures.run({ id: CHILD_ID, parentRunId: RUN_ID });
+    const { client } = api(() =>
+      jsonResponse(200, {
+        run: fixtures.runDetail(root, {
+          children: [child],
+          treeCost: { amount: '0.000000', currency: 'USD' },
+        }),
+      }),
+    );
+
+    const load = await loadRunDetail(client, RUN_ID);
+
+    expect(load).toMatchObject({ kind: 'loaded', run: { id: RUN_ID, parentRunId: null } });
+    expect(load.kind === 'loaded' && load.tree.children.map((run) => run.id)).toEqual([CHILD_ID]);
+    expect(load.kind === 'loaded' && load.tree.treeCost).toEqual({
+      amount: '0.000000',
+      currency: 'USD',
+    });
+  });
+
+  it('refuses a child that does not name the run as its parent', async () => {
+    const root = fixtures.run({ id: RUN_ID });
+    const stranger = fixtures.run({ id: CHILD_ID, parentRunId: CHILD_ID });
+    const { client } = api(() =>
+      jsonResponse(200, { run: fixtures.runDetail(root, { children: [stranger] }) }),
+    );
+
+    await expect(loadRunDetail(client, RUN_ID)).resolves.toMatchObject({
+      kind: 'problem',
+      problem: { kind: 'transport' },
+    });
   });
 
   it('answers a 404 as not-found, not as a problem', async () => {

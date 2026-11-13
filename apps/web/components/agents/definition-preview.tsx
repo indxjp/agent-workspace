@@ -7,29 +7,19 @@ import {
   BTN_DEFAULT,
   CARD,
   ModelStep,
-  PERMISSION_CHOICES,
   PermissionsStep,
   ResourcesStep,
   RuntimeProfileStep,
 } from './agent-form';
+import { changeInWords } from './builder-approval-words';
+import { builderStrings, type BuilderStrings } from './builder-messages';
+import { newAgentStrings } from './new-agent-messages';
+import type { VersionsLocale } from './versions-messages';
 import {
   diffBodies,
   type DefinitionChange,
   type DefinitionSection,
 } from '@indx-workspace/sdk/portable';
-
-const SECTION_TITLES: Readonly<Record<DefinitionSection, string>> = {
-  instructions: 'Instructions',
-  model: 'Model',
-  runtime: 'Runtime',
-  resources: 'Resources',
-  permissions: 'Permissions',
-  tools: 'Tools',
-  policy: 'Tool policy',
-  subagents: 'Subagents',
-  knowledge: 'Knowledge',
-  description: 'Description',
-};
 
 /** Every section, in display order. The `Record` makes a missing section a type error. */
 const SECTION_RANK = {
@@ -51,23 +41,19 @@ const PREVIEW_ORDER = (Object.keys(SECTION_RANK) as DefinitionSection[]).sort(
 
 const IGNORE = () => undefined;
 
-function changeLabel(change: DefinitionChange): string {
-  const key = change.path.slice(change.path.lastIndexOf('.') + 1);
-  const choice = PERMISSION_CHOICES.find(([permission]) => permission === key);
-  return change.section === 'permissions' && choice !== undefined
-    ? choice[1]
-    : change.path.replace(/^definition\./u, '');
-}
-
 function SectionFrame({
   section,
   changes,
   onAskBuilder,
+  strings,
+  locale,
   children,
 }: Readonly<{
   section: DefinitionSection;
   changes: readonly DefinitionChange[];
   onAskBuilder: (section: DefinitionSection) => void;
+  strings: BuilderStrings;
+  locale: VersionsLocale;
   children: ReactNode;
 }>) {
   const changed = changes.length > 0;
@@ -80,19 +66,20 @@ function SectionFrame({
       {changed ? (
         <p className="mb-1 flex flex-wrap items-center gap-2 text-[12px]">
           <span className="rounded-(--radius-sm) border border-accent px-1.5 font-semibold">
-            changed
+            {strings.changed}
           </span>
-          <span>{changes.map(changeLabel).join(', ')}</span>
+          {/* What changed, in the words the approval card uses. */}
+          <span>{changes.map((change) => changeInWords(change, locale).label).join(', ')}</span>
         </p>
       ) : null}
       {children}
       <button
         type="button"
-        aria-label={`Ask the Builder to change ${SECTION_TITLES[section]}`}
+        aria-label={strings.askToChange(strings.sections[section])}
         onClick={() => onAskBuilder(section)}
         className={`${BTN} ${BTN_DEFAULT} mt-2`}
       >
-        Ask the Builder to change this
+        {strings.askToChangeThis}
       </button>
     </div>
   );
@@ -116,16 +103,23 @@ export function DefinitionPreview({
   body,
   previous,
   onAskBuilder,
+  locale = 'en',
 }: Readonly<{
   body: AgentVersionBody;
   previous: AgentVersionBody | null;
   onAskBuilder: (section: DefinitionSection) => void;
+  /** The reader's language (UX-15 in #2086); English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const strings = builderStrings(locale);
+  const steps = newAgentStrings(locale);
+  const titles = strings.sections;
+  const none = strings.change.none;
   const { agent, resources, policy } = body.definition;
   const changes = diffBodies(previous, body);
   const rows = (names: readonly string[]) => names.map((name) => ({ id: name, label: name }));
   const sections: Readonly<Record<DefinitionSection, ReactNode>> = {
-    instructions: <TextSection title="Instructions" text={agent.instructions || 'None'} />,
+    instructions: <TextSection title={titles.instructions} text={agent.instructions || none} />,
     model: (
       <ModelStep
         models={[]}
@@ -137,18 +131,25 @@ export function DefinitionPreview({
         }
         onSelect={IGNORE}
         readOnly
+        words={steps}
+        title={titles.model}
       />
     ),
     runtime: (
       <RuntimeProfileStep
-        profiles={
-          agent.runtimeProfileName === null
-            ? []
-            : [{ id: agent.runtimeProfileName, name: agent.runtimeProfileName, driver: '' }]
-        }
-        selectedId={agent.runtimeProfileName}
+        // No name means the workspace's default profile, not none (the contract's own words).
+        profiles={[
+          {
+            id: agent.runtimeProfileName ?? '',
+            name: agent.runtimeProfileName ?? strings.change.workspaceDefault,
+            driver: '',
+          },
+        ]}
+        selectedId={agent.runtimeProfileName ?? ''}
         onSelect={IGNORE}
         readOnly
+        words={steps}
+        title={titles.runtime}
       />
     ),
     resources: (
@@ -165,52 +166,66 @@ export function DefinitionPreview({
         onSkill={IGNORE}
         onConnector={IGNORE}
         readOnly
+        words={steps}
+        title={titles.resources}
       />
     ),
-    permissions: <PermissionsStep permissions={agent.permissions} onChange={IGNORE} readOnly />,
+    permissions: (
+      <PermissionsStep
+        permissions={agent.permissions}
+        onChange={IGNORE}
+        readOnly
+        words={steps}
+        title={titles.permissions}
+      />
+    ),
     tools: (
       <TextSection
-        title="Tools"
+        title={titles.tools}
         text={
           body.toolBundles === undefined || body.toolBundles.length === 0
-            ? 'No code tools'
+            ? strings.noCodeTools
             : body.toolBundles.map((bundle) => bundle.tool).join(', ')
         }
       />
     ),
     policy: (
       <TextSection
-        title="Tool policy"
+        title={titles.policy}
         text={
           'tools' in policy
             ? [
-                `Permission mode: ${policy.tools.permissionMode}`,
-                `Skip permission checks: ${policy.tools.allowDangerouslySkipPermissions ? 'Yes' : 'No'}`,
-                `Auto-approved: ${policy.tools.autoApprove.join(', ') || 'None'}`,
-                `Denied: ${policy.tools.deny.join(', ') || 'None'}`,
-                `Tool set: ${policy.tools.base === 'claude_code_preset' ? 'Claude Code preset' : policy.tools.base.join(', ') || 'None'}`,
+                strings.permissionMode(policy.tools.permissionMode),
+                strings.skipChecks(policy.tools.allowDangerouslySkipPermissions),
+                strings.autoApproved(policy.tools.autoApprove.join(', ') || none),
+                strings.denied(policy.tools.deny.join(', ') || none),
+                strings.toolSet(
+                  policy.tools.base === 'claude_code_preset'
+                    ? strings.change.claudeCodePreset
+                    : policy.tools.base.join(', ') || none,
+                ),
               ].join('\n')
-            : 'No tool rules'
+            : strings.noToolRules
         }
       />
     ),
     subagents: (
       <TextSection
-        title="Subagents"
-        text={(body.subagents ?? []).map(({ name }) => name).join(', ') || 'None'}
+        title={titles.subagents}
+        text={(body.subagents ?? []).map(({ name }) => name).join(', ') || none}
       />
     ),
     knowledge: (
       <TextSection
-        title="Knowledge"
+        title={titles.knowledge}
         text={
           (body.knowledge ?? [])
             .map((source) => (source.kind === 'files' ? source.paths.join(', ') : source.name))
-            .join('\n') || 'None'
+            .join('\n') || none
         }
       />
     ),
-    description: <TextSection title="Description" text={body.description ?? 'None'} />,
+    description: <TextSection title={titles.description} text={body.description ?? none} />,
   };
   return (
     <div>
@@ -220,6 +235,8 @@ export function DefinitionPreview({
           section={section}
           changes={changes.filter((change) => change.section === section)}
           onAskBuilder={onAskBuilder}
+          strings={strings}
+          locale={locale}
         >
           {sections[section]}
         </SectionFrame>

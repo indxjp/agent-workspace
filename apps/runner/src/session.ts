@@ -75,9 +75,7 @@ function readable(env: Readonly<Record<string, string | undefined>>, name: strin
  * the two variables was trying to turn this on, and silently running without a store would give
  * them a deployment whose sessions cannot be resumed and no sentence anywhere saying so.
  */
-export function readMirrorConfig(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): MirrorConfig {
+export function readMirrorConfig(env: Readonly<Record<string, string | undefined>>): MirrorConfig {
   const url = readable(env, MIRROR_URL_ENV);
   const timeout = readable(env, MIRROR_TIMEOUT_ENV);
 

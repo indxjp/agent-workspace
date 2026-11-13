@@ -24,13 +24,15 @@ export type SetupAudience = (typeof SETUP_AUDIENCES)[number];
 
 /**
  * The model providers first-run setup offers: {@link MODEL_PROVIDERS} without
- * `anthropic-compatible`, which setup does not ask about.
+ * `anthropic-compatible`, which setup does not ask about. `vertex` is keyless and is set up in the
+ * web first-run setup only.
  */
 export const SETUP_PROVIDERS = [
   'anthropic',
   'openai',
   'azure-openai',
   'openai-compatible',
+  'vertex',
 ] as const satisfies readonly ModelProvider[];
 export type SetupProvider = (typeof SETUP_PROVIDERS)[number];
 
@@ -211,7 +213,8 @@ function multiSchema<const Choice extends string>(
 
 const themeSchema = z.enum(SETUP_THEMES);
 const sandboxSchema = z.enum(SETUP_SANDBOX_CHOICES);
-const modelProviderSchema = z.enum(MODEL_PROVIDERS);
+/** The `aw init` choices: a project file cannot declare a keyless connection, so no `vertex`. */
+const modelProviderSchema = z.enum(MODEL_PROVIDERS).exclude(['vertex']);
 const modelBaseUrlSchema = z
   .string()
   .max(MODEL_BASE_URL_MAX_LENGTH)
@@ -277,7 +280,7 @@ const modelProviderQuestion: SetupQuestion<'admin.modelProvider', typeof modelPr
   flag: 'provider',
   audience: 'admin',
   prompt: "Who serves the agent's model?",
-  answer: { kind: 'choice', choices: MODEL_PROVIDERS },
+  answer: { kind: 'choice', choices: modelProviderSchema.options },
   recommended: 'anthropic',
   writes: ['agent-workspace.yaml'],
   schema: modelProviderSchema,

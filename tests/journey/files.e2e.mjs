@@ -175,7 +175,7 @@ test('a run with a granted file shows its outputs in Files (issue #1687)', async
   await page.getByRole('textbox', { name: 'New folder name' }).fill('in');
   await page.getByRole('button', { name: 'Create folder here' }).click();
   await page.getByRole('button', { name: 'in/', exact: true }).click();
-  await page.getByLabel('Upload a file to this folder').setInputFiles({
+  await page.getByLabel('Upload files to this folder').setInputFiles({
     name: `${nonce}.txt`,
     mimeType: 'text/plain',
     buffer: Buffer.from(`${firstLine}\nthe second line stays in the input\n`),

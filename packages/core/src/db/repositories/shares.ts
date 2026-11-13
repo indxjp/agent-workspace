@@ -12,10 +12,15 @@ import {
 } from '../schema/index.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
 
-export type ShareRecord = Share;
+/**
+ * A stored share. `token` is left out: a public link is shown once, when it is published, and
+ * only its hash is kept (part 06 step 3 phase 2); the column only lingers for the previous release.
+ */
+export type ShareRecord = Omit<Share, 'token'>;
 export type CreateShareInput = Omit<
   NewShare,
   | 'id'
+  | 'token'
   | 'workspaceId'
   | 'createdAt'
   | 'spentUsd'
@@ -39,7 +44,8 @@ export type LinkShareRunOutcome =
 export interface ShareRepository {
   list(): Promise<readonly ShareRecord[]>;
   get(id: string): Promise<ShareRecord | null>;
-  findByToken(token: string): Promise<ShareRecord | null>;
+  /** The share whose link token hashes to `tokenHash` (`hashApiKeySecret`); links are never looked up by the plain token. */
+  findByTokenHash(tokenHash: string): Promise<ShareRecord | null>;
   create(input: CreateShareInput): Promise<ShareRecord>;
   getPublicSharingEnabled(): Promise<boolean>;
   setPublicSharingEnabled(enabled: boolean): Promise<void>;
@@ -89,9 +95,169 @@ async function countInFlightRuns(
   return Number(rows[0]?.value ?? 0);
 }
 
+/** Shared admission checks; the caller checks the budget while holding the same share lock. */
+function canRunShare(share: ShareRecord, now: Date): boolean {
+  return (
+    share.visibility === 'public' &&
+    share.mode === 'runnable' &&
+    share.revokedAt === null &&
+    share.suspendedAt === null &&
+    !share.stopped &&
+    !(share.expiresAt !== null && share.expiresAt.getTime() <= now.getTime())
+  );
+}
+
+function shareLock(workspaceId: string, id: string) {
+  const lockKey = `public-share:${workspaceId}:${id}`;
+  return sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+}
+
 export interface ShareRepositoryProvider {
   forScope(scope: WorkspaceScope): ShareRepository;
 }
+interface ShareContext {
+  readonly db: Database;
+  readonly workspaceId: string;
+}
+
+async function reserveVisitorMessage(
+  { db, workspaceId }: ShareContext,
+  input: Parameters<ShareRepository['reserveVisitorMessage']>[0],
+): Promise<ReserveShareMessageOutcome> {
+  const within = (id: string) => and(eq(shares.workspaceId, workspaceId), eq(shares.id, id));
+
+  if (
+    input.visitorKey.length === 0 ||
+    input.visitorKey.length > 128 ||
+    !Number.isSafeInteger(input.limit) ||
+    input.limit < 1 ||
+    !Number.isFinite(input.windowStartedAt.getTime()) ||
+    !Number.isFinite(input.now.getTime())
+  ) {
+    throw new Error('A bounded visitor key, valid time window and positive limit are required.');
+  }
+  return db.transaction(async (tx): Promise<ReserveShareMessageOutcome> => {
+    await tx.execute(shareLock(workspaceId, input.id));
+    const current = (
+      await tx
+        .select({
+          share: shares,
+          budgetExhausted: sql<boolean>`${shares.budgetCapUsd} is not null and ${shares.spentUsd} >= ${shares.budgetCapUsd}`,
+        })
+        .from(shares)
+        .where(within(input.id))
+        .limit(1)
+    )[0];
+    if (current === undefined) return { kind: 'unavailable' };
+    const share = current.share;
+    if (!canRunShare(share, input.now)) {
+      return { kind: 'unavailable' };
+    }
+    if (share.budgetCapUsd === null) return { kind: 'unavailable' };
+    if (current.budgetExhausted) {
+      const stopped = await tx
+        .update(shares)
+        .set({ stopped: true })
+        .where(and(within(input.id), eq(shares.stopped, false)))
+        .returning({ id: shares.id });
+      return { kind: 'budget-exhausted', stoppedNow: stopped.length === 1 };
+    }
+    const used = Number(
+      (
+        await tx
+          .select({ value: count() })
+          .from(shareViews)
+          .where(
+            and(
+              eq(shareViews.workspaceId, workspaceId),
+              eq(shareViews.shareId, input.id),
+              eq(shareViews.visitorKey, input.visitorKey),
+              sql`${shareViews.createdAt} >= ${input.windowStartedAt}`,
+            ),
+          )
+      )[0]?.value ?? 0,
+    );
+    if (used >= input.limit) return { kind: 'rate-limited' };
+    if ((await countInFlightRuns(tx, workspaceId, input.id)) >= MAX_IN_FLIGHT_RUNS_PER_SHARE) {
+      return { kind: 'busy' };
+    }
+    await tx.insert(shareViews).values({
+      workspaceId,
+      shareId: input.id,
+      visitorKey: input.visitorKey,
+      createdAt: input.now,
+    });
+    return { kind: 'reserved', share };
+  });
+}
+
+async function linkShareRun(
+  { db, workspaceId }: ShareContext,
+  { id, runId, now }: { readonly id: string; readonly runId: string; readonly now: Date },
+): Promise<LinkShareRunOutcome> {
+  const within = (id: string) => and(eq(shares.workspaceId, workspaceId), eq(shares.id, id));
+
+  if (!Number.isFinite(now.getTime())) throw new Error('share run link time must be valid');
+  return db.transaction(async (tx): Promise<LinkShareRunOutcome> => {
+    await tx.execute(shareLock(workspaceId, id));
+    const priorLink = (
+      await tx
+        .select({
+          shareId: shareRunCharges.shareId,
+          workspaceId: shareRunCharges.workspaceId,
+        })
+        .from(shareRunCharges)
+        .where(eq(shareRunCharges.runId, runId))
+        .limit(1)
+    )[0];
+    if (priorLink !== undefined) {
+      if (priorLink.workspaceId === workspaceId && priorLink.shareId === id) {
+        return { kind: 'existing' };
+      }
+      throw new Error(`run ${runId} is already attributed to another public share`);
+    }
+    const current = (await tx.select().from(shares).where(within(id)).limit(1))[0];
+    if (
+      current === undefined ||
+      !canRunShare(current, now) ||
+      current.budgetCapUsd === null ||
+      Number(current.spentUsd) >= Number(current.budgetCapUsd) ||
+      (await countInFlightRuns(tx, workspaceId, id)) >= MAX_IN_FLIGHT_RUNS_PER_SHARE
+    ) {
+      return { kind: 'unavailable' };
+    }
+    const run = (
+      await tx
+        .select({
+          id: runs.id,
+          accountingState: runs.accountingState,
+          costUsd: runs.costUsd,
+        })
+        .from(runs)
+        .where(and(eq(runs.workspaceId, workspaceId), eq(runs.id, runId)))
+        .limit(1)
+    )[0];
+    if (run === undefined || run.accountingState !== 'pending' || Number(run.costUsd) !== 0) {
+      return { kind: 'unavailable' };
+    }
+    const inserted = await tx
+      .insert(shareRunCharges)
+      .values({ workspaceId, shareId: id, runId })
+      .onConflictDoNothing({ target: shareRunCharges.runId })
+      .returning({ runId: shareRunCharges.runId });
+    if (inserted.length === 1) return { kind: 'linked' };
+    const existing = (
+      await tx
+        .select({ shareId: shareRunCharges.shareId })
+        .from(shareRunCharges)
+        .where(and(eq(shareRunCharges.workspaceId, workspaceId), eq(shareRunCharges.runId, runId)))
+        .limit(1)
+    )[0];
+    if (existing?.shareId === id) return { kind: 'existing' };
+    throw new Error(`run ${runId} is already attributed to another public share`);
+  });
+}
+
 export function createDatabaseShareRepositoryProvider(db: Database): ShareRepositoryProvider {
   return {
     forScope(scope) {
@@ -107,13 +273,13 @@ export function createDatabaseShareRepositoryProvider(db: Database): ShareReposi
         async get(id) {
           return (await db.select().from(shares).where(within(id)).limit(1))[0] ?? null;
         },
-        async findByToken(token) {
+        async findByTokenHash(tokenHash) {
           return (
             (
               await db
                 .select()
                 .from(shares)
-                .where(and(eq(shares.workspaceId, workspaceId), eq(shares.token, token)))
+                .where(and(eq(shares.workspaceId, workspaceId), eq(shares.tokenHash, tokenHash)))
                 .limit(1)
             )[0] ?? null
           );
@@ -170,8 +336,7 @@ export function createDatabaseShareRepositoryProvider(db: Database): ShareReposi
         },
         async stop(id) {
           return db.transaction(async (tx) => {
-            const lockKey = `public-share:${workspaceId}:${id}`;
-            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+            await tx.execute(shareLock(workspaceId, id));
             return (
               (
                 await tx
@@ -183,159 +348,8 @@ export function createDatabaseShareRepositoryProvider(db: Database): ShareReposi
             );
           });
         },
-        async reserveVisitorMessage(input) {
-          if (
-            input.visitorKey.length === 0 ||
-            input.visitorKey.length > 128 ||
-            !Number.isSafeInteger(input.limit) ||
-            input.limit < 1 ||
-            !Number.isFinite(input.windowStartedAt.getTime()) ||
-            !Number.isFinite(input.now.getTime())
-          ) {
-            throw new Error(
-              'A bounded visitor key, valid time window and positive limit are required.',
-            );
-          }
-          return db.transaction(async (tx): Promise<ReserveShareMessageOutcome> => {
-            const lockKey = `public-share:${workspaceId}:${input.id}`;
-            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-            const current = (
-              await tx
-                .select({
-                  share: shares,
-                  budgetExhausted: sql<boolean>`${shares.budgetCapUsd} is not null and ${shares.spentUsd} >= ${shares.budgetCapUsd}`,
-                })
-                .from(shares)
-                .where(within(input.id))
-                .limit(1)
-            )[0];
-            if (current === undefined) return { kind: 'unavailable' };
-            const share = current.share;
-            if (
-              share.visibility !== 'public' ||
-              share.mode !== 'runnable' ||
-              share.revokedAt !== null ||
-              share.suspendedAt !== null ||
-              share.stopped ||
-              (share.expiresAt !== null && share.expiresAt.getTime() <= input.now.getTime())
-            ) {
-              return { kind: 'unavailable' };
-            }
-            if (share.budgetCapUsd === null) return { kind: 'unavailable' };
-            if (current.budgetExhausted) {
-              const stopped = await tx
-                .update(shares)
-                .set({ stopped: true })
-                .where(and(within(input.id), eq(shares.stopped, false)))
-                .returning({ id: shares.id });
-              return { kind: 'budget-exhausted', stoppedNow: stopped.length === 1 };
-            }
-            const used = Number(
-              (
-                await tx
-                  .select({ value: count() })
-                  .from(shareViews)
-                  .where(
-                    and(
-                      eq(shareViews.workspaceId, workspaceId),
-                      eq(shareViews.shareId, input.id),
-                      eq(shareViews.visitorKey, input.visitorKey),
-                      sql`${shareViews.createdAt} >= ${input.windowStartedAt}`,
-                    ),
-                  )
-              )[0]?.value ?? 0,
-            );
-            if (used >= input.limit) return { kind: 'rate-limited' };
-            if (
-              (await countInFlightRuns(tx, workspaceId, input.id)) >= MAX_IN_FLIGHT_RUNS_PER_SHARE
-            ) {
-              return { kind: 'busy' };
-            }
-            await tx.insert(shareViews).values({
-              workspaceId,
-              shareId: input.id,
-              visitorKey: input.visitorKey,
-              createdAt: input.now,
-            });
-            return { kind: 'reserved', share };
-          });
-        },
-        async linkRun(id, runId, now) {
-          if (!Number.isFinite(now.getTime())) throw new Error('share run link time must be valid');
-          return db.transaction(async (tx): Promise<LinkShareRunOutcome> => {
-            const lockKey = `public-share:${workspaceId}:${id}`;
-            await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
-            const priorLink = (
-              await tx
-                .select({
-                  shareId: shareRunCharges.shareId,
-                  workspaceId: shareRunCharges.workspaceId,
-                })
-                .from(shareRunCharges)
-                .where(eq(shareRunCharges.runId, runId))
-                .limit(1)
-            )[0];
-            if (priorLink !== undefined) {
-              if (priorLink.workspaceId === workspaceId && priorLink.shareId === id) {
-                return { kind: 'existing' };
-              }
-              throw new Error(`run ${runId} is already attributed to another public share`);
-            }
-            const current = (await tx.select().from(shares).where(within(id)).limit(1))[0];
-            if (
-              current === undefined ||
-              current.visibility !== 'public' ||
-              current.mode !== 'runnable' ||
-              current.budgetCapUsd === null ||
-              current.revokedAt !== null ||
-              current.suspendedAt !== null ||
-              current.stopped ||
-              (current.expiresAt !== null && current.expiresAt.getTime() <= now.getTime()) ||
-              Number(current.spentUsd) >= Number(current.budgetCapUsd) ||
-              (await countInFlightRuns(tx, workspaceId, id)) >= MAX_IN_FLIGHT_RUNS_PER_SHARE
-            ) {
-              return { kind: 'unavailable' };
-            }
-            const run = (
-              await tx
-                .select({
-                  id: runs.id,
-                  accountingState: runs.accountingState,
-                  costUsd: runs.costUsd,
-                })
-                .from(runs)
-                .where(and(eq(runs.workspaceId, workspaceId), eq(runs.id, runId)))
-                .limit(1)
-            )[0];
-            if (
-              run === undefined ||
-              run.accountingState !== 'pending' ||
-              Number(run.costUsd) !== 0
-            ) {
-              return { kind: 'unavailable' };
-            }
-            const inserted = await tx
-              .insert(shareRunCharges)
-              .values({ workspaceId, shareId: id, runId })
-              .onConflictDoNothing({ target: shareRunCharges.runId })
-              .returning({ runId: shareRunCharges.runId });
-            if (inserted.length === 1) return { kind: 'linked' };
-            const existing = (
-              await tx
-                .select({ shareId: shareRunCharges.shareId })
-                .from(shareRunCharges)
-                .where(
-                  and(
-                    eq(shareRunCharges.workspaceId, workspaceId),
-                    eq(shareRunCharges.runId, runId),
-                  ),
-                )
-                .limit(1)
-            )[0];
-            if (existing?.shareId === id) return { kind: 'existing' };
-            throw new Error(`run ${runId} is already attributed to another public share`);
-          });
-        },
+        reserveVisitorMessage: (input) => reserveVisitorMessage({ db, workspaceId }, input),
+        linkRun: (id, runId, now) => linkShareRun({ db, workspaceId }, { id, runId, now }),
       };
     },
   };

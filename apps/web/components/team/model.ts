@@ -21,23 +21,20 @@ import {
 } from '../../contracts/team';
 import type { RequestProblem } from '../agents/model';
 
+import { teamStrings, type TeamModelWords } from './team-messages';
+
 // `RequestProblem` is `../agents/model.ts`'s own, generic over any route answering this platform's
 // error envelope. Re-exported so the team components have one import for the whole model, as
 // `../projects/model.ts` does.
 export type { RequestProblem };
 export type { MembershipCapability, MembershipResource, MembershipRoleName };
 
-/** §21's four roles, as a members table shows them. Display only; nothing is decided from this. */
-const ROLE_LABELS: Readonly<Record<MembershipRoleName, string>> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  builder: 'Builder',
-  viewer: 'Viewer',
-};
+/** This file's sentences in English: the default for a caller that does not pass the reader's. */
+const ENGLISH: TeamModelWords = teamStrings('en');
 
-/** The role name, capitalised the way §21 prints it. */
-export function describeRole(role: MembershipRoleName): string {
-  return ROLE_LABELS[role];
+/** The role name, capitalised the way §21 prints it (or the reader's word for it). Display only. */
+export function describeRole(role: MembershipRoleName, words: TeamModelWords = ENGLISH): string {
+  return words.roleLabel[role];
 }
 
 /**
@@ -48,10 +45,14 @@ export function describeRole(role: MembershipRoleName): string {
  * deadline a person acts on rather than a duration. An unparsable value is returned as it arrived,
  * because inventing a date for it would be worse than showing what the server actually sent.
  */
-export function formatTeamDate(iso: string): string {
+export function formatTeamDate(iso: string, words: TeamModelWords = ENGLISH): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(words.dateLocale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 /** Is this row the signed-in caller's own? A fact about the request, not a permission. */
@@ -116,12 +117,13 @@ export function describeWithheldControls(
   member: MembershipResource,
   capability: MembershipCapability,
   soleOwner: string | null,
+  words: TeamModelWords = ENGLISH,
 ): string | null {
   if (!capability.canChangeRole && !capability.canRemoveMember) return null;
   if (member.userId !== soleOwner) return null;
   return capability.conferrableRoles.includes('owner')
-    ? 'Last Owner. Promote another member to Owner before changing or removing this one.'
-    : 'Last Owner. Only an Owner can promote another member to Owner, so ask one before this member can be changed or removed.';
+    ? words.lastOwnerCanPromote
+    : words.lastOwnerAskOwner;
 }
 
 // ── Removal impact ─────────────────────────────────────────────────────────────────────────────
@@ -151,10 +153,6 @@ export function removalImpactFromReads(
   return { sessions, projects };
 }
 
-function countPhrase(count: number, singular: string, plural: string): string {
-  return count === 1 ? `1 ${singular}` : `${String(count)} ${plural}`;
-}
-
 /**
  * The impact sentence the confirmation renders.
  *
@@ -164,14 +162,12 @@ function countPhrase(count: number, singular: string, plural: string): string {
  * then the server refuses removal rather than orphaning ownership or deleting history. Saying so
  * before the button is pressed is the difference between a confirmation and a surprise refusal.
  */
-export function summariseRemovalImpact(counts: RemovalImpactCounts): string {
-  if (counts.sessions === 0 && counts.projects === 0) {
-    return 'This member owns no sessions and no projects in this workspace. Removing them ends their access here; nothing already run is deleted.';
-  }
-  const sessions = countPhrase(counts.sessions, 'session', 'sessions');
-  const projects = countPhrase(counts.projects, 'project', 'projects');
-  const kept = `${sessions} and ${projects} stay in this workspace and keep naming this member. Removing them ends their access; no history is deleted.`;
-  return `${kept} A member who still owns a session or project cannot be removed until those resources are deleted or reassigned, so this removal may be refused.`;
+export function summariseRemovalImpact(
+  counts: RemovalImpactCounts,
+  words: TeamModelWords = ENGLISH,
+): string {
+  if (counts.sessions === 0 && counts.projects === 0) return words.ownsNothing;
+  return words.ownsSome(counts.sessions, counts.projects);
 }
 
 /**
@@ -221,15 +217,11 @@ export interface MembershipFailureContext {
 export function describeMembershipFailure(
   problem: RequestProblem,
   context: MembershipFailureContext,
+  words: TeamModelWords = ENGLISH,
 ): string {
   if (problem.kind === 'api') return problem.message;
   const sessions = context.impact?.sessions ?? 0;
-  if (context.status === 500 && sessions > 0) {
-    return (
-      `${problem.reason} This member still owns ${countPhrase(sessions, 'session', 'sessions')} ` +
-      `in this workspace, and a workspace may not hold a session owned by someone who is not a ` +
-      `member. Delete or reassign those sessions first, or leave the membership in place.`
-    );
-  }
+  if (context.status === 500 && sessions > 0)
+    return words.stillOwnsSessions(problem.reason, sessions);
   return problem.reason;
 }

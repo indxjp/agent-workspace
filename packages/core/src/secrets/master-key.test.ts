@@ -101,17 +101,6 @@ describe('loadMasterKey', () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  it('defaults to process.env when no environment object is supplied', () => {
-    const previous = process.env[MASTER_KEY_ENV_VAR];
-    try {
-      delete process.env[MASTER_KEY_ENV_VAR];
-      expect(() => loadMasterKey()).toThrow(new RegExp(MASTER_KEY_ENV_VAR));
-    } finally {
-      if (previous === undefined) delete process.env[MASTER_KEY_ENV_VAR];
-      else process.env[MASTER_KEY_ENV_VAR] = previous;
-    }
-  });
-
   it('constructs a provider-returned key from exactly 32 bytes and copies the input', () => {
     const source = crypto.randomBytes(32);
     const result = masterKeyFromBytes(source);

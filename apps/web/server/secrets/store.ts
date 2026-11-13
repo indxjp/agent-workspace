@@ -144,7 +144,9 @@ export function createRepositorySecretsStoreProvider(
         resolved: CoreWorkspaceScope,
         id: string,
       ): Promise<string | null> => {
-        const secret = (await dependencies.service.list(resolved)).find((row) => row.id === id);
+        const secret = (await dependencies.service.list(resolved)).find(
+          (row) => row.id.toLowerCase() === id.toLowerCase(),
+        );
         const connectionId = secret === undefined ? null : storageConnectionIdOf(secret.name);
         if (connectionId === null) return null;
         const connection = await dependencies.storageConnections

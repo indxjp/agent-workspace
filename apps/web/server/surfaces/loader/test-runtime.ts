@@ -6,8 +6,7 @@
  */
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 
-import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
-import { FIXTURE_PERMISSIONS } from '../../agent-versions/fixtures';
+import { createInMemoryAgentStoreProvider, FIXTURE_PERMISSIONS } from '../../agents';
 import { createInMemoryAgentVersionStoreProvider } from '../../agent-versions/memory-store';
 import { createSurfaceSessionsRuntime } from '../public/composition';
 import { type SurfaceModelRefusal } from '../public/runtime';

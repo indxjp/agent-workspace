@@ -42,3 +42,12 @@ them.
   `Link` by deleting one wrapper — the labels and the surrounding sentences do not change.
 - The shell and the composer now share one visual vocabulary for "the destination is absent", which
   is the property that makes it readable rather than looking like three separate bugs.
+
+## Amendment (2026-11-04): two of the three are links now
+
+`/agents` and `/files` exist, so "Manage agents" and "Upload" are `Link`s to them, as the
+Consequences above planned; the labels are unchanged. The Files picker's "Only files this agent is
+permitted to read are listed." now shows only when files are listed: the home page does not list an
+agent's files yet (RF-502), and under an empty list the sentence contradicted the picker's own
+explanation. "See all" stays inert: it sits beside the Recent heading, and the Recent list is not
+shown in this release, so the label is never on screen. Issue #2089.

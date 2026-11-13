@@ -16,10 +16,8 @@ import {
 } from '@indx-workspace/contracts/feedback';
 import { AgentFrameSchema, type AgentFrame } from '@indx-workspace/contracts/run-events';
 
-import { finalAnswer } from '../evaluations/score';
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
-import { grantsFor } from '../rbac/permissions';
-import { parseRole } from '../rbac/roles';
+import { finalAnswer } from '../evaluations';
+import { grantsFor, ownerPrincipalIdOf, parseRole } from '../identity';
 import { upgradeStoredEvent } from './agent-frames';
 import {
   findRunForPrincipal,

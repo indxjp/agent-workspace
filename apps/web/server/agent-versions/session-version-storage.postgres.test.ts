@@ -24,8 +24,10 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createRepositoryAgentResourceStoreProvider } from '../agents/resource-store';
-import { createRepositoryAgentStoreProvider } from '../agents/store';
+import {
+  createRepositoryAgentResourceStoreProvider,
+  createRepositoryAgentStoreProvider,
+} from '../agents/store';
 import { FIXTURE_PERMISSIONS, versionRequest, type FixtureEdits } from './fixtures';
 import { createAgentVersion } from './handlers';
 import { setAgentPointer } from './pointers';
@@ -135,10 +137,22 @@ describe('a run reads its own version’s storage grants (PostgreSQL)', () => {
       }),
       versions: () => Promise.resolve(agentVersions),
     });
+    /** Point `local` at version `number`, as a rollback does. */
+    const pointLocal = async (number: number) => {
+      const row = await agentRepository.forScope(scope).get(agentId);
+      if (row === null) throw new Error('the agent exists');
+      return setAgentPointer(
+        { environment: 'local', version: number },
+        row,
+        { principalId, userId, actor: 'owner' },
+        { store, storageConnections },
+      );
+    };
     return {
       connections,
       connect,
       push,
+      pointLocal,
       readVersion: (versionId: string) => read(workspaceId, agentId, versionId),
     };
   }
@@ -204,5 +218,20 @@ describe('a run reads its own version’s storage grants (PostgreSQL)', () => {
     await expect(h.readVersion(v1)).rejects.toMatchObject({
       code: 'run_storage_grant_unavailable',
     });
+  }, 60_000);
+
+  it('[US-STO-12][unit][run] pointing local back at version 1 after a delete-and-recreate leaves the new connection deletable', async () => {
+    const h = await open();
+    const name = 'acme-' + crypto.randomUUID();
+    const first = await h.connect(name);
+    await h.push(folder(name, 'reports'));
+    await h.push({});
+    await h.connections.delete(first);
+    const second = await h.connect(name);
+
+    expect((await h.pointLocal(1)).status).toBe(200);
+
+    // Version 1's folder is not bound to the new connection by name, so nothing holds it.
+    expect(await h.connections.delete(second)).not.toBeNull();
   }, 60_000);
 });

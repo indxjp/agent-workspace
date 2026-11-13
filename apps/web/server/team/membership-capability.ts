@@ -24,7 +24,7 @@
  *
  * `PATCH /api/memberships/:id` does not merely check that the caller may write memberships: it
  * routes the requested role through `readConferredRole` → `conferRole`, which compares grants over
- * every resource and operation (`../rbac/conferral.ts`). The set of roles an Admin may confer is
+ * every resource and operation (`../rbac/core/conferral.ts`). The set of roles an Admin may confer is
  * `['admin','builder','viewer']` — the roles below it, since ADR-0152 made the table monotonic —
  * but it is still `conferRole`'s answer and not an ordering's, so the table stays the one place a
  * grant is written.
@@ -48,9 +48,9 @@ import {
   type MembershipCapability,
   type MembershipRoleName,
 } from '../../contracts/team';
-import { conferRole } from '../rbac/conferral';
+import { conferRole } from '../rbac/core/conferral';
 import { decide, type Ownership } from '../rbac/decide';
-import { parseRole, ROLES } from '../rbac/roles';
+import { parseRole, ROLES } from '../rbac/core/roles';
 import type { TeamViewer } from './team-viewer';
 
 /** The three route questions the team screen's controls depend on. */

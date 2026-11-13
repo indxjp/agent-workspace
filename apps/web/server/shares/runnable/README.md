@@ -10,9 +10,11 @@ a Fetch `Request` does not expose its socket peer. The web service must therefor
 except through the declared proxies. Proxies must overwrite or append `X-Forwarded-For`; a proxy
 that passes the header through unchanged is not trusted.
 
-Only a versioned HMAC of the canonical client address is persisted. Raw client addresses are not
-stored in `share_views`. Rotating `SESSION_SECRET` intentionally changes these opaque visitor keys
-and therefore resets their rolling rate-limit identity and ephemeral public session identity.
+Only a versioned HMAC of the canonical client address is persisted, keyed with the share-visitor
+key derived from `SESSION_SECRET` (`auth/core/key-ring.ts`; `v2_` since the key stopped being the
+raw secret). Raw client addresses are not stored in `share_views`. Rotating `SESSION_SECRET`
+intentionally changes these opaque visitor keys and therefore resets their rolling rate-limit
+identity and ephemeral public session identity.
 
 Atomic visitor reservation and the `share_run_charges` ledger protect the dormant implementation
 across web replicas. A public run is linked before launch; provider settlement advances the run,

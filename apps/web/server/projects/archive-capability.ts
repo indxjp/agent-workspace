@@ -36,9 +36,7 @@
  */
 import type { ProjectArchiveCapability } from '../../contracts/projects';
 import { getSession } from '../auth';
-import { decide } from '../rbac/decide';
-import type { DirectoryRoot } from '../rbac/directory';
-import { parseRole } from '../rbac/roles';
+import { decide, type DirectoryRoot, parseRole } from '../identity';
 import { applicationContext } from '../application-context';
 
 /** The answer for a caller nothing could be established about. Every field denies. */
@@ -49,18 +47,19 @@ export const NO_ARCHIVE_CAPABILITY: ProjectArchiveCapability = {
 };
 
 /**
- * Ask `decide()` both halves of the ownership split for a write route.
+ * Ask `decide()` both halves of the ownership split for a write route. It is not specific to
+ * projects: the project archive route and the agent restore route share it.
  *
  * `path` names the route to ask about. It defaults to the project archive route;
  * `../agents/restore-capability.ts` also asks `/api/agents/:id/restore` through this function.
  *
- * `restore` is not asked separately: `rbac/declarations/W9-PROJ-183.ts` classifies both segments as
+ * `restore` is not asked separately: `rbac/core/declarations/W9-PROJ-183.ts` classifies both segments as
  * writes on the same `projects` resource, so the two questions have one answer by construction. The
  * capability test asserts that, rather than this comment claiming it.
  *
  * Exported so the test can drive the role matrix without a session or a database.
  */
-export function archiveGrantsForRole(
+export function ownershipGrantsForRole(
   role: string,
   path = '/api/projects/:id/archive',
 ): {
@@ -102,7 +101,7 @@ export interface CapabilitySession {
  * The directory is a parameter rather than a lookup so the role matrix is testable without a
  * session cookie, which `next/headers` will not produce outside a real request.
  */
-export async function archiveCapabilityFor(
+export async function ownershipCapabilityFor(
   directory: Pick<DirectoryRoot, 'findUserByEmail' | 'membershipsForUser'>,
   session: CapabilitySession,
   path?: string,
@@ -112,7 +111,7 @@ export async function archiveCapabilityFor(
   const memberships = await directory.membershipsForUser(user.id);
   const current = memberships.find((membership) => membership.workspaceSlug === session.ws);
   if (current === undefined) return NO_ARCHIVE_CAPABILITY;
-  return { ...archiveGrantsForRole(current.role, path), viewerPrincipalId: current.principalId };
+  return { ...ownershipGrantsForRole(current.role, path), viewerPrincipalId: current.principalId };
 }
 
 /**
@@ -128,5 +127,5 @@ export async function resolveProjectArchiveCapability(): Promise<ProjectArchiveC
   if (runtime === null) return NO_ARCHIVE_CAPABILITY;
   const session = await getSession();
   if (session === null) return NO_ARCHIVE_CAPABILITY;
-  return archiveCapabilityFor(runtime.directory, session);
+  return ownershipCapabilityFor(runtime.directory, session);
 }

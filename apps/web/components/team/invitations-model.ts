@@ -31,6 +31,10 @@ import { type InvitationCapability, type InvitationResource } from '../../contra
 import type { IssuedInvitationResponse } from '@indx-workspace/contracts/invitations';
 import type { MembershipRoleName } from '../../contracts/team';
 import { formatTeamDate, type RequestProblem } from './model';
+import { teamStrings, type TeamModelWords } from './team-messages';
+
+/** This file's sentences in English: the default for a caller that does not pass the reader's. */
+const ENGLISH: TeamModelWords = teamStrings('en');
 
 export type { InvitationCapability, InvitationResource };
 
@@ -67,16 +71,12 @@ export function invitationStateOf(invitation: InvitationResource, nowMs: number)
   return new Date(invitation.expiresAt).getTime() <= nowMs ? 'expired' : 'pending';
 }
 
-const STATE_LABELS: Readonly<Record<InvitationState, string>> = {
-  pending: 'Pending',
-  expired: 'Expired',
-  accepted: 'Accepted',
-  revoked: 'Revoked',
-};
-
 /** The state, as the table's Status column prints it. */
-export function describeInvitationState(state: InvitationState): string {
-  return STATE_LABELS[state];
+export function describeInvitationState(
+  state: InvitationState,
+  words: TeamModelWords = ENGLISH,
+): string {
+  return words.invitationState[state];
 }
 
 /**
@@ -89,18 +89,21 @@ export function describeInvitationState(state: InvitationState): string {
 export function describeInvitationTiming(
   invitation: InvitationResource,
   state: InvitationState,
+  words: TeamModelWords = ENGLISH,
 ): string {
   switch (state) {
     case 'revoked':
-      return invitation.revokedAt === null ? '' : `Revoked ${formatTeamDate(invitation.revokedAt)}`;
+      return invitation.revokedAt === null
+        ? ''
+        : words.revokedOn(formatTeamDate(invitation.revokedAt, words));
     case 'accepted':
       return invitation.acceptedAt === null
         ? ''
-        : `Accepted ${formatTeamDate(invitation.acceptedAt)}`;
+        : words.acceptedOn(formatTeamDate(invitation.acceptedAt, words));
     case 'expired':
-      return `Expired ${formatTeamDate(invitation.expiresAt)}`;
+      return words.expiredOn(formatTeamDate(invitation.expiresAt, words));
     case 'pending':
-      return `Expires ${formatTeamDate(invitation.expiresAt)}`;
+      return words.expiresOn(formatTeamDate(invitation.expiresAt, words));
     default: {
       const unreachable: never = state;
       throw new Error(`unhandled invitation state ${JSON.stringify(unreachable)}`);
@@ -156,10 +159,11 @@ export function canRevokeInvitation(
 export function describeSettledInvitation(
   state: InvitationState,
   capability: InvitationCapability,
+  words: TeamModelWords = ENGLISH,
 ): string | null {
   if (!capability.canResendInvitation && !capability.canRevokeInvitation) return null;
-  if (state === 'accepted') return 'Accepted. Manage this person in the members table above.';
-  if (state === 'revoked') return 'Revoked. Send a new invitation if they still need access.';
+  if (state === 'accepted') return words.settledAccepted;
+  if (state === 'revoked') return words.settledRevoked;
   return null;
 }
 
@@ -233,14 +237,17 @@ export type CopyState = 'untouched' | 'copied' | 'unavailable';
  * Neither sentence contains the link. That is the point: a failure message that quoted what it
  * failed to copy would put the token in a second element, and #186 requires it in exactly one.
  */
-export function describeCopyState(state: CopyState): string | null {
+export function describeCopyState(
+  state: CopyState,
+  words: TeamModelWords = ENGLISH,
+): string | null {
   switch (state) {
     case 'untouched':
       return null;
     case 'copied':
-      return 'Link copied. Send it to the person you invited; it is not shown again.';
+      return words.copied;
     case 'unavailable':
-      return 'This browser would not give the page the clipboard. Select the link above and copy it before leaving this screen.';
+      return words.copyUnavailable;
     default: {
       const unreachable: never = state;
       throw new Error(`unhandled copy state ${JSON.stringify(unreachable)}`);
@@ -312,10 +319,11 @@ export function invitationRequestFrom(
  * This function never receives a token: its only argument is a {@link RequestProblem}, built from
  * an error envelope, and the two responses that carry a token are both successes.
  */
-export function describeInvitationFailure(problem: RequestProblem): string {
+export function describeInvitationFailure(
+  problem: RequestProblem,
+  words: TeamModelWords = ENGLISH,
+): string {
   if (problem.kind !== 'api') return problem.reason;
-  if (problem.code === 'no_such_invitation') {
-    return `${problem.message} The list on this screen is out of date; reload it.`;
-  }
+  if (problem.code === 'no_such_invitation') return words.listOutOfDate(problem.message);
   return problem.message;
 }

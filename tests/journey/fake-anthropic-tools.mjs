@@ -115,7 +115,8 @@ function toolInput(tool, nonce) {
   );
 }
 
-function toolUseEvents(id, model, toolUse) {
+/** The streaming events of a `tool_use` answer; the apps lane's scripted model reuses it. */
+export function toolUseEvents(id, model, toolUse) {
   const json = JSON.stringify(toolUse.input);
   const middle = Math.ceil(json.length / 2);
   return [
@@ -157,7 +158,8 @@ function toolUseEvents(id, model, toolUse) {
   ];
 }
 
-function toolUseResponse(id, model, toolUse) {
+/** A non-streaming `tool_use` answer; the apps lane's scripted model reuses it. */
+export function toolUseResponse(id, model, toolUse) {
   return {
     id,
     type: 'message',

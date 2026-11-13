@@ -416,7 +416,6 @@ export const FIXTURES = {
     suspendedAt: null,
     createdAt: AT,
     viewCount: 3,
-    url: '/p/token',
   },
   telemetry: {
     runId: IDS.run,
@@ -467,11 +466,13 @@ export function runFixture(status: string) {
       toolCalls: 0,
     },
     cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+    spendCeilingUsd: null,
     error: null,
     output: null,
     pendingApproval:
       status === 'awaiting_approval' ? { toolName: 'send_email', canonicalCall: '{}' } : null,
     accountingState: 'pending',
     accountingError: null,
+    parentRunId: null,
   };
 }

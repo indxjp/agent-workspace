@@ -10,8 +10,8 @@
  */
 import type { TriggerKind } from '@indx-workspace/contracts/triggers';
 
-import type { Ownership } from '../rbac/decide';
-import type { Principal } from '../rbac/principal';
+import type { Ownership, Principal } from '../identity';
+import type { IdGenerator } from '../ids';
 
 /**
  * A trigger as this domain reads it. The repository in `@agent-workspace/core/db` satisfies these
@@ -140,6 +140,8 @@ export interface TriggersRuntime {
   /** `null` when the deployment has no secrets service. */
   readonly zoomTokens: ZoomSecretTokens | null;
   now(): Date;
+  /** Where an automatic delivery key's id comes from. Defaults to random UUIDs. */
+  readonly ids?: IdGenerator;
 }
 
 /** The trigger routes as the application context holds them. */

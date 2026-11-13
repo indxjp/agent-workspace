@@ -1,0 +1,12 @@
+# jevlint config. Every key is optional: see docs/configuration.md
+presets = ["clean-code","code-smells","kiss-dry-yagni","readable-code","solid"]
+# include = ["src/**"]
+# exclude = ["**/*.generated.ts"]
+
+[provider]
+name = "openai"
+# model = "..."  # defaults to the provider's recommended model
+
+[scoring]
+scale = 100
+fail_under = 0    # exit 1 below this, for CI

@@ -57,6 +57,9 @@ const GENERAL_UNRUNNABLE = agent('general', 'General', {
   code: 'agent_runtime_profile_missing',
   reason: 'agent "General" has no runtime profile.',
 });
+/** The server's sentence for an agent with no runtime profile (`missingRuntimeProfile`). */
+const SETUP_REASON =
+  'agent "General" has no runtime profile. Attach a runtime profile to the agent, or finish the setup wizard.';
 const WIZARD = agent('wizard', 'Assistant', {
   kind: 'runnable',
   source: 'agent',
@@ -255,6 +258,20 @@ describe('the composer before a message is sent', () => {
     expect(html).toContain('General cannot run yet');
     expect(html).toContain('Cannot run yet · agent_runtime_profile_missing');
   });
+
+  it('links the setup wizard when the reason sends the reader there', () => {
+    const noProfile = agent('general', 'General', {
+      kind: 'unrunnable',
+      code: 'agent_runtime_profile_missing',
+      reason: SETUP_REASON,
+    });
+    const html = renderToStaticMarkup(
+      <HomeChat agents={{ kind: 'agents', agents: [noProfile] }} recent={[]} user={USER} />,
+    );
+    expect(html).toMatch(
+      /data-testid="composer-run-target"[^>]*>[^]*?<a [^>]*href="\/setup"[^>]*>setup wizard<\/a>\.<\/p>/u,
+    );
+  });
 });
 
 describe('the run view after a failed start', () => {
@@ -282,6 +299,31 @@ describe('the run view after a failed start', () => {
     );
     expect(html).toContain('data-testid="run-failure-code"');
     expect(html).toContain('agent &quot;General&quot; has no runtime profile.');
+    expect(html).not.toContain('href="/setup"');
+  });
+
+  it('links the setup wizard named in the failure sentence', () => {
+    const run = withFailure(
+      beginRun(
+        {
+          heading: { title: 'General', subtitle: '', status: null, actions: [] },
+          followUp: { placeholder: '', actions: [], status: '' },
+        },
+        userMessage('m0-1', USER, 'hello'),
+      ),
+      failureNoticeFrom(`agent_runtime_profile_missing: ${SETUP_REASON}`),
+    );
+    const html = renderToStaticMarkup(
+      <HomeChat
+        agents={{ kind: 'agents', agents: [GENERAL_UNRUNNABLE] }}
+        recent={[]}
+        user={USER}
+        run={run}
+      />,
+    );
+    expect(html).toMatch(
+      /data-testid="run-failure-message"[^>]*>[^<]*or finish the <a [^>]*href="\/setup"[^>]*>setup wizard<\/a>\.<\/p>/u,
+    );
   });
 
   it('splits a coded run error into its code and its sentence', () => {
@@ -362,28 +404,5 @@ describe('the model picker offers only models the engine can drive', () => {
       [model('anthropic', 'claude-sonnet-4-5'), model('openai', 'gpt-5.1')],
     );
     expect(offered.map((entry) => entry.providerModelId)).toEqual(['claude-sonnet-4-5']);
-  });
-});
-
-describe('preferredAgent and a built-in agent (#2012)', () => {
-  const BUILDER: ComposerAgent = {
-    ...agent('builder', 'builder', {
-      kind: 'runnable',
-      source: 'agent',
-      connectionName: 'anthropic default',
-      model: 'claude-sonnet-4-5',
-    }),
-    builtin: 'builder',
-  };
-
-  it('never picks the Builder by default, wherever it is listed', () => {
-    expect(preferredAgent([BUILDER, GENERAL_INHERITING], null)?.id).toBe('general');
-    expect(preferredAgent([BUILDER, GENERAL_UNRUNNABLE], null)?.id).toBe('general');
-    expect(initialSession([BUILDER, WIZARD])?.agentId).toBe('wizard');
-  });
-
-  it('keeps the remembered Builder, and opens on it only when it is the one agent listed', () => {
-    expect(preferredAgent([GENERAL_INHERITING, BUILDER], 'builder')?.id).toBe('builder');
-    expect(preferredAgent([BUILDER], null)?.id).toBe('builder');
   });
 });

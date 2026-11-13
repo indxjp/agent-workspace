@@ -8,11 +8,12 @@ import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import type { AgentVersionsRuntime } from '../../agent-versions/runtime';
 import type { StorageConnectionLookup } from '../../agent-versions/storage-grants';
 import type { AgentStoreProvider } from '../../agents/store';
-import type { ConnectorsStoreProvider } from '../../connectors/store';
-import type { ModelsStoreProvider } from '../../models/store';
-import type { RuntimeProfileStoreProvider } from '../../runtimes/store';
+import type { ConnectorsStoreProvider, ModelsStoreProvider } from '../../integrations';
+import type { RuntimeProfileStoreProvider } from '../../execution';
+import { systemClock } from '../../clock';
 import { enabledFeaturesFor } from '../../features/runtime';
-import type { DirectoryRoot } from '../../rbac/directory';
+import { randomIds } from '../../ids';
+import type { DirectoryRoot } from '../../identity';
 import type { ToolBundleLookup } from '../../tool-bundles/handlers';
 import type { ActorLabel } from '../adapters/actor-label';
 import { createApproval, type ApprovalDependencies } from '../adapters/approval/production';
@@ -67,10 +68,10 @@ export function productionBuilderPorts(root: BuilderCompositionRoot): BuilderPor
     toolDomainsRefusal,
   });
   const actorLabel: ActorLabel = async (workspaceId, principalId) => {
-    const members = await root.directory.forWorkspace(workspaceId).listMemberships();
-    const member = members.find((candidate) => candidate.principalId === principalId);
-    if (member === undefined)
-      throw new Error('The acting person is not a member of the workspace.');
+    const member = await root.directory
+      .forWorkspace(workspaceId)
+      .findMembershipByPrincipal(principalId);
+    if (member === null) throw new Error('The acting person is not a member of the workspace.');
     return member.email;
   };
   return {
@@ -105,7 +106,8 @@ export function productionBuilderPorts(root: BuilderCompositionRoot): BuilderPor
       skills: root.skills,
     }),
     audit: createAudit(root.journal),
-    clock: () => new Date(),
+    clock: () => systemClock.now(),
+    ids: randomIds,
   };
 }
 

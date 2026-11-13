@@ -6,6 +6,7 @@ export {
   storageRootsOverlap,
 } from './server/composition/register';
 export { holdComposition } from './server/composition/held-composition';
+export { registerOrStop } from './server/composition/stop-on-failed-start';
 export {
   maximumRunDurationMs,
   runtimeVerificationNetworkPolicy,

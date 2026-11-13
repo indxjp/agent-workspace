@@ -20,7 +20,7 @@ import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
 import { clearApplicationContext } from '../../application-context';
 import { installTestDomains } from '../../application-context-fixtures';
 import { createInMemoryConnectorsStoreProvider } from '../../connectors/memory-store';
-import { createInMemoryModelsStoreProvider } from '../../models/memory-store';
+import { createInMemoryModelsStoreProvider } from '../../models/store';
 import { callerHeaders, installRbacHarness } from '../../rbac/testing';
 import { createInMemoryCatalogStore } from '../../resources/catalog-store.memory';
 import { createInMemoryRuntimeConnectionStoreProvider } from '../../runtimes/connections';

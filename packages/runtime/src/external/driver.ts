@@ -1,3 +1,4 @@
+import { createExternalState } from './state.js';
 /**
  * The `external` runtime driver (ADR-0120 LC1): one sandbox per session at a provider this package
  * calls over REST, reached over HTTPS with a per-sandbox bearer (LC3).
@@ -8,181 +9,28 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import type {
-  AgentConnection,
-  RuntimeCapabilities,
-  RuntimeConfig,
-  RuntimeDriver,
-  RuntimeHandle,
-  RuntimeRunSpec,
-} from '../driver.js';
+import type { RuntimeConfig, RuntimeHandle, RuntimeRunSpec } from '../driver.js';
 import { requireEngineImage } from '../engine-images.js';
-import type { EngineImageMap } from '../engine-images.js';
 import { RuntimeRefusalError } from './errors.js';
-import { createSealer, type SealedSandbox, type Sealer } from './stateless.js';
+import { createSealer } from './stateless.js';
 
-export type ExternalSandboxRequest = Readonly<{
-  /** The engine's image reference at the provider (E2B: `<template>:<build_id>`, LC2). */
-  image: string;
-  sessionKey: string;
-  /** The per-sandbox bearer the runner server inside requires on every call (LC3). */
-  bearer: string;
-  /** `restricted`, and `open` when the capabilities omit it, are refused before the provider is called. */
-  networkPolicy: 'none' | 'open';
-  gatewayHost: string;
-  timeoutSeconds: number;
-  /**
-   * Set only by a stateless driver (ADR-0126): a stable, URL-safe name for this session's sandbox,
-   * derived from the manager secret. The provider records it (Vercel: the sandbox name, E2B:
-   * metadata) so `find` can return the sandbox without any table of ours.
-   */
-  lookupKey?: string;
-  /** `tool-host` starts the session's tool host (ADR-0118) instead of the runner server. */
-  workload?: 'tool-host';
-  /** Metadata the provider records with the sandbox, so `list` finds it again. Never a secret. */
-  tags?: Readonly<Record<string, string>>;
-}>;
-
-export type ExternalSandbox = Readonly<{
-  sandboxId: string;
-  origin: string;
-  /** Headers the provider's edge needs in addition to the bearer. */
-  accessHeaders: Readonly<Record<string, string>>;
-  /** Set when `create` reused a sandbox that already runs: the deadline the provider reports. */
-  expiresAt?: number;
-}>;
-
-/** A sandbox `find` returned: usable as `create`'s result, with the deadline the provider reports. */
-export type FoundExternalSandbox = ExternalSandbox & Readonly<{ expiresAt: number }>;
-
-/** The sandbox a file is written into, and the deadline the provider reported for it. */
-export type ExternalFileTarget = Readonly<{ sandboxId: string; expiresAt: number }>;
-
-export interface ExternalProvider {
-  readonly id: string;
-  readonly capabilities: RuntimeCapabilities;
-  /** The sentence refusing `restricted`, used while `capabilities` does not list `allowlist`. */
-  readonly restrictedRefusal: string;
-  create(request: ExternalSandboxRequest, apiKey: string): Promise<ExternalSandbox>;
-  destroy(sandboxId: string, apiKey: string): Promise<void>;
-  /**
-   * The running sandbox `create` recorded under `lookupKey`, or `undefined`. Needed to be stateless.
-   * With `renewSeconds` its deadline moves to that many seconds from now.
-   */
-  find?(
-    lookupKey: string,
-    apiKey: string,
-    renewSeconds?: number,
-  ): Promise<FoundExternalSandbox | undefined>;
-  /** The ids of the running sandboxes `create` recorded with every one of `tags`. */
-  list?(tags: Readonly<Record<string, string>>, apiKey: string): Promise<readonly string[]>;
-  /** Writes `content` to the plain file `name` in the tool host's workspace (ADR-0118 TS4). */
-  writeFile?(
-    target: ExternalFileTarget,
-    name: string,
-    content: string,
-    apiKey: string,
-  ): Promise<void>;
-}
-
-export type ExternalDriverId = 'external' | 'vercel-sandbox' | 'cloudflare-sandbox';
-
-export type ExternalAgentStarter<TRequest, TEvent> = (
-  runtime: RuntimeHandle,
-  request: TRequest,
-) => AgentConnection<TEvent> | Promise<AgentConnection<TEvent>>;
-
-export type ExternalDriverOptions<TRequest, TEvent> = Readonly<{
-  provider: ExternalProvider;
-  images: EngineImageMap;
-  /** The sandbox-facing public gateway URL (LC3); its host is always allowed outbound (LC4). */
-  gatewayUrl: string;
-  startAgent: ExternalAgentStarter<TRequest, TEvent>;
-  /**
-   * The id this driver publishes (ADR-0120 LC1). `external` for a provider reached through that
-   * driver; `vercel-sandbox` for the native driver of the Vercel cloud, which reuses this
-   * implementation and is a driver of its own, not an `external` provider; `cloudflare-sandbox`
-   * likewise reuses it under its own id.
-   */
-  driverId?: ExternalDriverId;
-  /**
-   * Makes the driver stateless (ADR-0126): at least 32 characters, from which the sandbox's
-   * lookup key, its bearer and the seal of its handle id are derived. The handle id then carries
-   * the sandbox's address, so another process holding the same secret serves it with no table. The
-   * provider must implement `find`.
-   */
-  sealSecret?: string;
-  /**
-   * `tool-host` makes this driver start the session's tool host instead of the runner server
-   * (ADR-0118, ADR-0120 LC5). Its handles are sealed under a label of their own, so an id of one
-   * workload is no use to the other.
-   */
-  workload?: 'tool-host';
-  /**
-   * Stateless agent driver only: bounds a session's sandbox to its idle time instead of the plan
-   * maximum. Its deadline is the larger of this and the run spec's `idleTimeoutSeconds`, plus a
-   * margin, capped at the plan maximum, and every allocation that finds it moves the deadline out
-   * again. A run spec that sets `timeoutSeconds` keeps that hard deadline instead.
-   */
-  sessionIdleSeconds?: number;
-}>;
-
-export type ExternalDriver<TRequest, TEvent> = Omit<
-  RuntimeDriver<TRequest, TEvent>,
-  'create' | 'destroy'
-> &
-  Readonly<{
-    /**
-     * `providerCredential` is the provider key for this call only (LC6). `tags` are recorded with
-     * the sandbox for `destroyTagged`; they must hold no secret.
-     */
-    create(
-      config: RuntimeConfig,
-      providerCredential?: string,
-      tags?: Readonly<Record<string, string>>,
-    ): Promise<RuntimeHandle>;
-    destroy(runtime: RuntimeHandle, providerCredential?: string): Promise<void>;
-    /** Throws what `create` would refuse (run spec, credential) without calling the provider. */
-    assertCreatable(config: RuntimeConfig, providerCredential?: string): void;
-    /** Whether this driver created the sandbox and its deadline has not passed. No provider call. */
-    isLive(runtime: RuntimeHandle): Promise<boolean>;
-    /**
-     * Destroys every running sandbox the provider holds with all of `tags`, whichever process
-     * created it. Only for a provider that can `list`.
-     */
-    destroyTagged?(
-      tags: Readonly<Record<string, string>>,
-      providerCredential?: string,
-    ): Promise<void>;
-    /**
-     * Stateless drivers only: the live sandbox of this session at the provider, or `undefined`. A
-     * tool host's deadline is renewed to the run spec's timeout, and an idle-bounded session's to
-     * its idle bound, so each ends that long after the last run that used it (an idle timeout).
-     */
-    find?(config: RuntimeConfig, providerCredential?: string): Promise<RuntimeHandle | undefined>;
-    /** Stateless drivers only: the handle a sealed id stands for, or `undefined` if it is not ours. */
-    recover?(id: string): RuntimeHandle | undefined;
-    requestUrl(runtime: RuntimeHandle, path: string): string;
-    authHeaders(runtime: RuntimeHandle): Promise<Record<string, string>>;
-    /** The headers the provider's edge needs, without the sandbox bearer. */
-    accessHeaders(runtime: RuntimeHandle): Readonly<Record<string, string>>;
-    /** Writes a plain file into the sandbox's workspace; `providerCredential` is for this call only (LC6). */
-    writeFile(
-      runtime: RuntimeHandle,
-      name: string,
-      content: string,
-      providerCredential?: string,
-    ): Promise<void>;
-  }>;
-
-type LiveSandbox = Readonly<{
-  handle: RuntimeHandle;
-  sandboxId: string;
-  origin: string;
-  bearer: string;
-  accessHeaders: Readonly<Record<string, string>>;
-  expiresAt: number;
-}>;
+export type {
+  ExternalSandboxRequest,
+  ExternalSandbox,
+  FoundExternalSandbox,
+  ExternalFileTarget,
+  ExternalProvider,
+  ExternalDriverId,
+  ExternalAgentStarter,
+  ExternalDriverOptions,
+  ExternalDriver,
+} from './model.js';
+import type {
+  ExternalProvider,
+  ExternalDriverId,
+  ExternalDriverOptions,
+  ExternalDriver,
+} from './model.js';
 
 const FALLBACK_TIMEOUT_SECONDS = 3_600;
 const SESSION_IDLE_MARGIN_SECONDS = 120;
@@ -266,251 +114,268 @@ function assertSupportedRunSpec(
   }
 }
 
-export function createExternalDriver<TRequest, TEvent>(
-  options: ExternalDriverOptions<TRequest, TEvent>,
-): ExternalDriver<TRequest, TEvent> {
-  const { provider, images } = options;
-  const driverId = options.driverId ?? 'external';
-  const gatewayHost = gatewayHostOf(options.gatewayUrl, driverId);
-  const live = new Map<string, LiveSandbox>();
-  const sealer =
-    options.sealSecret === undefined
-      ? undefined
-      : createSealer(
-          options.sealSecret,
-          options.workload === undefined ? driverId : `${driverId}/${options.workload}`,
-        );
-  if (sealer !== undefined && provider.find === undefined) {
-    throw new Error(
-      `${driverId} runtime: provider ${provider.id} cannot find a sandbox again, so it cannot be used statelessly (ADR-0126).`,
-    );
-  }
-
-  function handleOf(id: string, sealed: SealedSandbox): RuntimeHandle {
-    return {
-      id,
-      driver: driverId,
-      externalId: sealed.sandboxId,
-      workspacePath: sealed.workspacePath,
-      createdAt: new Date(sealed.createdAt),
-      expiresAt: new Date(sealed.expiresAt),
-    };
-  }
-
-  /** What this driver holds for a handle: its live table, else (stateless) what the id seals. */
-  function lookup(id: string): LiveSandbox | undefined {
-    const stored = live.get(id);
-    if (stored !== undefined || sealer === undefined) return stored;
-    const sealed = sealer.open(id);
-    if (sealed === undefined) return undefined;
-    return {
-      handle: handleOf(id, sealed),
-      sandboxId: sealed.sandboxId,
-      origin: sealed.origin,
-      bearer: sealer.bearer(sealed.lookupKey),
-      accessHeaders: sealed.accessHeaders,
-      expiresAt: sealed.expiresAt,
-    };
-  }
-
-  function sealedHandle(by: Sealer, sealed: SealedSandbox): RuntimeHandle {
-    return handleOf(by.seal(sealed), sealed);
-  }
-
-  function assertLive(runtime: RuntimeHandle, operation: string): LiveSandbox {
-    const known = lookup(runtime.id);
-    if (known === undefined || known.handle.externalId !== runtime.externalId) {
+class ExternalSessionDriver<TRequest, TEvent> {
+  private readonly options: ExternalDriverOptions<TRequest, TEvent>;
+  readonly provider: ExternalProvider;
+  private readonly images: ExternalDriverOptions<TRequest, TEvent>['images'];
+  private readonly maximumSessionSeconds: number;
+  readonly driverId: ExternalDriverId;
+  private readonly gatewayHost: string;
+  readonly sealer: ReturnType<typeof createSealer> | undefined;
+  private readonly state: ReturnType<typeof createExternalState>;
+  constructor(options: ExternalDriverOptions<TRequest, TEvent>) {
+    this.options = options;
+    this.provider = options.provider;
+    this.images = options.images;
+    this.maximumSessionSeconds =
+      this.provider.capabilities.maxSessionSeconds ?? FALLBACK_TIMEOUT_SECONDS;
+    this.driverId = options.driverId ?? 'external';
+    this.gatewayHost = gatewayHostOf(options.gatewayUrl, this.driverId);
+    this.sealer =
+      options.sealSecret === undefined
+        ? undefined
+        : createSealer(
+            options.sealSecret,
+            options.workload === undefined ? this.driverId : `${this.driverId}/${options.workload}`,
+          );
+    if (this.sealer !== undefined && this.provider.find === undefined) {
       throw new Error(
-        `${driverId} runtime: cannot ${operation}; handle ${JSON.stringify(runtime.id)} was not created by this driver or is no longer live.`,
+        `${this.driverId} runtime: provider ${this.provider.id} cannot find a sandbox again, so it cannot be used statelessly (ADR-0126).`,
       );
     }
-    return known;
+    this.state = createExternalState(this.driverId, this.sealer);
   }
-
   /** The deadline an idle-bounded session sandbox gets, or `undefined` when none applies. */
-  function idleBoundSeconds(spec: RuntimeRunSpec | undefined, limit: number): number | undefined {
-    const { sessionIdleSeconds } = options;
+  private idleBoundSeconds(spec: RuntimeRunSpec | undefined): number | undefined {
+    const { sessionIdleSeconds } = this.options;
     if (
       sessionIdleSeconds === undefined ||
-      sealer === undefined ||
-      options.workload !== undefined ||
+      this.sealer === undefined ||
+      this.options.workload !== undefined ||
       spec?.timeoutSeconds !== undefined
     ) {
       return undefined;
     }
     const idle = Math.max(spec?.idleTimeoutSeconds ?? 0, sessionIdleSeconds);
-    return Math.min(idle + SESSION_IDLE_MARGIN_SECONDS, limit);
+    return Math.min(idle + SESSION_IDLE_MARGIN_SECONDS, this.maximumSessionSeconds);
+  }
+
+  private hardTimeoutSeconds(spec: RuntimeRunSpec | undefined): number {
+    return Math.min(spec?.timeoutSeconds ?? this.maximumSessionSeconds, this.maximumSessionSeconds);
   }
 
   /** Everything `create` refuses before the provider is called; returns the provider key. */
-  function assertCreatable(config: RuntimeConfig, providerCredential: string | undefined): string {
+  private creatableCredential(
+    config: RuntimeConfig,
+    providerCredential: string | undefined,
+  ): string {
     if (config.sessionId.length === 0) {
-      throw new Error(`${driverId} runtime: sessionId must be a non-empty string.`);
+      throw new Error(`${this.driverId} runtime: sessionId must be a non-empty string.`);
     }
-    assertSupportedRunSpec(config.runSpec, provider, driverId);
-    return requireCredential(providerCredential, provider.id, driverId);
+    assertSupportedRunSpec(config.runSpec, this.provider, this.driverId);
+    return requireCredential(providerCredential, this.provider.id, this.driverId);
   }
 
-  return {
-    id: driverId,
-    capabilities: provider.capabilities,
+  readonly assertCreatable: ExternalDriver<TRequest, TEvent>['assertCreatable'] = (
+    config,
+    providerCredential,
+  ) => {
+    this.creatableCredential(config, providerCredential);
+  };
 
-    assertCreatable(config, providerCredential) {
-      assertCreatable(config, providerCredential);
-    },
-
-    async create(config, providerCredential, tags) {
-      const apiKey = assertCreatable(config, providerCredential);
-      const spec = config.runSpec;
-      const image = requireEngineImage(images, config.engine, driverId);
-      const limit = provider.capabilities.maxSessionSeconds ?? FALLBACK_TIMEOUT_SECONDS;
-      const timeoutSeconds =
-        idleBoundSeconds(spec, limit) ?? Math.min(spec?.timeoutSeconds ?? limit, limit);
-      const lookupKey = sealer?.lookupKey(sessionKeyOf(config));
-      const bearer =
-        sealer !== undefined && lookupKey !== undefined
-          ? sealer.bearer(lookupKey)
-          : randomBytes(32).toString('base64url');
-      const sandbox = await provider.create(
-        {
-          image,
-          sessionKey: config.sessionId,
-          bearer,
-          networkPolicy: spec?.networkPolicy === 'open' ? 'open' : 'none',
-          gatewayHost,
-          timeoutSeconds,
-          ...(lookupKey === undefined ? {} : { lookupKey }),
-          ...(options.workload === undefined ? {} : { workload: options.workload }),
-          ...(tags === undefined ? {} : { tags }),
-        },
-        apiKey,
-      );
-      const createdAt = new Date();
-      const expiresAt = sandbox.expiresAt ?? createdAt.getTime() + timeoutSeconds * 1_000;
-      if (sealer !== undefined && lookupKey !== undefined) {
-        return sealedHandle(sealer, {
-          sandboxId: sandbox.sandboxId,
-          origin: sandbox.origin,
-          accessHeaders: sandbox.accessHeaders,
-          createdAt: createdAt.getTime(),
-          expiresAt,
-          workspacePath: config.workspacePath,
-          lookupKey,
-        });
-      }
-      const handle: RuntimeHandle = {
-        id: randomUUID(),
-        driver: driverId,
-        externalId: sandbox.sandboxId,
-        workspacePath: config.workspacePath,
-        createdAt,
-        expiresAt: new Date(expiresAt),
-      };
-      live.set(handle.id, {
-        handle,
+  readonly create: ExternalDriver<TRequest, TEvent>['create'] = async (
+    config,
+    providerCredential,
+    tags,
+  ) => {
+    const apiKey = this.creatableCredential(config, providerCredential);
+    const spec = config.runSpec;
+    const image = requireEngineImage(this.images, config.engine, this.driverId);
+    const timeoutSeconds = this.idleBoundSeconds(spec) ?? this.hardTimeoutSeconds(spec);
+    const lookupKey = this.sealer?.lookupKey(sessionKeyOf(config));
+    const bearer =
+      this.sealer !== undefined && lookupKey !== undefined
+        ? this.sealer.bearer(lookupKey)
+        : randomBytes(32).toString('base64url');
+    const sandbox = await this.provider.create(
+      {
+        image,
+        sessionKey: config.sessionId,
+        bearer,
+        networkPolicy: spec?.networkPolicy === 'open' ? 'open' : 'none',
+        gatewayHost: this.gatewayHost,
+        timeoutSeconds,
+        ...(lookupKey === undefined ? {} : { lookupKey }),
+        ...(this.options.workload === undefined ? {} : { workload: this.options.workload }),
+        ...(tags === undefined ? {} : { tags }),
+      },
+      apiKey,
+    );
+    const createdAt = new Date();
+    const expiresAt = sandbox.expiresAt ?? createdAt.getTime() + timeoutSeconds * 1_000;
+    if (this.sealer !== undefined && lookupKey !== undefined) {
+      return this.state.sealedHandle(this.sealer, {
         sandboxId: sandbox.sandboxId,
         origin: sandbox.origin,
-        bearer,
         accessHeaders: sandbox.accessHeaders,
+        createdAt: createdAt.getTime(),
         expiresAt,
+        workspacePath: config.workspacePath,
+        lookupKey,
       });
-      return handle;
-    },
+    }
+    const handle: RuntimeHandle = {
+      id: randomUUID(),
+      driver: this.driverId,
+      externalId: sandbox.sandboxId,
+      workspacePath: config.workspacePath,
+      createdAt,
+      expiresAt: new Date(expiresAt),
+    };
+    this.state.live.set(handle.id, {
+      handle,
+      sandboxId: sandbox.sandboxId,
+      origin: sandbox.origin,
+      bearer,
+      accessHeaders: sandbox.accessHeaders,
+      expiresAt,
+    });
+    return handle;
+  };
 
-    async startAgent(runtime, request) {
-      return await options.startAgent(assertLive(runtime, 'start an agent').handle, request);
-    },
+  readonly startAgent: ExternalDriver<TRequest, TEvent>['startAgent'] = async (
+    runtime,
+    request,
+  ) => {
+    return await this.options.startAgent(
+      this.state.assertLive(runtime, 'start an agent').handle,
+      request,
+    );
+  };
 
-    async destroy(runtime, providerCredential) {
-      const known = assertLive(runtime, 'destroy');
-      // Without the key the sandbox is left to its provider-side timeout, and stays addressable
-      // here so the caller can retry with the key.
-      await provider.destroy(
-        known.sandboxId,
-        requireCredential(providerCredential, provider.id, driverId),
+  readonly destroy: ExternalDriver<TRequest, TEvent>['destroy'] = async (
+    runtime,
+    providerCredential,
+  ) => {
+    const known = this.state.assertLive(runtime, 'destroy');
+    // Without the key the sandbox is left to its provider-side timeout, and stays addressable
+    // here so the caller can retry with the key.
+    await this.provider.destroy(
+      known.sandboxId,
+      requireCredential(providerCredential, this.provider.id, this.driverId),
+    );
+    this.state.live.delete(known.handle.id);
+  };
+
+  readonly isLive: ExternalDriver<TRequest, TEvent>['isLive'] = (runtime) => {
+    const known = this.state.lookup(runtime.id);
+    return Promise.resolve(
+      known !== undefined &&
+        known.handle.externalId === runtime.externalId &&
+        Date.now() < known.expiresAt,
+    );
+  };
+
+  readonly requestUrl: ExternalDriver<TRequest, TEvent>['requestUrl'] = (runtime, path) => {
+    return `${this.state.assertLive(runtime, 'address').origin}${path}`;
+  };
+
+  readonly authHeaders: ExternalDriver<TRequest, TEvent>['authHeaders'] = (runtime) => {
+    const known = this.state.assertLive(runtime, 'authenticate');
+    return Promise.resolve({
+      authorization: `Bearer ${known.bearer}`,
+      ...known.accessHeaders,
+    });
+  };
+
+  readonly accessHeaders: ExternalDriver<TRequest, TEvent>['accessHeaders'] = (runtime) => {
+    return this.state.assertLive(runtime, 'address').accessHeaders;
+  };
+
+  readonly writeFile: ExternalDriver<TRequest, TEvent>['writeFile'] = async (
+    runtime,
+    name,
+    content,
+    providerCredential,
+  ) => {
+    const known = this.state.assertLive(runtime, 'write a file');
+    if (!WORKSPACE_FILE_NAME.test(name)) {
+      throw new Error(
+        `${this.driverId} runtime: ${JSON.stringify(name)} is not a plain file name.`,
       );
-      live.delete(known.handle.id);
-    },
-
-    isLive(runtime) {
-      const known = lookup(runtime.id);
-      return Promise.resolve(
-        known !== undefined &&
-          known.handle.externalId === runtime.externalId &&
-          Date.now() < known.expiresAt,
+    }
+    if (this.provider.writeFile === undefined) {
+      throw new Error(
+        `${this.driverId} runtime: provider ${this.provider.id} cannot write a file.`,
       );
-    },
+    }
+    await this.provider.writeFile(
+      { sandboxId: known.sandboxId, expiresAt: known.expiresAt },
+      name,
+      content,
+      requireCredential(providerCredential, this.provider.id, this.driverId),
+    );
+  };
 
-    ...(provider.list === undefined
-      ? {}
-      : {
-          async destroyTagged(tags: Readonly<Record<string, string>>, providerCredential?: string) {
-            const apiKey = requireCredential(providerCredential, provider.id, driverId);
-            const ids = new Set((await provider.list?.(tags, apiKey)) ?? []);
-            await Promise.all([...ids].map((id) => provider.destroy(id, apiKey)));
-            for (const [id, entry] of live) if (ids.has(entry.sandboxId)) live.delete(id);
-          },
-        }),
+  readonly destroyTagged: NonNullable<ExternalDriver<TRequest, TEvent>['destroyTagged']> = async (
+    tags: Readonly<Record<string, string>>,
+    providerCredential?: string,
+  ) => {
+    const apiKey = requireCredential(providerCredential, this.provider.id, this.driverId);
+    const ids = new Set((await this.provider.list?.(tags, apiKey)) ?? []);
+    await Promise.all([...ids].map((id) => this.provider.destroy(id, apiKey)));
+    for (const [id, entry] of this.state.live)
+      if (ids.has(entry.sandboxId)) this.state.live.delete(id);
+  };
 
-    ...(sealer === undefined
-      ? {}
-      : {
-          async find(config: RuntimeConfig, providerCredential?: string) {
-            const apiKey = requireCredential(providerCredential, provider.id, driverId);
-            const lookupKey = sealer.lookupKey(sessionKeyOf(config));
-            const limit = provider.capabilities.maxSessionSeconds ?? FALLBACK_TIMEOUT_SECONDS;
-            const renew =
-              options.workload === 'tool-host'
-                ? Math.min(config.runSpec?.timeoutSeconds ?? limit, limit)
-                : idleBoundSeconds(config.runSpec, limit);
-            const found = await provider.find?.(lookupKey, apiKey, renew);
-            if (found === undefined) return undefined;
-            return sealedHandle(sealer, {
-              sandboxId: found.sandboxId,
-              origin: found.origin,
-              accessHeaders: found.accessHeaders,
-              createdAt: Date.now(),
-              expiresAt: found.expiresAt,
-              workspacePath: config.workspacePath,
-              lookupKey,
-            });
-          },
-          recover(id: string) {
-            const known = lookup(id);
-            return known !== undefined && Date.now() < known.expiresAt ? known.handle : undefined;
-          },
-        }),
+  readonly find: NonNullable<ExternalDriver<TRequest, TEvent>['find']> = async (
+    config: RuntimeConfig,
+    providerCredential?: string,
+  ) => {
+    const apiKey = requireCredential(providerCredential, this.provider.id, this.driverId);
+    const sealer = this.sealer;
+    if (sealer === undefined) return undefined;
+    const lookupKey = sealer.lookupKey(sessionKeyOf(config));
+    const renew =
+      this.options.workload === 'tool-host'
+        ? this.hardTimeoutSeconds(config.runSpec)
+        : this.idleBoundSeconds(config.runSpec);
+    const found = await this.provider.find?.(lookupKey, apiKey, renew);
+    if (found === undefined) return undefined;
+    return this.state.sealedHandle(sealer, {
+      sandboxId: found.sandboxId,
+      origin: found.origin,
+      accessHeaders: found.accessHeaders,
+      createdAt: Date.now(),
+      expiresAt: found.expiresAt,
+      workspacePath: config.workspacePath,
+      lookupKey,
+    });
+  };
 
-    requestUrl(runtime, path) {
-      return `${assertLive(runtime, 'address').origin}${path}`;
-    },
+  readonly recover: NonNullable<ExternalDriver<TRequest, TEvent>['recover']> = (id: string) => {
+    const known = this.state.lookup(id);
+    return known !== undefined && Date.now() < known.expiresAt ? known.handle : undefined;
+  };
+}
 
-    authHeaders(runtime) {
-      const known = assertLive(runtime, 'authenticate');
-      return Promise.resolve({
-        authorization: `Bearer ${known.bearer}`,
-        ...known.accessHeaders,
-      });
-    },
-
-    accessHeaders(runtime) {
-      return assertLive(runtime, 'address').accessHeaders;
-    },
-
-    async writeFile(runtime, name, content, providerCredential) {
-      const known = assertLive(runtime, 'write a file');
-      if (!WORKSPACE_FILE_NAME.test(name)) {
-        throw new Error(`${driverId} runtime: ${JSON.stringify(name)} is not a plain file name.`);
-      }
-      if (provider.writeFile === undefined) {
-        throw new Error(`${driverId} runtime: provider ${provider.id} cannot write a file.`);
-      }
-      await provider.writeFile(
-        { sandboxId: known.sandboxId, expiresAt: known.expiresAt },
-        name,
-        content,
-        requireCredential(providerCredential, provider.id, driverId),
-      );
-    },
+export function createExternalDriver<TRequest, TEvent>(
+  options: ExternalDriverOptions<TRequest, TEvent>,
+): ExternalDriver<TRequest, TEvent> {
+  const driver = new ExternalSessionDriver(options);
+  return {
+    id: driver.driverId,
+    capabilities: driver.provider.capabilities,
+    assertCreatable: driver.assertCreatable,
+    create: driver.create,
+    startAgent: driver.startAgent,
+    destroy: driver.destroy,
+    isLive: driver.isLive,
+    requestUrl: driver.requestUrl,
+    authHeaders: driver.authHeaders,
+    accessHeaders: driver.accessHeaders,
+    writeFile: driver.writeFile,
+    ...(driver.provider.list === undefined ? {} : { destroyTagged: driver.destroyTagged }),
+    ...(driver.sealer === undefined ? {} : { find: driver.find, recover: driver.recover }),
   };
 }

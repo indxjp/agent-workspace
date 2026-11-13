@@ -73,7 +73,8 @@ async function prepareWorkspace(page, base) {
 
 test.describe('the Builder chat journey', () => {
   // One-shot against its own stack: a retry would fail at provisioning and hide the first error.
-  test.describe.configure({ retries: 0 });
+  // Serial: the second test runs on the workspace the first one set up.
+  test.describe.configure({ mode: 'serial', retries: 0 });
 
   test('[US-BLD-01][browser][web] [US-BLD-03][browser][web] [US-BLD-05][browser][web] a chat creates an agent, version 1, with the Builder as its source', async ({
     page,
@@ -90,7 +91,7 @@ test.describe('the Builder chat journey', () => {
 
     await expect(
       page.getByRole('alert').filter({ hasText: 'agent_definition_references_missing' }),
-    ).toContainText('connector:erp', { timeout: RUN_TIMEOUT });
+    ).toContainText('Connector: erp', { timeout: RUN_TIMEOUT });
 
     await page.getByLabel('Ask a follow-up').fill('yes');
     await page.getByRole('button', { name: 'Send' }).click();
@@ -100,10 +101,25 @@ test.describe('the Builder chat journey', () => {
       { timeout: RUN_TIMEOUT },
     );
     const approval = page.getByRole('region', { name: 'The Builder is waiting for your decision' });
-    // The diff names the connector the script swapped in, not just any change.
+    // The diff names the connector the script swapped in, not just any change, in words.
+    await expect(approval.getByRole('definition').filter({ hasText: 'Added' }).first()).toBeVisible(
+      {
+        timeout: RUN_TIMEOUT,
+      },
+    );
+    await expect(approval.getByRole('term').filter({ hasText: 'Connector: crm' })).toBeVisible();
+    // The exact fields stay one click away.
+    await approval.getByText('Show the exact fields').click();
     await expect(
-      approval.getByRole('row').filter({ hasText: 'resources' }).filter({ hasText: 'crm' }),
-    ).toBeVisible({ timeout: RUN_TIMEOUT });
+      approval.getByRole('row').filter({ hasText: 'definition.resources.connectors["crm"]' }),
+    ).toBeVisible();
+    // While the save waits for approval, no check has failed (UX-11): the paused call has no answer.
+    await expect(page.getByRole('alert').filter({ hasText: 'unreadable_result' })).toHaveCount(0);
+    await expect(page.getByText(/Step \d ·/u)).toHaveCount(0);
+    // The save repeats the body just checked; the panel still marks what changed since erp.
+    await expect(page.locator('[data-section="resources"][data-changed="true"]')).toContainText(
+      'Connector: crm',
+    );
     await approval.getByRole('button', { name: 'Approve' }).click();
 
     const saved = page.getByRole('status').filter({ hasText: 'Saved as version 1 on local' });
@@ -128,5 +144,63 @@ test.describe('the Builder chat journey', () => {
       subjectLabel: 'Expense refunds',
       builderRunId: expect.any(String),
     });
+  });
+
+  // #2091: Run commands asks before a command that changes something, instead of a silent refusal.
+  // The setup agent answers from `run-commands-ask.json`: one shell command that writes, repeated
+  // once approved, then a read-only `ls`, which runs without asking.
+  test('Run commands asks before a command that writes, and Approve runs it once', async ({
+    page,
+    baseURL,
+  }) => {
+    test.setTimeout(240_000);
+    await signInAsBootstrapAdmin(page, credentials);
+    const { agents } = await (await page.request.get(`${baseURL}/api/agents`)).json();
+    const agent = agents.find((candidate) => candidate.name === 'Browser setup');
+    expect(agent, JSON.stringify(agents.map((candidate) => candidate.name))).toBeTruthy();
+    const patched = await page.request.fetch(`${baseURL}/api/agents/${agent.id}`, {
+      method: 'PATCH',
+      headers: { origin: baseURL },
+      data: {
+        instructions: 'Answer briefly. [scripted:run-commands-ask]',
+        permissions: {
+          readFiles: true,
+          writeFiles: true,
+          runCommands: true,
+          unrestrictedNetwork: false,
+        },
+      },
+    });
+    expect(patched.ok(), await patched.text()).toBe(true);
+
+    await page.goto('/');
+    await page.getByLabel('Ask anything').fill('Write me the Q3 refunds report');
+    await page.getByRole('button', { name: 'Send' }).click();
+
+    const approve = page.getByRole('button', { name: 'Approve', exact: true });
+    await expect(approve).toBeVisible({ timeout: RUN_TIMEOUT });
+    await expect(page.getByText('mkdir -p outputs').first()).toBeVisible();
+    await approve.click();
+
+    await expect(page.getByText('I wrote the Q3 refunds report').first()).toBeVisible({
+      timeout: RUN_TIMEOUT,
+    });
+    await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible();
+    // One pause only, and nothing refused: the `ls` after the approved command did not ask.
+    await expect(approve).toHaveCount(0);
+    await expect(page.getByTestId('run-blocked')).toHaveCount(0);
+
+    // The continuation's tool results: the approved command ran, and `ls` lists the file it wrote.
+    const listed = await page.request.get(`${baseURL}/api/runs?agent=${agent.id}&limit=5`);
+    expect(listed.ok()).toBe(true);
+    const { runs } = await listed.json();
+    const streams = await Promise.all(
+      runs.map(async (run) =>
+        (await page.request.get(`${baseURL}/api/runs/${run.id}/events`)).text(),
+      ),
+    );
+    const events = streams.join('\n');
+    expect(events).toContain('"content":"q3-refunds.md","is_error":false');
+    expect(events).not.toContain('approval_call_mismatch');
   });
 });

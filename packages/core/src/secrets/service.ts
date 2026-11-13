@@ -92,7 +92,7 @@ export interface CreateSecretsServiceOptions {
  * instead of failing here, at startup.
  */
 export async function createSecretsService(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
   options: CreateSecretsServiceOptions = {},
 ): Promise<SecretsService> {
   // First, and unconditionally: no database connection is attempted before the master key is

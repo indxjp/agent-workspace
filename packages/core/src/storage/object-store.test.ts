@@ -17,6 +17,45 @@ import { streamToBytes, toNodeReadable, toWebStream } from './streams.js';
 
 const WORKSPACE_ID = '33333333-3333-4333-8333-333333333333';
 
+/** A backend that signs, binding an upload length or not, recording each call it gets. */
+function signingBackend(boundLengthSign: boolean): {
+  readonly backend: ObjectStore;
+  readonly seen: { key: string; request: SignedUrlRequest }[];
+} {
+  const raw = createInMemoryObjectStore();
+  const seen: { key: string; request: SignedUrlRequest }[] = [];
+  const backend: ObjectStore = {
+    ...raw,
+    capabilities: { ...raw.capabilities, sign: true, boundLengthSign },
+    createSignedUrl(key, request) {
+      seen.push({ key, request });
+      return Promise.resolve({ url: 'https://store.example/x', headers: {} });
+    },
+  };
+  return { backend, seen };
+}
+
+/** Every key under `prefix`, one entry per page, and the cursors handed out along the way. */
+async function listByOne(
+  store: ObjectStore,
+  prefix: string,
+): Promise<{ keys: string[]; cursors: string[] }> {
+  const keys: string[] = [];
+  const cursors: string[] = [];
+  let cursor: string | undefined;
+  for (let guard = 0; guard < 10; guard += 1) {
+    const page = await store.listPage(prefix, {
+      limit: 1,
+      ...(cursor === undefined ? {} : { cursor }),
+    });
+    keys.push(...page.entries.map((entry) => entry.key));
+    if (page.cursor === null) break;
+    cursors.push(page.cursor);
+    cursor = page.cursor;
+  }
+  return { keys, cursors };
+}
+
 describe('clampListLimit', () => {
   it('clampListLimit bounds', () => {
     expect(clampListLimit(0)).toBe(1);
@@ -49,25 +88,32 @@ describe('scoped listPage', () => {
     expect(page.entries.map((entry) => entry.key)).toEqual(['p/a.txt']);
   });
 
+  it('passes a provider token that holds a colon through unchanged', async () => {
+    const raw = createInMemoryObjectStore();
+    const seen: (string | undefined)[] = [];
+    const rawKeyToken = 'files/workspaces/w/dir:name/a.txt';
+    const spy: ObjectStore = {
+      ...raw,
+      listPage: (_prefix, options) => {
+        seen.push(options?.cursor);
+        return Promise.resolve({ entries: [], cursor: rawKeyToken });
+      },
+    };
+    const store = createScopedObjectStore(spy, WORKSPACE_ID);
+
+    const page = await store.listPage('p', { cursor: rawKeyToken });
+
+    expect(seen).toEqual([rawKeyToken]);
+    expect(page.cursor).toBe(rawKeyToken);
+  });
+
   it('continues a scoped listing from its own cursor until the last page', async () => {
     const store = createScopedObjectStore(createInMemoryObjectStore(), WORKSPACE_ID);
     for (const name of ['a', 'b', 'c']) {
       await store.write(`p/${name}.txt`, new Uint8Array([1]), {});
     }
 
-    const keys: string[] = [];
-    const cursors: string[] = [];
-    let cursor: string | undefined;
-    for (let guard = 0; guard < 10; guard += 1) {
-      const page = await store.listPage('p', {
-        limit: 1,
-        ...(cursor === undefined ? {} : { cursor }),
-      });
-      keys.push(...page.entries.map((entry) => entry.key));
-      if (page.cursor === null) break;
-      cursors.push(page.cursor);
-      cursor = page.cursor;
-    }
+    const { keys, cursors } = await listByOne(store, 'p');
 
     expect(keys).toEqual(['p/a.txt', 'p/b.txt', 'p/c.txt']);
     expect(cursors).toHaveLength(2);
@@ -124,23 +170,6 @@ describe('createScopedObjectStore', () => {
 });
 
 describe('scoped createSignedUrl', () => {
-  function signingBackend(boundLengthSign: boolean): {
-    readonly backend: ObjectStore;
-    readonly seen: { key: string; request: SignedUrlRequest }[];
-  } {
-    const raw = createInMemoryObjectStore();
-    const seen: { key: string; request: SignedUrlRequest }[] = [];
-    const backend: ObjectStore = {
-      ...raw,
-      capabilities: { ...raw.capabilities, sign: true, boundLengthSign },
-      createSignedUrl(key, request) {
-        seen.push({ key, request });
-        return Promise.resolve({ url: 'https://store.example/x', headers: {} });
-      },
-    };
-    return { backend, seen };
-  }
-
   // @story US-STO-02
   it('[US-STO-02][unit][sdk] expiry above 900 s is refused before any I/O', async () => {
     const { backend, seen } = signingBackend(true);
@@ -169,7 +198,9 @@ describe('scoped createSignedUrl', () => {
     }
     expect(seen).toHaveLength(3);
   });
+});
 
+describe('scoped createSignedUrl requests', () => {
   // @story US-STO-02
   it('[US-STO-02][unit][sdk] a bound length is refused centrally when it cannot be bound', async () => {
     const unable = signingBackend(false);

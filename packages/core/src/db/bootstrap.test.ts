@@ -2,6 +2,10 @@
  * S1-03 (issue #441, contract C2): `prepareDatabase` returns the seed's ids, and the same ids on
  * every call against the same database. Skipped loudly without `TEST_DATABASE_URL`.
  */
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { prepareDatabase } from './bootstrap.js';
@@ -39,5 +43,19 @@ describe.skipIf(!hasDatabase)('prepareDatabase', () => {
     expect(first.generalAgentId).toMatch(UUID);
 
     await expect(prepareDatabase(env)).resolves.toEqual(first);
+  }, 120_000);
+
+  it('migrates from the MIGRATIONS_DIR of the environment it is given', async () => {
+    const empty = await mkdtemp(path.join(tmpdir(), 'aw-bootstrap-migrations-'));
+    try {
+      const env = {
+        DATABASE_URL: isolated.url,
+        BOOTSTRAP_ADMIN: 'owner@example.test',
+        MIGRATIONS_DIR: empty,
+      };
+      await expect(prepareDatabase(env)).rejects.toThrow(path.join(empty, 'meta', '_journal.json'));
+    } finally {
+      await rm(empty, { recursive: true, force: true });
+    }
   }, 120_000);
 });

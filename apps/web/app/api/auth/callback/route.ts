@@ -40,8 +40,8 @@ import {
   mintSelectionToken,
   mintSessionToken,
   newSessionClaims,
-  readOidcConfiguration,
-  readSessionSecret,
+  oidcConfiguration,
+  sessionSecret,
   safeNextPath,
   selectionCookie,
   sessionCookie,
@@ -114,8 +114,8 @@ export async function handleCallback(
     return NextResponse.json({ error: 'cross_origin' }, { status: 403 });
   }
 
-  const configuration = readOidcConfiguration();
-  const secret = readSessionSecret(process.env);
+  const configuration = oidcConfiguration();
+  const secret = sessionSecret();
   if (configuration === null || !secret.ok) {
     return NextResponse.json({ error: 'oidc_not_configured' }, { status: 503 });
   }

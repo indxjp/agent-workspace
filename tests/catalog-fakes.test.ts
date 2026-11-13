@@ -1,6 +1,6 @@
 // Fitness test for the shared in-memory catalog (the storage design, §07 rule 4): tests use
 // `createInMemoryCatalog()`, not their own hand-written copies of the catalog port. The allowlist
-// holds today's fakes and may only shrink; #1634 and #1635 empty it.
+// is empty (#1745) and stays so: any hand-written fake fails here.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -14,12 +14,12 @@ const ALLOWLIST = 'tests/fitness/catalog-fakes-allowlist.json';
 const CATALOG_PORTS = ['ResourceCatalogRepository', 'CatalogPort'];
 // Repository-only members: the port's own `get`/`list`/`remove` are too generic to prove a catalog.
 const CATALOG_METHODS = new Set([
-  'listFiles',
-  'putFile',
-  'renameFile',
-  'deleteFile',
-  'renameFilesByPrefix',
-  'deleteFilesByPrefix',
+  'reserve',
+  'confirm',
+  'createFolder',
+  'referencing',
+  'deleting',
+  'forget',
   'listSkills',
   'putSkill',
   'deleteSkill',
@@ -27,7 +27,7 @@ const CATALOG_METHODS = new Set([
   'listSkillRevisions',
 ]);
 const PAIRS = [
-  ['listFiles', 'putFile'],
+  ['list', 'reserve'],
   ['listSkills', 'putSkill'],
 ] as const;
 
@@ -94,7 +94,13 @@ function isShapedFake(literal: ts.ObjectLiteralExpression): boolean {
     if (member.name && ts.isIdentifier(member.name)) names.add(member.name.text);
   }
   if (PAIRS.some((pair) => pair.every((name) => names.has(name)))) return true;
-  return [...names].some((name) => CATALOG_METHODS.has(name)) && inCatalogPosition(literal);
+  // `{ ...catalog, reserve() { … } }` wraps a real catalog and overrides one member: not a copy.
+  const wrapsCatalog = literal.properties.some(ts.isSpreadAssignment);
+  return (
+    !wrapsCatalog &&
+    [...names].some((name) => CATALOG_METHODS.has(name)) &&
+    inCatalogPosition(literal)
+  );
 }
 
 /** `path → number of hand-written catalog fakes` in the given test files. */
@@ -158,19 +164,32 @@ const one = { 'x.test.ts': 1 };
 describe('catalog fakes are not hand-written', () => {
   it('flags a planted literal', () => {
     expect(
-      planted('const c: ResourceCatalogRepository = { listFiles: () => Promise.resolve([]) };'),
+      planted('const c: ResourceCatalogRepository = { list: () => Promise.resolve([]) };'),
     ).toEqual(one);
-    expect(planted('const c = { listFiles, putFile };')).toEqual(one);
+    expect(planted('const c = { list, reserve };')).toEqual(one);
+    expect(planted('const c = { listSkills, putSkill };')).toEqual(one);
+  });
+
+  it("flags a planted fake of the two-step file catalog by the port's own members", () => {
+    for (const member of [
+      'reserve',
+      'confirm',
+      'createFolder',
+      'referencing',
+      'deleting',
+      'forget',
+    ])
+      expect(planted(`run({ catalog: { ${member} } as never });`), member).toEqual(one);
   });
 
   it('flags a planted cast, however it is spelled', () => {
-    expect(planted('const c = { putFile } as unknown as ResourceCatalogRepository;')).toEqual(one);
+    expect(planted('const c = { reserve } as unknown as ResourceCatalogRepository;')).toEqual(one);
     expect(planted('const c = { get } as CatalogPort;')).toEqual(one);
     expect(planted('const c = { get } satisfies Pick<CatalogPort, "get">;')).toEqual(one);
     expect(planted('const c: Partial<ResourceCatalogRepository> = { get };')).toEqual(one);
     expect(planted('class C implements CatalogPort {}')).toEqual(one);
     expect(planted('class C implements db.CatalogPort {}')).toEqual(one);
-    expect(planted('const c = { listFiles } as unknown as db.ResourceCatalogRepository;')).toEqual(
+    expect(planted('const c = { confirm } as unknown as db.ResourceCatalogRepository;')).toEqual(
       one,
     );
     expect(planted('const c = repo as unknown as ResourceCatalogRepository;')).toEqual(one);
@@ -185,23 +204,36 @@ describe('catalog fakes are not hand-written', () => {
   });
 
   it('flags a fake passed as `never` where a catalog is expected', () => {
-    expect(planted('run({ catalog: { listFiles } as never });')).toEqual(one);
+    expect(planted('run({ catalog: { listSkills } as never });')).toEqual(one);
     expect(
       planted('const catalog = { forWorkspace: () => Promise.resolve({ listSkills }) };'),
     ).toEqual(one);
     expect(
       planted(
-        'const p = { forWorkspace: () => ({ listFiles } as unknown as Awaited<ReturnType<P["forWorkspace"]>>) };',
+        'const p = { forWorkspace: () => ({ reserve } as unknown as Awaited<ReturnType<P["forWorkspace"]>>) };',
       ),
     ).toEqual(one);
   });
 
-  it('ignores vi.fn() and listFiles on a type that is not a catalog port', () => {
+  it('ignores a wrapper that spreads a real catalog and overrides one member', () => {
     expect(
-      planted('const p = { listFiles: vi.fn(), readFile: vi.fn() } as unknown as Source;'),
+      planted(
+        'const p = { async forWorkspace(id) { const c = await inner.forWorkspace(id); return { ...c, reserve: gated }; } };',
+      ),
     ).toEqual({});
-    expect(planted('const listFiles = vi.fn();\nconst store = { put: vi.fn() };')).toEqual({});
-    expect(planted('const p: Source = { listFiles: () => Promise.resolve([]) };')).toEqual({});
+    expect(
+      planted(
+        'const p = { async forWorkspace(id) { const c = await inner.forWorkspace(id); return { reserve: gated }; } };',
+      ),
+    ).toEqual(one);
+  });
+
+  it('ignores vi.fn() and reserve on a type that is not a catalog port', () => {
+    expect(
+      planted('const p = { reserve: vi.fn(), readFile: vi.fn() } as unknown as Source;'),
+    ).toEqual({});
+    expect(planted('const reserve = vi.fn();\nconst store = { put: vi.fn() };')).toEqual({});
+    expect(planted('const p: Source = { reserve: () => Promise.resolve([]) };')).toEqual({});
     expect(planted('const i: Parameters<ResourceCatalogRepository["putSkill"]>[0] = {};')).toEqual(
       {},
     );

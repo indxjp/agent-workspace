@@ -60,7 +60,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { browserClient } from '../../lib/browser-client';
+import { ProblemDetail } from '../agents/problem-line';
+import type { VersionsLocale } from '../agents/versions-messages';
 import { RunDetailPanel } from './run-detail-panel';
+import { runStatusLabel } from './run-view-messages';
+import { runsStrings, type RunsStrings } from './runs-messages';
 import { loadCatalog, loadRunPage, probeUserFilter } from './run-requests-model';
 import { StatusBadge } from './run-view';
 import {
@@ -136,7 +140,13 @@ function useUserFilterAvailability(): UserFilterAvailability | null {
 
 // ── The screen ───────────────────────────────────────────────────────────────────────────────────
 
-export function RunsHistoryScreen() {
+export function RunsHistoryScreen({
+  locale = 'en',
+}: Readonly<{
+  /** The reader's language (UX-15 in #2086); the page negotiates it from `Accept-Language`. */
+  locale?: VersionsLocale;
+}>) {
+  const strings = runsStrings(locale);
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -150,12 +160,10 @@ export function RunsHistoryScreen() {
   const runId = runIdFromSearchParams(searchParams);
 
   return (
-    <main className="w-full max-w-[1120px] px-4 pt-[26px] pb-[90px] sm:px-8">
+    <main lang={locale} className="w-full max-w-[1120px] px-4 pt-[26px] pb-[90px] sm:px-8">
       <div className="mb-5">
-        <h1 className="text-[21px]">Runs</h1>
-        <p className="text-[13px] text-muted">
-          Every run this workspace's history API answers for your role, newest first.
-        </p>
+        <h1 className="text-[21px]">{strings.title}</h1>
+        <p className="text-[13px] text-muted">{strings.intro}</p>
       </div>
 
       {runId === null ? (
@@ -164,12 +172,14 @@ export function RunsHistoryScreen() {
           searchParams={searchParams}
           catalogs={{ agents, projects, users, workspaces }}
           userFilterAvailability={userFilterAvailability}
+          locale={locale}
         />
       ) : (
         <RunDetailPanel
           runId={runId}
           backHref={`${pathname}?${withScreenState(searchParams, { run: null }).toString()}`}
           catalogs={{ agents, projects, users, workspaces }}
+          locale={locale}
         />
       )}
     </main>
@@ -208,12 +218,15 @@ function RunsListView({
   searchParams,
   catalogs,
   userFilterAvailability,
+  locale,
 }: Readonly<{
   pathname: string;
   searchParams: URLSearchParams;
   catalogs: Catalogs;
   userFilterAvailability: UserFilterAvailability | null;
+  locale: VersionsLocale;
 }>) {
+  const strings = runsStrings(locale);
   const router = useRouter();
   const filters = filtersFromSearchParams(searchParams);
   const cursor = cursorFromSearchParams(searchParams);
@@ -279,13 +292,15 @@ function RunsListView({
         projectOptions={catalogOptions(catalogs.projects)}
         userOptions={catalogOptions(catalogs.users)}
         showUserFilter={userFilterAvailability === 'available'}
+        strings={strings}
+        locale={locale}
         onChange={(patch) => {
           navigate({ ...patch, cursor: null });
         }}
       />
 
       {state.kind === 'loading' ? (
-        <p className="mt-4 text-[13px] text-muted">Loading runs…</p>
+        <p className="mt-4 text-[13px] text-muted">{strings.loadingRuns}</p>
       ) : null}
 
       {state.kind === 'problem' ? (
@@ -294,26 +309,17 @@ function RunsListView({
             !
           </span>
           <div className="min-w-0 flex-1">
-            {state.problem.kind === 'api' ? (
-              <>
-                <b className="font-semibold">
-                  {state.problem.status} {state.problem.code}
-                </b>
-                <div>{state.problem.message}</div>
-              </>
-            ) : (
-              <div>{state.problem.reason}</div>
-            )}
+            <ProblemDetail locale={locale} lead={strings.runsLoadFailed} problem={state.problem} />
           </div>
         </div>
       ) : null}
 
       {state.kind === 'loaded' && state.runs.length === 0 ? (
-        <p className="mt-4 text-[13px] text-muted">No runs match these filters yet.</p>
+        <p className="mt-4 text-[13px] text-muted">{strings.noRuns}</p>
       ) : null}
 
       {state.kind === 'loaded' && state.runs.length > 0 && visibleRuns.length === 0 ? (
-        <p className="mt-4 text-[13px] text-muted">No runs on this page match that search.</p>
+        <p className="mt-4 text-[13px] text-muted">{strings.noSearchMatch}</p>
       ) : null}
 
       {state.kind === 'loaded' && visibleRuns.length > 0 ? (
@@ -322,17 +328,7 @@ function RunsListView({
             <table className="w-full border-collapse text-[13px]">
               <thead>
                 <tr>
-                  {[
-                    'Started',
-                    'Agent',
-                    'Status',
-                    'Started by',
-                    'Provider / model',
-                    'Duration',
-                    'Tokens',
-                    'Cost',
-                    '',
-                  ].map((heading) => (
+                  {[...strings.columns, ''].map((heading) => (
                     <th
                       key={heading}
                       className="border-b border-border bg-surface-2 px-4 py-[9px] text-left text-[11.5px] font-semibold tracking-[.04em] whitespace-nowrap text-muted uppercase"
@@ -349,6 +345,8 @@ function RunsListView({
                     run={run}
                     catalogs={catalogs}
                     openHref={`${pathname}?${withScreenState(searchParams, { run: run.id }).toString()}`}
+                    strings={strings}
+                    locale={locale}
                   />
                 ))}
               </tbody>
@@ -363,7 +361,7 @@ function RunsListView({
             href={`${pathname}?${withScreenState(searchParams, { cursor: state.nextCursor }).toString()}`}
             className={`${BTN} ${BTN_DEFAULT}`}
           >
-            Next page →
+            {strings.nextPage}
           </Link>
         </div>
       ) : null}
@@ -375,7 +373,15 @@ function RunRow({
   run,
   catalogs,
   openHref,
-}: Readonly<{ run: RunListItem; catalogs: Catalogs; openHref: string }>) {
+  strings,
+  locale,
+}: Readonly<{
+  run: RunListItem;
+  catalogs: Catalogs;
+  openHref: string;
+  strings: RunsStrings;
+  locale: VersionsLocale;
+}>) {
   const agent = resolveResourceReference(run.agentId, catalogs.agents);
   const user = resolveResourceReference(run.initiatingUserId, catalogs.users);
   return (
@@ -389,13 +395,13 @@ function RunRow({
             {agent.label}
           </Link>
         ) : agent.kind === 'deleted' ? (
-          <span className="text-muted">Deleted agent</span>
+          <span className="text-muted">{strings.deletedAgent}</span>
         ) : (
-          <span className="text-muted">Not available</span>
+          <span className="text-muted">{strings.notAvailable}</span>
         )}
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle">
-        <StatusBadge badge={badgeForRunStatus(run.status)} />
+        <StatusBadge badge={badgeForRunStatus(run.status)} locale={locale} />
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle">
         {user.kind === 'resolved' ? (
@@ -403,26 +409,30 @@ function RunRow({
         ) : user.kind === 'absent' ? (
           <span className="text-muted">—</span>
         ) : user.kind === 'deleted' ? (
-          <span className="text-muted">No longer a member</span>
+          <span className="text-muted">{strings.noLongerMember}</span>
         ) : (
-          <span className="text-muted">Not available</span>
+          <span className="text-muted">{strings.notAvailable}</span>
         )}
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle">
-        {formatProviderModel(run.provider, run.model)}
+        {formatProviderModel(run.provider, run.model, strings)}
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle whitespace-nowrap">
-        {formatDuration(run.durationMs, run.status)}
+        {formatDuration(run.durationMs, run.status, strings)}
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle whitespace-nowrap">
         {formatTokenCount(run.usage.totalTokens)}
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle whitespace-nowrap">
-        {formatCostDisplay(run)}
+        {formatCostDisplay(run, strings)}
       </td>
       <td className="border-b border-border px-4 py-[11px] align-middle">
-        <Link href={openHref} className={`${BTN} ${BTN_DEFAULT}`} aria-label={`Open run ${run.id}`}>
-          Open
+        <Link
+          href={openHref}
+          className={`${BTN} ${BTN_DEFAULT}`}
+          aria-label={strings.openRunLabel(run.id)}
+        >
+          {strings.open}
         </Link>
       </td>
     </tr>
@@ -435,8 +445,12 @@ function FilterBar({
   projectOptions,
   userOptions,
   showUserFilter,
+  strings,
+  locale,
   onChange,
 }: Readonly<{
+  strings: RunsStrings;
+  locale: VersionsLocale;
   filters: RunListFilters;
   agentOptions: readonly { readonly id: string; readonly label: string }[];
   projectOptions: readonly { readonly id: string; readonly label: string }[];
@@ -454,13 +468,13 @@ function FilterBar({
     <div className="flex flex-wrap items-end gap-3">
       <label className="text-[13px]">
         <span className="mb-1 block text-[11.5px] font-semibold tracking-[.04em] text-muted uppercase">
-          Search this page
+          {strings.searchThisPage}
         </span>
         <input
           className={`${CONTROL} w-48`}
           type="search"
           value={filters.query ?? ''}
-          placeholder="Run, model, or name"
+          placeholder={strings.searchPlaceholder}
           onChange={(event) => {
             onChange({ query: event.target.value === '' ? null : event.target.value });
           }}
@@ -469,7 +483,7 @@ function FilterBar({
 
       <label className="text-[13px]">
         <span className="mb-1 block text-[11.5px] font-semibold tracking-[.04em] text-muted uppercase">
-          Status
+          {strings.status}
         </span>
         <select
           className={CONTROL}
@@ -478,10 +492,11 @@ function FilterBar({
             onChange({ status: event.target.value === '' ? null : event.target.value });
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">{strings.allStatuses}</option>
           {RUN_STATUS_NAMES.map((status) => (
             <option key={status} value={status}>
-              {status}
+              {/* English keeps the status's own name; Japanese reads as the badge does. */}
+              {locale === 'en' ? status : runStatusLabel(badgeForRunStatus(status).label, locale)}
             </option>
           ))}
         </select>
@@ -489,7 +504,7 @@ function FilterBar({
 
       <label className="text-[13px]">
         <span className="mb-1 block text-[11.5px] font-semibold tracking-[.04em] text-muted uppercase">
-          Agent
+          {strings.agent}
         </span>
         <select
           className={CONTROL}
@@ -498,7 +513,7 @@ function FilterBar({
             onChange({ agentId: event.target.value === '' ? null : event.target.value });
           }}
         >
-          <option value="">All agents</option>
+          <option value="">{strings.allAgents}</option>
           {agentOptions.map((option) => (
             <option key={option.id} value={option.id}>
               {option.label}
@@ -509,7 +524,7 @@ function FilterBar({
 
       <label className="text-[13px]">
         <span className="mb-1 block text-[11.5px] font-semibold tracking-[.04em] text-muted uppercase">
-          Project
+          {strings.project}
         </span>
         <select
           className={CONTROL}
@@ -518,7 +533,7 @@ function FilterBar({
             onChange({ projectId: event.target.value === '' ? null : event.target.value });
           }}
         >
-          <option value="">All projects</option>
+          <option value="">{strings.allProjects}</option>
           {projectOptions.map((option) => (
             <option key={option.id} value={option.id}>
               {option.label}
@@ -530,7 +545,7 @@ function FilterBar({
       {showUserFilter ? (
         <label className="text-[13px]">
           <span className="mb-1 block text-[11.5px] font-semibold tracking-[.04em] text-muted uppercase">
-            Started by
+            {strings.startedBy}
           </span>
           <select
             className={CONTROL}
@@ -539,7 +554,7 @@ function FilterBar({
               onChange({ userId: event.target.value === '' ? null : event.target.value });
             }}
           >
-            <option value="">Everyone</option>
+            <option value="">{strings.everyone}</option>
             {userOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
@@ -561,7 +576,7 @@ function FilterBar({
             onChange({ query: null, status: null, agentId: null, projectId: null, userId: null });
           }}
         >
-          Clear filters
+          {strings.clearFilters}
         </button>
       )}
     </div>

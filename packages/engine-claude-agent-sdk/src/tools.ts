@@ -38,17 +38,17 @@
  * `deny: []` does not thereby re-grant `Bash` to an agent whose `runCommands` is off.
  */
 import {
-  approvalOverlapsGate,
   CLAUDE_GRANT_SHELL_DENIALS,
   CLAUDE_PERMISSION_TOOL_DENIALS,
   claudeDeniedToolsFor,
   claudeReadOnlyGrantDenials,
   claudeRulePath,
+  needsApproval,
 } from '@indx-workspace/contracts/agents';
 import type { AgentPermissions, AgentToolPolicy } from '@indx-workspace/contracts/agents';
 import { normaliseGrants, type EngineFileGrant } from '@agent-workspace/engine';
 
-import type { CompiledSdkOptions } from './options.js';
+export { CLAUDE_APPROVABLE_TOOLS, splitApprovals, unapprovableRules } from './approval-rules.js';
 
 /**
  * The Claude tools that write a file. Claude Code checks all three against `Edit(path)` rules, so
@@ -167,157 +167,91 @@ export function compileClaudeToolPolicy(
   };
 }
 
-/** The text before a glob rule's first `*` or `?`, or `null` for a rule whose tool name has none. */
-function globPrefix(rule: string): string | null {
-  const head = rule.split('(', 1)[0] ?? rule;
-  const index = head.search(/[*?]/u);
-  return index === -1 ? null : head.slice(0, index);
+/**
+ * The shell tool **Run commands** asks about (#2091): `['Bash']` when a command that Claude Code
+ * would stop to ask about should reach a person, else `[]`.
+ *
+ * Without it, Run commands only keeps `Bash` out of `disallowedTools`. In `permissionMode: 'default'`
+ * Claude Code runs a read-only command on its own and asks about one that writes; with nobody to
+ * ask, the SDK refused it and the run still ended Completed. This rule joins the approval gate, so
+ * that call pauses the run and the console shows Approve / Reject (ADR-0145).
+ *
+ * It is not an `ask` rule (see `ClaudeApprovalGate.ask`): Claude Code still runs a read-only
+ * command, and an `allowedTools` rule such as `Bash(npm test)` still runs its command, without
+ * asking. Only a call Claude Code would have refused reaches `canUseTool`.
+ *
+ * Left out when the switch is off, when `Bash` is denied (a read-only file grant denies it) or
+ * auto-approved whole (every command already runs, as the gallery agents declare), when the base
+ * list does not offer it, when a stored `requireApproval` already gates it, and in any mode but
+ * `default`, which is the only mode that asks `canUseTool`.
+ */
+export function claudeCommandApprovalRules(
+  permissions: AgentPermissions,
+  tools: AgentToolPolicy,
+  requireApproval: readonly string[],
+): readonly string[] {
+  if (!permissions.runCommands || tools.permissionMode !== 'default') return [];
+  if (tools.deny.includes('Bash') || tools.autoApprove.includes('Bash')) return [];
+  if (needsApproval(requireApproval, 'Bash')) return [];
+  if (tools.base !== 'claude_code_preset' && !tools.base.includes('Bash')) return [];
+  return ['Bash'];
 }
 
 /**
- * The Claude tools a `requireApproval` rule may name: the ones the SDK sends through `canUseTool` in
- * `permissionMode: 'default'`, plus every connector tool (`mcp__…`).
+ * The allow rule **Write files** adds: `['Edit(//<cwd>/**)']` when the agent may write files, else
+ * `[]`.
  *
- * Pitfall: in `default` mode the SDK runs its read-only tools (`Read`, `Glob`, `Grep`, …) without
- * calling `canUseTool`, so a gate on one of them would be accepted and never asked. This is an
- * allowlist rather than a denylist so a tool a later SDK adds fails closed instead of running
- * ungated.
+ * In `permissionMode: 'default'` Claude Code asks before every `Write`, `Edit` and `NotebookEdit`.
+ * A run has nobody to answer that prompt, so an agent with Write files on had every file write
+ * refused ("Did not run: Write"), its memory file included (ADR-0163). The switch is the person's
+ * grant, as an assigned connector is (`claudeMcpAutoApprovals`), so it is an allow rule. An `Edit`
+ * rule covers all three tools, and it is scoped to the workspace: a write outside it still asks,
+ * so it is still refused.
+ *
+ * A deny rule still wins over it, so a read-only file grant (`Edit(//<cwd>/<path>)` in `deny`) keeps
+ * its path read-only. Left out when the switch is off, when one of the write tools is denied by name
+ * (a read-only switch on another arm, or the stored policy), when the base list offers none of them,
+ * when a stored `requireApproval` gates one of them (an allow rule would run the call without
+ * asking `canUseTool`), and in any mode but `default` (`acceptEdits` already allows these, `plan`
+ * withholds Write files).
  */
-export const CLAUDE_APPROVABLE_TOOLS: readonly string[] = [
-  'Bash',
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'NotebookEdit',
-  'WebFetch',
-  'WebSearch',
+export function claudeWriteFilesApprovals(
+  permissions: AgentPermissions,
+  tools: AgentToolPolicy,
+  requireApproval: readonly string[],
+  cwd: string,
+): readonly string[] {
+  if (!permissions.writeFiles || tools.permissionMode !== 'default') return [];
+  if (CLAUDE_WRITE_TOOLS.some((tool) => tools.deny.includes(tool))) return [];
+  if (CLAUDE_WRITE_TOOLS.some((tool) => needsApproval(requireApproval, tool))) return [];
+  if (
+    tools.base !== 'claude_code_preset' &&
+    !CLAUDE_WRITE_TOOLS.some((tool) => tools.base.includes(tool))
+  ) {
+    return [];
+  }
+  return [`Edit(/${claudeRulePath(cwd)}/**)`];
+}
+
+/**
+ * Paths in the workspace Write files never reaches, because Claude Code loads them on the next run
+ * (`settingSources: ['project']`): its settings and skills, `.mcp.json`, and project memory
+ * (`CLAUDE.md`, also in a subdirectory). Mirrors the ejected program's `WORKSPACE_KEPT`. Without
+ * them, content the agent read could write instructions that every later turn in the session
+ * obeys, unseen in the chat.
+ */
+const CLAUDE_WORKSPACE_KEPT: readonly string[] = [
+  '.claude/**',
+  '.mcp.json',
+  'CLAUDE.md',
+  '**/CLAUDE.md',
 ];
 
 /**
- * Is `rule` a connector gate Claude Code's own rule matcher can match: an exact connector tool name,
- * or exactly `mcp__<server>__*`? A partial glob (`mcp__gh__*_issue`, `mcp__gh__x?y`) is not: the
- * `ask` rule a gated run compiles it to would never match, so a workspace allow rule would settle
- * the call before `canUseTool`.
+ * The deny rules that go with {@link claudeWriteFilesApprovals}: the same rules, for the same
+ * `cwd`, that keep the files Claude Code loads as instructions out of the workspace allow rule. A
+ * deny wins over the allow rule.
  */
-function isConnectorGate(rule: string): boolean {
-  if (!rule.startsWith('mcp__')) return false;
-  const rest = rule.slice('mcp__'.length);
-  if (!/[*?]/u.test(rest)) return true;
-  const server = rest.slice(0, -'__*'.length);
-  return rest.endsWith('__*') && !/[*?]/u.test(server) && !server.includes('__');
-}
-
-/**
- * The `requireApproval` rules the compile refuses, in order: a tool `canUseTool` would never be
- * asked about (see {@link CLAUDE_APPROVABLE_TOOLS}), or a connector glob Claude Code cannot match
- * (see {@link isConnectorGate}).
- */
-export function unapprovableRules(requireApproval: readonly string[]): readonly string[] {
-  return requireApproval.filter(
-    (rule) => !isConnectorGate(rule) && !CLAUDE_APPROVABLE_TOOLS.includes(rule),
-  );
-}
-
-/**
- * Move out of `autoApprove` every rule that could approve a tool `requireApproval` gates.
- *
- * `allowedTools` bypasses `canUseTool`: a rule left in it would auto-approve a gated call without
- * asking, which is what an assigned connector's `mcp__<server>__*` does to a gated tool of that
- * server, and what an `Edit(//…)` rule does to a gated `Write` (Claude Code checks every file write
- * against `Edit` rules). A rule is moved when it overlaps a gated rule by `approvalOverlapsGate`, or
- * when it and a gated rule are both globs whose literal prefixes are prefix-compatible, which
- * over-approximates glob intersection (`mcp__gh__a*` against `mcp__gh__*b`) and closes the partial
- * glob case `conflictingApprovalRules` leaves open. Over-moving only costs an extra decision in
- * `canUseTool`; under-moving would skip an approval.
- *
- * `deferred` keeps the moved rules in order: `canUseTool` still allows a tool they cover that no
- * gated rule names, so an unattended run keeps what the wildcard used to approve.
- */
-export function splitApprovals(
-  autoApprove: readonly string[],
-  requireApproval: readonly string[],
-): { readonly allowedTools: readonly string[]; readonly deferred: readonly string[] } {
-  if (requireApproval.length === 0) return { allowedTools: autoApprove, deferred: [] };
-  const gatedPrefixes = requireApproval.flatMap((rule) => globPrefix(rule) ?? []);
-  const overlapsGate = (rule: string): boolean => {
-    if (requireApproval.some((gated) => approvalOverlapsGate(rule, gated))) return true;
-    const prefix = globPrefix(rule);
-    return (
-      prefix !== null &&
-      gatedPrefixes.some((gated) => gated.startsWith(prefix) || prefix.startsWith(gated))
-    );
-  };
-  return {
-    allowedTools: autoApprove.filter((rule) => !overlapsGate(rule)),
-    deferred: autoApprove.filter(overlapsGate),
-  };
-}
-
-/**
- * Does `rule` deny editing `target`, an absolute path in Claude's POSIX form?
- *
- * Read the way Claude Code reads it: only an `Edit(…)` path rule is consulted for a file write, and
- * only `//` makes its path absolute. Any other anchor answers `false`, so a rule this check cannot
- * place counts as protecting nothing rather than as protecting the grant.
- */
-function editRuleCovers(rule: string, target: string): boolean {
-  if (!rule.startsWith('Edit(//') || !rule.endsWith(')')) return false;
-  const pattern = rule.slice('Edit(/'.length, -1);
-  if (pattern.endsWith('/**')) {
-    const root = pattern.slice(0, -3);
-    return target === root || target.startsWith(`${root}/`);
-  }
-  return target === pattern;
-}
-
-/**
- * Does a compiled Claude options object let the agent write `path` (workspace-relative)?
- *
- * The adapter's own reading of its own tool grammar, which is what the conformance kit asks when it
- * checks that a read-only grant is not writable and that a permission switch is honoured: a write
- * is possible when no `Edit(//…)` rule covers the path and some of {@link CLAUDE_WRITE_TOOLS} is not
- * denied by name, or when a shell tool is not denied at all. A path this adapter cannot normalise answers `false` — nothing the
- * engine could be told to write there would be inside the workspace.
- */
-export function claudeOptionsAllowWrite(options: CompiledSdkOptions, path: string): boolean {
-  const normalised = normaliseGrants([{ kind: 'file', path, access: 'read-write' }]);
-  if (!normalised.ok) return false;
-  const target = `${claudeRulePath(options.cwd)}/${normalised.grants[0]?.path ?? ''}`;
-  const deny = options.disallowedTools;
-  const editDenied = deny.some((rule) => editRuleCovers(rule, target));
-  const writeToolsRemoved = CLAUDE_WRITE_TOOLS.every((tool) => deny.includes(tool));
-  if (!editDenied && !writeToolsRemoved) return true;
-  return !CLAUDE_SHELL_TOOLS.every((tool) => deny.includes(tool));
-}
-
-/**
- * The Claude tools each of §17 Step 4's four switches governs, so the conformance kit can ask an
- * adapter whether its compiled options still honour one.
- *
- * It is the *read-back* half of {@link compileClaudeToolPolicy}, and it is deliberately not derived
- * from `CLAUDE_PERMISSION_TOOL_DENIALS` by a loop over the same table: the kit's question is "does
- * this compile forbid what the switch forbids", and answering it from the very table the compile
- * used would make the scenario a tautology. It asks about one representative tool per switch, by
- * name, the way a person checking the run would.
- */
-const CLAUDE_PERMISSION_WITNESS_TOOLS = {
-  readFiles: 'Read',
-  writeFiles: 'Write',
-  runCommands: 'Bash',
-  unrestrictedNetwork: 'WebFetch',
-} as const;
-
-/**
- * Does a compiled Claude options object still allow what this permission switch governs?
- *
- * The conformance kit's `permissionAllowed`. A switch that is off must leave its witness tool
- * denied outright — not narrowed over a path, not merely un-approved, since `allowedTools` grants
- * and does not restrict (R-01 §10).
- */
-export function claudeOptionsAllowPermission(
-  options: CompiledSdkOptions,
-  permission: keyof typeof CLAUDE_PERMISSION_WITNESS_TOOLS,
-): boolean {
-  const tool = CLAUDE_PERMISSION_WITNESS_TOOLS[permission];
-  return !options.disallowedTools.includes(tool);
+export function claudeWriteFilesDenials(cwd: string): readonly string[] {
+  return CLAUDE_WORKSPACE_KEPT.map((path) => `Edit(/${claudeRulePath(cwd)}/${path})`);
 }

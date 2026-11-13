@@ -3,7 +3,8 @@
  * §05 and §06 Phase 5). The workspace is the principal's and nothing else; a credential goes to the
  * secret store and is never part of a response, an audit row or an error. Every successful write is
  * audited once, and so is every test. `test` and `browse` reach the customer's storage only through
- * `openConnectionStore`, which owns the egress guard, the pinned lookup and the read-only wrapper.
+ * `openConnectionStore`, which owns the egress guard, the pinned lookup or the outbound proxy, and
+ * the read-only wrapper.
  */
 import {
   CreateStorageConnectionInputSchema,
@@ -20,22 +21,22 @@ import {
   type StorageConnectionTestOutcome,
 } from '@indx-workspace/contracts/storage-connections';
 import { parseStorageUrl } from '@indx-workspace/contracts/storage-url';
+import { toObjectKey, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
+
+import { formatIssues, problem, type ApiResult } from '../http/result';
+import type { Principal } from '../identity';
+import { isUuid } from '../secrets';
 import {
   ConnectionStoreError,
+  folderFailure,
   openConnectionStore,
   resolveFileRoot,
   storageProviderStatus,
   storageRefusalClass,
-  toObjectKey,
-  UnsafeObjectKeyError,
   type ObjectPage,
-} from '@agent-workspace/core/storage';
-
-import { isUnderAllowedPrefix } from '../agent-versions/storage-grants';
-import { formatIssues, problem, type ApiResult } from '../http/result';
-import { PROBE_TIMEOUT_MS } from '../models/probe';
-import type { Principal } from '../rbac/principal';
-import { isUuid } from '../secrets/contract';
+  type ObjectStore,
+} from '../storage/objects';
+import { isUnderAllowedPrefix } from './prefixes';
 import { log } from '../telemetry/logger';
 import type { StorageConnections, StorageConnectionsRuntime } from './runtime';
 import { credentialTarget } from './store';
@@ -206,27 +207,27 @@ export async function deleteStorageConnection(
 }
 
 /**
- * Open the connection read-only with its stored credential and list one page. Nothing is dialled
- * until `openConnectionStore` has checked the endpoint; any failure is thrown for the caller to map.
- * `signal` aborts the open and the listing once the probe has timed out.
+ * Open the connection read-only with its stored credential. Nothing is dialled until
+ * `openConnectionStore` has checked the endpoint; any failure is thrown for the caller to map.
+ * `signal` aborts the open and every listing once the probe has timed out.
  */
-async function listConnection(
+async function openConnection(
   runtime: StorageConnectionsRuntime,
   store: WorkspaceStorageConnectionsStore,
   connection: StorageConnectionResource,
-  prefix: string,
-  options: { readonly cursor?: string; readonly limit?: number; readonly signal: AbortSignal },
-): Promise<ObjectPage> {
+  signal: AbortSignal,
+): Promise<ObjectStore> {
   const credential =
     connection.provider === 'file'
       ? ({ provider: 'file' } as const)
       : await store.credential(connection.id, connection.url);
   if (credential === null) throw new ConnectionStoreError('storage_connection_credential_required');
-  const objects = await openConnectionStore(connection.url, credential, {
+  return openConnectionStore(connection.url, credential, {
     writable: false,
     fileRoots: runtime.fileRoots,
     egress: runtime.egress,
-    signal: options.signal,
+    ...(runtime.proxy === undefined ? {} : { proxy: runtime.proxy }),
+    signal,
     // Counts and the id only: a name or path could carry the target of a link.
     onSkipped: (counts) =>
       log.warn('[storage-connections] a listing skipped entries', {
@@ -234,10 +235,30 @@ async function listConnection(
         ...counts,
       }),
   });
-  return objects.listPage(prefix, options);
 }
 
-/** `work` until `PROBE_TIMEOUT_MS`; then its signal is aborted and the probe is `unreachable`. */
+/**
+ * The allowed folders that list nothing. An object store has no folders, only key prefixes, so a
+ * missing folder and an empty one cannot be told apart; neither is an error.
+ */
+async function emptyFolders(objects: ObjectStore, folders: readonly string[], signal: AbortSignal) {
+  // One entry per allowed folder: a test never lists beyond what browse may show.
+  const found = await Promise.all(
+    folders.map(async (folder) => {
+      const page = await objects.listPage(folder, { limit: 1, signal });
+      return page.entries.length === 0 && page.cursor === null ? folder : null;
+    }),
+  );
+  return found.filter((folder) => folder !== null);
+}
+
+/**
+ * How long a connection test or browse waits for the customer's storage before it answers
+ * `unreachable`. The same budget as the model probe, named here because it is this route's own.
+ */
+const CONNECTION_PROBE_TIMEOUT_MS = 10_000;
+
+/** `work` until `CONNECTION_PROBE_TIMEOUT_MS`; then its signal is aborted and the probe is `unreachable`. */
 function withProbeTimeout<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -245,13 +266,34 @@ function withProbeTimeout<T>(work: (signal: AbortSignal) => Promise<T>): Promise
     timer = setTimeout(() => {
       reject(new ConnectionStoreError('storage_connection_unreachable'));
       controller.abort();
-    }, PROBE_TIMEOUT_MS);
+    }, CONNECTION_PROBE_TIMEOUT_MS);
   });
   return Promise.race([work(controller.signal), expired]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * A `file` connection's own failure, logged by its reason code alone: its message names the
+ * customer's key. `null` for any other error.
+ */
+function loggedFolderFailure(
+  route: 'test' | 'browse',
+  connectionId: string,
+  error: unknown,
+): ReturnType<typeof folderFailure> {
+  const failure = folderFailure(error);
+  if (failure !== null) {
+    log.warn(`[storage-connections] ${route}: the connection's folder failed`, {
+      connectionId,
+      reason: failure.reason,
+    });
+  }
+  return failure;
+}
+
 /** Only the code or the status is read: the message and `cause` may echo the provider's reply. */
-function testOutcome(error: unknown): StorageConnectionTestOutcome {
+function testOutcome(connectionId: string, error: unknown): StorageConnectionTestOutcome {
+  const folder = loggedFolderFailure('test', connectionId, error);
+  if (folder !== null) return { ok: false, code: folder.refusal };
   if (error instanceof ConnectionStoreError) {
     return error.code === 'storage_connection_endpoint_forbidden'
       ? { ok: false, code: 'forbidden' }
@@ -277,15 +319,18 @@ export async function testStorageConnection(
   const store = runtime.store.forWorkspace(principal.workspaceId);
   const connection = isUuid(id) ? await store.get(id) : null;
   if (connection === null) return refusal('storage_connection_not_found');
-  let outcome: StorageConnectionTestOutcome = { ok: true };
+  let outcome: StorageConnectionTestOutcome;
   try {
-    // One entry of an allowed folder: a test never lists beyond what browse may show.
-    const [folder = ''] = connection.allowedPrefixes;
-    await withProbeTimeout((signal) =>
-      listConnection(runtime, store, connection, folder, { limit: 1, signal }),
+    const empty = await withProbeTimeout(async (signal) =>
+      emptyFolders(
+        await openConnection(runtime, store, connection, signal),
+        connection.allowedPrefixes,
+        signal,
+      ),
     );
+    outcome = empty.length === 0 ? { ok: true } : { ok: true, emptyFolders: empty };
   } catch (error) {
-    outcome = testOutcome(error);
+    outcome = testOutcome(connection.id, error);
   }
   await audit(runtime, principal, 'storage-connection-tested', connection);
   return { status: 200, body: outcome };
@@ -325,8 +370,18 @@ function decodeQueryValue(value: string): string | null {
   }
 }
 
-function browseFailure(error: unknown): ApiResult {
+function browseFailure(connectionId: string, error: unknown): ApiResult {
   if (error instanceof ConnectionStoreError) return refusal(error.code);
+  // A key resolved outside the folder is refused like a forbidden endpoint; anything else the
+  // folder failed with (an I/O error, the walk cap) is unreachable.
+  const folder = loggedFolderFailure('browse', connectionId, error);
+  if (folder !== null) {
+    return refusal(
+      folder.reason === 'outside_root'
+        ? 'storage_connection_endpoint_forbidden'
+        : 'storage_connection_unreachable',
+    );
+  }
   // A key the store's guard refuses (`%2e%2e` and the like) is a folder this API will not show.
   if (error instanceof UnsafeObjectKeyError)
     return refusal('storage_connection_prefix_not_allowed');
@@ -380,17 +435,14 @@ export async function browseStorageConnection(
   const cursor = new URL(requestUrl).searchParams.get('cursor');
   let page: ObjectPage;
   try {
-    page = await withProbeTimeout((signal) =>
-      listConnection(
-        runtime,
-        store,
-        connection,
+    page = await withProbeTimeout(async (signal) =>
+      (await openConnection(runtime, store, connection, signal)).listPage(
         parsed.prefix,
         cursor === null || cursor === '' ? { signal } : { cursor, signal },
       ),
     );
   } catch (error) {
-    return browseFailure(error);
+    return browseFailure(connection.id, error);
   }
   // Whatever the cursor was, nothing outside the prefix is shown.
   const entries = page.entries

@@ -1,0 +1,42 @@
+{
+  "conversations": [
+    {
+      "when": "into one new page",
+      "turns": [
+        { "tool": "page_list", "input": {} },
+        { "tool": "page_get", "input": { "id": "{{prompt.uuid.0}}" } },
+        { "tool": "page_get", "input": { "id": "{{prompt.uuid.1}}" } },
+        { "tool": "page_get", "input": { "id": "{{prompt.uuid.2}}" } },
+        {
+          "tool": "page_create",
+          "input": {
+            "parent": "{{prompt.uuid.0}}",
+            "space": "{{result.space}}",
+            "title": "Summary",
+            "markdown": "This space has three pages.\n\n- Engineering handbook: how the team works.\n- Onboarding: the first week of a new engineer.\n- Deploys: how a change reaches production."
+          }
+        },
+        { "text": "I summarized the three pages into the new page Summary." }
+      ]
+    },
+    {
+      "when": "新しいページにまとめてください",
+      "turns": [
+        { "tool": "page_list", "input": {} },
+        { "tool": "page_get", "input": { "id": "{{prompt.uuid.0}}" } },
+        { "tool": "page_get", "input": { "id": "{{prompt.uuid.1}}" } },
+        { "tool": "page_get", "input": { "id": "{{prompt.uuid.2}}" } },
+        {
+          "tool": "page_create",
+          "input": {
+            "parent": "{{prompt.uuid.0}}",
+            "space": "{{result.space}}",
+            "title": "Summary",
+            "markdown": "This space has three pages.\n\n- Engineering handbook: how the team works.\n- Onboarding: the first week of a new engineer.\n- Deploys: how a change reaches production."
+          }
+        },
+        { "text": "I summarized the three pages into the new page Summary." }
+      ]
+    }
+  ]
+}

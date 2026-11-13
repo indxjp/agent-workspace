@@ -71,7 +71,7 @@ describe('define types', () => {
 
   it('has exact nested key sets', () => {
     expectTypeOf<keyof DefinePermissions>().toEqualTypeOf<
-      'readFiles' | 'writeFiles' | 'runCommands' | 'unrestrictedNetwork'
+      'readFiles' | 'writeFiles' | 'memory' | 'runCommands' | 'unrestrictedNetwork'
     >();
     expectTypeOf<keyof DefineLimits>().toEqualTypeOf<'maxTurns' | 'maxBudgetUsd'>();
     expectTypeOf<keyof Exclude<ModelReference, string>>().toEqualTypeOf<'connection' | 'id'>();

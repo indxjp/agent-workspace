@@ -1,8 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
-
 import { CREDENTIAL_INPUT_PROPS, ONE_TIME_CODE_INPUT_PROPS } from './credential-input';
 
 /** `apps/web`, the tree the guard below scans. */
@@ -113,7 +111,7 @@ describe('credential inputs across apps/web', () => {
       'app/signin/page.tsx',
       'components/models/add-provider-screen.tsx',
       'components/models/provider-detail.tsx',
-      'components/resources/resource-screens.tsx',
+      'components/resources/connectors-screens.tsx',
       'components/setup/setup-wizard.tsx',
       'components/shares/share-dialog.tsx',
     ]) {

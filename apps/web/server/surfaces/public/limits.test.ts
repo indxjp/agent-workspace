@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { MIN_SESSION_SECRET_LENGTH } from '../../auth/session';
 import {
+  admitSurfaceSession,
   admitSurfaceVisitorWrite,
   admitVisitorWrite,
   DEFAULT_TURNS_PER_CONVERSATION,
@@ -103,6 +104,7 @@ describe('admitSurfaceVisitorWrite, the run API hook (issue #622)', () => {
       surfaces: {
         kind: 'serving',
         runtime: {
+          env: () => process.env,
           resolve: () => Promise.reject(new Error('the hook never resolves a name')),
           open: () => Promise.reject(new Error('the hook never opens a session')),
           checkModel: () => Promise.reject(new Error('the hook never checks a model')),
@@ -133,6 +135,29 @@ describe('admitSurfaceVisitorWrite, the run API hook (issue #622)', () => {
     await expect(turn()).resolves.toMatchObject({ code: 'surface_turn_limit_reached' });
   });
 
+  it('identifies the client by the installed runtime’s environment', async () => {
+    installTestDomains({
+      surfaces: {
+        kind: 'serving',
+        runtime: {
+          env: () => PROXIED,
+          resolve: () => Promise.reject(new Error('the hook never resolves a name')),
+          open: () => Promise.reject(new Error('the hook never opens a session')),
+          checkModel: () => Promise.reject(new Error('the hook never checks a model')),
+          visitorSurface: () => Promise.resolve({ surface: PLAIN }),
+          servedSurfaces: () => Promise.reject(new Error('the limits never list surfaces')),
+        },
+      },
+    });
+    const turn = () =>
+      admitSurfaceVisitorWrite(WORKSPACE, crypto.randomUUID(), 'turn', client('203.0.113.7'));
+    for (let sent = 0; sent < SURFACE_RATE_LIMITS.turnsPerClient; sent += 1) {
+      await expect(turn()).resolves.toBeNull();
+    }
+    // Without the trusted proxy hops it would count against the shared bucket, ten times larger.
+    await expect(turn()).resolves.toMatchObject({ code: 'surface_rate_limited' });
+  });
+
   it('caps a visitor of a surface that is no longer served at the default', () => {
     const turn = (minute: number) =>
       admitVisitorWrite(
@@ -149,5 +174,17 @@ describe('admitSurfaceVisitorWrite, the run API hook (issue #622)', () => {
     expect(turn(DEFAULT_TURNS_PER_CONVERSATION)).toMatchObject({
       code: 'surface_turn_limit_reached',
     });
+  });
+});
+
+describe('opening surface sessions per client (issue #622)', () => {
+  it('counts each proxied client on its own, and shares one bucket without a proxy chain', () => {
+    for (let i = 0; i < SURFACE_RATE_LIMITS.sessionsPerClient; i += 1) {
+      expect(admitSurfaceSession(client('203.0.113.7'), NOW, PROXIED).admitted).toBe(true);
+    }
+    expect(admitSurfaceSession(client('203.0.113.7'), NOW, PROXIED).admitted).toBe(false);
+    expect(admitSurfaceSession(client('203.0.113.8'), NOW, PROXIED).admitted).toBe(true);
+    // Without a trusted proxy chain the same address is one of many in the shared bucket.
+    expect(admitSurfaceSession(client('203.0.113.7'), NOW, {}).admitted).toBe(true);
   });
 });

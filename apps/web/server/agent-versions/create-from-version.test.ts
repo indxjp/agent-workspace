@@ -5,7 +5,12 @@ import { CreateAgentFromVersionResponseSchema } from '@indx-workspace/contracts/
 import { createInMemoryAgentStoreProvider } from '../agents/memory-store';
 import type { WorkspaceAgentStore } from '../agents/store';
 import { createAgentFromVersion } from './create-from-version';
-import { FIXTURE_POLICY, fixtureSurface, fromVersionRequest } from './fixtures';
+import {
+  FIXTURE_PERMISSIONS,
+  FIXTURE_POLICY,
+  fixtureSurface,
+  fromVersionRequest,
+} from './fixtures';
 import {
   createInMemoryAgentVersionStoreProvider,
   type InMemoryAgentVersionStoreProvider,
@@ -43,6 +48,93 @@ async function harness(knownPrincipalIds?: ReadonlySet<string>): Promise<Harness
 }
 
 describe('createAgentFromVersion', () => {
+  it('keeps the validated version and environment when the caller replaces them during agent creation', async () => {
+    const underlyingAgents = createInMemoryAgentStoreProvider();
+    let enter = (): void => {
+      throw new Error('the entry gate was not initialised');
+    };
+    let release = (): void => {
+      throw new Error('the release gate was not initialised');
+    };
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const proceed = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const provider = createInMemoryAgentVersionStoreProvider({
+      agents: {
+        forWorkspace(workspaceId) {
+          const agents = underlyingAgents.forWorkspace(workspaceId);
+          return {
+            ...agents,
+            async create(input, owner) {
+              enter();
+              await proceed;
+              return agents.create(input, owner);
+            },
+          };
+        },
+      },
+      knownPrincipalIds: new Set([OWNER.principalId]),
+    });
+    const store = await provider.forWorkspace(WORKSPACE);
+    if (store === null) throw new Error('the memory store answers every workspace');
+    type FirstInput = Parameters<WorkspaceAgentVersionStore['createAgentWithFirstVersion']>[0];
+    const version = {
+      ...fromVersionRequest().version,
+      createdByPrincipalId: OWNER.principalId,
+    };
+    const input: {
+      agent: FirstInput['agent'];
+      version: FirstInput['version'];
+      environment: FirstInput['environment'];
+    } = {
+      agent: {
+        name: 'Original agent',
+        instructions: 'Answer support mail.',
+        model: null,
+        permissions: FIXTURE_PERMISSIONS,
+        policy: null,
+        references: {
+          skillIds: [],
+          connectorIds: [],
+          files: [],
+          modelConnectionId: null,
+          runtimeProfileId: null,
+        },
+        ownerPrincipalId: OWNER.principalId,
+        createdBy: null,
+      },
+      version,
+      environment: 'local',
+    };
+    const pending = store.createAgentWithFirstVersion(input);
+    await entered;
+    try {
+      input.version = {
+        ...version,
+        summary: 'Unvalidated replacement',
+        body: fromVersionRequest({ subagents: ['missing'] }).version.body,
+        createdByPrincipalId: 'unknown-principal',
+      };
+      input.environment = 'production';
+    } finally {
+      release();
+    }
+    const created = await pending;
+    if (created.kind !== 'created') throw new Error(`expected created, got ${created.kind}`);
+    expect(created.version).toMatchObject({
+      summary: version.summary,
+      createdByPrincipalId: OWNER.principalId,
+    });
+    expect(created.version.body).toEqual(version.body);
+    expect(created.pointer.environment).toBe('local');
+    expect((await store.list(created.agent.id))?.pointers).toMatchObject([
+      { environment: 'local', number: 1 },
+    ]);
+  });
+
   it('creates the agent, version 1 and local -> 1 in one write', async () => {
     const h = await harness();
     const result = await createAgentFromVersion(

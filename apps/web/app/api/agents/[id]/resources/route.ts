@@ -1,8 +1,7 @@
-import { applicationContext } from '../../../../../server/application-context';
-import { agentNotFound, refuseBuiltinWrite } from '../../../../../server/agents/handlers';
-import type { BuiltinAgentOperation } from '../../../../../contracts/agents';
 import { problem, type ApiResult } from '../../../../../server/http/result';
-import { isUuid, parseAssignments } from '../../../../../server/agents/contract';
+import { agentNotFound } from '../../../../../server/agents/handlers';
+import { parseAssignments } from '../../../../../server/agents/contract';
+import { agentResourcesOwnership as ownershipOf } from '../../../../../server/agents/resource-ownership';
 import {
   readAgentIdParam,
   readJsonBody,
@@ -12,33 +11,6 @@ import { route } from '../../../../../server/http/route';
 import { saveConsoleEdit } from '../../../../../server/agent-versions/http';
 import { judgeAgent } from '../../../../../server/policy-ceiling/ceiling';
 import { requireResourceAccess } from '../../../../../server/resources/authorise';
-import type { OwnershipResolver } from '../../../../../server/rbac/http';
-
-/**
- * Issue #117: load the agent within the caller's workspace, answer an indistinguishable 404 when
- * it is absent, and only then let `decide()` compare `created_by` against the caller. Built as a
- * bare {@link OwnershipResolver} rather than through `resources/item-ownership.ts`'s
- * `resolverForRow`: unlike the sibling `[id]/route.ts`, this route calls `requireResourceAccess`
- * before any workspace-scoped store is resolved, so the id is looked up straight from the
- * installed agents runtime once the resolver is handed the verified `principal`'s workspace,
- * rather than from a store closed over one.
- */
-function ownershipOf(id: unknown, operation: BuiltinAgentOperation): OwnershipResolver {
-  return async (principal) => {
-    const runtime = applicationContext()?.agents ?? null;
-    if (runtime === null || !isUuid(id)) {
-      return { kind: 'refuse', result: agentNotFound() };
-    }
-    const row = await runtime.agents.forWorkspace(principal.workspaceId).get(id);
-    if (row === null) return { kind: 'refuse', result: agentNotFound() };
-    const readOnly = refuseBuiltinWrite(row, operation);
-    if (readOnly !== null) return { kind: 'refuse', result: readOnly };
-    return {
-      kind: 'ownership',
-      ownership: principal.ownerPrincipalId === row.ownerPrincipalId ? 'own' : 'other',
-    };
-  };
-}
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';

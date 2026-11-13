@@ -18,6 +18,7 @@ import {
 
 import {
   createAuthenticatedGateway,
+  firstRefusalOf,
   type GatewayAdmission,
   type GatewayRunResolver,
   type UsageRecorder,
@@ -28,8 +29,12 @@ import {
   createDatabaseGatewayRunResolver,
   createDatabaseUsageRecorder,
 } from './database.js';
-import { parsePricingCatalog, type PricingCatalog } from './pricing.js';
-import { createProviderRegistry, type ProviderRegistryOptions } from './providers/registry.js';
+import { createRunCeilingAdmission } from './run-ceiling.js';
+import {
+  createProviderRegistry,
+  createScriptedModels,
+  type ProviderRegistryOptions,
+} from './providers/registry.js';
 import { createRouter, ROUTES } from './router.js';
 import { createGatewayServer, requestLogger } from './server.js';
 import {
@@ -40,7 +45,6 @@ import { createRunTokenCodec } from './tokens/run-token.js';
 import {
   createDatabaseAwControlResolver,
   handleAwControlRequest,
-  parseControlPlaneOrigin,
   type AwControlResolver,
 } from './tools/aw-control.js';
 import { createDatabaseToolResolver, type ToolConnectorResolver } from './tools/authorize.js';
@@ -52,7 +56,16 @@ import {
   handleToolSandboxRequest,
   type ToolSandboxResolver,
 } from './tools/sandbox.js';
-import type { GatewayRoute, GatewayRouter } from './types.js';
+import { loggedFetch } from './upstream-log.js';
+import { createGoogleAdcTokenSource } from './providers/google-adc-token.js';
+import { createGoogleIdTokenSource } from './providers/google-id-token.js';
+import {
+  readGatewayServerSettings,
+  readGatewaySettings,
+  type GatewaySettings,
+  startFailureFields,
+} from './settings.js';
+import type { GatewayRoute, GatewayRouter, TokenSource } from './types.js';
 
 export type {
   AnthropicMessageRequest,
@@ -95,6 +108,8 @@ export type GatewayApplicationDependencies = {
   readonly usage?: UsageRecorder;
   /** `request` is the one whose usage failed to settle, for its trace id. */
   readonly onUsageError?: (error: unknown, request: Request) => void;
+  /** Refuses a model call of a run that has spent its spend ceiling (ADR-0162); asked first. */
+  readonly runCeiling?: GatewayAdmission;
   /** Refuses a model call over the workspace's daily cost cap; without it no call is gated. */
   readonly dailyCost?: GatewayAdmission;
   /** Serves `POST /v1/tools/:connectorId/mcp`. Without it that path is an unknown route. */
@@ -105,6 +120,8 @@ export type GatewayApplicationDependencies = {
   readonly toolSandboxFetch?: typeof fetch;
   /** The runner manager's token, for a tool sandbox the manager serves (ADR-0132). */
   readonly runnerManagerToken?: string;
+  /** Mints the Google ID token a Cloud Run tool sandbox (`*.run.app`) requires; see `GATEWAY_TOOL_SANDBOX_AUTH`. */
+  readonly toolSandboxIdToken?: (audience: string) => Promise<string>;
   /** Runs `postgres` tool calls and owns their pools; one is created when this is omitted. */
   readonly postgres?: PostgresToolExecutor;
   /**
@@ -140,7 +157,12 @@ export function createGatewayApplication(
     dependencies.usage,
     dependencies.onUsageError,
     undefined,
-    dependencies.dailyCost,
+    // ADR-0162 decision 1: the run ceiling needs no read of its own, so it is asked first.
+    firstRefusalOf(
+      [dependencies.runCeiling, dependencies.dailyCost].filter(
+        (admission): admission is GatewayAdmission => admission !== undefined,
+      ),
+    ),
   );
   const { tools, toolSandbox } = dependencies;
   const postgres = dependencies.postgres ?? createPostgresExecutor();
@@ -168,6 +190,9 @@ export function createGatewayApplication(
               ...(dependencies.toolSandboxFetch === undefined
                 ? {}
                 : { fetch: dependencies.toolSandboxFetch }),
+              ...(dependencies.toolSandboxIdToken === undefined
+                ? {}
+                : { serverlessIdToken: dependencies.toolSandboxIdToken }),
             });
       }
       if (pathname === GATEWAY_TOOL_SANDBOX_ENDPOINT_ROUTE.path) {
@@ -182,6 +207,9 @@ export function createGatewayApplication(
               ...(dependencies.toolSandboxFetch === undefined
                 ? {}
                 : { fetch: dependencies.toolSandboxFetch }),
+              ...(dependencies.toolSandboxIdToken === undefined
+                ? {}
+                : { serverlessIdToken: dependencies.toolSandboxIdToken }),
             });
       }
       // Before the connector route: `aw-control` is the platform's, so no workspace connector can
@@ -224,14 +252,6 @@ function listen(server: ReturnType<typeof createGatewayServer>, port: number, ho
   });
 }
 
-function requireTokenSecret(env: Readonly<Record<string, string | undefined>>): string {
-  const tokenSecret = env['GATEWAY_TOKEN_SECRET'];
-  if (tokenSecret === undefined || tokenSecret.length < 32) {
-    throw new Error('GATEWAY_TOKEN_SECRET must contain at least 32 characters.');
-  }
-  return tokenSecret;
-}
-
 export type GatewayFromEnvironment = {
   readonly application: GatewayRouter;
   readonly close: () => Promise<void>;
@@ -245,9 +265,37 @@ export type GatewayFromEnvironment = {
  */
 export async function createGatewayFromEnvironment(
   env: Readonly<Record<string, string | undefined>> = process.env,
+  /**
+   * The cloud identity keyless (`vertex`) connections use. Together with `GATEWAY_VERTEX_PROJECT_ID`,
+   * the one project it may act on, it enables them; without either they are refused with a 503.
+   */
+  tokens?: TokenSource,
 ): Promise<GatewayFromEnvironment> {
-  const tokenSecret = requireTokenSecret(env);
-  const controlPlaneOrigin = parseControlPlaneOrigin(env['GATEWAY_CONTROL_PLANE_ORIGIN']);
+  // Every setting is parsed before the database opens, so a bad value stops start-up without a
+  // connection and names each refused variable (refactoring part 03).
+  return await createGatewayFromSettings(readGatewaySettings(env), env, tokens);
+}
+
+/**
+ * {@link createGatewayFromEnvironment} over settings already parsed. `env` is passed on only to the
+ * database and the master key, whose readers live in `packages/core`.
+ */
+async function createGatewayFromSettings(
+  settings: GatewaySettings,
+  env: Readonly<Record<string, string | undefined>>,
+  tokens: TokenSource | undefined,
+): Promise<GatewayFromEnvironment> {
+  const {
+    tokenSecret,
+    pricing,
+    toolSandboxAuth,
+    controlPlaneOrigin,
+    runnerManagerToken,
+    vertexProjectId,
+    scriptedModelsDir,
+  } = settings;
+  const scripted =
+    scriptedModelsDir === undefined ? null : createScriptedModels({ dir: scriptedModelsDir });
   const database = await openDatabaseRoot(env);
   let secrets: SecretsService;
   try {
@@ -256,26 +304,32 @@ export async function createGatewayFromEnvironment(
     await database.close();
     throw error;
   }
-  let pricing: PricingCatalog;
-  try {
-    pricing = parsePricingCatalog(env['GATEWAY_PRICING_JSON']);
-  } catch (error) {
-    await Promise.all([database.close(), secrets.close()]);
-    throw error;
-  }
   const postgres = createPostgresExecutor();
-  const runnerManagerToken = env['RUNNER_MANAGER_TOKEN'] ?? '';
+  const ledger = createDatabaseDailyCostLedger(database);
   const application = createGatewayApplication({
-    ...(runnerManagerToken === '' ? {} : { runnerManagerToken }),
+    ...(toolSandboxAuth === undefined ? {} : { toolSandboxIdToken: createGoogleIdTokenSource() }),
+    ...(runnerManagerToken === undefined ? {} : { runnerManagerToken }),
     ...(controlPlaneOrigin === undefined ? {} : { controlPlaneOrigin }),
-    resolver: createDatabaseGatewayRunResolver(database, secrets),
+    resolver: createDatabaseGatewayRunResolver(
+      database,
+      secrets,
+      tokens === undefined || vertexProjectId === undefined
+        ? undefined
+        : { tokens, projectId: vertexProjectId },
+    ),
+    providers: { fetch: loggedFetch(log), scripted },
     tools: createDatabaseToolResolver(database, secrets),
     toolSandbox: createDatabaseToolSandboxResolver(database),
     awControl: createDatabaseAwControlResolver(database),
     postgres,
     tokenSecret,
     usage: createDatabaseUsageRecorder(database, pricing),
-    dailyCost: createDailyCostAdmission(createDatabaseDailyCostLedger(database), {
+    runCeiling: createRunCeilingAdmission(ledger, {
+      onError(error, context) {
+        log.error('run spend ceiling admission failed', { error, ...context });
+      },
+    }),
+    dailyCost: createDailyCostAdmission(ledger, {
       now: () => new Date(),
       onError(error, context) {
         log.error('daily cost admission failed', { error, ...context });
@@ -297,15 +351,17 @@ export async function createGatewayFromEnvironment(
 export async function startGateway(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<RunningGateway> {
-  requireTokenSecret(env);
-  const portText = env['PORT'] ?? '4000';
-  const port = /^\d+$/.test(portText) ? Number(portText) : Number.NaN;
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error('PORT must be an integer from 1 through 65535.');
-  }
-  const host = env['HOST'] ?? '0.0.0.0';
+  const {
+    gateway: settings,
+    listen: { host, port },
+  } = readGatewayServerSettings(env);
 
-  const { application, close: closeStores } = await createGatewayFromEnvironment(env);
+  const { application, close: closeStores } = await createGatewayFromSettings(
+    settings,
+    env,
+    // Keyless connections are opt-in: only a deployment that names its project gets the identity.
+    settings.vertexProjectId === undefined ? undefined : createGoogleAdcTokenSource(),
+  );
   const server = createGatewayServer(application, undefined, log);
   try {
     await listen(server, port, host);
@@ -344,7 +400,7 @@ if (invokedPath !== undefined && import.meta.url === pathToFileURL(invokedPath).
       process.once('SIGTERM', stop);
     })
     .catch((error: unknown) => {
-      log.error('model gateway failed to start', { error });
+      log.error('model gateway failed to start', startFailureFields(error));
       process.exitCode = 1;
     });
 }

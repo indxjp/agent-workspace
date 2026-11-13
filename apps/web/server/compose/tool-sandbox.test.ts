@@ -39,7 +39,23 @@ async function refusal(promise: Promise<unknown>): Promise<string> {
   return error instanceof DomainError ? error.publicMessage : '';
 }
 
-describe('buildToolSandboxRequest', () => {
+/** A stored version declares `name`, which exists in the store: the sandbox must fail it as missing without reading it. */
+async function expectDeclaredSecretNeverRead(name: string, storedValue: string): Promise<void> {
+  const reads: string[] = [];
+  const message = await refusal(
+    buildToolSandboxRequest('run-1', [bundle({ secrets: [name] })], {
+      ...sources(),
+      secret: (secret) => {
+        reads.push(secret);
+        return Promise.resolve(storedValue);
+      },
+    }),
+  );
+  expect(message).toContain('code_tool_secret_missing');
+  expect(reads).toEqual([]);
+}
+
+describe('buildToolSandboxRequest: the request', () => {
   it('serves the pinned bundle with the declared secrets and the union of the domains', async () => {
     const request = await buildToolSandboxRequest(
       'run-1',
@@ -84,7 +100,9 @@ describe('buildToolSandboxRequest', () => {
     expect(again.key).toBe(first.key);
     expect(rotated.key).not.toBe(first.key);
   });
+});
 
+describe('buildToolSandboxRequest: refusals', () => {
   it('fails the run naming the secret that is not set', async () => {
     const message = await refusal(
       buildToolSandboxRequest('run-1', [bundle({ secrets: ['STRIPE_KEY'] })], sources()),
@@ -95,20 +113,25 @@ describe('buildToolSandboxRequest', () => {
 
   // @story US-STO-12
   it('[US-STO-12][unit][run] never reads a storage connection credential a stored version declares, and fails as missing', async () => {
-    const name = 'STORAGE_CONNECTION_77777777777747778777777777777777';
-    const reads: string[] = [];
-    const message = await refusal(
-      buildToolSandboxRequest('run-1', [bundle({ secrets: [name] })], {
-        ...sources(),
-        // The secret exists: a version stored before the contracts refused the name reaches here.
-        secret: (secret) => {
-          reads.push(secret);
-          return Promise.resolve('{"target":"x","credential":{}}');
-        },
-      }),
+    // The secret exists: a version stored before the contracts refused the name reaches here.
+    await expectDeclaredSecretNeverRead(
+      'STORAGE_CONNECTION_77777777777747778777777777777777',
+      '{"target":"x","credential":{}}',
     );
-    expect(message).toContain('code_tool_secret_missing');
-    expect(reads).toEqual([]);
+  });
+
+  it("never reads a webhook's signing secret a tool declares, and fails as missing", async () => {
+    await expectDeclaredSecretNeverRead(
+      'WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET',
+      'whsec_c2lnbmluZw==',
+    );
+  });
+
+  it.each([
+    'MODEL_CONNECTION_77777777777747778777777777777777',
+    'RUNTIME_CONNECTION__DOCKER__DOCKER_DEFAULT',
+  ])('[#2283] never reads the platform-owned secret %s a stored version declares', async (name) => {
+    await expectDeclaredSecretNeverRead(name, 'sk-provider-key');
   });
 
   it('fails the run naming a tool whose bundle is gone', async () => {

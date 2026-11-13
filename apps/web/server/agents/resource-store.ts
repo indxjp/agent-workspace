@@ -1,11 +1,24 @@
+/**
+ * The port for an agent's resource assignments (files, skills, connectors, storage grants). Its
+ * types are the published wire shapes (`@indx-workspace/contracts/agents`), not database records;
+ * the database-backed implementation is `createRepositoryAgentResourceStoreProvider` in
+ * `./store.ts`, the one file of this domain that names `@agent-workspace/core/db`.
+ */
 import type {
   AgentResourceAssignments,
   AgentResourceAssignmentsInput,
-  AgentResourceRepository,
-  AgentResourceRepositoryProvider,
-  ReplaceAgentResourcesOutcome,
-  WorkspaceScopeResolver,
-} from '@agent-workspace/core/db';
+} from '@indx-workspace/contracts/agents';
+
+/** What replacing an agent's assignments can produce. */
+export type ReplaceAgentResourcesOutcome =
+  | { readonly kind: 'updated'; readonly assignments: AgentResourceAssignments }
+  | { readonly kind: 'not-found' }
+  | { readonly kind: 'unknown-file'; readonly id: string }
+  | { readonly kind: 'unknown-skill'; readonly id: string }
+  /** A delete of the skill is under way: it cannot be assigned any more (the mark is never undone). */
+  | { readonly kind: 'skill-deleting'; readonly id: string }
+  | { readonly kind: 'unknown-skill-revision'; readonly id: string; readonly revision: number }
+  | { readonly kind: 'unknown-connector'; readonly id: string };
 
 export interface WorkspaceAgentResourceStore {
   get(agentId: string): Promise<AgentResourceAssignments | null>;
@@ -17,30 +30,4 @@ export interface WorkspaceAgentResourceStore {
 
 export interface AgentResourceStoreProvider {
   forWorkspace(workspaceId: string): WorkspaceAgentResourceStore;
-}
-
-export function createRepositoryAgentResourceStoreProvider(dependencies: {
-  readonly repositories: AgentResourceRepositoryProvider;
-  readonly scopes: WorkspaceScopeResolver;
-}): AgentResourceStoreProvider {
-  return {
-    forWorkspace(workspaceId) {
-      let pending: Promise<AgentResourceRepository> | null = null;
-      const repository = async () => {
-        pending ??= dependencies.scopes.forWorkspaceId(workspaceId).then((scope) => {
-          if (scope === null) throw new Error(`workspace ${workspaceId} no longer exists`);
-          return dependencies.repositories.forScope(scope);
-        });
-        return pending;
-      };
-      return {
-        async get(agentId) {
-          return (await repository()).get(agentId);
-        },
-        async replace(agentId, assignments) {
-          return (await repository()).replace(agentId, assignments);
-        },
-      };
-    },
-  };
 }

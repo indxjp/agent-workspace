@@ -30,8 +30,8 @@ export interface DatabaseConfig {
 }
 
 const SUPPORTED_PROTOCOLS = ['postgres:', 'postgresql:'] as const;
-const DEFAULT_MAX_CONNECTIONS = 10;
-const MAX_MAX_CONNECTIONS = 1000;
+export const DEFAULT_MAX_CONNECTIONS = 10;
+export const MAX_MAX_CONNECTIONS = 1000;
 
 /** Describe an unexpected value for an error message without dumping a credential into a log. */
 function describeType(value: unknown): string {
@@ -109,7 +109,7 @@ export function parseMaxConnections(raw: unknown, fallback = DEFAULT_MAX_CONNECT
 
 /** Read and validate the database configuration from an environment. Throws on anything invalid. */
 export function readDatabaseConfig(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
 ): DatabaseConfig {
   return {
     url: parseDatabaseUrl(env['DATABASE_URL']),
@@ -257,7 +257,7 @@ export type Database = ReturnType<typeof createDatabase>;
  * Pool plus handle, for the one-shot entry points (migrate, seed) that own their connection.
  * Long-lived services should create the pool once and keep it, not call this per request.
  */
-export function connect(config: DatabaseConfig = readDatabaseConfig()): {
+export function connect(config: DatabaseConfig): {
   pool: pg.Pool;
   db: Database;
 } {

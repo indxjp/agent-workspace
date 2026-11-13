@@ -66,6 +66,22 @@ export async function expectBasicAccessibility(page) {
 }
 
 /**
+ * Shows the sidebar navigation. Below `md` it sits behind the Menu button (UX-10, #2124), and a
+ * hidden link is out of the accessibility tree: a role query finds none, so a "visible" check fails
+ * and a "not offered" check passes whatever the role. Opens it there, once per page load (following
+ * a link or a `goto` closes it again); from `md` up the button is not shown and nothing happens.
+ */
+export async function openNavigation(page) {
+  const menu = page.getByRole('button', { name: 'Menu' });
+  if (!(await menu.isVisible())) return;
+  // A press before hydration does nothing, so press again until the button says it is open.
+  await expect(async () => {
+    if ((await menu.getAttribute('aria-expanded')) !== 'true') await menu.click();
+    await expect(menu).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 });
+  }).toPass();
+}
+
+/**
  * The only account this build can sign in as.
  *
  * `apps/web/server/auth/session.ts` implements exactly one credential path — the bootstrap

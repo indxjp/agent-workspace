@@ -1,0 +1,3 @@
+import {{variable}} from '@/channels/{{name}}';
+
+export const { GET } = {{variable}}.routes();

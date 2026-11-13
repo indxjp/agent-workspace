@@ -41,29 +41,34 @@ import {
   type SelectionCookie,
 } from './selection';
 import {
-  readSessionSecret,
-  scopedCookieName,
-  sessionCookieName,
+  installedAuthSettings,
+  installedOidcConfiguration,
+  installedScopedCookieName,
+  installedSessionCookieName,
+  installedSessionSecret,
+} from '../auth-settings';
+import {
+  clearedSessionCookie as baseClearedSessionCookie,
+  sessionCookie as baseSessionCookie,
+  signInWith,
   verifySessionToken,
+  type SessionCookie,
+  type SignInInput,
+  type SignInResult,
   type VerifiedSessionClaims,
 } from './session';
 import { workspaceScopeFrom, WorkspaceScope } from './workspace';
 
 export {
   DEFAULT_SESSION_COOKIE_NAME,
-  scopedCookieName,
-  sessionCookieName,
   SESSION_TTL_SECONDS,
   MIN_SESSION_SECRET_LENGTH,
   MIN_BOOTSTRAP_PASSWORD_LENGTH,
-  sessionCookie,
-  clearedSessionCookie,
   mintSessionToken,
   newSessionClaims,
   readSessionSecret,
   readBootstrapAdmin,
   verifySessionToken,
-  signIn,
 } from './session';
 export type {
   SessionClaims,
@@ -103,18 +108,51 @@ export { readOidcConfiguration, beginOidcLogin, finishOidcLogin } from './oidc';
  */
 
 /** The workspace-selection cookie's name for this deployment. */
+/** The session cookie's name for this deployment, from the settings installed at start-up. */
+export const sessionCookieName = installedSessionCookieName;
+
+/** The deployment's session secret, parsed once at start-up, or why there is none. */
+export const sessionSecret = installedSessionSecret;
+
+/** The OIDC client parsed at start-up, or `null`; a partial client throws when used. */
+export const oidcConfiguration = installedOidcConfiguration;
+
+/** Sign in against the settings installed at start-up. */
+export function signIn(input: SignInInput, nowMs?: number): Promise<SignInResult> {
+  const settings = installedAuthSettings();
+  return signInWith(
+    input,
+    {
+      secret: settings.sessionSecret,
+      admin: settings.bootstrapAdmin,
+      cookieName: installedSessionCookieName(),
+    },
+    nowMs,
+  );
+}
+
+/** The session cookie carrying `token`, under this deployment's name. */
+export function sessionCookie(token: string, maxAgeSeconds?: number): SessionCookie {
+  return baseSessionCookie(token, installedSessionCookieName(), maxAgeSeconds);
+}
+
+/** The session cookie with an immediate expiry: sign-out. */
+export function clearedSessionCookie(): SessionCookie {
+  return baseClearedSessionCookie(installedSessionCookieName());
+}
+
 export function selectionCookieName(): string {
-  return scopedCookieName(SELECTION_COOKIE_BASE_NAME);
+  return installedScopedCookieName(SELECTION_COOKIE_BASE_NAME);
 }
 
 /** The invitation-identity cookie's name for this deployment. */
 export function invitationIdentityCookieName(): string {
-  return scopedCookieName(INVITATION_IDENTITY_COOKIE_BASE_NAME);
+  return installedScopedCookieName(INVITATION_IDENTITY_COOKIE_BASE_NAME);
 }
 
 /** The OIDC transaction cookie's name for this deployment. */
 export function oidcTransactionCookieName(): string {
-  return scopedCookieName(OIDC_TRANSACTION_COOKIE_BASE_NAME);
+  return installedScopedCookieName(OIDC_TRANSACTION_COOKIE_BASE_NAME);
 }
 
 export function selectionCookie(
@@ -159,12 +197,15 @@ export class UnauthenticatedError extends Error {
 
 /** The signed-in identity, or `null`. Never throws for an absent or invalid session. */
 export async function getSession(): Promise<VerifiedSessionClaims | null> {
-  const secret = readSessionSecret(process.env);
+  const secret = installedSessionSecret();
   if (!secret.ok) {
     return null;
   }
   const store = await cookies();
-  const result = await verifySessionToken(store.get(sessionCookieName())?.value, secret.secret);
+  const result = await verifySessionToken(
+    store.get(installedSessionCookieName())?.value,
+    secret.secret,
+  );
   return result.ok ? result.claims : null;
 }
 

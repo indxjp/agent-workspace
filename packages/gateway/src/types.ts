@@ -50,8 +50,26 @@ export type RequestContext = {
    * capability-header list required by Claude Code.
    */
   requestHeaders?: Headers;
+  /**
+   * Set only for a keyless connection: drops the cached cloud token and fetches a fresh one, so
+   * an adapter can replay one request after the upstream answered `401`.
+   */
+  refreshCredential?: () => Promise<string>;
   signal?: AbortSignal;
 };
+
+/**
+ * The one port where a cloud call enters domain code: it yields the bearer token of the identity
+ * the gateway runs as (Application Default Credentials). A keyless connection stores no
+ * credential, so the resolver asks this port instead of the secret store. Implementations cache
+ * until shortly before expiry, throw {@link ModelCredentialUnavailableError} and never put a token
+ * in an error message.
+ */
+export interface TokenSource {
+  accessToken(): Promise<string>;
+  /** Drop the cached token so the next {@link accessToken} fetches a new one. */
+  invalidate(): void;
+}
 
 export type ModelCapabilities = {
   streaming: boolean;
@@ -145,6 +163,14 @@ export class ModelDiscoveryHttpError extends Error {
   }
 }
 
+/** The selected connection's provider cannot perform the operation; the router answers a typed 501. */
+export class ModelOperationUnsupportedError extends Error {
+  public constructor(provider: string, operation: string) {
+    super(`Model provider ${JSON.stringify(provider)} does not support ${operation}.`);
+    this.name = 'ModelOperationUnsupportedError';
+  }
+}
+
 /**
  * A stored model connection lacks a config field its provider requires (for example an Azure row
  * saved before `apiVersion` became mandatory). The router answers it with a typed 409. The message
@@ -159,5 +185,19 @@ export class ModelConnectionIncompleteError extends Error {
     );
     this.name = 'ModelConnectionIncompleteError';
     this.field = field;
+  }
+}
+
+/**
+ * A keyless connection has no usable cloud identity: no {@link TokenSource} is configured for this
+ * deployment, or the identity could not mint a token. The gateway answers it with a typed 503.
+ * The message is fixed text and never carries a token.
+ */
+export class ModelCredentialUnavailableError extends Error {
+  public constructor(
+    message = 'The gateway could not obtain a cloud access token for this model connection.',
+  ) {
+    super(message);
+    this.name = 'ModelCredentialUnavailableError';
   }
 }

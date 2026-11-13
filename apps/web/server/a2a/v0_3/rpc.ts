@@ -16,18 +16,24 @@ import {
   type A2aTextPart,
 } from '@indx-workspace/contracts/a2a';
 
-import { upgradeEventStream } from '../../runs/agent-frames';
-import { findRunForPrincipal, interruptRunFor } from '../../runs/api';
-import type { AgentRef, RunPrincipal, RunApiEnvironment, SessionRef } from '../../runs/environment';
-import { publicRunFailure } from '../../runs/failures';
-import { apiError, isUuid, json } from '../../runs/http';
-import { MAX_PROMPT_CHARS, startRunOnSession } from '../../runs/service';
 import {
+  type AgentRef,
+  apiError,
   isStoppedRunStatus,
   isTerminalRunStatus,
+  isUuid,
+  json,
+  type RunReadEnvironment,
+  type RunStartEnvironment,
+  type RunPrincipal,
   type RunRecord,
   type RunStore,
-} from '../../runs/store';
+  type SessionRef,
+  upgradeEventStream,
+} from '../../execution';
+import { findRunForPrincipal, interruptRunFor } from '../../runs/api';
+import { publicRunFailure } from '../../runs/failures';
+import { MAX_PROMPT_CHARS, startRunOnSession } from '../../runs/service';
 import type { PublishedAgent } from '../env';
 import { admitA2aMessage } from '../limits';
 import {
@@ -50,7 +56,7 @@ const KEEPALIVE_MS = 15_000;
 /** Everything a method handler needs about one authorised call. */
 export interface A2aCall {
   readonly request: Request;
-  readonly runs: RunApiEnvironment;
+  readonly runs: RunReadEnvironment & RunStartEnvironment;
   readonly principal: RunPrincipal;
   readonly credentialId: string;
   readonly agent: PublishedAgent;

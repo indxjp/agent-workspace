@@ -1,0 +1,14 @@
+{
+  // The type-checking view: the whole of `src`, tests included, emitting nothing. `DOM` is in `lib`
+  // because `./react` runs in a browser and `./server` answers Web-standard `Request`s with
+  // `Response`s; `node` types are wanted because `./server`, `./db` and the tests run on Node;
+  // `jsx` is set for the pages `./react` will hold.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "noEmit": true
+  },
+  "include": ["src"]
+}

@@ -3,7 +3,7 @@ title: "routes"
 description: "The @indx-workspace/contracts/routes exports, sorted alphabetically."
 ---
 
-<Note>This page is generated from `packages/contracts/src/routes.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+<Note>This page is generated from `packages/contracts/src/routes.ts`, `packages/contracts/src/routes/definition.ts`, `packages/contracts/src/routes/schemas.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
 ## API_ROUTE_EXCLUSIONS
 
@@ -30,6 +30,7 @@ running agent reaches through the gateway (issue #1846) accepts only a run token
 - `{ method: 'GET', path: '/api/cron/storage-cleanup', feature: 'core', because: 'platform cron job (CRON_SECRET bearer)', }`
 - `{ method: 'GET', path: '/api/readyz', feature: 'core', because: 'platform readiness probe (no credential)', }`
 - `{ method: 'POST', path: '/api/builder/mcp', feature: 'builder', because: 'run-caller route (per-run token, aw-control tools)', }`
+- `{ method: 'POST', path: '/api/runs/:id/members/mcp', feature: 'core', because: "lead-run route (the lead run's own token, agent-team member tools; ADR-0104)", }`
 - `{ method: 'GET', path: '/p/:token', feature: 'sharing', because: 'a public share page (04 §1)' }`
 - `{ method: 'POST', path: '/p/:token/messages', feature: 'sharing', because: 'a public share page (04 §1)', }`
 - `{ method: 'GET', path: '/p/s/:name', feature: 'surfaces', because: 'a hosted surface page (04 §1)', }`
@@ -71,6 +72,7 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - ``{ method: 'POST', path: '/api/auth/cli-device', operationId: 'auth.startDevice', tag: 'auth', feature: 'core', summary: 'Start a device authorization for `aw login` (RFC 8628)', success: ok(json('DeviceAuthorizationResponseSchema')), security: 'none', }``
 - `{ method: 'POST', path: '/api/auth/cli-token', operationId: 'auth.pollToken', tag: 'auth', feature: 'core', summary: 'Poll with the device code; the user token once the person approved', request: json('CliTokenRequestSchema'), success: ok(json('CliTokenResponseSchema')), security: 'none', }`
 - ``{ method: 'DELETE', path: '/api/auth/cli-token', operationId: 'auth.revoke', tag: 'auth', feature: 'core', summary: 'Revoke the presented user token (`aw logout`)', success: NO_CONTENT, security: 'user-token', }``
+- `{ method: 'POST', path: '/api/auth/token-exchange', operationId: 'auth.exchange', tag: 'auth', feature: 'core', summary: "Exchange the signed-in person's OIDC ID token for a short-lived access token of an app-backend endpoint client (ADR-0161)", request: json('TokenExchangeRequestSchema'), success: ok(json('TokenExchangeResponseSchema')), security: 'none', }`
 - `{ method: 'GET', path: '/api/sharing-policies', operationId: 'workspaces.sharingPolicy.get', tag: 'workspaces', feature: 'sharing', summary: "Read the workspace's sharing policy", success: ok(json('SharingPolicySchema')), }`
 - `{ method: 'PATCH', path: '/api/sharing-policies', operationId: 'workspaces.sharingPolicy.set', tag: 'workspaces', feature: 'sharing', summary: "Change the workspace's sharing policy", request: json('SharingPolicySchema'), success: ok(json('SharingPolicySchema')), }`
 - `{ method: 'POST', path: '/api/tokens', operationId: 'tokens.mint', tag: 'tokens', feature: 'core', summary: 'Mint a short-lived browser token', request: json('MintTokenRequestSchema'), success: created(json('MintTokenResponseSchema')), }`
@@ -102,6 +104,9 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - `{ method: 'DELETE', path: '/api/triggers/:id', operationId: 'triggers.remove', tag: 'triggers', feature: 'triggers', summary: 'Delete a trigger and its delivery records', success: ok(json('TriggerResponseSchema')), }`
 - `{ method: 'POST', path: '/api/triggers/:id/secret', operationId: 'triggers.rotateSecret', tag: 'triggers', feature: 'triggers', summary: "Rotate a webhook trigger's URL secret; the new secret is returned once", success: created(json('TriggerSecretResponseSchema')), }`
 - `{ method: 'POST', path: '/api/triggers/:id/fire/:secret', operationId: 'triggers.fire', tag: 'triggers', feature: 'triggers', summary: 'Fire a webhook trigger: the body is the {{body}} of its prompt and a run starts as the ' + 'trigger owner in a new session (202). The URL secret is the authentication and travels in ' + 'the path, so it can appear in access logs of a proxy or CDN: rotate it if one may have ' + 'leaked. Every miss answers one 404 trigger_not_found. A Microsoft Graph validationToken ' + 'query parameter is echoed as text/plain, and Zoom endpoint.url_validation is answered with ' + 'the token and its HMAC (200); neither starts a run.', request: { kind: 'binary' }, success: [ { status: 202, body: json('RunResponseSchema') }, { status: 200, body: json('ZoomUrlValidationResponseSchema') }, ], security: 'none', }`
+- `{ method: 'GET', path: '/api/webhooks', operationId: 'webhooks.list', tag: 'webhooks', feature: 'runs', summary: "List the workspace's webhooks (at most 10, unpaginated); the secret is never listed", success: ok(json('WebhookListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/webhooks', operationId: 'webhooks.create', tag: 'webhooks', feature: 'runs', summary: 'Register a webhook for terminal run outcomes. The URL must pass the egress policy; the ' + 'whsec_ signing secret is returned once, in this answer', request: json('CreateWebhookRequestSchema'), success: created(json('CreateWebhookResponseSchema')), }`
+- `{ method: 'DELETE', path: '/api/webhooks/:id', operationId: 'webhooks.remove', tag: 'webhooks', feature: 'runs', summary: 'Remove a webhook, its pending deliveries and its signing secret', success: NO_CONTENT, }`
 - `{ method: 'GET', path: '/api/model-connections', operationId: 'models.connections.list', tag: 'models', feature: 'core', summary: 'List model connections', success: ok(json('ModelConnectionListResponseSchema')), }`
 - `{ method: 'POST', path: '/api/model-connections', operationId: 'models.connections.create', tag: 'models', feature: 'core', summary: 'Create a model connection', request: UNDESCRIBED, success: created(json('ModelConnectionResourceSchema')), }`
 - `{ method: 'GET', path: '/api/model-connections/:id', operationId: 'models.connections.get', tag: 'models', feature: 'core', summary: 'Read one model connection', success: ok(json('ModelConnectionResourceSchema')), }`
@@ -176,6 +181,13 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - `{ method: 'GET', path: '/api/agents/:id/evaluation-runs', operationId: 'agents.evaluationRuns.get', tag: 'agents', feature: 'evaluations', summary: 'Read an evaluation run and its results so far', success: ok(json('EvaluationRunResourceSchema')), }`
 - `{ method: 'POST', path: '/api/agents/:id/evaluation-advance', operationId: 'agents.evaluationRuns.advance', tag: 'agents', feature: 'evaluations', summary: 'Run the next cases of an evaluation run', request: json('AdvanceEvaluationRunRequestSchema'), success: ok(json('EvaluationRunResourceSchema')), }`
 - `{ method: 'GET', path: '/api/agents/:id/feedback', operationId: 'agents.listFeedback', tag: 'agents', feature: 'runs', summary: "List the ratings of an agent's runs", success: ok(json('RunFeedbackListResponseSchema')), }`
+- `{ method: 'GET', path: '/api/agent-teams', operationId: 'agentTeams.list', tag: 'agentTeams', feature: 'core', summary: "List the workspace's agent teams, newest first, cursor paged", success: ok(json('AgentTeamListResponseSchema')), }`
+- `{ method: 'POST', path: '/api/agent-teams', operationId: 'agentTeams.create', tag: 'agentTeams', feature: 'core', summary: 'Create an agent team, with its first version when the body carries one', request: json('CreateAgentTeamRequestSchema'), success: created(json('AgentTeamResourceSchema')), }`
+- `{ method: 'GET', path: '/api/agent-teams/:id', operationId: 'agentTeams.get', tag: 'agentTeams', feature: 'core', summary: 'Read one agent team with its newest version', success: ok(json('AgentTeamResourceSchema')), }`
+- `{ method: 'DELETE', path: '/api/agent-teams/:id', operationId: 'agentTeams.remove', tag: 'agentTeams', feature: 'core', summary: 'Delete an agent team; its name becomes free again', success: NO_CONTENT, }`
+- `{ method: 'POST', path: '/api/agent-teams/:id/versions', operationId: 'agentTeams.versions.create', tag: 'agentTeams', feature: 'core', summary: "Save a team's next immutable version, pinning the lead's and each member's version", request: json('CreateAgentTeamVersionRequestSchema'), success: created(json('AgentTeamVersionSchema')), }`
+- `{ method: 'GET', path: '/api/agent-teams/:id/versions', operationId: 'agentTeams.versions.list', tag: 'agentTeams', feature: 'core', summary: "List a team's versions, newest first, cursor paged", success: ok(json('AgentTeamVersionListResponseSchema')), }`
+- ``{ method: 'POST', path: '/api/agent-teams/:id/runs', operationId: 'agentTeams.run', tag: 'agentTeams', feature: 'core', summary: "Run an agent team: start its newest version's lead, which calls the members", request: json('StartRunRequestSchema'), headers: [ { name: 'Idempotency-Key', required: false, description: 'Makes a retried team run safe exactly as on `POST /api/agents/:id/runs` (S-6, ' + 'ADR-0151): the same key with the same request returns the run the first start ' + 'queued; the same key with a different request answers `409 run_idempotency_conflict`.', }, ], success: [{ status: 202, body: json('StartRunResponseSchema') }], }``
 - `{ method: 'GET', path: '/api/projects', operationId: 'projects.list', tag: 'projects', feature: 'projects', summary: 'List projects', success: ok(json('ProjectListResponseSchema')), }`
 - `{ method: 'POST', path: '/api/projects', operationId: 'projects.create', tag: 'projects', feature: 'projects', summary: 'Create a project', request: UNDESCRIBED, success: created(json('ProjectResourceSchema')), }`
 - `{ method: 'GET', path: '/api/projects/:id', operationId: 'projects.get', tag: 'projects', feature: 'projects', summary: 'Read one project', success: ok(json('ProjectResourceSchema')), }`
@@ -189,9 +201,9 @@ The catalogue, grouped by family in the order of spec 04 §5.
 - `{ method: 'GET', path: '/api/sessions/:engineSessionId/transcript', operationId: 'sessions.transcript.read', tag: 'sessions', feature: 'chat', summary: "Read a session's transcript", success: ok(json('TranscriptResponseSchema')), }`
 - `{ method: 'GET', path: '/api/sessions/:engineSessionId/subkeys', operationId: 'sessions.transcript.subkeys', tag: 'sessions', feature: 'chat', summary: "List a transcript's subkeys", success: ok(json('TranscriptSubkeysResponseSchema')), }`
 - ``{ method: 'POST', path: '/api/sessions/:engineSessionId/attachments', operationId: 'sessions.attachments.upload', tag: 'sessions', feature: 'core', summary: "Upload one file (bytes, name in `name`) into a visitor's session, for `runs.start` `attachments`", request: BINARY, success: created(json('SurfaceAttachmentResponseSchema')), }``
-- `{ method: 'POST', path: '/api/agents/:id/runs', operationId: 'runs.start', tag: 'runs', feature: 'core', summary: 'Start a run of an agent', request: json('StartRunRequestSchema'), success: [{ status: 202, body: json('StartRunResponseSchema') }], }`
+- ``{ method: 'POST', path: '/api/agents/:id/runs', operationId: 'runs.start', tag: 'runs', feature: 'core', summary: 'Start a run of an agent', request: json('StartRunRequestSchema'), headers: [ { name: 'Idempotency-Key', required: false, description: 'Makes a retried start safe (S-6, ADR-0151, spec §5.12): 1–255 characters after ' + 'trimming, scoped to the calling principal. The same key with the same request returns ' + 'the run the first start queued; the same key with a different request answers ' + '`409 run_idempotency_conflict`; a blank or longer key answers ' + '`400 invalid_idempotency_key`.', }, ], success: [{ status: 202, body: json('StartRunResponseSchema') }], }``
 - `{ method: 'GET', path: '/api/runs', operationId: 'runs.list', tag: 'runs', feature: 'runs', summary: 'List runs', success: ok(json('RunListResponseSchema')), }`
-- `{ method: 'GET', path: '/api/runs/:id', operationId: 'runs.get', tag: 'runs', feature: 'core', summary: 'Read one run', success: ok(json('RunResponseSchema')), }`
+- `{ method: 'GET', path: '/api/runs/:id', operationId: 'runs.get', tag: 'runs', feature: 'core', summary: 'Read one run, with its child runs (at most 16, oldest first) and treeCost, the read-time ' + 'sum of cost over the run and its children (ADR-0104)', success: ok(json('RunDetailResponseSchema')), }`
 - `{ method: 'POST', path: '/api/runs/:id', operationId: 'runs.revokeTokensDeprecated', tag: 'runs', feature: 'core', summary: 'Revoke gateway tokens (deprecated alias of the revoke-tokens route)', request: UNDESCRIBED, success: ok(json('RevokeRunTokensResponseSchema')), deprecated: true, }`
 - ``{ method: 'GET', path: '/api/runs/:id/events', operationId: 'runs.events', tag: 'runs', feature: 'core', summary: "Follow a run's events (resume with `Last-Event-ID`)", success: ok({ kind: 'event-stream', frames: [ 'RunStatusEventDataSchema', 'RunWarningEventDataSchema', 'AgentFrameSchema', 'RunFailedFrameDataSchema', 'StreamResetFrameDataSchema', ], }), }``
 - `{ method: 'POST', path: '/api/runs/:id/interrupt', operationId: 'runs.interrupt', tag: 'runs', feature: 'core', summary: 'Interrupt a run', success: ok(json('InterruptRunResponseSchema')), }`
@@ -247,6 +259,17 @@ sent once per item under the same name, at least once.
 | `repeated` | `undefined \| true` | No |  |
 | `description` | `string` | Yes |  |
 
+## ApiRequestHeader
+
+One request header a route reads beyond the ones every route shares (the contracts version and
+the credential). The header's value is a string; its rules and refusals are in `description`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `required` | `false \| true` | Yes |  |
+| `description` | `string` | Yes |  |
+
 ## ApiRoute
 
 One public route and the contracts it is parsed with.
@@ -260,6 +283,7 @@ One public route and the contracts it is parsed with.
 | `feature` | `"skills" \| "files" \| "connectors" \| "surfaces" \| "builder" \| "evaluations" \| "chat" \| "projects" \| "runs" \| "sharing" \| "triggers" \| "core"` | Yes | The feature this route belongs to (ADR-0160 D4), or `core`. Required, so a route cannot be added without saying which switch turns it off. |
 | `summary` | `string` | Yes |  |
 | `request` | `undefined \| { readonly kind: "json"; readonly schemas: readonly [ApiSchemaName, ...ApiSchemaName[]]; } \| { readonly kind: "json-undescribed"; } \| { readonly kind: "binary"; } \| { readonly kind: "event-stream"; readonly frames: readonly ApiSchemaName[]; } \| { readonly kind: "multipart"; readonly parts: readonly [ApiMultipartPart, ...ApiMultipartPart[]]; } \| { readonly kind: "none"; }` | No | Absent when the request carries no body. |
+| `headers` | `undefined \| readonly ApiRequestHeader[]` | No | Request headers this route reads beyond the shared ones; absent when it reads none. |
 | `deprecatedRequests` | `undefined \| readonly ({ readonly kind: "json"; readonly schemas: readonly [ApiSchemaName, ...ApiSchemaName[]]; } \| { readonly kind: "json-undescribed"; } \| { readonly kind: "binary"; } \| { readonly kind: "event-stream"; readonly frames: readonly ApiSchemaName[]; } \| { readonly kind: "multipart"; readonly parts: readonly [ApiMultipartPart, ...ApiMultipartPart[]]; } \| { readonly kind: "none"; })[]` | No | Older request bodies the route still accepts beside `request`, each on its own media type, kept for one release and then removed (04 §4). The OpenAPI document marks them deprecated. |
 | `success` | `readonly ApiSuccess[]` | Yes |  |
 | `deprecated` | `undefined \| true` | No | Kept for one release and replaced by another route (04 §4). |
@@ -303,6 +327,10 @@ The name of a schema in `API_SCHEMAS`.
 - `"AgentResourceAssignmentsResponseSchema"`
 - `"AgentResourceAssignmentsSchema"`
 - `"AgentResourceSchema"`
+- `"AgentTeamListResponseSchema"`
+- `"AgentTeamResourceSchema"`
+- `"AgentTeamVersionListResponseSchema"`
+- `"AgentTeamVersionSchema"`
 - `"AgentVersionCheckResponseSchema"`
 - `"AgentVersionListResponseSchema"`
 - `"AgentVersionResourceSchema"`
@@ -315,6 +343,8 @@ The name of a schema in `API_SCHEMAS`.
 - `"ConnectorListResponseSchema"`
 - `"ConnectorResourceSchema"`
 - `"CreateAgentFromVersionResponseSchema"`
+- `"CreateAgentTeamRequestSchema"`
+- `"CreateAgentTeamVersionRequestSchema"`
 - `"CreateAgentVersionRequestSchema"`
 - `"CreateAgentWithAssignmentsResponseSchema"`
 - `"CreateEndpointClientRequestSchema"`
@@ -322,6 +352,8 @@ The name of a schema in `API_SCHEMAS`.
 - `"CreateEvaluationRunRequestSchema"`
 - `"CreateTriggerRequestSchema"`
 - `"CreateTriggerResponseSchema"`
+- `"CreateWebhookRequestSchema"`
+- `"CreateWebhookResponseSchema"`
 - `"CreatedUserResponseSchema"`
 - `"DeleteModelConnectionResponseSchema"`
 - `"DiscoveredModelsResponseSchema"`
@@ -369,6 +401,7 @@ The name of a schema in `API_SCHEMAS`.
 - `"RunFeedbackListResponseSchema"`
 - `"RunFeedbackRequestSchema"`
 - `"RunListResponseSchema"`
+- `"RunDetailResponseSchema"`
 - `"RunResponseSchema"`
 - `"RunStatusEventDataSchema"`
 - `"RunTelemetryListResponseSchema"`
@@ -405,6 +438,8 @@ The name of a schema in `API_SCHEMAS`.
 - `"StreamResetFrameDataSchema"`
 - `"SurfaceAttachmentResponseSchema"`
 - `"TestConnectionOutcomeSchema"`
+- `"TokenExchangeRequestSchema"`
+- `"TokenExchangeResponseSchema"`
 - `"ToolBundleResponseSchema"`
 - `"TranscriptResponseSchema"`
 - `"TranscriptSubkeysResponseSchema"`
@@ -417,6 +452,7 @@ The name of a schema in `API_SCHEMAS`.
 - `"UploadToolBundleRequestSchema"`
 - `"UploadToolBundleResponseSchema"`
 - `"UserListResponseSchema"`
+- `"WebhookListResponseSchema"`
 - `"WorkspaceFeaturesSchema"`
 - `"WorkspaceListResponseSchema"`
 - `"WorkspaceMembershipResponseSchema"`

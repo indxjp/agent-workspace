@@ -21,7 +21,8 @@ export type ToolName =
   | 'agentcore'
   | 'pac'
   | 'az'
-  | 'gcloud';
+  | 'gcloud'
+  | 'cosign';
 
 export interface ToolInvocation {
   readonly tool: ToolName;

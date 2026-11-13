@@ -8,6 +8,7 @@ import {
   type SetupAnswers,
 } from '@indx-workspace/contracts/setup';
 import {
+  APP_PRESETS,
   askSetupQuestions,
   confirmMenu,
   MenuCancelledError,
@@ -15,6 +16,7 @@ import {
   parseSetupAnswersFile,
   projectNameFor,
   ProjectRenderError,
+  renderAppTemplate,
   renderProjectFiles,
   renderProjectShell,
   setupSecretNames,
@@ -24,7 +26,7 @@ import {
 
 import { CreateUsageError, errorCode } from '../cli-failure.ts';
 import { CLI_VERSION } from '../version.ts';
-import { DEFAULT_TARGET, type CreateProjectArguments } from './args.ts';
+import { DEFAULT_TARGET, type CreateProjectArguments, type CreateTemplate } from './args.ts';
 import { nextStepLines, paint, windowsDriveWarning } from './output.ts';
 import {
   detectPackageManager,
@@ -49,16 +51,30 @@ export interface CreatedProject {
 
 /**
  * The v2 project's files for `destination`: the shell that makes it installable, then the three
- * files the setup answers are written into, exactly as `aw init` renders them. A refused answer
- * or name becomes a plain refusal carrying the renderer's own message.
+ * files the setup answers are written into, exactly as `aw init` renders them. With a `template`,
+ * its app follows (named as the project) and its packages are added to `package.json` at exact
+ * pins, the `@indx-workspace/*` ones at this CLI's version; `aw-generated.json` records every file
+ * written, the project's own as `project:<name>` and the app's as `app:<name>`. A
+ * refused answer or name becomes a plain refusal carrying the renderer's own message.
  */
-function renderProject(destination: string, answers: CompleteSetupAnswers): readonly ProjectFile[] {
+async function renderProject(
+  destination: string,
+  answers: CompleteSetupAnswers,
+  template: CreateTemplate | undefined,
+): Promise<readonly ProjectFile[]> {
   try {
     const name = projectNameFor(path.basename(destination));
-    return [
+    const project = [
       ...renderProjectShell({ name, version: CLI_VERSION, engine: answers['content.engine'] }),
       ...renderProjectFiles(answers, { name, version: CLI_VERSION }),
     ];
+    if (template === undefined) return project;
+    const app = await renderAppTemplate(template, {
+      appName: name,
+      version: CLI_VERSION,
+      projectFiles: project,
+    });
+    return app.files;
   } catch (error) {
     if (error instanceof ProjectRenderError) throw new Error(error.message, { cause: error });
     throw error;
@@ -124,9 +140,10 @@ async function assertAbsent(destination: string): Promise<void> {
 export async function createProject(
   target: string,
   answers: CompleteSetupAnswers,
+  template?: CreateTemplate,
 ): Promise<CreatedProject> {
   const destination = path.resolve(target);
-  const files = renderProject(destination, answers);
+  const files = await renderProject(destination, answers, template);
   await makeNewDirectory(destination);
   for (const file of files) {
     await mkdir(path.dirname(path.join(destination, file.path)), { recursive: true });
@@ -242,6 +259,20 @@ async function presetAnswers({
   }
 }
 
+/**
+ * The answers with a preset's `setup.theme` (issue #1511) when `--template` names a preset and
+ * neither `--theme` nor the answers file chose one: the presets start from the `blank` agent.
+ */
+function withPresetTheme(
+  answers: SetupAnswers,
+  template: CreateTemplate | undefined,
+): SetupAnswers {
+  if (template === undefined || template === 'portal' || answers['setup.theme'] !== undefined) {
+    return answers;
+  }
+  return { ...answers, 'setup.theme': APP_PRESETS[template].theme };
+}
+
 export interface CreateProjectOptions {
   /** Injected by the suite; production asks the v2 setup questions on this process's terminal. */
   readonly terminal?: CreateTerminal;
@@ -262,7 +293,7 @@ export async function runCreateProject(
   options: CreateProjectOptions,
 ): Promise<void> {
   const { yes } = args;
-  const preset = await presetAnswers(args);
+  const preset = withPresetTheme(await presetAnswers(args), args.template);
   const io = yes ? null : terminalFor(options.terminal);
   if (io === null) {
     // Nobody can be asked, so a question with no usable default is refused before anything is written.
@@ -305,7 +336,7 @@ export async function runCreateProject(
             preset,
             io.choose,
           );
-          const files = renderProject(destination, answers);
+          const files = await renderProject(destination, answers, args.template);
           process.stdout.write(
             `create will write:\n${files.map((file) => `  ${file.path}\n`).join('')}`,
           );
@@ -342,7 +373,7 @@ export async function runCreateProject(
     );
   }
   const answers = asked ?? withRecommendedAnswers(preset);
-  const created = await createProject(target, answers);
+  const created = await createProject(target, answers, args.template);
   printCreatedProject(created, answers, asked === null);
   const platform = options.platform ?? process.platform;
   const driveWarning = windowsDriveWarning(created.destination, platform === 'linux' && isWsl());

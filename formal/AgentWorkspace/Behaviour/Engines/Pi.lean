@@ -22,7 +22,7 @@ port. This module models the decisions the adapter owns, as pure functions over 
 6. **the session** (`src/session.ts#PiSessionMirror`) — pi's JSONL tree over the store stream.
 
 The path rules are `Authz/PathGrant.lean`'s, the frames `Events/AgentFrames.lean`'s, and the
-permission switches, refusal codes, the provisional price list and the frame vocabulary are
+permission switches, refusal codes and the frame vocabulary are
 `Behaviour/Engines/OpenAiAgents.lean`'s; none is re-modelled here.
 
 ## What is a hypothesis rather than a theorem
@@ -141,7 +141,8 @@ structure Request where
   /-- A fork naming the session it would create. -/
   forksIntoItself : Bool
   maxTurns : Option Nat
-  /-- `limits.maxBudgetUsd` is set. -/
+  /-- `limits.maxBudgetUsd` is set. Compile never reads it: the gateway enforces the cap
+  (ADR-0162), so a cap neither refuses a request nor reaches the compiled configuration. -/
   budgetCap : Bool
   /-- `(baseUrl, token, protocol)`, or `none` for a request carrying no gateway. -/
   gateway : Option (String × String × String)
@@ -166,10 +167,6 @@ def defaultModel : String := "claude-opus-4-8"
 /-- The model a run is compiled with. -/
 def modelOf (r : Request) : String := r.model.getD defaultModel
 
-/-- Can a cap on this model be priced? The port's provisional table (`provisionalPriceFor`). -/
-@[aw_spec (ts := "packages/engine/src/prices.ts#provisionalPriceFor")]
-def priced (model : String) : Bool := OpenAiAgents.pricedModels.contains model
-
 /-- Insert a skill name into a sorted list without repeats, keeping it sorted and without repeats. -/
 def insertSkill (name : String) : List String → List String
   | [] => [name]
@@ -193,7 +190,6 @@ structure Compiled where
   connection : Connection
   model : String
   maxTurns : Option Nat
-  budgetCap : Bool
   grants : List Grant
   skills : List String
   deriving DecidableEq, Repr, Inhabited
@@ -209,7 +205,7 @@ def compileWith (r : Request) (grants : List Grant) (baseUrl token : String) : C
     tools := toolPlan r.permissions (grants.any (·.readOnly)),
     networkEgress := r.permissions.unrestrictedNetwork,
     connection := connectionFor baseUrl token, model := modelOf r, maxTurns := r.maxTurns,
-    budgetCap := r.budgetCap, grants, skills := skillSet r.skills }
+    grants, skills := skillSet r.skills }
 
 /-- `compilePiRun`, check for check and in the same order. -/
 @[aw_spec (ts := "packages/engine-pi/src/compile.ts#compilePiRun")]
@@ -219,7 +215,6 @@ def compile (r : Request) : Outcome :=
   | none => .refused (.policyInvalid "grants")
   | some grants =>
     if !r.connectors.isEmpty then .refused (.capabilityUnsupported "mcp")
-    else if r.budgetCap && !priced (modelOf r) then .refused (.capabilityUnsupported "maxBudget")
     else match r.gateway with
     | none => .refused (.credentialRefused "gateway")
     | some (baseUrl, token, wire) =>
@@ -247,21 +242,19 @@ theorem compile_ok_shape {r : Request} {c : Compiled} (h : compile r = .ok c) :
       · rename_i hc
         split at h
         · cases h
-        · split at h
+        · rename_i b t w hgw
+          split at h
           · cases h
-          · rename_i b t w hgw
+          · rename_i hw
             split at h
             · cases h
-            · rename_i hw
-              split at h
+            · split at h
               · cases h
-              · split at h
-                · cases h
-                · cases h
-                  refine ⟨grants, b, t, hg, ?_, ?_, rfl⟩
-                  · simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hw
-                    rw [hgw, hw]
-                  · simpa using hc
+              · cases h
+                refine ⟨grants, b, t, hg, ?_, ?_, rfl⟩
+                · simp only [bne_iff_ne, ne_eq, Decidable.not_not] at hw
+                  rw [hgw, hw]
+                · simpa using hc
 
 /-! ## The guard (`beforeToolCall`) -/
 

@@ -333,6 +333,18 @@ export interface RunFailureNotice {
 }
 
 /**
+ * A tool call the engine refused on its own, with nobody asked (issue #2091): the agent's
+ * permissions did not allow it, so it never ran. The run can still end "Completed", and the answer
+ * can read as if the call worked, so the transcript says so in plain words.
+ */
+export interface BlockedTool {
+  /** The engine's id for the call, so a repeated report of one call is shown once. */
+  readonly toolCallId: string;
+  /** The tool the agent tried to use, as the engine names it (`Bash`, `Write`). */
+  readonly toolName: string;
+}
+
+/**
  * A run, as this screen shows it.
  *
  * `messages` is a **non-empty tuple**. That is the type-level statement of §19.5.1 rule 5: this
@@ -348,6 +360,8 @@ export interface Run {
   readonly followUp: FollowUp;
   /** The failure shown in the transcript, or `null` while the run has not failed. */
   readonly failure: RunFailureNotice | null;
+  /** The tool calls refused without asking anyone, in the order they were reported. */
+  readonly blocked: readonly BlockedTool[];
 }
 
 // ── §19.5.1 rule 5 ──────────────────────────────────────────────────────────────────────────────
@@ -441,6 +455,7 @@ export function beginRun(opening: RunOpening, first: Message): Run {
     rail: opening.rail ?? [],
     followUp: opening.followUp,
     failure: null,
+    blocked: [],
   };
 }
 
@@ -549,6 +564,12 @@ export function failureNoticeFrom(message: string, code: string | null = null): 
   if (code !== null) return { code, message };
   const parsed = parseRunFailure(message);
   return parsed === null ? { code: null, message } : { code: parsed.code, message: parsed.message };
+}
+
+/** Record one refused tool call (issue #2091). A call already recorded is not shown twice. */
+export function withBlockedTool(run: Run, tool: BlockedTool): Run {
+  if (run.blocked.some((seen) => seen.toolCallId === tool.toolCallId)) return run;
+  return { ...run, blocked: [...run.blocked, tool] };
 }
 
 /** Append one line to the SDK event log — §19's raw stream behind "Show technical details". */
@@ -663,4 +684,36 @@ export function parseRunStatusPayload(data: unknown): {
   const record = data as Record<string, unknown>;
   const error = typeof record['error'] === 'string' ? record['error'] : null;
   return { status: record['status'], error };
+}
+
+/** The words for the three approval refusals; `surfaceStrings(locale)` has them. */
+export interface ApprovalProblemStrings {
+  /** `409 approval_expired`. */
+  readonly approvalExpired: string;
+  /** `409 approval_already_decided`. */
+  readonly approvalAlreadyDecided: string;
+  /** `409 run_not_awaiting_approval`. */
+  readonly approvalNotAwaiting: string;
+}
+
+/**
+ * What the reader sees when `POST /api/runs/:id/approval` refuses a decision (issue #1490): the
+ * three `RUN_APPROVAL_PROBLEM_CODES` in the reader's words, and any other refusal in the server's
+ * own `message`. None of them is retried.
+ */
+export function approvalProblemMessage(
+  code: string,
+  message: string,
+  strings: ApprovalProblemStrings,
+): string {
+  switch (code) {
+    case 'approval_expired':
+      return strings.approvalExpired;
+    case 'approval_already_decided':
+      return strings.approvalAlreadyDecided;
+    case 'run_not_awaiting_approval':
+      return strings.approvalNotAwaiting;
+    default:
+      return message;
+  }
 }

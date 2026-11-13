@@ -30,16 +30,24 @@ function memoryResources(): AgentResourceStoreProvider {
 
 describeStorageGrantStore('the in-memory version store', async () => {
   const resources = memoryResources();
+  const connections = { first: crypto.randomUUID(), second: crypto.randomUUID() };
+  const live = new Set(Object.values(connections));
   const provider = createInMemoryAgentVersionStoreProvider({
     agents: createInMemoryAgentStoreProvider(),
     resources,
+    connectionExists: (workspaceId, connectionId) =>
+      Promise.resolve(workspaceId === WORKSPACE && live.has(connectionId)),
   });
   const store = await provider.forWorkspace(WORKSPACE);
   if (store === null) throw new Error('the memory store answers every workspace');
   return {
     store,
     principalId: crypto.randomUUID(),
-    connections: { first: crypto.randomUUID(), second: crypto.randomUUID() },
+    connections,
+    deleteConnection: (id) => {
+      live.delete(id);
+      return Promise.resolve();
+    },
     grantsOf: async (agentId) =>
       (await resources.forWorkspace(WORKSPACE).get(agentId))?.storageGrants ?? [],
     grantAuditsOf: (agentId) =>

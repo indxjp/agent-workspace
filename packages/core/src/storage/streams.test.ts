@@ -8,7 +8,7 @@ import { createFolderObjectStore, type FolderSkipCounts } from './folder-store.j
 import { createLocalFilesystemObjectStore } from './local-fs-store.js';
 import { createInMemoryObjectStore } from './memory-store.js';
 import type { ListPageOptions, ObjectListEntry, ObjectStore } from './object-store.js';
-import { listPageFrom, readBytes } from './streams.js';
+import { childKey, listPageFrom, readBytes, servedRange } from './streams.js';
 
 function chunked(parts: readonly string[], onCancel?: () => void): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -289,11 +289,32 @@ describe('a paged walk resumes at its cursor instead of walking from the start',
       expect(keys).toHaveLength(3000);
       expect(keys).toEqual([...keys].sort());
       expect(pages).toBe(3);
-      // `p` once a page, each of its 30 folders once, and two folders again at each page boundary:
-      // the cursor's own and the one the previous page peeked into. A walk from the start is 93.
-      expect(readdirs).toBe(3 + 30 + 2 * 2);
+      // One walk carried from page to page: `p` and each of its 30 folders once (#1835).
+      expect(readdirs).toBe(1 + 30);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('servedRange', () => {
+  it.each([
+    ['bytes 2-5/10', { start: 2, end: 5, size: 10 }],
+    [undefined, null],
+    ['', null],
+    ['bytes 2-5/*', null],
+    ['items 2-5/10', null],
+  ] as const)('reads %j as %j', (header, expected) => {
+    expect(servedRange(header)).toEqual(expected);
+  });
+});
+
+describe('childKey', () => {
+  it.each([
+    ['', 'a.txt', 'a.txt'],
+    ['docs', 'a.txt', 'docs/a.txt'],
+    ['docs/2026', 'a.txt', 'docs/2026/a.txt'],
+  ] as const)('joins %j and %j as %j', (prefix, name, expected) => {
+    expect(childKey(prefix, name)).toBe(expected);
   });
 });

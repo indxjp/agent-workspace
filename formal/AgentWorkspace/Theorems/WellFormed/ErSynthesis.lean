@@ -31,13 +31,13 @@ theorem clusters_partition_the_tables :
       ((WireEnum.all : List Current.Cluster).map (·.tables.length)).sum =
         Snapshot.tableCount := by decide +kernel
 
-/-- Today's schema has 108 checks that are not closed sets, and every one of them is given a
+/-- Today's schema has 119 checks that are not closed sets, and every one of them is given a
 meaning by at least one cluster. -/
 @[aw_spec (tier := T0)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem every_other_check_is_refined :
-    Current.otherChecks.length = 108 ∧
+    Current.otherChecks.length = 119 ∧
       (Current.otherChecks.all fun (t, n) => !(Current.refinedBy t n).isEmpty) = true := by decide +kernel
 
 /-- Exactly two checks are given a meaning by two clusters: the default-model pairs of workspaces
@@ -61,7 +61,7 @@ theorem check_semantics_follow_the_owning_cluster :
 /-- Every table of the target schema is well formed: unique names, a `NOT NULL` primary key, keys
 PostgreSQL accepts, well-formed unique keys and checks, and the tenancy rule. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/concepts.md#the-target-er-model")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem target_tables_are_well_formed (t : TableName) :
     tableWellFormed Target.schema t = true := by
   cases t <;> decide +kernel
@@ -74,12 +74,12 @@ theorem target_checks_all_have_a_meaning :
       | .other n => (Target.targetCheck? n default).isSome || !(Current.refinedBy t n).isEmpty
       | .oneOf .. => true) = true := by decide +kernel
 
-/-- The target ER diagram draws each foreign key at most once, and draws every key except the 54
+/-- The target ER diagram draws each foreign key at most once, and draws every key except the 59
 references to the tenant root and the 10 single-column `SET NULL` siblings. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/concepts.md#the-target-er-model")]
 theorem er_diagram_draws_each_relationship_once :
     ((Target.drawn Target.schema).map (·.2.name)).Nodup ∧
-      (Target.drawn Target.schema).length + 54 + 10 =
+      (Target.drawn Target.schema).length + 59 + 10 =
         (allTables.map fun t => (Target.schema t).foreignKeys.length).sum := by decide +kernel
 
 end AgentWorkspace.Theorems.WellFormed.ErSynthesis

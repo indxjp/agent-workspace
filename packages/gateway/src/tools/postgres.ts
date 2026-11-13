@@ -53,6 +53,10 @@ export type PostgresToolExecutor = {
 const POSTGRES_PORT = 5432;
 const POOL_MAX_CONNECTIONS = 2;
 const POOL_IDLE_MS = 30_000;
+/** The longest string a filter value may be. */
+const MAX_FILTER_VALUE_CHARS = 1_024;
+/** Added to the statement timeout so PostgreSQL ends a slow statement before the client gives up. */
+const QUERY_TIMEOUT_MARGIN_MS = 1_000;
 
 const IdentifierSchema = z
   .string()
@@ -81,7 +85,7 @@ function selectArgsSchema(maxRows: number) {
             .object({
               column: IdentifierSchema,
               op: z.enum(['eq', 'lt', 'lte', 'gt', 'gte']),
-              value: z.union([z.string().max(1024), z.number(), z.boolean()]),
+              value: z.union([z.string().max(MAX_FILTER_VALUE_CHARS), z.number(), z.boolean()]),
             })
             .strict(),
         )
@@ -425,7 +429,7 @@ export function createPostgresExecutor(
       max: POOL_MAX_CONNECTIONS,
       idleTimeoutMillis: POOL_IDLE_MS,
       connectionTimeoutMillis: seconds > 0 ? Math.min(seconds * 1000, timeoutMs) : timeoutMs,
-      query_timeout: timeoutMs + 1000,
+      query_timeout: timeoutMs + QUERY_TIMEOUT_MARGIN_MS,
       allowExitOnIdle: true,
       ...(target.applicationName === null ? {} : { application_name: target.applicationName }),
     });

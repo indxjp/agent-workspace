@@ -3,11 +3,9 @@
  * body streams to the object store and the database decides who wins a path, so there is no
  * in-process lock.
  */
-import { MAX_UPLOAD_BYTES } from '@indx-workspace/contracts/files';
 
 import { toObjectKey, UnsafeObjectKeyError } from '@agent-workspace/core/storage/keys';
-import type { Principal } from '../rbac/principal';
-import { recheckResourceAccess } from '../resources/authorise';
+import type { Principal } from '../identity';
 import type { CatalogFile } from '../storage/store';
 import type { StorageService } from '../storage/service';
 import {
@@ -19,8 +17,7 @@ import {
   type FileResource,
   type FileResult,
 } from './handlers';
-import { boundedBodyStream, storageContextOf, tooLarge } from './http';
-import { ownershipOfFileOwner } from './ownership';
+import { boundedBodyStream, storageContextOf, tooLarge, UPLOAD_LIMIT } from './http';
 
 function created(row: CatalogFile): FileResult {
   const file: FileResource =
@@ -109,10 +106,15 @@ export async function saveUpload(
   principal: Principal,
   storage: StorageService,
   rawPath: string,
+  /**
+   * Decides again on the file the upload would replace, as the save read it under its lock; `null`
+   * allows. The route builds it from the RBAC decision, as it does for a signed upload link.
+   */
+  recheck: (replaced: CatalogFile) => Promise<FileResult | null>,
 ): Promise<FileResult> {
   const target = writableKey(principal, rawPath, 'file');
   if (!target.ok) return target.result;
-  const bounded = boundedBodyStream(request, MAX_UPLOAD_BYTES);
+  const bounded = boundedBodyStream(request, UPLOAD_LIMIT);
   if (!bounded.ok) return bounded.result;
   // The ownership read before this call can be stale: another member may have written the path
   // since. The file a replacement takes the path from is decided again, as the reservation read
@@ -122,23 +124,18 @@ export async function saveUpload(
     area: 'files',
     path: target.key,
     body: bounded.body,
-    maxBytes: MAX_UPLOAD_BYTES,
+    maxBytes: UPLOAD_LIMIT,
     contentType: declaredContentType(request),
     replace: async (replaced) => {
-      const denied = await recheckResourceAccess(
-        request,
-        principal,
-        ownershipOfFileOwner(replaced),
-      );
-      refusal.denied = denied === null ? null : { ...denied, kind: 'json' };
-      return denied === null;
+      refusal.denied = await recheck(replaced);
+      return refusal.denied === null;
     },
   });
   if (saved.ok) return created(saved.row);
   if (refusal.denied !== null) return refusal.denied;
   switch (saved.code) {
     case 'too_large':
-      return tooLarge('sent more than that and was not read to the end', MAX_UPLOAD_BYTES);
+      return tooLarge('sent more than that and was not read to the end', UPLOAD_LIMIT);
     case 'upload_in_progress':
     case 'path_changed':
       return uploadInProgress();

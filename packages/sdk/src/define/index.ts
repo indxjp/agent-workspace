@@ -84,9 +84,12 @@ export {
 export { z } from 'zod';
 export {
   agentFromVersionBody,
+  pinnedOf,
   toolModulesOf,
   type AgentFromVersionBody,
   type AgentVersionSource,
+  type PinnableCodeTool,
+  type PinnedToolDeclaration,
   type ToolModuleExport,
   type VersionBodyDrop,
 } from './from-version-body.js';
@@ -99,4 +102,4 @@ export {
   type ToolCredentialReference,
   type ToolDefinition,
 } from './version-body.js';
-export { DefinitionError, type DefinitionIssue } from './errors.js';
+export { DefinitionError, issuesFromZod, type DefinitionIssue } from './errors.js';

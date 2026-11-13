@@ -7,7 +7,7 @@
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { describe, expect, it } from 'vitest';
 
-import { runToolSecretSource } from './runtime-resolver';
+import { runToolSecretSource } from './run-tool-sandbox';
 
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
 
@@ -34,6 +34,17 @@ describe('runToolSecretSource', () => {
     const { secret, reads } = source();
     await expect(secret('STORAGE_CONNECTION_77777777777747778777777777777777')).resolves.toBeNull();
     expect(reads).toEqual([]);
+  });
+
+  it("never hands a run a webhook's signing secret, and does not read it", async () => {
+    const { secret, reads } = source();
+    await expect(
+      secret('WEBHOOK_77777777777747778777777777777777_SIGNING_SECRET'),
+    ).resolves.toBeNull();
+    await expect(secret('WEBHOOK_STRIPE_SIGNING_SECRET')).resolves.toBe(
+      'value-of-WEBHOOK_STRIPE_SIGNING_SECRET',
+    );
+    expect(reads).toEqual(['WEBHOOK_STRIPE_SIGNING_SECRET']);
   });
 
   it('[US-STO-12][unit][run] reads any other secret the tool declares', async () => {

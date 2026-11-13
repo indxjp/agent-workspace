@@ -110,7 +110,7 @@ theorem cluster_foreign_keys_are_the_catalogue's :
 
 /-- The tenancy classes of the nine keys: three root references, the global `created_by → users`
 reference, and five tenant-paired keys; none is unpaired or merely sibling-paired. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")
+@[aw_spec (tier := T0) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")
   (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem cluster_foreign_key_classes :
     foreignKeys.map (fun p => classify catalogue p.1 p.2) =

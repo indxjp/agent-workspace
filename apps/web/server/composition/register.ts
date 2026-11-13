@@ -72,9 +72,15 @@ import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features'
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
 import { installApplicationContext } from '../application-context';
-import { readSessionSecret } from '../auth/session';
+import {
+  authSettingsFromEnvironment,
+  clearAuthSettings,
+  installAuthSettings,
+} from '../auth-settings';
+import { clearClientIdentity, installClientIdentity } from '../client-identity';
 import { readDeploymentFeatures } from '../features/deployment';
 import { clearFeatureSwitches, configureFeatureSwitches } from '../features/runtime';
+import { readWebSettings, SettingsError, type WebSettings } from '../settings';
 import { isWorkspaceUsableForRuns } from '../workspaces/run-gate';
 import {
   builderProvisioner,
@@ -90,6 +96,8 @@ import { RUN_DOMAINS_DISABLED, wireRunDomains } from './wiring/run-api';
 import { wireRunResources } from './wiring/run-resources';
 import { wireRunRuntime } from './wiring/run-runtime';
 import { wireSubsystems } from './wiring/subsystems';
+import { wireAgentTeams } from './wiring/agent-teams';
+import { wireWebhooks } from './wiring/webhooks';
 
 export { storageRootsOverlap } from './config';
 export { sessionCookieValue } from './identity';
@@ -156,6 +164,37 @@ export interface RegisteredComposition {
   close(): Promise<void>;
 }
 
+/** The settings `register()` reads before anything opens. */
+interface StartupSettings {
+  readonly policyCeiling: ProjectPolicy | null;
+  readonly deploymentFeatures: readonly FeatureId[];
+  readonly settings: WebSettings;
+}
+
+/**
+ * Read the policy ceiling, the deployment's features and the web settings, refusing every invalid
+ * one in a single {@link SettingsError}, so an operator fixes them in one restart, not three.
+ */
+function readStartupSettings(env: Readonly<Record<string, string | undefined>>): StartupSettings {
+  const reasons: string[] = [];
+  const attempt = <T>(read: () => T): T | undefined => {
+    try {
+      return read();
+    } catch (error) {
+      if (error instanceof SettingsError) reasons.push(...error.reasons);
+      else reasons.push(error instanceof Error ? error.message : String(error));
+      return undefined;
+    }
+  };
+  const policyCeiling = attempt(() => readDeploymentPolicy(env));
+  const deploymentFeatures = attempt(() => readDeploymentFeatures(env));
+  const settings = attempt(() => readWebSettings(env));
+  if (policyCeiling === undefined || deploymentFeatures === undefined || settings === undefined) {
+    throw new SettingsError(reasons);
+  }
+  return { policyCeiling, deploymentFeatures, settings };
+}
+
 export async function register(): Promise<RegisteredComposition | undefined> {
   // Not `!== 'nodejs'`. `NEXT_RUNTIME` is not guaranteed to be set, and an absent value read as
   // "not node" would silently skip the whole composition — the ADR-0015 shape, where the check
@@ -163,20 +202,26 @@ export async function register(): Promise<RegisteredComposition | undefined> {
   // positively cannot serve is skipped: `pg` and `node:*` do not exist on the edge runtime.
   if (process.env['NEXT_RUNTIME'] === 'edge') return;
 
-  // Issue #535 (C13): read once, before the database opens. An invalid value throws, so start-up
-  // stops rather than run without the ceiling the operator asked for.
-  const policyCeiling = readDeploymentPolicy(process.env);
+  // Issue #535 (C13), ADR-0160 D5 and refactoring part 03: read once, before the database opens.
+  // An invalid value throws a `SettingsError` that names every refused variable at once, and the
+  // Next.js entry then exits (`stop-on-failed-start.ts`) rather than run without the ceiling or the
+  // features the operator asked for, or with a value the server would otherwise ignore.
+  const { policyCeiling, deploymentFeatures, settings } = readStartupSettings(process.env);
   log.info(
     `[compose] policy ceiling: ${policyCeiling === null ? 'none' : Object.keys(policyCeiling).join(', ')}`,
   );
-
-  // ADR-0160 D5: read once, like the policy ceiling; an invalid value throws and stops start-up.
-  const deploymentFeatures = readDeploymentFeatures(process.env);
   log.info(
     `[compose] features: ${deploymentFeatures.length === FEATURE_IDS.length ? 'all' : deploymentFeatures.join(', ')}`,
   );
+  log.info(
+    `[compose] settings: trusted proxy hops ${String(settings.trustedProxyHops ?? 0)}, container idle stop ${settings.containerIdleStopSeconds === null ? 'none' : `${String(settings.containerIdleStopSeconds)} s`}`,
+  );
 
-  const secret = readSessionSecret(process.env);
+  // Refactoring part 03, step 3: the sign-in settings, read once and installed before anything can
+  // fail, so a route that runs without a seam still gives the reason (a missing secret, say).
+  const authSettings = authSettingsFromEnvironment(process.env);
+  installAuthSettings(authSettings);
+  const secret = authSettings.sessionSecret;
   if (!secret.ok) {
     log.error(
       `[compose] no seam installed: ${secret.reason} Every /api/** route will answer 503, and the middleware refuses each request 401 before it gets there.`,
@@ -229,6 +274,8 @@ export async function register(): Promise<RegisteredComposition | undefined> {
     close(): Promise<void> {
       closePromise ??= (async () => {
         for (const stop of stops.splice(0)) stop();
+        clearClientIdentity();
+        clearAuthSettings();
         const resources = [
           root.close(),
           ...(secretsService === null ? [] : [secretsService.close()]),
@@ -249,6 +296,13 @@ export async function register(): Promise<RegisteredComposition | undefined> {
       return closePromise;
     },
   };
+
+  // Refactoring part 03, step 2: the per-client limits and runnable public links read these from
+  // here, never from the environment. `close()` removes them.
+  installClientIdentity({
+    trustedProxyHops: settings.trustedProxyHops,
+    sessionSecret: secret.secret,
+  });
 
   try {
     return await registerOpenedDatabase(
@@ -310,6 +364,12 @@ async function registerOpenedDatabase(
     switches: featureSwitches,
   });
   const context = {
+    // ADR-0104 acceptance (issues #1516, #1517): the team routes need the database, and the
+    // member endpoint the lead run's token and the directory its caller is read from.
+    agentTeams: wireAgentTeams(root, {
+      tokenSecret: configuredPath('GATEWAY_TOKEN_SECRET'),
+      directory: principalIdentity.rbac.directory,
+    }),
     agents: { ...wired.agentsRuntime, runtimeSwitchAudit: wired.runtimeSwitchAudit },
     agentVersions: wired.agentVersions,
     audit: wired.audit,
@@ -338,6 +398,9 @@ async function registerOpenedDatabase(
     ),
     workspaces: principalIdentity.workspaces,
     shares: wireShares(wired),
+    // N-3 (ADR-SDK-18-N3-250): the registry needs no run runtime; its worker sends what stopped
+    // runs wrote, and stops on close like the stale-run sweep.
+    webhooks: wireWebhooks(root, wired.secretsService, { log, stopOnClose }),
   };
   // The run API, the A2A and tool endpoints, `POST /api/tokens`, the triggers and the public
   // surfaces need the run runtime; with none they are disabled (503). One install, after

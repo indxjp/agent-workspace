@@ -47,6 +47,9 @@ export function isStoppedRunStatus(status: RunStatus): boolean {
  * Not the engine. The harness that runs the agent loop is {@link RunResourceSchema}'s `engine`
  * (`EngineId`, `./engines.ts`); this list is who answered the model call it made. One run has both,
  * and they are independent: a `claude-agent-sdk` run can be served by `openai`.
+ *
+ * `vertex` is Claude served by Vertex AI in the operator's own Google Cloud project. It is keyless:
+ * the gateway authenticates with the workload identity, so the connection stores no credential.
  */
 export const MODEL_PROVIDERS = [
   'anthropic',
@@ -54,6 +57,7 @@ export const MODEL_PROVIDERS = [
   'openai',
   'azure-openai',
   'openai-compatible',
+  'vertex',
 ] as const;
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
 
@@ -75,6 +79,23 @@ export const MAX_RUN_ATTACHMENTS = 10;
 
 /** The most paths one run's `fileScope` may name (issue #1539). */
 export const MAX_RUN_FILE_SCOPE_PATHS = 100;
+
+/** The highest `spendCeilingUsd` one run start may ask for (ADR-0162). */
+export const MAX_SPEND_CEILING_USD = 1_000_000;
+
+/**
+ * A run start's spend ceiling in USD (ADR-0162 decision 2): positive, finite, at most
+ * {@link MAX_SPEND_CEILING_USD}, and at most six decimal places, so it is stored in
+ * `runs.spend_ceiling_usd` (`numeric(14,6)`) exactly as it was sent.
+ */
+export const SpendCeilingUsdSchema = z
+  .number()
+  .positive()
+  .finite()
+  .max(MAX_SPEND_CEILING_USD)
+  .refine((value) => Number(value.toFixed(6)) === value, {
+    message: 'spendCeilingUsd must have at most six decimal places',
+  });
 
 /** The longest one `fileScope` path, in characters. */
 const MAX_RUN_FILE_SCOPE_PATH_LENGTH = 1024;
@@ -145,63 +166,120 @@ export const RunApprovalCallSchema = z
 export type RunApprovalCall = z.infer<typeof RunApprovalCallSchema>;
 
 /**
- * One run as `GET /api/runs/:id`, every item of `GET /api/runs`, and the `202` of
- * `POST /api/agents/:id/runs` render it. Dates are ISO-8601 strings; `durationMs` is `null` until
- * both `startedAt` and `endedAt` exist.
+ * The fields of one run, shared by {@link RunResourceSchema} and {@link RunDetailSchema} so the
+ * detail is the resource plus its tree and nothing that could drift from it.
  */
-export const RunResourceSchema = z
+const runResourceShape = {
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  agentId: z.string().min(1),
+  projectId: z.string().nullable(),
+  /** Legacy human attribution; `null` for a run started with an API key. */
+  initiatingUserId: z.string().nullable(),
+  sessionId: z.string().min(1),
+  /**
+   * The number of the agent version this run's session pins (#612, ADR-0101): the version the run
+   * executed, whose definition names the skill revisions it applied. `null` for a legacy session
+   * created before versions existed. Server-set and read-only.
+   */
+  agentVersion: z.number().int().min(1).nullable(),
+  status: z.enum(RUN_STATUSES),
+  createdAt: IsoDateTimeSchema,
+  startedAt: IsoDateTimeSchema.nullable(),
+  endedAt: IsoDateTimeSchema.nullable(),
+  durationMs: z.number().int().nonnegative().nullable(),
+  model: z.string().nullable(),
+  /** The **model** provider that served the call, never the engine. See {@link MODEL_PROVIDERS}. */
+  provider: z.enum(MODEL_PROVIDERS).nullable(),
+  modelConnectionId: z.string().nullable(),
+  /**
+   * The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and
+   * `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row
+   * nobody ever wrote an engine onto, rather than a backfilled guess.
+   */
+  engine: EngineIdSchema.nullable(),
+  /**
+   * The adapter's and third-party SDK's version, as the runner reported it. Opaque to the
+   * platform: recorded for support, never compared. `null` for a historic run.
+   */
+  engineVersion: z.string().nullable(),
+  usage: RunUsageSchema,
+  cost: RunCostSchema,
+  /**
+   * The run's spend ceiling in USD (ADR-0162), a decimal string like `cost.amount`, or `null` when
+   * the run has none. It is the lowest of the agent's `limits.maxBudgetUsd`, the deployment
+   * ceiling's and the start's {@link StartRunRequest.spendCeilingUsd}, fixed when the run starts.
+   * The gateway refuses the run's next model call once `cost.amount` reaches it, and the run ends
+   * `failed` with the failure code {@link RUN_BUDGET_REACHED}. A run on a model the gateway cannot
+   * price is recorded at cost 0 (`accountingState: 'unavailable'`), so its ceiling is never reached.
+   */
+  spendCeilingUsd: z.string().nullable(),
+  /** The safe public failure text, or `null` while the run is live or ended well. */
+  error: z.string().nullable(),
+  /** The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. */
+  output: RunOutputSchema.nullable(),
+  /**
+   * The call the run is waiting for a decision on while `status` is `awaiting_approval`, and
+   * `null` in every other status (once decided, the continuation run carries the approved call).
+   */
+  pendingApproval: RunApprovalCallSchema.nullable(),
+  accountingState: z.enum(ACCOUNTING_STATES),
+  accountingError: z.string().nullable(),
+  /**
+   * The lead run that started this one through an agent team's member tool (ADR-0104
+   * acceptance, spec 04 §5.12 "Run trees"), or `null` for a root run. The depth is at most 1, so
+   * a run whose `parentRunId` is set has no children.
+   */
+  parentRunId: z.string().min(1).nullable(),
+};
+
+/**
+ * One run as every item of `GET /api/runs` and the `202` of `POST /api/agents/:id/runs` render
+ * it; `GET /api/runs/:id` renders the {@link RunDetailSchema} that extends it. Dates are ISO-8601
+ * strings; `durationMs` is `null` until both `startedAt` and `endedAt` exist.
+ */
+export const RunResourceSchema = z.object(runResourceShape).strict().readonly();
+
+export type RunResource = z.infer<typeof RunResourceSchema>;
+
+/** The most child runs one root run has, so the most `children` a detail carries (ADR-0104). */
+export const RUN_CHILDREN_MAX = 16;
+
+/**
+ * A tree's cost: the exact decimal sum of `cost.amount` over the root and its children, summed at
+ * read time (there is no stored total, so it cannot disagree with its parts).
+ */
+export const RunTreeCostSchema = z
   .object({
-    id: z.string().min(1),
-    workspaceId: z.string().min(1),
-    agentId: z.string().min(1),
-    projectId: z.string().nullable(),
-    /** Legacy human attribution; `null` for a run started with an API key. */
-    initiatingUserId: z.string().nullable(),
-    sessionId: z.string().min(1),
-    /**
-     * The number of the agent version this run's session pins (#612, ADR-0101): the version the run
-     * executed, whose definition names the skill revisions it applied. `null` for a legacy session
-     * created before versions existed. Server-set and read-only.
-     */
-    agentVersion: z.number().int().min(1).nullable(),
-    status: z.enum(RUN_STATUSES),
-    createdAt: IsoDateTimeSchema,
-    startedAt: IsoDateTimeSchema.nullable(),
-    endedAt: IsoDateTimeSchema.nullable(),
-    durationMs: z.number().int().nonnegative().nullable(),
-    model: z.string().nullable(),
-    /** The **model** provider that served the call, never the engine. See {@link MODEL_PROVIDERS}. */
-    provider: z.enum(MODEL_PROVIDERS).nullable(),
-    modelConnectionId: z.string().nullable(),
-    /**
-     * The engine that executed the run. `'claude-agent-sdk'` on every run this release starts, and
-     * `null` only for a run recorded before ADR-0065 named the field — the honest answer for a row
-     * nobody ever wrote an engine onto, rather than a backfilled guess.
-     */
-    engine: EngineIdSchema.nullable(),
-    /**
-     * The adapter's and third-party SDK's version, as the runner reported it. Opaque to the
-     * platform: recorded for support, never compared. `null` for a historic run.
-     */
-    engineVersion: z.string().nullable(),
-    usage: RunUsageSchema,
-    cost: RunCostSchema,
-    /** The safe public failure text, or `null` while the run is live or ended well. */
-    error: z.string().nullable(),
-    /** The answer once the run is `completed`; `null` while it is live and for a failed or cancelled run. */
-    output: RunOutputSchema.nullable(),
-    /**
-     * The call the run is waiting for a decision on while `status` is `awaiting_approval`, and
-     * `null` in every other status (once decided, the continuation run carries the approved call).
-     */
-    pendingApproval: RunApprovalCallSchema.nullable(),
-    accountingState: z.enum(ACCOUNTING_STATES),
-    accountingError: z.string().nullable(),
+    /** A decimal string, never a float, at the scale of the runs' own amounts. */
+    amount: z.string().min(1),
+    currency: z.string().min(1),
   })
   .strict()
   .readonly();
 
-export type RunResource = z.infer<typeof RunResourceSchema>;
+export type RunTreeCost = z.infer<typeof RunTreeCostSchema>;
+
+/**
+ * One run as `GET /api/runs/:id` renders it (spec 04 §5.12 "Run trees"): the run resource plus
+ * `children`, the runs whose `parentRunId` is this run (at most {@link RUN_CHILDREN_MAX}, oldest
+ * first; always empty for a child), and `treeCost`, the read-time sum of `cost` over the root and
+ * those children. Lists never carry either field.
+ *
+ * This release's control plane always sends both on the read. They are optional here, on the read
+ * alone, so a client reading a control plane or a test double that answers the plain resource
+ * still parses it (the field may be absent, never `null` or malformed).
+ */
+export const RunDetailSchema = z
+  .object({
+    ...runResourceShape,
+    children: z.array(RunResourceSchema).max(RUN_CHILDREN_MAX).readonly().exactOptional(),
+    treeCost: RunTreeCostSchema.exactOptional(),
+  })
+  .strict()
+  .readonly();
+
+export type RunDetail = z.infer<typeof RunDetailSchema>;
 
 /** The largest `outputSchema` a request may carry: its JSON serialisation in UTF-8 bytes (ADR-0143). */
 export const OUTPUT_SCHEMA_MAX_BYTES = 32_768;
@@ -382,6 +460,12 @@ export function outputSchemaViolation(schema: unknown): OutputSchemaViolation | 
  * `outputSchema` asks for the answer as a value of that JSON Schema (ADR-0143): it comes back as
  * `RunResource.output.structured`. It must satisfy {@link outputSchemaViolation}, and an engine
  * that cannot honour it is refused with `422 engine_capability_unsupported`.
+ *
+ * `spendCeilingUsd` lowers the run's spend ceiling (ADR-0162): positive, finite, at most
+ * {@link MAX_SPEND_CEILING_USD} and at most six decimal places. It only narrows: a value above the
+ * agent's or the deployment ceiling's `limits.maxBudgetUsd` is refused `403 policy_cannot_widen`
+ * with the path `spendCeilingUsd`. The run's {@link RunResource.spendCeilingUsd} is the lowest of
+ * the three.
  */
 export const StartRunRequestSchema = z
   .object({
@@ -427,6 +511,7 @@ export const StartRunRequestSchema = z
         if (found !== null) context.addIssue({ code: 'custom', message: found.message });
       })
       .optional(),
+    spendCeilingUsd: SpendCeilingUsdSchema.optional(),
   })
   .strict()
   .refine((body) => body.version === undefined || (body.sessionId ?? null) === null, {
@@ -587,9 +672,9 @@ export const RUN_START_PROBLEM_CODES = {
   policy_cannot_widen: 403,
   /**
    * The workspace's model spend today (UTC) has reached the policy ceiling's `maxCostPerDayUsd`
-   * (issue #1851). `details` are `capUsd: <n>`, `spentUsd: <n>` and `resetsAt: <ISO time>`, the
-   * next UTC midnight, plus `unpricedUsage: true` when the refusal is because some of today's usage
-   * has no price (it is stored as 0, so the spend cannot be measured).
+   * (issue #1851). `details` are `capUsd: <n>` and `resetsAt: <ISO time>`, the next UTC midnight
+   * (the workspace's spend is not echoed), plus `unpricedUsage: true` when the refusal is because
+   * some of today's usage has no price (it is stored as 0, so the spend cannot be measured).
    */
   daily_cost_cap_reached: 429,
   /**
@@ -677,6 +762,16 @@ export const OUTPUT_SCHEMA_UNSATISFIED_MESSAGE =
 export const RUN_FILE_CORRUPT = 'run_file_corrupt' as const;
 
 /**
+ * The run-failure code of a run the gateway stopped at its spend ceiling (ADR-0162). The stored
+ * `error` is `run_budget_reached: The run stopped at its spend ceiling of <n> USD.`, `<n>` being
+ * {@link RunResource.spendCeilingUsd}; a client names the ceiling from that field, never from the
+ * message. Not a start refusal, and so not in {@link RUN_START_PROBLEM_CODES}: no start can have
+ * spent its ceiling. Not retryable as is: the same prompt under the same ceiling will likely stop
+ * again.
+ */
+export const RUN_BUDGET_REACHED = 'run_budget_reached' as const;
+
+/**
  * A run's stored `error`, split into its safe code and its message.
  *
  * A run that is refused only once it is being composed — a race with an edit made after the start
@@ -695,6 +790,7 @@ export interface RunFailure {
     | typeof RUN_PREPARATION_FAILED
     | typeof OUTPUT_SCHEMA_UNSATISFIED
     | typeof RUN_FILE_CORRUPT
+    | typeof RUN_BUDGET_REACHED
     | null;
   readonly message: string;
 }
@@ -713,6 +809,7 @@ export function parseRunFailure(error: string | null): RunFailure | null {
     code === RUN_PREPARATION_FAILED ||
     code === OUTPUT_SCHEMA_UNSATISFIED ||
     code === RUN_FILE_CORRUPT ||
+    code === RUN_BUDGET_REACHED ||
     isRunStartProblemCode(code)
   ) {
     return { code, message };
@@ -720,8 +817,13 @@ export function parseRunFailure(error: string | null): RunFailure | null {
   return { code: null, message: error };
 }
 
-/** The body of `GET /api/runs/:id`. */
+/** A body that carries one run resource: a trigger fire's `202` (ADR-0144). */
 export const RunResponseSchema = z.object({ run: RunResourceSchema }).strict().readonly();
+
+/** The body of `GET /api/runs/:id`: the run with its children and tree cost (ADR-0104). */
+export const RunDetailResponseSchema = z.object({ run: RunDetailSchema }).strict().readonly();
+
+export type RunDetailResponse = z.infer<typeof RunDetailResponseSchema>;
 
 /**
  * The body of `POST /api/runs/:id/interrupt` (issue #235, S-14): the run, re-read after its

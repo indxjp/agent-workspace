@@ -429,9 +429,13 @@ function enumValues(id: string): readonly (readonly string[])[] {
     case 'enum/credentialed-auth-type':
       return [schema.credentialedMcpAuthTypes];
     case 'enum/agent-permission-key':
+      // The switches: every key of the stored schema but `memory`, which is a scope beside them,
+      // not a switch (ADR-0163); the test below pins that it is the only such key.
       return [
         AGENT_PERMISSION_KEYS,
-        Object.keys(shapeOf(schema.AgentPermissions, 'AgentPermissions')),
+        Object.keys(shapeOf(schema.AgentPermissions, 'AgentPermissions')).filter(
+          (key) => !AGENT_PERMISSION_SCOPE_KEYS.includes(key),
+        ),
       ];
     case 'enum/agent-mutable-field':
       return [AGENT_MUTABLE_FIELDS];
@@ -439,6 +443,9 @@ function enumValues(id: string): readonly (readonly string[])[] {
       throw new Error(`no TypeScript counterpart for ${id}`);
   }
 }
+
+/** The keys of the stored permissions that are not switches: the memory scope (ADR-0163). */
+const AGENT_PERMISSION_SCOPE_KEYS: readonly string[] = ['memory'];
 
 /** The keys of a Zod object schema, through any `.readonly()` wrappers. */
 function shapeOf(zodSchema: unknown, what: string): Record<string, unknown> {
@@ -466,6 +473,12 @@ describe('concept-catalog: enumerations and wire fields against the code', () =>
       for (const actual of enumValues(id)) expect([...actual]).toEqual(values);
     },
   );
+
+  it('the stored permissions are the switches and the memory scope, nothing else (ADR-0163)', () => {
+    expect(Object.keys(shapeOf(schema.AgentPermissions, 'AgentPermissions')).sort()).toEqual(
+      [...AGENT_PERMISSION_KEYS, ...AGENT_PERMISSION_SCOPE_KEYS].sort(),
+    );
+  });
 
   it('the file access modes are exactly what AgentResourceAssignmentsSchema admits', () => {
     const vector = enumVectors.find((v) => v.id === 'enum/file-access');

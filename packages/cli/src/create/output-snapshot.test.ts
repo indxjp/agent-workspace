@@ -5,7 +5,6 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { ENGINE_IDS } from '@indx-workspace/contracts/engines';
-import { MODEL_PROVIDERS } from '@indx-workspace/contracts/runs';
 import {
   SETUP_QUESTIONS,
   SETUP_SANDBOX_CHOICES,
@@ -64,11 +63,21 @@ interface Row {
   readonly target?: false;
   readonly images?: DeploymentImages;
   readonly answers?: GeneratorAnswers;
+  /** The directory created in; `acme-ai` when not given. */
+  readonly directory?: string;
+  /** Lines some written files must hold, by path, checked besides the digests. */
+  readonly contains?: Readonly<Record<string, readonly string[]>>;
 }
 
 const YES = ['--yes', '--no-install'];
 const modelBaseUrl = SETUP_QUESTIONS.find((question) => question.id === 'admin.modelBaseUrl');
 if (modelBaseUrl === undefined) throw new Error('the admin.modelBaseUrl question is gone');
+const modelProvider = SETUP_QUESTIONS.find((question) => question.id === 'admin.modelProvider');
+if (modelProvider === undefined || modelProvider.answer.kind !== 'choice') {
+  throw new Error('the admin.modelProvider question is gone or is no longer a choice');
+}
+// Only the providers `create` offers: `vertex` is keyless and deploy-only, so `--provider vertex` is refused.
+const CREATE_PROVIDERS = modelProvider.answer.choices;
 
 const rows: readonly Row[] = [
   ...SETUP_THEMES.flatMap((theme) =>
@@ -77,7 +86,7 @@ const rows: readonly Row[] = [
       argv: [...YES, '--theme', theme, '--engine', engine],
     })),
   ),
-  ...MODEL_PROVIDERS.map((provider) => ({
+  ...CREATE_PROVIDERS.map((provider) => ({
     name: `provider ${provider}`,
     argv: [
       ...YES,
@@ -122,6 +131,29 @@ const rows: readonly Row[] = [
     images: cloudImages,
   },
   { name: 'refusal: unknown theme', argv: ['--theme', 'nope'] },
+  { name: 'template portal', argv: ['--template', 'portal', '--yes'] },
+  ...(['chat', 'wiki', 'crm', 'desk'] as const).map((template) => ({
+    name: `template ${template}`,
+    argv: ['--template', template, '--yes'],
+  })),
+  {
+    name: 'template desk in service-desk',
+    argv: ['--template', 'desk', '--yes'],
+    directory: 'service-desk',
+    contains: {
+      'app.config.ts': ["  name: 'service-desk',"],
+      'db/migrations/0000_app_kit.sql': [
+        'CREATE TABLE IF NOT EXISTS "app_service_desk"."app_audit_events" (',
+      ],
+      'db/migrations/0001_app_kit_recipes.sql': ['"app_service_desk"'],
+      'aw-generated.json': ['"app:service-desk"', '"page:dashboard"', '"project:service-desk"'],
+    },
+  },
+  { name: 'refusal: unknown template', argv: ['--template', 'nope'] },
+  {
+    name: 'refusal: --template portal --cloud local',
+    argv: ['--template', 'portal', '--cloud', 'local'],
+  },
 ];
 
 async function filesUnder(root: string, directory = root): Promise<readonly string[]> {
@@ -154,7 +186,7 @@ afterEach(async () => {
 
 describe('create output', () => {
   it.each(rows)('$name', async (row) => {
-    const target = path.join(parent, 'acme-ai');
+    const target = path.join(parent, row.directory ?? 'acme-ai');
     const argv = row.target === false ? [...row.argv] : [target, ...row.argv];
 
     const normalise = (text: string): string =>
@@ -192,10 +224,16 @@ describe('create output', () => {
     for (const file of [...written].sort()) {
       const contents = normalise(await readFile(path.join(target, file), 'utf8'));
       files[file] = createHash('sha256').update(contents).digest('hex');
+      for (const line of row.contains?.[file] ?? []) expect(contents).toContain(line);
     }
+    expect(Object.keys(row.contains ?? {}).filter((file) => !Object.hasOwn(files, file))).toEqual(
+      [],
+    );
 
     const record: CreateRecord = {
-      argv: argv.map((argument) => (argument === target ? '<parent>/acme-ai' : argument)),
+      argv: argv.map((argument) =>
+        argument === target ? `<parent>/${path.basename(target)}` : argument,
+      ),
       exit,
       exitCode,
       stdout: normalise(captured.stdout.replaceAll('\r\n', '\n')),

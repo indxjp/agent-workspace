@@ -358,6 +358,11 @@ describe('the wire resource the model renders', () => {
     expect(ShareResourceSchema.safeParse(resource).success).toBe(true);
     expect(ShareListItemSchema.safeParse(item).success).toBe(true);
     expect(ShareResourceSchema.safeParse(item).success).toBe(false);
+    // Part 06 step 3 phase 2: a list item never carries a link, whatever the visibility.
+    expect(
+      ShareListItemSchema.safeParse({ ...item, url: `/p/${asString(share['token'], vector.id)}` })
+        .success,
+    ).toBe(false);
 
     const broken =
       expected['url'] === null

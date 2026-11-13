@@ -12,7 +12,7 @@ the deployment-wide `storage_migration_runs` are the only global tables, and eve
 tenant-scoped. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/site/concepts/workspaces-and-principals.mdx#workspace-and-principal")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem workspace_is_the_tenant_root :
     (catalogue .workspaces).tenancy = .root ∧
       allTables.filter (fun t => (catalogue t).tenancy == .global) = [.storageMigrationRuns, .userIdentities, .users] ∧
@@ -24,7 +24,7 @@ theorem workspace_is_the_tenant_root :
 `workspace_id` column, and no other table has one. -/
 @[aw_spec (tier := T1)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenant_scoped_iff_workspace_column (t : TableName) :
     ((catalogue t).tenancy == .scoped) = (catalogue t).hasColumn "workspace_id" ∧
       ((catalogue t).tenancy == .scoped →
@@ -35,7 +35,7 @@ theorem tenant_scoped_iff_workspace_column (t : TableName) :
 `(workspace_id, user_id) → memberships (workspace_id, user_id)` and is tenant-paired, so a session's
 person holds a membership in the session's workspace. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#REQUIRED_REFERENCES")
+  (ts := "packages/core/src/db/tenancy-references.test-support.ts#REQUIRED_REFERENCES")
   (ts := "packages/core/src/db/schema/sessions.ts#sessions_member_workspace_fk")]
 theorem session_member_reference_is_required :
     (catalogue .sessions).foreignKey? "sessions_member_workspace_fk" =
@@ -132,7 +132,7 @@ theorem closed_set_check_admits_only_its_values :
       checkHolds [⟨[("id", "af1")]⟩] ck = true := by
   decide +kernel
 
-/-- The composite unique targets: exactly these 18 tables declare a unique key over
+/-- The composite unique targets: exactly these 21 tables declare a unique key over
 `{id, workspace_id}`, the target of every tenant-paired reference into them. -/
 @[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")]
 theorem composite_unique_targets :
@@ -140,20 +140,23 @@ theorem composite_unique_targets :
         sameColumns u.columns ["id", "workspace_id"] && u.partialNullColumns.isEmpty &&
           u.partialNotNullColumns.isEmpty) =
       [.agentVersions, .agents, .apiKeys, .endpointClients, .files, .mcpServers, .memberships, .modelConnections, .projects, .runs,
-        .runtimeProfiles, .secrets, .sessions, .storageConnections, .shares, .skills, .triggers, .workspacePrincipals] := by
+        .runtimeProfiles, .secrets, .sessions, .storageConnections, .shares, .skills, .triggers, .workspacePrincipals,
+        .webhooks, .agentTeams, .agentTeamVersions] := by
   decide +kernel
 
-/-- The five partial unique keys: at most one built-in agent per workspace and key (ordinary agents
+/-- The six partial unique keys: at most one built-in agent per workspace and key (ordinary agents
 carry no key and are outside the index), at most one file row per workspace and object id (rows
 without one are outside the index), at most one pending (neither accepted nor revoked) invitation
 per workspace and address, at most one run per workspace and start idempotency key (runs without a key
-are outside the index), and at most one continuation per paused run (runs that continue nothing are
-outside the index). -/
+are outside the index), at most one continuation per paused run (runs that continue nothing are
+outside the index), and at most one live agent team per workspace and name (a deleted team is outside
+the index, so its name is free again). -/
 @[aw_spec (tier := T1) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/agents.ts#agents")
   (ts := "packages/core/src/db/schema/files.ts#files")
   (ts := "packages/core/src/db/schema/invitations.ts#invitations")
-  (ts := "packages/core/src/db/schema/runs.ts#runs")]
+  (ts := "packages/core/src/db/schema/runs.ts#runs")
+  (ts := "packages/core/src/db/schema/agent-teams.ts#agentTeams")]
 theorem the_partial_unique_keys_are_builtin_agents_file_objects_pending_invitations_run_keys_and_continuations :
     (allTables.flatMap fun t => ((catalogue t).uniques.filter fun u =>
         !u.partialNullColumns.isEmpty || !u.partialNotNullColumns.isEmpty)) =
@@ -166,7 +169,9 @@ theorem the_partial_unique_keys_are_builtin_agents_file_objects_pending_invitati
        { name := "runs_workspace_idempotency_key_unique", columns := ["workspace_id", "idempotency_key"],
          kind := .index, partialNullColumns := [], partialNotNullColumns := ["idempotency_key"] },
        { name := "runs_continues_run_id_unique", columns := ["continues_run_id"],
-         kind := .index, partialNullColumns := [], partialNotNullColumns := ["continues_run_id"] }] := by
+         kind := .index, partialNullColumns := [], partialNotNullColumns := ["continues_run_id"] },
+       { name := "agent_teams_workspace_name_key", columns := ["workspace_id", "name"],
+         kind := .index, partialNullColumns := ["deleted_at"] }] := by
   decide +kernel
 
 /-- Runs carry no `agent_id`: a run's agent is its session's (the only run parent is the session,

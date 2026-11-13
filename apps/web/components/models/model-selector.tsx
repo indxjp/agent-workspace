@@ -5,9 +5,8 @@
  * selector component that treats `(connectionId, providerModelId)` as a single value drawn from
  * `#129`'s catalog, and is reused at every layer."
  *
- * A value is encoded onto the `<select>` element as `${connectionId}::${providerModelId}` — the
- * DOM has no way to carry a pair natively — and decoded back on every change; nothing here ever
- * stores or compares a display label.
+ * Nothing here ever stores or compares a display label: the model control carries the provider
+ * model id and the connection control the connection id.
  */
 import { useEffect, useState } from 'react';
 
@@ -20,7 +19,13 @@ import { loadCatalog } from './connections-model';
 export type ModelCatalogState =
   | { readonly kind: 'loading' }
   | { readonly kind: 'ready'; readonly catalog: Catalog }
-  | { readonly kind: 'failed'; readonly reason: string };
+  | {
+      readonly kind: 'failed';
+      /** The whole English sentence, as before. */
+      readonly reason: string;
+      /** The error's own text, for a screen that writes its own lead in the reader's language. */
+      readonly detail: string;
+    };
 
 /**
  * `GET /api/models` (discovered models) and `GET /api/model-connections` (names, readiness),
@@ -43,10 +48,8 @@ export function useModelCatalog(): ModelCatalogState {
       })
       .catch((error: unknown) => {
         if (!active) return;
-        setState({
-          kind: 'failed',
-          reason: `Models could not be loaded: ${error instanceof Error ? error.message : String(error)}`,
-        });
+        const detail = error instanceof Error ? error.message : String(error);
+        setState({ kind: 'failed', reason: `Models could not be loaded: ${detail}`, detail });
       });
     return () => {
       active = false;
@@ -57,17 +60,6 @@ export function useModelCatalog(): ModelCatalogState {
 
 const CONTROL =
   'h-[27px] rounded-[999px] border border-border-strong bg-surface px-2.5 text-[12.5px] text-text-2 disabled:opacity-60';
-
-function encode(entry: Pick<CatalogModel, 'connectionId' | 'providerModelId'>): string {
-  return `${entry.connectionId}::${entry.providerModelId}`;
-}
-
-function decode(raw: string): ModelSelectionValue {
-  if (raw === '') return null;
-  const separator = raw.indexOf('::');
-  if (separator < 0) return null;
-  return { connectionId: raw.slice(0, separator), model: raw.slice(separator + 2) };
-}
 
 export interface ModelSelectorProps {
   readonly id: string;
@@ -82,14 +74,27 @@ export interface ModelSelectorProps {
   readonly inheritLabel?: string;
   readonly disabled?: boolean;
   readonly ariaDescribedBy?: string;
+  /** The control's own words in the reader's language; English when absent. */
+  readonly words?: ModelSelectorWords;
 }
 
+interface ModelSelectorWords {
+  readonly connection: string;
+  readonly noModels: string;
+}
+
+const EN_SELECTOR_WORDS: ModelSelectorWords = {
+  connection: 'Connection',
+  noModels: 'No models available',
+};
+
 /**
- * Grouped by connection (`<optgroup>`), so two connections offering a model of the same display
- * name are never ambiguous in the list. A connection with nothing to select is never rendered as a
- * choosable group — it is named, with its reason, in the unavailable notice beneath the control
- * (see `<ModelUnavailableNotice>` below) instead of as a disabled option a screen reader announces
- * without saying why.
+ * Each model is listed once, however many connections offer it (UX-22). The value is still the
+ * `(connectionId, model)` pair, because two connections carry different keys and limits: when the
+ * chosen model is offered by more than one connection, a second control picks the connection, and
+ * changing the model keeps the current connection when it offers the new one. A connection with
+ * nothing to select is named, with its reason, in `<ModelUnavailableNotice>` below the control,
+ * never as a disabled option a screen reader announces without saying why.
  */
 export function ModelSelector({
   id,
@@ -100,46 +105,79 @@ export function ModelSelector({
   inheritLabel,
   disabled = false,
   ariaDescribedBy,
+  words = EN_SELECTOR_WORDS,
 }: Readonly<ModelSelectorProps>) {
-  const byConnection = new Map<string, { name: string; entries: CatalogModel[] }>();
+  const byModel = new Map<string, CatalogModel[]>();
   for (const entry of models) {
-    const group = byConnection.get(entry.connectionId);
-    if (group === undefined) {
-      byConnection.set(entry.connectionId, { name: entry.connectionName, entries: [entry] });
-    } else {
-      group.entries.push(entry);
-    }
+    const offering = byModel.get(entry.providerModelId);
+    if (offering === undefined) byModel.set(entry.providerModelId, [entry]);
+    else offering.push(entry);
   }
-  const selectedValue =
-    value === null
-      ? ''
-      : encode({ connectionId: value.connectionId, providerModelId: value.model });
+  // Without connection groups, two different models with one display name would read the same.
+  const nameCounts = new Map<string, number>();
+  for (const [model, entries] of byModel) {
+    const name = entries[0]?.displayName ?? model;
+    nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+  const optionLabel = (model: string, entries: readonly CatalogModel[]): string => {
+    const name = entries[0]?.displayName ?? model;
+    return (nameCounts.get(name) ?? 0) > 1 ? `${name} (${model})` : name;
+  };
+  const offering = value === null ? [] : (byModel.get(value.model) ?? []);
+  function chooseModel(model: string): void {
+    const entries = model === '' ? [] : (byModel.get(model) ?? []);
+    const entry =
+      entries.find((candidate) => candidate.connectionId === value?.connectionId) ?? entries[0];
+    onChange(
+      entry === undefined
+        ? null
+        : { connectionId: entry.connectionId, model: entry.providerModelId },
+    );
+  }
   return (
-    <label className="inline-flex items-center gap-1.5" htmlFor={id}>
-      <span className="text-[12.5px] text-text-2">{label}</span>
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <label className="text-[12.5px] text-text-2" htmlFor={id}>
+        {label}
+      </label>
       <select
         id={id}
         className={CONTROL}
-        value={selectedValue}
+        value={value?.model ?? ''}
         disabled={disabled || models.length === 0}
         aria-describedby={ariaDescribedBy}
-        onChange={(event) => onChange(decode(event.target.value))}
+        onChange={(event) => chooseModel(event.target.value)}
       >
         {inheritLabel === undefined ? null : <option value="">{inheritLabel}</option>}
         {models.length === 0 && inheritLabel === undefined ? (
-          <option value="">No models available</option>
+          <option value="">{words.noModels}</option>
         ) : null}
-        {[...byConnection.entries()].map(([connectionId, group]) => (
-          <optgroup key={connectionId} label={group.name}>
-            {group.entries.map((entry) => (
-              <option key={encode(entry)} value={encode(entry)}>
-                {entry.displayName}
-              </option>
-            ))}
-          </optgroup>
+        {[...byModel.entries()].map(([model, entries]) => (
+          <option key={model} value={model}>
+            {optionLabel(model, entries)}
+          </option>
         ))}
       </select>
-    </label>
+      {value === null || offering.length < 2 ? null : (
+        <>
+          <label className="text-[12.5px] text-text-2" htmlFor={`${id}-connection`}>
+            {words.connection}
+          </label>
+          <select
+            id={`${id}-connection`}
+            className={CONTROL}
+            value={value.connectionId}
+            disabled={disabled}
+            onChange={(event) => onChange({ connectionId: event.target.value, model: value.model })}
+          >
+            {offering.map((entry) => (
+              <option key={entry.connectionId} value={entry.connectionId}>
+                {entry.connectionName}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+    </span>
   );
 }
 
@@ -147,8 +185,11 @@ export function ModelSelector({
  *  step" the card asks a blocked state to name, in the caller's own words back. */
 export function ModelUnavailableNotice({
   unavailable,
+  dismissLabel,
 }: Readonly<{
   unavailable: readonly { readonly connectionName: string; readonly reason: string }[];
+  /** The dismiss button's name in the reader's language; the notice's own default when absent. */
+  dismissLabel?: string;
 }>) {
   if (unavailable.length === 0) return null;
   // Entries carry no connection id, so the name and reason together are the condition: a new
@@ -164,6 +205,7 @@ export function ModelUnavailableNotice({
       className="mt-1.5 text-[11.5px] text-warn"
       role="status"
       testId="model-unavailable-notice"
+      {...(dismissLabel === undefined ? {} : { dismissLabel })}
     >
       <ul>
         {unavailable.map((entry) => (

@@ -2,10 +2,12 @@ import { ApiProblemError, type StorageConnectionResource } from '@indx-workspace
 import { describe, expect, it } from 'vitest';
 
 import {
+  connectionNameProblem,
   credentialProblem,
   EMPTY_CREDENTIALS,
   editFormValues,
   storageProblemMessage,
+  testOutcomeMessage,
   updatePatch,
 } from './storage-model';
 
@@ -75,6 +77,49 @@ describe('storageProblemMessage', () => {
     );
     expect(storageProblemMessage(problem('storage_connection_credential_required'), 'x')).toMatch(
       /needs a new credential/u,
+    );
+  });
+});
+
+describe('connectionNameProblem', () => {
+  it.each(['acme-data', 'a', 'reports-2026', `a${'b'.repeat(62)}`])('accepts %j', (name) => {
+    expect(connectionNameProblem(name)).toBeNull();
+  });
+
+  it.each(['Acme', 'acme data', '2026-reports', 'acme_data', '-acme', '', `a${'b'.repeat(63)}`])(
+    'names the rule for %j',
+    (name) => {
+      expect(connectionNameProblem(name)).toBe(
+        'Name: use lowercase letters, digits and hyphens, starting with a letter, up to 63 characters. For example: sales-reports.',
+      );
+    },
+  );
+
+  it('ignores the spaces around a name, as the form does when it sends it', () => {
+    expect(connectionNameProblem('  acme-data ')).toBeNull();
+  });
+
+  it('refuses a name shaped like a connection ID', () => {
+    expect(connectionNameProblem('a1b2c3d4-0000-4000-8000-000000000001')).toContain(
+      'looks like a connection ID',
+    );
+  });
+});
+
+describe('testOutcomeMessage', () => {
+  it('says OK when every folder held something', () => {
+    expect(testOutcomeMessage({ ok: true })).toBe('Connection OK');
+  });
+
+  it('names the folders it found nothing in, without failing the test', () => {
+    expect(testOutcomeMessage({ ok: true, emptyFolders: ['reports', '請求書/2026'] })).toBe(
+      'Connection OK, but no files found under: reports, 請求書/2026. Check the folder names.',
+    );
+  });
+
+  it('still reports a failure by its code', () => {
+    expect(testOutcomeMessage({ ok: false, code: 'not_found' })).toBe(
+      'The storage location was not found.',
     );
   });
 });

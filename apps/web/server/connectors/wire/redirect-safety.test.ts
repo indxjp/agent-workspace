@@ -47,6 +47,7 @@ describe('credential destination confinement', () => {
         `${redirector}/mcp`,
         { 'x-api-key': 'must-stay-at-the-configured-origin' },
         AbortSignal.timeout(2_000),
+        fetch,
       ),
     ).rejects.toThrow();
     expect(receiverRequests).toBe(0);
@@ -72,6 +73,7 @@ describe('credential destination confinement', () => {
         `${sse}/events`,
         { authorization: 'Bearer must-stay-at-the-configured-origin' },
         AbortSignal.timeout(2_000),
+        fetch,
       ),
     ).rejects.toThrow('cross-origin SSE endpoint refused');
     expect(receiverRequests).toBe(0);

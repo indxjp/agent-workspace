@@ -40,6 +40,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NO_INVITATION_CAPABILITY, type InvitationCapability } from '../../contracts/invitations';
 import { NO_MEMBERSHIP_CAPABILITY } from '../../contracts/team';
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
 import { InvitationsSection } from './invitations-section';
 import { MembersTable, type MembersTableState } from './members-table';
 import {
@@ -50,6 +51,7 @@ import {
   type MembershipRoleName,
 } from './model';
 import { RemoveMemberDialog } from './remove-dialog';
+import { teamStrings } from './team-messages';
 import {
   changeMemberRole,
   countRemovalImpact,
@@ -66,10 +68,14 @@ interface OpenDialog {
 export function TeamScreen({
   capability = NO_MEMBERSHIP_CAPABILITY,
   invitationCapability = NO_INVITATION_CAPABILITY,
+  locale = 'en',
 }: Readonly<{
   capability?: MembershipCapability;
   invitationCapability?: InvitationCapability;
+  /** The reader's language (UX-15 in #2086); English by default. */
+  locale?: VersionsLocale;
 }>) {
+  const strings = teamStrings(locale);
   // The refused state is the FIRST state for a caller the server will not give the list to, not a
   // state reached after a 403: showing "Loading members…" to someone who will never be shown any is
   // a promise this screen already knows it cannot keep.
@@ -101,13 +107,14 @@ export function TeamScreen({
         ? { kind: 'ready', members: result.value }
         : {
             kind: 'failed',
-            message: describeMembershipFailure(result.problem, {
-              status: result.status,
-              impact: null,
-            }),
+            message: describeMembershipFailure(
+              result.problem,
+              { status: result.status, impact: null },
+              strings,
+            ),
           },
     );
-  }, [capability.canListMembers]);
+  }, [capability.canListMembers, strings]);
 
   useEffect(() => {
     void load();
@@ -120,7 +127,7 @@ export function TeamScreen({
     setBusyMembershipId(null);
     if (!result.ok) {
       setRoleProblem(
-        describeMembershipFailure(result.problem, { status: result.status, impact: null }),
+        describeMembershipFailure(result.problem, { status: result.status, impact: null }, strings),
       );
       return;
     }
@@ -160,7 +167,11 @@ export function TeamScreen({
         member: open.member,
         state: {
           kind: 'failed',
-          message: describeMembershipFailure(result.problem, { status: result.status, impact }),
+          message: describeMembershipFailure(
+            result.problem,
+            { status: result.status, impact },
+            strings,
+          ),
         },
       });
       return;
@@ -176,15 +187,12 @@ export function TeamScreen({
   }
 
   return (
-    <main className="w-full max-w-[980px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[980px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-6">
         <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold text-text">
-          Users
+          {strings.title}
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          Active members of this workspace, their roles, who may change them, and who has been
-          invited.
-        </p>
+        <p className="mt-1 text-sm text-muted">{strings.intro}</p>
       </div>
       <MembersTable
         state={table}
@@ -193,8 +201,9 @@ export function TeamScreen({
         roleProblem={roleProblem}
         onChangeRole={(member, role) => void changeRole(member, role)}
         onRemove={openRemoval}
+        strings={strings}
       />
-      <InvitationsSection capability={invitationCapability} />
+      <InvitationsSection capability={invitationCapability} strings={strings} />
       {dialog === null ? null : (
         <RemoveMemberDialog
           member={dialog.member}
@@ -202,6 +211,7 @@ export function TeamScreen({
           returnFocusTo={returnFocusRef}
           onCancel={() => setDialog(null)}
           onConfirm={() => void confirmRemoval()}
+          strings={strings}
         />
       )}
     </main>

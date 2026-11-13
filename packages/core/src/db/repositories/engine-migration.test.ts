@@ -66,7 +66,7 @@ const statementKind = (statement: string): 'update' | 'validate' | 'other' => {
 describe('0024 engine CHECK constraints', () => {
   it('keeps both hand-edited NOT VALID clauses', async () => {
     const source = await readFile(
-      path.join(resolveMigrationsDir(), `${FIRST_ENGINE_MIGRATION}.sql`),
+      path.join(resolveMigrationsDir(process.env), `${FIRST_ENGINE_MIGRATION}.sql`),
       'utf8',
     );
     expect(source).toMatch(/ADD CONSTRAINT "runs_engine_valid" CHECK \([^;]*\) NOT VALID;/);
@@ -89,7 +89,7 @@ describe.skipIf(!hasDatabase)('0024/0025 engine identity rename and backfill', (
   const historicRunId = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-engine-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 
@@ -309,7 +309,7 @@ describe.skipIf(!hasDatabase)('0024/0025 engine identity rename and backfill', (
     });
     const before = await snapshot();
     const statements = (
-      await readFile(path.join(resolveMigrationsDir(), `${DATA_MIGRATION}.sql`), 'utf8')
+      await readFile(path.join(resolveMigrationsDir(process.env), `${DATA_MIGRATION}.sql`), 'utf8')
     )
       .split('--> statement-breakpoint')
       .map((statement) => statement.trim())

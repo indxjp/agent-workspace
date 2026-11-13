@@ -159,12 +159,12 @@ describe('the read tools', () => {
   });
 });
 
-describe('the Shell', () => {
-  const env = {
-    PATH: process.env['PATH'] ?? '',
-    ...(process.env['SystemRoot'] === undefined ? {} : { SystemRoot: process.env['SystemRoot'] }),
-  };
+const env = {
+  PATH: process.env['PATH'] ?? '',
+  ...(process.env['SystemRoot'] === undefined ? {} : { SystemRoot: process.env['SystemRoot'] }),
+};
 
+describe('the Shell', () => {
   it('runs in cwd and stops at the first failing command', async () => {
     const ws = workspace();
     const ok = await runShell(ws, env, {
@@ -189,6 +189,29 @@ describe('the Shell', () => {
       '[exit 0; truncated: 234464 more characters were printed and not kept]',
     );
     expect(answer.length).toBeLessThan(2 * 64 * 1024);
+  });
+
+  it('does not split a multi-byte character that arrives in two chunks (D3)', async () => {
+    const ws = workspace();
+    const script =
+      'const b=Buffer.from("\\u3042");process.stdout.write(b.subarray(0,1));setTimeout(()=>process.stdout.write(b.subarray(1)),100)';
+    const answer = await runShell(ws, env, { commands: [`node -e '${script}'`] });
+    expect(answer).toContain('\u3042');
+    expect(answer).not.toContain('\uFFFD');
+  });
+});
+
+describe('the Shell: limits and process groups', () => {
+  it('does not cut a surrogate pair at the answer limit (executors.ts:65)', async () => {
+    const ws = workspace();
+    const answer = await runShell(ws, env, {
+      commands: ["node -e \"process.stdout.write('x'.repeat(65535)+'\\u{1F600}')\""],
+    });
+    expect(answer).not.toMatch(/\p{Cs}/u);
+    writeFileSync(path.join(root, 'emoji.txt'), `${'x'.repeat(65535)}\u{1F600}tail`);
+    const read = await readWorkspaceFile(ws, 'emoji.txt');
+    expect(read).not.toMatch(/\p{Cs}/u);
+    expect(read).toContain('[truncated: 6 more characters]');
   });
 
   // POSIX only: there is no process group to kill on Windows, where only the shell is killed.

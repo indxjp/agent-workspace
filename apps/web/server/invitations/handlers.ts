@@ -25,12 +25,15 @@
  */
 import type { DirectoryRoot, WorkspaceDirectory } from '../rbac/directory';
 import type { InvitationIdentityClaims } from '../auth/invitation-identity';
-import { asObject, readConferredRole, readEmail, readString } from '../rbac/handlers';
+import { asObject, readConferredRole, readEmail, readString } from '../rbac/body-readers';
 import type { ApiResult } from '../http/result';
 import { problemWithDetail as problem } from '../http/result';
 import { resolveSessionActorUserId } from '../rbac/ownership';
 import type { Principal } from '../rbac/principal';
 import type { InvitationsRuntime } from './runtime';
+
+/** The longest invitation token a request may carry; minted tokens are far shorter. */
+const MAX_INVITATION_TOKEN_CHARS = 4_096;
 
 const INVITATION_ID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
@@ -316,7 +319,7 @@ export async function acceptInvitation(
   if (!object.ok) return object.result;
   const exactFields = requireExactFields(object.body, ['token']);
   if (exactFields !== null) return exactFields;
-  const token = readString(object.body, 'token', 4096);
+  const token = readString(object.body, 'token', MAX_INVITATION_TOKEN_CHARS);
   if (!token.ok) return token.result;
 
   const outcome = await directoryRoot.acceptInvitation(invitationId.value, token.value, identity);

@@ -42,6 +42,101 @@ const rawFetchSyntax = [
 ];
 const slotMessage =
   'Declare module-graph state with defineSlot in apps/web/server/runtime-slot.ts.';
+const slotSyntax = [
+  'TSPropertySignature > Identifier.key[name=/^__agentWorkspace\\w*__$/]',
+  'MemberExpression > Identifier.property[name=/^__agentWorkspace\\w*__$/]',
+  "TSIntersectionType > TSTypeQuery[exprName.name='globalThis']",
+  "CallExpression[callee.object.name='Reflect'][arguments.0.name='globalThis']",
+].map((selector) => ({ selector, message: slotMessage }));
+const processEnvProperty = {
+  object: 'process',
+  property: 'env',
+  message: 'Read the environment in a composition root and inject it (F-23).',
+};
+const CORE_IO_MESSAGE =
+  'A domain core does no I/O: take the time, ids, settings and data as arguments (AGENTS.md hexagonal rule 2).';
+/**
+ * `Date` in a core, refused everywhere but the pure uses: `Date.UTC`, `Date.parse`, `new Date(<args>)`,
+ * a type, `instanceof Date`, and a property or key that only happens to be named `Date`. An allow-list,
+ * because every way of reaching the constructor otherwise (an alias, `(0, Date)`, `[Date][0]`, an
+ * argument, an object) is one more pattern to forget. `Date.now` is left to `no-restricted-properties`,
+ * so it is not refused twice.
+ */
+function dateAllowList() {
+  return [
+    "Identifier[name='Date']",
+    ':not(MemberExpression[computed=false][property.name=/^(UTC|parse|now)$/] > Identifier.object)',
+    ':not(NewExpression[arguments.length>0] > Identifier.callee)',
+    ':not(TSTypeReference > Identifier.typeName)',
+    ":not(BinaryExpression[operator='instanceof'] > Identifier.right)",
+    ':not(MemberExpression[computed=false] > Identifier.property)',
+    ':not(Property[computed=false] > Identifier.key)',
+    ':not(TSPropertySignature[computed=false] > Identifier.key)',
+  ].join('');
+}
+
+/**
+ * The rules that keep a domain core free of I/O globals. A pure date computation such as
+ * `new Date(ms)` or `Date.UTC(…)` stays allowed (the Builder's core uses one); reading the clock
+ * does not. The global object itself is refused under every name it has (`globalThis`, `global`,
+ * `window`, `self`), so `globalThis.fetch`, `const { fetch } = globalThis` and `window.fetch` cannot
+ * walk past the bare-name ban, and `Date` is refused but for its pure uses ({@link dateAllowList}). A file's options for a rule are replaced, not merged, by a later
+ * block, so the server-wide `process.env` and module-graph-state entries are repeated here.
+ *
+ * @returns {import('eslint').Linter.RulesRecord}
+ */
+function coreGlobalsRules() {
+  /**
+   * @template {object} T
+   * @param {readonly T[]} entries
+   * @returns {(T & { message: string })[]}
+   */
+  const io = (entries) => entries.map((entry) => ({ ...entry, message: CORE_IO_MESSAGE }));
+  return {
+    'no-restricted-globals': [
+      'error',
+      ...io(
+        [
+          'process',
+          'fetch',
+          'crypto',
+          'performance',
+          'setTimeout',
+          'setInterval',
+          'setImmediate',
+          'globalThis',
+          'global',
+          'window',
+          'self',
+          // Network and host access needs no import either.
+          'WebSocket',
+          'EventSource',
+          'XMLHttpRequest',
+          'navigator',
+          'AbortSignal',
+        ].map((name) => ({ name })),
+      ),
+    ],
+    'no-restricted-properties': [
+      'error',
+      processEnvProperty,
+      ...io([
+        { object: 'Date', property: 'now' },
+        { object: 'Math', property: 'random' },
+      ]),
+    ],
+    'no-restricted-syntax': [
+      'error',
+      ...slotSyntax,
+      ...cleanupSyntax,
+      ...io(
+        [dateAllowList(), "NewExpression[callee.name='Date'] > SpreadElement"].map((selector) => ({
+          selector,
+        })),
+      ),
+    ],
+  };
+}
 
 export default tseslint.config(
   {
@@ -140,6 +235,7 @@ export default tseslint.config(
       'apps/runner/src/**/*.ts',
       'packages/gateway/src/**/*.ts',
       'packages/core/src/**/*.ts',
+      'packages/egress-proxy/src/**/*.ts',
     ],
     ignores: [
       ...TEST_FILES,
@@ -147,17 +243,9 @@ export default tseslint.config(
       'apps/web/server/start.ts',
       'apps/runner/src/{index,start,server,environment,manager-start,manager-function}.ts',
       'packages/gateway/src/{index,vercel-function}.ts',
+      'packages/egress-proxy/src/main.ts',
     ],
-    rules: {
-      'no-restricted-properties': [
-        'error',
-        {
-          object: 'process',
-          property: 'env',
-          message: 'Read the environment in a composition root and inject it (F-23).',
-        },
-      ],
-    },
+    rules: { 'no-restricted-properties': ['error', processEnvProperty] },
   },
   {
     // #1260: Next compiles instrumentation and route handlers into separate module graphs, so
@@ -165,18 +253,15 @@ export default tseslint.config(
     // declare it; a hand-anchored `__agentWorkspace*__` property is the second way this refuses.
     files: ['apps/web/server/**/*.ts'],
     ignores: ['apps/web/server/runtime-slot.ts', '**/*.test.ts'],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        ...[
-          'TSPropertySignature > Identifier.key[name=/^__agentWorkspace\\w*__$/]',
-          'MemberExpression > Identifier.property[name=/^__agentWorkspace\\w*__$/]',
-          "TSIntersectionType > TSTypeQuery[exprName.name='globalThis']",
-          "CallExpression[callee.object.name='Reflect'][arguments.0.name='globalThis']",
-        ].map((selector) => ({ selector, message: slotMessage })),
-        ...cleanupSyntax,
-      ],
-    },
+    rules: { 'no-restricted-syntax': ['error', ...slotSyntax, ...cleanupSyntax] },
+  },
+  // AGENTS.md hexagonal rule 2: a domain core does no I/O. `domain-core-is-pure` refuses its
+  // imports; these are the globals an import rule cannot see. See `coreGlobalsRules`.
+  {
+    files: ['apps/web/server/*/core/**/*.ts'],
+    // Test helpers are left out as `domain-core-is-pure` leaves them out of the import rule.
+    ignores: [...TEST_FILES, '**/*.test-support.ts'],
+    rules: coreGlobalsRules(),
   },
   {
     // F-07: browser components use the SDK. Baseline: eslint-suppressions.json.

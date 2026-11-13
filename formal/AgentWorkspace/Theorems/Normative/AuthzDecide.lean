@@ -3,7 +3,7 @@ import AgentWorkspace.Authz.Decide
 /-!
 T1 — the documented authorisation rules, one theorem per rule:
 
-- one theorem per cell of the role table (4 roles × 31 resources), each pinning the grant
+- one theorem per cell of the role table (4 roles × 32 resources), each pinning the grant
   `permissions.ts` computes against this file's own transcription **and** against the independent
   transcription of `docs/sdk/04-api-specification.md` §3.3 (`documentedGrants`): the cell agrees on
   every reachable operation, disagrees, or the document is silent;
@@ -44,7 +44,7 @@ the handler could conceivably produce. `write: none` for admin, builder and view
 half: an engine is installed by deploying an adapter, and no route writes one. Owner keeps §21's
 `Everything.` fallback and is therefore deliberately absent from the write half. -/
 @[aw_spec (tier := T1) (ts := "apps/web/app/api/engines/route.ts#GET")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")
   (doc := "docs/sdk/04-api-specification.md#33-roles")]
 theorem engine_catalogue_is_read_by_every_role :
     ∀ o : Ownership,
@@ -86,7 +86,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
-        (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+        (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧
           (documentedGrants $roleE $resE).map (agreeOnReachable $resE ⟨$a, $b, $c⟩) = some true :=
         by decide +kernel))
@@ -96,7 +96,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
-        (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+        (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧
           (documentedGrants $roleE $resE).map (agreeOnReachable $resE ⟨$a, $b, $c⟩) = some false :=
         by decide +kernel))
@@ -106,7 +106,7 @@ elab "aw_role_table_cell " role:ident res:ident g1:ident g2:ident g3:ident tag:i
     elabCommand (← `(command|
       $doc:docComment
       @[aw_spec (tier := $(mkIdent `T1)) (doc := "docs/sdk/04-api-specification.md#33-roles")
-        (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+        (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
       theorem $thm : grantsFor $roleE $resE = ⟨$a, $b, $c⟩ ∧ documentedGrants $roleE $resE = none :=
         by decide +kernel))
   | t => throwError "unknown tag {t}"
@@ -143,6 +143,7 @@ aw_role_table_cell owner toolBundles any any any silent
 aw_role_table_cell owner tokens any any any agrees
 aw_role_table_cell owner triggers any any any silent
 aw_role_table_cell owner users any any any agrees
+aw_role_table_cell owner webhooks any any any agrees
 aw_role_table_cell owner workspaces own own none agrees
 
 aw_role_table_cell admin agents any any any agrees
@@ -175,6 +176,7 @@ aw_role_table_cell admin toolBundles any any none silent
 aw_role_table_cell admin tokens none any none agrees
 aw_role_table_cell admin triggers any any any silent
 aw_role_table_cell admin users any any none agrees
+aw_role_table_cell admin webhooks any any none agrees
 aw_role_table_cell admin workspaces own own none agrees
 
 aw_role_table_cell builder agents any own permitted agrees
@@ -207,6 +209,7 @@ aw_role_table_cell builder toolBundles any any none silent
 aw_role_table_cell builder tokens none own none agrees
 aw_role_table_cell builder triggers any own own silent
 aw_role_table_cell builder users none none none agrees
+aw_role_table_cell builder webhooks none none none agrees
 aw_role_table_cell builder workspaces own own none agrees
 
 aw_role_table_cell viewer agents any none permitted agrees
@@ -239,13 +242,14 @@ aw_role_table_cell viewer toolBundles none none none silent
 aw_role_table_cell viewer tokens none none none agrees
 aw_role_table_cell viewer triggers none none none silent
 aw_role_table_cell viewer users none none none agrees
+aw_role_table_cell viewer webhooks none none none agrees
 aw_role_table_cell viewer workspaces own own none agrees
 
 /-- §21's "Owner — Everything." and the permission file's header: Owner is the only role whose
 fallback grants anything; every other role falls back to `NOTHING`, so an unnamed resource is
 denied. -/
 @[aw_spec (tier := T1) (doc := "docs/spec.md#21-users-and-rbac")
-  (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+  (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem only_owner_falls_back_to_everything :
     (policy .owner).fallback = EVERYTHING ∧ (policy .admin).fallback = NOTHING ∧
       (policy .builder).fallback = NOTHING ∧ (policy .viewer).fallback = NOTHING := by decide +kernel
@@ -256,12 +260,12 @@ theorem only_owner_falls_back_to_everything :
 `/api/<resource>/:id/<sub>` the sub-resource, for every resource and every classified sub. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/0026-section-34-is-a-shape-rule-and-an-extra-route-cites-its-mandate.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#parsePath")]
+  (ts := "apps/web/server/rbac/core/decide.ts#parsePath")]
 theorem path_grammar_collection_row_and_sub (r : Resource) (id : String) :
     parseSegments ["", "api", r.toWire] = .ok r none none ∧
       parseSegments ["", "api", r.toWire, id] = .ok r none (some id) ∧
       ∀ sub ∈ subResources r, parseSegments ["", "api", r.toWire, id, sub] = .ok r (some sub) (some id) := by
-  have hr : parseResource r.toWire = some r := WireEnum.ofWire?_toWire r
+  have hr : resourceOfSegment r.toWire = some r := resourceOfSegment_toWire r
   refine ⟨by simp [parseSegments, hr], by simp [parseSegments, hr], fun sub hs => ?_⟩
   have : parseSub r sub = some sub := by
     unfold parseSub
@@ -276,17 +280,17 @@ theorem path_grammar_collection_row_and_sub (r : Resource) (id : String) :
 resource is classified. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/0026-section-34-is-a-shape-rule-and-an-extra-route-cites-its-mandate.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#parsePath")]
+  (ts := "apps/web/server/rbac/core/decide.ts#parsePath")]
 theorem path_deeper_than_sub_is_refused (r : Resource) (id sub x : String) (rest : List String) :
     parseSegments ("" :: "api" :: r.toWire :: id :: sub :: x :: rest) = .tooDeep := by
-  have hr : parseResource r.toWire = some r := WireEnum.ofWire?_toWire r
+  have hr : resourceOfSegment r.toWire = some r := resourceOfSegment_toWire r
   simp [parseSegments, hr]
 
 /-- An unclassified resource segment is refused before depth or sub-resource are looked at. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/0015-gates-decide-on-positive-assertions.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#parsePath")]
+  (ts := "apps/web/server/rbac/core/decide.ts#parsePath")]
 theorem unknown_resource_is_refused_first (seg : String) (rest : List String)
-    (h : parseResource seg = none) :
+    (h : resourceOfSegment seg = none) :
     parseSegments ("" :: "api" :: seg :: rest) = .unknownResource seg := by
   simp [parseSegments, h]
 
@@ -297,7 +301,7 @@ example : parseSegments ["", "api", "widgets", "x", "y", "z"] = .unknownResource
 `refuse` for it whoever asks, whatever the method, ownership or scope. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/0015-gates-decide-on-positive-assertions.md#decision")
   (doc := "docs/adr/W2-CP-06-an-unclassified-sub-resource-is-refused-not-inherited.md#decision-1--sub_resources-is-the-else")
-  (ts := "apps/web/server/rbac/decide.ts#parsePath")]
+  (ts := "apps/web/server/rbac/core/decide.ts#parsePath")]
 theorem unclassified_sub_is_refused_not_inherited (q : Query) (role : Role) (r : Resource)
     (s : String) (hr : parseRoleInput q.role = some role) (hs : classifyPath q.path = .api)
     (hp : parsePath q.path = .unclassifiedSub r s) :
@@ -316,7 +320,7 @@ and any other `POST` a write; `PUT`, `PATCH`, `DELETE` write whatever the sub;
 `OPTIONS` and every other string are refused. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md#decision")
-  (doc := "docs/spec.md#21-users-and-rbac") (ts := "apps/web/server/rbac/decide.ts#parseOperation")]
+  (doc := "docs/spec.md#21-users-and-rbac") (ts := "apps/web/server/rbac/core/decide.ts#parseOperation")]
 theorem method_maps_to_operation (sub : Option String) :
     parseOperation "GET" sub = .ok .read ∧ parseOperation "HEAD" sub = .ok .read ∧
       parseOperation "PUT" sub = .ok .write ∧ parseOperation "PATCH" sub = .ok .write ∧
@@ -352,7 +356,7 @@ example : parseOperationFor "POST" .storageConnections (some "test") = .ok .read
 /-- A method outside `METHODS` (lower-case `get`, `TRACE`, the empty string, …) yields no
 operation, so `decide()` refuses it. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/0015-gates-decide-on-positive-assertions.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#parseOperation")]
+  (ts := "apps/web/server/rbac/core/decide.ts#parseOperation")]
 theorem unknown_method_is_refused (m : String) (sub : Option String) (h : m ∉ methods) :
     parseOperation m sub = .refused .unknownMethod := by
   simp [methods] at h
@@ -366,7 +370,7 @@ example : parseOperation "TRACE" none = .refused .unknownMethod :=
 /-- An unrecognised role is refused before anything else is looked at, never downgraded to a
 narrower role — even on the public surface. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/0015-gates-decide-on-positive-assertions.md#decision")
-  (ts := "apps/web/server/rbac/roles.ts#requireRole") (ts := "apps/web/server/rbac/decide.ts#decide")]
+  (ts := "apps/web/server/rbac/core/roles.ts#requireRole") (ts := "apps/web/server/rbac/decide.ts#decide")]
 theorem unknown_role_is_refused (q : Query) (h : parseRoleInput q.role = none) :
     decideOrdinary q = .refuse .unknownRole := by
   simp [decideOrdinary, h]
@@ -378,7 +382,7 @@ example : decideOrdinary ⟨"Viewer", "GET", "/p/x", .notApplicable, none⟩ = .
 role parse accepts exactly the four lower-case spellings and refuses every variant of case,
 padding or name. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/0015-gates-decide-on-positive-assertions.md#decision")
-  (ts := "apps/web/server/rbac/roles.ts#parseRole")]
+  (ts := "apps/web/server/rbac/core/roles.ts#parseRole")]
 theorem role_parse_is_exact :
     (["owner", "admin", "builder", "viewer"].map parseRoleInput) =
         [some .owner, some .admin, some .builder, some .viewer] ∧
@@ -425,7 +429,7 @@ of its kind's grammar (`inGrammar`), and every cell is witnessed by a documented
 — same resource and operation, and, for a sub-keyed cell such as `(runs, run, "feedback")`, the
 same sub-resource. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR")]
+  (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")]
 theorem scope_grammar_is_the_documented_route_table :
     ∀ k : ScopeKind,
       (documentedScopeRoutes.filter (·.1 == k)).all (fun (_, m, p) =>
@@ -447,7 +451,7 @@ theorem scope_grammar_is_the_documented_route_table :
 grammar (`inGrammar`, sub-resource included) is denied with the scope code, whatever the role's
 grant. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem out_of_grammar_is_token_out_of_scope (q : Query) (role : Role) (s : Scope) (r : Resource)
     (sub id : Option String) (op : Operation) (hr : parseRoleInput q.role = some role)
     (hs : classifyPath q.path = .api) (hp : parsePath q.path = .ok r sub id)
@@ -470,7 +474,7 @@ example : decideOrdinary ⟨"owner", "POST", "/api/files/x/upload-urls", .own, s
 decision carries the code `token_out_of_scope` exactly when the scope check objected (and is then a
 deny), and otherwise no code, so every other deny renders the default `forbidden`. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#Decision")]
+  (ts := "apps/web/server/rbac/core/decide.ts#Decision")]
 theorem deny_code_is_token_out_of_scope_exactly_on_a_scope_objection (q : Query) {role : Role}
     {r : Resource} {sub id : Option String} {op : Operation} (hr : parseRoleInput q.role = some role)
     (hs : classifyPath q.path = .api) (hp : parsePath q.path = .ok r sub id)
@@ -503,7 +507,7 @@ example : (decideOrdinary ⟨"owner", "GET", "/api/runs/other", .own, some (.run
 /-- "A scope reads one row, never a collection": a scoped `runs` read that names no `:id` is
 denied with `token_out_of_scope`, for both kinds. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem scoped_collection_read_is_out_of_scope (s : Scope) (sub : Option String) :
     checkTokenScope s .runs .read sub none = some .collectionRead := by
   cases s <;> simp [checkTokenScope, inGrammar, grammar, Scope.kind]
@@ -513,7 +517,7 @@ example : checkTokenScope (.session ⟨"s"⟩) .runs .read none none = some .col
 
 /-- A run scope admits the same row by exact spelling or equivalent valid UUID spelling. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem run_scope_needs_the_exact_run_id (run : RunId) (id : String) (sub : Option String) :
     checkTokenScope (.run run) .runs .read sub (some id) =
       if sameRunId (some id) run.val then none else some .runIdMismatch := by
@@ -524,7 +528,7 @@ theorem run_scope_needs_the_exact_run_id (run : RunId) (id : String) (sub : Opti
 its own session — the one shape whose path `:id` is the scope's session — by exact spelling or
 equivalent valid UUID spelling, and otherwise denied as a different row. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem session_scope_needs_its_own_session_id (session : SessionId) (id : String) :
     checkTokenScope (.session session) .sessions .write (some "attachments") (some id) =
       if sameRunId (some id) session.val then none else some .sessionIdMismatch := by
@@ -535,7 +539,7 @@ theorem session_scope_needs_its_own_session_id (session : SessionId) (id : Strin
 session scope's run read, agent run and run feedback for any path id, leaving the row check to the
 handler. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")
-  (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+  (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem session_scope_defers_row_identity (session : SessionId) (id : String) (agentId : Option String)
     (sub : Option String) :
     checkTokenScope (.session session) .runs .read sub (some id) = none ∧
@@ -550,7 +554,7 @@ theorem session_scope_defers_row_identity (session : SessionId) (id : String) (a
 owner denies rather than passes. -/
 @[aw_spec (tier := T1) (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
+  (ts := "apps/web/server/rbac/core/decide.ts#applyGrant")]
 theorem apply_grant_table :
     (WireEnum.all : List Grant).map (fun g => (WireEnum.all : List Ownership).map (applyGrant g)) =
       [ [false, false, false, false, false],
@@ -562,7 +566,7 @@ theorem apply_grant_table :
 `agent_grants` row names it: `permitted` is "own or granted" (ADR-0152). -/
 @[aw_spec (tier := T1) (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
   (doc := "docs/adr/0152-roles-are-monotonic.md#decision")
-  (ts := "apps/web/server/rbac/decide.ts#applyGrant")]
+  (ts := "apps/web/server/rbac/core/decide.ts#applyGrant")]
 theorem permitted_grant_admits_own_and_permitted (o : Ownership) :
     applyGrant .permitted o = true ↔ (o = .own ∨ o = .permitted) := by
   cases o <;> simp [applyGrant]
@@ -614,7 +618,7 @@ theorem archive_capability_follows_decide :
 already classifies is refused, naming that declaration, whatever follows it. -/
 @[aw_spec (tier := T1)
   (doc := "docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision")
-  (ts := "apps/web/server/rbac/declared-sub-resources.ts#composeSubResources")]
+  (ts := "apps/web/server/rbac/core/declared-sub-resources.ts#composeSubResources")]
 theorem compose_refuses_a_duplicate_pair (base : SubTable) (d : SubDeclaration)
     (ds : List SubDeclaration) (h : (d.resource, d.sub) ∈ pairsOf base) :
     composeSubResources base (d :: ds) = .error d := by
@@ -625,7 +629,7 @@ example : composeSubResources spec34SubResources [⟨"W9-XX-99", .runs, "events"
   compose_refuses_a_duplicate_pair _ _ _ (by decide +kernel)
 
 /-- Uppercase path spelling of a valid run UUID is the same scoped row. -/
-@[aw_spec (tier := T1) (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")]
+@[aw_spec (tier := T1) (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")]
 theorem uppercase_run_uuid_keeps_scope :
     sameRunId (some "123E4567-E89B-42D3-A456-426614174000")
       "123e4567-e89b-42d3-a456-426614174000" = true := by

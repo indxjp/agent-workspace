@@ -26,6 +26,7 @@ import {
   type InvitationDraft,
 } from './invitations-model';
 import { describeRole } from './model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 const BTN =
   'inline-flex h-8 items-center rounded-(--radius-sm) border px-[13px] text-[13px] font-medium';
@@ -46,6 +47,8 @@ interface InvitationFormProps {
   readonly problem: string | null;
   readonly onChange: (draft: InvitationDraft) => void;
   readonly onSubmit: () => void;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  readonly strings?: TeamStrings;
 }
 
 export function InvitationForm({
@@ -55,6 +58,7 @@ export function InvitationForm({
   problem,
   onChange,
   onSubmit,
+  strings = teamStrings('en'),
 }: Readonly<InvitationFormProps>) {
   if (!capability.canCreateInvitation) return null;
 
@@ -73,14 +77,12 @@ export function InvitationForm({
       {/* `h3`: the section's own `h2` is above this, and the screen's single `h1` above that. The
           accessibility floor (`tests/browser/harness.mjs`) counts the `h1`; the nesting is for a
           screen reader walking the outline. */}
-      <h3 className="text-[14px] font-semibold text-text">Invite someone to this workspace</h3>
-      <p className="mt-1 text-[12.5px] text-muted">
-        They receive no email. The link appears once, here, for you to relay.
-      </p>
+      <h3 className="text-[14px] font-semibold text-text">{strings.inviteHeading}</h3>
+      <p className="mt-1 text-[12.5px] text-muted">{strings.inviteNote}</p>
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-[12px] font-semibold text-muted" htmlFor={EMAIL_ID}>
-            Email
+            {strings.email}
           </label>
           <input
             id={EMAIL_ID}
@@ -94,7 +96,7 @@ export function InvitationForm({
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-[12px] font-semibold text-muted" htmlFor={ROLE_ID}>
-            Role
+            {strings.role}
           </label>
           <select
             id={ROLE_ID}
@@ -111,11 +113,11 @@ export function InvitationForm({
                 the client-side role policy #186 forbids. `disabled` keeps it unreachable once a
                 role has been chosen, and `roleFrom` maps its `''` back to `null`. */}
             <option value="" disabled>
-              Choose a role
+              {strings.chooseRole}
             </option>
             {capability.invitableRoles.map((role) => (
               <option key={role} value={role}>
-                {describeRole(role)}
+                {describeRole(role, strings)}
               </option>
             ))}
           </select>
@@ -125,7 +127,7 @@ export function InvitationForm({
           className={`${BTN} ${BTN_PRIMARY} ${submittable ? '' : BTN_DISABLED}`}
           disabled={!submittable}
         >
-          {sending ? 'Sending…' : 'Send invitation'}
+          {sending ? strings.sending : strings.sendInvitation}
         </button>
       </div>
       {problem === null ? null : (

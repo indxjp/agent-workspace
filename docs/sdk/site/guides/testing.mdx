@@ -601,7 +601,7 @@ stream.
 
 If you maintain the control plane itself, hand-written fixtures can't prove your server's real
 responses satisfy the contract — they can drift from what your serializers produce without either
-side's tests noticing. `apps/web/server/sdk-conformance.test.ts` is the pattern for that: it renders
+side's tests noticing. `apps/web/server/sdk-conformance.*.test.ts` is the pattern for that: it renders
 real records through the application's own serializers (`toAgentResource`, `renderRun`, and so on)
 and parses the result with the same contracts schemas, so a drift fails there first.
 

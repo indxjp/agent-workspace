@@ -5,6 +5,7 @@ import { EVALUATION_CASE_LIMIT } from '@indx-workspace/contracts/evaluations';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MemoryApproval } from '../adapters/approval/memory';
+import { MemoryPolicy } from '../adapters/policy/memory';
 import { MemoryRunner } from '../adapters/runner/memory';
 import type { EvalResult } from '../ports';
 import { handleToolCall } from '../shell';
@@ -22,13 +23,13 @@ const caseNamed = (name: string) => ({
 });
 
 /** A workspace with one agent the caller owns, at version 1, and every port in memory. */
-function evalsSetup() {
+function evalsSetup(policy = new MemoryPolicy()) {
   const approval = new MemoryApproval();
   const authorization = new BuilderAuthorization();
   const runner = new MemoryRunner();
   const agentId = authorization.addAgent(WORKSPACE, PERSON);
   runner.seedAgent(WORKSPACE, agentId, PERSON, 1);
-  const ports = makeMemoryPorts({ approval, authorization, runner });
+  const ports = makeMemoryPorts({ approval, authorization, runner, policy });
   const ctx = callContextOf(WORKSPACE, 'builder', PERSON);
   const args = { agentId, version: 1, cases: [caseNamed('a'), caseNamed('b')] };
   const call = (callId: string, callArgs: unknown = args) =>
@@ -102,6 +103,15 @@ describe('evals_run through the shell', () => {
       version: 1,
       overrideUsd: BUILDER_DEFAULT_LIMITS.trialBudgetUsd,
     });
+  });
+
+  it('runs each case under the policy’s trial budget, as trial_run does (SPD-09)', async () => {
+    const { runner, call, approve } = evalsSetup(new MemoryPolicy({ trialBudgetUsd: 0.05 }));
+    approve();
+
+    await call('c-1');
+
+    expect(runner.last).toMatchObject({ overrideUsd: 0.05 });
   });
 
   it('answers a retry of the same call id with the first result and runs no second evaluation', async () => {
@@ -234,15 +244,15 @@ describe('evals_run through the shell', () => {
     const { runner, call, approve } = evalsSetup();
     vi.spyOn(runner, 'evaluate').mockResolvedValueOnce({
       ok: false,
-      code: 'approval_required',
-      message: 'The evaluations route refused.',
+      code: 'trial_not_stopped',
+      message: 'A case run could not be stopped, so the evaluation is not accepted.',
     });
     approve();
 
     expect(await call('c-1')).toEqual({
       ok: false,
       code: 'evals_refused',
-      message: 'The evaluations route refused.',
+      message: 'A case run could not be stopped, so the evaluation is not accepted.',
     });
   });
 

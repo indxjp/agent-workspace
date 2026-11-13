@@ -38,14 +38,30 @@
  *      and the transcript takes the full width; no SDK events renders the tab's empty line rather
  *      than an empty log. §43 asks for calm and sparse, and a framed empty container is furniture.
  */
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { AssistantProse } from '@indx-workspace/react';
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { AssistantProse, sendsOnEnter } from '@indx-workspace/react';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { withSetupWizardLink } from '../setup/setup-wizard-link';
 import { ShareDialog, type ShareSubject } from '../shares/share-dialog';
 import { AttachControl, type AttachedFile } from './attach-control';
+import { blockedStrings, type BlockedStrings } from './blocked-tools';
+import { browserLocale } from './attach-messages';
+import { RunOutputs } from './run-outputs';
+import { runStatusLabel, runViewStrings, type RunViewStrings } from './run-view-messages';
+import {
+  matchMemberCalls,
+  memberNameOfTool,
+  runHref,
+  type ChildRunLink,
+  type MemberCall,
+} from './run-tree-model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 import {
   type ActivityStep,
   type BadgeTone,
+  type BlockedTool,
   type EventLine,
   type Message,
   type Paragraph,
@@ -119,6 +135,42 @@ export interface RunViewProps {
   readonly prefill?: ComposerPrefill | undefined;
   /** Rendered under the transcript: a caller's own prompt, such as the Builder's approval card. */
   readonly approval?: ReactNode;
+  /**
+   * The run's place in a run tree (ADR-0104): its lead run, when it is a member's child run, and
+   * its child runs, which its `agent__<name>` activity rows link to. Absent for a run outside one.
+   */
+  readonly tree?: RunViewTree | undefined;
+  /** `false` hides **Attach file**: the workspace has Files switched off (UX-21 in #2086). */
+  readonly filesEnabled?: boolean | undefined;
+  /** `false` inside another screen's `<main>`: a `<div>` and an `<h2>` (see HomeChatProps). */
+  readonly landmark?: boolean;
+}
+
+/** What the run view knows of a run tree: the lead run's id, or the child runs to link to. */
+export interface RunViewTree {
+  readonly parentRunId: string | null;
+  readonly children: readonly ChildRunLink[];
+}
+
+/** The member calls of a run's activity rows, and the child run each one started. */
+interface TeamLinks {
+  readonly matched: ReadonlyMap<string, ChildRunLink>;
+  readonly strings: TeamStrings;
+}
+
+/** Every activity step that calls a tool, in transcript order. */
+function toolCallsOf(messages: Run['messages']): readonly MemberCall[] {
+  return messages.flatMap((message) =>
+    message.kind === 'agent'
+      ? message.blocks.flatMap((block) =>
+          block.kind === 'activity'
+            ? block.steps.flatMap((step) =>
+                step.tool === null ? [] : [{ stepId: step.id, toolName: step.tool }],
+              )
+            : [],
+        )
+      : [],
+  );
 }
 
 /** Text a caller asks a composer to hold; a new `nonce` is a new request, the same one is not. */
@@ -166,8 +218,21 @@ export function RunView({
   onFollowUp,
   prefill,
   approval,
+  tree,
+  filesEnabled = true,
+  landmark = true,
 }: RunViewProps) {
-  const { heading, messages, technical, rail, followUp, failure } = run;
+  const { heading, messages, technical, rail, followUp, failure, blocked } = run;
+  const [locale, setLocale] = useState<VersionsLocale>('en');
+  useEffect(() => setLocale(browserLocale(navigator.languages)), []);
+  const strings = runViewStrings(locale);
+  const team = useMemo<TeamLinks>(
+    () => ({
+      matched: matchMemberCalls(toolCallsOf(messages), tree?.children ?? []),
+      strings: teamStrings(locale),
+    }),
+    [messages, tree, locale],
+  );
   const shareSubject = shareSubjectForSession(sessionId, heading.title);
   const [followUpDraft, setFollowUpDraft] = useState('');
   const followUpRef = useRef<HTMLTextAreaElement>(null);
@@ -193,18 +258,32 @@ export function RunView({
     );
   };
 
+  const Landmark = landmark ? 'main' : 'div';
+  const Heading = landmark ? 'h1' : 'h2';
   return (
-    <main className="w-full max-w-[1320px] px-5 pt-5 pb-[90px] sm:px-8">
+    <Landmark className="w-full max-w-[1320px] px-5 pt-5 pb-[90px] sm:px-8">
       <div className="mx-auto mb-8 flex max-w-[900px] items-center gap-4 border-b border-border pb-4">
         <div className="min-w-0">
-          <h1 className="truncate text-[17px] font-semibold">{heading.title}</h1>
+          <Heading className="truncate text-[17px] font-semibold">{heading.title}</Heading>
           {heading.subtitle === '' ? null : (
             <div className="mt-0.5 truncate text-[12px] text-muted">{heading.subtitle}</div>
+          )}
+          {tree === undefined || tree.parentRunId === null ? null : (
+            <div className="mt-0.5 text-[12px] text-text-2" data-testid="run-parent">
+              {team.strings.partOfTeamRun}
+              {' · '}
+              <Link
+                href={runHref(tree.parentRunId)}
+                className="text-accent no-underline hover:underline"
+              >
+                {team.strings.openLeadRun}
+              </Link>
+            </div>
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
           {shareSubject === null ? null : <ShareDialog subject={shareSubject} runIds={runIds} />}
-          {heading.status === null ? null : <StatusBadge badge={heading.status} />}
+          {heading.status === null ? null : <StatusBadge badge={heading.status} locale={locale} />}
           {heading.actions.map((action) => (
             <UnbuiltButton key={action.id} action={action} />
           ))}
@@ -222,35 +301,50 @@ export function RunView({
         <div className="min-w-0">
           <div aria-live="polite" className="flex flex-col gap-8">
             {messages.map((message) => (
-              <MessageBlock key={message.id} message={message} />
+              <MessageBlock key={message.id} message={message} team={team} />
             ))}
-            {assistantIsWorking ? <PendingAssistant name={heading.title} /> : null}
-            {failure === null ? null : <FailureNotice failure={failure} />}
+            {assistantIsWorking ? (
+              <PendingAssistant name={heading.title} strings={strings} locale={locale} />
+            ) : null}
+            {blocked.length === 0 ? null : (
+              <BlockedNotice blocked={blocked} strings={blockedStrings(locale)} />
+            )}
+            {failure === null ? null : (
+              <FailureNotice failure={failure} strings={strings} locale={locale} />
+            )}
           </div>
           {approval}
+          {filesEnabled ? (
+            <RunOutputs runIds={runIds} settled={!runIsLive} locale={locale} />
+          ) : null}
 
-          <div className="mt-10 flex flex-col gap-2 rounded-[18px] border border-border-strong bg-surface px-4 py-3 shadow-(--shadow)">
+          <div
+            lang={locale}
+            className="mt-10 flex flex-col gap-2 rounded-[18px] border border-border-strong bg-surface px-4 py-3 shadow-(--shadow)"
+          >
             <textarea
               ref={followUpRef}
-              aria-label="Ask a follow-up"
+              aria-label={strings.followUpLabel}
               className="min-h-[52px] w-full resize-y border-0 bg-transparent p-0 text-[14.5px] leading-[1.6] text-text placeholder:text-muted focus:outline-none"
               placeholder={followUp.placeholder}
               value={followUpDraft}
               onChange={(event) => setFollowUpDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.shiftKey) return;
+                if (!sendsOnEnter(event)) return;
                 event.preventDefault();
                 submitFollowUp();
               }}
             />
             <div className="flex flex-wrap items-center gap-2">
-              <AttachControl
-                sessionId={sessionId}
-                files={attached}
-                onAttached={(file) => setAttached((current) => [...current, file])}
-                buttonClass={`${BTN} ${BTN_SM} ${BTN_GHOST}`}
-                disabledClass={BTN_DISABLED}
-              />
+              {filesEnabled ? (
+                <AttachControl
+                  sessionId={sessionId}
+                  files={attached}
+                  onAttached={(file) => setAttached((current) => [...current, file])}
+                  buttonClass={`${BTN} ${BTN_SM} ${BTN_GHOST}`}
+                  disabledClass={BTN_DISABLED}
+                />
+              ) : null}
               {followUp.actions
                 .filter((action) => action.id !== 'attach')
                 .map((action) => (
@@ -268,19 +362,19 @@ export function RunView({
                     : BTN_DISABLED
                 }`}
               >
-                Send
+                {strings.send}
               </button>
             </div>
           </div>
 
           {/* Diagnostics are secondary to the conversation and remain collapsed by default. */}
-          <details className="group mt-5 border-t border-border pt-3">
+          <details lang={locale} className="group mt-5 border-t border-border pt-3">
             <summary className="flex cursor-pointer list-none items-center gap-[7px] text-[12.5px] text-muted before:text-[10px] before:content-['▸'] group-open:before:content-['▾'] hover:text-text-2 [&::-webkit-details-marker]:hidden">
-              Show technical details
-              <span className="font-normal text-muted">SDK events, tool calls, usage</span>
+              {strings.technicalDetails}
+              <span className="font-normal text-muted">{strings.technicalDetailsHint}</span>
             </summary>
             <div className="pt-3">
-              <TechnicalPanels technical={technical} />
+              <TechnicalPanels technical={technical} strings={strings} />
             </div>
           </details>
         </div>
@@ -293,7 +387,7 @@ export function RunView({
           </aside>
         )}
       </div>
-    </main>
+    </Landmark>
   );
 }
 
@@ -304,7 +398,15 @@ export function RunView({
  * shown apart from the sentence so a reader can tell "no runtime profile" from "the key was
  * rejected" at a glance. The `data-testid`s are the stable hooks the generated-project E2E reads.
  */
-export function FailureNotice({ failure }: { readonly failure: RunFailureNotice }) {
+export function FailureNotice({
+  failure,
+  strings = runViewStrings('en'),
+  locale = 'en',
+}: {
+  readonly failure: RunFailureNotice;
+  readonly strings?: RunViewStrings;
+  readonly locale?: VersionsLocale;
+}) {
   return (
     <div
       role="alert"
@@ -312,8 +414,8 @@ export function FailureNotice({ failure }: { readonly failure: RunFailureNotice 
       data-failure-code={failure.code ?? ''}
       className="rounded-[10px] border border-danger bg-danger-soft px-4 py-3 text-[13.5px] text-danger"
     >
-      <div className="flex flex-wrap items-center gap-2 font-semibold">
-        This run did not complete
+      <div lang={locale} className="flex flex-wrap items-center gap-2 font-semibold">
+        {strings.didNotComplete}
         {failure.code === null ? null : (
           <code
             data-testid="run-failure-code"
@@ -324,14 +426,53 @@ export function FailureNotice({ failure }: { readonly failure: RunFailureNotice 
         )}
       </div>
       <p data-testid="run-failure-message" className="mt-1 text-text-2 [overflow-wrap:anywhere]">
-        {failure.message}
+        {withSetupWizardLink(failure.message)}
       </p>
     </div>
   );
 }
 
+/**
+ * The tool calls the engine refused with nobody asked (issue #2091), in the conversation: a run
+ * can end "Completed" and its answer can read as if the call worked. One notice lists every
+ * refused tool by name, once each.
+ */
+export function BlockedNotice({
+  blocked,
+  strings,
+}: {
+  readonly blocked: readonly BlockedTool[];
+  readonly strings: BlockedStrings;
+}) {
+  const names = [...new Set(blocked.map((tool) => tool.toolName))];
+  return (
+    <div
+      role="status"
+      data-testid="run-blocked"
+      className="rounded-[10px] border border-warn bg-warn-soft px-4 py-3 text-[13.5px]"
+    >
+      <div className="font-semibold text-warn">{strings.title}</div>
+      <p className="mt-1 text-text-2 [overflow-wrap:anywhere]">
+        {strings.lead}{' '}
+        {names.map((name, index) => (
+          <span key={name}>
+            {index === 0 ? null : ', '}
+            <code
+              data-testid="run-blocked-tool"
+              className="rounded-[6px] bg-surface px-1.5 py-0.5 font-mono text-[12px]"
+            >
+              {name}
+            </code>
+          </span>
+        ))}
+      </p>
+      <p className="mt-1 text-text-2">{strings.explanation}</p>
+    </div>
+  );
+}
+
 /** One `.msg`. Total over the two arms; there is no third kind of speaker. */
-function MessageBlock({ message }: { readonly message: Message }) {
+function MessageBlock({ message, team }: { readonly message: Message; readonly team: TeamLinks }) {
   switch (message.kind) {
     case 'user':
       return (
@@ -350,7 +491,7 @@ function MessageBlock({ message }: { readonly message: Message }) {
           <div className="min-w-0 flex-1 pt-0.5 text-[15px] leading-7 [&_p:last-child]:mb-0">
             <div className="mb-2 text-[13px] font-semibold text-text-2">{message.speaker.name}</div>
             {message.blocks.map((block, index) => (
-              <BlockView key={index} block={block} />
+              <BlockView key={index} block={block} team={team} />
             ))}
           </div>
         </div>
@@ -365,7 +506,15 @@ function MessageBlock({ message }: { readonly message: Message }) {
 }
 
 /** The assistant occupies its eventual answer position while the SDK is still working. */
-function PendingAssistant({ name }: { readonly name: string }) {
+function PendingAssistant({
+  name,
+  strings,
+  locale,
+}: {
+  readonly name: string;
+  readonly strings: RunViewStrings;
+  readonly locale: VersionsLocale;
+}) {
   const initials = name
     .trim()
     .split(/\s+/u)
@@ -374,14 +523,14 @@ function PendingAssistant({ name }: { readonly name: string }) {
     .join('')
     .toUpperCase();
   return (
-    <div className="flex gap-3.5" role="status" aria-label={`${name} is working`}>
+    <div className="flex gap-3.5" role="status" lang={locale} aria-label={strings.working(name)}>
       <Avatar initials={initials || 'AI'} tone="agent" />
       <div className="flex min-h-8 items-center gap-2 pt-0.5 text-[13.5px] text-muted">
         <span
           aria-hidden="true"
           className="size-3 animate-spin rounded-full border-2 border-border-strong border-t-accent [animation-duration:.8s]"
         />
-        Thinking…
+        {strings.thinking}
       </div>
     </div>
   );
@@ -449,7 +598,7 @@ function Runs({ paragraph }: { readonly paragraph: Paragraph }) {
 }
 
 /** Prose, or the activity bracket beside it. Total over {@link TurnBlock}. */
-function BlockView({ block }: { readonly block: TurnBlock }) {
+function BlockView({ block, team }: { readonly block: TurnBlock; readonly team: TeamLinks }) {
   switch (block.kind) {
     case 'prose':
       return (
@@ -467,7 +616,7 @@ function BlockView({ block }: { readonly block: TurnBlock }) {
       return (
         <div className="my-3 flex flex-col gap-[7px] border-l-2 border-border pl-[14px]">
           {block.steps.map((step) => (
-            <ActivityRow key={step.id} step={step} />
+            <ActivityRow key={step.id} step={step} team={team} />
           ))}
         </div>
       );
@@ -485,7 +634,8 @@ function BlockView({ block }: { readonly block: TurnBlock }) {
  * happens to be present. A running step legitimately has no duration and would otherwise be drawn
  * as finished.
  */
-function ActivityRow({ step }: { readonly step: ActivityStep }) {
+function ActivityRow({ step, team }: { readonly step: ActivityStep; readonly team: TeamLinks }) {
+  const member = step.tool === null ? null : memberNameOfTool(step.tool);
   return (
     <div className="flex items-center gap-2 text-[13px] text-text-2">
       {step.state === 'done' ? (
@@ -499,11 +649,39 @@ function ActivityRow({ step }: { readonly step: ActivityStep }) {
       {step.label}
       {step.tool === null ? null : (
         <span className="rounded-[4px] border border-border bg-surface-2 px-1.5 py-px font-mono text-[12px]">
-          {step.tool}
+          {member ?? step.tool}
         </span>
+      )}
+      {member === null ? null : (
+        <MemberRunLink child={team.matched.get(step.id)} member={member} strings={team.strings} />
       )}
       <span className="ml-auto text-[12px] text-muted">{step.duration}</span>
     </div>
+  );
+}
+
+/** An `agent__<name>` row's link to the child run the call started, or why there is none yet. */
+function MemberRunLink({
+  child,
+  member,
+  strings,
+}: {
+  readonly child: ChildRunLink | undefined;
+  readonly member: string;
+  readonly strings: TeamStrings;
+}) {
+  if (child === undefined) {
+    return <span className="text-[12px] text-muted">{strings.childRunPending}</span>;
+  }
+  return (
+    <Link
+      href={runHref(child.id)}
+      className="text-[12px] text-accent no-underline hover:underline"
+      aria-label={`${strings.openChildRun}: ${member}`}
+      data-testid="run-member-link"
+    >
+      {strings.openChildRun} →
+    </Link>
   );
 }
 
@@ -511,14 +689,20 @@ function ActivityRow({ step }: { readonly step: ActivityStep }) {
 
 /** The three tabs the mockup puts inside the disclosure, in the mockup's order. */
 const TABS = [
-  { id: 'events', label: 'SDK events' },
-  { id: 'usage', label: 'Usage' },
-  { id: 'runtime', label: 'Runtime' },
-] as const;
+  { id: 'events', label: 'tabEvents' },
+  { id: 'usage', label: 'tabUsage' },
+  { id: 'runtime', label: 'tabRuntime' },
+] as const satisfies readonly { readonly id: string; readonly label: keyof RunViewStrings }[];
 
 type TabId = (typeof TABS)[number]['id'];
 
-function TechnicalPanels({ technical }: { readonly technical: Run['technical'] }) {
+function TechnicalPanels({
+  technical,
+  strings,
+}: {
+  readonly technical: Run['technical'];
+  readonly strings: RunViewStrings;
+}) {
   const [active, setActive] = useState<TabId>('events');
 
   return (
@@ -536,17 +720,14 @@ function TechnicalPanels({ technical }: { readonly technical: Run['technical'] }
             }`}
             onClick={() => setActive(tab.id)}
           >
-            {tab.label}
+            {strings[tab.label]}
           </button>
         ))}
       </div>
 
       {active === 'events' ? (
         <section>
-          <EventLogCard
-            lines={technical.sdkEvents}
-            empty="No SDK events have been received for this run."
-          />
+          <EventLogCard lines={technical.sdkEvents} empty={strings.noSdkEvents} />
           {technical.sdkEventsNote === '' ? null : (
             <p className="mt-2 mb-0 text-[12.5px] text-muted">{technical.sdkEventsNote}</p>
           )}
@@ -556,9 +737,7 @@ function TechnicalPanels({ technical }: { readonly technical: Run['technical'] }
       {active === 'usage' ? (
         <section>
           {technical.usageStats.length === 0 ? (
-            <p className="mt-0 mb-0 text-[12.5px] text-muted">
-              No usage has been reported for this run.
-            </p>
+            <p className="mt-0 mb-0 text-[12.5px] text-muted">{strings.noUsage}</p>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(94px,1fr))] gap-px overflow-hidden rounded-(--radius) border border-border bg-border">
               {technical.usageStats.map((stat) => (
@@ -613,10 +792,7 @@ function TechnicalPanels({ technical }: { readonly technical: Run['technical'] }
 
       {active === 'runtime' ? (
         <section>
-          <EventLogCard
-            lines={technical.runtimeEvents}
-            empty="No runtime events have been received for this run."
-          />
+          <EventLogCard lines={technical.runtimeEvents} empty={strings.noRuntimeEvents} />
         </section>
       ) : null}
     </>
@@ -741,11 +917,18 @@ function RailCardView({ card }: { readonly card: RailCard }) {
 // ── Shared pieces ───────────────────────────────────────────────────────────────────────────────
 
 /** `.badge`, with the mockup's leading `.dot` where the mockup puts one. */
-export function StatusBadge({ badge }: { readonly badge: RunBadge }) {
+export function StatusBadge({
+  badge,
+  locale = 'en',
+}: {
+  readonly badge: RunBadge;
+  /** The reader's language; the run view, the Runs list and the detail panel all pass it. */
+  readonly locale?: VersionsLocale;
+}) {
   return (
-    <span className={`${BADGE} ${BADGE_TONE[badge.tone]}`}>
+    <span lang={locale} className={`${BADGE} ${BADGE_TONE[badge.tone]}`}>
       {badge.dot ? <span aria-hidden="true" className="size-1.5 rounded-full bg-current" /> : null}
-      {badge.label}
+      {runStatusLabel(badge.label, locale)}
     </span>
   );
 }

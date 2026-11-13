@@ -10,7 +10,7 @@ import { AGENT_MUTABLE_FIELDS, type CreateAgentInput } from '../../contracts/age
 import { createAgentFromVersion } from '../agent-versions/create-from-version';
 import { openStorageConnectionLookup, readCreateAgentBody } from '../agent-versions/http';
 import { applicationContext } from '../application-context';
-import { DEFAULT_ENGINE_ID } from '../engines/session-engine';
+import { DEFAULT_ENGINE_ID } from '../execution';
 import { problem, type ApiResult } from '../http/result';
 import { judgeAgent } from '../policy-ceiling/ceiling';
 import { installBuiltinSkillsNamedBy } from '../skills/builtin';

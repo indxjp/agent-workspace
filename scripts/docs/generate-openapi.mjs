@@ -322,7 +322,17 @@ export async function buildOpenApiDocument(repoRoot) {
     /** @type {Record<string, unknown>} */
     const operation = {
       operationId: route.operationId,
-      parameters: [...pathParameters, { $ref: '#/components/parameters/ContractsVersion' }],
+      parameters: [
+        ...pathParameters,
+        ...(route.headers ?? []).map((header) => ({
+          in: 'header',
+          name: header.name,
+          required: header.required,
+          description: header.description,
+          schema: { type: 'string' },
+        })),
+        { $ref: '#/components/parameters/ContractsVersion' },
+      ],
       responses,
       summary: route.summary,
       tags: [route.tag],

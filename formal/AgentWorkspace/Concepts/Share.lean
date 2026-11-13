@@ -157,7 +157,7 @@ instance : WireEnum Expiry where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- The lifetime of an expiry in milliseconds, `none` for `never` (`EXPIRY_MS`). -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#EXPIRY_MS")]
+@[aw_spec (ts := "apps/web/server/shares/core/rules.ts#EXPIRY_MS")]
 def Expiry.durationMs? : Expiry → Option Nat
   | .hours24 => some 86400000
   | .days7 => some 604800000
@@ -175,7 +175,7 @@ def Expiry.expiresAt? (e : Expiry) (createdAt : Nat) : Option Nat :=
 def passphraseMaxLength : Nat := 1024
 
 /-- Every share token starts with `pub_` (`ShareService.publish`). -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")]
 def tokenPrefix : String := "pub_"
 
 /-- The public link of a share is `/p/<token>` (`toShareResource`). -/
@@ -184,7 +184,7 @@ def tokenPrefix : String := "pub_"
 def publicUrlPrefix : String := "/p/"
 
 /-- The budget, in USD, a runnable share gets when the publisher names none. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2063-publishing-an-agent")]
 def defaultRunnableBudgetUsd : String := "20"
 
@@ -288,7 +288,8 @@ milliseconds since the epoch; amounts are decimal strings. -/
 structure Share where
   id : ShareId
   workspace : WorkspaceId
-  /-- The secret link token, globally unique (`shares_token_key`). -/
+  /-- The secret link token, shown once when the share is published; only its hash is stored
+  (`shares_token_hash_key`). -/
   token : String
   subjectType : SubjectType
   /-- The subject's id as text: no foreign key; the table is `subjectType.table`. -/
@@ -347,10 +348,17 @@ def rowOf (cells : List (String × Option String)) : Row :=
 /-- An instant as the row stores it. -/
 def instant (n : Nat) : String := toString n
 
-/-- The column cells of a share, in `shares` column order. -/
+/-- The model's stand-in for the SHA-256 a link is looked up by (`token_hash`, part 06 step 3):
+the proofs need only that distinct tokens have distinct hashes, which any injective function of
+the token gives. -/
+def tokenHashOf (token : String) : String := "sha256:" ++ token
+
+/-- The column cells of a share, in `shares` column order. The plain `token` is never stored (part
+06 step 3 phase 2): only its hash is. -/
 def Share.cells (s : Share) : List (String × Option String) :=
-  [("id", some s.id.val), ("workspace_id", some s.workspace.val), ("token", some s.token),
-    ("subject_type", some s.subjectType.toWire), ("subject_id", some s.subjectId),
+  [("id", some s.id.val), ("workspace_id", some s.workspace.val), ("token", none),
+    ("token_hash", some (tokenHashOf s.token)), ("subject_type", some s.subjectType.toWire),
+    ("subject_id", some s.subjectId),
     ("subject_label", some s.subjectLabel), ("visibility", some s.visibility.toWire),
     ("mode", s.mode.map Mode.toWire), ("snapshot", s.snapshot),
     ("include", some s.«include».toJsonText), ("budget_cap_usd", s.budgetCapUsd),
@@ -419,7 +427,7 @@ share a mode (`definition` by default), gives a budget to a runnable share only 
 exactly when its subject is an agent; it has a budget exactly when it is runnable; a non-session
 share includes nothing; the token has the `pub_` prefix; and it starts unstopped, unrevoked,
 unsuspended and with nothing spent. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "apps/web/server/shares/core/input.ts#PublishShareRequestSchema")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def Share.wellPublished (s : Share) : Bool :=
@@ -503,7 +511,7 @@ instance : WireEnum ShareState where
 def Share.expiredAt (s : Share) (now : Nat) : Bool := s.expiresAt.any (· ≤ now)
 
 /-- The state of a share at instant `now`. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/formal/inventory.md#2-state-machines")]
 def Share.stateAt (s : Share) (now : Nat) : ShareState :=
   if s.revokedAt.isSome then .revoked
@@ -515,7 +523,7 @@ def Share.stateAt (s : Share) (now : Nat) : ShareState :=
 /-- A public link opens at `now` (before any passphrase): the share is public and live. This is
 the availability test of `ShareService.resolve` and of the unscoped token lookup
 `findShareWorkspace`, which only finds public shares. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "packages/core/src/db/repositories/root.ts#findShareWorkspace")
   (doc := "docs/spec.md#2061-three-visibilities-for-every-shareable-object")]
 def Share.publiclyOpen (s : Share) (now : Nat) : Bool :=
@@ -535,16 +543,19 @@ def Share.budgetExhausted (s : Share) : Bool :=
 
 /-! ## The wire projection -/
 
-/-- The keys `toShareResource` renders, in its order, for a share with this visibility, with or
-without a view count. -/
+/-- The keys rendered, in order, for a share with this visibility: by `toShareResource` (the
+publish response, no view count) or by `toShareListItem` (a list item, with its view count). Only
+the publish response of a public share carries `url`: the token is not stored, so a list item
+cannot (part 06 step 3 phase 2). -/
 @[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
+  (ts := "apps/web/server/shares/core/resource.ts#toShareListItem")
   (ts := "packages/contracts/src/shares.ts#ShareResourceSchema")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def resourceKeys (v : Visibility) (withViewCount : Bool) : List String :=
   ["id", "subjectType", "subjectId", "subjectLabel", "visibility", "mode", "snapshot", "include",
     "budgetCapUsd", "spentUsd", "stopped", "expiresAt", "revokedAt", "suspendedAt", "createdAt"] ++
     (if withViewCount then ["viewCount"] else []) ++
-    (if v == .«public» then ["url"] else [])
+    (if v == .«public» && !withViewCount then ["url"] else [])
 
 /-- The persistence-only columns that must never cross the wire as fields. -/
 @[aw_spec (ts := "apps/web/server/shares/core/resource.ts#toShareResource")
@@ -590,7 +601,7 @@ structure PublishRequest where
   deriving DecidableEq, Repr, Inhabited
 
 /-- Why `ShareService.publish` refuses an otherwise valid request. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "packages/contracts/src/shares.ts#SHARES_PROBLEM_CODES")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 inductive PublishRefusal where
@@ -606,7 +617,7 @@ inductive PublishRefusal where
 def PublishRefusal.code (_ : PublishRefusal) : String := "invalid_share"
 
 /-- The public message of each refusal, as `ShareService.publish` words it. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")]
 def PublishRefusal.message : PublishRefusal → String
   | .publicSharingOff => "Public sharing is disabled for this workspace."
   | .runnableUnreleased => "Runnable public links are not available in this release (D-06)."
@@ -636,7 +647,7 @@ def ownerOrAdmin (role : Membership.Role) : Bool := role == .owner || role == .a
 
 /-- `ShareService.publish` for a request the schema accepted, by a caller of `role`, with the
 workspace's public-sharing policy, the runnable release gate, at instant `now`. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "apps/web/server/shares/runnable/feature.ts#runnablePublicLinksEnabled")
   (doc := "docs/sdk/04-api-specification.md#513-shares--awshares")]
 def publishDecision (r : PublishRequest) (role : Membership.Role)
@@ -690,7 +701,7 @@ def ResolveOutcome.code? : ResolveOutcome → Option String
 
 /-- `ShareService.resolve` at instant `now`: a closed link is unavailable whatever the passphrase;
 an open link with a passphrase opens only for the right one; an open link without one opens. -/
-@[aw_spec (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2062-publishing-a-session-run-history")]
 def Share.resolveAt (s : Share) (now : Nat) (a : PassphraseAttempt) : ResolveOutcome :=
   if !s.publiclyOpen now then .unavailable

@@ -149,6 +149,11 @@ on each row's immutable `(createdAt, id)`, so rows written while you walk never 
 `file-deleted`); paging, order and cursors are unchanged, and an unknown action is
 `400 invalid_action`.
 
+File actions are recorded after they commit, one row per event. Every download request is its own
+`file-downloaded` row, a `Range` request included, so a file read in parts shows one row per part
+and no read goes unaudited. A retried upload or a retried audit write does not add a second row:
+an upload is one event per stored object, and a delete one per file removed.
+
 ```ts title="illustrative" claim="illustrative"
 export const AUDIT_LIST_DEFAULT_LIMIT = 100;
 export const AUDIT_LIST_MAX_LIMIT = 500;

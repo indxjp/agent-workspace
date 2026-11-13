@@ -9,6 +9,14 @@ import { base64Url, decodeBase64Url } from './base64url.js';
 
 export * from './endpoint-grant.js';
 
+const DEFAULT_TTL_SECONDS = 300;
+/**
+ * The longest lifetime a run token may have: one hour. Minting refuses a longer TTL, and
+ * verification refuses a token whose own claims span longer, so a token signed elsewhere with a
+ * far `expiresAt` cannot outlive the cap (refactoring part 06 step 8).
+ */
+const MAX_TTL_SECONDS = 3_600;
+
 const NonBlankStringSchema = z.string().refine((value) => value.trim().length > 0);
 
 const RunTokenClaimsSchema = z
@@ -38,7 +46,10 @@ const RunTokenClaimsSchema = z
   })
   .strict()
   .readonly()
-  .refine((claims) => claims.expiresAt > claims.issuedAt);
+  .refine(
+    (claims) =>
+      claims.expiresAt > claims.issuedAt && claims.expiresAt - claims.issuedAt <= MAX_TTL_SECONDS,
+  );
 
 export type RunTokenClaims = z.infer<typeof RunTokenClaimsSchema>;
 
@@ -69,7 +80,6 @@ export type RunTokenCodecOptions = {
   readonly randomId?: () => string;
 };
 
-const DEFAULT_TTL_SECONDS = 300;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -90,7 +100,7 @@ export function createRunTokenCodec(options: RunTokenCodecOptions): RunTokenCode
     throw new Error('Gateway token signing secret must contain at least 32 bytes.');
   }
   const ttlSeconds = options.ttlSeconds ?? DEFAULT_TTL_SECONDS;
-  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > 3600) {
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > MAX_TTL_SECONDS) {
     throw new Error('Gateway run token TTL must be an integer from 1 through 3600 seconds.');
   }
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));

@@ -7,6 +7,8 @@ import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { createInMemorySecretsService } from '@agent-workspace/core/secrets';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { fixedClock } from '../clock';
+
 import {
   createInMemoryRuntimeConnectionStoreProvider,
   createSecretsRuntimeConnectionStoreProvider,
@@ -274,5 +276,22 @@ describe('W3-CP-06-B2: the in-memory store agrees with the secrets-backed store'
     expect(memoryListed[0]?.createdAt).toEqual(creationInstant);
     expect(secretsListed[0]?.createdAt).toEqual(creationInstant);
     expect(secretsListed[0]?.createdAt).toEqual(trueSecrets[0]?.createdAt);
+  });
+});
+
+describe('createInMemoryRuntimeConnectionStoreProvider: the clock (part 09 step 5)', () => {
+  it('stamps createdAt from the clock it is given', async () => {
+    const clock = fixedClock('2026-11-13T09:00:00.000Z');
+    const store = createInMemoryRuntimeConnectionStoreProvider(clock).forWorkspace('workspace-1');
+    const created = await store.create({
+      name: 'first',
+      driver: 'docker',
+      endpoint: 'https://x',
+      credential: 'y',
+    });
+    expect(created.kind).toBe('created');
+    if (created.kind === 'created') {
+      expect(created.connection.createdAt.toISOString()).toBe('2026-11-13T09:00:00.000Z');
+    }
   });
 });

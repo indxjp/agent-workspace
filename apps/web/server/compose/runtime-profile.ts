@@ -1,28 +1,22 @@
-import type {
-  RuntimeCapabilities,
-  RuntimeDriverId,
-  RuntimeRunSpec,
-} from '@agent-workspace/runtime/driver';
+import type { RuntimeDriverId, RuntimeRunSpec } from '@agent-workspace/runtime/driver';
 import { networkPolicyFloor } from '@indx-workspace/contracts/policy-ceiling';
 
 import type { AgentRecord } from '../agents/contract';
-import { restrictedUnenforceableReason } from '../runtimes/network-policy';
-import type { RuntimeRegistryEntry, WebRuntimeRegistry } from '../runtimes/registry';
-import type { RuntimeProfileRecord, RuntimeProfileStoreProvider } from '../runtimes/store';
-import type { LaunchContext } from '../runs/environment';
+import {
+  type FileTransfer,
+  type LaunchContext,
+  restrictedUnenforceableReason,
+  type RuntimeLaunchTarget,
+  type RuntimeRunResolver,
+  type RuntimeProfileRecord,
+  type RuntimeProfileStoreProvider,
+  type RuntimeRegistryEntry,
+  type WebRuntimeRegistry,
+} from '../execution';
 import { missingRuntimeProfile, runStartRefusalError } from './run-preflight';
 import type { RuntimeSettings } from './run-request';
 
-/** How the run's files reach the target: the driver's `RuntimeCapabilities.fileTransfer`. */
-export type FileTransfer = RuntimeCapabilities['fileTransfer'];
-
-export type RuntimeLaunchTarget = RuntimeRunSpec &
-  Readonly<{
-    runnerUrl: string;
-    workspaceRoot: string;
-    toolSandboxOrigin?: string;
-    fileTransfer: FileTransfer;
-  }>;
+export type { FileTransfer, RuntimeLaunchTarget, RuntimeRunResolver } from '../execution';
 
 export type RuntimeDriverTarget = Readonly<{
   driver: RuntimeDriverId;
@@ -38,10 +32,6 @@ export type RuntimeDriverTarget = Readonly<{
   /** Return a reason when this concrete target cannot enforce the selected constraints. */
   validate?: (spec: RuntimeRunSpec) => string | null;
 }>;
-
-export interface RuntimeRunResolver {
-  resolve(context: LaunchContext): Promise<RuntimeLaunchTarget>;
-}
 
 /**
  * Refuse a driver that cannot run this profile now. An enabled driver whose Test Runtime pass has

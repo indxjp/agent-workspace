@@ -10,6 +10,7 @@ import {
   detectionOf,
   SETUP_REQUEST_HEADERS,
   setupOutcomeOf,
+  setupProviderApiKey,
   setupUnanswered,
   type RuntimeDetection,
 } from './setup-requests-model';
@@ -19,6 +20,7 @@ const SETUP_PROVIDER_LABELS: Readonly<Record<SetupProvider, string>> = {
   openai: 'OpenAI',
   'azure-openai': 'Azure OpenAI',
   'openai-compatible': 'OpenAI-compatible',
+  vertex: 'Claude on Google Cloud (Vertex AI)',
 };
 
 const STEPS = ['Provider', 'Credentials', 'Runtime', 'Administrator', 'First agent'] as const;
@@ -45,7 +47,7 @@ export function SetupWizard() {
       headers: { ...SETUP_REQUEST_HEADERS, 'content-type': 'application/json' },
       body: JSON.stringify({
         provider,
-        providerApiKey,
+        providerApiKey: setupProviderApiKey(provider, providerApiKey),
         runtime,
         adminEmail,
         adminPassword,
@@ -252,6 +254,9 @@ export const ADMIN_EMAIL_HINT =
   'The administrator email the generator printed (BOOTSTRAP_ADMIN in .env).';
 export const ADMIN_PASSWORD_HINT =
   'The one-time setup password: BOOTSTRAP_ADMIN_PASSWORD in the project .env file. Not a new password.';
+/** Step 2 for Claude on Google Cloud: there is no key to enter. */
+export const VERTEX_KEYLESS_MESSAGE =
+  "Claude on Google Cloud uses this install's Google Cloud identity, so there is no API key to enter.";
 /** Shown when the host could not be asked which runtimes it can run; setup keeps `local`. */
 export const DETECTION_FAILED_MESSAGE =
   'Could not detect which runtimes this host can run, so setup uses the local driver.';
@@ -282,9 +287,13 @@ export function AdministratorFields(props: {
 
 /** Step 2: the provider key is a credential to store, never a password to generate (PR #418). */
 export function ProviderKeyField(props: {
+  provider: string;
   providerApiKey: string;
   setProviderApiKey: (value: string) => void;
 }) {
+  if (props.provider === 'vertex') {
+    return <p className="text-sm text-text-2">{VERTEX_KEYLESS_MESSAGE}</p>;
+  }
   return controlledInput('Provider API key', props.providerApiKey, props.setProviderApiKey, {
     type: 'password',
     credential: 'stored',
@@ -350,6 +359,7 @@ function stepContent(props: StepContentProps) {
     case 1:
       return (
         <ProviderKeyField
+          provider={props.provider}
           providerApiKey={props.providerApiKey}
           setProviderApiKey={props.setProviderApiKey}
         />

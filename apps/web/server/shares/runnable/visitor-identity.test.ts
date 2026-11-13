@@ -1,5 +1,8 @@
+import { createHmac, hkdfSync } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
+import { clientIdentityFromEnvironment } from '../../client-identity';
 import { resolvePublicVisitorIdentity } from './visitor-identity';
 
 const SECRET = 'a-secure-test-secret-with-at-least-32-characters';
@@ -7,7 +10,10 @@ const SECRET = 'a-secure-test-secret-with-at-least-32-characters';
 function resolve(forwardedFor: string | undefined, hops: string | null = '1') {
   return resolvePublicVisitorIdentity(
     new Headers(forwardedFor === undefined ? {} : { 'x-forwarded-for': forwardedFor }),
-    { SESSION_SECRET: SECRET, ...(hops === null ? {} : { AW_TRUSTED_PROXY_HOPS: hops }) },
+    clientIdentityFromEnvironment({
+      SESSION_SECRET: SECRET,
+      ...(hops === null ? {} : { AW_TRUSTED_PROXY_HOPS: hops }),
+    }),
   );
 }
 
@@ -45,10 +51,29 @@ describe('public visitor identity', () => {
     const first = resolve('192.0.2.42');
     expect(first.ok).toBe(true);
     if (!first.ok) return;
-    expect(first.visitorKey).toMatch(/^v1_[A-Za-z0-9_-]{43}$/u);
+    expect(first.visitorKey).toMatch(/^v2_[A-Za-z0-9_-]{43}$/u);
     expect(first.visitorKey).not.toContain('192.0.2.42');
     expect(resolve('192.0.2.42')).toEqual(first);
     expect(resolve('192.0.2.43')).not.toEqual(first);
+  });
+
+  it('keys the address with the share-visitor key derived from the secret, not the secret itself', () => {
+    const key = hkdfSync(
+      'sha256',
+      SECRET,
+      'agent-workspace/key-ring',
+      'agent-workspace/share-visitor/v1',
+      32,
+    );
+    const digest = (hmacKey: ArrayBuffer | string) =>
+      createHmac('sha256', typeof hmacKey === 'string' ? hmacKey : Buffer.from(hmacKey))
+        .update('agent-workspace/public-share-visitor/v1')
+        .update('\0')
+        .update('192.0.2.42')
+        .digest('base64url');
+    const resolved = resolve('192.0.2.42');
+    expect(resolved).toEqual({ ok: true, visitorKey: `v2_${digest(key)}` });
+    expect(resolved).not.toEqual({ ok: true, visitorKey: `v2_${digest(SECRET)}` });
   });
 
   it('rejects missing, malformed, insufficient and oversized forwarding data', () => {

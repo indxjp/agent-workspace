@@ -57,7 +57,7 @@ import {
 } from './problems';
 import { builderNameRefusal } from '../agents/builder-name';
 import type { RequestCeiling } from '../policy-ceiling/ceiling';
-import type { Role } from '../rbac/roles';
+import type { Role } from '../identity';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import type { StorageConnectionLookup } from './storage-grants';
 import type { WorkspaceAgentVersionStore } from './store';

@@ -49,7 +49,44 @@ async function setUp(
   return { agent, provider, store };
 }
 
-describe('createAgentVersion', () => {
+type SetUp = Awaited<ReturnType<typeof setUp>>;
+type VersionRequest = ReturnType<typeof versionRequest>;
+type Deps = Parameters<typeof createAgentVersion>[3];
+
+async function expectNothingSaved({ agent, store }: SetUp): Promise<void> {
+  expect((await store.list(agent.id))?.versions).toEqual([]);
+}
+
+/** A request the pipeline refuses (nothing saved), then accepts once the refusal no longer applies. */
+async function expectRefusedThenSaved(
+  context: SetUp,
+  attempt: {
+    readonly refused: { readonly request: VersionRequest; readonly deps: Deps };
+    readonly saved: { readonly request: VersionRequest; readonly deps: Deps };
+    readonly refusal: object;
+    readonly status: number;
+  },
+): Promise<void> {
+  const { agent } = context;
+  const refused = await createAgentVersion(
+    attempt.refused.request,
+    agent,
+    PRINCIPAL,
+    attempt.refused.deps,
+  );
+  expect(refused.status).toBe(attempt.status);
+  expect(refused.body).toMatchObject(attempt.refusal);
+  await expectNothingSaved(context);
+  const saved = await createAgentVersion(
+    attempt.saved.request,
+    agent,
+    PRINCIPAL,
+    attempt.saved.deps,
+  );
+  expect(saved.status).toBe(201);
+}
+
+describe('createAgentVersion: storing', () => {
   it('stores the normalised body without dryRun and answers the published resource', async () => {
     const { agent, store } = await setUp();
     const result = await createAgentVersion(versionRequest(), agent, PRINCIPAL, { store });
@@ -60,7 +97,9 @@ describe('createAgentVersion', () => {
     expect(listing?.versions[0]?.body).not.toHaveProperty('dryRun');
     expect(listing?.versions[0]?.body).toMatchObject({ definition: { policySource: 'stored' } });
   });
+});
 
+describe('createAgentVersion: refused requests', () => {
   it("refuses via 'builder' from a client with 400 invalid_agent_version, and saves nothing", async () => {
     const { agent, store } = await setUp();
     const result = await createAgentVersion(
@@ -79,94 +118,63 @@ describe('createAgentVersion', () => {
   });
 
   it('refuses a version that pins a bundle the workspace does not hold, and saves nothing (issue #790)', async () => {
-    const { agent, store } = await setUp();
+    const context = await setUp();
     const digest = 'a'.repeat(64);
     const request = versionRequest({ toolBundles: [{ tool: 'lookup', digest }] });
-
-    const refused = await createAgentVersion(request, agent, PRINCIPAL, {
-      store,
-      toolBundles: () => Promise.resolve([digest]),
+    const { store } = context;
+    await expectRefusedThenSaved(context, {
+      refused: { request, deps: { store, toolBundles: () => Promise.resolve([digest]) } },
+      saved: { request, deps: { store, toolBundles: () => Promise.resolve([]) } },
+      status: 422,
+      refusal: { error: { code: 'tool_bundle_unknown' } },
     });
-
-    expect(refused.status).toBe(422);
-    expect(refused.body).toMatchObject({ error: { code: 'tool_bundle_unknown' } });
-    expect((await store.list(agent.id))?.versions).toEqual([]);
-
-    const saved = await createAgentVersion(request, agent, PRINCIPAL, {
-      store,
-      toolBundles: () => Promise.resolve([]),
-    });
-    expect(saved.status).toBe(201);
   });
+});
 
+describe('createAgentVersion: refused code tools', () => {
   // @story US-STO-12
   it('[US-STO-12][api][run] refuses a code tool that declares a storage connection credential, and saves nothing', async () => {
-    const { agent, store } = await setUp();
+    const context = await setUp();
+    const { store } = context;
     const digest = 'a'.repeat(64);
+    const bundleWith = (secrets: readonly string[]): VersionRequest =>
+      versionRequest({ toolBundles: [{ tool: 'lookup', digest, secrets: [...secrets] }] });
     const deps = { store, toolBundles: () => Promise.resolve([]) };
-    const refused = await createAgentVersion(
-      versionRequest({
-        toolBundles: [
-          {
-            tool: 'lookup',
-            digest,
-            secrets: ['STORAGE_CONNECTION_77777777777747778777777777777777'],
-          },
-        ],
-      }),
-      agent,
-      PRINCIPAL,
-      deps,
-    );
-    expect(refused).toMatchObject({
+    await expectRefusedThenSaved(context, {
+      refused: {
+        request: bundleWith(['STORAGE_CONNECTION_77777777777747778777777777777777']),
+        deps,
+      },
+      saved: { request: bundleWith(['LOOKUP_TOKEN']), deps },
       status: 400,
-      body: {
+      refusal: {
         error: {
           code: 'invalid_agent_version',
-          details: [expect.stringContaining('must not name a storage connection credential')],
+          details: [expect.stringContaining('must not name a platform-owned credential')],
         },
       },
     });
-    expect((await store.list(agent.id))?.versions).toEqual([]);
-    const saved = await createAgentVersion(
-      versionRequest({ toolBundles: [{ tool: 'lookup', digest, secrets: ['LOOKUP_TOKEN'] }] }),
-      agent,
-      PRINCIPAL,
-      deps,
-    );
-    expect(saved.status).toBe(201);
   });
 
   it('refuses a domain-declaring code tool where the sandbox cannot enforce domains, and saves nothing (#1018)', async () => {
-    const { agent, store } = await setUp();
-    const digest = 'a'.repeat(64);
+    const context = await setUp();
+    const { store } = context;
     const request = versionRequest({
-      toolBundles: [{ tool: 'lookup', digest, allowedDomains: ['api.example.com'] }],
+      toolBundles: [
+        { tool: 'lookup', digest: 'a'.repeat(64), allowedDomains: ['api.example.com'] },
+      ],
     });
-    const deps = {
-      store,
-      toolBundles: () => Promise.resolve([]),
-      toolHost: true,
-    };
-
-    const refused = await createAgentVersion(request, agent, PRINCIPAL, {
-      ...deps,
-      toolDomainsRefusal: 'cannot enforce restricted yet',
+    const deps = { store, toolBundles: () => Promise.resolve([]), toolHost: true };
+    await expectRefusedThenSaved(context, {
+      refused: { request, deps: { ...deps, toolDomainsRefusal: 'cannot enforce restricted yet' } },
+      saved: { request, deps: { ...deps, toolDomainsRefusal: null } },
+      status: 422,
+      refusal: { error: { code: 'network_policy_unsupported', details: ['tool:lookup'] } },
     });
-
-    expect(refused.status).toBe(422);
-    expect(refused.body).toMatchObject({
-      error: { code: 'network_policy_unsupported', details: ['tool:lookup'] },
-    });
-    expect((await store.list(agent.id))?.versions).toEqual([]);
-
-    const saved = await createAgentVersion(request, agent, PRINCIPAL, {
-      ...deps,
-      toolDomainsRefusal: null,
-    });
-    expect(saved.status).toBe(201);
   });
+});
 
+describe('createAgentVersion: stored policy', () => {
   it('stores the policy carried across an engine switch, keeping the denial it narrows to', async () => {
     const { agent, store } = await setUp({
       storedPolicy: { ...FIXTURE_POLICY, tools: { ...FIXTURE_POLICY.tools, deny: ['Bash'] } },
@@ -208,7 +216,9 @@ describe('createAgentVersion', () => {
       FIXTURE_POLICY,
     );
   });
+});
 
+describe('createAgentVersion: unknown agent and principal', () => {
   it('answers 404 agent_not_found when the store no longer has the agent', async () => {
     const { agent, store } = await setUp();
     const gone = { ...agent, id: MISSING_AGENT };

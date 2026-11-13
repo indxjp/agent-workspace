@@ -9,12 +9,16 @@ import type { ClassifiedSdkEvent } from '@agent-workspace/run-protocol';
 
 import {
   decideToolPermission,
+  normalise,
+  normaliseMirrored,
+  RESULT_LINGER_MS,
   startRun,
   structuredOutputFailure,
   toSdkOptions,
   type ApprovalState,
 } from './boundary.js';
 import { CLAUDE_DELEGATION_TOOL } from './compile.js';
+import { newRunState } from './run-state.js';
 import type { ClaudeApprovalGate, CompiledSdkOptions } from './options.js';
 import { canonicalCall } from '@indx-workspace/contracts/agents';
 
@@ -66,6 +70,16 @@ describe('toSdkOptions outputFormat', () => {
     const options = toSdkOptions({ ...compiled, outputFormat: { type: 'json_schema', schema } });
     expect(options['outputFormat']).toEqual({ type: 'json_schema', schema });
     expect((options['outputFormat'] as { schema: unknown }).schema).not.toBe(schema);
+  });
+
+  it("drops the schema's top-level $schema, which Claude Code's validator cannot resolve", () => {
+    const named = { $schema: 'https://json-schema.org/draft/2020-12/schema', ...schema };
+    const options = toSdkOptions({
+      ...compiled,
+      outputFormat: { type: 'json_schema', schema: named },
+    });
+    expect(options['outputFormat']).toEqual({ type: 'json_schema', schema });
+    expect(named.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
   });
 
   it('sets no outputFormat unless one was compiled', () => {
@@ -196,10 +210,11 @@ describe('toSdkOptions canUseTool (ADR-0145)', () => {
     requireApproval: ['Write'],
     deferred: [],
     approvedToolCalls: [],
+    ask: ['Write'],
   };
 
   it('sets canUseTool only when the gate requires approval for some tool', () => {
-    const state: ApprovalState = { consumed: new Set(), request: null };
+    const state: ApprovalState = { consumed: new Set(), request: null, denied: [] };
     expect('canUseTool' in toSdkOptions(compiled)).toBe(false);
     expect(
       'canUseTool' in
@@ -211,11 +226,14 @@ describe('toSdkOptions canUseTool (ADR-0145)', () => {
   });
 
   it('makes every gate an ask rule and turns settings hooks off, so project settings cannot settle a gated call', () => {
-    const state: ApprovalState = { consumed: new Set(), request: null };
+    const state: ApprovalState = { consumed: new Set(), request: null, denied: [] };
     // A workspace `.claude/settings.json` with `permissions.allow: ['Bash']` is loaded through
     // `settingSources: ['project']`; the flag tier outranks it and ask rules precede allow rules.
     const options = toSdkOptions(compiled, {
-      approval: { gate: { ...gate, requireApproval: ['Bash', 'mcp__gh__*'] }, state },
+      approval: {
+        gate: { ...gate, requireApproval: ['Bash', 'mcp__gh__*'], ask: ['Bash', 'mcp__gh__*'] },
+        state,
+      },
     });
     expect(options['settingSources']).toEqual(['project']);
     expect(options['settings']).toEqual({
@@ -225,8 +243,23 @@ describe('toSdkOptions canUseTool (ADR-0145)', () => {
     expect('settings' in toSdkOptions(compiled)).toBe(false);
   });
 
+  it("asks through canUseTool but writes no ask rule for Run commands' own gate (#2091)", () => {
+    // Claude Code keeps running a read-only command, and an allowed one, without asking; only a
+    // command it would have refused reaches canUseTool. Hooks stay on, as for any run.
+    const state: ApprovalState = { consumed: new Set(), request: null, denied: [] };
+    const options = toSdkOptions(compiled, {
+      approval: { gate: { ...gate, requireApproval: ['Bash'], ask: [] }, state },
+    });
+    expect(typeof options['canUseTool']).toBe('function');
+    expect('settings' in options).toBe(false);
+    const both = toSdkOptions(compiled, {
+      approval: { gate: { ...gate, requireApproval: ['Write', 'Bash'], ask: ['Write'] }, state },
+    });
+    expect(both['settings']).toEqual({ permissions: { ask: ['Write'] }, disableAllHooks: true });
+  });
+
   it('records the request into the run state it was given', async () => {
-    const state: ApprovalState = { consumed: new Set(), request: null };
+    const state: ApprovalState = { consumed: new Set(), request: null, denied: [] };
     // `toSdkOptions` deliberately types its result without the SDK; this is the SDK's `CanUseTool`.
     const canUseTool = toSdkOptions(compiled, { approval: { gate, state } })['canUseTool'] as
       | ((
@@ -248,15 +281,30 @@ describe('toSdkOptions canUseTool (ADR-0145)', () => {
 });
 
 describe('decideToolPermission (ADR-0145)', () => {
-  const fresh = (): ApprovalState => ({ consumed: new Set(), request: null });
+  const fresh = (): ApprovalState => ({ consumed: new Set(), request: null, denied: [] });
   const gate = (overrides: Partial<ClaudeApprovalGate> = {}): ClaudeApprovalGate => ({
     requireApproval: ['mcp__gh__push'],
     deferred: ['mcp__gh__*'],
     approvedToolCalls: [],
+    ask: ['mcp__gh__push'],
     ...overrides,
   });
   const input = { branch: 'main', token: 'SECRET-ARGUMENT' };
   const call = canonicalCall('mcp__gh__push', input);
+
+  it('records a call no rule allows, and nothing for a gated or deferred one', () => {
+    const state = fresh();
+    decideToolPermission(gate(), state, 'Write', { file_path: '/a' }, 'toolu_w');
+    decideToolPermission(gate(), state, 'mcp__gh__push', input, 'toolu_g');
+    decideToolPermission(gate(), state, 'mcp__gh__list', {}, 'toolu_d');
+    expect(state.denied).toEqual([
+      {
+        toolName: 'Write',
+        toolUseId: 'toolu_w',
+        message: "Write is not allowed by this agent's tool policy.",
+      },
+    ]);
+  });
 
   it('stops a gated call: denies with interrupt and records the call', () => {
     const state = fresh();
@@ -338,5 +386,180 @@ describe('decideToolPermission (ADR-0145)', () => {
     ).toMatchObject({
       behavior: 'deny',
     });
+  });
+});
+
+describe('normalise: a run ends with its result (issue #2076)', () => {
+  const failedCall = {
+    type: 'user',
+    message: {
+      content: [{ type: 'tool_result', content: 'ECONNREFUSED', is_error: true, tool_use_id: 't' }],
+    },
+  };
+  const result = { type: 'result', subtype: 'success', result: 'done' };
+
+  /** `messages`, then a read that never settles; it records each `return()`. */
+  function lingeringStream(messages: readonly unknown[]) {
+    const seen = { returned: 0 };
+    let index = 0;
+    const iterator: AsyncIterator<unknown> = {
+      next: () =>
+        index < messages.length
+          ? Promise.resolve({ done: false, value: messages[index++] })
+          : new Promise<IteratorResult<unknown>>(() => undefined),
+      return: () => {
+        seen.returned += 1;
+        return Promise.resolve({ done: true, value: undefined });
+      },
+    };
+    return { source: { [Symbol.asyncIterator]: () => iterator }, seen };
+  }
+
+  async function kindsOf(events: AsyncGenerator<ClassifiedSdkEvent, void, void>) {
+    const kinds: string[] = [];
+    for await (const event of events) kinds.push(event.kind);
+    return kinds;
+  }
+
+  it('ends a run whose tool call failed and whose stream stays open after its result', async () => {
+    const { source, seen } = lingeringStream([failedCall, result]);
+    const aborts: Error[] = [];
+    const started = Date.now();
+
+    const kinds = await kindsOf(
+      normalise(source, { ms: 20, abort: (reason) => void aborts.push(reason) }),
+    );
+
+    expect(kinds).toStrictEqual(['event', 'result']);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(aborts.map((reason) => reason.message)).toStrictEqual([
+      "the SDK stream stayed open 20 ms after the run's result",
+    ]);
+    expect(seen.returned).toBe(1);
+  });
+
+  it("reports a call canUseTool refused by policy as the SDK's own permission_denied (#2091)", async () => {
+    // With a gate, canUseTool settles every call that asks; one no rule allows is refused there and
+    // the SDK sends no permission_denied of its own, so the console's notice (#2207) needs this.
+    const state = newRunState(false);
+    const gate: ClaudeApprovalGate = {
+      requireApproval: ['Bash'],
+      deferred: [],
+      approvedToolCalls: [],
+      ask: [],
+    };
+    const toolResult = {
+      type: 'user',
+      session_id: 'session-1',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'toolu_w', is_error: true }],
+      },
+    };
+    async function* refusedWrite() {
+      yield { type: 'system', subtype: 'init', session_id: 'session-1' };
+      // The SDK asks canUseTool between two messages; the gap stands in for that.
+      await Promise.resolve();
+      expect(
+        decideToolPermission(gate, state.approval, 'Write', { file_path: '/a' }, 'toolu_w'),
+      ).toMatchObject({
+        behavior: 'deny',
+      });
+      yield toolResult;
+    }
+
+    const events: ClassifiedSdkEvent[] = [];
+    for await (const event of normalise(
+      refusedWrite(),
+      { ms: 10, abort: () => undefined },
+      state,
+    )) {
+      events.push(event);
+    }
+
+    const denied = events.filter(
+      (event) => event.kind === 'system' && event.subtype === 'permission_denied',
+    );
+    expect(denied).toHaveLength(1);
+    expect(denied[0]?.event).toMatchObject({
+      tool_name: 'Write',
+      tool_use_id: 'toolu_w',
+      session_id: 'session-1',
+      message: "Write is not allowed by this agent's tool policy.",
+    });
+    // Before the refused call's tool result, as the SDK orders its own.
+    expect(events.indexOf(denied[0] as ClassifiedSdkEvent)).toBe(1);
+    expect(state.approval.denied).toEqual([]);
+  });
+
+  it('still reports a refusal the stream ends right after', async () => {
+    const state = newRunState(false);
+    state.approval.denied.push({ toolName: 'Edit', toolUseId: 'toolu_e', message: 'no' });
+    const kinds: string[] = [];
+    async function* empty() {}
+    for await (const event of normalise(empty(), { ms: 10, abort: () => undefined }, state)) {
+      kinds.push(event.kind === 'system' ? event.subtype : event.kind);
+    }
+    expect(kinds).toEqual(['permission_denied']);
+  });
+
+  it('waits for a slow result, and aborts nothing when the stream closes', async () => {
+    async function* slow() {
+      yield failedCall;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      yield result;
+    }
+    const aborts: Error[] = [];
+
+    const kinds = await kindsOf(
+      normalise(slow(), { ms: 10, abort: (reason) => void aborts.push(reason) }),
+    );
+
+    expect(kinds).toStrictEqual(['event', 'result']);
+    expect(aborts).toStrictEqual([]);
+  });
+
+  /** A mirror that keeps nothing; each run below hands it one batch, as the SDK would. */
+  const mirror = {
+    append: () => Promise.resolve(),
+    load: () => Promise.resolve(null),
+  };
+  const key = { projectKey: 'tenant-a', sessionId: 'session-1' };
+
+  it('never calls a session durable once the stream was aborted after its result', async () => {
+    const { source } = lingeringStream([failedCall, result]);
+    const run = normaliseMirrored(source, { ms: 20, abort: () => undefined }, mirror);
+    await run.sessionStore.append(key, []);
+
+    expect(await kindsOf(run.events)).toStrictEqual(['event', 'result']);
+    expect(run.sessionDurability()).toStrictEqual({
+      durable: false,
+      reason:
+        "the SDK stream was aborted after the run's result because it stayed open past the linger window, so the CLI may have been stopped before its last transcript batch was mirrored.",
+    });
+  });
+
+  it('calls the same mirrored run durable when its stream closes on its own', async () => {
+    const messages: readonly unknown[] = [failedCall, result];
+    let index = 0;
+    const closes: AsyncIterable<unknown> = {
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          Promise.resolve<IteratorResult<unknown>>(
+            index < messages.length
+              ? { done: false, value: messages[index++] }
+              : { done: true, value: undefined },
+          ),
+      }),
+    };
+    const run = normaliseMirrored(closes, { ms: 20, abort: () => undefined }, mirror);
+    await run.sessionStore.append(key, []);
+
+    expect(await kindsOf(run.events)).toStrictEqual(['event', 'result']);
+    expect(run.sessionDurability()).toStrictEqual({ durable: true, mirroredBatches: 1 });
+  });
+
+  it('gives a lingering stream seconds, far below a run credential lifetime', () => {
+    expect(RESULT_LINGER_MS).toBeLessThanOrEqual(10_000);
   });
 });

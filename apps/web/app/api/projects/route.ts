@@ -7,7 +7,7 @@ import {
   requireProjectAccess,
   withProjects,
 } from '../../../server/projects/http';
-import { ownerPrincipalIdOf } from '../../../server/rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../../../server/rbac/core/owner-principal';
 import { toProjectResource } from '../../../server/projects/resource';
 import { ProjectListResponseSchema } from '../../../contracts/projects';
 import { InfrastructureError } from '../../../server/errors';

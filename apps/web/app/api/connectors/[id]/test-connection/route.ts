@@ -3,7 +3,7 @@
  * secret reference server-side (spec §8, §23). Not printed in spec §34's example list, so it
  * carries a `mandate` in `tests/route-declarations/W2-CP-05.ts` (ADR-0026); `test-connection` is
  * also a sub-resource of `:id` that §34 does not print, so it is additionally declared in
- * `apps/web/server/rbac/declarations/W2-CP-05.ts` (ADR-0040).
+ * `apps/web/server/rbac/core/declarations/W2-CP-05.ts` (ADR-0040).
  */
 import {
   connectorNotFound,

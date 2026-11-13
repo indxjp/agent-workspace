@@ -66,6 +66,8 @@ export interface Cell {
    * a repository path; for `live`, the eval case or check the live tier runs.
    */
   readonly ref: string;
+  /** The contract assertion's same-gallery test module filename; defaults to `<id>.test.ts`. */
+  readonly testFile?: string;
   /** One sentence a reader of the tutorial sees beside the verdict. */
   readonly note: string;
 }

@@ -17,7 +17,7 @@ import type {
   UserSummary,
   WorkspaceDirectory,
 } from './directory';
-import type { TokenScope } from './token-scope';
+import type { TokenScope } from './core/token-scope';
 import { hashInvitationToken, INVITATION_TTL_MS, mintInvitationToken } from '../invitations/token';
 
 const iso = (value: Date | null): string | null => (value === null ? null : value.toISOString());
@@ -113,6 +113,10 @@ export function createPostgresDirectory(
       },
       async listMemberships() {
         return (await directory.listMemberships()).map(membership);
+      },
+      async findMembershipByPrincipal(principalId) {
+        const row = await directory.findMembershipByPrincipal(principalId);
+        return row === null ? null : membership(row);
       },
       async createMembership(input) {
         const outcome = await directory.createMembership(input);

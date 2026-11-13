@@ -15,7 +15,7 @@ import { createInMemoryAgentVersionStoreProvider } from '../agent-versions/memor
 import { ensureBuilderAgent } from '../builder/agent/provision';
 import type { AgentRef, RunApiEnvironment, RunPrincipal } from '../runs/environment';
 import { createRunPreflight } from '../compose/run-preflight';
-import { createInMemoryModelsStoreProvider } from '../models/memory-store';
+import { createInMemoryModelsStoreProvider } from '../models/store';
 import { decide } from '../rbac/decide';
 import { createInMemoryRuntimeProfileStoreProvider } from '../runtimes/memory-store';
 import { startRun } from '../runs/api';

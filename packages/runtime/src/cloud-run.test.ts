@@ -1,59 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { createCloudRunDriver, type CloudRunResourceClient } from './cloud-run.js';
-
-function echoConnection(value: string) {
-  return {
-    events: (async function* () {
-      await Promise.resolve();
-      yield value;
-    })(),
-    sessionId: Promise.resolve('session'),
-    interrupt: () => Promise.resolve(),
-  };
-}
-
-function fakeClient(): {
-  client: CloudRunResourceClient;
-  created: string[];
-  deleted: string[];
-} {
-  const created: string[] = [];
-  const deleted: string[] = [];
-  const services = new Map<string, { ready: boolean; url: string }>();
-  const client: CloudRunResourceClient = {
-    createService: (spec) => {
-      const name = `projects/${spec.project}/locations/${spec.region}/services/${spec.serviceId}`;
-      created.push(name);
-      services.set(name, { ready: false, url: '' });
-      return Promise.resolve({ name, url: '', ready: false });
-    },
-    getService: (name) => {
-      const known = services.get(name);
-      if (known === undefined) return Promise.resolve(null);
-      // First poll after creation reports ready, mimicking a fast-converging revision.
-      services.set(name, { ready: true, url: `https://${name.split('/').pop()}.a.run.app` });
-      return Promise.resolve({ name, ...services.get(name)! });
-    },
-    deleteService: (name) => {
-      deleted.push(name);
-      services.delete(name);
-      return Promise.resolve();
-    },
-  };
-  return { client, created, deleted };
-}
+import { type CloudRunResourceClient } from './cloud-run.js';
+import { cloudRunDriver, echoConnection, fakeClient } from './cloud-run.test-support.js';
 
 describe('cloud-run-service runtime', () => {
   it('deploys one private service per session and reports its URL as the handle', async () => {
     const { client, created } = fakeClient();
-    const driver = createCloudRunDriver<string, string>({
-      images: new Map([['claude-agent-sdk', 'runtime@sha256:abc']]),
-      project: 'proj',
-      region: 'asia-northeast1',
-      serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
-      client,
-      pollIntervalMs: 0,
+    const driver = cloudRunDriver(client, {
       startAgent: (runtime, request) => echoConnection(`${runtime.externalId}:${request}`),
     });
     const handle = await driver.create({
@@ -74,14 +27,7 @@ describe('cloud-run-service runtime', () => {
 
   it('refuses a run spec selecting a different driver', async () => {
     const { client } = fakeClient();
-    const driver = createCloudRunDriver<string, string>({
-      images: new Map([['claude-agent-sdk', 'runtime@sha256:abc']]),
-      project: 'proj',
-      region: 'asia-northeast1',
-      serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
-      client,
-      startAgent: () => echoConnection('unused'),
-    });
+    const driver = cloudRunDriver(client);
     await expect(
       driver.create({
         sessionId: 'session-1',
@@ -99,29 +45,18 @@ describe('cloud-run-service runtime', () => {
 
   it('refuses production images that are not pinned by digest', () => {
     expect(() =>
-      createCloudRunDriver<string, string>({
+      cloudRunDriver(fakeClient().client, {
         images: new Map([['claude-agent-sdk', 'runtime:latest']]),
-        project: 'proj',
-        region: 'asia-northeast1',
-        serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
         requireDigest: true,
-        client: fakeClient().client,
-        startAgent: () => echoConnection('unused'),
       }),
     ).toThrow(/pinned by sha256 digest/u);
   });
+});
 
+describe('cloud-run-service runtime: teardown and readiness failures', () => {
   it('destroys the exact service create() stood up and marks the handle no longer live', async () => {
     const { client, deleted } = fakeClient();
-    const driver = createCloudRunDriver<string, string>({
-      images: new Map([['claude-agent-sdk', 'runtime@sha256:abc']]),
-      project: 'proj',
-      region: 'asia-northeast1',
-      serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
-      client,
-      pollIntervalMs: 0,
-      startAgent: () => echoConnection('unused'),
-    });
+    const driver = cloudRunDriver(client);
     const handle = await driver.create({
       engine: 'claude-agent-sdk',
       sessionId: 'session-1',
@@ -147,17 +82,9 @@ describe('cloud-run-service runtime', () => {
         deleted.push(name);
         return Promise.resolve();
       },
+      listServices: () => Promise.resolve([]),
     };
-    const driver = createCloudRunDriver<string, string>({
-      images: new Map([['claude-agent-sdk', 'runtime@sha256:abc']]),
-      project: 'proj',
-      region: 'asia-northeast1',
-      serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
-      client,
-      pollIntervalMs: 0,
-      readyTimeoutMs: 0,
-      startAgent: () => echoConnection('unused'),
-    });
+    const driver = cloudRunDriver(client, { readyTimeoutMs: 0 });
     await expect(
       driver.create({
         engine: 'claude-agent-sdk',
@@ -167,93 +94,85 @@ describe('cloud-run-service runtime', () => {
     ).rejects.toThrow(/did not become ready/u);
     expect(deleted).toHaveLength(1);
   });
-});
 
-describe('createCloudRunAdminClient', () => {
-  it('sends a bearer token and rejects a non-2xx create response', async () => {
-    const { createCloudRunAdminClient } = await import('./cloud-run.js');
-    const calls: Array<{ url: string; init: RequestInit }> = [];
-    const doFetch = vi.fn<typeof fetch>((url, init = {}) => {
-      const href = url instanceof Request ? url.url : url instanceof URL ? url.href : url;
-      calls.push({ url: href, init });
-      return Promise.resolve(new Response('forbidden', { status: 403 }));
-    });
-    const client = createCloudRunAdminClient({
-      fetch: doFetch,
-      accessToken: () => Promise.resolve('tok'),
-    });
-    await expect(
-      client.createService({
-        serviceId: 'rt-1',
-        image: 'runtime@sha256:abc',
-        region: 'asia-northeast1',
-        project: 'proj',
-        serviceAccount: 'sa@proj.iam.gserviceaccount.com',
-        egress: 'none',
-        labels: {},
-      }),
-    ).rejects.toThrow(/create service rt-1 failed: 403/u);
-    expect(calls[0]?.url).toContain(
-      'projects/proj/locations/asia-northeast1/services?serviceId=rt-1',
-    );
-    const headers = new Headers(calls[0]?.init.headers);
-    expect(headers.get('authorization')).toBe('Bearer tok');
-  });
-});
-
-// ENG-07 (#306, ADR-0073 D3): the image is the run's engine's, from a map of two engines.
-const TWO_ENGINE_IMAGES = new Map([
-  ['claude-agent-sdk', `registry.example/runtime-claude-agent-sdk@sha256:${'a'.repeat(64)}`],
-  ['pi', `registry.example/runtime-pi@sha256:${'b'.repeat(64)}`],
-]);
-
-describe('cloud-run-service runtime: one image per engine (ENG-07)', () => {
-  function recordingClient(images: string[]): CloudRunResourceClient {
-    return {
-      createService: (spec) => {
-        images.push(spec.image);
-        const name = `projects/${spec.project}/locations/${spec.region}/services/${spec.serviceId}`;
-        return Promise.resolve({ name, url: `https://${spec.serviceId}.a.run.app`, ready: true });
-      },
-      getService: (name) =>
+  it('reports a failed rollback delete alongside the readiness failure', async () => {
+    const client: CloudRunResourceClient = {
+      createService: (spec) =>
         Promise.resolve({
-          name,
-          url: `https://${name.split('/').pop() ?? ''}.a.run.app`,
-          ready: true,
+          name: `projects/${spec.project}/locations/${spec.region}/services/${spec.serviceId}`,
+          url: '',
+          ready: false,
         }),
-      deleteService: () => Promise.resolve(),
+      getService: (name) => Promise.resolve({ name, url: '', ready: false }),
+      deleteService: () => Promise.reject(new Error('delete denied')),
+      listServices: () => Promise.resolve([]),
     };
-  }
+    const driver = cloudRunDriver(client, { readyTimeoutMs: 0 });
+    await expect(
+      driver.create({
+        engine: 'claude-agent-sdk',
+        sessionId: 'session-1',
+        workspacePath: '/ws/session-1',
+      }),
+    ).rejects.toThrow(/did not become ready.*also failed \(delete denied\)/u);
+  });
+});
 
-  function driverWith(images: string[]) {
-    return createCloudRunDriver<string, string>({
-      images: TWO_ENGINE_IMAGES,
-      project: 'proj',
-      region: 'asia-northeast1',
-      serviceAccount: 'runtime-sa@proj.iam.gserviceaccount.com',
-      client: recordingClient(images),
-      pollIntervalMs: 0,
-      startAgent: (runtime, request) => echoConnection(`${runtime.externalId}:${request}`),
-    });
-  }
+function driver(
+  client: CloudRunResourceClient,
+  overrides: { network?: string; subnetwork?: string } = {},
+) {
+  return cloudRunDriver(client, { ...overrides });
+}
 
-  it("deploys each run's service from its own engine's image", async () => {
-    for (const engine of ['claude-agent-sdk', 'pi']) {
-      const images: string[] = [];
-      await driverWith(images).create({ engine, sessionId: 's', workspacePath: `/ws/${engine}` });
-      expect(images).toEqual([TWO_ENGINE_IMAGES.get(engine)]);
-    }
+describe('cloud-run-service runtime: sandbox has no internet', () => {
+  it.each(['open', 'restricted'] as const)(
+    'refuses the %s network policy before any service is created',
+    async (networkPolicy) => {
+      const { client, created } = fakeClient();
+      await expect(
+        driver(client).create({
+          sessionId: 's',
+          engine: 'claude-agent-sdk',
+          workspacePath: '/ws/s',
+          runSpec: {
+            runtimeProfileId: 'p',
+            driver: 'cloud-run-service',
+            networkPolicy,
+            filesystem: 'read-write',
+          },
+        }),
+      ).rejects.toThrow(/need gcp\.sandboxInternet: true in agent-workspace\.yaml/u);
+      expect(created).toHaveLength(0);
+    },
+  );
+
+  it('refuses allowedDomains on the none policy without a proxy as a spec error, not a missing option', async () => {
+    const { client, created } = fakeClient();
+    await expect(
+      driver(client).create({
+        sessionId: 's',
+        engine: 'claude-agent-sdk',
+        workspacePath: '/ws/s',
+        runSpec: {
+          runtimeProfileId: 'p',
+          driver: 'cloud-run-service',
+          networkPolicy: 'none',
+          allowedDomains: ['api.example.com'],
+          filesystem: 'read-write',
+        },
+      }),
+    ).rejects.toThrow(/applies only to the restricted/u);
+    expect(created).toHaveLength(0);
+  });
+});
+
+describe('cloud-run-service runtime: sandbox network construction', () => {
+  it.each([{ network: '' }, { subnetwork: ' ' }])('refuses construction with %j', (overrides) => {
+    expect(() => driver(fakeClient().client, overrides)).toThrow(/must be a non-empty string/u);
   });
 
-  it('refuses an engine with no image before any service is deployed', async () => {
-    const images: string[] = [];
-    await expect(
-      driverWith(images).create({
-        engine: 'openai-agents',
-        sessionId: 's',
-        workspacePath: '/ws/x',
-      }),
-    ).rejects.toThrow(/no runtime image for engine "openai-agents"/u);
-    expect(images).toHaveLength(0);
+  it('advertises only the none network policy', () => {
+    expect(driver(fakeClient().client).capabilities.networkPolicies).toEqual(['none']);
   });
 });

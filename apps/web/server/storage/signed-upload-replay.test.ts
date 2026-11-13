@@ -13,6 +13,7 @@ import {
   createDatabaseResourceCatalogRepositoryProvider,
   createDatabaseWorkspaceScopeResolver,
   createInMemoryCatalog,
+  createInMemorySessionStateBlobs,
   createIsolatedTestDatabase,
   memberships,
   users,
@@ -150,9 +151,8 @@ function defineSuite(name: string, setup: () => Promise<Fixture>) {
       const cleanup = (now: Date) =>
         runCleanupPass({
           objects,
-          legacy: null,
           catalogs: catalogOf,
-          sessionState: () => Promise.resolve({ referencedObjectIds: () => Promise.resolve([]) }),
+          sessionState: (id) => Promise.resolve(createInMemorySessionStateBlobs().forWorkspace(id)),
           workspaceIds: () => Promise.resolve([ws.id]),
           now: () => now,
           mode: 'delete',

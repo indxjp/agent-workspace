@@ -13,8 +13,8 @@ open AgentWorkspace AgentWorkspace.Concepts.Membership AgentWorkspace.Concepts.B
   AgentWorkspace.Authz.Roles AgentWorkspace.Authz.Resources AgentWorkspace.Authz.Permissions
   AgentWorkspace.Authz.TokenScope AgentWorkspace.Authz.Surface AgentWorkspace.Authz.Decide
 
-/-- `RESOURCES` is exactly these 31 path segments, in this order. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/resources.ts#RESOURCES")
+/-- `RESOURCES` is exactly these 32 path segments, in this order. -/
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/resources.ts#RESOURCES")
   (doc := "docs/formal/domains/d1-runs.md#authorisation")]
 theorem resource_wires_are_the_thirty_resources :
     WireEnum.wires Resource =
@@ -22,13 +22,13 @@ theorem resource_wires_are_the_thirty_resources :
         "invitations", "me", "memberships", "metrics", "model-connections", "models", "platforms", "projects",
         "runs", "runtime-connections", "runtime-profiles", "runtimes", "secrets", "sessions", "shares",
         "sharing-policies", "skills", "setup", "storage-connections", "tool-bundles", "tokens", "triggers",
-        "users", "workspaces"] := by
+        "users", "webhooks", "workspaces"] := by
   decide +kernel
 
 /-- The operation, grant, ownership, surface and method vocabularies are exactly the TypeScript
 unions and lists (`Operation`, `Grant`, `OWNERSHIPS`, `Surface`, `METHODS`), in their order. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/decide.ts#OWNERSHIPS")
-  (ts := "apps/web/server/rbac/decide.ts#METHODS") (ts := "apps/web/server/rbac/permissions.ts#Grant")
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/decide.ts#OWNERSHIPS")
+  (ts := "apps/web/server/rbac/core/decide.ts#METHODS") (ts := "apps/web/server/rbac/core/permissions.ts#Grant")
   (ts := "apps/web/server/auth/paths.ts#Surface")]
 theorem decision_vocabularies_match_typescript :
     WireEnum.wires Operation = ["read", "write", "run"] ∧
@@ -40,8 +40,8 @@ theorem decision_vocabularies_match_typescript :
 
 /-- `composeSubResources` does not throw on the tracked declarations, and `SUB_RESOURCES` is §34's
 three pairs plus the forty-three declared ones: 46 classified `(resource, sub)` pairs. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/permissions.ts#SUB_RESOURCES")
-  (ts := "apps/web/server/rbac/declared-sub-resources.ts#composeSubResources")
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/permissions.ts#SUB_RESOURCES")
+  (ts := "apps/web/server/rbac/core/declared-sub-resources.ts#composeSubResources")
   (doc := "docs/adr/0040-sub-resource-classification-is-partitioned-by-the-task-that-ships-the-routes.md#decision")]
 theorem sub_resource_composition_yields_forty_six_pairs :
     (match composeSubResources spec34SubResources declaredSubResources with
@@ -65,14 +65,14 @@ theorem sub_resource_composition_yields_forty_six_pairs :
 
 /-- Every role's policy names each resource at most once, so no override silently shadows
 another (a duplicate key in a TypeScript object literal would). -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/permissions.ts#POLICY")]
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/permissions.ts#POLICY")]
 theorem every_role_policy_names_each_resource_once :
     ∀ r : Role, ((policy r).byResource.map (·.1)).Nodup := by decide +kernel
 
 /-- `decide()` never refuses a query whose role parses, whose path is on the `api` surface and
 parses, and whose method maps to an operation: every such cell is `allow` or `deny`. -/
 @[aw_spec (tier := T0) (ts := "apps/web/server/rbac/decide.ts#decide")
-  (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#undecidedCells")
+  (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#undecidedCells")
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")]
 theorem decide_decides_every_classified_query (q : Query) {role : Role} {res : Resource}
     {sub id : Option String} {op : Operation} (hr : parseRoleInput q.role = some role)
@@ -144,13 +144,13 @@ private def routeClassified (r : DeclaredRoute) : Bool :=
       | .refused _ => false
     | _ => false
 
-/-- The authorisation matrix is total: its 157 routes (the declared union minus the eighteen
+/-- The authorisation matrix is total: its 167 routes (the declared union minus the eighteen
 pre-authentication routes and the nine identity-only routes) are decided — `allow` or `deny`, never
-`refuse` — for every role and every ownership answer, 3 140 cells. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#undecidedCells")
+`refuse` — for every role and every ownership answer, 3 340 cells. -/
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#undecidedCells")
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")]
 theorem every_matrix_route_is_decided :
-    matrixRoutes.length = 157 ∧ ∀ r ∈ matrixRoutes, ∀ role : Role, ∀ o : Ownership,
+    matrixRoutes.length = 167 ∧ ∀ r ∈ matrixRoutes, ∀ role : Role, ∀ o : Ownership,
       (decideOrdinary ⟨WireEnum.toWire role, r.method, r.path, o, none⟩).effect ≠ .refuse := by
   have hall : matrixRoutes.all routeClassified = true := by decide +kernel
   refine ⟨by decide +kernel, fun r hr role o => ?_⟩

@@ -6,7 +6,9 @@
  * A session is a short-lived token that names the signed-in identity, MAC'd with HMAC-SHA-256
  * under a deployment secret, carried in a `__Host-` cookie. It is **not** a JWT: there is no
  * algorithm field to confuse, no header to negotiate, no `none`, and no library-shaped surface
- * for an attacker to aim at. The version tag is a constant that must match exactly.
+ * for an attacker to aim at. The version tag is a constant that must match exactly. (The OIDC
+ * sign-in in `oidc.ts` does use JWTs, through `jose`, because that is what the identity provider
+ * sends; that is a different credential.)
  *
  * Every cryptographic operation here is a call into Web Crypto — `crypto.subtle.sign`,
  * `crypto.subtle.verify`, `crypto.getRandomValues`. Nothing in this file implements a primitive,
@@ -26,6 +28,27 @@
  * cannot produce a `NaN < now` that is false and therefore reads as "not expired" (ADR-0015 —
  * this is the exact bug that shipped three times in Wave 0).
  */
+
+import { systemClock } from '../clock.ts';
+import {
+  parseSessionClaims,
+  SESSION_TTL_SECONDS,
+  sessionClaimsAt,
+  sessionCookie,
+  sessionTimeRefusal,
+  type SessionClaims,
+  type SessionCookie,
+} from './core/session-rules.ts';
+import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
+
+// The pure rules live in `./core/` (ADR W1-CP-06, amended); this module signs and verifies.
+export {
+  clearedSessionCookie,
+  SESSION_TTL_SECONDS,
+  sessionCookie,
+  type SessionClaims,
+  type SessionCookie,
+} from './core/session-rules.ts';
 
 /**
  * `__Host-` is a browser-enforced prefix: the cookie is rejected by the browser unless it is
@@ -65,7 +88,7 @@ function shortHash(value: string): string {
  * such a `COMPOSE_PROJECT_NAME` up front, so this is the path of a hand-set value only.
  */
 export function cookieInstanceId(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  env: Readonly<Record<string, string | undefined>>,
 ): string | undefined {
   const raw = env['AW_INSTANCE_ID']?.trim() ?? '';
   if (raw.length === 0) return undefined;
@@ -89,13 +112,10 @@ export function cookieInstanceId(
  * unchanged; the attributes come from each cookie's own builder. This is the one helper every
  * auth cookie's name goes through: the session cookie here, and the workspace-selection,
  * invitation-identity and OIDC-transaction cookies through `index.ts`, the composition root
- * (their modules import nothing, per docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md).
+ * (their modules import no other auth module, per
+ * docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md).
  */
-export function scopedCookieName(
-  base: string,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string {
-  const instanceId = cookieInstanceId(env);
+export function scopedCookieName(base: string, instanceId: string | undefined): string {
   return instanceId === undefined ? base : `${base}_${instanceId}`;
 }
 
@@ -107,17 +127,12 @@ export function scopedCookieName(
  * Every reader and writer — the proxy, `getSession`, the route handlers that read the raw
  * `Cookie` header, and {@link sessionCookie} — calls this, so none can disagree about the name.
  */
-export function sessionCookieName(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string {
-  return scopedCookieName(DEFAULT_SESSION_COOKIE_NAME, env);
+export function sessionCookieName(env: Readonly<Record<string, string | undefined>>): string {
+  return scopedCookieName(DEFAULT_SESSION_COOKIE_NAME, cookieInstanceId(env));
 }
 
 /** The only token format this build mints or accepts. */
 const TOKEN_VERSION = 'aw1';
-
-/** Absolute lifetime. Not a sliding window: a session ends twelve hours after it began. */
-export const SESSION_TTL_SECONDS = 12 * 60 * 60;
 
 /**
  * 32 characters. Shorter than this and the MAC key is the weak link; a deployment that has not
@@ -127,20 +142,6 @@ export const SESSION_TTL_SECONDS = 12 * 60 * 60;
 export const MIN_SESSION_SECRET_LENGTH = 32;
 
 const encoder = new TextEncoder();
-
-/** The claims a Wave 1 session carries. Four roles arrive in W2-CP-06; this wave mints one. */
-export interface SessionClaims {
-  /** The bootstrap administrator's email address, lower-cased. */
-  readonly sub: string;
-  /** Workspace slug — the tenant this session is scoped to (spec §25). */
-  readonly ws: string;
-  /** Spec §21's highest role. The only value this wave mints or accepts. */
-  readonly role: 'owner';
-  /** Issued at, seconds since the epoch. */
-  readonly iat: number;
-  /** Expires at, seconds since the epoch. */
-  readonly exp: number;
-}
 
 /**
  * The same five fields, and one statement about where they came from that the type system
@@ -189,21 +190,20 @@ export interface SessionClaims {
 class VerifiedClaims implements SessionClaims {
   public readonly sub: string;
   public readonly ws: string;
-  public readonly role: 'owner';
   public readonly iat: number;
   public readonly exp: number;
 
   /**
    * Unnameable outside this file, and — unlike a symbol-keyed phantom property — not carried
    * across an object spread. It is what makes this type nominal. Not enumerable, so
-   * `JSON.stringify` still produces exactly the five-field payload `mintSessionToken` signs.
+   * `JSON.stringify` produces only the public claims. There is no `role`: the role is read from
+   * the membership row per request, never from the token (refactoring part 06, step 9).
    */
   readonly #verifiedBy = 'verifySessionToken';
 
   public constructor(claims: SessionClaims) {
     this.sub = claims.sub;
     this.ws = claims.ws;
-    this.role = claims.role;
     this.iat = claims.iat;
     this.exp = claims.exp;
   }
@@ -262,26 +262,39 @@ export function readSessionSecret(env: Readonly<Record<string, string | undefine
 }
 
 /**
- * Importing a key is asynchronous and happens on every request through the gate, so the imported
- * key is memoised by secret. The map holds at most a handful of entries — one per distinct
- * secret a process has seen, which in practice is one.
+ * Deriving and importing a key is asynchronous and happens on every request through the gate, so
+ * the imported keys are memoised by secret. The map holds two entries, the session key and the old
+ * key, for each distinct secret a process has seen, which in practice is one.
  */
 type HmacKey = Awaited<ReturnType<typeof crypto.subtle.importKey>>;
 
 const keyCache = new Map<string, Promise<HmacKey>>();
 
-function hmacKey(secret: string): Promise<HmacKey> {
-  const cached = keyCache.get(secret);
+function importHmacKey(bytes: Uint8Array<ArrayBuffer>): Promise<HmacKey> {
+  return crypto.subtle.importKey('raw', bytes, { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+    'verify',
+  ]);
+}
+
+function memoised(cacheKey: string, create: () => Promise<HmacKey>): Promise<HmacKey> {
+  const cached = keyCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  const created = crypto.subtle.importKey(
-    'raw',
-    encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
-  keyCache.set(secret, created);
+  const created = create();
+  keyCache.set(cacheKey, created);
   return created;
+}
+
+/** The session's own key, derived from the secret (part 06 step 5, `./core/key-ring.ts`). */
+function sessionKey(secret: string): Promise<HmacKey> {
+  return memoised(`session\0${secret}`, async () =>
+    importHmacKey(await derivePurposeKey(crypto.subtle, secret, 'session')),
+  );
+}
+
+/** The raw secret as the key: what every session was signed with before step 5. Verify only. */
+function legacyKey(secret: string): Promise<HmacKey> {
+  return memoised(`legacy\0${secret}`, () => importHmacKey(encoder.encode(secret)));
 }
 
 function base64UrlEncode(bytes: Uint8Array): string {
@@ -313,11 +326,33 @@ function base64UrlDecode(text: string): Uint8Array<ArrayBuffer> | null {
   return bytes;
 }
 
+/**
+ * The session key, then the old one during the roll-over (`verificationKeys`). Each comparison is
+ * constant-time; how many keys were tried shows only which key signed the token, not the MAC.
+ */
+async function verifiesUnderAnyKey(
+  secret: string,
+  signature: Uint8Array<ArrayBuffer>,
+  signed: Uint8Array<ArrayBuffer>,
+): Promise<boolean> {
+  for (const key of verificationKeys(
+    () => sessionKey(secret),
+    () => legacyKey(secret),
+  )) {
+    if (await crypto.subtle.verify('HMAC', await key(), signature, signed)) return true;
+  }
+  return false;
+}
+
 /** Mint a token for `claims`. The caller has already decided the claims are true. */
 export async function mintSessionToken(claims: SessionClaims, secret: string): Promise<string> {
   const payload = base64UrlEncode(encoder.encode(JSON.stringify(claims)));
   const signed = `${TOKEN_VERSION}.${payload}`;
-  const signature = await crypto.subtle.sign('HMAC', await hmacKey(secret), encoder.encode(signed));
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    await sessionKey(secret),
+    encoder.encode(signed),
+  );
   return `${signed}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
 
@@ -325,11 +360,10 @@ export async function mintSessionToken(claims: SessionClaims, secret: string): P
 export function newSessionClaims(
   sub: string,
   ws: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
   ttlSeconds: number = SESSION_TTL_SECONDS,
 ): SessionClaims {
-  const iat = Math.floor(nowMs / 1000);
-  return { sub, ws, role: 'owner', iat, exp: iat + ttlSeconds };
+  return sessionClaimsAt(sub, ws, nowMs, ttlSeconds);
 }
 
 function reject(code: VerifyFailure, reason: string): VerifyResult {
@@ -344,7 +378,7 @@ function reject(code: VerifyFailure, reason: string): VerifyResult {
 export async function verifySessionToken(
   token: unknown,
   secret: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<VerifyResult> {
   if (typeof token !== 'string' || token.length === 0) {
     return reject('no_session_cookie', 'no session cookie on the request');
@@ -365,9 +399,8 @@ export async function verifySessionToken(
   }
 
   // Constant-time, and before anything attacker-controlled is parsed.
-  const signatureValid = await crypto.subtle.verify(
-    'HMAC',
-    await hmacKey(secret),
+  const signatureValid = await verifiesUnderAnyKey(
+    secret,
     signature,
     encoder.encode(`${version}.${payloadPart}`),
   );
@@ -385,85 +418,17 @@ export async function verifySessionToken(
   } catch {
     return reject('malformed_session', 'payload is not JSON');
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return reject('malformed_session', 'payload is not a JSON object');
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const sub = record['sub'];
-  const ws = record['ws'];
-  const role = record['role'];
-  const iat = record['iat'];
-  const exp = record['exp'];
-
-  if (typeof sub !== 'string' || sub.length === 0)
-    return reject('malformed_session', 'sub is missing or not a non-empty string');
-  if (typeof ws !== 'string' || ws.length === 0)
-    return reject('malformed_session', 'ws is missing or not a non-empty string');
-  if (role !== 'owner')
-    return reject(
-      'malformed_session',
-      `role ${JSON.stringify(role)} is not a role this build accepts`,
-    );
-  if (typeof iat !== 'number' || !Number.isFinite(iat))
-    return reject('malformed_session', 'iat is missing or not a finite number');
-  if (typeof exp !== 'number' || !Number.isFinite(exp))
-    return reject('malformed_session', 'exp is missing or not a finite number');
-  if (exp <= iat) return reject('malformed_session', 'exp is not after iat');
-
-  // Parsed and type-checked above, so this comparison cannot be `NaN < now`.
-  if (exp * 1000 <= nowMs) {
-    return reject('expired_session', 'session expired');
-  }
-  if (exp - iat > SESSION_TTL_SECONDS) {
-    return reject('malformed_session', 'session lifetime exceeds the maximum this build issues');
-  }
+  const claims = parseSessionClaims(parsed);
+  if (!claims.ok) return reject(claims.code, claims.reason);
+  const refused = sessionTimeRefusal(claims.claims, nowMs);
+  if (refused !== null) return reject(refused.code, refused.reason);
 
   // The one expression in the program that constructs verified claims, and it is reachable only
   // from below `crypto.subtle.verify` returning true and every field above being parsed and
   // range-checked. Every claim this task makes about tenant provenance reduces to this line, so
   // it is the line to read first when auditing it. Note that it is a constructor call and not a
   // cast: nothing here asserts a type the compiler could not check.
-  return { ok: true, claims: new VerifiedClaims({ sub, ws, role, iat, exp }) };
-}
-
-/**
- * Cookie attributes, in the shape `cookies().set()` and `NextResponse.cookies.set()` both take.
- *
- * `secure: true` is unconditional. Making it depend on the request's scheme is the classic
- * downgrade: an attacker who can force one plain-HTTP request gets a cookie without it. Browsers
- * exempt `http://localhost` from the `Secure` requirement, so development works; a deployment
- * served over plain HTTP on any other host cannot hold a session, and that is the intended
- * answer rather than an oversight. See docs/adr/W1-CP-06-the-session-cookie-is-always-secure.md.
- */
-export interface SessionCookie {
-  readonly name: string;
-  readonly value: string;
-  readonly httpOnly: true;
-  readonly secure: true;
-  readonly sameSite: 'lax';
-  readonly path: '/';
-  readonly maxAge: number;
-}
-
-export function sessionCookie(
-  token: string,
-  maxAgeSeconds: number = SESSION_TTL_SECONDS,
-): SessionCookie {
-  return {
-    name: sessionCookieName(),
-    value: token,
-    httpOnly: true,
-    secure: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: maxAgeSeconds,
-  };
-}
-
-/** The same cookie with an immediate expiry — sign-out. */
-export function clearedSessionCookie(): SessionCookie {
-  return { ...sessionCookie(''), value: '', maxAge: 0 };
+  return { ok: true, claims: new VerifiedClaims(claims.claims) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -486,11 +451,11 @@ export function clearedSessionCookie(): SessionCookie {
  * not the secret half, and the choice is recorded in
  * docs/adr/W1-CP-06-bootstrap-credential-is-a-deployment-value.md.
  *
- * This lives in the same module as the token deliberately, and not for taste: the modules under
- * `apps/web/server/auth` import nothing from each other, which is what lets Turbopack (which
- * resolves extensionless specifiers, not `./x.js`) and TypeScript's NodeNext program (which
- * requires `./x.js`) both read the same files. See
- * docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md.
+ * This lives in the same module as the token deliberately: the modules under
+ * `apps/web/server/auth` import nothing from each other except the pure rules in `./core/` (and the
+ * clock port, `../clock.ts`), by an explicit `.ts` path that Turbopack and TypeScript's NodeNext
+ * program both read the same way. See docs/adr/W1-CP-06-auth-modules-are-standalone-es-modules.md
+ * and its amendments.
  */
 
 /**
@@ -633,17 +598,45 @@ export type SignInResult =
  */
 export type SignInFailure = 'server_not_configured' | 'invalid_credentials' | 'malformed_request';
 
-/** Verify credentials and mint a session. The only way a session cookie comes into existence. */
-export async function signIn(
+/** {@link signInWith}, with the settings read from `env`. */
+export function signIn(
   input: SignInInput,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-  nowMs: number = Date.now(),
+  env: Readonly<Record<string, string | undefined>>,
+  nowMs?: number,
 ): Promise<SignInResult> {
-  const secret = readSessionSecret(env);
+  return signInWith(
+    input,
+    {
+      secret: readSessionSecret(env),
+      admin: readBootstrapAdmin(env),
+      cookieName: sessionCookieName(env),
+    },
+    nowMs,
+  );
+}
+
+/** What {@link signInWith} checks credentials against: both parsed once, at start-up. */
+export interface SignInSettings {
+  readonly secret: SecretResult;
+  readonly admin: BootstrapAdminResult;
+  /** The session cookie's name for this deployment. */
+  readonly cookieName: string;
+}
+
+/**
+ * Verify credentials and mint a session. The only way a session cookie comes into existence. The
+ * settings are parsed once, at start-up (refactoring part 03, step 3).
+ */
+export async function signInWith(
+  input: SignInInput,
+  settings: SignInSettings,
+  nowMs: number = systemClock.now().getTime(),
+): Promise<SignInResult> {
+  const secret = settings.secret;
   if (!secret.ok) {
     return { ok: false, code: 'server_not_configured', reason: secret.reason };
   }
-  const configured = readBootstrapAdmin(env);
+  const configured = settings.admin;
   if (!configured.ok) {
     return { ok: false, code: 'server_not_configured', reason: configured.reason };
   }
@@ -665,5 +658,9 @@ export async function signIn(
 
   const claims = newSessionClaims(configured.admin.email, configured.admin.workspaceSlug, nowMs);
   const token = await mintSessionToken(claims, secret.secret);
-  return { ok: true, token, cookie: sessionCookie(token, SESSION_TTL_SECONDS) };
+  return {
+    ok: true,
+    token,
+    cookie: sessionCookie(token, settings.cookieName, SESSION_TTL_SECONDS),
+  };
 }

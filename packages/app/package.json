@@ -1,0 +1,145 @@
+{
+  "name": "@indx-workspace/app",
+  "version": "0.6.12",
+  "description": "The app kit for Agent Workspace portal apps: resources, generated routes, agent tools, pages and their test kit.",
+  "license": "Apache-2.0",
+  "homepage": "https://docs.agentworkspace.indx.jp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/indxjp/agent-workspace.git",
+    "directory": "packages/app"
+  },
+  "bugs": {
+    "url": "https://github.com/indxjp/agent-workspace/issues"
+  },
+  "keywords": [
+    "agent-workspace",
+    "claude",
+    "ai-agents",
+    "app-kit",
+    "portal"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./src/server/index.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./db": {
+      "types": "./src/db/index.ts",
+      "default": "./dist/db/index.js"
+    },
+    "./react": {
+      "types": "./src/react/index.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./react/styles.css": {
+      "types": "./src/react/styles.d.css.ts",
+      "default": "./dist/react/styles.css"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./dist/testing/index.js"
+    }
+  },
+  "bin": {
+    "aw-app": "./dist/bin/aw-app.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./server": {
+        "types": "./dist/server/index.d.ts",
+        "default": "./dist/server/index.js"
+      },
+      "./db": {
+        "types": "./dist/db/index.d.ts",
+        "default": "./dist/db/index.js"
+      },
+      "./react": {
+        "types": "./dist/react/index.d.ts",
+        "default": "./dist/react/index.js"
+      },
+      "./react/styles.css": {
+        "types": "./dist/react/styles.d.css.ts",
+        "default": "./dist/react/styles.css"
+      },
+      "./testing": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/testing/index.js"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"for (const f of ['styles.css','styles.d.css.ts']) require('node:fs').cpSync('src/react/'+f,'dist/react/'+f)\"",
+    "typecheck": "tsc -p tsconfig.json && tsc -p fixtures/desk/tsconfig.json && tsc -p fixtures/generated-recipes/tsconfig.json"
+  },
+  "dependencies": {
+    "@indx-workspace/contracts": "workspace:*",
+    "@indx-workspace/react": "workspace:*",
+    "@indx-workspace/sdk": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "croner": "10.0.1",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "0.45.4",
+    "pg": "^8",
+    "react": "^18.3.0 || ^19"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "drizzle-orm": "0.45.4",
+    "next": "16.4.3",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "5.0.5"
+  },
+  "nx": {
+    "targets": {
+      "lint": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "eslint packages/app --max-warnings 0"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "vitest run --project @indx-workspace/app --reporter=default --reporter=json --outputFile={projectRoot}/.vitest-report.json",
+          "env": {
+            "NODE_OPTIONS": "--unhandled-rejections=strict",
+            "VITEST_MAX_WORKERS": "4"
+          }
+        }
+      }
+    }
+  }
+}

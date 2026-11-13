@@ -37,6 +37,63 @@ const ROOT_DENIES =
 
 type PortableTool = PortableAgent['tools'][number];
 
+/**
+ * The agent's working directory in the ejected project, relative to the project root: the SDK
+ * `cwd`, as the platform runs an agent in its own workspace. Its skills (`.claude/skills/`), its
+ * relative paths (`outputs/a.md`) and anything it writes live there; the program itself (`src/`,
+ * `tools/`, `package.json`, `.env`, `node_modules/`, …) sits beside it, outside the area Claude
+ * Code lets the agent write, or read without asking.
+ */
+const WORKSPACE_DIR = 'workspace';
+
+/**
+ * Write files in the ejected program (the #2232 fix, carried over). In `permissionMode: 'default'`
+ * Claude Code asks before every `Write`, `Edit` and `NotebookEdit`, and the ejected `main.ts` has
+ * nobody to answer, so every write was refused.
+ *
+ * The root's `allowedTools` gets the rule the engine adds (`claudeWriteFilesApprovals`) for the
+ * agent's working directory, `Edit(//<project>/workspace/**)`: an allowlist, so every other path,
+ * the program's files included, still asks and is refused. `disallowedTools` adds deny rules (a
+ * deny wins over the allow rule, and the root's bind its subagents): {@link WORKSPACE_KEPT}, the
+ * files Claude Code loads from the working directory on the next run, and, as defence in depth,
+ * {@link PROGRAM_KEPT}.
+ *
+ * The directories are known only at run time, so the generated program builds the rules itself.
+ * Their form is the engine's allow rule and the platform's read-only grant denial
+ * (`claudeReadOnlyGrantDenials`): `tests/platforms/eject-write-files.test.ts` runs the generated
+ * function and fails if either differs.
+ */
+const EDIT_RULE = 'editRule';
+const EDIT_RULE_LINES = [
+  '// Write files: Claude Code asks before every write in permissionMode "default", and nobody',
+  "// answers in this program, so writes inside the agent's workspace are allowed, except to the",
+  '// files Claude Code loads from it (see disallowedTools). Any other write still asks and is',
+  '// refused.',
+  `function ${EDIT_RULE}(directory: string, relative: string): string {`,
+  '  const posix = directory',
+  String.raw`    .replaceAll("\\", "/")`,
+  '    .replace(/^([A-Za-z]):/u, (_drive, letter: string) => "/" + letter.toLowerCase())',
+  String.raw`    .replace(/\/+$/u, "");`,
+  '  return "Edit(/" + posix + "/" + relative + ")";',
+  '}',
+  '',
+];
+
+/**
+ * Paths in the working directory the agent may not write, because Claude Code reads them on the
+ * next run (`settingSources: ['project']`): its settings and skills (`.claude/`, which Claude Code
+ * also guards), and project memory (`CLAUDE.md`, also in a subdirectory, where it is loaded when
+ * the agent reads there). `.mcp.json` is ignored under `strictMcpConfig`, and kept anyway.
+ */
+const WORKSPACE_KEPT: readonly string[] = ['.claude/**', '.mcp.json', 'CLAUDE.md', '**/CLAUDE.md'];
+
+/**
+ * Program paths denied as well, though the allow rule never reaches them: the files whose change
+ * would hand the agent more on the next run (its options and code tools, its secrets, its
+ * dependencies, git hooks).
+ */
+const PROGRAM_KEPT: readonly string[] = ['.env*', '.git/**', 'package.json', 'src/**', 'tools/**'];
+
 interface Build extends ToolBuild {
   readonly skillNames: Set<string>;
 }
@@ -91,6 +148,12 @@ function mapPermissions(agent: PortableAgent, root: PortableAgent): FieldVerdict
     if (agent.permissions[key] && !root.permissions[key]) {
       return dropped(path, 'permissions_unsupported', ROOT_DENIES);
     }
+    if (key === 'writeFiles' && agent.permissions[key]) {
+      return mapped(
+        path,
+        'Write, Edit and NotebookEdit are allowed inside the agent’s working directory, workspace/; the program’s own files (src/, tools/, package.json, .env, …) are outside it and stay read-only',
+      );
+    }
     if (key === 'unrestrictedNetwork' && !agent.permissions[key]) {
       return mapped(
         path,
@@ -131,7 +194,7 @@ function mapOtherFields(agent: PortableAgent, isRoot: boolean): FieldVerdict[] {
     verdicts.push(
       native(
         at(`skills.${index}`),
-        `copied to .claude/skills/${skill.name}/ and enabled by skills`,
+        `copied to ${WORKSPACE_DIR}/.claude/skills/${skill.name}/ and enabled by skills`,
       ),
     ),
   );
@@ -200,14 +263,25 @@ function agentSource(
     if (server !== undefined) servers[name] = server.config;
   }
   if (hasCodeTools) servers[CODE_TOOLS_SERVER] = code('codeToolsServer(codeTools)');
-  const allowed = [...build.servers.keys(), ...(hasCodeTools ? [CODE_TOOLS_SERVER] : [])]
-    .sort()
-    .map((name) => `mcp__${name}__*`);
-  const denied = claudeDeniedToolsFor(root.permissions);
+  const writeFiles = root.permissions.writeFiles;
+  const allowed: CodeValue[] = [
+    ...[...build.servers.keys(), ...(hasCodeTools ? [CODE_TOOLS_SERVER] : [])]
+      .sort()
+      .map((name) => `mcp__${name}__*`),
+    ...(writeFiles ? [code(`${EDIT_RULE}(workDir, "**")`)] : []),
+  ];
+  const kept = (directory: string, paths: readonly string[]): CodeValue[] =>
+    paths.map((path) => code(`${EDIT_RULE}(${directory}, ${lit(path)})`));
+  const denied: CodeValue[] = [
+    ...claudeDeniedToolsFor(root.permissions),
+    ...(writeFiles
+      ? [...kept('workDir', WORKSPACE_KEPT), ...kept('projectRoot', PROGRAM_KEPT)]
+      : []),
+  ];
   const agents: Record<string, CodeValue> = {};
   for (const subagent of subagents) agents[subagent.name] = subagentDefinition(subagent, build);
   const options: CodeValue = {
-    cwd: code('projectRoot'),
+    cwd: code('workDir'),
     model: modelOf(root),
     systemPrompt:
       root.instructions.trim() === ''
@@ -230,15 +304,20 @@ function agentSource(
     hasCodeTools
       ? importLine(['createSdkMcpServer', 'tool', 'type Options'], SDK_PACKAGE)
       : `import type { Options } from ${lit(SDK_PACKAGE)};`,
-    importLine(['fileURLToPath'], 'node:url'),
+    importLine(['mkdir'], 'node:fs/promises'),
     'import path from "node:path";',
+    importLine(['fileURLToPath'], 'node:url'),
     ...(hasCodeTools
       ? [importLine(['loadCodeTools', 'type LoadedCodeTool'], './code-tools.ts')]
       : []),
     '',
     'const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");',
+    '// The agent works in workspace/: its skills, its files and what it writes. The program (src/,',
+    '// tools/, package.json, .env) stays outside it.',
+    `const workDir = path.join(projectRoot, ${lit(WORKSPACE_DIR)});`,
     '',
     ...(usesSecrets ? REQUIRE_ENV_LINES : []),
+    ...(writeFiles ? EDIT_RULE_LINES : []),
     ...(hasCodeTools
       ? [
           'function codeToolsServer(codeTools: readonly LoadedCodeTool[]) {',
@@ -258,6 +337,7 @@ function agentSource(
         ]
       : []),
     'export async function agentOptions(): Promise<Options> {',
+    '  await mkdir(workDir, { recursive: true });',
     ...(hasCodeTools
       ? [
           `  const codeTools = await loadCodeTools(projectRoot, ${render(build.codeToolNames, 1)}, ${lit(root.name)});`,
@@ -299,7 +379,7 @@ function mainSource(): string {
 const README_SECTION = [
   '## Claude Agent SDK',
   '',
-  'The agent runs through `query()` of the Claude Agent SDK. `src/agent.ts` exports `agentOptions()`, which holds the permissions, MCP servers, skills and subagents; `.claude/skills/` holds the skills.',
+  'The agent runs through `query()` of the Claude Agent SDK. `src/agent.ts` exports `agentOptions()`, which holds the permissions, MCP servers, skills and subagents. The agent works in `workspace/`, its working directory: its skills are in `workspace/.claude/skills/`, and what it writes lands there. The program’s own files stay outside it.',
   'Set `ANTHROPIC_API_KEY` in `.env`.',
 ].join('\n');
 
@@ -366,7 +446,7 @@ export function compileEjectClaude(
       ...shell,
       { path: 'src/agent.ts', content: agentSource(root, subagents, build) },
       { path: 'src/main.ts', content: mainSource() },
-      ...skillFiles(project, build.skillNames, '.claude/skills'),
+      ...skillFiles(project, build.skillNames, `${WORKSPACE_DIR}/.claude/skills`),
     ],
     report: verdicts,
   };

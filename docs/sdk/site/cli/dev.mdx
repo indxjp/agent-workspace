@@ -211,6 +211,25 @@ The project pins `@indx-workspace/aw`, `@indx-workspace/embedded` and `@indx-wor
 npm's install-script prompt in an `allowScripts` block (pnpm's in `pnpm-workspace.yaml`), and its
 `dev` script is `aw dev`.
 
+### Choose the features
+
+`--features chat,files` writes a `features:` list into `agent-workspace.yaml`: the features this
+deployment installs (`chat`, `projects`, `files`, `skills`, `connectors`, `runs`, `sharing`,
+`surfaces`, `triggers`, `evaluations`, `builder`). Each id is listed once, with the features it
+needs: `surfaces` needs `chat`, and `triggers` and `evaluations` need `runs`. With no list, every
+feature is installed.
+
+```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+features: [chat, files, runs]
+```
+
+`aw dev` passes the list to the local runtime as `AW_DEPLOYMENT_FEATURES` when it starts, and a
+route of a feature the list leaves out answers `404 feature_disabled`. An `AW_DEPLOYMENT_FEATURES`
+set in `.env` or the environment must name the same features, or the runtime refuses to start;
+with no `features:` in the file, a valid one applies and `aw dev` prints a warning. A change to
+`features:` while `aw dev` runs prints `agent-workspace.yaml: features changed; restart aw dev to
+apply`. `aw deploy` passes the same list to the deployment (see [Deploy](/guides/deploy)).
+
 ## Start in an existing directory (aw init)
 
 Run `npx @indx-workspace/aw init` there. On a terminal it asks the same setup questions as
@@ -226,6 +245,90 @@ when the directory has no `package.json`, the `npm install -D` line for the thre
 `aw init` takes the same setup flags as `npm create` (`--theme`, `--provider`, `--agent`, and the
 rest; `npx @indx-workspace/aw init --help` lists them with their defaults), and a flag answers its
 question so it is not asked.
+
+## With an app
+
+In the next release, a project with a portal app (`aw generate app <name>`, which records
+`app:<name>` in `aw-generated.json`) runs the app too. After the runtime is ready, and before the
+first sync, `aw dev`:
+
+1. **Migrates the app.** It runs the app kit's `aw-app migrate --app <name> --dir db/migrations`
+   from the project's own install, against the local runtime's PostgreSQL (or `DATABASE_URL`, when
+   you set it for `aw dev`), into the schema `app_<name>`. A migration that fails stops `aw dev`
+   with the reason, and the app does not start.
+2. **Starts the app.** It runs `next dev` on `127.0.0.1`, on the first free port from the web port
+   plus 100 (3100 for a project on 3000), and waits until the app's `/api/mcp` answers. The ready
+   screen shows it on its own row, `app       http://127.0.0.1:3100`. The app's output goes to
+   `.aw/logs/app.log`.
+3. **Registers the app's connector.** It adds the connector `<name>`
+   (`http://127.0.0.1:<port>/api/mcp`, with `identity: { secret: APP_<NAME>_IDENTITY }`) to the
+   same plan as the project file's `connectors`, without editing `agent-workspace.yaml`. The
+   identity key is 32 random bytes made on the first run and kept in `.aw/app-identity.json`
+   (mode `0600`); it is never printed. On the first run the app restarts once with the
+   connector's id, which the identity assertion names.
+
+The connector signs with the workspace secret `APP_<NAME>_IDENTITY`. Only an Owner may store a
+secret, and `aw dev` holds an Admin key, so on its first run it says so in a `notice:` line. Sign in
+to the console as the Owner (the ready screen's `console` row) and add `APP_<NAME>_IDENTITY` under
+Secrets, with the `secret` value from `.aw/app-identity.json`. Until then a run that reaches the
+app's connector is refused before the connector is called.
+
+An agent that uses `mcp('<name>')` then calls the app as the person who started the run, never
+beyond what that person may do, and every write it makes records the run's id. A second `aw dev`
+changes nothing: the migrations are applied, and the connector and its secret are as they were.
+
+`aw dev` refuses a connector named like the app that it did not create (or one
+`agent-workspace.yaml` declares) as `app_connector_conflict`; rename or delete that connector.
+A run started with the runtime's own key (`npx aw chat` in the project) names no person, so a
+connector that asks for an identity refuses it; start the run from the console, signed in.
+
+## aw deploy with an app
+
+In the next release, an app made with `aw generate app <name>` (or `--template portal`) is one
+more image in the deployment. `aw deploy` does not build it: you build it, push it, and name its
+digest in the project file.
+
+1. **Build the image.** `npm run image` runs `docker build -t <name> .` with the app's
+   `Dockerfile`: `npm ci` and `npm run build` in a build stage on a digest-pinned Node.js 24
+   image, then a final stage with only Next.js's standalone server (`next.config.ts` sets
+   `output: 'standalone'`), its static files and `db/migrations`. It runs as the `node` user on
+   port 3000. The build reads `package-lock.json`, so install with npm first; `.dockerignore`
+   keeps `node_modules`, `.next`, `.aw`, `.agent-workspace` and `.env*` out of it.
+2. **Push it and list it.** Push the image to your registry and add its digest under
+   `environments.production.apps`, with the https origin the app is served at:
+
+   ```yaml title="agent-workspace.yaml (illustrative)" claim="illustrative"
+   environments:
+     production:
+       target: single-vm
+       url: https://agents.example.com
+       apps:
+         desk:
+           image: ghcr.io/acme/desk@sha256:<64 hex>
+           url: https://desk.example.com
+   ```
+
+   `aw deploy production` refuses a project whose `aw-generated.json` has an app that `apps` does
+   not list. The `single-vm`, `kubernetes` and `gcp-cloudrun` targets run apps; `vercel` refuses
+   `apps`.
+
+3. **Deploy.** `aw deploy production` runs the app beside the platform, as the database role
+   `app_<name>` that owns the schema `app_<name>` and no platform table. The app never receives the
+   platform's `DATABASE_URL`. The TLS host, the app's secrets and registering its connector are in
+   the `Apps` section of the
+   [single-VM](https://github.com/indxjp/agent-workspace/blob/main/docs/deploy/single-vm.md#apps)
+   [Kubernetes](https://github.com/indxjp/agent-workspace/blob/main/docs/deploy/kubernetes.md#apps)
+   and [Cloud Run](https://github.com/indxjp/agent-workspace/blob/main/docs/deploy/gcp-cloudrun.md#apps)
+   deployment guides; `aw deploy --yes` prints them for each app.
+
+The image migrates its own schema as it starts. `aw deploy` sets `AW_APP_MIGRATE_ON_START=1`, so
+the app's `instrumentation.ts` applies `db/migrations` before the server answers; a migration that
+fails stops the container with a non-zero exit, and it never serves an older schema. `aw dev` leaves
+the variable unset, because it migrates before `next dev` starts.
+
+`GET /api/health` answers `ok` with `cache-control: no-store`, and reads none of the app's settings.
+So an app whose connector is not registered yet is still healthy, while its API answers
+`app_misconfigured`. The deployment's health check polls it.
 
 ## Stop it
 

@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+import { VERTEX_CLAUDE_MODELS } from '@indx-workspace/contracts/models';
 import { describe, expect, it } from 'vitest';
 
 import { calculateUsageCost, parsePricingCatalog, priceFor } from './pricing.js';
@@ -55,4 +59,16 @@ describe('versioned gateway pricing', () => {
       expect(() => parsePricingCatalog(raw)).toThrow();
     },
   );
+
+  it.each([
+    '../../../infra/terraform/gcp-cloudrun/variables.tf',
+    '../../cli/modules/gcp-cloudrun/variables.tf',
+  ])('prices every Vertex Claude model in the default catalogue of %s', (relative) => {
+    const source = readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+    const match = /gateway_pricing_json[\s\S]*?<<-JSON\n([\s\S]*?)\n\s*JSON/u.exec(source);
+    const catalog = parsePricingCatalog(match?.[1]);
+    for (const model of VERTEX_CLAUDE_MODELS) {
+      expect(priceFor(catalog, 'vertex', model.id).inputUsdPerMillion).toMatch(/^\d/u);
+    }
+  });
 });

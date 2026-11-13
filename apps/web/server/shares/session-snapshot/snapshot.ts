@@ -1,7 +1,7 @@
 import { SHARE_TRANSCRIPT_MAX_BYTES } from '@indx-workspace/contracts/shares';
 
 import { DomainError } from '../../errors';
-import { unstorableTextPath } from '../../sessions/transcript';
+import { unstorableTextPath } from '../../execution';
 
 export interface SnapshotOptions {
   readonly technicalDetails?: boolean;

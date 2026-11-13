@@ -15,6 +15,7 @@ import {
   type RunListPage,
   type UserFilterAvailability,
 } from './history';
+import { parseRunTree, type RunTree } from './run-tree-model';
 
 /**
  * The run screens' reads through the SDK client. Each resolves with what the screen shows: a
@@ -26,7 +27,7 @@ export type DetailLoad =
   | { readonly kind: 'loading' }
   | { readonly kind: 'not-found' }
   | { readonly kind: 'problem'; readonly problem: RequestProblem }
-  | { readonly kind: 'loaded'; readonly run: RunListItem };
+  | { readonly kind: 'loaded'; readonly run: RunListItem; readonly tree: RunTree };
 
 /**
  * `GET /api/runs` for one filter set and cursor. The SDK validates the page; each run then passes
@@ -49,6 +50,24 @@ export function loadRunPage(
 }
 
 /**
+ * The read's run without `children` and `treeCost` (ADR-0104): the list's shape, which
+ * `parseRunResource` checks exactly. The tree is parsed apart by `parseRunTree`.
+ */
+function withoutTree(detail: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const run: Record<string, unknown> = { ...detail };
+  delete run['children'];
+  delete run['treeCost'];
+  return run;
+}
+
+/** One detail read: the run, then its tree, which names the run as every child's parent. */
+function parseRunDetail(detail: object): { readonly run: RunListItem; readonly tree: RunTree } {
+  const record = { ...detail } as Readonly<Record<string, unknown>>;
+  const run = parseRunResource(withoutTree(record));
+  return { run, tree: parseRunTree(record, run) };
+}
+
+/**
  * `GET /api/runs/:id`. A `404` is one `not-found` arm: the route answers a foreign id exactly like
  * a missing one (issue #117's concealment rule). An id that is not a canonical UUID never reaches
  * the network.
@@ -64,11 +83,11 @@ export async function loadRunDetail(
     };
   }
   const outcome = await requestOutcome(
-    client.runs.get(runId).then((run) => parseRunResource(run)),
+    client.runs.get(runId).then(parseRunDetail),
     'The run could not be loaded',
     'The server returned an invalid run.',
   );
-  if (outcome.ok) return { kind: 'loaded', run: outcome.value };
+  if (outcome.ok) return { kind: 'loaded', ...outcome.value };
   const { problem } = outcome;
   return problem.kind === 'api' && problem.status === 404
     ? { kind: 'not-found' }

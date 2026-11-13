@@ -26,9 +26,11 @@ import { createRepositoryAgentVersionStoreProvider } from '../agent-versions/sto
 import { createRepositoryRuntimeProfileStoreProvider } from '../runtimes/store';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';
-import { createRepositoryAgentResourceStoreProvider } from './resource-store';
+import {
+  createRepositoryAgentResourceStoreProvider,
+  createRepositoryAgentStoreProvider,
+} from './store';
 import { createRuntimeSwitchAudit } from './runtime-switch-audit';
-import { createRepositoryAgentStoreProvider } from './store';
 
 const rawUrl = process.env['TEST_DATABASE_URL'];
 const hasDatabase = rawUrl !== undefined && rawUrl.trim() !== '';

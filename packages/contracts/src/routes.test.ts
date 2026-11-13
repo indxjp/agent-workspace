@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import golden from './__golden__/route-features.json' with { type: 'json' };
 import { FEATURE_IDS, ROUTE_FEATURES } from './features.js';
 import { API_ROUTE_EXCLUSIONS, API_ROUTES } from './routes.js';
+import { CONTRACTS_VERSION_HEADER } from './version.js';
 
 const ENTRIES = [...API_ROUTES, ...API_ROUTE_EXCLUSIONS].map((entry) => ({
   key: `${entry.method} ${entry.path}`,
@@ -41,5 +42,28 @@ describe('route features (ADR-0160 D4)', () => {
       'POST /api/builder/mcp',
       'POST /mcp/builder',
     ]);
+  });
+});
+
+describe('route request headers', () => {
+  it('declares the optional Idempotency-Key header on runs.start (S-6, #250)', () => {
+    const start = API_ROUTES.find((route) => route.operationId === 'runs.start');
+    expect(start?.method).toBe('POST');
+    expect(start?.path).toBe('/api/agents/:id/runs');
+    expect(start?.headers?.map(({ name, required }) => ({ name, required }))).toEqual([
+      { name: 'Idempotency-Key', required: false },
+    ]);
+  });
+
+  it('names each header once per route, and never one every route already shares', () => {
+    const shared = ['authorization', 'cookie', CONTRACTS_VERSION_HEADER.toLowerCase()];
+    for (const route of API_ROUTES) {
+      const names = (route.headers ?? []).map(({ name }) => name.toLowerCase());
+      expect(new Set(names).size, route.operationId).toBe(names.length);
+      expect(
+        names.filter((name) => shared.includes(name)),
+        route.operationId,
+      ).toEqual([]);
+    }
   });
 });

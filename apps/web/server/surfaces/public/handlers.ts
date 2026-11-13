@@ -55,7 +55,6 @@ import {
   type SurfaceSessionResponse,
 } from '@indx-workspace/contracts/surfaces';
 
-import { applicationContext } from '../../application-context';
 import { enabledFeaturesFor } from '../../features/runtime';
 import { formatIssues, type ApiResult } from '../../http/result';
 import {
@@ -64,6 +63,7 @@ import {
   type SurfaceConditionEnvironment,
   type SurfaceConditionHeaders,
 } from './conditions';
+import { installedEnvironment, surfaceSessions } from './installed';
 import { admitSurfaceSession } from './limits';
 import {
   surfaceModeOf,
@@ -73,12 +73,6 @@ import {
   type SurfaceModelRefusal,
   type SurfaceSessionsRuntime,
 } from './runtime';
-
-/** The installed bootstrap, or `null` while it is not `serving`. */
-function surfaceSessions(): SurfaceSessionsRuntime | null {
-  const surfaces = applicationContext()?.surfaces;
-  return surfaces?.kind === 'serving' ? surfaces.runtime : null;
-}
 
 /** The response headers every answer of the bootstrap carries, besides `cache-control`. */
 export const SURFACE_RESPONSE_HEADERS: Readonly<Record<string, string>> = {
@@ -211,7 +205,7 @@ export function isSurfaceName(name: string): boolean {
 export async function createSurfaceSession(
   request: Request,
   name: string,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<ApiResult> {
   const options = await readSessionRequest(request);
   if (!options.ok) {
@@ -360,7 +354,7 @@ async function resolvedSurface(name: string): Promise<ResolvedSurface | null> {
 export async function preflightSurfaceSession(
   name: string,
   headers: SurfaceConditionHeaders,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<Readonly<Record<string, string>>> {
   const served = await resolvedSurface(name);
   const verdict = mayOpenSession(
@@ -427,7 +421,7 @@ function preflightHeaders(
  */
 async function visitorRunCors(
   headers: SurfaceConditionHeaders,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<string | null> {
   const runtime = surfaceSessions();
   if (headers.get('origin') === null || runtime === null) return null;
@@ -467,7 +461,7 @@ const VISITOR_RUN_RESPONSE_HEADERS = [
 export async function preflightVisitorRun(
   method: 'GET' | 'POST',
   headers: SurfaceConditionHeaders,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<Readonly<Record<string, string>>> {
   const asked = headers.get('access-control-request-method');
   const corsOrigin = asked === method ? await visitorRunCors(headers, env) : null;
@@ -481,7 +475,7 @@ export async function preflightVisitorRun(
  */
 export async function visitorRunResponseHeaders(
   headers: SurfaceConditionHeaders,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<Readonly<Record<string, string>>> {
   const corsOrigin = await visitorRunCors(headers, env);
   return corsOrigin === null
@@ -527,7 +521,7 @@ export interface SurfacePage {
 export async function readSurfacePage(
   name: string,
   headers: SurfaceConditionHeaders,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
   mode: SurfaceMode = 'public',
 ): Promise<SurfacePage | null> {
   return (await servedSurface(name, headers, env, mode))?.page ?? null;
@@ -599,7 +593,7 @@ function modelSecretsOf(env: SurfaceConditionEnvironment): readonly string[] | u
 export async function readTryPage(
   name: string,
   headers: SurfaceConditionHeaders,
-  env: SurfaceConditionEnvironment = process.env,
+  env: SurfaceConditionEnvironment = installedEnvironment(),
 ): Promise<TryPageData | null> {
   const served = await servedSurface(name, headers, env, 'try');
   if (served === null) return null;

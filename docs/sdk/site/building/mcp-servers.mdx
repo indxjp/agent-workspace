@@ -231,8 +231,9 @@ per-session egress proxy: `restricted` reaches the hosts in `allowedDomains` and
 loopback or private (LAN) addresses. The proxy is switched on by configuring its image
 (`egressProxyImage` on the driver, `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE` for the runner), and the
 sandbox is pointed at it with `HTTP_PROXY` / `HTTPS_PROXY` and `NO_PROXY` for the gateway (`egressProxyEnvironment` in
-`packages/runtime/src/egress.ts`). On `cloud-run-service`, `open` is still unproxied and `restricted` is
-refused; `aca-sessions` refuses `restricted` too.
+`packages/runtime/src/egress.ts`). On `cloud-run-service`, both go through one shared proxy VM when the project file sets
+`gcp.sandboxInternet: true` (each run carries a signed credential naming its allowlist); without it
+Cloud Run refuses both `restricted` and `open` (only `none` is available). `aca-sessions` refuses `restricted`.
 
 <Warning>
   **Today:** `allowedDomains` lists the hosts you name and nothing else — the platform does not add

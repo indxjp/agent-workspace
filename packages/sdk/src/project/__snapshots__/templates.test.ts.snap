@@ -1,0 +1,354 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the generator templates > agent: the files and their digests 1`] = `
+{
+  "agents/triage.ts": "07f02bee4f11e000fd76687ebb379560bfa010ba0b6c221c447709f5262e7051",
+}
+`;
+
+exports[`the generator templates > app: the files and their digests 1`] = `
+{
+  ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+  ".github/workflows/app-ci.yml": "1351ce208591ff3fea19117a91070c4c40e34f4a76f1149dc7e9e69a97286e9a",
+  "Dockerfile": "30309d19f3c7b7f7633c4934e0696572dd425d86bec5dfeb49309fb1bc0aa1e7",
+  "README.md": "b2e6ffea4fbc2b13911100d9ef09d83622cf23a1a4353721110035f8c4a66ec2",
+  "app.config.ts": "04719bd428dc6fd399cb2d61fd6d90da2229bd4c4ff27a37d8f7a6fa37d20010",
+  "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+  "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+  "app/layout.tsx": "9587cceb65389fa2ccf159ee305115455c2f2c6124029e8a57dcd8280e41748f",
+  "app/page.tsx": "6e87261d73c59bd58d802f84447a9f227d385306e116f07d77418db2a75722df",
+  "db/migrations/0000_app_kit.sql": "780714a44abc602845d9c0ca611fa6d2cdd0238dff2a763d48bcac7bc79cc73a",
+  "db/migrations/0001_app_kit_recipes.sql": "2d1b2c913fb167c61fe3dc843290ec4589b2b22da4ab12026cb4e4ebd470c18a",
+  "db/migrations/0002_app_kit_channels.sql": "bc868954d597ffc2ab56c44268b6ed049b3239532649251a1498c3d7199a1451",
+  "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+  "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+  "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+  "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+  "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+}
+`;
+
+exports[`the generator templates > channel: edits each of the resource's route files by one line, from the line it generated 1`] = `
+[
+  {
+    "added": "export const { GET, POST } = resourceRoutes(message, { publish: messageChannel });",
+    "import": "import messageChannel from '@/channels/message';",
+    "path": "app/api/messages/route.ts",
+    "replaced": "export const { GET, POST } = resourceRoutes(message);",
+  },
+  {
+    "added": "export const { GET, PATCH, DELETE } = resourceItemRoutes(message, { publish: messageChannel });",
+    "import": "import messageChannel from '@/channels/message';",
+    "path": "app/api/messages/[id]/route.ts",
+    "replaced": "export const { GET, PATCH, DELETE } = resourceItemRoutes(message);",
+  },
+]
+`;
+
+exports[`the generator templates > channel: writes the channel, its events route and its page, keyed on the first ref() to another resource (#1519) 1`] = `
+"import roomResource from '@/resources/room';
+import { channel } from '@indx-workspace/app/server';
+
+// Every write of a message, through its routes or an agent tool, is published to the room
+// its \`room\` field names. Whoever may read that room follows it at
+// /api/channels/message/events?key=<the room's id>.
+export default channel('message', { resource: roomResource, key: 'room' });
+"
+`;
+
+exports[`the generator templates > channel: writes the channel, its events route and its page, keyed on the first ref() to another resource (#1519) 2`] = `
+"import messageChannel from '@/channels/message';
+
+export const { GET } = messageChannel.routes();
+"
+`;
+
+exports[`the generator templates > channel: writes the channel, its events route and its page, keyed on the first ref() to another resource (#1519) 3`] = `
+"'use client';
+import message from '@/resources/message';
+import { ChannelView } from '@indx-workspace/app/react';
+import { use } from 'react';
+
+export default function MessageChannelPage(props: {
+  readonly params: Promise<{ key: string }>;
+}) {
+  const { key } = use(props.params);
+  return <ChannelView channel="message" resource={message} keyValue={key} />;
+}
+"
+`;
+
+exports[`the generator templates > page/*: the files and their digests 1`] = `
+{
+  "custom": {
+    "app/team_rota/page.tsx": "32705606b4477eb37b4baa5e25c9222d1db767074580a3878e5f7c832690cdbf",
+  },
+  "dashboard": {
+    "app/api/dashboard/route.ts": "ebde066eca18cd62a3e8046d7af38aeb93b5dcf5e0161432d7a75bfea55aaa15",
+    "app/dashboard/page.tsx": "3a6f0cdea7b6f4ca53b3c29d155b5b251f2fbec4b10f0d2f5b6240fbabe7e12a",
+  },
+  "list": {
+    "app/open-tickets/page.tsx": "2409d8b274d2f64fd06803a40273a6da236f256cae21809874c1e426bf12b727",
+  },
+}
+`;
+
+exports[`the generator templates > recipe: writes exactly the recipe and its test, for each trigger (#1514) 1`] = `
+"import { defineRecipe, resourceEvent } from '@indx-workspace/app';
+
+/** The agent the example step asks: set AW_ENRICH_CONTACT_AGENT_ID to its Agent Workspace id. */
+export const AGENT = process.env['AW_ENRICH_CONTACT_AGENT_ID'] ?? 'enrich-contact-agent';
+
+/**
+ * Enrich contact: the app runs it when a contact is created.
+ *
+ * Each step runs once: its key is the idempotency key of the one Agent Workspace run it may
+ * start, so after a restart the recipe resumes rather than repeats. Keep each step safe to run
+ * again until it completes.
+ */
+export default defineRecipe({
+  name: 'enrich-contact',
+  on: resourceEvent('contact', 'created'),
+  async run({ aw, step }) {
+    await step('first-step', async () => {
+      const prompt = 'Do the first step of enrich-contact.';
+      const { result } = await aw.runs.start(AGENT, { prompt });
+      return (await result).text;
+    });
+  },
+});
+"
+`;
+
+exports[`the generator templates > recipe: writes exactly the recipe and its test, for each trigger (#1514) 2`] = `
+"import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { completed, recipeHarness } from '@indx-workspace/app/testing';
+
+import recipe, { AGENT } from '../../recipes/enrich-contact.ts';
+
+void test('enrich-contact completes, starting one run for its step', async () => {
+  const harness = recipeHarness(recipe, { agents: { [AGENT]: [completed('done')] } });
+
+  const run = await harness.start({
+    resource: 'contact',
+    event: 'created',
+    record: { id: '00000000-0000-4000-8000-000000000001' },
+  });
+
+  assert.equal(run.status, 'completed');
+  assert.equal(harness.runsStarted().length, 1);
+});
+"
+`;
+
+exports[`the generator templates > recipe: writes exactly the recipe and its test, for each trigger (#1514) 3`] = `
+"import { defineRecipe, schedule } from '@indx-workspace/app';
+
+/** The agent the example step asks: set AW_SLA_SWEEP_AGENT_ID to its Agent Workspace id. */
+export const AGENT = process.env['AW_SLA_SWEEP_AGENT_ID'] ?? 'sla-sweep-agent';
+
+/**
+ * Sla sweep: the app runs it on each slot of its schedule, in UTC.
+ *
+ * Each step runs once: its key is the idempotency key of the one Agent Workspace run it may
+ * start, so after a restart the recipe resumes rather than repeats. Keep each step safe to run
+ * again until it completes.
+ */
+export default defineRecipe({
+  name: 'sla-sweep',
+  on: schedule('*/5 * * * *', 'UTC'),
+  async run({ aw, step }) {
+    await step('first-step', async () => {
+      const prompt = 'Do the first step of sla-sweep.';
+      const { result } = await aw.runs.start(AGENT, { prompt });
+      return (await result).text;
+    });
+  },
+});
+"
+`;
+
+exports[`the generator templates > recipe: writes exactly the recipe and its test, for each trigger (#1514) 4`] = `
+"import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { completed, recipeHarness } from '@indx-workspace/app/testing';
+
+import recipe, { AGENT } from '../../recipes/sla-sweep.ts';
+
+void test('sla-sweep completes, starting one run for its step', async () => {
+  const harness = recipeHarness(recipe, { agents: { [AGENT]: [completed('done')] } });
+
+  const run = await harness.start({ slot: '2026-01-01T00:05:00.000Z' });
+
+  assert.equal(run.status, 'completed');
+  assert.equal(harness.runsStarted().length, 1);
+});
+"
+`;
+
+exports[`the generator templates > resource: the files and their digests 1`] = `
+{
+  "app/api/tickets/[id]/route.ts": "cc60c450168cdbb4c20918e3f28e16b02348d5563c2311d01c16a832cbaaedf6",
+  "app/api/tickets/route.ts": "b740e9dd5fcc05409fd710730dec10bb3a989f1363597b42592428f8486905dd",
+  "resources/ticket.ts": "ba124a0d3ee515dd37934cbdbcde68b0ab2e0ca5abed1f0f1ab21a6d10e65b8e",
+  "tests/ticket.test.ts": "e0cb0674af5b0e08ae3c2375500e29499f799674460028f42ded038dd30d8138",
+}
+`;
+
+exports[`the generator templates > resource-pages: the files and their digests 1`] = `
+{
+  "app/tickets/[id]/edit/page.tsx": "f01da44d637ed72dd5a47568a701adccb4c7fec5ab552596f403d6191777e862",
+  "app/tickets/[id]/page.tsx": "fe2ace5ff1ef9ff884d594e2949c629e157d96c2a68f0d9e27f999e3366bd3b4",
+  "app/tickets/new/page.tsx": "a7627dad6b06d2a3437267a5eaf5b423d816e4c13478c30b89f2912f5472add7",
+  "app/tickets/page.tsx": "48fc47ee1b9cd4f07fbe579753f39c4660ef073c070db5beb99d757087fd944d",
+}
+`;
+
+exports[`the generator templates > wires the agent to the app connector 1`] = `
+"import { defineAgent, mcp } from '@indx-workspace/sdk/define';
+
+export default defineAgent({
+  name: 'triage',
+  description: 'Works with tickets in the service-desk app.',
+  instructions: [
+    'You work in the service-desk app for the person who asked, through its tools:',
+    'tickets: ticket_list and ticket_get read them, ticket_search finds them when the resource is searchable, and ticket_update changes the fields agents may write.',
+    'Each tool acts as that person, so it refuses what they may not do; say so instead of retrying.',
+  ].join('\\n'),
+  tools: [mcp('service-desk')],
+});
+"
+`;
+
+exports[`the generator templates > writes the resource file from the parsed fields 1`] = `
+"import {
+  bool,
+  date,
+  dateTime,
+  defineResource,
+  enumOf,
+  files,
+  money,
+  number,
+  person,
+  ref,
+  richText,
+  tags,
+  text,
+} from '@indx-workspace/app';
+
+export default defineResource({
+  name: 'ticket',
+  fields: {
+    title: text({ max: 200 }),
+    description: richText(),
+    estimate: number({ min: 0, max: 100, optional: true }),
+    budget: money({ currency: 'JPY' }),
+    urgent: bool(),
+    due: date({ optional: true }),
+    opened_at: dateTime(),
+    status: enumOf(['new', 'in_progress', 'closed']),
+    assignee: person({ optional: true }),
+    parent: ref('ticket', { optional: true }),
+    attachments: files(),
+    labels: tags(),
+  },
+  access: {
+    read: 'member',
+    create: 'member',
+    update: 'member',
+    delete: 'role:admin',
+  },
+  // Agents act for a person and never exceed that person's access. List the fields they may
+  // change, such as write: ['status'], to give them the ticket_update tool.
+  agents: { read: true, write: false },
+  search: ['title', 'description'],
+  board: 'status',
+});
+"
+`;
+
+exports[`the generator templates > writes the resource file from the parsed fields 2`] = `
+"import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { fakePerson, memoryStoreOf } from '@indx-workspace/app/testing';
+
+import resource from '../resources/ticket.ts';
+
+const record = {
+  title: 'example',
+  description: [{ type: 'paragraph', text: 'Example' }],
+  budget: { amount: '100', currency: 'JPY' },
+  urgent: true,
+  opened_at: '2026-01-01T09:00:00Z',
+  status: 'new',
+  attachments: [],
+  labels: [],
+};
+
+test('a member creates a ticket and lists it', async () => {
+  const store = memoryStoreOf(resource);
+  const member = fakePerson({ role: 'builder' });
+
+  const created = await store.create(member, record);
+  const page = await store.list(member, {});
+
+  assert.deepEqual(
+    page.items.map((row) => row.id),
+    [created.id],
+  );
+});
+
+test('a builder may not delete a ticket: delete is role:admin', async () => {
+  const store = memoryStoreOf(resource);
+  const builder = fakePerson({ role: 'builder' });
+  const created = await store.create(builder, record);
+
+  await assert.rejects(store.delete(builder, created.id), { code: 'forbidden' });
+});
+"
+`;
+
+exports[`the portal app template (create --template portal) > the files and their digests 1`] = `
+{
+  ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+  ".github/workflows/app-ci.yml": "af2d7d59695dda4f5a3e6720aa213d13e0e0e5f5b205e64073c7fbd1696247a7",
+  "Dockerfile": "721cec214478df162cd7d8bbae04ff70a5ef5af92d9589d563df84f76cae77dd",
+  "README.md": "dbd2716b448eaf6f71a6fa514d5b46fd5669076facc820c1bdc85c28a248031e",
+  "agents/assistant.ts": "450f0af4f4c1ecc4c7180f2e364c8a59bfed69dd350fb6b47bce8641c2a37786",
+  "app.config.ts": "7d6b838cace00bee0e0cabe7a96ac3a8dedc5dddf196aa1171e773e6a0bf14b1",
+  "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+  "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+  "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+  "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+  "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+  "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+  "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+  "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+  "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+  "app/layout.tsx": "4bc86b335c9fa7be2ba678c5d368efe63b5e32da6fea728a535d95458ab2b330",
+  "app/nav.ts": "954cc1e71aee7ce91b65c522a94cc42f9d8e4d23a3a4b29d5670e39945af7c43",
+  "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+  "app/page.tsx": "f2c836895900d6adab4171c68164c300ad798dc7188b7de30d4f612c4ebaf5f5",
+  "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+  "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+  "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+  "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+  "app/strings.ts": "be00626f9660c89090a7a5ad8656ad38476e28501e4486b76bb8852612fafffc",
+  "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+  "aw-generated.json": "2c495de305066d10a89fe2fdf2c1b318089ccfd3020c0dc958f0c7436a6f5a0e",
+  "db/migrations/0000_app_kit.sql": "e011c74fd4b0d128cbb7e3973c3189db2fa1fad307d01c2f9cf6e1f7b72f28e4",
+  "db/migrations/0001_app_kit_recipes.sql": "a6b2bd3e4f28625ad8beffef800c445532b49ff39e20ab413eb728bf50a3f053",
+  "db/migrations/0002_app_kit_channels.sql": "fb5df09fd2c3d36284a19ee252ee3dc5ce2110a0c6ef7d794a42f100f3fa0560",
+  "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+  "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+  "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+  "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+  "package.json": "6241954979d626a060e245b7618587023d980d5108677d7aacb61eff92fe3ae2",
+  "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470",
+}
+`;

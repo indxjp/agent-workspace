@@ -20,7 +20,7 @@ import {
   resolveModelForRun,
   sandboxFor,
 } from '../server/compose/run-request';
-import { createInMemoryModelsStoreProvider } from '../server/models/memory-store';
+import { createInMemoryModelsStoreProvider } from '../server/models/store';
 import { parseStartRunBody } from '../server/runs/api';
 import { asRecord, asString, loadVectors } from '../../../tests/formal/vectors';
 import type { RegisteredComposition } from '../server/composition/register';
@@ -134,10 +134,14 @@ describe('run-compose: real narrowing decisions', () => {
   };
 
   it('preserves stored denials and intersects requested skills with assignment', () => {
-    const config = portableAgentConfigFor(agent, undefined, null, {
-      files: [],
-      skills: [{ name: 'assigned', files: [{ path: 'SKILL.md', size: 0, sha256: EMPTY_SHA256 }] }],
-      mcpServers: {},
+    const config = portableAgentConfigFor(agent, {
+      resources: {
+        files: [],
+        skills: [
+          { name: 'assigned', files: [{ path: 'SKILL.md', size: 0, sha256: EMPTY_SHA256 }] },
+        ],
+        mcpServers: {},
+      },
     });
     expect(config.skills).toEqual({ mode: 'allowlist', names: ['assigned'] });
   });

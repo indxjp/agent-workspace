@@ -49,7 +49,7 @@ jobs:
   server:
     name: cache server tests · image
     if: github.repository_owner == 'INDXDev'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out
@@ -72,7 +72,7 @@ jobs:
   live-trust:
     name: live trust check (deployed cache)
     if: github.repository_owner == 'INDXDev'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read

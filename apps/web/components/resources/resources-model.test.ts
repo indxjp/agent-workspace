@@ -78,11 +78,16 @@ describe('files', () => {
   });
 
   // @story US-STO-02
-  it('[US-STO-02][unit][web] says a file is too large for the deployment on a 413', async () => {
+  it('[US-STO-02][unit][web] names the file, its size and the 64 MiB every deployment takes on a 413', async () => {
     const { client } = api(() => problem(413, 'too_large'));
-    await expect(uploadFile(client, 'a.txt', new File(['x'], 'a.txt'))).rejects.toThrow(
-      'This file is too large for this deployment.',
+    const big = new File(['x'], 'big.bin');
+    Object.defineProperty(big, 'size', { value: 70 * 1024 * 1024 });
+    await expect(uploadFile(client, 'big.bin', big)).rejects.toThrow(
+      '"big.bin" is 70 MiB, more than this deployment accepts. Files up to 64 MiB always upload here.',
     );
+    const small = new File(['x'], 'a.txt');
+    Object.defineProperty(small, 'size', { value: 2.5 * 1024 * 1024 });
+    await expect(uploadFile(client, 'a.txt', small)).rejects.toThrow('"a.txt" is 2.5 MiB,');
   });
 
   it('[US-STO-02][unit][web] reports any other refused upload by status', async () => {

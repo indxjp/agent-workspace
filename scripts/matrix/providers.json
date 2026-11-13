@@ -3,8 +3,7 @@
     {
       "id": "anthropic",
       "default": "native",
-      "overrides": { "prompt-caching": "unsupported" },
-      "basis": "recorded-fixture conformance; no live provider credential was available"
+      "basis": "recorded-fixture conformance; prompt-caching also verified against the real API by model-providers-live.yml"
     },
     {
       "id": "openai",

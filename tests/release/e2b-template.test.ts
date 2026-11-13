@@ -720,9 +720,9 @@ describe('the runtime template built from the checkout (#827)', () => {
     expect(OWNER_COMMAND).toContain(`chown -R node:node ${SRV_DIR} ${WORKSPACE_DIR}`);
     expect(dockerfile).toContain('RUN mkdir -p /workspace && chown node:node /workspace');
     expect(dockerfile).toContain('CMD ["node", "/srv/apps/runner/dist/index.js"]');
-    expect(readFileSync(path.join(ROOT, 'packages/runtime/src/external/e2b.ts'), 'utf8')).toContain(
-      "const RUNNER_ENTRY = '/srv/apps/runner/dist/index.js'",
-    );
+    expect(
+      readFileSync(path.join(ROOT, 'packages/runtime/src/external/e2b-process-config.ts'), 'utf8'),
+    ).toContain("const RUNNER_ENTRY = '/srv/apps/runner/dist/index.js'");
     for (const command of commands) expect(command).not.toMatch(/\bexport /u);
   });
 

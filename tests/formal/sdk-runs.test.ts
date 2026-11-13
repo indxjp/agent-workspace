@@ -67,11 +67,13 @@ const run = (status: string) => ({
     toolCalls: 0,
   },
   cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+  spendCeilingUsd: null,
   error: null,
   output: null,
   pendingApproval: null,
   accountingState: 'pending',
   accountingError: null,
+  parentRunId: null,
 });
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), {

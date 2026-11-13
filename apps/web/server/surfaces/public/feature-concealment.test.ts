@@ -54,6 +54,7 @@ function install(): { opened: number } {
     surfaces: {
       kind: 'serving',
       runtime: {
+        env: () => process.env,
         resolve: () => Promise.resolve(RESOLVED),
         open: () => {
           calls.opened += 1;

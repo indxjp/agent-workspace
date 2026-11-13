@@ -48,7 +48,7 @@ describe.skipIf(!hasDatabase)('ShareRepository workspace policy against PostgreS
 
   async function createRunnableShare(token: string, budgetCapUsd = '20.0000') {
     return createDatabaseShareRepositoryProvider(isolated.db).forScope(scope).create({
-      token,
+      tokenHash: token,
       subjectType: 'agent',
       subjectId: 'agent-1',
       subjectLabel: 'Runnable agent',
@@ -68,7 +68,7 @@ describe.skipIf(!hasDatabase)('ShareRepository workspace policy against PostgreS
     const provider = createDatabaseShareRepositoryProvider(isolated.db);
     const repository = provider.forScope(scope);
     const share = await repository.create({
-      token: 'pub_policy_test',
+      tokenHash: 'pub_policy_test',
       subjectType: 'session',
       subjectId: 'session-1',
       subjectLabel: 'Session',

@@ -1,6 +1,6 @@
 // The public surface of `@indx-workspace/contracts/agents`, listed by name. The code lives in
 // `./agents/`, one module per reason to change:
-//   permissions   — the four permission switches an agent carries
+//   permissions   — the four permission switches an agent carries, and its memory scope (ADR-0163)
 //   resource      — the agent resource, its CRUD bodies, resource assignments and run grants
 //   tool-rules    — Claude's tool-rule grammar and the tool policy built on it
 //   policy        — the stored policy arms, their sources and problem codes
@@ -9,8 +9,18 @@
 // The engine-native constants come from `./engine-catalogue.js`.
 
 export {
+  AGENT_MEMORY_DIRECTORY,
+  AGENT_MEMORY_FILE,
+  AGENT_MEMORY_LIMIT_EXCEEDED,
+  AGENT_MEMORY_MAX_BYTES,
+  AGENT_MEMORY_MAX_FILES,
+  AGENT_MEMORY_SCOPES,
   AGENT_PERMISSION_KEYS,
+  AgentMemoryScopeSchema,
   AgentPermissionsSchema,
+  agentMemoryEnabled,
+  agentMemoryFolder,
+  type AgentMemoryScope,
   type AgentPermissionKey,
   type AgentPermissions,
 } from './agents/permissions.js';

@@ -1,0 +1,238 @@
+{
+  "version": 1,
+  "entries": {
+    "agent:closer": {
+      "files": {
+        "agents/closer.ts": "fa3b2660e6eef62ae4e68dafbca5ec37ef425d2b763ee64d01c2c2e0eeff4a3b"
+      },
+      "edits": []
+    },
+    "agent:triage": {
+      "files": {
+        "agents/triage.ts": "339bd3cce7877f5ee4b88cdca0731ff5a7d8fdee493020c78e4c214adaf7a9c9"
+      },
+      "edits": []
+    },
+    "app:service-desk": {
+      "files": {
+        ".dockerignore": "1cd7921f45505a96149efb3ee556f04a2b29d0ed4301d7f7b97ac9303767e76f",
+        ".github/workflows/app-ci.yml": "1351ce208591ff3fea19117a91070c4c40e34f4a76f1149dc7e9e69a97286e9a",
+        "Dockerfile": "30309d19f3c7b7f7633c4934e0696572dd425d86bec5dfeb49309fb1bc0aa1e7",
+        "README.md": "d9a99571c5467476f95bf87e14ae407c8a91013f0f726028ed52644a15a34821",
+        "app.config.ts": "be27c2caf7ca8fef5efaf01ba1f79aa6f0a2a36963848a67b0456e5ad64efe01",
+        "app/api/browser-token/route.ts": "6a043c5537187ebf83ce939353c7346a21a3f9192df28289990825c46e5b6022",
+        "app/api/health/route.ts": "ba45341e69b4b7f741a59e0ea418eb299600b929801c868051705e9bb322c14a",
+        "app/api/mcp/route.ts": "c9b2a1f30afe6c31451a141352ec688eb7b6eb5e9b13ad9c2839b12447c0601f",
+        "app/api/recipes/runs/[id]/route.ts": "fa4f9e40a530445560d549d38979e868ebb51fbd012cef5437a6ceaec375325c",
+        "app/api/recipes/runs/[id]/steps/[key]/decision/route.ts": "e971f18eeb1ddd14b92a1a3ba832d539466e4f004f7c4f2ca972f0cb248329ad",
+        "app/api/recipes/runs/route.ts": "07cba3267a355d8cfd856a72d75aadb69377bc9b6b52a7a1a9529616e85a4974",
+        "app/api/recipes/slots/route.ts": "785f415020be59d5d7c7a42fdf4b7958f6f36e4cdb0cfcdecd7edcd287e5732f",
+        "app/api/recipes/webhook/route.ts": "35eca34e5c209e320304f8cc6d4faee4378f4fe34ebf4549a8cefd82bf9ff583",
+        "app/api/sign-in/callback/route.ts": "675bf618f7ffff10046640e8adb223ae8018768a4d37e140a20be93b607d482f",
+        "app/api/sign-in/route.ts": "59188a718311fe01486cbc217d78d1655cf6ea57a23bef2359727267e65af3aa",
+        "app/api/sign-out/route.ts": "b7f5d5aaa862af8268614d836f1499c24c4561f28797dba27fcee3ffbd4752ba",
+        "app/chat/chat-panel.tsx": "2c0bd2857c0be0a13f677fff8f349456193d22cc7991b1b1c0134f2e2e6ec8d5",
+        "app/chat/page.tsx": "4e4e411f30422616865c2ecd4d43422c1c842e5137b827d68f601deefa955504",
+        "app/files/page.tsx": "1c9c8f3442054f9d19705ffd0bb13ee9984822c36fccb0d26945188399c979ee",
+        "app/layout.tsx": "7cc9c42f4b69be54e289bfb9ccd77bdab45ea5b142d68ef10b4efcb51f29c8dd",
+        "app/nav.ts": "ca980d76fee72c240831f2f48b512123bcaad272c1fa230a902bf4e503288614",
+        "app/notices.tsx": "40561bc9cfb6b04dbceafb8b5d825b48c8e64cab092ea16037fb08b36b759f8a",
+        "app/page.tsx": "66ddab6e498ef7418a811145b6b9647e610eccbf7649663b2b1a1dc64912791f",
+        "app/portal.ts": "28dbc48ba899a827c9a073819506acb01c35489da48d9797fe2dfa3adec4ca75",
+        "app/recipes/[id]/page.tsx": "7cc8c0851ecfefc2351f7487af09ba08d3df66e7ec6064f81c3cd2c284176f09",
+        "app/recipes/page.tsx": "1e44e39efbf88d6794f3b0f25452ae0363b1abf7eeb82ead2c1f9161d3e26215",
+        "app/runs/[id]/page.tsx": "1757392c0228376e1e8e5539e0de0f16b31c50447b257d22e67bdb36dee443f8",
+        "app/runs/page.tsx": "dc21e1136fac472095357dd7f544f1dcd64961c97cf8d465f5c0ae253d5c9daf",
+        "app/sign-in/page.tsx": "05cbe03be94c529af3db449b5bb55913fffc925527eaa9b46605aa87c034108b",
+        "app/strings.ts": "83056d677b12647eb0ecf44f4b87e3f643a605bf56aa322992a5cfecdf6d61a0",
+        "app/theme.ts": "6d8eac9eec37a1948ea922be58260cd40341ca8aee69def1f29be66356b58115",
+        "db/migrations/0000_app_kit.sql": "780714a44abc602845d9c0ca611fa6d2cdd0238dff2a763d48bcac7bc79cc73a",
+        "db/migrations/0001_app_kit_recipes.sql": "2d1b2c913fb167c61fe3dc843290ec4589b2b22da4ab12026cb4e4ebd470c18a",
+        "db/migrations/0002_app_kit_channels.sql": "bc868954d597ffc2ab56c44268b6ed049b3239532649251a1498c3d7199a1451",
+        "db/migrations/meta/_journal.json": "e6fe33e6abeb3a955ce43a25f12a64f141fbb7113f17390f678c8cefe7324e12",
+        "dependency-cruiser.config.mjs": "8cb457db9d0e96dd78b3e49560f107a81d4a0b555ef486d1fd7f02c21fea14ff",
+        "instrumentation.ts": "623e04b9ee54b23fcb10835e3f3a79586e71b2a963858c0166f2935ab4ce6fcf",
+        "next.config.ts": "26c2ebe375f14bd185f520f39a965cbd6803ae333df72406d59665eda3f15faa",
+        "tsconfig.json": "22ca6953fd6ca840724d23fb576f74203b2ddde92def0e788db2cedc6f1ca470"
+      },
+      "edits": [
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/app\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"drizzle-orm\":\"0.45.4\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"next\":\"16.4.3\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"pg\":\"8.23.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"react-dom\":\"19.3.1\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"devDependencies\":{\"dependency-cruiser\":\"18.7.0\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/contracts\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"dependencies\":{\"@indx-workspace/react\":\"0.6.12\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"build\":\"next build\"}}"
+        },
+        {
+          "path": "package.json",
+          "added": "{\"scripts\":{\"image\":\"docker build -t service-desk .\"}}"
+        }
+      ]
+    },
+    "page:dashboard": {
+      "files": {
+        "app/api/dashboard/route.ts": "ebde066eca18cd62a3e8046d7af38aeb93b5dcf5e0161432d7a75bfea55aaa15",
+        "app/dashboard/page.tsx": "3a6f0cdea7b6f4ca53b3c29d155b5b251f2fbec4b10f0d2f5b6240fbabe7e12a"
+      },
+      "edits": []
+    },
+    "project:service-desk": {
+      "files": {
+        ".gitignore": "05aeb40f9eabf4f811606527a642c8090aa239c86c203baae3ac1c3d1d6a7736",
+        "AGENTS.md": "9421498264f90a0343a846593c06389d793c543ab9d4d2617556530d384bff54",
+        "agent-workspace.yaml": "0ea67251e38b434b34172f81cb9aaf500802441c451c53580ce956643c6d0580",
+        "agents/assistant.ts": "989659dcfefc4a42f2f53b0e7e883fa0970301b5af8ea4b16fefada37d12a567",
+        "package.json": "c5272a4441ce5e4f7d538d672403b1e40fc33a9da0e409477698e76811736a96",
+        "pnpm-workspace.yaml": "bade773569e920bdaef07454c04afdb3459b96ba5682ad294ce3c549af183682",
+        "surfaces/main.ts": "cedaa483e1dabb6dba1117d60f671c4e36a7063e9cb023404ea8254b544ceb48"
+      },
+      "edits": []
+    },
+    "recipe:sla-sweep": {
+      "files": {
+        "recipes/sla-sweep.ts": "16ab26e91360fa34dd4424b45af51be34c202d90f85d70ac26eecfa4cf3fdbdd",
+        "tests/recipes/sla-sweep.test.ts": "177dd3c96fd924c31c1f6db79388d9d614b34f6b8a050e2ebc7695ae266721bf"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import slaSweepRecipe from './recipes/sla-sweep.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    slaSweepRecipe,"
+        }
+      ]
+    },
+    "recipe:triage-incident": {
+      "files": {
+        "recipes/triage-incident.ts": "7a6d676363ac68e570eabe0d98728a2f49cfd3754f85cdbe5a3c26667b9cd1f5",
+        "tests/recipes/triage-incident.test.ts": "5a35aee64c57b755e95c5da5adf6de63a5328432ac0c0819ffdebb4e963a0115"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import triageIncidentRecipe from './recipes/triage-incident.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    triageIncidentRecipe,"
+        }
+      ]
+    },
+    "resource:kb_article": {
+      "files": {
+        "app/api/kb_articles/[id]/route.ts": "338495c9db16a286559ff04e94e3d6601de6e71a0f6c9e16cd3a11f6c5927eb4",
+        "app/api/kb_articles/route.ts": "b5c02a69bfbad01c807b8e29ec4dc0dac78e82370818640aa2562bf69f1c9ad4",
+        "app/kb_articles/[id]/edit/page.tsx": "6876b7f8d773fee4209c8fafc86ba3363680a099026638f12c9582795e169e6f",
+        "app/kb_articles/[id]/page.tsx": "a5842a7b2d61d928df3efddd941658ea95ad0c6618ee0fab0aa856787e296a41",
+        "app/kb_articles/new/page.tsx": "0492adcf7abf293e797d4e664a1e2ab81dfc333fc3c54af5e57d70b7af3e3112",
+        "app/kb_articles/page.tsx": "7d9561859df53b90231da7f5b19a908a58aee5906f010f5eaa35bb501f8bdf86",
+        "db/migrations/0004_create_kb_articles.sql": "b1b09ca9ce401e55b4e04f8a52b6a5f0f84e23d7e223ea76b9143d644dd8ed67",
+        "resources/kb_article.ts": "10a54a96a4e4d01ba1044e0d2c591814b04377b6ce43b1aeaf933ef53bde425a",
+        "tests/kb_article.test.ts": "f6a21daadf577b9389af1db69a816d7739ae876dde0b1fb3b2735ebb32df306c"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import kb_article from './resources/kb_article.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    kb_article,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":4,\"version\":\"7\",\"when\":1767225600004,\"tag\":\"0004_create_kb_articles\",\"breakpoints\":true}"
+        }
+      ]
+    },
+    "resource:ticket": {
+      "files": {
+        "app/api/tickets/[id]/route.ts": "cc60c450168cdbb4c20918e3f28e16b02348d5563c2311d01c16a832cbaaedf6",
+        "app/api/tickets/route.ts": "b740e9dd5fcc05409fd710730dec10bb3a989f1363597b42592428f8486905dd",
+        "app/tickets/[id]/edit/page.tsx": "f01da44d637ed72dd5a47568a701adccb4c7fec5ab552596f403d6191777e862",
+        "app/tickets/[id]/page.tsx": "fe2ace5ff1ef9ff884d594e2949c629e157d96c2a68f0d9e27f999e3366bd3b4",
+        "app/tickets/new/page.tsx": "a7627dad6b06d2a3437267a5eaf5b423d816e4c13478c30b89f2912f5472add7",
+        "app/tickets/page.tsx": "48fc47ee1b9cd4f07fbe579753f39c4660ef073c070db5beb99d757087fd944d",
+        "db/migrations/0003_create_tickets.sql": "7d2038213fb693db53e56df7d034700b3d830ca25dddbf4ef107b8cbf6e50f52",
+        "resources/ticket.ts": "7b79f1a7b23f666abb91a8a20c4f12a88ac2ecc91284abd72f4c1e6b0d875677",
+        "tests/ticket.test.ts": "b65ff9f2920a16623be6483b010898de16b5e6cfe6bf0f7e3ab621bcb90fdbdd"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import ticket from './resources/ticket.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    ticket,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":3,\"version\":\"7\",\"when\":1767225600003,\"tag\":\"0003_create_tickets\",\"breakpoints\":true}"
+        }
+      ]
+    },
+    "resource:ticket_comment": {
+      "files": {
+        "app/api/ticket_comments/[id]/route.ts": "fdce84a05641963f7f3bed659e272dbb3c18d4b4096a47b5f033c626f616aee7",
+        "app/api/ticket_comments/route.ts": "c1a0fc13ac781f699d99a91acfbdb5d304f856b992137194213d73e48c213c0a",
+        "app/ticket_comments/[id]/edit/page.tsx": "7191a257e460380b40a0aef226a9bc3a43f6d5c89da334ae5d251eece70d306d",
+        "app/ticket_comments/[id]/page.tsx": "1f72ea85a0d320fd1c5f328db0d19a09eb9f6c77440b5f9a735f97cf841e1ff7",
+        "app/ticket_comments/new/page.tsx": "b25c55902e0dbbdc40f4a6747a237e357893db7517665a7ebba096b09b9b226e",
+        "app/ticket_comments/page.tsx": "0740dc83dcd36b46d190733cc31eeb501d5a5423728583fe9c2806ccc75de585",
+        "db/migrations/0005_create_ticket_comments.sql": "26e5d1f6ba28c46668b7b7947fcc1bd5a62d3e2f5f8fa80e8af72200c466924a",
+        "resources/ticket_comment.ts": "8c65990c41b5b1137aa23d800718fe4fc13ea01c2a846cb9d601476e1b720df0",
+        "tests/ticket_comment.test.ts": "52d9b701cede5a5f03c4744571b2ad214c89b02dc1f708fcf1e10a3a9b1c3df6"
+      },
+      "edits": [
+        {
+          "path": "app.config.ts",
+          "added": "import ticket_comment from './resources/ticket_comment.ts';"
+        },
+        {
+          "path": "app.config.ts",
+          "added": "    ticket_comment,"
+        },
+        {
+          "path": "db/migrations/meta/_journal.json",
+          "added": "{\"idx\":5,\"version\":\"7\",\"when\":1767225600005,\"tag\":\"0005_create_ticket_comments\",\"breakpoints\":true}"
+        }
+      ]
+    }
+  }
+}

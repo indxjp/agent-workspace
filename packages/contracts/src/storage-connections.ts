@@ -253,11 +253,25 @@ export const UpdateStorageConnectionPatchSchema = z
   });
 export type UpdateStorageConnectionPatch = z.infer<typeof UpdateStorageConnectionPatchSchema>;
 
-/** The body of `POST /api/storage-connections/:id/test`; `code` says why it failed. */
+/**
+ * The body of `POST /api/storage-connections/:id/test`; `code` says why it failed. `emptyFolders`
+ * names the allowed folders the test found nothing in, and is absent when every folder held an
+ * entry. An object store has no folders of its own, only keys that share a prefix, so a folder that
+ * does not exist and one that is empty look the same: both are listed here, and neither fails the
+ * test.
+ */
 // @story US-STO-12
 export const StorageConnectionTestOutcomeSchema = z.discriminatedUnion('ok', [
   z
-    .object({ ok: z.literal(true) })
+    .object({
+      ok: z.literal(true),
+      emptyFolders: z
+        .array(CanonicalPrefixSchema)
+        .min(1)
+        .max(MAX_STORAGE_CONNECTION_PREFIXES)
+        .readonly()
+        .optional(),
+    })
     .strict()
     .readonly(),
   z

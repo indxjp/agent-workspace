@@ -1,4 +1,4 @@
-import type { WorkspaceSharing } from '../core/runtime';
+import type { WorkspaceSharing } from '../runtime';
 import { describe, expect, it, vi } from 'vitest';
 
 import { isPublicSharingEnabled, setPublicSharingPolicy } from './service';
@@ -11,7 +11,7 @@ function sharing(enabled = true) {
     shares: {
       list: vi.fn(),
       get: vi.fn(),
-      findByToken: vi.fn(),
+      findByTokenHash: vi.fn(),
       create: vi.fn(),
       getPublicSharingEnabled,
       setPublicSharingEnabled,

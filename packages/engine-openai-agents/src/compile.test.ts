@@ -107,14 +107,12 @@ describe('compileOpenAiAgentsRun', () => {
       ]);
     });
 
-    it('refuses by name a subagent on another model when a budget cap is set', () => {
+    it('compiles a subagent on another model under a budget cap: the gateway meters every call', () => {
       const capped = withSubagents([{ ...researcher, model: 'gpt-other' }], 1);
-      const result = compileOpenAiAgentsRun({
-        ...capped,
-        portable: { ...capped.portable, model: 'gpt-5' },
-      });
-      expect(result).toMatchObject({ ok: false, code: 'engine_capability_unsupported' });
-      expect(result.ok ? '' : result.reason).toContain('"researcher"');
+      const out = compiled({ ...capped, portable: { ...capped.portable, model: 'gpt-5' } });
+      expect(out.subagents).toEqual([
+        expect.objectContaining({ name: 'researcher', model: 'gpt-other' }),
+      ]);
     });
 
     it('refuses by name two subagents whose tool names collide, or one too long', () => {
@@ -160,7 +158,7 @@ describe('compileOpenAiAgentsRun', () => {
       endpoint: 'http://gateway.test/v1',
       authorization: 'Bearer tok',
     });
-    expect(result.limits).toEqual({ maxTurns: 7, budget: null });
+    expect(result.limits).toEqual({ maxTurns: 7 });
     expect(result.workspace.cwd).toBe('/workspace/run');
     expect(result.networkEgress).toBe(true);
     expect(result.tracingDisabled).toBe(true);
@@ -330,37 +328,15 @@ describe('compileOpenAiAgentsRun', () => {
     ]);
   });
 
-  it('compiles a budget cap on a priced model with the rates it will be measured by', () => {
-    const result = compiled({
-      ...BASE,
-      portable: { ...BASE.portable, model: 'gpt-5', limits: { maxTurns: null, maxBudgetUsd: 2.5 } },
-    });
-    expect(result.limits).toEqual({
-      maxTurns: null,
-      budget: {
-        maxBudgetUsd: 2.5,
-        model: 'gpt-5',
-        price: {
-          inputUsdPerMillion: '1.25',
-          outputUsdPerMillion: '10',
-          cachedInputUsdPerMillion: '0.125',
-        },
-      },
-    });
-    expect(compiled(BASE).limits.budget).toBeNull();
-  });
-
-  it('refuses a budget cap it cannot price, naming maxBudget and the model', () => {
-    for (const model of ['gpt-test', null]) {
-      const result = compileOpenAiAgentsRun({
+  // ADR-0162 (#342): the gateway enforces the cap from its own catalogue, so the adapter prices
+  // nothing and refuses no cap, priced model or not.
+  it('compiles a budget cap on any model, priced or unpriced, without carrying it', () => {
+    for (const model of ['gpt-5', 'gpt-test', null]) {
+      const result = compiled({
         ...BASE,
         portable: { ...BASE.portable, model, limits: { maxTurns: null, maxBudgetUsd: 1 } },
       });
-      expect(result.ok).toBe(false);
-      if (result.ok) continue;
-      expect(result.code).toBe('engine_capability_unsupported');
-      expect(result.reason).toContain('maxBudget');
-      if (model !== null) expect(result.reason).toContain(JSON.stringify(model));
+      expect(result.limits).toEqual({ maxTurns: null });
     }
   });
 

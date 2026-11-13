@@ -133,6 +133,15 @@ OpenAI client and the tracing exporter are never configured.
 fine, but build it"). #342 moves budget enforcement into the gateway for every engine, priced from
 the real catalogue and `run_usage_records`, and retires this one.
 
+**Amendment (2026-11-01).** Retired by
+[ADR-0162](0162-the-gateway-stops-a-run-at-its-spend-ceiling.md), which takes over #342: the
+gateway stops a run at its spend ceiling for every engine, priced from the deployment's catalogue,
+and the run fails `run_budget_reached`. When U5.4b lands, this adapter cap, its price table and its
+refusal of a cap on an unpriced model are removed, and the same goes for the Mastra and pi engines'
+shared `provisionalBudget`. Until then this section stays in force. U5.4b (#1524) has removed them:
+`budget.ts`, the port's `prices.ts` and `provisionalBudget` are gone, a cap on any model compiles,
+and the adapter has no budget stop. The rest of this section records what was built.
+
 - **What is measured.** After every model response the boundary adds the usage the gateway relayed
   back in that response (input, cached input, output tokens) and prices it.
 - **What it is priced with.** A small table next to the adapter,
@@ -313,6 +322,8 @@ switches into whatever policy is written.
 
 - [ADR-0065](0065-an-agents-engine-is-an-extension-point-behind-one-port.md) — the port and its
   non-goals.
+- [ADR-0162](0162-the-gateway-stops-a-run-at-its-spend-ceiling.md) — retires D7's provisional
+  budget in favour of a gateway-enforced run ceiling.
 - [ADR-0068](0068-openai-wire-protocols-are-passthrough-ingress.md) — the ingress this engine speaks.
 - [ADR-0070](0070-the-engine-port-and-its-first-adapter.md),
   [ADR-0071](0071-one-engine-scoped-session-state-store.md),

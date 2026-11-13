@@ -43,6 +43,7 @@ def transitionVectors : List Vector :=
       expected := outcomeJson (runStep s op),
       witnesses := ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
         "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+        "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
         "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"] }
 
 def files : List (String × Json) :=

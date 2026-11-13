@@ -14,6 +14,9 @@ import {
   storageGrantPath,
   type GrantAccess,
 } from './storage-grants-model';
+import type { VersionsLocale } from '../agents/versions-messages';
+import { connectedStorageWords, type ConnectedStorageWords } from './connected-storage-messages';
+import { storageStrings } from './storage-messages';
 import { storageProblemMessage } from './storage-model';
 
 const CONTROL =
@@ -31,7 +34,10 @@ export type StorageConnectionsState =
   | { readonly kind: 'failed'; readonly reason: string };
 
 /** The connections the caller may read; a refusal (a Viewer, an unconfigured deployment) is a `failed` state. */
-export function useStorageConnections(enabled: boolean): StorageConnectionsState {
+export function useStorageConnections(
+  enabled: boolean,
+  locale: VersionsLocale = 'en',
+): StorageConnectionsState {
   const [state, setState] = useState<StorageConnectionsState>({ kind: 'loading' });
   useEffect(() => {
     if (!enabled) return undefined;
@@ -46,7 +52,11 @@ export function useStorageConnections(enabled: boolean): StorageConnectionsState
           if (active) {
             setState({
               kind: 'failed',
-              reason: storageProblemMessage(error, 'Connected storage could not be loaded.'),
+              reason: storageProblemMessage(
+                error,
+                connectedStorageWords(locale).loadFailed,
+                storageStrings(locale),
+              ),
             });
           }
         },
@@ -54,18 +64,21 @@ export function useStorageConnections(enabled: boolean): StorageConnectionsState
     return () => {
       active = false;
     };
-  }, [enabled]);
+  }, [enabled, locale]);
   return state;
 }
 
 /** How a grant reads: an id is "unresolved" only once the list loaded without it. */
-function grantLabel(state: StorageConnectionsState, connectionId: string, prefix: string): string {
-  if (state.kind !== 'ready') return `${prefix}/ (Loading…)`;
+function grantLabel(
+  state: StorageConnectionsState,
+  connectionId: string,
+  prefix: string,
+  words: ConnectedStorageWords,
+): string {
+  if (state.kind !== 'ready') return words.loadingGrant(prefix);
   const name = state.connections.find((connection) => connection.id === connectionId)?.name;
-  return name === undefined ? `Unresolved connection (${prefix}/)` : `${name}/${prefix}/`;
+  return name === undefined ? words.unresolvedConnection(prefix) : `${name}/${prefix}/`;
 }
-
-const READ_WRITE_LABEL = 'Read/write';
 
 /** The folders of storage connections this agent is granted, one row each. */
 export function StorageGrantList({
@@ -75,6 +88,7 @@ export function StorageGrantList({
   listRef,
   focusWhenEmpty,
   onChanged,
+  locale = 'en',
 }: Readonly<{
   agentId: string;
   grants: StorageGrants;
@@ -84,7 +98,10 @@ export function StorageGrantList({
   focusWhenEmpty: RefObject<HTMLElement | null>;
   /** The agent's assignments after a grant was removed. */
   onChanged: (next: AgentResourceAssignments) => void;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const words = connectedStorageWords(locale);
   const [removing, setRemoving] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   // After a removal: the key of the grant to focus, `null` for "none is left", `undefined` for idle.
@@ -121,7 +138,7 @@ export function StorageGrantList({
       onChanged(next);
       setFocusAfter(grantFocusedAfterRemoval(grants, key, next.storageGrants));
     } catch (error) {
-      setProblem(storageProblemMessage(error, 'The grant could not be removed.'));
+      setProblem(storageProblemMessage(error, words.removeFailed, storageStrings(locale)));
     } finally {
       setRemoving(null);
     }
@@ -132,10 +149,10 @@ export function StorageGrantList({
       {connections.kind === 'failed' ? (
         <p className="text-[12.5px] text-danger">{connections.reason}</p>
       ) : null}
-      <ul aria-label="Connected storage grants" ref={list}>
+      <ul aria-label={words.grantsLabel} ref={list}>
         {grants.map((grant) => {
           const path = grantKey(grant);
-          const label = grantLabel(connections, grant.connectionId, grant.prefix);
+          const label = grantLabel(connections, grant.connectionId, grant.prefix, words);
           const connection =
             connections.kind === 'ready'
               ? connections.connections.find((candidate) => candidate.id === grant.connectionId)
@@ -144,13 +161,13 @@ export function StorageGrantList({
             <li className={ROW} key={path} tabIndex={-1} data-grant-path={path}>
               <span className="min-w-0 flex-1 truncate">{label}</span>
               <span className="text-[12px] text-muted">
-                {grant.access === 'read-write' ? READ_WRITE_LABEL : 'Read'}
+                {grant.access === 'read-write' ? words.readWrite : words.read}
               </span>
               {connection === undefined ? null : (
                 <button
                   type="button"
                   className={BTN_SM}
-                  aria-label={`Remove ${label}`}
+                  aria-label={words.removeGrant(label)}
                   // Not `disabled`: the pressed button keeps focus while the removal is in flight,
                   // and keeps it if the removal is refused.
                   aria-disabled={removing !== null}
@@ -158,7 +175,7 @@ export function StorageGrantList({
                     void remove(connection, path, grant.prefix);
                   }}
                 >
-                  Remove
+                  {words.remove}
                 </button>
               )}
             </li>
@@ -177,14 +194,16 @@ export function StorageGrantList({
 const lastSegment = (path: string) => path.replace(/\/+$/u, '').split('/').pop() ?? path;
 const parentOf = (prefix: string) => prefix.split('/').slice(0, -1).join('/');
 
-function readWriteGap(connection: StorageConnectionResource, writeFilesAllowed: boolean) {
+function readWriteGap(
+  connection: StorageConnectionResource,
+  writeFilesAllowed: boolean,
+  words: ConnectedStorageWords,
+) {
   const gaps = [
-    ...(connection.writeAllowed ? [] : ['This connection is read-only.']),
-    ...(writeFilesAllowed ? [] : ['This agent’s Write files permission is off.']),
+    ...(connection.writeAllowed ? [] : [words.connectionReadOnly]),
+    ...(writeFilesAllowed ? [] : [words.writeFilesOff]),
   ];
-  return gaps.length === 0
-    ? null
-    : `Read/write needs a connection that allows writing and an agent with Write files turned on. ${gaps.join(' ')}`;
+  return gaps.length === 0 ? null : words.readWriteGap(...gaps);
 }
 
 /** Browses one connection folder by folder and grants the open folder to the agent. */
@@ -194,13 +213,17 @@ export function ConnectedStorage({
   writeFilesAllowed,
   grantsRef,
   onGranted,
+  locale = 'en',
 }: Readonly<{
   agentId: string;
   connections: StorageConnectionsState;
   writeFilesAllowed: boolean;
   grantsRef: RefObject<HTMLUListElement | null>;
   onGranted: (next: AgentResourceAssignments) => void;
+  /** The reader's language; English when absent. */
+  locale?: VersionsLocale;
 }>) {
+  const words = connectedStorageWords(locale);
   const [connectionId, setConnectionId] = useState('');
   const [prefix, setPrefix] = useState('');
   const [entries, setEntries] = useState<readonly StorageConnectionBrowseEntry[] | null>(null);
@@ -226,11 +249,11 @@ export function ConnectedStorage({
       if (!controller.signal.aborted) setEntries(found);
     })().catch((error: unknown) => {
       if (!controller.signal.aborted) {
-        setProblem(storageProblemMessage(error, 'This folder could not be listed.'));
+        setProblem(storageProblemMessage(error, words.listFailed, storageStrings(locale)));
       }
     });
     return () => controller.abort();
-  }, [connectionId, prefix]);
+  }, [connectionId, prefix, words, locale]);
 
   useEffect(() => {
     if (focusPath === null) return;
@@ -244,7 +267,7 @@ export function ConnectedStorage({
   }, [focusPath, grantsRef]);
 
   if (connections.kind === 'loading') {
-    return <p className="text-[12.5px] text-muted">Loading connected storage…</p>;
+    return <p className="text-[12.5px] text-muted">{words.loading}</p>;
   }
   if (connections.kind === 'failed') {
     return (
@@ -254,12 +277,10 @@ export function ConnectedStorage({
     );
   }
   if (known.length === 0) {
-    return (
-      <p className="text-[12.5px] text-muted">No storage is connected to this workspace yet.</p>
-    );
+    return <p className="text-[12.5px] text-muted">{words.noConnections}</p>;
   }
 
-  const gap = connection === undefined ? null : readWriteGap(connection, writeFilesAllowed);
+  const gap = connection === undefined ? null : readWriteGap(connection, writeFilesAllowed, words);
   const effectiveAccess: GrantAccess = gap === null ? access : 'read';
   const folders = (entries ?? []).filter((entry) => entry.kind === 'folder');
   const files = (entries ?? []).filter((entry) => entry.kind === 'file');
@@ -281,7 +302,7 @@ export function ConnectedStorage({
       );
       setFocusPath(saved === undefined ? null : `${saved.connectionId}/${saved.prefix}`);
     } catch (error) {
-      setProblem(storageProblemMessage(error, 'The grant could not be saved.'));
+      setProblem(storageProblemMessage(error, words.saveFailed, storageStrings(locale)));
     } finally {
       setGranting(false);
     }
@@ -291,7 +312,7 @@ export function ConnectedStorage({
     <div className="space-y-3">
       <div>
         <label className="block text-[12.5px] font-semibold" htmlFor="storage-connection-select">
-          Storage connection
+          {words.connection}
         </label>
         <select
           id="storage-connection-select"
@@ -303,7 +324,7 @@ export function ConnectedStorage({
             setEntries(null);
           }}
         >
-          <option value="">Choose one…</option>
+          <option value="">{words.chooseOne}</option>
           {known.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
               {candidate.name}
@@ -315,18 +336,18 @@ export function ConnectedStorage({
       {connection === undefined ? null : (
         <>
           <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
-            <span>Current folder: {prefix === '' ? 'allowed folders' : `${prefix}/`}</span>
+            <span>{words.currentFolder(prefix === '' ? words.allowedFolders : `${prefix}/`)}</span>
             <button
               type="button"
               className={BTN_SM}
               disabled={prefix === ''}
               onClick={() => setPrefix(parentOf(prefix))}
             >
-              Up one folder
+              {words.upOneFolder}
             </button>
           </div>
           {entries === null && problem === null ? (
-            <p className="text-[12.5px] text-muted">Loading folder…</p>
+            <p className="text-[12.5px] text-muted">{words.loadingFolder}</p>
           ) : (
             <ul className="text-[12.5px]">
               {folders.map((entry) => (
@@ -336,7 +357,7 @@ export function ConnectedStorage({
                     className={BTN_SM}
                     onClick={() => setPrefix(entry.path.replace(/\/+$/u, ''))}
                   >
-                    {`Open ${lastSegment(entry.path)}/`}
+                    {words.openFolder(lastSegment(entry.path))}
                   </button>
                 </li>
               ))}
@@ -346,13 +367,13 @@ export function ConnectedStorage({
                 </li>
               ))}
               {folders.length === 0 && files.length === 0 ? (
-                <li className="text-muted">This folder is empty.</li>
+                <li className="text-muted">{words.emptyFolder}</li>
               ) : null}
             </ul>
           )}
           <div className="flex flex-wrap items-center gap-2">
             <label className="text-[12.5px] font-semibold" htmlFor="storage-grant-access">
-              Access for this folder
+              {words.accessForFolder}
             </label>
             <select
               id="storage-grant-access"
@@ -363,9 +384,9 @@ export function ConnectedStorage({
                 setAccess(event.target.value === 'read-write' ? 'read-write' : 'read')
               }
             >
-              <option value="read">Read</option>
+              <option value="read">{words.read}</option>
               <option value="read-write" disabled={gap !== null}>
-                {READ_WRITE_LABEL}
+                {words.readWrite}
               </option>
             </select>
             <button
@@ -376,7 +397,7 @@ export function ConnectedStorage({
                 void grant();
               }}
             >
-              Grant this folder
+              {words.grantFolder}
             </button>
           </div>
           {gap === null ? null : (
@@ -384,9 +405,7 @@ export function ConnectedStorage({
               {gap}
             </p>
           )}
-          {prefix === '' ? (
-            <p className="text-[12px] text-muted">Open a folder to grant it.</p>
-          ) : null}
+          {prefix === '' ? <p className="text-[12px] text-muted">{words.openToGrant}</p> : null}
         </>
       )}
       {problem === null ? null : (

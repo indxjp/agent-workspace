@@ -50,8 +50,15 @@ ejected/
   src/main.ts          reads a prompt from the command line and runs the agent
   src/code-tools.ts    only when the agent has code tools
   tools/               your code tools, copied by the export
-  .claude/skills/…     the skills (Claude Agent SDK); .mastra/skills/… for Mastra
+  workspace/           the agent's working directory (Claude Agent SDK); its skills are in
+                       workspace/.claude/skills/…
+  .mastra/skills/…     the skills (Mastra)
 ```
+
+The Claude Agent SDK project runs the agent in `workspace/`, as Agent Workspace runs an agent in
+its own workspace: relative paths and the files it writes land there. With **Write files** on, the
+agent may write only inside `workspace/` (not its `CLAUDE.md` or `.claude/`), so the program beside
+it, `src/`, `tools/`, `package.json` and `.env`, stays out of its reach.
 
 The OpenAI Agents SDK has no skills, so that project has no skills folder. Dependencies are pinned,
 and `.env.example` lists the variables the project reads, with no values.

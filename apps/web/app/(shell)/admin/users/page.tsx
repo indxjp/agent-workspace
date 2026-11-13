@@ -1,3 +1,6 @@
+import { headers } from 'next/headers';
+
+import { versionsLocaleOf } from '../../../../components/agents/versions-messages';
 import { TeamScreen } from '../../../../components/team/team-screen';
 import { resolveTeamCapability } from '../../../../server/team/team-capability';
 
@@ -18,7 +21,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function UsersPage() {
   const capability = await resolveTeamCapability();
+  // The reader's language (UX-15 in #2086), negotiated as the shell negotiates it.
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
   return (
-    <TeamScreen capability={capability.membership} invitationCapability={capability.invitation} />
+    <TeamScreen
+      capability={capability.membership}
+      invitationCapability={capability.invitation}
+      locale={locale}
+    />
   );
 }

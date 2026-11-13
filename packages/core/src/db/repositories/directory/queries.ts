@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from '../../client.js';
 import { apiKeys } from '../../schema/api-keys.js';
@@ -56,6 +56,11 @@ export const INVITATION_COLUMNS = {
 } as const;
 
 export type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+
+/** Take the workspace's transaction-scoped advisory lock, the one every membership change holds. */
+export async function lockWorkspace(tx: Transaction, workspaceId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${workspaceId}))`);
+}
 
 /**
  * Whether `principalId` is an unrevoked membership principal of `workspaceId` whose membership row
@@ -141,8 +146,11 @@ export async function endpointBindings(
 }
 
 /**
- * The scope an endpoint client's API key carries. A `builder` client binds no key (it is reached
- * by an OAuth token only), so a key bound to one fails closed instead of becoming another scope.
+ * The scope an endpoint client's API key carries, or `null` when the binding names no target. A
+ * `builder` or `app-backend` client binds no key (it is reached by an OAuth token only, ADR-0161
+ * D4), so a key bound to one has
+ * no scope to carry: `null` makes `authenticateApiKeyHash` refuse it, as for an a2a client whose
+ * agent is gone, where a throw here would fail every key listing of the workspace instead.
  */
 function endpointScopeOf(row: {
   readonly kind: EndpointClientKind;
@@ -157,7 +165,8 @@ function endpointScopeOf(row: {
         ? null
         : { kind: 'a2a-agent', clientId: row.clientId, agentId: row.agentId };
     case 'builder':
-      throw new Error('A builder endpoint client has no API key.');
+    case 'app-backend':
+      return null;
     default: {
       const unreachable: never = row.kind;
       throw new Error(`unhandled endpoint client kind ${String(unreachable)}`);

@@ -7,6 +7,7 @@ import {
   MAX_PROMPT_CHARS,
   MAX_RUN_ATTACHMENTS,
   MAX_RUN_FILE_SCOPE_PATHS,
+  MODEL_PROVIDERS,
   OUTPUT_SCHEMA_DIALECT,
   OUTPUT_SCHEMA_MAX_BYTES,
   OUTPUT_SCHEMA_MAX_DEPTH,
@@ -16,9 +17,14 @@ import {
   RUN_START_PROBLEM_CODES,
   RUN_LIST_MAX_LIMIT,
   RUN_PREPARATION_FAILED,
+  RUN_BUDGET_REACHED,
   RUN_FILE_CORRUPT,
+  MAX_SPEND_CEILING_USD,
   RUNTIME_CAPACITY_EXHAUSTED,
+  RUN_CHILDREN_MAX,
   RevokeRunTokensResponseSchema,
+  RunDetailResponseSchema,
+  RunDetailSchema,
   RunApprovalRequestSchema,
   RunApprovalResponseSchema,
   RunListResponseSchema,
@@ -63,11 +69,13 @@ const run = {
     toolCalls: 0,
   },
   cost: { amount: '0.000000', currency: 'USD', priceTableVersion: null },
+  spendCeilingUsd: null,
   error: null,
   output: null,
   accountingState: 'pending',
   accountingError: null,
   pendingApproval: null,
+  parentRunId: null,
 };
 
 describe('RunResourceSchema', () => {
@@ -87,6 +95,11 @@ describe('RunResourceSchema', () => {
         accountingState: 'complete',
       }).success,
     ).toBe(true);
+  });
+
+  it('names a run served by vertex, the last model provider', () => {
+    expect(MODEL_PROVIDERS.at(-1)).toBe('vertex');
+    expect(RunResourceSchema.safeParse({ ...run, provider: 'vertex' }).success).toBe(true);
   });
 
   it('rejects an unknown status, an unknown key, and a missing usage block', () => {
@@ -134,6 +147,25 @@ describe('StartRunRequestSchema', () => {
       StartRunRequestSchema.safeParse({ prompt: 'x'.repeat(MAX_PROMPT_CHARS + 1) }).success,
     ).toBe(false);
     expect(StartRunRequestSchema.safeParse({ prompt: 'hi', temperature: 1 }).success).toBe(false);
+  });
+
+  it('accepts a spend ceiling that narrows and refuses 0, negative, non-finite and over-precise ones (ADR-0162)', () => {
+    for (const spendCeilingUsd of [0.5, 0.000001, 2, MAX_SPEND_CEILING_USD]) {
+      expect(StartRunRequestSchema.safeParse({ prompt: 'hi', spendCeilingUsd }).success).toBe(true);
+    }
+    for (const spendCeilingUsd of [
+      0,
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      MAX_SPEND_CEILING_USD + 1,
+      0.0000001,
+      '1',
+    ]) {
+      expect(StartRunRequestSchema.safeParse({ prompt: 'hi', spendCeilingUsd }).success).toBe(
+        false,
+      );
+    }
   });
 
   it('refuses a connection without a model and a model without a connection', () => {
@@ -214,6 +246,58 @@ describe('response envelopes', () => {
     ).toBe(true);
     expect(RunListResponseSchema.safeParse({ runs: [run], nextCursor: null }).success).toBe(true);
     expect(RunListResponseSchema.safeParse({ runs: [run] }).success).toBe(false);
+  });
+});
+
+describe('run trees (ADR-0104 acceptance)', () => {
+  const child = {
+    ...run,
+    id: '66666666-6666-4666-8666-666666666666',
+    parentRunId: run.id,
+    cost: { amount: '0.010000', currency: 'USD', priceTableVersion: null },
+  };
+  const detail = {
+    ...run,
+    children: [child],
+    treeCost: { amount: '0.010000', currency: 'USD' },
+  };
+
+  it('round-trips parentRunId on the resource, null for a root and set for a child', () => {
+    expect(RunResourceSchema.parse(run).parentRunId).toBeNull();
+    expect(RunResourceSchema.parse(child)).toEqual(child);
+    const withoutParent: Record<string, unknown> = { ...run };
+    delete withoutParent['parentRunId'];
+    expect(RunResourceSchema.safeParse(withoutParent).success).toBe(false);
+  });
+
+  it('reads the detail with its children and tree cost, and the list item without them', () => {
+    expect(RunDetailResponseSchema.parse({ run: detail })).toEqual({ run: detail });
+    expect(
+      RunDetailSchema.safeParse({ ...run, children: [], treeCost: detail.treeCost }).success,
+    ).toBe(true);
+    expect(RunResourceSchema.safeParse(detail).success).toBe(false);
+    expect(RunListResponseSchema.safeParse({ runs: [detail], nextCursor: null }).success).toBe(
+      false,
+    );
+  });
+
+  it(`refuses more than ${String(RUN_CHILDREN_MAX)} children, a tree cost with a price table, and null for either field`, () => {
+    const children = Array.from({ length: RUN_CHILDREN_MAX + 1 }, () => child);
+    expect(RunDetailSchema.safeParse({ ...detail, children }).success).toBe(false);
+    expect(
+      RunDetailSchema.safeParse({ ...detail, children: children.slice(0, RUN_CHILDREN_MAX) })
+        .success,
+    ).toBe(true);
+    expect(
+      RunDetailSchema.safeParse({
+        ...detail,
+        treeCost: { ...detail.treeCost, priceTableVersion: null },
+      }).success,
+    ).toBe(false);
+    expect(RunDetailSchema.safeParse({ ...detail, treeCost: null }).success).toBe(false);
+    expect(RunDetailSchema.safeParse({ ...detail, children: null }).success).toBe(false);
+    // The read of a control plane that predates run trees answers the plain resource.
+    expect(RunDetailSchema.safeParse(run).success).toBe(true);
   });
 });
 
@@ -396,6 +480,17 @@ describe('parseRunFailure', () => {
       code: 'policy_cannot_widen',
       message: 'engine:pi',
     });
+  });
+
+  it('reads run_budget_reached, which is not a start refusal (ADR-0162)', () => {
+    expect(RUN_BUDGET_REACHED).toBe('run_budget_reached');
+    expect(
+      parseRunFailure('run_budget_reached: The run stopped at its spend ceiling of 0.5 USD.'),
+    ).toEqual({
+      code: RUN_BUDGET_REACHED,
+      message: 'The run stopped at its spend ceiling of 0.5 USD.',
+    });
+    expect(isRunStartProblemCode(RUN_BUDGET_REACHED)).toBe(false);
   });
 
   it('keeps an uncoded or unknown-coded error whole, with no code', () => {

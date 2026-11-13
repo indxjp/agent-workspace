@@ -83,7 +83,7 @@ def Kind.ofStorage? : String → Option Kind
 def storageSpellings : List String := (WireEnum.all : List Kind).map Kind.toStorage
 
 /-- `wireKind`: the one place the server maps the storage spelling to the wire spelling. -/
-@[aw_spec (ts := "apps/web/server/rbac/handlers.ts#wireKind")]
+@[aw_spec (ts := "apps/web/server/rbac/me.ts#wireKind")]
 def wireKindOfStorage? (s : String) : Option String := (Kind.ofStorage? s).map WireEnum.toWire
 
 /-- A principal's source: exactly one membership or exactly one API key. -/

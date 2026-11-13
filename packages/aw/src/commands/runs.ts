@@ -2,7 +2,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { UUID_PATTERN } from '@indx-workspace/contracts';
-import { outputSchemaViolation, RUN_STATUSES } from '@indx-workspace/contracts/runs';
+import {
+  outputSchemaViolation,
+  RUN_STATUSES,
+  SpendCeilingUsdSchema,
+} from '@indx-workspace/contracts/runs';
 import type { RunResource } from '@indx-workspace/contracts/runs';
 import { runFailure, type RunEventsOptions, type StartRunInput } from '@indx-workspace/sdk';
 import { toAgentEvent } from '@indx-workspace/sdk/events';
@@ -126,6 +130,18 @@ function modelOverride(
   return { connectionId, model };
 }
 
+/**
+ * `--idempotency-key <key>` (issue #250, S-6): sent as the `Idempotency-Key` header, so a start
+ * retried with the same key and input answers with the run the first one started. A blank key is
+ * refused here, before any request; the server judges the length (`400 invalid_idempotency_key`).
+ */
+export function idempotencyKeyOf(context: CommandContext): { readonly idempotencyKey?: string } {
+  const key = value(context, 'idempotency-key');
+  if (key === undefined) return {};
+  if (key.trim() === '') throw new UsageError('--idempotency-key must not be blank');
+  return { idempotencyKey: key };
+}
+
 function eventsOptions(context: CommandContext): RunEventsOptions {
   const after = value(context, 'after');
   return { signal: context.signal, ...(after === undefined ? {} : { after }) };
@@ -142,7 +158,15 @@ function assertRunSucceeded(run: RunResource): void {
   if (failure !== null) throw new RunFailedError(run.id, failure.code, failure.message);
 }
 
-async function start(context: CommandContext): Promise<CommandResult | undefined> {
+/** How a started run is shown: `--wait`, `--follow` and `--fail-on-error`, checked together. */
+interface StartDelivery {
+  readonly wait: boolean;
+  readonly follow: boolean;
+  readonly failOnError: boolean;
+}
+
+/** Read the delivery flags of a run start; refused before any request when they disagree. */
+export function startDeliveryOf(context: CommandContext): StartDelivery {
   const wait = isOn(context, 'wait');
   const follow = isOn(context, 'follow');
   const failOnError = isOn(context, 'fail-on-error');
@@ -152,10 +176,49 @@ async function start(context: CommandContext): Promise<CommandResult | undefined
       '--fail-on-error needs --wait or --follow: a queued run has no outcome yet',
     );
   }
+  return { wait, follow, failOnError };
+}
+
+/** The started run as the command answers it: queued, waited for, or followed to its end. */
+export async function deliverStarted(
+  context: CommandContext,
+  delivery: StartDelivery,
+  run: RunResource,
+): Promise<CommandResult | undefined> {
   const { client, signal, mode, io } = context;
+  if (!delivery.wait && !delivery.follow) return { value: run };
+  notice(io, mode, `run ${run.id} started`);
+  if (delivery.wait) {
+    const settled = await client.runs.waitForOutcome(run.id, { signal });
+    if (delivery.failOnError) assertRunSucceeded(settled);
+    return { value: settled };
+  }
+  await printStream(io, mode, client.runs.follow(run.id, { signal }));
+  if (delivery.failOnError) assertRunSucceeded(await client.runs.get(run.id, { signal }));
+  return undefined;
+}
+
+/** `--spend-ceiling-usd <usd>` (ADR-0162), checked by the contract's own schema before any request. */
+function spendCeilingOf(context: CommandContext): { readonly spendCeilingUsd?: number } {
+  const raw = value(context, 'spend-ceiling-usd');
+  if (raw === undefined) return {};
+  const parsed = SpendCeilingUsdSchema.safeParse(raw.trim() === '' ? Number.NaN : Number(raw));
+  if (!parsed.success) {
+    throw new UsageError(
+      '--spend-ceiling-usd must be a positive number of USD, at most 1000000, with at most six decimal places',
+    );
+  }
+  return { spendCeilingUsd: parsed.data };
+}
+
+async function start(context: CommandContext): Promise<CommandResult | undefined> {
+  const delivery = startDeliveryOf(context);
+  const { client, signal } = context;
+  const idempotency = idempotencyKeyOf(context);
   const prompt = await promptOf(context);
   const outputSchema = await outputSchemaOf(context);
   const fileScope = values(context, 'file-scope');
+  const spendCeiling = spendCeilingOf(context);
   const attachments = await attachmentsOf(context);
   const started = await client.runs.start(
     positional(context, 0, 'agent'),
@@ -165,20 +228,13 @@ async function start(context: CommandContext): Promise<CommandResult | undefined
       modelOverride: modelOverride(context),
       ...(outputSchema === undefined ? {} : { outputSchema }),
       ...(fileScope.length === 0 ? {} : { fileScope }),
+      ...spendCeiling,
       ...(attachments.length === 0 ? {} : { attachments }),
+      ...idempotency,
     },
     { signal },
   );
-  if (!wait && !follow) return { value: started.run };
-  notice(io, mode, `run ${started.run.id} started`);
-  if (wait) {
-    const settled = await client.runs.waitForOutcome(started.run.id, { signal });
-    if (failOnError) assertRunSucceeded(settled);
-    return { value: settled };
-  }
-  await printStream(io, mode, client.runs.follow(started.run.id, { signal }));
-  if (failOnError) assertRunSucceeded(await client.runs.get(started.run.id, { signal }));
-  return undefined;
+  return deliverStarted(context, delivery, started.run);
 }
 
 /** Where `--download <dir>` puts a file; a name that climbs out of `<dir>` is refused. */
@@ -216,7 +272,7 @@ async function outputs(context: CommandContext): Promise<CommandResult> {
 export const runCommands: readonly Command[] = [
   command(
     'runs start',
-    '<agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--attach <file-id|path>]... [--wait|--follow] [--fail-on-error]',
+    '<agent> --prompt <text>|--prompt-file <path> [--session <id>] [--model <conn>:<model>] [--output-schema <path>] [--file-scope <path>]... [--spend-ceiling-usd <usd>] [--attach <file-id|path>]... [--idempotency-key <key>] [--wait|--follow] [--fail-on-error]',
     'Queue a run, and optionally wait for or follow it',
     start,
   ),

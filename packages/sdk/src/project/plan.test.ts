@@ -474,6 +474,40 @@ describe('planProjectResources: MCP connectors (C10)', () => {
       expect(result.creates[0]?.input).toMatchObject({ name: 'github', identity: IDENTITY });
     });
 
+    // Issue #1506: the identity is a workspace secret the server resolves by name at run compose
+    // (ADR-0142 D1). The plan names it and never carries a value, so it is never the action's
+    // `secret`, and a name unset in this shell is no notice: `aw secrets create` or `aw dev` (for an
+    // app's connector) holds it in the workspace.
+    it('plans a connector identity as a secret reference', () => {
+      const desk = {
+        url: 'http://127.0.0.1:3200/api/mcp',
+        identity: { secret: 'APP_DESK_IDENTITY' },
+      };
+      const expected = {
+        ...EMPTY,
+        creates: [
+          {
+            kind: 'connector',
+            path: 'connectors.desk',
+            input: {
+              name: 'desk',
+              transport: 'http',
+              url: desk.url,
+              identity: { secret: 'APP_DESK_IDENTITY' },
+            },
+          },
+        ],
+      };
+      const unset = plan({ project: project({ connectors: { desk } }) });
+      expect(unset).toStrictEqual(expected);
+      const set = plan({
+        project: project({ connectors: { desk } }),
+        secrets: secrets({ APP_DESK_IDENTITY: UNRECORDED }),
+      });
+      expect(set).toStrictEqual(expected);
+      expect(JSON.stringify(set)).not.toContain(UNRECORDED.fingerprint);
+    });
+
     it('patches an identity that changed, and nothing for one that did not', () => {
       const existing = (identity?: typeof IDENTITY): PlanProjectResourcesInput['existing'] => ({
         modelConnections: [DEFAULT],

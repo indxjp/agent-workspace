@@ -16,7 +16,11 @@ the migration playbook (maintainers' notes); this page does not repeat them.
 Arrows are the workspace dependencies each `package.json` declares (`workspace:*`), which is
 also the direction `pnpm architecture:check` enforces (`dependency-cruiser.config.mjs`:
 `libraries-do-not-import-applications`, `contracts-depend-on-nothing-in-the-workspace`,
-`sdk-depends-only-on-contracts`, `aw-depends-only-on-sdk-and-contracts`,
+`sdk-depends-only-on-contracts`, `react-depends-only-on-sdk-and-contracts`,
+`app-kit-depends-only-on-published-packages` (the app kit reaches only sdk, contracts and react;
+its `src/dependencies.test.ts` allowlist adds `@modelcontextprotocol/sdk`, `zod` and the peers
+`drizzle-orm`, `pg`, `next` and `react`), `platform-never-imports-the-app-kit` (no application or
+other package imports it; `aw` spawns its `aw-app` bin), `aw-depends-only-on-sdk-and-contracts`,
 `cli-depends-only-on-sdk-and-contracts`, `create-depends-only-on-cli`,
 `engine-port-depends-only-on-contracts`, `run-protocol-depends-only-on-contracts-and-engine`,
 `platforms-depend-only-on-contracts`,
@@ -36,14 +40,18 @@ nothing server-side is reachable from the three consumer packages.
 Their workspace names are their npm names: `@indx-workspace/contracts`, `@indx-workspace/sdk`
 (subpaths `./events` and `./testing`, the recording `fetch` double and contract-valid fixtures),
 `@indx-workspace/platforms` (the pure platform translators, ADR-0133, second in publish order),
-`@indx-workspace/aw` (the `aw` bin), `@indx-workspace/cli` (the bins `create-agent-workspace` and
-`agent-workspace`; subpath `./create`) and `@indx-workspace/create` (what
-`npm create @indx-workspace` runs). Every other member keeps `@agent-workspace/*` and stays
+`@indx-workspace/react` (the hosted surface chat as React), `@indx-workspace/app` (the app kit
+generated portal apps import; subpaths `./server`, `./db`, `./react` and `./testing`, empty until
+the portal implementation guide's later units fill them), `@indx-workspace/aw` (the `aw` bin),
+`@indx-workspace/cli` (the bins `create-agent-workspace` and `agent-workspace`; subpath
+`./create`) and `@indx-workspace/create` (what
+`npm create @indx-workspace` runs), with `@indx-workspace/embedded`, the bundled local runtime
+`aw dev` forks (ADR-0109). Every other member keeps `@agent-workspace/*` and stays
 `"private": true`; that scope is a third party's on npm, so no published manifest, template or
 `dist/` file may name it (`scripts/release/pack-packages.mjs` refuses one). The CLI therefore
-reaches only the SDK and the contracts; the development-only embedded workspace, which imports the
-server, is the private `packages/embedded` (`pnpm start:embedded`). The five are released in
-lock-step at
+reaches only the SDK and the contracts. The nine — contracts, platforms, sdk, react, app, aw,
+cli, embedded and create, in that publish order (`PUBLISHED_PACKAGES` in
+`scripts/release/pack-packages.mjs`) — are released in lock-step at
 `CONTRACTS_VERSION` by `.github/workflows/publish-packages.yml` from a `packages-v<version>` tag,
 with npm trusted publishing (provenance is one switch, off while the repository is internal);
 CI's heavy-checks packs and installs them on every change (`pnpm release:pack --smoke`).
@@ -56,6 +64,8 @@ graph LR
     aw["packages/aw · @indx-workspace/aw<br/>the aw command line: argument parsing,<br/>table/JSON output, exit codes, profiles"]
     cli["packages/cli · @indx-workspace/cli<br/>create-agent-workspace: the project generator;<br/>agent-workspace start (Compose) and validate"]
     create["packages/create · @indx-workspace/create<br/>npm create @indx-workspace: runs the generator"]
+    react["packages/react · @indx-workspace/react<br/>the hosted surface chat as React"]
+    app["packages/app · @indx-workspace/app<br/>the app kit portal apps import: definitions, ./server, ./db,<br/>./react, ./testing; never imported by the platform"]
   end
   subgraph server["Server side — never imported by contracts, sdk or aw"]
     web["apps/web<br/>control plane: Next.js routes app/api/**,<br/>domain operations server/**, RBAC, browser UI"]
@@ -64,13 +74,13 @@ graph LR
     runProtocol["packages/run-protocol<br/>the private run contract: RunRequest, agent configuration schemas,<br/>the Claude SDK event surface and its agent.* mapping"]
     runtime["packages/runtime<br/>runtime driver interfaces and implementations<br/>(local, docker, kubernetes, cloud-run, aca);<br/>the engine → image map (ENG-07)"]
     gateway["packages/gateway<br/>authenticated model-provider routing;<br/>substitutes a run identity for a stored credential"]
-    embedded["packages/embedded (private)<br/>pnpm start:embedded: the development-only<br/>embedded workspace in one Node process"]
+    embedded["packages/embedded · @indx-workspace/embedded (ADR-0109)<br/>the local runtime aw dev forks: the server bundled<br/>into one Node process"]
   end
   claudeSdk(["@anthropic-ai/claude-agent-sdk"])
   openaiSdk(["@openai/agents<br/>(+ @openai/agents-extensions, @ai-sdk/anthropic)"])
   piSdk(["@earendil-works/pi-coding-agent"])
   mastraSdk(["@mastra/core<br/>(+ @mastra/mcp, @mastra/memory, @ai-sdk/anthropic, @ai-sdk/openai)"])
-  platforms["packages/platforms · @indx-workspace/platforms (ADR-0133)<br/>the PlatformTarget port, the per-field verdict model and the conformance kit;<br/>pure, depends on contracts only; not yet in PUBLISHED_PACKAGES"]
+  platforms["packages/platforms · @indx-workspace/platforms (ADR-0133)<br/>the PlatformTarget port, the per-field verdict model and the conformance kit;<br/>pure, depends on contracts only"]
   subgraph engines["Engines — ADR-0065, ADR-0070, ADR-0074, ADR-0081, ADR-0084; the port and four adapters exist"]
     engine["packages/engine<br/>the AgentEngine port: compile, start,<br/>agent.* frame builders, path grants,<br/>the sandbox-environment contract, the conformance kit<br/>depends on contracts only"]
     engineAdapter["packages/engine-claude-agent-sdk<br/>the first adapter; imports @anthropic-ai/claude-agent-sdk<br/>from exactly one boundary file (src/boundary.ts)"]
@@ -80,6 +90,11 @@ graph LR
   end
 
   sdk --> contracts
+  react --> sdk
+  react --> contracts
+  app -.->|"allowed; declared when first imported"| sdk
+  app -.->|"allowed; declared when first imported"| contracts
+  app -.->|"allowed; declared when first imported"| react
   aw --> sdk
   aw --> contracts
   aw --> platforms
@@ -188,9 +203,9 @@ flowchart TB
     r0["proxy.ts + server/versioning/contracts-version.ts<br/>426 contracts_version_unsupported before any route;<br/>the served range on every /api/** answer"]
     r1["app/api/agents/route.ts — GET, POST<br/>app/api/agents/[id]/route.ts — GET, PATCH, DELETE<br/>app/api/agents/[id]/resources/route.ts — GET, PUT<br/>app/api/agents/[id]/policy/route.ts — GET, PUT"]
     r4["server/agents/{contract,handlers,http,store}.ts<br/>parse → decide → persist; toAgentResource()"]
-    r5["server/rbac/permissions.ts<br/>the agents row of the role table"]
+    r5["server/rbac/core/permissions.ts<br/>the agents row of the role table"]
     r6["tests/route-declarations/W1-CP-05.ts<br/>+ SDK-02-AGENT-POLICY-234.ts<br/>closed-world declaration of the nine routes"]
-    r7["server/sdk-conformance.test.ts<br/>pins toAgentResource() to AgentResourceSchema"]
+    r7["server/sdk-conformance.*.test.ts<br/>pins toAgentResource() to AgentResourceSchema"]
   end
   subgraph L3["3 · SDK — packages/sdk"]
     direction LR
@@ -296,6 +311,9 @@ erDiagram
   workspace_principals ||--o{ browser_tokens : "minted_by_principal_id"
   runs |o--o{ browser_tokens : "run_id"
   sessions |o--o{ browser_tokens : "session_id"
+  workspaces ||--o{ webhooks : "workspace_id"
+  webhooks ||--o{ webhook_deliveries : "(workspace_id, webhook_id)"
+  runs ||--o{ webhook_deliveries : "(run_id, workspace_id)"
 
   workspaces {
     uuid id PK
@@ -517,6 +535,25 @@ erDiagram
     timestamptz expires_at
     timestamptz revoked_at
   }
+  webhooks {
+    uuid id PK
+    uuid workspace_id FK
+    text url
+    text_array events "run.completed | run.failed | run.cancelled"
+  }
+  webhook_deliveries {
+    uuid id PK "sent as webhook-id"
+    uuid workspace_id FK
+    uuid webhook_id FK
+    uuid run_id FK
+    text event_type
+    text state "pending | delivered | failed"
+    smallint attempts
+    timestamptz next_attempt_at
+    integer last_status_code
+    text last_error
+    timestamptz delivered_at
+  }
   shares {
     uuid id PK
     uuid workspace_id FK
@@ -572,6 +609,7 @@ SDK client is `packages/sdk/src/resources/<family>.ts`; the commands are
 | Team               | `team`, `invitations`, `api-keys` | `/memberships[/:id]`, `/users`, `/invitations[/:id]`, `/invitations/:id/resend\|accept`, `/api-keys[/:id]`                                                                                                                       | `team.members.*`, `team.users.*`, `team.invitations.*`, `team.apiKeys.*`                                                                                                                 | `aw team members\|users\|api-keys …` [^s22]                                                                                                               | `memberships`, `users`, `invitations`, `api_keys`, `workspace_principals`                                    |
 | Endpoint clients   | `endpoint-clients`                | `GET/POST /endpoint-clients`, `GET/PATCH/DELETE /endpoint-clients/:id`, `POST /endpoint-clients/:id/keys`, `POST /endpoint-clients/:id/secret`                                                                                   | `endpointClients.list/get/create/update/revoke/mintKey/rotateSecret`                                                                                                                     | `aw endpoint-clients list\|get\|create\|update\|revoke`, `aw endpoint-clients keys create`, `aw endpoint-clients secret rotate`                           | `endpoint_clients`, `endpoint_client_agents`, `endpoint_client_api_keys`                                     |
 | Triggers           | `triggers`                        | `GET/POST /triggers`, `GET/PATCH/DELETE /triggers/:id`, `POST /triggers/:id/secret`, `POST /triggers/:id/fire/:secret` (public, sender-facing) [^fire]                                                                           | `triggers.list/get/create/update/remove/rotateSecret`                                                                                                                                    | `aw triggers list\|get\|create\|update\|remove`, `aw triggers secret rotate`                                                                              | `triggers`, `trigger_deliveries`                                                                             |
+| Webhooks           | `webhooks`                        | `GET/POST /webhooks`, `DELETE /webhooks/:id` (`204`) [^webhooks]                                                                                                                                                                 | `webhooks.list/create/remove`; `verifyWebhookSignature` (a free function, no route)                                                                                                      | `aw webhooks list\|create\|remove` | `webhooks`, `webhook_deliveries` |
 | Tokens             | `tokens`                          | `POST /tokens`                                                                                                                                                                                                                   | `tokens.mint`                                                                                                                                                                            | `aw tokens mint`                                                                                                                                          | `browser_tokens`                                                                                             |
 | Models             | `models`                          | `GET /models`, `/model-connections[/:id]`, `/model-connections/:id/credential\|test`                                                                                                                                             | `models.discover`, `models.connections.list/get/create/update/remove/rotateCredential/test`                                                                                              | `aw models discover`, `aw models connections …`                                                                                                           | `model_connections`                                                                                          |
 | Runtimes           | `runtimes`                        | `/runtime-profiles[/:id]`, `/runtime-connections`                                                                                                                                                                                | `runtimes.profiles.list/get/create/update/remove`, `runtimes.connections.list/create`                                                                                                    | `aw runtimes profiles …`, `aw runtimes connections …` [^runtimes]                                                                                         | `runtime_profiles`, `secrets` (a connection is a secret)                                                     |
@@ -581,6 +619,7 @@ SDK client is `packages/sdk/src/resources/<family>.ts`; the commands are
 | Connectors (MCP)   | `connectors`                      | `GET/POST /connectors`, `GET/PATCH/DELETE /connectors/:id`, `POST /connectors/:id/test-connection`                                                                                                                               | `connectors.list/get/create/update/remove/rotateCredential/test/testDraft`                                                                                                               | `aw connectors list\|get\|create\|update\|remove\|rotate-credential\|test\|test-draft`                                                                    | `mcp_servers`                                                                                                |
 | Engines            | `engines`                         | `GET /engines`                                                                                                                                                                                                                   | `engines.list`                                                                                                                                                                           | `aw engines list`; `aw agents create\|update --engine <id>`                                                                                               | none — the catalogue is deployment configuration, read from `apps/web/server/engines/registry.ts` [^engines] |
 | Agents             | `agents`                          | `GET/POST /agents`, `GET/PATCH/DELETE /agents/:id`, `GET/PUT /agents/:id/resources`, `GET/PUT /agents/:id/policy`, `GET/PUT /agents/:id/grants`                                                                                  | `agents.list/get/create/update/remove/getResourceAssignments/replaceResourceAssignments/getPolicy/replacePolicy/getGrants/replaceGrants/export/import` (export/import compose, no route) | `aw agents list\|get\|create\|update\|remove\|export\|import`, `aw agents assignments get\|set`, `aw agents policy get\|set`, `aw agents grants get\|set` | `agents`, `agent_files`, `agent_skills`, `agent_mcp_servers`, `agent_grants`                                 |
+| Agent teams        | `agent-teams`                     | `GET/POST /agent-teams`, `GET/DELETE /agent-teams/:id` (`204`), `GET/POST /agent-teams/:id/versions` [^agentteams] | `agentTeams.list/listAll/get/create/remove`, `agentTeams.versions.create/list` | `aw agent-teams list\|get\|create\|remove`, `aw agent-teams versions create\|list` | `agent_teams`, `agent_team_versions`, `agent_team_version_members` |
 | Projects           | `projects`                        | `GET/POST /projects`, `GET/PATCH /projects/:id`, `POST /projects/:id/archive\|restore`, `POST /projects/:id/sessions`                                                                                                            | `projects.list/get/create/update/archive/restore/startSession/adoptSession`                                                                                                              | `aw projects list\|get\|create\|update\|archive\|restore\|start-session\|adopt-session`                                                                   | `projects`, `project_files`, `project_mcp_servers`                                                           |
 | Sessions           | `sessions`                        | `GET /sessions`, `GET/PATCH /sessions/:engineSessionId`, `GET /sessions/:engineSessionId/transcript\|subkeys`                                                                                                                    | `sessions.list/listAll/get/update`, `sessions.transcript.read/subkeys`                                                                                                                   | `aw sessions list\|get\|rename\|archive\|restore\|transcript\|subkeys`                                                                                    | `sessions`, `session_transcripts`, `session_messages`                                                        |
 | Runs               | `runs`, `run-events`              | `POST /agents/:id/runs`, `GET /runs`, `GET /runs/:id`, `GET /runs/:id/events` (SSE), `POST /runs/:id/interrupt`, `POST /runs/:id/revoke-tokens`                                                                                  | `runs.start/get/list/events/follow/waitForOutcome/interrupt/revokeTokens`                                                                                                                | `aw runs start\|get\|list\|events\|follow\|wait\|interrupt`                                                                                               | `runs`, `run_events`, `run_usage_records`, `run_tokens`                                                      |
@@ -613,6 +652,24 @@ Routes not in the table are outside the SDK's scope by 04 §1 (`/api/setup`, `/a
     (Microsoft Graph, Zoom, a mail rule) that holds no API key; the URL secret that `triggers.create`
     and `triggers.rotateSecret` return once is its only authentication. `trigger_deliveries` holds
     the dedupe and rate records of firings and is never on the wire.
+
+[^agentteams]:
+    Agent teams (ADR-0104, accepted for `handoff` mode; #1516) are named alike in every layer, never
+    plain "team", which is the people of a workspace (`team`, `aw.team`, `aw team`). The routes are
+    decided as the `agents` resource (acceptance decision 10): every role reads, a Builder writes its
+    own teams, Owner and Admin any; a write is audited as `agent-changed` naming the team. A version
+    pins the lead's and each member's agent version and is immutable. `runs.parent_run_id` is read
+    back as `RunResource.parentRunId`, and `GET /runs/:id` adds `children` and `treeCost`; running a
+    team and the member tools land with U4.2c.
+
+[^webhooks]:
+    Run-outcome webhooks (N-3, #250, ADR-SDK-18-N3-250) are Owner/Admin `MANAGE` and belong to the
+    `runs` feature. The signing secret is returned once by `webhooks.create` and kept in
+    `SecretsService` under `WEBHOOK_<ID>_SIGNING_SECRET`, never in a row. `webhook_deliveries` is
+    the outbox the run's stop writes in its own transaction (one row per subscribed webhook,
+    unique on `(workspace_id, webhook_id, run_id)`), which the in-process delivery worker claims
+    with `FOR UPDATE SKIP LOCKED`; it is never on the wire. The receiver side is
+    `verifyWebhookSignature`, which makes no request.
 
 [^features]:
     `GET` answers one row per feature (`installed`, `enabled`) to any member; `PUT` replaces the
@@ -656,9 +713,9 @@ Routes not in the table are outside the SDK's scope by 04 §1 (`/api/setup`, `/a
 - **Adding a resource or an operation** (the playbook's moves 1–7, in this order): the schema in
   `packages/contracts/src/<family>.ts` with its tests → the route in `apps/web/app/api/**`, its
   domain operation in `apps/web/server/<family>/**`, its RBAC row in
-  `apps/web/server/rbac/permissions.ts`, and its closed-world declaration in
+  `apps/web/server/rbac/core/permissions.ts`, and its closed-world declaration in
   `tests/route-declarations/<owner>.ts` (`tests/route-inventory.test.ts` fails on an undeclared
-  route) → the conformance case in `apps/web/server/sdk-conformance.test.ts` → the method in
+  route) → the conformance case in `apps/web/server/sdk-conformance.*.test.ts` → the method in
   `packages/sdk/src/resources/<family>.ts` → the command in `packages/aw/src/commands/<family>.ts`
   → one consumer in `apps/web` or the CLI → the route's entry in
   `packages/contracts/src/routes.ts` (`tests/docs/openapi.test.ts` fails on a declared route with

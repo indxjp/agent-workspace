@@ -55,6 +55,16 @@ Accepted now:
     run as `failed` with `daily_cost_cap_reached`, which carries the cap and the reset time. If the
     run's end cannot be written the call answers 503, never 403. The cap can overshoot by up to one
     60 s window per instance, plus the call that crossed it (#1851 slice 3b, 2026-10-27).
+  - Amendment: the per-run part of D13 ("cost per run", `limits.maxBudgetUsd`) becomes
+    gateway-enforced under
+    [ADR-0162](0162-the-gateway-stops-a-run-at-its-spend-ceiling.md) (2026-11-01, built by
+    U5.4b). A run's ceiling is the lowest of the agent's `limits.maxBudgetUsd`, this ceiling's
+    `limits.maxBudgetUsd` and an optional per-start `spendCeilingUsd`, which may only narrow (a
+    value above is `403 policy_cannot_widen` at `spendCeilingUsd`). It is stored on the run as
+    `runs.spend_ceiling_usd`. The gateway's model-call admission refuses the next call once the
+    run's `cost_usd` reaches it and ends the run `failed` with `run_budget_reached`: the refusal
+    path of `daily_cost_cap_reached`, at the run's scope. A session ceiling is decided there and
+    deferred.
   - `policyWidenings(effective, ceiling)` and `meetPolicyCeiling(effective, ceiling)` are pure
     functions in contracts. The server's write paths and its compose step use them and no copy.
     The dry run and the save answer identically (C8), and a run start or preflight the ceiling

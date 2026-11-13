@@ -88,9 +88,7 @@ export interface SeedOptions {
  * malformed. Nothing is defaulted except the workspace's own slug and name, which identify no
  * one and grant nothing.
  */
-export function readSeedOptions(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): SeedOptions {
+export function readSeedOptions(env: Readonly<Record<string, string | undefined>>): SeedOptions {
   const rawAdmin = env['BOOTSTRAP_ADMIN'];
   if (rawAdmin === undefined || rawAdmin.trim() === '') {
     throw new Error(
@@ -217,10 +215,7 @@ export async function seed(db: Database, options: SeedOptions): Promise<SeedResu
 }
 
 /** Open a connection, seed, close it. The form `pnpm db:seed` uses. */
-export async function runSeed(
-  config: DatabaseConfig = readDatabaseConfig(),
-  options: SeedOptions = readSeedOptions(),
-): Promise<SeedResult> {
+export async function runSeed(config: DatabaseConfig, options: SeedOptions): Promise<SeedResult> {
   const { pool, db } = connect(config);
   try {
     return await seed(db, options);
@@ -230,8 +225,10 @@ export async function runSeed(
 }
 
 async function main(): Promise<void> {
-  const options = readSeedOptions();
-  const result = await runSeed(readDatabaseConfig(), options);
+  // The process entry (`node dist/db/seed.js`): the one place this module reads the environment.
+  const env = process.env;
+  const options = readSeedOptions(env);
+  const result = await runSeed(readDatabaseConfig(env), options);
   console.log(
     `db:seed — workspace "${options.workspaceSlug}" (${result.workspaceId}), ` +
       `owner ${options.adminEmail} (${result.adminUserId}), ` +

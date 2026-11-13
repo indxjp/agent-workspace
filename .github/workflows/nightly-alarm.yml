@@ -18,7 +18,7 @@ permissions:
 jobs:
   alarm:
     if: github.repository_owner == 'INDXDev' && (github.event.workflow_run.event == 'schedule' && (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'success'))
-    runs-on: [self-hosted, ms-a2]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read

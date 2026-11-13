@@ -242,14 +242,14 @@ export function createScriptedModels(options: { readonly dir: string }): Scripte
 }
 
 /**
- * The scripted models the process opted into, or `undefined` when `AW_SCRIPTED_MODELS_DIR` is
- * unset (every deployment). A set variable that is relative, or that is set outside the `local`
- * posture, throws: the gateway and the web process then fail at startup instead of silently
- * serving a test tool.
+ * The folder of scripted models the process opted into, or `undefined` when
+ * `AW_SCRIPTED_MODELS_DIR` is unset or blank (every deployment). A set variable that is relative, or
+ * that is set outside the `local` posture, throws: the gateway and the web process then fail at
+ * startup instead of silently serving a test tool. It reads no file.
  */
-export function scriptedModelsFromEnv(
+export function scriptedModelsDirFromEnv(
   env: Readonly<Record<string, string | undefined>>,
-): ScriptedModels | undefined {
+): string | undefined {
   const dir = (env[SCRIPTED_MODELS_DIR_ENV] ?? '').trim();
   if (dir.length === 0) return undefined;
   if (!isAbsolute(dir)) {
@@ -260,5 +260,13 @@ export function scriptedModelsFromEnv(
       `${SCRIPTED_MODELS_DIR_ENV} is a test tool and only works in the local posture.`,
     );
   }
-  return createScriptedModels({ dir });
+  return dir;
+}
+
+/** The scripted models from {@link scriptedModelsDirFromEnv}'s folder, or `undefined` when unset. */
+export function scriptedModelsFromEnv(
+  env: Readonly<Record<string, string | undefined>>,
+): ScriptedModels | undefined {
+  const dir = scriptedModelsDirFromEnv(env);
+  return dir === undefined ? undefined : createScriptedModels({ dir });
 }

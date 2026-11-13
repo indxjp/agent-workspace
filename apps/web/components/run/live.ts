@@ -15,6 +15,8 @@ import {
   type RunEventFrame,
 } from '@indx-workspace/sdk';
 
+import type { RunApprovalDecision, RunStatus } from '@indx-workspace/contracts/runs';
+
 import { browserClient } from '../../lib/browser-client';
 
 /** What this screen does with a live run's event stream. Called for every frame this module reads. */
@@ -139,6 +141,7 @@ export async function startAgentRun(
   client: AgentWorkspaceClient = browserClient(),
   attachments: readonly string[] = [],
   version: number | null = null,
+  fileScope: readonly string[] = [],
 ): Promise<StartRunOutcome> {
   try {
     const { run } = await client.runs.start(agentId, {
@@ -149,6 +152,8 @@ export async function startAgentRun(
       ...(attachments.length === 0
         ? {}
         : { attachments: attachments.map((fileId) => ({ fileId })) }),
+      // RF-502: the home chat's picked files narrow the run (ADR-0147); none keeps every grant.
+      ...(fileScope.length === 0 ? {} : { fileScope }),
     });
     return { kind: 'started', status: run.status, runId: run.id, sessionId: run.sessionId };
   } catch (error) {
@@ -182,13 +187,23 @@ export async function startAgentRunInProject(
   projectId: string | null,
   client: AgentWorkspaceClient = browserClient(),
   version: number | null = null,
+  fileScope: readonly string[] = [],
 ): Promise<StartRunOutcome> {
   if (projectId === null) {
-    return startAgentRun(agentId, prompt, modelOverride, null, client, [], version);
+    return startAgentRun(agentId, prompt, modelOverride, null, client, [], version, fileScope);
   }
   const session = await startProjectSession(projectId, agentId, client);
   if (session.kind !== 'started') return session;
-  return startAgentRun(agentId, prompt, modelOverride, session.sessionId, client, [], version);
+  return startAgentRun(
+    agentId,
+    prompt,
+    modelOverride,
+    session.sessionId,
+    client,
+    [],
+    version,
+    fileScope,
+  );
 }
 
 /**
@@ -205,8 +220,54 @@ export function startAgentRunForSession(
   client: AgentWorkspaceClient = browserClient(),
   attachments: readonly string[] = [],
   version: number | null = null,
+  fileScope: readonly string[] = [],
 ): Promise<StartRunOutcome> {
   return sessionId === null
-    ? startAgentRunInProject(agentId, prompt, modelOverride, projectId, client, version)
-    : startAgentRun(agentId, prompt, modelOverride, sessionId, client, attachments);
+    ? startAgentRunInProject(agentId, prompt, modelOverride, projectId, client, version, fileScope)
+    : startAgentRun(
+        agentId,
+        prompt,
+        modelOverride,
+        sessionId,
+        client,
+        attachments,
+        null,
+        fileScope,
+      );
+}
+
+/** What `POST /api/runs/:id/approval` answered (issue #1490, ADR-0145). */
+export type RunApprovalOutcome =
+  // The continuation's status from the 202 (`queued` or `running`): the chat shows it at once, so the
+  // run reads as live, and holds the follow-up, before its stream says anything.
+  | { readonly kind: 'continued'; readonly runId: string; readonly status: RunStatus }
+  | {
+      readonly kind: 'rejected';
+      readonly status: number;
+      readonly code: string;
+      readonly message: string;
+    }
+  | { readonly kind: 'transport-error'; readonly message: string };
+
+/**
+ * Approve or reject the tool call run `runId` paused on. The decision starts a continuation run in
+ * the same session; `continued` names it so the screen follows it into the same transcript. A
+ * refusal (the three `409`s, or any other problem) is returned, never retried; a `202` whose body
+ * is not the published contract is a transport error, because the SDK validates it.
+ */
+export async function decideRunApproval(
+  runId: string,
+  decision: RunApprovalDecision,
+  comment: string | undefined,
+  client: AgentWorkspaceClient = browserClient(),
+): Promise<RunApprovalOutcome> {
+  const input = comment === undefined ? {} : { comment };
+  try {
+    const { run } = await (decision === 'approve'
+      ? client.runs.approve(runId, input)
+      : client.runs.reject(runId, input));
+    return { kind: 'continued', runId: run.id, status: run.status };
+  } catch (error) {
+    return failureOutcome(error, 'the request to decide this approval failed');
+  }
 }

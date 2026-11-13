@@ -71,11 +71,14 @@ const MigrationJournal = z.object({
  * `packages/core`, or by a container whose working directory is anyone's guess. `MIGRATIONS_DIR`
  * overrides it for an image that copies the directory somewhere else.
  */
-export function resolveMigrationsDir(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): string {
+export function resolveMigrationsDir(env: Readonly<Record<string, string | undefined>>): string {
   const override = env['MIGRATIONS_DIR'];
   if (override !== undefined && override.trim() !== '') return path.resolve(override.trim());
+  return packagedMigrationsDir();
+}
+
+/** The `migrations/` directory beside this package, which {@link resolveMigrationsDir} defaults to. */
+export function packagedMigrationsDir(): string {
   // …/packages/core/{src,dist}/db/migrate.{ts,js} → four levels up is the repository root, and
   // the layout is the same compiled or not.
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -167,8 +170,8 @@ export interface MigrationOutcome {
  * @returns what this invocation applied and what the ledger holds afterwards.
  */
 export async function runMigrations(
-  config: DatabaseConfig = readDatabaseConfig(),
-  migrationsDir: string = resolveMigrationsDir(),
+  config: DatabaseConfig,
+  migrationsDir: string,
 ): Promise<MigrationOutcome> {
   // Read and validate the journal FIRST: if the drift check could not run afterwards, there is
   // no point taking a lock and mutating the schema.
@@ -215,8 +218,10 @@ export async function runMigrations(
 
 /** CLI entry point. Only runs when this module is the process entry, so tests may import it. */
 async function main(): Promise<void> {
-  const migrationsDir = resolveMigrationsDir();
-  const outcome = await runMigrations(readDatabaseConfig(), migrationsDir);
+  // The process entry (`node dist/db/migrate.js`): the one place this module reads the environment.
+  const env = process.env;
+  const migrationsDir = resolveMigrationsDir(env);
+  const outcome = await runMigrations(readDatabaseConfig(env), migrationsDir);
   // Two numbers, because one cannot say both things. `applied` is what this run did — zero on a
   // no-op re-run — and `ledgerTotal` is what the database now holds. The previous single number
   // was the ledger total labelled "applied", which made an idempotent second run read as though

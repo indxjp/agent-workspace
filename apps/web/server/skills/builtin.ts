@@ -13,8 +13,8 @@ import { createHash } from 'node:crypto';
 import { builtinSkillFiles } from '@agent-workspace/skills-office';
 import { isBuiltinSkillName, SKILL_MD_FILENAME } from '@indx-workspace/contracts/skills';
 import type { BuiltinSkillName } from '@indx-workspace/contracts/skills';
-import { readWhole } from '@agent-workspace/core/storage/streams';
-import type { SkillObjects } from '../storage/store';
+import { readWhole } from '../storage/objects';
+import type { SkillObjects } from '../storage-and-sharing';
 
 import { withSkillMetaColumn } from './meta-column';
 import { skillSyncContext } from './pending-delete';

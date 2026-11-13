@@ -9,7 +9,7 @@
 // @story US-STO-12
 import { createHash } from 'node:crypto';
 
-import { ObjectConflictError, toObjectKey } from '@agent-workspace/core/storage';
+import { toObjectKey } from '@agent-workspace/core/storage/keys';
 import {
   readUstarStream,
   RUN_FILES_MAX_BYTES,
@@ -18,11 +18,13 @@ import {
 import { RUN_FILE_CORRUPT } from '@indx-workspace/contracts/runs';
 import { z } from 'zod';
 
-import { isUnderAllowedPrefix } from '../agent-versions/storage-grants';
+import { isUnderAllowedPrefix } from '../storage-and-sharing';
 import type { RunAgent } from '../agent-versions/session-version';
 import type { StorageGrantRef } from '../agent-versions/store';
+import { systemClock, type Clock } from '../clock';
 import { DomainError } from '../errors';
-import type { LaunchContext } from '../runs/environment';
+import type { LaunchContext } from '../execution';
+import { ObjectConflictError } from '../storage/objects';
 import { log } from '../telemetry/logger';
 import type {
   DeliveredStorageFolder,
@@ -58,6 +60,8 @@ export interface StorageWriteBackDeps {
    * replica stops the save within that interval rather than at the deadline.
    */
   readonly stillRunning: (runId: string) => Promise<boolean>;
+  /** Where the status interval reads the time; the system clock by default. */
+  readonly clock?: Clock;
 }
 
 /** How long the write-back waits for its audit row to be recorded, after its own deadline. */
@@ -392,7 +396,7 @@ async function saveFile(
     let options: { ifNoneMatch: '*' } | { ifMatch: string } = { ifNoneMatch: '*' };
     if (item.delivered !== undefined) {
       // Last write wins unless the bucket moved on: the object must still be the delivered one.
-      const current = await unlessAborted(store.read(key), signal);
+      const current = await unlessAborted(store.read(key, { signal }), signal);
       if (
         current === null ||
         (await sha256Of(untilAborted(current.body, signal))) !== item.delivered
@@ -413,7 +417,7 @@ async function saveFile(
       store.write(
         key,
         verified(streamOf(body), { size: item.size, sha256: item.sha256 }, corrupt),
-        options,
+        { ...options, signal },
       ),
       signal,
     );
@@ -514,7 +518,7 @@ async function recordOutcome(
  * save: the deadline still bounds it, and the lookup's failure is logged.
  */
 async function isStillRunning(scope: WriteBackScope): Promise<boolean> {
-  const now = Date.now();
+  const now = (scope.deps.clock ?? systemClock).now().getTime();
   if (
     scope.statusReadAt !== null &&
     now - scope.statusReadAt < STORAGE_WRITEBACK_STATUS_INTERVAL_MS
@@ -608,7 +612,11 @@ async function writeBackFolder(
 
   try {
     const store = await unlessAborted(
-      scope.deps.connections.openWritable(run.context.principal.workspaceId, target.connectionId),
+      scope.deps.connections.openWritable(
+        run.context.principal.workspaceId,
+        target.connectionId,
+        scope.signal,
+      ),
       scope.signal,
     );
     const archive = await unlessAborted(run.collect(path), scope.signal);

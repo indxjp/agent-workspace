@@ -46,7 +46,8 @@ import {
 } from './model';
 import { loadAgents } from './agent-requests-model';
 import { ArchivedBadge } from './agent-archived';
-import { BuiltinBadge } from './builtin-badge';
+import { agentsListStrings } from './agents-list-messages';
+import { ProblemDetail } from './problem-line';
 import { versionsStrings, type VersionsLocale } from './versions-messages';
 
 // ── Transcribed class strings ───────────────────────────────────────────────────────────────────
@@ -91,6 +92,7 @@ type LoadState =
   | { readonly kind: 'problem'; readonly problem: RequestProblem };
 
 export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }>) {
+  const strings = agentsListStrings(locale);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [query, setQuery] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -100,9 +102,10 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
 
     void loadAgents(browserClient(), { includeArchived }).then((result) => {
       if (cancelled) return;
+      // The built-in Builder is not one of the person's agents; it is reached from New Agent.
       setState(
         result.ok
-          ? { kind: 'loaded', agents: result.value }
+          ? { kind: 'loaded', agents: result.value.filter((agent) => agent.builtin === undefined) }
           : { kind: 'problem', problem: result.problem },
       );
     });
@@ -116,18 +119,18 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
   const visible = state.kind === 'loaded' ? filterAgentsByName(state.agents, query) : [];
 
   return (
-    <main className="w-full max-w-[1120px] px-8 pt-[26px] pb-[90px]">
-      <div className="mb-[22px] flex items-start gap-4">
+    <main className="w-full max-w-[1120px] px-4 pt-[26px] pb-[90px] sm:px-8" lang={locale}>
+      {/* Wraps on a phone (UX-10 in #2086): a row that cannot wrap scrolled the page sideways. */}
+      <div className="mb-[22px] flex flex-wrap items-start gap-4">
         <div>
-          <h1 className="text-[21px]">Agents</h1>
+          <h1 className="text-[21px]">{strings.heading}</h1>
           {total === null ? null : (
-            <div className="mt-[3px] text-[13px] text-muted">
-              {total === 1 ? '1 agent' : `${String(total)} agents`}
-            </div>
+            <div className="mt-[3px] text-[13px] text-muted">{strings.count(total)}</div>
           )}
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[13px]" lang={locale}>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {/* No wrap: as a shrinking flex item, the Japanese label broke after every character. */}
+          <label className="flex items-center gap-1.5 text-[13px] whitespace-nowrap" lang={locale}>
             <input
               type="checkbox"
               checked={includeArchived}
@@ -141,7 +144,8 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
             <SearchIcon />
             <input
               type="search"
-              placeholder="Search agents"
+              placeholder={strings.searchPlaceholder}
+              aria-label={strings.searchPlaceholder}
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value);
@@ -150,12 +154,14 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
             />
           </label>
           <Link href="/agents/new" className={`${BTN} ${BTN_PRIMARY}`}>
-            New Agent
+            {strings.newAgent}
           </Link>
         </div>
       </div>
 
-      {state.kind === 'loading' ? <p className="text-[13px] text-muted">Loading…</p> : null}
+      {state.kind === 'loading' ? (
+        <p className="text-[13px] text-muted">{strings.loading}</p>
+      ) : null}
 
       {state.kind === 'problem' ? (
         <div className={CALLOUT_DANGER}>
@@ -163,22 +169,13 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
             !
           </span>
           <div className="min-w-0 flex-1">
-            {state.problem.kind === 'api' ? (
-              <>
-                <b className="font-semibold">
-                  {state.problem.status} {state.problem.code}
-                </b>
-                <div>{state.problem.message}</div>
-              </>
-            ) : (
-              <div>{state.problem.reason}</div>
-            )}
+            <ProblemDetail locale={locale} lead={strings.loadFailed} problem={state.problem} />
           </div>
         </div>
       ) : null}
 
       {state.kind === 'loaded' && state.agents.length === 0 ? (
-        <p className="text-[13px] text-muted">This workspace has no agents yet.</p>
+        <p className="text-[13px] text-muted">{strings.empty}</p>
       ) : null}
 
       {state.kind === 'loaded' && state.agents.length > 0 ? (
@@ -188,13 +185,13 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
               <thead>
                 <tr>
                   <th className="border-b border-border bg-surface-2 px-4 py-[9px] text-left text-[11.5px] font-semibold tracking-[.04em] whitespace-nowrap text-muted uppercase">
-                    Agent
+                    {strings.columnAgent}
                   </th>
                   <th className="border-b border-border bg-surface-2 px-4 py-[9px] text-left text-[11.5px] font-semibold tracking-[.04em] whitespace-nowrap text-muted uppercase">
-                    Model
+                    {strings.columnModel}
                   </th>
                   <th className="border-b border-border bg-surface-2 px-4 py-[9px] text-left text-[11.5px] font-semibold tracking-[.04em] whitespace-nowrap text-muted uppercase">
-                    Created
+                    {strings.columnCreated}
                   </th>
                 </tr>
               </thead>
@@ -211,7 +208,6 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
                           >
                             {agent.name}
                           </Link>
-                          <BuiltinBadge builtin={agent.builtin} />
                           {agent.archivedAt === undefined ? null : (
                             <ArchivedBadge archivedAt={agent.archivedAt} locale={locale} />
                           )}
@@ -226,10 +222,10 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
                         )}
                       </td>
                       <td className="border-b border-border px-4 py-[11px] align-middle">
-                        {describeModel(agent.model)}
+                        {describeModel(agent.model, strings.workspaceDefault)}
                       </td>
                       <td className="border-b border-border px-4 py-[11px] align-middle whitespace-nowrap">
-                        {formatCreatedAt(agent.createdAt)}
+                        {formatCreatedAt(agent.createdAt, locale)}
                       </td>
                     </tr>
                   );
@@ -237,7 +233,7 @@ export function AgentsListScreen({ locale }: Readonly<{ locale: VersionsLocale }
                 {visible.length === 0 ? (
                   <tr>
                     <td colSpan={3} className="px-4 py-[11px] text-muted">
-                      No agent matches “{query}”.
+                      {strings.noMatch(query)}
                     </td>
                   </tr>
                 ) : null}

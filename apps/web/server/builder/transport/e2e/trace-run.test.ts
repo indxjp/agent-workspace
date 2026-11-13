@@ -8,7 +8,7 @@ import { context, propagation, trace } from '@opentelemetry/api';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { WORKSPACE, builderDoor } from './harness';
+import { WORKSPACE, builderDoor } from './harness.test-support';
 
 const FORGED_TRACE = '0123456789abcdef0123456789abcdef';
 const FORGED = `00-${FORGED_TRACE}-0123456789abcdef-01`;

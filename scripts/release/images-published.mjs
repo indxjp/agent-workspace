@@ -9,10 +9,13 @@
  * pull, so `.github/workflows/publish-packages.yml` runs this before `npm publish`. It asks the
  * registry anonymously — the same view a user's Docker daemon has — for each image's manifest.
  *
- *   node scripts/release/images-published.mjs
+ *   node scripts/release/images-published.mjs --pin
+ *
+ * `--pin` writes the registry's `sha256` digest of every image into `release-images.json`
+ * (`digests`, keyed like `images`), so the published CLI installs images by digest.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -69,7 +72,7 @@ function isPlainObject(value) {
  *
  * @param {string} reference `<host>/<repository>:<tag>`
  * @param {typeof fetch} doFetch
- * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
+ * @returns {Promise<{ ok: true, digest: string } | { ok: false, reason: string }>}
  */
 export async function referenceResolvesAnonymously(reference, doFetch = fetch) {
   const slash = reference.indexOf('/');
@@ -91,35 +94,60 @@ export async function referenceResolvesAnonymously(reference, doFetch = fetch) {
     method: 'HEAD',
     headers: { authorization: `Bearer ${token}`, accept: MANIFEST_TYPES },
   });
-  return manifest.ok
-    ? { ok: true }
-    : { ok: false, reason: `manifest not served (HTTP ${String(manifest.status)})` };
+  if (!manifest.ok) {
+    return { ok: false, reason: `manifest not served (HTTP ${String(manifest.status)})` };
+  }
+  const digest = manifest.headers.get('docker-content-digest');
+  return digest !== null && DIGEST.test(digest)
+    ? { ok: true, digest }
+    : { ok: false, reason: 'no content digest' };
 }
 
+const DIGEST = /^sha256:[0-9a-f]{64}$/u;
+
 /**
+ * Resolve every image of `release-images.json` and write its digest back as `digests`, keyed like
+ * `images`. Nothing is written unless all images resolve.
+ *
  * @param {string} root
  * @param {typeof fetch} [doFetch]
- * @returns {Promise<string[]>} the references checked
+ * @returns {Promise<string[]>} the `<registry>/agent-workspace/<name>@<digest>` references
  */
-export async function checkPinnedImagesPublished(root, doFetch = fetch) {
+export async function pinImageDigests(root, doFetch = fetch) {
   const references = await pinnedImageReferences(root);
-  const missing = [];
-  for (const reference of references) {
+  const file = path.join(root, 'packages', 'cli', 'src', 'release-images.json');
+  const document = JSON.parse(await readFile(file, 'utf8'));
+  const fields = Object.keys(document.images);
+  /** @type {Record<string, string>} */
+  const digests = {};
+  const failures = [];
+  for (const [index, reference] of references.entries()) {
+    const field = fields[index];
+    if (field === undefined)
+      throw new Error(`PINNED_IMAGES_MISMATCH: no image field for ${reference}`);
     const outcome = await referenceResolvesAnonymously(reference, doFetch);
-    if (!outcome.ok) missing.push(`${reference}: ${outcome.reason}`);
+    if (outcome.ok) digests[field] = outcome.digest;
+    else failures.push(`${reference}: ${outcome.reason}`);
   }
-  if (missing.length > 0) {
+  if (failures.length > 0) {
     throw new Error(
-      `PINNED_IMAGES_NOT_PUBLISHED: publish images-v<version> (and make each package public) before packages-v<version>:\n  ${missing.join('\n  ')}`,
+      `PINNED_IMAGES_NOT_PUBLISHED: publish images-v<version> (and make each package public) before packages-v<version>:\n  ${failures.join('\n  ')}`,
     );
   }
-  return references;
+  await writeFile(file, `${JSON.stringify({ ...document, digests }, null, 2)}\n`);
+  const repository = `${document.registry}/agent-workspace`;
+  return fields.map((field) => `${repository}/${document.images[field]}@${digests[field]}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
   try {
-    const references = await checkPinnedImagesPublished(process.cwd());
-    console.log(`pinned images are public: ${references.join(', ')}`);
+    if (!process.argv.includes('--pin')) throw new Error('usage: images-published.mjs --pin');
+    const pinned = await pinImageDigests(process.cwd());
+    const fields = Object.keys(
+      JSON.parse(await readFile(path.join('packages', 'cli', 'src', 'release-images.json'), 'utf8'))
+        .images,
+    );
+    for (const [index, reference] of pinned.entries()) console.log(`${fields[index]} ${reference}`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;

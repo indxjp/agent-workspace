@@ -1,0 +1,75 @@
+{
+  "$comment": "The server's bounded contexts (refactoring plan part 04). Every folder in apps/web/server is in exactly one entry. Contexts are listed upstream first: a context may depend on the shared kernel and the contexts before it. docs/architecture.md (Server contexts) carries the same table, and tests/server-contexts.test.ts checks both. A context with an `entry` is imported from other contexts through that one file (part 04, step 7); dependency-cruiser.config.mjs enforces it.",
+  "sharedKernel": ["audit", "features", "http", "openapi", "pagination", "telemetry", "versioning"],
+  "compositionRoot": "composition",
+  "contexts": [
+    {
+      "name": "identity",
+      "entry": "identity/index.ts",
+      "folders": [
+        "auth",
+        "cli-auth",
+        "identity",
+        "invitations",
+        "oauth",
+        "rbac",
+        "setup",
+        "team",
+        "tokens",
+        "workspaces"
+      ]
+    },
+    { "name": "secrets", "folders": ["secrets"], "entry": "secrets/index.ts" },
+    {
+      "name": "storage and sharing",
+      "entry": "storage-and-sharing/index.ts",
+      "folders": [
+        "files",
+        "shares",
+        "storage",
+        "storage-and-sharing",
+        "storage-connections",
+        "surfaces"
+      ]
+    },
+    {
+      "name": "execution",
+      "entry": "execution/index.ts",
+      "folders": ["engines", "execution", "runs", "runtimes", "sessions", "usage"]
+    },
+    {
+      "name": "integrations",
+      "entry": "integrations/index.ts",
+      "folders": [
+        "a2a",
+        "connectors",
+        "endpoint-clients",
+        "endpoints",
+        "gateway",
+        "integrations",
+        "models",
+        "tool-endpoint",
+        "triggers",
+        "webhooks"
+      ]
+    },
+    {
+      "name": "agents",
+      "entry": "agents/index.ts",
+      "folders": [
+        "agent-teams",
+        "agent-versions",
+        "agents",
+        "builder",
+        "compose",
+        "platforms",
+        "policy-ceiling",
+        "projects",
+        "resources",
+        "skills",
+        "tool-bundles"
+      ]
+    },
+    { "name": "evaluations", "folders": ["evaluations"], "entry": "evaluations/index.ts" }
+  ]
+}

@@ -1,0 +1,19 @@
+images:
+  web: registry.example/web@sha256:1111111111111111111111111111111111111111111111111111111111111111
+  gateway: registry.example/gateway@sha256:2222222222222222222222222222222222222222222222222222222222222222
+  runnerManager: registry.example/runner@sha256:3333333333333333333333333333333333333333333333333333333333333333
+  runtime:
+    claude-agent-sdk: registry.example/runtime@sha256:4444444444444444444444444444444444444444444444444444444444444444
+ingress:
+  enabled: true
+  host: agents.acme.example
+publicUrl: https://agents.acme.example
+apps:
+  - name: desk
+    image: ghcr.io/acme/desk@sha256:d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1
+    host: desk.acme.example
+    schema: app_desk
+  - name: service-desk
+    image: ghcr.io/acme/service-desk@sha256:e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2
+    host: service-desk.acme.example
+    schema: app_service_desk

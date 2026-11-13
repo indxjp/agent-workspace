@@ -12,6 +12,11 @@
  * decides the tag on positive assertions only, ending in an explicit `unknown-failure` else
  * (ADR-0015) — there is no path here on which an unrecognised failure reads as success.
  */
+import {
+  guardedFetch,
+  loadEgressPolicyFromEnv,
+  type EgressPolicyConfig,
+} from '@agent-workspace/core';
 import type { REMOTE_CONNECTOR_TRANSPORTS } from '@indx-workspace/contracts/connectors';
 
 import {
@@ -21,7 +26,7 @@ import {
   type MessageDetail,
   type ProbeSignal,
 } from './classify';
-import { createDeadline, ProbeError } from './wire/probe-error';
+import { createDeadline, ProbeError, type ProbeFetch } from './wire/probe-error';
 import { probeHttp } from './wire/http';
 import { probeSse } from './wire/sse';
 // There is intentionally no stdio probe implementation in this process. ADR-0045 forbids the
@@ -90,6 +95,76 @@ function describeSignal(signal: ProbeSignal, fallback: string): string {
   }
 }
 
+const BASE_MESSAGE_DETAIL: MessageDetail = {
+  target: '',
+  command: null,
+  status: null,
+  timeoutMs: CONNECT_TIMEOUT_MS,
+  stderr: null,
+  detail: '',
+  serverVersion: null,
+};
+
+function requireBaseEnv(baseEnv: Readonly<Record<string, string | undefined>> | undefined): void {
+  if (baseEnv !== undefined) return;
+  // Belt-and-braces beyond the type system: a `.js` caller or an `as any` cannot silently get
+  // `process.env` back. ADR-0015 — the absence of a value must be an error, not a decision.
+  throw new Error(
+    'testConnection: options.baseEnv is required and was not provided. Refusing to fall back ' +
+      'to process.env (that fallback is the credential leak this signature exists to prevent) ' +
+      '— pass an explicit environment, e.g. restrictedBaseEnv() from ./base-env.',
+  );
+}
+
+function okOutcome(
+  target: string,
+  timeoutMs: number,
+  result: {
+    readonly serverName: string | null;
+    readonly serverVersion: string | null;
+    readonly toolCount: number;
+  },
+): TestConnectionOutcome {
+  return {
+    ok: true,
+    kind: 'ok',
+    message: MESSAGES.ok({
+      ...BASE_MESSAGE_DETAIL,
+      target,
+      timeoutMs,
+      serverVersion: result.serverVersion,
+    }),
+    serverName: result.serverName,
+    serverVersion: result.serverVersion,
+    toolCount: result.toolCount,
+  };
+}
+
+/** Classify a probe failure on positive assertions only (see `classify.ts`) and word it for the person. */
+function failureOutcome(
+  error: unknown,
+  context: {
+    readonly target: string;
+    readonly timeoutMs: number;
+    readonly credentialConfigured: boolean;
+  },
+): TestConnectionOutcome {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const signal: ProbeSignal =
+    error instanceof ProbeError ? error.signal : { kind: 'unknown', detail: errorMessage };
+  const kind = classify(signal, { credentialConfigured: context.credentialConfigured });
+  const detail: MessageDetail = {
+    ...BASE_MESSAGE_DETAIL,
+    target: context.target,
+    status: signal.kind === 'http-status' ? signal.status : null,
+    timeoutMs: context.timeoutMs,
+    stderr: signal.kind === 'process-died' ? signal.stderr : null,
+    detail: describeSignal(signal, errorMessage),
+    serverVersion: signal.kind === 'protocol-version-unsupported' ? signal.version : null,
+  };
+  return { ok: false, kind, message: MESSAGES[kind](detail) };
+}
+
 /**
  * Run Test Connection against `config`, with a wall-clock deadline covering the whole sequence —
  * R-06 §4.3: the SDK's own per-request timeout would not bound the `sse` handshake, and this
@@ -117,17 +192,14 @@ export async function testConnection(
     /** The environment the RUNNER would launch this connector with — REQUIRED, never defaulted.
      *  Build it with `./base-env.ts`'s `restrictedBaseEnv`, never pass `process.env` itself. */
     readonly baseEnv: Readonly<Record<string, string | undefined>>;
+    /** The egress policy, read at each request. Defaults to `loadEgressPolicyFromEnv()`. */
+    readonly egressPolicy?: () => EgressPolicyConfig;
+    /** The transport `guardedFetch` sends with once the URL is admitted. Defaults to `fetch`. */
+    readonly transport?: typeof fetch;
   },
 ): Promise<TestConnectionOutcome> {
-  if (options.baseEnv === undefined) {
-    // Belt-and-braces beyond the type system: a `.js` caller or an `as any` cannot silently get
-    // `process.env` back. ADR-0015 — the absence of a value must be an error, not a decision.
-    throw new Error(
-      'testConnection: options.baseEnv is required and was not provided. Refusing to fall back ' +
-        'to process.env (that fallback is the credential leak this signature exists to prevent) ' +
-        '— pass an explicit environment, e.g. restrictedBaseEnv() from ./base-env.',
-    );
-  }
+  requireBaseEnv(options.baseEnv);
+  const timeoutMs = options.timeoutMs ?? CONNECT_TIMEOUT_MS;
 
   if (config.transport === 'stdio') {
     // ADR-0045: the control plane does not `spawn` a caller-supplied command — not with a
@@ -143,64 +215,33 @@ export async function testConnection(
       ok: false,
       kind: 'stdio-probe-unavailable',
       message: MESSAGES['stdio-probe-unavailable']({
+        ...BASE_MESSAGE_DETAIL,
         target: config.command,
         command: config.command,
-        status: null,
-        timeoutMs: options.timeoutMs ?? CONNECT_TIMEOUT_MS,
-        stderr: null,
-        detail: '',
-        serverVersion: null,
+        timeoutMs,
       }),
     };
   }
 
-  const timeoutMs = options.timeoutMs ?? CONNECT_TIMEOUT_MS;
   const deadline = createDeadline(timeoutMs);
-  const target = config.url;
+  // Every request — the SSE GET, each POST, and the endpoint the server names — goes through the
+  // egress guard, so a caller-supplied URL cannot make the control plane probe internal addresses.
+  const send: ProbeFetch = (url, init) =>
+    guardedFetch(url, init, (options.egressPolicy ?? loadEgressPolicyFromEnv)(), options.transport);
 
   try {
-    const result =
-      config.transport === 'http'
-        ? await Promise.race([
-            probeHttp(config.url, config.headers, deadline.signal),
-            deadline.promise,
-          ])
-        : await Promise.race([
-            probeSse(config.url, config.headers, deadline.signal),
-            deadline.promise,
-          ]);
-    return {
-      ok: true,
-      kind: 'ok',
-      message: MESSAGES.ok({
-        target,
-        command: null,
-        status: null,
-        timeoutMs,
-        stderr: null,
-        detail: '',
-        serverVersion: result.serverVersion,
-      }),
-      serverName: result.serverName,
-      serverVersion: result.serverVersion,
-      toolCount: result.toolCount,
-    };
+    const probe = config.transport === 'http' ? probeHttp : probeSse;
+    const result = await Promise.race([
+      probe(config.url, config.headers, deadline.signal, send),
+      deadline.promise,
+    ]);
+    return okOutcome(config.url, timeoutMs, result);
   } catch (error) {
-    const signal: ProbeSignal =
-      error instanceof ProbeError
-        ? error.signal
-        : { kind: 'unknown', detail: error instanceof Error ? error.message : String(error) };
-    const kind = classify(signal, { credentialConfigured: config.credentialConfigured });
-    const detail: MessageDetail = {
-      target,
-      command: null,
-      status: signal.kind === 'http-status' ? signal.status : null,
+    return failureOutcome(error, {
+      target: config.url,
       timeoutMs,
-      stderr: signal.kind === 'process-died' ? signal.stderr : null,
-      detail: describeSignal(signal, error instanceof Error ? error.message : String(error)),
-      serverVersion: signal.kind === 'protocol-version-unsupported' ? signal.version : null,
-    };
-    return { ok: false, kind, message: MESSAGES[kind](detail) };
+      credentialConfigured: config.credentialConfigured,
+    });
   } finally {
     deadline.cancel();
   }

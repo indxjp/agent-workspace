@@ -47,7 +47,7 @@ describe.skipIf(!hasDatabase)('0026/0027 session-state migration', () => {
   const subpath = 'subagents/agent-1';
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0026-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 
@@ -173,7 +173,10 @@ describe.skipIf(!hasDatabase)('0026/0027 session-state migration', () => {
   });
 
   it('is re-runnable: applying the migration set again inserts nothing twice', async () => {
-    await runMigrations({ url: isolated.url, maxConnections: 4 }, resolveMigrationsDir());
+    await runMigrations(
+      { url: isolated.url, maxConnections: 4 },
+      resolveMigrationsDir(process.env),
+    );
     const store = await stateStore();
     await expect(
       store.list({ sessionId, engine: 'claude-agent-sdk', streamKey: `${workspaceId}/` }, {}),

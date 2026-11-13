@@ -263,6 +263,17 @@ describe('a document tells an agent to build a stronger one (design §05)', () =
   );
 
   it.each(['draft_check', 'draft_save'] as const)(
+    'refuses %s whose body spells aw-control with another case or surrounding space',
+    (tool) => {
+      for (const spelling of ['AW-Control', ' aw-control ', '\taw-CONTROL\n']) {
+        expect(decide(callOf(tool, ['erp', spelling]), factsWith()), spelling).toEqual(
+          refusal('not_allowed_to_build'),
+        );
+      }
+    },
+  );
+
+  it.each(['draft_check', 'draft_save'] as const)(
     'runs %s whose body names other connectors',
     (tool) => {
       expect(decide(callOf(tool, ['erp']), factsWith())).toEqual({ kind: 'run', tool });

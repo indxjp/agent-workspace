@@ -30,7 +30,7 @@ import {
   newMember,
   type World,
 } from './run-files-load-fixtures';
-import { createResourceCatalogStoreProvider } from '../resources/catalog-store';
+import { createResourceCatalogStoreProvider } from '../storage/store';
 import { createInMemoryCatalogStore } from '../resources/catalog-store.memory';
 import { measureRssGrowth, MiB, warmHttpTransport } from '../../../../tests/load/flat-memory';
 

@@ -1,3 +1,4 @@
+import { withinDeadline, checkSetup, type CheckedSetup } from './setup-check';
 import { log } from '../telemetry/logger';
 import type { DatabaseRoot, WorkspaceMembership, WorkspaceScope } from '@agent-workspace/core/db';
 import {
@@ -5,31 +6,23 @@ import {
   type PolicyWidening,
   type ProjectPolicy,
 } from '@indx-workspace/contracts/policy-ceiling';
-import { RUN_START_PROBLEM_CODES, isRunStartProblemCode } from '@indx-workspace/contracts/runs';
-
-import { DomainError } from '../errors';
-import { RuntimeManagerError } from '../compose/runtime-manager-client';
 import { takesProviderCredential } from '../compose/runtime-provider-credential';
+import { isKeylessProvider } from '@indx-workspace/contracts/models';
 import { createModelDiscovery, type ModelDiscovery } from '../models/discovery';
+import { readVertexDefaults } from '../models/vertex-defaults';
 import { storedEffective, type CeilingAgent } from '../policy-ceiling/ceiling';
 import type { ResolvedModelConnection, WorkspaceModelsStore } from '../models/store';
 import { setupSecretsOf, setupStepFailure } from '../setup/failure';
-import type { Setup, SetupInput, SetupResult, SetupRuntime } from '../setup/runtime';
-import { runtimeNetworkPolicyRefusal, setupRuntimeNetworkPolicy } from './config';
+import type { Setup, SetupInput, SetupRuntime } from '../setup/runtime';
+import { scriptedModelsOption, setupRuntimeNetworkPolicy } from './config';
 import {
   persistSetup,
   SETUP_AGENT_PERMISSIONS,
   setupConnectionCandidate,
   type PersistedSetup,
-  type SetupConnectionCandidate,
   type SetupRuntimeConnection,
 } from './setup-persist';
-import {
-  isSetupProvider,
-  selectSetupSeededModel,
-  SETUP_SEEDED_MODEL,
-  type SeededSetupProvider,
-} from './setup-reconciliation';
+import { isSetupProvider, type SeededSetupProvider } from './setup-reconciliation';
 import type { SetupRuntimeSecrets } from './setup-runtime-connection';
 import { rollBack, type SetupFailure, type SetupUndo } from './setup-undo';
 import type { InstalledModelsApi } from './types';
@@ -39,6 +32,7 @@ export {
   selectSetupSeededModel,
   selectWorkspaceDefaultReconciliation,
 } from './setup-reconciliation';
+
 export type { SetupConnectionView, SetupProfileView } from './setup-reconciliation';
 
 /** How long a setup waits behind another setup of the same workspace before it gives up. */
@@ -70,26 +64,6 @@ function sameEndpoint(left: ResolvedModelConnection, right: ResolvedModelConnect
     JSON.stringify(left.connection.config) === JSON.stringify(right.connection.config)
   );
 }
-
-/** `promise`'s value, or `null` when it has not settled within `ms`. A rejection still rejects. */
-async function withinDeadline<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), Math.max(0, ms));
-  });
-  try {
-    return await Promise.race([promise, expired]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** What setup's checks decided; `runtimeRefusal` is set when the runtime refused its test (ADR-0131). */
-type CheckedSetup = Readonly<{
-  candidate: SetupConnectionCandidate;
-  seededModel: string;
-  runtimeRefusal?: NonNullable<Extract<SetupResult, { ok: true }>['runtimeRefusal']>;
-}>;
 
 /**
  * The agent of the wizard's name as stored before setup runs (issue #535): its id, its stored
@@ -158,223 +132,60 @@ export function setupCeilingRefusal(
   };
 }
 
-export async function installSetupApi(
-  root: DatabaseRoot,
-  modelsApi: InstalledModelsApi | null,
-  options: {
-    /** The deployment's policy ceiling (issue #535); absent or `null` means none. */
-    readonly policyCeiling?: ProjectPolicy | null;
-    /**
-     * Discovery for the key setup checks before anything is written. It keeps no cache (issue
-     * #415): the candidate connection may never be written, so a list cached under its id would
-     * never be read again. Tests pass their own.
-     */
-    readonly probeDiscover?: ModelDiscovery;
-    /** How long a setup waits for another setup of its workspace to finish writing. */
-    readonly lockWaitMs?: number;
-    /** How long the runtime test may take. */
-    readonly runtimeTestTimeoutMs?: number;
-    /** Encrypted storage for the runtime key setup may be given; absent when secrets are unavailable. */
-    readonly runtimeSecrets?: SetupRuntimeSecrets | null;
-  } = {},
-): Promise<Setup> {
-  if (modelsApi === null) {
-    log.error('[compose] setup API NOT installed: encrypted model storage is unavailable.');
-    return { kind: 'unavailable' };
-  }
-  const { models, discover } = modelsApi;
-  const probeDiscover = options.probeDiscover ?? createModelDiscovery({ cache: false });
-  const lockWaitMs = options.lockWaitMs ?? SETUP_LOCK_WAIT_MS;
-  const runtimeTestTimeoutMs = options.runtimeTestTimeoutMs ?? SETUP_RUNTIME_TEST_TIMEOUT_MS;
-  const runtimeSecrets = options.runtimeSecrets ?? null;
-  const [{ signIn, readBootstrapAdmin }, { probeModelConnection }, registryModule] =
-    await Promise.all([
-      import('../auth/session'),
-      import('../models/probe'),
-      import('../runtimes/registry'),
-    ]);
-  /**
-   * The checks that need the network: the submitted key against the provider, the seeded model
-   * against discovery, and the runtime. They run before the workspace's setup lock is taken, so a
-   * slow provider never holds up another setup.
-   */
-  async function check(
-    input: SetupInput & { provider: SeededSetupProvider },
-    workspaceModels: WorkspaceModelsStore,
-    workspaceId: string,
-  ): Promise<SetupFailure | CheckedSetup> {
-    // issue #415: everything setup decides is decided before anything is written. The submitted
-    // key is probed, and the seeded model discovered, on a candidate held in memory; a refusal
-    // leaves the workspace exactly as it was, including the key on a connection that works.
-    const candidate = await setupConnectionCandidate(
+type SupportedSetupInput = SetupInput & { provider: SeededSetupProvider };
+
+async function persistCheckedSetup(context: {
+  readonly root: DatabaseRoot;
+  readonly discover: ModelDiscovery;
+  readonly input: SupportedSetupInput;
+  readonly member: WorkspaceMembership;
+  readonly scope: WorkspaceScope;
+  readonly workspaceModels: WorkspaceModelsStore;
+  readonly checked: CheckedSetup;
+  readonly runtimeConnection: SetupRuntimeConnection | null;
+}): Promise<PersistedSetup | SetupFailure> {
+  const { root, discover, input, member, scope, workspaceModels, checked, runtimeConnection } =
+    context;
+
+  const candidate = await setupConnectionCandidate(
+    workspaceModels,
+    member.workspaceId,
+    input.provider,
+    input.providerApiKey,
+    input.providerBaseUrl,
+    readVertexDefaults(process.env),
+  );
+  if ('ok' in candidate) return candidate;
+  if (!sameEndpoint(candidate.resolved, checked.candidate.resolved)) return SETUP_CONFLICT;
+
+  // Every check passed; now persist. The writes span the model-connection secret's own pool
+  // and the application pool, so they cannot share one transaction
+  // (docs/adr/W9-PROV-126-atomicity-within-owns-globs.md). Each write this attempt creates
+  // registers its undo instead, and a refusal or a throw part-way runs them in reverse.
+  const undo: SetupUndo = [];
+  try {
+    const persisted = await persistSetup({
+      root,
+      input,
+      member,
+      scope,
       workspaceModels,
-      workspaceId,
-      input.provider,
-      input.providerApiKey,
-      input.providerBaseUrl,
-    );
-    if ('ok' in candidate) return candidate;
-    const probe = await probeModelConnection(candidate.resolved);
-    if (!probe.ok)
-      return { ok: false, status: 422, code: 'provider_test_failed', message: probe.message };
-
-    // issue #129: the setup-seeded model id is validated against this exact connection's
-    // discovery, rather than written unconditionally. A reachable, credentialed connection
-    // whose account genuinely lacks the seeded model (a restricted API key, a deprecated model)
-    // fails setup closed here, naming the model, instead of creating an agent whose first run
-    // fails opaquely at the gateway.
-    const preferredModel = SETUP_SEEDED_MODEL[input.provider];
-    const discovered = await probeDiscover(candidate.resolved);
-    const discoveredIds = discovered.ok
-      ? discovered.models.map((model) => model.providerModelId)
-      : [];
-    const seededModel = selectSetupSeededModel(input.provider, discoveredIds);
-    if (seededModel === null) {
-      return {
-        ok: false,
-        status: 422,
-        code: 'seeded_model_unavailable',
-        message: discovered.ok
-          ? `The default model "${preferredModel}" is not available at this connection.`
-          : `The default model "${preferredModel}" could not be validated: model discovery failed (${discovered.reason}).`,
-      };
-    }
-
-    const registry = registryModule.currentWebRuntimeRegistry();
-    if (registry === null)
-      return {
-        ok: false,
-        status: 503,
-        code: 'runtime_registry_unavailable',
-        message: 'Runtime detection is unavailable.',
-      };
-    const runtimeEntry = (await registry.list()).find((entry) => entry.id === input.runtime);
-    if (runtimeEntry === undefined || runtimeEntry.state !== 'enabled')
-      return {
-        ok: false,
-        status: 422,
-        code: 'runtime_unavailable',
-        message: runtimeEntry?.reason ?? 'The selected runtime is unavailable.',
-      };
-    let runtimeTest;
-    try {
-      runtimeTest = await withinDeadline(
-        registry.test(input.runtime, 'agent-workspace-setup-runtime-test', {
-          workspaceId,
-          // The key is tested before it is stored, so a refused setup writes nothing.
-          ...(input.runtimeCredential === undefined
-            ? {}
-            : { providerCredential: input.runtimeCredential }),
-        }),
-        runtimeTestTimeoutMs,
-      );
-    } catch (error) {
-      // A provider driver with no usable runtime connection is a configuration refusal the wizard
-      // shows, the same 422 a run start answers; anything else is still an infrastructure failure.
-      if (error instanceof DomainError && isRunStartProblemCode(error.code))
-        return {
-          ok: false,
-          status: RUN_START_PROBLEM_CODES[error.code],
-          code: error.code,
-          message:
-            error.code === 'runtime_connection_missing' &&
-            input.runtimeCredential === undefined &&
-            takesProviderCredential(input.runtime)
-              ? `runtime_connection_missing: Runtime ${input.runtime} needs its provider key at first-run setup. Send runtimeCredential and runtimeEndpoint with the setup request.`
-              : error.publicMessage,
-        };
-      // ADR-0131: a driver that declares no network policy refuses the test like every run. That
-      // is its recorded state, not a broken setup; runs stay refused with the same typed code.
-      if (error instanceof RuntimeManagerError && error.code === 'network_policy_unsupported')
-        return {
-          candidate,
-          seededModel,
-          runtimeRefusal: {
-            code: error.code,
-            message:
-              runtimeNetworkPolicyRefusal(input.runtime) ??
-              `${input.runtime} refuses the network policy its runtime test runs under: runs are refused with network_policy_unsupported until a policy is declared.`,
-          },
-        };
-      return setupStepFailure(
-        'runtime test',
-        error,
-        setupSecretsOf(input),
-        error instanceof RuntimeManagerError ? error.safeCause : undefined,
-      );
-    }
-    if (runtimeTest === null)
-      return {
-        ok: false,
-        status: 422,
-        code: 'runtime_test_timeout',
-        message: `The runtime test did not finish within ${String(Math.round(runtimeTestTimeoutMs / 1000))} seconds.`,
-      };
-    if (!runtimeTest.destroyed)
-      return {
-        ok: false,
-        status: 422,
-        code: 'runtime_test_failed',
-        message: 'The runtime did not cleanly destroy its test allocation.',
-      };
-    return { candidate, seededModel };
+      discover,
+      candidate,
+      seededModel: checked.seededModel,
+      runtimeNetworkPolicy: setupRuntimeNetworkPolicy(input.runtime, process.env),
+      runtimeConnection,
+      undo,
+    });
+    if (!persisted.ok) await rollBack(undo);
+    return persisted;
+  } catch (error) {
+    await rollBack(undo);
+    return setupStepFailure('persistence', error, setupSecretsOf(input));
   }
+}
 
-  /**
-   * The writes, with the workspace's setup lock held. The candidate is read again first: another
-   * setup may have written or repaired the row since {@link check} read it. The new reading is the
-   * one written to, as long as it still reaches the provider the way the probed one did;
-   * otherwise the probe proved nothing about it and this setup is refused.
-   */
-  async function persist(
-    input: SetupInput & { provider: SeededSetupProvider },
-    member: WorkspaceMembership,
-    scope: WorkspaceScope,
-    workspaceModels: WorkspaceModelsStore,
-    checked: CheckedSetup,
-    runtimeConnection: SetupRuntimeConnection | null,
-  ): Promise<PersistedSetup | SetupFailure> {
-    const candidate = await setupConnectionCandidate(
-      workspaceModels,
-      member.workspaceId,
-      input.provider,
-      input.providerApiKey,
-      input.providerBaseUrl,
-    );
-    if ('ok' in candidate) return candidate;
-    if (!sameEndpoint(candidate.resolved, checked.candidate.resolved)) return SETUP_CONFLICT;
-
-    // Every check passed; now persist. The writes span the model-connection secret's own pool
-    // and the application pool, so they cannot share one transaction
-    // (docs/adr/W9-PROV-126-atomicity-within-owns-globs.md). Each write this attempt creates
-    // registers its undo instead, and a refusal or a throw part-way runs them in reverse.
-    const undo: SetupUndo = [];
-    try {
-      const persisted = await persistSetup({
-        root,
-        input,
-        member,
-        scope,
-        workspaceModels,
-        discover,
-        candidate,
-        seededModel: checked.seededModel,
-        runtimeNetworkPolicy: setupRuntimeNetworkPolicy(input.runtime, process.env),
-        runtimeConnection,
-        undo,
-      });
-      if (!persisted.ok) await rollBack(undo);
-      return persisted;
-    } catch (error) {
-      await rollBack(undo);
-      return setupStepFailure('persistence', error, setupSecretsOf(input));
-    }
-  }
-
-  /**
-   * Per-process queue of each workspace's setups: the tail every new setup waits behind. A setup
-   * that is not at the front by `deadline` gives up its place and runs nothing.
-   */
+function createSetupQueue() {
   const queues = new Map<string, Promise<void>>();
   async function serialise<T>(
     workspaceId: string,
@@ -400,6 +211,145 @@ export async function installSetupApi(
       done();
     }
   }
+  return serialise;
+}
+
+async function authenticateSetupAdministrator(
+  input: SetupInput,
+  root: DatabaseRoot,
+  auth: Pick<typeof import('../auth/session'), 'signIn' | 'readBootstrapAdmin'>,
+): Promise<
+  | SetupFailure
+  | {
+      readonly authentication: Extract<Awaited<ReturnType<typeof auth.signIn>>, { ok: true }>;
+      readonly member: WorkspaceMembership;
+      readonly scope: WorkspaceScope;
+    }
+> {
+  const authentication = await auth.signIn(
+    { email: input.adminEmail, password: input.adminPassword },
+    process.env,
+  );
+  if (!authentication.ok) {
+    return {
+      ok: false,
+      status: authentication.code === 'server_not_configured' ? 503 : 401,
+      code: authentication.code,
+      message:
+        authentication.code === 'server_not_configured'
+          ? 'Bootstrap sign-in is not configured.'
+          : 'Administrator credentials did not match.',
+    };
+  }
+  const configured = auth.readBootstrapAdmin(process.env);
+  if (!configured.ok)
+    return {
+      ok: false,
+      status: 503,
+      code: 'server_not_configured',
+      message: 'Bootstrap sign-in is not configured.',
+    };
+  const member = await root.resolveMembership(
+    input.adminEmail.trim().toLowerCase(),
+    configured.admin.workspaceSlug,
+  );
+  if (member === null)
+    return {
+      ok: false,
+      status: 409,
+      code: 'administrator_missing',
+      message: 'The seeded administrator membership is missing; rerun the idempotent seed.',
+    };
+  const scope = await root.scopes.forWorkspaceId(member.workspaceId);
+  if (scope === null)
+    return {
+      ok: false,
+      status: 409,
+      code: 'workspace_missing',
+      message: 'The setup workspace is missing.',
+    };
+
+  return { authentication, member, scope };
+}
+
+function setupRuntimeConnection(
+  input: SetupInput,
+  runtimeSecrets: SetupRuntimeSecrets | null,
+): SetupRuntimeConnection | SetupFailure | null {
+  // After the sign-in, so only the administrator can have setup store or send a runtime key.
+  let runtimeConnection: SetupRuntimeConnection | null = null;
+  if (input.runtimeCredential !== undefined) {
+    if (!takesProviderCredential(input.runtime)) {
+      return {
+        ok: false,
+        status: 400,
+        code: 'invalid_setup',
+        message: `Runtime ${input.runtime} takes no provider key; remove runtimeCredential and runtimeEndpoint.`,
+      };
+    }
+    if (runtimeSecrets === null) {
+      return {
+        ok: false,
+        status: 503,
+        code: 'setup_unavailable',
+        message: 'Encrypted runtime connection storage is unavailable.',
+      };
+    }
+    if (input.runtimeEndpoint !== undefined) {
+      runtimeConnection = {
+        secrets: runtimeSecrets,
+        endpoint: input.runtimeEndpoint,
+        credential: input.runtimeCredential,
+      };
+    }
+  }
+
+  return runtimeConnection;
+}
+
+export async function installSetupApi(
+  root: DatabaseRoot,
+  modelsApi: InstalledModelsApi | null,
+  options: {
+    /** The deployment's policy ceiling (issue #535); absent or `null` means none. */
+    readonly policyCeiling?: ProjectPolicy | null;
+    /**
+     * Discovery for the key setup checks before anything is written. It keeps no cache (issue
+     * #415): the candidate connection may never be written, so a list cached under its id would
+     * never be read again. Tests pass their own.
+     */
+    readonly probeDiscover?: ModelDiscovery;
+    /** How long a setup waits for another setup of its workspace to finish writing. */
+    readonly lockWaitMs?: number;
+    /** How long the runtime test may take. */
+    readonly runtimeTestTimeoutMs?: number;
+    /** Encrypted storage for the runtime key setup may be given; absent when secrets are unavailable. */
+    readonly runtimeSecrets?: SetupRuntimeSecrets | null;
+  } = {},
+): Promise<Setup> {
+  if (modelsApi === null) {
+    log.error('[compose] setup API NOT installed: encrypted model storage is unavailable.');
+    return { kind: 'unavailable' };
+  }
+  const { models, discover } = modelsApi;
+  const probeDiscover =
+    options.probeDiscover ??
+    createModelDiscovery({ cache: false, ...scriptedModelsOption(process.env) });
+  const lockWaitMs = options.lockWaitMs ?? SETUP_LOCK_WAIT_MS;
+  const runtimeTestTimeoutMs = options.runtimeTestTimeoutMs ?? SETUP_RUNTIME_TEST_TIMEOUT_MS;
+  const runtimeSecrets = options.runtimeSecrets ?? null;
+  const [{ signIn, readBootstrapAdmin }, { probeModelConnection }, registryModule] =
+    await Promise.all([
+      import('../auth/session'),
+      import('../models/probe'),
+      import('../runtimes/registry'),
+    ]);
+
+  /**
+   * Per-process queue of each workspace's setups: the tail every new setup waits behind. A setup
+   * that is not at the front by `deadline` gives up its place and runs nothing.
+   */
+  const serialise = createSetupQueue();
 
   const runtime: SetupRuntime = {
     async complete(input) {
@@ -412,7 +362,10 @@ export async function installSetupApi(
             'First-run setup supports Anthropic and OpenAI; configure custom endpoints after sign-in.',
         };
       }
-      if (input.providerApiKey.length === 0 || input.agentName.trim() === '') {
+      if (
+        (input.providerApiKey.length === 0 && !isKeylessProvider(input.provider)) ||
+        input.agentName.trim() === ''
+      ) {
         return {
           ok: false,
           status: 400,
@@ -420,79 +373,26 @@ export async function installSetupApi(
           message: 'Credential and agent name are required.',
         };
       }
-      const authentication = await signIn({
-        email: input.adminEmail,
-        password: input.adminPassword,
+      const administrator = await authenticateSetupAdministrator(input, root, {
+        signIn,
+        readBootstrapAdmin,
       });
-      if (!authentication.ok) {
-        return {
-          ok: false,
-          status: authentication.code === 'server_not_configured' ? 503 : 401,
-          code: authentication.code,
-          message:
-            authentication.code === 'server_not_configured'
-              ? 'Bootstrap sign-in is not configured.'
-              : 'Administrator credentials did not match.',
-        };
-      }
-      const configured = readBootstrapAdmin(process.env);
-      if (!configured.ok)
-        return {
-          ok: false,
-          status: 503,
-          code: 'server_not_configured',
-          message: 'Bootstrap sign-in is not configured.',
-        };
-      const member = await root.resolveMembership(
-        input.adminEmail.trim().toLowerCase(),
-        configured.admin.workspaceSlug,
-      );
-      if (member === null)
-        return {
-          ok: false,
-          status: 409,
-          code: 'administrator_missing',
-          message: 'The seeded administrator membership is missing; rerun the idempotent seed.',
-        };
-      const scope = await root.scopes.forWorkspaceId(member.workspaceId);
-      if (scope === null)
-        return {
-          ok: false,
-          status: 409,
-          code: 'workspace_missing',
-          message: 'The setup workspace is missing.',
-        };
+      if ('ok' in administrator) return administrator;
+      const { authentication, member, scope } = administrator;
 
-      // After the sign-in, so only the administrator can have setup store or send a runtime key.
-      let runtimeConnection: SetupRuntimeConnection | null = null;
-      if (input.runtimeCredential !== undefined) {
-        if (!takesProviderCredential(input.runtime)) {
-          return {
-            ok: false,
-            status: 400,
-            code: 'invalid_setup',
-            message: `Runtime ${input.runtime} takes no provider key; remove runtimeCredential and runtimeEndpoint.`,
-          };
-        }
-        if (runtimeSecrets === null) {
-          return {
-            ok: false,
-            status: 503,
-            code: 'setup_unavailable',
-            message: 'Encrypted runtime connection storage is unavailable.',
-          };
-        }
-        if (input.runtimeEndpoint !== undefined) {
-          runtimeConnection = {
-            secrets: runtimeSecrets,
-            endpoint: input.runtimeEndpoint,
-            credential: input.runtimeCredential,
-          };
-        }
-      }
+      // Only an authenticated administrator can store or send a runtime key.
+      const runtimeConnection = setupRuntimeConnection(input, runtimeSecrets);
+      if (runtimeConnection !== null && 'ok' in runtimeConnection) return runtimeConnection;
       const setupInput = { ...input, provider: input.provider };
       const workspaceModels = models.forWorkspace(member.workspaceId);
-      const checked = await check(setupInput, workspaceModels, member.workspaceId);
+      const checked = await checkSetup(setupInput, {
+        workspaceModels,
+        workspaceId: member.workspaceId,
+        probeDiscover,
+        probeModelConnection,
+        currentWebRuntimeRegistry: registryModule.currentWebRuntimeRegistry,
+        runtimeTestTimeoutMs,
+      });
       if ('ok' in checked) return checked;
       // Issue #535: refused before the setup lock and before any write; the refusal is audited.
       // The agent setup will update is judged as stored, with its policy and connectors.
@@ -523,7 +423,16 @@ export async function installSetupApi(
       const deadline = Date.now() + lockWaitMs;
       const queued = await serialise(member.workspaceId, deadline, () =>
         root.withWorkspaceSetupLock(member.workspaceId, deadline - Date.now(), () =>
-          persist(setupInput, member, scope, workspaceModels, checked, runtimeConnection),
+          persistCheckedSetup({
+            root,
+            discover,
+            input: setupInput,
+            member,
+            scope,
+            workspaceModels,
+            checked,
+            runtimeConnection,
+          }),
         ),
       );
       if (!queued.ran || !queued.value.acquired) return SETUP_IN_PROGRESS;

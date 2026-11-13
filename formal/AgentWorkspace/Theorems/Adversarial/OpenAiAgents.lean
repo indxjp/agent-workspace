@@ -42,7 +42,7 @@ example :
     let c : Compiled :=
       { tools := [.applyPatch], networkEgress := false,
         connection := connectionFor .openaiResponses "http://gw" "tok", connectors := [],
-        maxTurns := none, budgetCap := false,
+        maxTurns := none,
         grants := [{ directory := true, segments := ["docs"], readOnly := true }],
         tracingDisabled := true }
     writeAllowed c "docs/a.md" = false ∧ writeAllowed c "x/../docs/a.md" = false ∧

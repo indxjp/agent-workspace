@@ -28,6 +28,7 @@
 import { useEffect, useRef } from 'react';
 
 import { describeCopyState, type CopyState, type RevealedInvitation } from './invitations-model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 const BTN =
   'inline-flex h-8 items-center rounded-(--radius-sm) border px-[13px] text-[13px] font-medium';
@@ -38,6 +39,8 @@ interface InvitationRevealProps {
   readonly copyState: CopyState;
   readonly onCopy: () => void;
   readonly onDismiss: () => void;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  readonly strings?: TeamStrings;
 }
 
 export function InvitationReveal({
@@ -45,6 +48,7 @@ export function InvitationReveal({
   copyState,
   onCopy,
   onDismiss,
+  strings = teamStrings('en'),
 }: Readonly<InvitationRevealProps>) {
   const copyRef = useRef<HTMLButtonElement | null>(null);
 
@@ -58,7 +62,7 @@ export function InvitationReveal({
     copyRef.current?.focus();
   }, [revealed.link]);
 
-  const copyNote = describeCopyState(copyState);
+  const copyNote = describeCopyState(copyState, strings);
 
   return (
     <div
@@ -66,12 +70,12 @@ export function InvitationReveal({
       role="status"
       className="mb-4 rounded-(--radius) border border-border-strong bg-surface p-5 shadow-(--shadow)"
     >
-      <h3 className="text-[14px] font-semibold text-text">Invitation link for {revealed.email}</h3>
-      <p className="mt-1 text-[12.5px] text-danger">{revealed.warning}</p>
-      <p className="mt-3 text-[12.5px] text-muted">
-        This deployment sends no email, so relay this link yourself. It is not stored anywhere and
-        leaving this screen loses it.
+      <h3 className="text-[14px] font-semibold text-text">{strings.linkFor(revealed.email)}</h3>
+      {/* The server's own one-time-only sentence, as the server worded it (English). */}
+      <p lang="en" className="mt-1 text-[12.5px] text-danger">
+        {revealed.warning}
       </p>
+      <p className="mt-3 text-[12.5px] text-muted">{strings.relayNote}</p>
       {/* The secret, and the only place in the document it appears. `break-all` because an accept
           link is longer than the card and a link that overflows is a link a person cannot select. */}
       <code className="mt-3 block rounded-(--radius-sm) border border-border bg-surface-2 p-3 text-[12.5px] break-all text-text">
@@ -81,19 +85,19 @@ export function InvitationReveal({
         <button
           ref={copyRef}
           type="button"
-          aria-label={`Copy the invitation link for ${revealed.email}`}
+          aria-label={strings.copyLabel(revealed.email)}
           className={`${BTN} ${BTN_PRIMARY}`}
           onClick={onCopy}
         >
-          Copy link
+          {strings.copyLink}
         </button>
         <button
           type="button"
-          aria-label={`Dismiss the invitation link for ${revealed.email}`}
+          aria-label={strings.dismissLabel(revealed.email)}
           className={`${BTN} ${BTN_PRIMARY}`}
           onClick={onDismiss}
         >
-          Dismiss
+          {strings.dismiss}
         </button>
       </div>
       {copyNote === null ? null : <p className="mt-3 text-[12.5px] text-text-2">{copyNote}</p>}

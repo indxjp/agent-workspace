@@ -1,0 +1,119 @@
+---
+title: "token-exchange"
+description: "The @indx-workspace/contracts/token-exchange exports, sorted alphabetically."
+---
+
+<Note>This page is generated from `packages/contracts/src/token-exchange.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
+
+## ACCESS_TOKEN_TYPE
+
+RFC 8693 §3: what the exchange issues, and the only `requested_token_type` it accepts.
+
+Value: `'urn:ietf:params:oauth:token-type:access_token'`
+
+## ID_TOKEN_TYPE
+
+RFC 8693 §3: the only `subject_token_type` accepted is an OpenID Connect ID token.
+
+Value: `'urn:ietf:params:oauth:token-type:id_token'`
+
+## OAUTH_ACCESS_TOKEN_PATTERN
+
+An ADR-0134 access token: `awo_live_<22-char id>_<43-char secret>`, base64url. The second group
+is the secret half the server hashes; the server's token module reads it from this one pattern.
+
+Value: `/^awo_live_([A-Za-z0-9_-]{22})_([A-Za-z0-9_-]{43})$/u`
+
+## OAUTH_ACCESS_TOKEN_PREFIX
+
+The prefix of an ADR-0134 part 3 access token, which the proxy recognises by shape.
+
+Value: `'awo_live_'`
+
+## SUBJECT_TOKEN_MAX_LENGTH
+
+ADR-0161 D3: the longest ID token accepted, 16 KiB of compact JWS.
+
+Value: `16_384`
+
+## TOKEN_EXCHANGE_GRANT_TYPE
+
+RFC 8693 §2.1 `grant_type`.
+
+Value: `'urn:ietf:params:oauth:grant-type:token-exchange'`
+
+## TOKEN_EXCHANGE_PROBLEM_CODES
+
+ADR-0161 D7: the domain problem codes of `POST /api/auth/token-exchange`, with the status each
+travels under. `subject_not_member` says the same thing whether the person is unknown or a member
+of another workspace only. The body-shape refusals are the common `invalid_body`,
+`malformed_body` and `unsupported_media_type`.
+
+| Key | Value |
+| --- | --- |
+| `token_exchange_not_configured` | `503` |
+| `invalid_client` | `401` |
+| `subject_token_invalid` | `401` |
+| `subject_token_wrong_issuer` | `401` |
+| `subject_token_wrong_audience` | `401` |
+| `subject_not_member` | `403` |
+| `rate_limited` | `429` |
+
+## TOKEN_EXCHANGE_TTL_SECONDS
+
+ADR-0161 D2: an exchanged token lives five minutes and has no refresh token.
+
+Value: `300`
+
+## TokenExchangeProblemCode
+
+- `"token_exchange_not_configured"`
+- `"invalid_client"`
+- `"subject_token_invalid"`
+- `"subject_token_wrong_issuer"`
+- `"subject_token_wrong_audience"`
+- `"subject_not_member"`
+- `"rate_limited"`
+
+## TokenExchangeRequest
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `grant_type` | `"urn:ietf:params:oauth:grant-type:token-exchange"` | Yes |  |
+| `subject_token` | `string` | Yes |  |
+| `subject_token_type` | `"urn:ietf:params:oauth:token-type:id_token"` | Yes |  |
+| `requested_token_type` | `undefined \| "urn:ietf:params:oauth:token-type:access_token"` | No |  |
+
+## TokenExchangeRequestSchema
+
+The body of `POST /api/auth/token-exchange`. The endpoint client authenticates with
+`client_secret_basic`, never in the body; `audience`, `resource`, `scope` and `actor_token` are
+refused because the client's binding decides all of them.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `grant_type` | `"urn:ietf:params:oauth:grant-type:token-exchange"` | Yes |  |
+| `subject_token` | `string` | Yes |  |
+| `subject_token_type` | `"urn:ietf:params:oauth:token-type:id_token"` | Yes |  |
+| `requested_token_type` | `undefined \| "urn:ietf:params:oauth:token-type:access_token"` | No |  |
+
+## TokenExchangeResponse
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `access_token` | `string` | Yes |  |
+| `issued_token_type` | `"urn:ietf:params:oauth:token-type:access_token"` | Yes |  |
+| `token_type` | `"Bearer"` | Yes |  |
+| `expires_in` | `number` | Yes |  |
+
+## TokenExchangeResponseSchema
+
+The `200` of `POST /api/auth/token-exchange`, sent with `Cache-Control: no-store`. No
+`refresh_token` and no `scope`: the token's reach is the client's binding.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `access_token` | `string` | Yes |  |
+| `issued_token_type` | `"urn:ietf:params:oauth:token-type:access_token"` | Yes |  |
+| `token_type` | `"Bearer"` | Yes |  |
+| `expires_in` | `number` | Yes |  |

@@ -21,6 +21,7 @@ import {
   bootstrapAdminCredentials,
   expectBasicAccessibility,
   newMemberContext,
+  openNavigation,
   signInAsBootstrapAdmin,
 } from './harness.mjs';
 import { storageConnectionFileRoot } from './storage-file-root.mjs';
@@ -152,7 +153,12 @@ test('[US-STO-12][browser][web] connect a bucket and grant one folder', async ({
     await page.getByLabel('URL').fill(`file://${folder}`);
     await page.getByLabel('Allowed folders').fill('reports');
     await expect(page.getByLabel('Allow writing')).not.toBeChecked();
-    await page.getByRole('button', { name: 'Save connection' }).click();
+    await page.getByRole('button', { name: 'Save and test' }).click();
+    // UX-07: the saved connection is tested at once with its stored key.
+    await expect(page.getByRole('heading', { name: `Saved ${connection}` })).toBeVisible();
+    await expect(page.getByRole('status')).toHaveText('Saved and connected.');
+    await expectBasicAccessibility(page);
+    await page.getByRole('link', { name: 'Done' }).click();
     await expect(page).toHaveURL(/\/admin\/storage$/u);
     await expect(page.getByRole('heading', { name: 'Storage' })).toBeVisible();
     await expectBasicAccessibility(page);
@@ -237,7 +243,7 @@ test('[US-STO-12][browser][web] credentials are never rendered back', async ({
     await page.getByLabel('Allowed folders').fill('reports');
     await page.getByLabel('Access key ID').fill(`id-${suffix}`);
     await page.getByLabel('Secret access key').fill(secret);
-    await page.getByRole('button', { name: 'Save connection' }).click();
+    await page.getByRole('button', { name: 'Save and test' }).click();
   }
 
   await test.step('after a failed save', async () => {
@@ -250,6 +256,9 @@ test('[US-STO-12][browser][web] credentials are never rendered back', async ({
 
   await test.step('after a successful save', async () => {
     await fillS3(`sto-ok-${suffix}`, 's3://reports-bucket?endpoint=https://s3.example.com');
+    await expect(page.getByRole('heading', { name: `Saved sto-ok-${suffix}` })).toBeVisible();
+    await expectNoSecret();
+    await page.getByRole('link', { name: 'Back to Storage' }).click();
     await expect(page).toHaveURL(/\/admin\/storage$/u);
     await expect(page.getByText(`sto-ok-${suffix}`)).toBeVisible();
     await expectNoSecret();
@@ -319,7 +328,9 @@ test('[US-STO-12][browser][web] edit a connection: folders, write, and a moved e
   await expect(page.getByLabel('Allowed folders')).toHaveValue('reports');
   await expect(page.getByLabel('Allow writing')).not.toBeChecked();
   await expect(
-    page.getByText('Off by default. Grants stay read-only until write-back ships.'),
+    page.getByText(
+      "Off by default. With a read/write grant, a run's new and changed files are written back; nothing is deleted.",
+    ),
   ).toBeVisible();
 
   await test.step('change the folders and the write switch', async () => {
@@ -479,7 +490,7 @@ test('[US-STO-12][browser][web] only Owners and Admins manage storage', async ({
           await expect(member.getByText(NOT_ALLOWED)).toBeVisible();
           await expect(
             member.getByRole('button', {
-              name: /^(Save connection|Save changes|Rotate credential|Delete this connection)$/u,
+              name: /^(Save and test|Save changes|Rotate credential|Delete this connection)$/u,
             }),
           ).toHaveCount(0);
           await expect(member.getByRole('link', { name: /Connect storage|^Edit /u })).toHaveCount(
@@ -487,6 +498,7 @@ test('[US-STO-12][browser][web] only Owners and Admins manage storage', async ({
           );
         }
         await member.goto('/agents');
+        await openNavigation(member);
         await expect(navLink(member)).toHaveCount(0);
       });
     });
@@ -495,6 +507,7 @@ test('[US-STO-12][browser][web] only Owners and Admins manage storage', async ({
   await test.step('admin: sees the pages and the navigation entry', async () => {
     await asRole('admin', async (member) => {
       await member.goto('/agents');
+      await openNavigation(member);
       await expect(navLink(member)).toBeVisible();
       await member.goto('/admin/storage');
       await expect(member.getByRole('heading', { name: 'Storage' })).toBeVisible();
@@ -507,6 +520,7 @@ test('[US-STO-12][browser][web] only Owners and Admins manage storage', async ({
 
   await test.step('owner: sees the pages and the navigation entry', async () => {
     await page.goto('/agents');
+    await openNavigation(page);
     await expect(navLink(page)).toBeVisible();
     await navLink(page).click();
     await expect(page).toHaveURL(/\/admin\/storage$/u);
@@ -562,7 +576,10 @@ test('[US-STO-12][browser][web] keyboard only: connect, grant, edit, delete', as
     await type('Allowed folders', 'reports');
     await type('Access key ID', `id-${suffix}`);
     await type('Secret access key', secret);
-    await press('Save connection');
+    await press('Save and test');
+    // Focus moves to the result, so the next Tab reaches its links (UX-07).
+    await expect(page.getByRole('heading', { name: `Saved ${bucket}` })).toBeFocused();
+    await press('Back to Storage', 'link');
     await expect(page).toHaveURL(/\/admin\/storage$/u);
     await expect(page.getByText(bucket, { exact: true })).toBeVisible();
   });

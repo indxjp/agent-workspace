@@ -39,86 +39,35 @@
  * `maxSteps`, so "keep trying" has a hard end that does not depend on the model.
  */
 import type { AgentWorkspaceClient } from '@indx-workspace/sdk';
-import { z } from 'zod';
 
-import { parseCitations, type Citation } from '../../shared/citations.ts';
 import {
   readRun,
   runAndRead,
   RunAwaitingApproval,
   type AwaitingApproval,
   type RunReading,
-  type ToolCall,
 } from '../../shared/run-answer.ts';
+import {
+  inspectTurn,
+  TurnAnswerSchema,
+  type TurnAnswer,
+  type TurnInspection,
+} from './inspect-turn.ts';
 import { fileScopeFor, loadAccess, type Access } from './scope.ts';
 
-const STEP = /手順\s*([0-9０-９]+)\s*[:：]/gu;
+export {
+  inspectTurn,
+  TurnAnswerSchema,
+  type LoggedResolution,
+  type TurnAnswer,
+  type TurnInspection,
+  type TurnKind,
+  type Violation,
+} from './inspect-turn.ts';
+
 const MESSAGE_MAX = 500;
 const TECHNICIAN_MAX = 40;
-
-/** What one run returns: the reply the technician reads, and the same turn as fields. */
-export const TurnAnswerSchema = z.object({
-  reply: z.string().min(1).describe('技術者に表示する返答の全文'),
-  kind: z
-    .enum(['step', 'resolution'])
-    .describe(
-      'step: 手順を1つ出す（熟練者に引き継ぐターンも step、step は null）／resolution: 解決して記録した',
-    ),
-  step: z
-    .object({
-      number: z.number().int().min(1).describe('手順の番号（前の手順+1）'),
-      instruction: z.string().min(1).describe('技術者にやってもらう確認・作業を1つ'),
-      citations: z
-        .array(z.string())
-        .describe('この手順の出典。〔〕の中の文字列（例: 過去トラ T-0001）'),
-    })
-    .nullable()
-    .describe('kind が step のときの手順。それ以外は null'),
-  citations: z
-    .array(z.string())
-    .describe('返答で使った出典すべて。〔〕の中の文字列（安全措置の出典を含む）'),
-});
-
-export type TurnAnswer = z.infer<typeof TurnAnswerSchema>;
-
-/** What the turn was: the agent's own `kind`, or `escalation` when the run ended in a handoff. */
-export type TurnKind = TurnAnswer['kind'] | 'escalation';
-
-export type Violation =
-  /** The session's first answer does not say to stop the machine and apply LOTO. */
-  | 'missing-safety'
-  /** A step turn that carries no step. */
-  | 'no-step'
-  /** More than one 手順N： in the reply, or a step next to an escalation or resolution. */
-  | 'multiple-steps'
-  /** The step has no 〔…〕 source. */
-  | 'uncited-step'
-  /** A 〔…〕 that no tool returned in this run. */
-  | 'unverified-citation'
-  /** 手順N： where N is not the previous step plus one. */
-  | 'step-out-of-order'
-  /** 【解決】 without a successful logResolution call in the same run. */
-  | 'resolution-not-logged';
-
-export interface LoggedResolution {
-  readonly id: string;
-  readonly machineId: string;
-  readonly cause: string;
-  readonly action: string;
-  readonly technician: string;
-}
-
-export interface TurnInspection {
-  readonly kind: TurnKind;
-  /** The step number this answer gives, or null when it gives none. */
-  readonly step: number | null;
-  /** What the technician is asked to do in this step, or null when it gives none. */
-  readonly instruction: string | null;
-  readonly citations: readonly Citation[];
-  readonly unverified: readonly Citation[];
-  readonly logged: LoggedResolution | null;
-  readonly violations: readonly Violation[];
-}
+const DEFAULT_MAX_STEPS = 6;
 
 export interface DiagnosisTurn extends TurnInspection {
   readonly sessionId: string;
@@ -195,112 +144,12 @@ export interface DiagnosisDesk {
   readonly session: (sessionId: string) => DiagnosisSession;
 }
 
-const toolIs = (name: string, tool: string): boolean => name === tool || name.endsWith(`__${tool}`);
-
 function requireText(value: string, what: string, max: number): string {
   const trimmed = value.trim();
   if (trimmed === '' || [...trimmed].length > max) {
     throw new DiagnosisError('invalid_input', `${what} must be 1 to ${String(max)} characters`);
   }
   return trimmed;
-}
-
-function asLogged(call: ToolCall): LoggedResolution | null {
-  if (call.output === null) return null;
-  try {
-    const parsed = JSON.parse(call.output) as Partial<LoggedResolution> & { logged?: unknown };
-    if (
-      parsed.logged !== true ||
-      typeof parsed.id !== 'string' ||
-      typeof parsed.machineId !== 'string' ||
-      typeof parsed.cause !== 'string' ||
-      typeof parsed.action !== 'string' ||
-      typeof parsed.technician !== 'string'
-    ) {
-      return null;
-    }
-    return {
-      id: parsed.id,
-      machineId: parsed.machineId,
-      cause: parsed.cause,
-      action: parsed.action,
-      technician: parsed.technician,
-    };
-  } catch {
-    return null;
-  }
-}
-
-const citationsOf = (texts: readonly string[]): Citation[] =>
-  texts.flatMap((text) => parseCitations(`〔${text.replace(/^〔|〕$/gu, '')}〕`));
-
-/**
- * Check one answer against the rules above. Pure: what the agent answered, what its tools returned
- * in the run, and what the session knows (first turn or not, the last step, the technician).
- */
-export function inspectTurn(input: {
-  readonly answer: TurnAnswer;
-  readonly toolCalls: readonly ToolCall[];
-  readonly first: boolean;
-  readonly previousStep: number;
-  /** The reason of the run's `agent.handoff` frame, or null when the agent did not hand off. */
-  readonly handoff: string | null;
-}): TurnInspection {
-  const { answer, toolCalls } = input;
-  const { reply } = answer;
-  const kind: TurnKind = input.handoff === null ? answer.kind : 'escalation';
-  const violations: Violation[] = [];
-
-  if (input.first && !(/停止/u.test(reply) && /LOTO|ロックアウト/u.test(reply))) {
-    violations.push('missing-safety');
-  }
-
-  const marked = [...reply.matchAll(STEP)].length;
-  if (kind === 'step' && answer.step === null) violations.push('no-step');
-  if (marked > 1 || (kind !== 'step' && (answer.step !== null || marked > 0))) {
-    violations.push('multiple-steps');
-  }
-
-  const step = answer.step?.number ?? null;
-  if (kind === 'step' && answer.step !== null) {
-    if (citationsOf(answer.step.citations).length === 0) violations.push('uncited-step');
-    if (answer.step.number !== input.previousStep + 1) violations.push('step-out-of-order');
-  }
-
-  const returned = new Set(
-    toolCalls
-      .filter((call) => !call.isError && call.output !== null)
-      .flatMap((call) => parseCitations(call.output ?? '').map((citation) => citation.raw)),
-  );
-  // A source named only in the reply text counts too: the schema must not be a way around the check.
-  const citations = [
-    ...new Map(
-      [
-        ...citationsOf(answer.citations),
-        ...citationsOf(answer.step?.citations ?? []),
-        ...parseCitations(reply),
-      ].map((citation) => [citation.raw, citation] as const),
-    ).values(),
-  ];
-  const unverified = citations.filter((citation) => !returned.has(citation.raw));
-  if (unverified.length > 0) violations.push('unverified-citation');
-
-  let logged: LoggedResolution | null = null;
-  if (kind === 'resolution') {
-    const call = toolCalls.find((each) => toolIs(each.name, 'logResolution') && !each.isError);
-    logged = call === undefined ? null : asLogged(call);
-    if (logged === null) violations.push('resolution-not-logged');
-  }
-
-  return {
-    kind,
-    step,
-    instruction: answer.step?.instruction ?? null,
-    citations,
-    unverified,
-    logged,
-    violations,
-  };
 }
 
 interface SessionState {
@@ -335,6 +184,120 @@ function summaryOf(state: SessionState): string {
   return lines.join('\n');
 }
 
+type ReadTurn = () => Promise<RunReading<TurnAnswer>>;
+
+interface Settled {
+  readonly state: SessionState;
+  readonly turn: DiagnosisTurn | AwaitingApproval;
+}
+
+/** What a turn does to its session: nothing, close it as resolved, or escalate it for a reason. */
+type StatusChange =
+  | { readonly status: 'diagnosing' | 'resolved' }
+  | { readonly status: 'escalated'; readonly reason: Escalation['reason'] };
+
+/** A new session for `technician`, under the id the platform gave its first run. */
+const openSession = (sessionId: string, technician: string): SessionState => ({
+  sessionId,
+  technician,
+  status: 'diagnosing',
+  turns: [],
+  escalation: null,
+  lastStep: 0,
+  awaiting: null,
+});
+
+/** What the platform tells the continuation of a decision (ADR-0145 D2.2). */
+function decisionMessage(decision: {
+  readonly approve: boolean;
+  readonly comment?: string;
+}): string {
+  const verdict = decision.approve ? 'approved' : 'rejected';
+  return decision.comment === undefined ? verdict : `${verdict}: ${decision.comment}`;
+}
+
+/** Pure: what `turn` does to its session, with the backend's own stop past `maxSteps`. */
+function statusAfter(turn: DiagnosisTurn, maxSteps: number): StatusChange {
+  if (turn.kind === 'escalation') return { status: 'escalated', reason: 'agent' };
+  if (turn.kind === 'resolution' && turn.logged !== null) return { status: 'resolved' };
+  if (turn.kind === 'step' && (turn.step ?? 0) > maxSteps) {
+    return { status: 'escalated', reason: 'step-limit' };
+  }
+  return { status: 'diagnosing' };
+}
+
+/** The checked turn a run's reading is, in a session that is at `previousStep`. */
+function diagnosisTurn(
+  reading: RunReading<TurnAnswer>,
+  sessionId: string,
+  turn: { readonly message: string; readonly first: boolean; readonly previousStep: number },
+): DiagnosisTurn {
+  const inspection: TurnInspection = inspectTurn({
+    answer: reading.output,
+    toolCalls: reading.toolCalls,
+    first: turn.first,
+    previousStep: turn.previousStep,
+    handoff: reading.handoff,
+  });
+  return {
+    ...inspection,
+    sessionId,
+    runId: reading.run.id,
+    message: turn.message,
+    reply: reading.output.reply,
+    handoff: reading.handoff,
+    ok: inspection.violations.length === 0,
+  };
+}
+
+async function escalate(
+  state: SessionState,
+  reason: Escalation['reason'],
+  notifyExpert: DiagnosisDeskOptions['notifyExpert'],
+): Promise<void> {
+  state.status = 'escalated';
+  state.escalation = { reason, summary: summaryOf(state) };
+  await notifyExpert?.(snapshot(state));
+}
+
+interface DeskRules {
+  readonly maxSteps: number;
+  readonly notifyExpert: DiagnosisDeskOptions['notifyExpert'];
+}
+
+/** Read the run `read` follows as the session's next turn, or answer the pause it ended in. */
+async function settleTurn(
+  rules: DeskRules,
+  state: SessionState | null,
+  turn: { readonly technician: string; readonly message: string; readonly read: ReadTurn },
+): Promise<Settled> {
+  let reading;
+  try {
+    reading = await turn.read();
+  } catch (error) {
+    if (!(error instanceof RunAwaitingApproval)) throw error;
+    const paused = state ?? openSession(error.pending.sessionId, turn.technician);
+    paused.awaiting = error.pending;
+    return { state: paused, turn: error.pending };
+  }
+  const current = state ?? openSession(reading.run.sessionId, turn.technician);
+  const result = diagnosisTurn(reading, current.sessionId, {
+    message: turn.message,
+    first: state === null,
+    previousStep: current.lastStep,
+  });
+  current.turns.push(result);
+  if (result.step !== null) current.lastStep = result.step;
+
+  const next = statusAfter(result, rules.maxSteps);
+  if (next.status === 'escalated') {
+    await escalate(current, next.reason, rules.notifyExpert);
+  } else if (next.status === 'resolved') {
+    current.status = 'resolved';
+  }
+  return { state: current, turn: result };
+}
+
 /**
  * A diagnosis desk over `agentId`. Sessions live in memory here; a production desk keeps the same
  * state in its database, keyed by the session id.
@@ -344,71 +307,24 @@ export function createDiagnosisDesk(
   agentId: string,
   options: DiagnosisDeskOptions = {},
 ): DiagnosisDesk {
-  const maxSteps = options.maxSteps ?? 6;
+  const rules: DeskRules = {
+    maxSteps: options.maxSteps ?? DEFAULT_MAX_STEPS,
+    notifyExpert: options.notifyExpert,
+  };
   const access = options.access ?? loadAccess();
   const sessions = new Map<string, SessionState>();
 
-  async function escalate(state: SessionState, reason: Escalation['reason']): Promise<void> {
-    state.status = 'escalated';
-    state.escalation = { reason, summary: summaryOf(state) };
-    await options.notifyExpert?.(snapshot(state));
-  }
-
-  /** Read the run `read` follows as the session's next turn, or answer the pause it ended in. */
-  async function settle(
+  const sessionOf = (sessionId: string): SessionState => {
+    const state = sessions.get(sessionId);
+    if (state === undefined) throw new DiagnosisError('unknown_session', 'no such session');
+    return state;
+  };
+  const settle = (
     state: SessionState | null,
     technician: string,
     message: string,
-    read: () => Promise<RunReading<TurnAnswer>>,
-  ): Promise<{ state: SessionState; turn: DiagnosisTurn | AwaitingApproval }> {
-    const opened = (sessionId: string): SessionState =>
-      state ?? {
-        sessionId,
-        technician,
-        status: 'diagnosing',
-        turns: [],
-        escalation: null,
-        lastStep: 0,
-        awaiting: null,
-      };
-    let reading;
-    try {
-      reading = await read();
-    } catch (error) {
-      if (!(error instanceof RunAwaitingApproval)) throw error;
-      const paused = opened(error.pending.sessionId);
-      paused.awaiting = error.pending;
-      return { state: paused, turn: error.pending };
-    }
-    const current = opened(reading.run.sessionId);
-    const inspection = inspectTurn({
-      answer: reading.output,
-      toolCalls: reading.toolCalls,
-      first: state === null,
-      previousStep: current.lastStep,
-      handoff: reading.handoff,
-    });
-    const result: DiagnosisTurn = {
-      ...inspection,
-      sessionId: current.sessionId,
-      runId: reading.run.id,
-      message,
-      reply: reading.output.reply,
-      handoff: reading.handoff,
-      ok: inspection.violations.length === 0,
-    };
-    current.turns.push(result);
-    if (result.step !== null) current.lastStep = result.step;
-
-    if (result.kind === 'escalation') {
-      await escalate(current, 'agent');
-    } else if (result.kind === 'resolution' && result.logged !== null) {
-      current.status = 'resolved';
-    } else if (result.kind === 'step' && (result.step ?? 0) > maxSteps) {
-      await escalate(current, 'step-limit');
-    }
-    return { state: current, turn: result };
-  }
+    read: ReadTurn,
+  ): Promise<Settled> => settleTurn(rules, state, { technician, message, read });
 
   async function turn(
     state: SessionState | null,
@@ -448,8 +364,7 @@ export function createDiagnosisDesk(
       return first;
     },
     async reply(sessionId, rawMessage, photo) {
-      const state = sessions.get(sessionId);
-      if (state === undefined) throw new DiagnosisError('unknown_session', 'no such session');
+      const state = sessionOf(sessionId);
       if (state.status !== 'diagnosing') {
         throw new DiagnosisError('session_closed', `this session is ${state.status}`);
       }
@@ -457,8 +372,7 @@ export function createDiagnosisDesk(
       return (await turn(state, state.technician, message, photo)).turn;
     },
     async approve(sessionId, decision) {
-      const state = sessions.get(sessionId);
-      if (state === undefined) throw new DiagnosisError('unknown_session', 'no such session');
+      const state = sessionOf(sessionId);
       const { awaiting } = state;
       if (awaiting === null) {
         throw new DiagnosisError('nothing_to_approve', 'this session is not waiting for approval');
@@ -468,17 +382,13 @@ export function createDiagnosisDesk(
         ? await aw.runs.approve(awaiting.runId, input)
         : await aw.runs.reject(awaiting.runId, input);
       state.awaiting = null;
-      // What the platform tells the continuation (ADR-0145 D2.2).
-      const verdict = decision.approve ? 'approved' : 'rejected';
-      const message = decision.comment === undefined ? verdict : `${verdict}: ${decision.comment}`;
+      const message = decisionMessage(decision);
       return (
         await settle(state, state.technician, message, () => readRun(aw, run.id, TurnAnswerSchema))
       ).turn;
     },
     session(sessionId) {
-      const state = sessions.get(sessionId);
-      if (state === undefined) throw new DiagnosisError('unknown_session', 'no such session');
-      return snapshot(state);
+      return snapshot(sessionOf(sessionId));
     },
   };
 }

@@ -3,12 +3,12 @@
  * share: the run size, the memory bound, a member on either catalog, and a run granted a folder of
  * files written before any baseline is taken. Vitest-free, so each file owns its own database.
  */
-import { openRootObjectStore } from '@agent-workspace/core/storage';
+import { openRootObjectStore } from '../storage/testing';
 import { RUN_FILES_MAX_BYTES } from '@agent-workspace/runtime/transfer';
 
 import { createAgentRunResourceLoader } from '../compose/resource-loader';
 import { createRuntimeWorkspaceLifecycle } from '../compose/workspace-lifecycle';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
+import type { ResourceCatalogStoreProvider } from '../storage-and-sharing';
 import { createStorageService, type StorageContext } from '../storage/service';
 import type { LaunchContext } from './environment';
 

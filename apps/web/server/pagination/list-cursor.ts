@@ -1,6 +1,6 @@
 /**
- * The opaque `cursor` / `nextCursor` of `GET /api/sessions` and `GET /api/audit-events` (S-5,
- * ADR-0079).
+ * The opaque `cursor` / `nextCursor` of `GET /api/sessions`, `GET /api/audit-events` and
+ * `GET /api/agent-teams` (S-5, ADR-0079).
  *
  * On the wire a cursor is base64url of `{"v":1,"k":<list>,"w":<workspace id>,"t":<created_at>,
  * "i":<row id>}`. Clients must treat it as opaque; the server reads it back strictly:
@@ -22,7 +22,7 @@ import { isUuid } from '../runs/http';
 import { isKeysetTimestamp } from './keyset-timestamp';
 
 /** The lists whose cursors this module mints. A cursor of one is refused by the other. */
-export type ListCursorKind = 'sessions' | 'audit-events';
+export type ListCursorKind = 'sessions' | 'audit-events' | 'agent-teams';
 
 const CURSOR_VERSION = 1;
 const CURSOR_KEYS = ['i', 'k', 't', 'v', 'w'] as const;

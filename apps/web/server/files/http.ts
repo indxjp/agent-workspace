@@ -7,10 +7,14 @@ import { MAX_UPLOAD_BYTES } from '@indx-workspace/contracts/files';
 import { contentDisposition, problem, type FileResult } from './handlers';
 import { applicationContext } from '../application-context';
 import { jsonBodyResponse, readBoundedJson, readRouteParam } from '../http/json-transport';
-import type { ResourceCatalogRepository } from '@agent-workspace/core/db';
-import type { Principal } from '../rbac/principal';
+import type { ResourceCatalogRepository } from '../storage/store';
+import type { Principal } from '../identity';
 import type { WorkspaceResolution } from './runtime';
 import type { StorageContext, StorageService } from '../storage/service';
+import { Bytes } from '../newtypes';
+
+/** The most an upload may be: the published contract's limit, as a size. */
+export const UPLOAD_LIMIT = Bytes.parse(MAX_UPLOAD_BYTES);
 
 /** The catalog service's caller, from the signed-in principal only. */
 export function storageContextOf(principal: Principal): StorageContext {
@@ -22,7 +26,7 @@ export function storageContextOf(principal: Principal): StorageContext {
   };
 }
 
-export function tooLarge(observed: string, maxBytes: number): FileResult {
+export function tooLarge(observed: string, maxBytes: Bytes): FileResult {
   return problem(
     413,
     'request_body_too_large',
@@ -31,7 +35,7 @@ export function tooLarge(observed: string, maxBytes: number): FileResult {
 }
 
 /** The refusal for a declared `Content-Length` that is not a byte count or is over `maxBytes`, else `null`. */
-function declaredLengthRefusal(request: Request, maxBytes: number): FileResult | null {
+function declaredLengthRefusal(request: Request, maxBytes: Bytes): FileResult | null {
   const declared = request.headers.get('content-length');
   if (declared === null) return null;
   const length = Number(declared);
@@ -54,7 +58,7 @@ function declaredLengthRefusal(request: Request, maxBytes: number): FileResult |
  */
 export function boundedBodyStream(
   request: Request,
-  maxBytes: number = MAX_UPLOAD_BYTES,
+  maxBytes: Bytes = UPLOAD_LIMIT,
 ): { ok: true; body: ReadableStream<Uint8Array> } | { ok: false; result: FileResult } {
   const refusal = declaredLengthRefusal(request, maxBytes);
   if (refusal !== null) return { ok: false, result: refusal };

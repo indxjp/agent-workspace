@@ -1,0 +1,23 @@
+import { defineRecipe, {{builder}} } from '@indx-workspace/app';
+
+/** The agent the example step asks: set {{agentVariable}} to its Agent Workspace id. */
+export const AGENT = process.env['{{agentVariable}}'] ?? '{{name}}-agent';
+
+/**
+ * {{title}}: the app runs it {{when}}.
+ *
+ * Each step runs once: its key is the idempotency key of the one Agent Workspace run it may
+ * start, so after a restart the recipe resumes rather than repeats. Keep each step safe to run
+ * again until it completes.
+ */
+export default defineRecipe({
+  name: '{{name}}',
+  on: {{on}},
+  async run({ aw, step }) {
+    await step('first-step', async () => {
+      const prompt = 'Do the first step of {{name}}.';
+      const { result } = await aw.runs.start(AGENT, { prompt });
+      return (await result).text;
+    });
+  },
+});

@@ -16,7 +16,7 @@ import { DomainError } from '../errors';
 import { featureRefusalResponse } from '../features/guard';
 import { bearerChallenge, mcpResourcePath, resourceUrl } from '../oauth/resource';
 import { requireRunPermission } from '../runs/api';
-import { apiError } from '../runs/http';
+import { apiError } from '../execution';
 import type { ToolEndpointEnvironment, ToolEndpointIdentity } from './env';
 import { admitToolEndpointCall } from './limits';
 

@@ -88,7 +88,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"const fs = require('node:fs'); fs.rmSync('dist/project/starters', { recursive: true, force: true }); fs.cpSync('src/project/starters', 'dist/project/starters', { recursive: true, filter: (from) => !from.endsWith('tsconfig.json') })\"",
+    "build": "tsc -p tsconfig.build.json && node -e \"const fs = require('node:fs'); for (const dir of ['starters', 'templates']) { fs.rmSync('dist/project/' + dir, { recursive: true, force: true }); fs.cpSync('src/project/' + dir, 'dist/project/' + dir, { recursive: true, filter: (from) => !from.endsWith('tsconfig.json') }); }\"",
     "typecheck": "tsc -p tsconfig.json && tsc -p src/project/starters/tsconfig.json"
   },
   "dependencies": {

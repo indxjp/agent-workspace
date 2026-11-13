@@ -2,14 +2,16 @@
 
 /**
  * The "Archived" badge and Restore button on the agent page (issue #1851, slice 4). The notice sits
- * above the tabs so every tab shows it; after a restore the page refreshes its server data, so the
- * pointer controls and tabs reload.
+ * above the tabs so every tab shows it. After a restore the page refreshes its server data and
+ * marks the surrounding {@link AgentRestoreScope}, so the tabs that read their own state in the
+ * browser read it again (#1987 B3-11).
  */
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import type { AgentResource, AgentRestoreCapability } from '../../contracts/agents';
 import { browserClient } from '../../lib/browser-client';
+import { useMarkRestored } from './agent-restore-scope';
 import { getAgent, restoreAgent } from './agent-requests-model';
 import type { RequestProblem } from './model';
 import { BUTTON } from './table-styles';
@@ -85,6 +87,7 @@ export function AgentArchivedNotice({
   capability,
 }: Readonly<{ agentId: string; locale: VersionsLocale; capability: AgentRestoreCapability }>) {
   const router = useRouter();
+  const markRestored = useMarkRestored();
   const [agent, setAgent] = useState<AgentResource | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [problem, setProblem] = useState<RequestProblem | null>(null);
@@ -106,9 +109,10 @@ export function AgentArchivedNotice({
     const result = await restoreAgent(browserClient(), agentId);
     if (result.ok) {
       setAgent(result.value);
-      // Reload the server data too: the other tabs and the pointer controls were rendered while the
-      // agent was frozen.
+      // `refresh()` re-renders only the server components (the viewer's capability). The tabs read
+      // their state in the browser, which a refresh does not touch, so they are mounted again.
       router.refresh();
+      markRestored();
     } else setProblem(result.problem);
     setRestoring(false);
   }

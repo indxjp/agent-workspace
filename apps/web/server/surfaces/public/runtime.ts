@@ -9,6 +9,8 @@ import type { AgentEnvironment } from '@indx-workspace/contracts/agent-versions'
 import type { RunStartProblemCode } from '@indx-workspace/contracts/runs';
 import type { SurfaceDefinition, SurfaceSessionRequest } from '@indx-workspace/contracts/surfaces';
 
+import type { SurfaceConditionEnvironment } from './conditions';
+
 /**
  * Who asks for a surface (issue #612): `public` is `/p/s/<name>` and the widget, served from
  * `production`, or from `local` while the agent has no `production` pointer; `try` is
@@ -98,6 +100,11 @@ export interface SurfaceSessionsRuntime {
    * a visitor token may call answer CORS for are these surfaces' `allowedOrigins`.
    */
   servedSurfaces(): Promise<readonly ServedSurface[]>;
+  /**
+   * The environment the open conditions, the visitor limits and the try page read, injected by the
+   * composition root and read on every call, so a changed setting is never stale.
+   */
+  env(): SurfaceConditionEnvironment;
 }
 
 /** The surface a visitor session was opened on; `surface` is `null` once it is not served. */

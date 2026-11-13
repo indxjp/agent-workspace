@@ -49,16 +49,32 @@ describe('the platform image list (#370)', () => {
     }
   });
 
-  it('is the generator images, the egress proxy, the tool host and one runtime image per engine, and nothing else', () => {
+  it('is the generator images (the egress proxy and the tool host among them) and one runtime image per engine, and nothing else', () => {
     expect(names).toEqual([
       images['web'],
       images['gateway'],
       images['runner'],
-      'egress-proxy',
-      'tool-host',
+      images['egressProxy'],
+      images['toolHost'],
       ...engineImages().map((engine) => engine.image),
     ]);
     expect(names).toEqual(releaseImages(ROOT));
+  });
+
+  it('pins the egress proxy under the name its Dockerfile target builds', () => {
+    expect(images['egressProxy']).toBe('egress-proxy');
+    expect(plan.find((image) => image.name === images['egressProxy'])).toMatchObject({
+      dockerfile: 'egress-proxy.Dockerfile',
+      target: 'egress-proxy',
+    });
+  });
+
+  it('pins the tool host under the name its Dockerfile target builds', () => {
+    expect(images['toolHost']).toBe('tool-host');
+    expect(plan.find((image) => image.name === images['toolHost'])).toMatchObject({
+      dockerfile: 'tool-host.Dockerfile',
+      target: 'tool-host',
+    });
   });
 
   it('selects an explicit Dockerfile target for every image', () => {
@@ -78,7 +94,14 @@ describe('the platform image list (#370)', () => {
       JSON.stringify({
         registry: 'ghcr.io/example',
         version: '1.0.0',
-        images: { web: 'web', gateway: 'gateway', runner: 'runner', runtime: 'runtime-nothing' },
+        images: {
+          web: 'web',
+          gateway: 'gateway',
+          runner: 'runner',
+          runtime: 'runtime-nothing',
+          egressProxy: 'egress-proxy',
+          toolHost: 'tool-host',
+        },
       }),
     );
     expect(() => releasePlan(root)).toThrow(/RELEASE_IMAGE_UNBUILT: .*runtime-nothing/u);
@@ -272,6 +295,41 @@ describe('the release trivy gate (#373, docs/adr/0087)', () => {
     expect(built[0]).not.toBe(built[1]);
     // Each invocation removes exactly the image it built.
     expect(removed).toEqual(built);
+  }, 60_000);
+
+  it('rebuilds every apt-get upgrade stage, so a warm cache never hides a published Debian fix', () => {
+    // CVE-2026-109518: the shared daemon replayed an upgrade layer built before apt 2.6.2 existed.
+    const bin = mkdtempSync(path.join(tmpdir(), 'aw-scan-images-'));
+    temporary.push(bin);
+    const calls = path.join(bin, 'calls.log');
+    writeFileSync(path.join(bin, 'docker'), `#!/bin/sh\necho "$*" >> '${calls}'\nexit 0\n`, {
+      mode: 0o755,
+    });
+    writeFileSync(path.join(bin, 'trivy'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+    const images = ['web', 'gateway', 'egress-proxy', 'tool-host', 'runtime-pi'];
+    const result = spawnSync(
+      shell,
+      ['infra/release/scan-images.sh', ...images.flatMap((image) => ['--image', image])],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, PATH: [bin, process.env['PATH']].join(path.delimiter) },
+      },
+    );
+    if (result.error) throw result.error;
+    expect(result.status).toBe(0);
+    const filters: Record<string, string | undefined> = {};
+    for (const line of readFileSync(calls, 'utf8').split('\n')) {
+      const image = /^buildx build .*--tag agent-workspace-scan\/([^:]+):/u.exec(line)?.[1];
+      if (image) filters[image] = /--no-cache-filter (\S+)/u.exec(line)?.[1];
+    }
+    expect(filters).toEqual({
+      web: 'runtime-base',
+      gateway: 'gateway',
+      'egress-proxy': 'egress-proxy',
+      'tool-host': 'tool-host',
+      'runtime-pi': 'runtime',
+    });
   }, 60_000);
 
   it('builds with the packageManager pnpm, and keeps npm and corepack out of every final stage', () => {

@@ -9,10 +9,12 @@ import {
 import { createProjectRunGate, guardProjectSessionCreation } from '../../projects/archive-gate';
 import type { ProjectsRuntime } from '../../projects/runtime';
 import { getRunApi } from '../../runs/environment';
-import type { SharesRuntime } from '../../shares/core/runtime';
+import { effectiveSpendCeiling } from '../../runs/spend-ceiling';
+import type { SharesRuntime } from '../../shares/runtime';
 import { log } from '../../telemetry/logger';
 import { guardSessionCreation } from '../../workspaces/run-gate';
 import { sessionForLaunch } from '../session-launch';
+import { hashShareToken } from '../../shares/link-token';
 import type { AgentsWiring } from './agents';
 import type { RunResourcesWiring } from './run-resources';
 
@@ -162,12 +164,21 @@ export function createPublicShareRun({
     if (pin.kind === 'mismatch') {
       throw new Error(`The public share cannot run: ${sessionEngineMismatchMessage(pin)}`);
     }
+    // ADR-0162: a visitor's run has the spend ceiling any run of this session would have.
+    const ceiling = effectiveSpendCeiling(
+      (await runApi.spendLimitFor?.(principal, agentRef, session.id)) ?? null,
+      undefined,
+      undefined,
+    );
     const run = await runApi.store.create({
       engine: pin.engine,
       id: crypto.randomUUID(),
       workspaceId,
       agentId: agent.id,
       sessionId: session.id,
+      ...(ceiling.kind === 'ok' && ceiling.spendCeilingUsd !== null
+        ? { spendCeilingUsd: ceiling.spendCeilingUsd }
+        : {}),
     });
     const attribution = await root.shares.forScope(scope).linkRun(share.id, run.id, new Date());
     if (attribution.kind === 'unavailable') {
@@ -219,7 +230,7 @@ export function wireShares({
       return { shares: repositories.shares, views: repositories.views, audit: repositories.audit };
     },
     resolvePublic: async (token) => {
-      const workspaceId = await root.findShareWorkspace(token);
+      const workspaceId = await root.findShareWorkspace(await hashShareToken(token));
       if (workspaceId === null) return null;
       const repositories = await wave5Repositories(workspaceId);
       return {

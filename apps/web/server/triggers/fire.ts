@@ -31,26 +31,165 @@ import {
   TRIGGER_PROBLEM_CODES,
   TRIGGER_RATE_PER_MINUTE,
   TRIGGER_VALIDATION_TOKEN_MAX_LENGTH,
-  ZoomUrlValidationEventSchema,
   type TriggerProblemCode,
+  ZoomUrlValidationEventSchema,
 } from '@indx-workspace/contracts/triggers';
 
 import { readCappedBody } from '../endpoints/request';
 import { featureRefusalResponse } from '../features/guard';
 import { noStoreResultResponse, problemWithDetail as problem } from '../http/result';
-import { clientSecretDigest } from '../oauth/tokens';
-import { hashesEqual } from '../rbac/api-key';
-import { decide } from '../rbac/decide';
-import type { Principal } from '../rbac/principal';
+import { clientSecretDigest, decide, hashesEqual, type Principal } from '../identity';
+import { randomIds, type IdGenerator } from '../ids';
+import { log } from '../telemetry/logger';
+import type { RunRecord } from '../execution';
 import { getRunApi } from '../runs/environment';
 import { renderRun } from '../runs/api';
 import { MAX_PROMPT_CHARS, startRunOnSession } from '../runs/service';
-import type { RunRecord } from '../runs/store';
 import { domainProblem, servingTriggers } from './handlers';
 import type { TriggersRuntime } from './runtime';
 
-const DUMMY_HASH = '0'.repeat(64);
+// Delivery: claim a firing under its idempotency key, apply the rate and concurrency limits and
+// start the run as the trigger's owner. Shared with the schedule pass, so both obey the same limits.
 const RATE_WINDOW_MS = 60_000;
+
+export type Runtime = TriggersRuntime;
+export type Runs = NonNullable<ReturnType<typeof getRunApi>>;
+export type Trigger = NonNullable<Awaited<ReturnType<Runtime['findForIngress']>>>['trigger'];
+
+export type DeliveryOutcome =
+  | { readonly kind: 'started'; readonly run: RunRecord }
+  | { readonly kind: 'duplicate'; readonly runId: string | null }
+  | { readonly kind: 'not-found' }
+  | {
+      readonly kind: 'refused';
+      readonly status: number;
+      readonly code: string;
+      readonly message: string;
+      readonly retryAfterSeconds?: number;
+    };
+
+const refusal = (
+  code: TriggerProblemCode,
+  message: string,
+  retryAfterSeconds?: number,
+): DeliveryOutcome => ({
+  kind: 'refused',
+  status: TRIGGER_PROBLEM_CODES[code],
+  code,
+  message,
+  ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+});
+
+type DeliveryRepository = Awaited<ReturnType<Runtime['repository']>>;
+type DeliveryRequest = { trigger: Trigger; owner: Principal; prompt: string; key: string };
+
+const RATE_LIMIT_RETRY_SECONDS = 60;
+const CONCURRENCY_LIMIT_RETRY_SECONDS = 30;
+
+/**
+ * A refusal when the trigger is over its rate or concurrency limit (the claim is released), else
+ * `null`. ponytail: counted, not locked, so a burst can exceed a limit by the requests in flight;
+ * lock the trigger row if that matters.
+ */
+async function refuseOverLimits(
+  repository: DeliveryRepository,
+  runtime: Runtime,
+  { trigger, key }: DeliveryRequest,
+): Promise<DeliveryOutcome | null> {
+  const windowStart = new Date(runtime.now().getTime() - RATE_WINDOW_MS);
+  if ((await repository.countDeliveriesSince(trigger.id, windowStart)) > TRIGGER_RATE_PER_MINUTE) {
+    await repository.releaseDelivery(trigger.id, key);
+    return refusal(
+      'trigger_rate_limited',
+      `this trigger accepts ${String(TRIGGER_RATE_PER_MINUTE)} firings a minute.`,
+      RATE_LIMIT_RETRY_SECONDS,
+    );
+  }
+  if ((await repository.countUnfinishedRuns(trigger.id)) >= TRIGGER_MAX_CONCURRENT_RUNS) {
+    await repository.releaseDelivery(trigger.id, key);
+    return refusal(
+      'trigger_concurrency_limited',
+      `this trigger has ${String(TRIGGER_MAX_CONCURRENT_RUNS)} runs unfinished; retry when one ends.`,
+      CONCURRENCY_LIMIT_RETRY_SECONDS,
+    );
+  }
+  return null;
+}
+
+/** Start the trigger's run as its owner; `null` when the agent can no longer be found. */
+async function startOwnerRun(runs: Runs, { trigger, owner, prompt }: DeliveryRequest) {
+  const agent = await runs.findAgent(owner, trigger.agentId);
+  if (agent === null) return null;
+  return startRunOnSession(runs, owner, agent, {
+    prompt,
+    sessionId: null,
+    modelOverride: null,
+    ...(trigger.outputSchema === null ? {} : { outputSchema: trigger.outputSchema }),
+    ...(trigger.subject === null ? {} : { subject: trigger.subject }),
+  });
+}
+
+/**
+ * Free the claim after a failure before any run started. A failed release leaves the claim at
+ * run_id null until its window lapses; say so, and still surface the original failure.
+ */
+async function releaseAfterFailure(
+  repository: DeliveryRepository,
+  { trigger, key }: DeliveryRequest,
+  failure: unknown,
+): Promise<void> {
+  await repository.releaseDelivery(trigger.id, key).catch((releaseError: unknown) => {
+    log.error(`[trigger] ${trigger.id} could not release its delivery claim`, {
+      error: releaseError,
+      cause: failure,
+    });
+    return false;
+  });
+}
+
+/**
+ * Claim the delivery, apply the limits, start the run; a refusal or failure frees the claim. Shared by
+ * the webhook ingress and the schedule pass, so both obey the same limits and the same ownership.
+ */
+export async function deliver(
+  runtime: Runtime,
+  runs: Runs,
+  delivery: DeliveryRequest,
+): Promise<DeliveryOutcome> {
+  const { trigger, key } = delivery;
+  const repository = await runtime.repository(trigger.workspaceId);
+  const claim = await repository.claimDelivery(trigger.id, key, runtime.now());
+  if (claim.kind === 'trigger-not-found') return { kind: 'not-found' };
+  if (claim.kind === 'duplicate') return { kind: 'duplicate', runId: claim.runId };
+
+  // Once a run has started the claim stays, even if recording it fails: a retry with the same key
+  // then answers `409` instead of starting a second run.
+  let runStarted = false;
+  try {
+    const overLimit = await refuseOverLimits(repository, runtime, delivery);
+    if (overLimit !== null) return overLimit;
+
+    const started = await startOwnerRun(runs, delivery);
+    if (started === null || started.kind === 'refused') {
+      await repository.releaseDelivery(trigger.id, key);
+      return started === null
+        ? refusal('trigger_owner_not_allowed', 'the trigger’s agent can no longer be run.')
+        : { kind: 'refused', status: started.status, code: started.code, message: started.message };
+    }
+    // ponytail: one failed recordDeliveryRun leaves the delivery at run_id null, so a retry with the
+    // same key answers 409 for the dedupe window and the run is not counted toward the concurrency
+    // limit; retry the write if that matters.
+    runStarted = true;
+    await repository.recordDeliveryRun(trigger.id, key, started.run.id);
+    await repository.markFired(trigger.id, runtime.now());
+    return { kind: 'started', run: started.run };
+  } catch (error) {
+    if (!runStarted) await releaseAfterFailure(repository, delivery, error);
+    throw error;
+  }
+}
+
+const DUMMY_HASH = '0'.repeat(64);
 
 const reply = (result: ReturnType<typeof problem>): Response => noStoreResultResponse(result);
 
@@ -60,10 +199,6 @@ const notFound = (): Response =>
 
 const retryLater = (result: ReturnType<typeof problem>, seconds: number): Response =>
   reply({ ...result, headers: { 'retry-after': String(seconds) } });
-
-export type Runtime = TriggersRuntime;
-export type Runs = NonNullable<ReturnType<typeof getRunApi>>;
-export type Trigger = NonNullable<Awaited<ReturnType<Runtime['findForIngress']>>>['trigger'];
 
 /** The enabled webhook trigger whose secret this is, or `null` for every kind of miss. */
 async function authenticated(
@@ -187,7 +322,11 @@ export async function fire(request: Request, id: unknown, secret: unknown): Prom
       ),
     );
   }
-  const key = deliveryKey(request.headers.get('idempotency-key'), body.text);
+  const key = deliveryKey(
+    request.headers.get('idempotency-key'),
+    body.text,
+    runtime.ids ?? randomIds,
+  );
   if (key === '' || key.length > TRIGGER_IDEMPOTENCY_KEY_MAX_LENGTH) {
     return reply(
       domainProblem(
@@ -231,110 +370,14 @@ async function deliveryResponse(runs: Runs, outcome: DeliveryOutcome): Promise<R
   }
 }
 
-export type DeliveryOutcome =
-  | { readonly kind: 'started'; readonly run: RunRecord }
-  | { readonly kind: 'duplicate'; readonly runId: string | null }
-  | { readonly kind: 'not-found' }
-  | {
-      readonly kind: 'refused';
-      readonly status: number;
-      readonly code: string;
-      readonly message: string;
-      readonly retryAfterSeconds?: number;
-    };
-
-const refusal = (
-  code: TriggerProblemCode,
-  message: string,
-  retryAfterSeconds?: number,
-): DeliveryOutcome => ({
-  kind: 'refused',
-  status: TRIGGER_PROBLEM_CODES[code],
-  code,
-  message,
-  ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
-});
-
-/**
- * Claim the delivery, apply the limits, start the run; a refusal or failure frees the claim. Shared by
- * the webhook ingress and the schedule pass, so both obey the same limits and the same ownership.
- */
-export async function deliver(
-  runtime: Runtime,
-  runs: Runs,
-  delivery: { trigger: Trigger; owner: Principal; prompt: string; key: string },
-): Promise<DeliveryOutcome> {
-  const { trigger, owner, prompt, key } = delivery;
-  const repository = await runtime.repository(trigger.workspaceId);
-  const claim = await repository.claimDelivery(trigger.id, key, runtime.now());
-  if (claim.kind === 'trigger-not-found') return { kind: 'not-found' };
-  if (claim.kind === 'duplicate') return { kind: 'duplicate', runId: claim.runId };
-
-  // Once a run has started the claim stays, even if recording it fails: a retry with the same key
-  // then answers `409` instead of starting a second run.
-  let runStarted = false;
-  try {
-    // ponytail: counted, not locked, so a burst can exceed a limit by the requests in flight; lock
-    // the trigger row if that matters.
-    const recent = await repository.countDeliveriesSince(
-      trigger.id,
-      new Date(runtime.now().getTime() - RATE_WINDOW_MS),
-    );
-    if (recent > TRIGGER_RATE_PER_MINUTE) {
-      await repository.releaseDelivery(trigger.id, key);
-      return refusal(
-        'trigger_rate_limited',
-        `this trigger accepts ${String(TRIGGER_RATE_PER_MINUTE)} firings a minute.`,
-        60,
-      );
-    }
-    if ((await repository.countUnfinishedRuns(trigger.id)) >= TRIGGER_MAX_CONCURRENT_RUNS) {
-      await repository.releaseDelivery(trigger.id, key);
-      return refusal(
-        'trigger_concurrency_limited',
-        `this trigger has ${String(TRIGGER_MAX_CONCURRENT_RUNS)} runs unfinished; retry when one ends.`,
-        30,
-      );
-    }
-
-    const agent = await runs.findAgent(owner, trigger.agentId);
-    const started =
-      agent === null
-        ? null
-        : await startRunOnSession(runs, owner, agent, {
-            prompt,
-            sessionId: null,
-            modelOverride: null,
-            ...(trigger.outputSchema === null ? {} : { outputSchema: trigger.outputSchema }),
-            ...(trigger.subject === null ? {} : { subject: trigger.subject }),
-          });
-    if (started === null || started.kind === 'refused') {
-      await repository.releaseDelivery(trigger.id, key);
-      return started === null
-        ? refusal('trigger_owner_not_allowed', 'the trigger’s agent can no longer be run.')
-        : { kind: 'refused', status: started.status, code: started.code, message: started.message };
-    }
-    // ponytail: one failed recordDeliveryRun leaves the delivery at run_id null, so a retry with the
-    // same key answers 409 for the dedupe window and the run is not counted toward the concurrency
-    // limit; retry the write if that matters.
-    runStarted = true;
-    await repository.recordDeliveryRun(trigger.id, key, started.run.id);
-    await repository.markFired(trigger.id, runtime.now());
-    return { kind: 'started', run: started.run };
-  } catch (error) {
-    if (!runStarted) await repository.releaseDelivery(trigger.id, key).catch(() => false);
-    throw error;
-  }
-}
-
 /**
  * The explicit `Idempotency-Key`, else `body:<SHA-256 hex>` so a sender that retries the same body
  * without the header (Graph and Zoom never send one) starts one run. An empty body carries nothing to
  * tell a retry from a new firing, so it gets a fresh key.
  */
-function deliveryKey(header: string | null, body: string): string {
+function deliveryKey(header: string | null, body: string, ids: IdGenerator): string {
   if (header !== null) return header.trim();
-  if (body === '') return `auto:${crypto.randomUUID()}`;
+  if (body === '') return `auto:${ids.newId()}`;
   return `body:${createHash('sha256').update(body).digest('hex')}`;
 }
 

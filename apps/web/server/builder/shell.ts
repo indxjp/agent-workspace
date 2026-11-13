@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { canonicalCall } from '@indx-workspace/contracts/agents';
 import {
   BUILDER_DEFAULT_LIMITS,
@@ -14,6 +12,7 @@ import {
 } from '@indx-workspace/contracts/builder';
 import { z } from 'zod';
 
+import { randomIds } from '../ids';
 import { log } from '../telemetry/logger';
 import { callDigest } from './call-digest';
 import type { ToolCall } from './core/call';
@@ -77,7 +76,9 @@ export async function handleToolCall(
   let result: ToolResult;
   try {
     const replayed = await replayOf(tool, callId, ctx, ports);
-    if (replayed !== null) return replayed;
+    // A workspace that switched the Builder off mid-run is told so, not handed the stored result
+    // of an earlier write: the switch is the first rule (`featureOff`) and a replay is no exception.
+    if (replayed !== null && (await ports.feature.enabled(ctx))) return replayed;
     const facts = await gatherFacts(parsed, envelope.data.arguments, ctx, ports, signal);
     if ('unresolved' in facts) {
       // The door names no caller the deployment can resolve: refused, never run as the Builder. A
@@ -329,7 +330,10 @@ async function finish(
     const entry = { ...row, outcome: outcomeOf(result), code };
     // The call id comes from the client, so a repeated id must still count: journal it again.
     if (!(await ports.audit.record(ctx, entry))) {
-      await ports.audit.record(ctx, { ...entry, callId: `${row.callId}:${randomUUID()}` });
+      await ports.audit.record(ctx, {
+        ...entry,
+        callId: `${row.callId}:${(ports.ids ?? randomIds).newId()}`,
+      });
     }
   } catch (err) {
     if (result !== INTERNAL_ERROR) logFailure(ctx, row.tool, err);

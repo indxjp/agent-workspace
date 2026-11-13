@@ -28,9 +28,47 @@ function collapse(text) {
   return text.replaceAll(/\s+/gu, ' ');
 }
 
-/** @param {ts.ArrayLiteralExpression} literal */
-export function renderArrayLiteral(literal) {
-  return literal.elements
+/**
+ * Follow only const array sources; unresolved or cyclic spreads stay visible as written.
+ * @param {ts.Expression} expression @param {ts.TypeChecker} checker @param {Set<ts.Node>} seen
+ * @returns {readonly ts.Expression[] | undefined}
+ */
+function arrayMembers(expression, checker, seen) {
+  const node = unwrapExpression(expression);
+  if (seen.has(node)) return undefined;
+  seen.add(node);
+  try {
+    if (ts.isIdentifier(node)) {
+      let symbol = checker.getSymbolAtLocation(node);
+      if (symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+        symbol = checker.getAliasedSymbol(symbol);
+      }
+      const declaration = symbol?.valueDeclaration;
+      if (
+        declaration === undefined ||
+        !ts.isVariableDeclaration(declaration) ||
+        !isConstDeclaration(declaration) ||
+        declaration.initializer === undefined
+      )
+        return undefined;
+      return arrayMembers(declaration.initializer, checker, seen);
+    }
+    if (!ts.isArrayLiteralExpression(node)) return undefined;
+    return node.elements.flatMap((element) =>
+      ts.isSpreadElement(element)
+        ? (arrayMembers(element.expression, checker, seen) ?? [element])
+        : [element],
+    );
+  } finally {
+    seen.delete(node);
+  }
+}
+
+/** @param {ts.ArrayLiteralExpression} literal @param {ts.TypeChecker} [checker] */
+export function renderArrayLiteral(literal, checker) {
+  const elements =
+    checker === undefined ? literal.elements : arrayMembers(literal, checker, new Set());
+  return (elements ?? literal.elements)
     .map((element) => `- ${inlineCode(collapse(element.getText()))}`)
     .join('\n');
 }
@@ -153,7 +191,7 @@ export function renderScalar(expression, checker) {
  */
 export function renderLiteralConst(expression, checker) {
   const unwrapped = unwrapExpression(expression);
-  if (ts.isArrayLiteralExpression(unwrapped)) return renderArrayLiteral(unwrapped);
+  if (ts.isArrayLiteralExpression(unwrapped)) return renderArrayLiteral(unwrapped, checker);
   if (ts.isObjectLiteralExpression(unwrapped)) return renderObjectLiteral(unwrapped);
   return renderScalar(unwrapped, checker);
 }

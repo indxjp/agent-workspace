@@ -12,12 +12,8 @@ import type {
   WireProtocolForwarder,
 } from '../types.js';
 import { ModelDiscoveryHttpError } from '../types.js';
-import {
-  anthropicToOpenAI,
-  openAIError,
-  openAIToAnthropic,
-  OPENAI_APPROXIMATION_WARNINGS,
-} from '../translate/openai.js';
+import { anthropicToOpenAI, openAIError, openAIToAnthropic } from '../translate/openai.js';
+import { OPENAI_APPROXIMATION_WARNINGS } from '../translate/openai-translation-table.js';
 import { translateOpenAIStream } from '../translate/openai-stream.js';
 import { createWireProtocolForwarder, OPENAI_WIRE_PROTOCOLS } from './passthrough.js';
 

@@ -22,17 +22,21 @@ function sweeper({
   const listStaleRunIds = vi.fn<StaleRunSweepDependencies['listStaleRunIds']>(() =>
     Promise.resolve(['run-1', 'run-2']),
   );
+  const listExpiredApprovalRunIds = vi.fn<StaleRunSweepDependencies['listExpiredApprovalRunIds']>(
+    () => Promise.resolve([]),
+  );
   const onError = vi.fn<(error: unknown) => void>();
   const stop = startStaleRunSweeper({
     lease: { tryAcquire },
     listStaleRunIds,
+    listExpiredApprovalRunIds,
     finish,
     staleAfterMs: STALE_AFTER_MS,
     clock: fixedClock(NOW),
     intervalMs: INTERVAL_MS,
     onError,
   });
-  return { tryAcquire, release, listStaleRunIds, finish, onError, stop };
+  return { tryAcquire, release, listStaleRunIds, listExpiredApprovalRunIds, finish, onError, stop };
 }
 
 describe('startStaleRunSweeper', () => {
@@ -55,6 +59,23 @@ describe('startStaleRunSweeper', () => {
     expect(sweep.finish).toHaveBeenCalledWith('run-2', 'failed', expect.any(String), true);
     expect(sweep.release).toHaveBeenCalledTimes(1);
     expect(sweep.onError).not.toHaveBeenCalled();
+    // Held for one sweep of the one-minute interval.
+    expect(sweep.tryAcquire).toHaveBeenCalledWith('stale-run-sweep', 60_000);
+  });
+
+  it('cancels a paused run past its approval deadline as approval_expired (ADR-0145 D2.4)', async () => {
+    const sweep = sweeper();
+    sweep.listExpiredApprovalRunIds.mockResolvedValueOnce(['paused-1']);
+    await vi.advanceTimersByTimeAsync(INTERVAL_MS);
+    sweep.stop();
+
+    expect(sweep.listExpiredApprovalRunIds.mock.calls[0]?.[0].toISOString()).toBe(NOW);
+    expect(sweep.finish).toHaveBeenCalledWith(
+      'paused-1',
+      'cancelled',
+      expect.stringMatching(/^approval_expired/u),
+      true,
+    );
   });
 
   it('does nothing when another replica holds the lease', async () => {

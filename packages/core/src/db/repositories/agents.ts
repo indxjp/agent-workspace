@@ -4,7 +4,7 @@
  * Read `./scope.ts` first: the one property that matters here is that {@link AgentRepository} is
  * obtained *for a {@link WorkspaceScope}* and that no method on it takes a workspace id. Every
  * `where` clause below opens with `eq(agents.workspaceId, scope.workspaceId)` and is built inside
- * this file, so a caller has no way to write a query that forgets the tenant.
+ * this file or `./agents/`, so a caller has no way to write a query that forgets the tenant.
  *
  * ## What the outcomes are, and why they are not exceptions
  *
@@ -21,7 +21,7 @@
  *     than as forbidden, because a 403 would confirm the id exists, which is an existence oracle
  *     across a tenant boundary.
  *
- * Anything else is re-thrown. {@link classifyWriteFailure} decides on a positive assertion — a
+ * Anything else is re-thrown. `classifyWriteFailure` (`./agents/rows.ts`) decides on a positive assertion — a
  * violation is classified because its SQLSTATE and its constraint name were both recognised, never
  * because nothing else matched — and its final arm returns `null`, which the callers turn back
  * into a throw (ADR-0015).
@@ -35,21 +35,7 @@
  * is falsy, and therefore a permission that would be *granted* by any check written the obvious
  * way round.
  */
-import {
-  and,
-  asc,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  max,
-  notExists,
-  sql,
-  type SQL,
-} from 'drizzle-orm';
+import { and, eq, type SQL } from 'drizzle-orm';
 
 import type { AgentCreatedByAgent, BuiltinAgentKey } from '@indx-workspace/contracts/agents';
 
@@ -59,21 +45,16 @@ import {
   type AgentResourceAssignmentsInput,
   type ReplaceAgentResourcesOutcome,
 } from './agent-resources.js';
-import { lockAgentCreations, type Executor } from './agent-versions-shared.js';
-import { checkedAuditEvent } from './audit-events.js';
-import { auditEvents } from '../schema/audit-events.js';
-import { runs } from '../schema/runs.js';
-import { sessions } from '../schema/sessions.js';
+import type { Executor } from './agent-versions-shared.js';
+import { createAgentArchive } from './agents/archive.js';
+import { Rollback } from './agents/rows.js';
+import { createAgentWrites } from './agents/writes.js';
 import {
   agents,
-  parseAgentPermissions,
-  parseAgentPolicy,
-  parseBuiltinKey,
   type AgentPermissions as StoredAgentPermissions,
   type AgentStoredPolicy as StoredAgentPolicy,
 } from '../schema/agents.js';
 import { requireWorkspaceScope, type WorkspaceScope } from './scope.js';
-import { postgresViolations } from './violations.js';
 
 /** Spec §17 Step 4's four booleans, as the `agents.permissions` column stores them. */
 export type AgentPermissions = StoredAgentPermissions;
@@ -164,28 +145,6 @@ export type UpdateAgentOutcome =
   | { readonly kind: 'name-conflict'; readonly name: string }
   | { readonly kind: 'unknown-model-connection'; readonly modelConnectionId: string }
   | { readonly kind: 'unknown-runtime-profile'; readonly runtimeProfileId: string };
-
-/** How long a restore keeps the auto-archive sweep away from an agent (the sweep's own 30 days). */
-const RESTORE_WINDOW_DAYS = 30;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * True for an agent with no restore (`agent-changed`, `archived: false`) at or after `since`.
- *
- * ponytail: scans the workspace's recent audit rows; add an index on
- * (workspace_id, action, subject_id) if audit volume makes the hourly sweep slow.
- */
-function notRestoredSince(workspaceId: string, since: Date): SQL {
-  return notExists(
-    sql`(select 1 from ${auditEvents} where ${and(
-      eq(auditEvents.workspaceId, workspaceId),
-      eq(auditEvents.action, 'agent-changed'),
-      eq(auditEvents.subjectId, sql`${agents.id}::text`),
-      sql`${auditEvents.details}->>'archived' = 'false'`,
-      gte(auditEvents.createdAt, since),
-    )})`,
-  );
-}
 
 /** What restoring an agent can produce. `not-archived` is the no-op: the agent is active already. */
 export type RestoreAgentOutcome =
@@ -282,138 +241,6 @@ export interface AgentRepositoryProvider {
 }
 
 /**
- * The constraint names this module knows how to turn into an outcome.
- *
- * Transcribed from `migrations/0000_init.sql`, which is the artefact PostgreSQL actually reports.
- * `agents_workspace_name_key` is a unique *index*; PostgreSQL still reports its name in the
- * error's `constraint` field, which is why it can be matched the same way as the two foreign keys.
- */
-const NAME_CONFLICT_CONSTRAINTS: ReadonlySet<string> = new Set(['agents_workspace_name_key']);
-const MODEL_CONNECTION_CONSTRAINTS: ReadonlySet<string> = new Set([
-  'agents_model_connection_id_model_connections_id_fk',
-  'agents_model_connection_workspace_fk',
-]);
-const RUNTIME_PROFILE_CONSTRAINTS: ReadonlySet<string> = new Set([
-  'agents_runtime_profile_id_runtime_profiles_id_fk',
-  'agents_runtime_profile_workspace_fk',
-]);
-
-/** PostgreSQL SQLSTATE classes this module classifies. Anything else is somebody else's problem. */
-const UNIQUE_VIOLATION = '23505';
-const FOREIGN_KEY_VIOLATION = '23503';
-
-/**
- * Classify a write failure, or answer `null`.
- *
- * Positive assertion, twice over: a failure is a name conflict because its SQLSTATE was
- * `23505` **and** its constraint was one of the names above. A `null` return means "this module
- * does not know what this is", and every caller re-throws on it rather than reporting a plausible
- * client error for a failure that might be a dropped connection (ADR-0015).
- */
-function classifyWriteFailure(
-  error: unknown,
-): 'name-conflict' | 'unknown-model-connection' | 'unknown-runtime-profile' | null {
-  for (const failure of postgresViolations(error)) {
-    if (failure.code === UNIQUE_VIOLATION && NAME_CONFLICT_CONSTRAINTS.has(failure.constraint)) {
-      return 'name-conflict';
-    }
-    if (
-      failure.code === FOREIGN_KEY_VIOLATION &&
-      MODEL_CONNECTION_CONSTRAINTS.has(failure.constraint)
-    ) {
-      return 'unknown-model-connection';
-    }
-    if (
-      failure.code === FOREIGN_KEY_VIOLATION &&
-      RUNTIME_PROFILE_CONSTRAINTS.has(failure.constraint)
-    ) {
-      return 'unknown-runtime-profile';
-    }
-  }
-  return null;
-}
-
-/** The columns a read selects. Written out so a schema change that drops one is a compile error. */
-const AGENT_COLUMNS = {
-  id: agents.id,
-  workspaceId: agents.workspaceId,
-  name: agents.name,
-  instructions: agents.instructions,
-  modelConnectionId: agents.modelConnectionId,
-  model: agents.model,
-  runtimeProfileId: agents.runtimeProfileId,
-  permissions: agents.permissions,
-  policy: agents.policy,
-  createdBy: agents.createdBy,
-  ownerPrincipalId: agents.ownerPrincipalId,
-  builtinKey: agents.builtinKey,
-  createdByAgentId: agents.createdByAgentId,
-  createdByAgentVersion: agents.createdByAgentVersion,
-  createdByRunId: agents.createdByRunId,
-  archivedAt: agents.archivedAt,
-  createdAt: agents.createdAt,
-  updatedAt: agents.updatedAt,
-} as const;
-
-/** One selected row into an {@link AgentRecord}, parsing `permissions` rather than trusting it. */
-function toRecord(row: {
-  id: string;
-  workspaceId: string;
-  name: string;
-  instructions: string;
-  modelConnectionId: string | null;
-  model: string | null;
-  runtimeProfileId: string | null;
-  permissions: unknown;
-  policy: unknown;
-  createdBy: string | null;
-  ownerPrincipalId: string;
-  builtinKey: string | null;
-  createdByAgentId: string | null;
-  createdByAgentVersion: number | null;
-  createdByRunId: string | null;
-  archivedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-}): AgentRecord {
-  const builtin = parseBuiltinKey(row.builtinKey);
-  return {
-    id: row.id,
-    workspaceId: row.workspaceId,
-    name: row.name,
-    instructions: row.instructions,
-    modelConnectionId: row.modelConnectionId,
-    model: row.model,
-    runtimeProfileId: row.runtimeProfileId,
-    permissions: parseAgentPermissions(row.permissions),
-    policy: parseAgentPolicy(row.policy),
-    createdBy: row.createdBy,
-    ownerPrincipalId: row.ownerPrincipalId,
-    ...(builtin === undefined ? {} : { builtin }),
-    // The lineage CHECK makes the version and the run both present or both absent.
-    ...(row.createdByAgentVersion === null || row.createdByRunId === null
-      ? {}
-      : {
-          createdByAgent: {
-            agentId: row.createdByAgentId,
-            version: row.createdByAgentVersion,
-            runId: row.createdByRunId,
-          },
-        }),
-    ...(row.archivedAt === null ? {} : { archivedAt: row.archivedAt }),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
-
-/** Private: thrown inside a transaction to roll it back, and caught by the method that threw it. */
-class Rollback extends Error {
-  constructor(readonly outcome: Exclude<CreateAgentWithAssignmentsOutcome, { kind: 'created' }>) {
-    super(`agent create rolled back: ${outcome.kind}`);
-  }
-}
-
-/**
  * The PostgreSQL {@link AgentRepositoryProvider}.
  *
  * One `db` handle, one provider, any number of scopes. The handle is a pool, so the repositories
@@ -440,328 +267,46 @@ export function createDatabaseAgentRepositoryProvider(db: Executor): AgentReposi
         return combined;
       };
 
+      const context = { db, checked, tenant, within };
       return {
-        async list(): Promise<readonly AgentRecord[]> {
-          const rows = await db
-            .select(AGENT_COLUMNS)
-            .from(agents)
-            .where(tenant)
-            // Total and stable, and identical to the in-memory store's documented order: oldest
-            // first, ties broken by id. Without the second key two rows sharing a `created_at`
-            // could come back in either order and a list test would be flaky rather than wrong.
-            .orderBy(asc(agents.createdAt), asc(agents.id));
-          return rows.map(toRecord);
-        },
-
-        async get(id: string): Promise<AgentRecord | null> {
-          const rows = await db
-            .select(AGENT_COLUMNS)
-            .from(agents)
-            .where(within(eq(agents.id, id)))
-            .limit(1);
-          const row = rows[0];
-          return row === undefined ? null : toRecord(row);
-        },
-
-        async create(input: CreateAgentInput): Promise<CreateAgentOutcome> {
-          try {
-            const rows = await db.transaction(async (tx) => {
-              // The quota count reads `agents`, so a creation from any door waits its turn.
-              await lockAgentCreations(tx, checked.workspaceId);
-              return tx
-                .insert(agents)
-                .values({
-                  // Not from the caller. An insert cannot name a workspace; it inherits the scope's.
-                  workspaceId: checked.workspaceId,
-                  name: input.name,
-                  instructions: input.instructions,
-                  modelConnectionId: input.modelConnectionId,
-                  model: input.model,
-                  runtimeProfileId: input.runtimeProfileId ?? null,
-                  permissions: { ...input.permissions },
-                  ownerPrincipalId: input.ownerPrincipalId,
-                  createdBy: input.createdBy ?? null,
-                  createdByAgentId: input.createdByAgent?.agentId ?? null,
-                  createdByAgentVersion: input.createdByAgent?.version ?? null,
-                  createdByRunId: input.createdByAgent?.runId ?? null,
-                })
-                .returning(AGENT_COLUMNS);
-            });
-            const row = rows[0];
-            if (row === undefined) {
-              throw new Error('the insert returned no row');
-            }
-            return { kind: 'created', agent: toRecord(row) };
-          } catch (error) {
-            const classified = classifyWriteFailure(error);
-            if (classified === 'name-conflict') return { kind: 'name-conflict', name: input.name };
-            if (classified === 'unknown-model-connection') {
-              return {
-                kind: 'unknown-model-connection',
-                modelConnectionId: input.modelConnectionId ?? '',
-              };
-            }
-            if (classified === 'unknown-runtime-profile') {
-              return {
-                kind: 'unknown-runtime-profile',
-                runtimeProfileId: input.runtimeProfileId ?? '',
-              };
-            }
-            throw error;
-          }
-        },
-
-        async createWithAssignments(input, assignments) {
-          try {
-            return await db.transaction(async (tx) => {
-              // The same create and replace as the single writes, over the transaction, so the
-              // rules (constraint mapping, the #133 file ceiling) are stated once.
-              const created = await createDatabaseAgentRepositoryProvider(tx)
-                .forScope(scope)
-                .create(input);
-              if (created.kind !== 'created') throw new Rollback(created);
-              const assigned = await createDatabaseAgentResourceRepositoryProvider(tx)
-                .forScope(scope)
-                .replace(created.agent.id, assignments);
-              if (assigned.kind === 'not-found') {
-                throw new Error(`agent ${created.agent.id} vanished inside its own create`);
-              }
-              if (assigned.kind !== 'updated') throw new Rollback(assigned);
-              // `updated_at` is `now()`, the transaction's start, so the created row is still current.
-              return {
-                kind: 'created' as const,
-                agent: created.agent,
-                assignments: assigned.assignments,
-              };
-            });
-          } catch (error) {
-            if (error instanceof Rollback) return error.outcome;
-            throw error;
-          }
-        },
-
-        async update(id: string, patch: UpdateAgentPatch): Promise<UpdateAgentOutcome> {
-          // Only the keys the patch actually carries. `exactOptionalPropertyTypes` makes
-          // `patch.name !== undefined` mean "the key was supplied", so a nullable column can be
-          // set back to null without an absent key being read as one.
-          const changes: {
-            name?: string;
-            instructions?: string;
-            modelConnectionId?: string | null;
-            model?: string | null;
-            runtimeProfileId?: string | null;
-            permissions?: AgentPermissions;
-          } = {};
-          if (patch.name !== undefined) changes.name = patch.name;
-          if (patch.instructions !== undefined) changes.instructions = patch.instructions;
-          if (patch.modelConnectionId !== undefined) {
-            changes.modelConnectionId = patch.modelConnectionId;
-          }
-          if (patch.model !== undefined) changes.model = patch.model;
-          if (patch.runtimeProfileId !== undefined)
-            changes.runtimeProfileId = patch.runtimeProfileId;
-          if (patch.permissions !== undefined) changes.permissions = { ...patch.permissions };
-
-          if (Object.keys(changes).length === 0) {
-            // An empty patch must still answer not-found for an id this workspace does not have,
-            // so it is a read rather than a no-op that reports success.
-            const rows = await db
-              .select(AGENT_COLUMNS)
-              .from(agents)
-              .where(within(eq(agents.id, id)))
-              .limit(1);
-            const row = rows[0];
-            return row === undefined
-              ? { kind: 'not-found' }
-              : { kind: 'updated', agent: toRecord(row) };
-          }
-
-          try {
-            // An edit outside the version pipeline: the row no longer equals a version.
-            const rows = await db
-              .update(agents)
-              .set({ ...changes, materialisedVersionId: null })
-              .where(within(eq(agents.id, id)))
-              .returning(AGENT_COLUMNS);
-            const row = rows[0];
-            // No row matched: either no such id, or the id belongs to another workspace. The two
-            // are the same answer on purpose — see the file header.
-            if (row === undefined) return { kind: 'not-found' };
-            return { kind: 'updated', agent: toRecord(row) };
-          } catch (error) {
-            const classified = classifyWriteFailure(error);
-            if (classified === 'name-conflict') {
-              return { kind: 'name-conflict', name: patch.name ?? '' };
-            }
-            if (classified === 'unknown-model-connection') {
-              return {
-                kind: 'unknown-model-connection',
-                modelConnectionId: patch.modelConnectionId ?? '',
-              };
-            }
-            if (classified === 'unknown-runtime-profile') {
-              return {
-                kind: 'unknown-runtime-profile',
-                runtimeProfileId: patch.runtimeProfileId ?? '',
-              };
-            }
-            throw error;
-          }
-        },
-
-        async delete(id: string): Promise<DeleteAgentOutcome> {
-          const rows = await db
-            .delete(agents)
-            .where(within(eq(agents.id, id)))
-            .returning({ id: agents.id });
-          return rows.length > 0 ? { kind: 'deleted' } : { kind: 'not-found' };
-        },
-
-        async replacePolicy(
-          id: string,
-          policy: AgentStoredPolicy | null,
-        ): Promise<ReplaceAgentPolicyOutcome> {
-          const rows = await db
-            .update(agents)
-            .set({ policy, materialisedVersionId: null })
-            .where(within(eq(agents.id, id)))
-            .returning(AGENT_COLUMNS);
-          const row = rows[0];
-          return row === undefined
-            ? { kind: 'not-found' }
-            : { kind: 'updated', agent: toRecord(row) };
-        },
-
-        async listArchiveCandidates(query) {
-          const rows = await db
-            .select({
-              id: agents.id,
-              createdAt: agents.createdAt,
-              createdByAgentId: agents.createdByAgentId,
-              createdByAgentVersion: agents.createdByAgentVersion,
-              createdByRunId: agents.createdByRunId,
-            })
-            .from(agents)
-            .where(
-              // `within` first: the workspace predicate is the left-most term of the conjunction.
-              and(
-                within(isNull(agents.archivedAt)),
-                isNotNull(agents.createdByAgentVersion),
-                lt(agents.createdAt, query.createdBefore),
-                notRestoredSince(checked.workspaceId, query.notRestoredSince),
-                query.afterId === null ? undefined : gt(agents.id, query.afterId),
-              ),
-            )
-            .orderBy(asc(agents.id))
-            .limit(query.limit);
-          const ran =
-            rows.length === 0
-              ? []
-              : await db
-                  .select({ agentId: sessions.agentId, lastRunAt: max(runs.createdAt) })
-                  .from(runs)
-                  .innerJoin(sessions, eq(sessions.id, runs.sessionId))
-                  .where(
-                    and(
-                      eq(sessions.workspaceId, checked.workspaceId),
-                      inArray(
-                        sessions.agentId,
-                        rows.map((row) => row.id),
-                      ),
-                    ),
-                  )
-                  .groupBy(sessions.agentId);
-          const lastRunAt = new Map(ran.map((row) => [row.agentId, row.lastRunAt]));
-          return rows.flatMap((row) =>
-            // The lineage CHECK makes the version and the run both present or both absent.
-            row.createdByAgentVersion === null || row.createdByRunId === null
-              ? []
-              : [
-                  {
-                    id: row.id,
-                    createdAt: row.createdAt,
-                    lastRunAt: lastRunAt.get(row.id) ?? null,
-                    createdByAgent: {
-                      agentId: row.createdByAgentId,
-                      version: row.createdByAgentVersion,
-                      runId: row.createdByRunId,
-                    },
-                  },
-                ],
-          );
-        },
-
-        async archive(ids, at) {
-          if (ids.length === 0) return [];
-          return db.transaction(async (tx) => {
-            const archived = await tx
-              .update(agents)
-              .set({ archivedAt: at })
-              .where(
-                and(
-                  within(inArray(agents.id, [...ids])),
-                  isNull(agents.archivedAt),
-                  // A restore committed after the sweep listed the agent keeps it active.
-                  notRestoredSince(
-                    checked.workspaceId,
-                    new Date(at.getTime() - RESTORE_WINDOW_DAYS * DAY_MS),
-                  ),
-                ),
-              )
-              .returning({ id: agents.id, name: agents.name });
-            if (archived.length > 0) {
-              await tx.insert(auditEvents).values(
-                archived.map((agent) =>
-                  checkedAuditEvent({
-                    workspaceId: checked.workspaceId,
-                    actorPrincipalId: null,
-                    actorUserId: null,
-                    actorLabel: 'Auto-archive',
-                    action: 'agent-changed' as const,
-                    subjectId: agent.id,
-                    subjectLabel: agent.name,
-                    details: { archived: true as const },
-                  }),
-                ),
-              );
-            }
-            return archived.map((agent) => agent.id);
-          });
-        },
-
-        async restore(id, actor) {
-          return db.transaction(async (tx) => {
-            const restored = await tx
-              .update(agents)
-              .set({ archivedAt: null })
-              .where(and(within(eq(agents.id, id)), isNotNull(agents.archivedAt)))
-              .returning(AGENT_COLUMNS);
-            const row = restored[0];
-            if (row !== undefined) {
-              await tx.insert(auditEvents).values(
-                checkedAuditEvent({
-                  workspaceId: checked.workspaceId,
-                  actorPrincipalId: actor.principalId,
-                  actorUserId: actor.userId,
-                  actorLabel: actor.label,
-                  action: 'agent-changed' as const,
-                  subjectId: row.id,
-                  subjectLabel: row.name,
-                  details: { archived: false },
-                }),
-              );
-              return { kind: 'restored', agent: toRecord(row) };
-            }
-            const [current] = await tx
-              .select(AGENT_COLUMNS)
-              .from(agents)
-              .where(within(eq(agents.id, id)));
-            return current === undefined
-              ? { kind: 'not-found' }
-              : { kind: 'not-archived', agent: toRecord(current) };
-          });
-        },
+        ...createAgentWrites(context),
+        createWithAssignments: (input, assignments) =>
+          createWithAssignments(db, scope, input, assignments),
+        ...createAgentArchive(context),
       };
     },
   };
+}
+
+/** {@link AgentRepository.createWithAssignments}: the single writes again, over one transaction. */
+async function createWithAssignments(
+  db: Executor,
+  scope: WorkspaceScope,
+  input: CreateAgentInput,
+  assignments: AgentResourceAssignmentsInput,
+): Promise<CreateAgentWithAssignmentsOutcome> {
+  try {
+    return await db.transaction(async (tx) => {
+      // The same create and replace as the single writes, over the transaction, so the
+      // rules (constraint mapping, the #133 file ceiling) are stated once.
+      const created = await createDatabaseAgentRepositoryProvider(tx).forScope(scope).create(input);
+      if (created.kind !== 'created') throw new Rollback(created);
+      const assigned = await createDatabaseAgentResourceRepositoryProvider(tx)
+        .forScope(scope)
+        .replace(created.agent.id, assignments);
+      if (assigned.kind === 'not-found') {
+        throw new Error(`agent ${created.agent.id} vanished inside its own create`);
+      }
+      if (assigned.kind !== 'updated') throw new Rollback(assigned);
+      // `updated_at` is `now()`, the transaction's start, so the created row is still current.
+      return {
+        kind: 'created' as const,
+        agent: created.agent,
+        assignments: assigned.assignments,
+      };
+    });
+  } catch (error) {
+    if (error instanceof Rollback) return error.outcome;
+    throw error;
+  }
 }

@@ -1,3 +1,4 @@
+export { runIntakeSandbox, type IntakeOptions } from './intake.js';
 export {
   ManifestError,
   READY_FILE,

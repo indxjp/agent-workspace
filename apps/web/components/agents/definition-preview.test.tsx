@@ -49,6 +49,46 @@ describe('DefinitionPreview', () => {
     expect(permissions.querySelector('p')?.textContent).toBe('changedWrite files');
   });
 
+  it('names its sections without the form step numbers, which read 5, 3, 4 here (UX-11)', () => {
+    const headings = [...mount(BEFORE).querySelectorAll('h2, legend')].map(
+      (node) => node.textContent,
+    );
+    expect(headings).toEqual(expect.arrayContaining(['Runtime', 'Resources', 'Permissions']));
+    expect(headings.join(' ')).not.toMatch(/Step \d/u);
+  });
+
+  it("reads a runtime profile left unnamed as the workspace's default, not as none", () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    flushSync(() => {
+      createRoot(container).render(
+        <DefinitionPreview
+          body={definitionBody({ agent: { runtimeProfileName: null } })}
+          previous={null}
+          onAskBuilder={() => undefined}
+        />,
+      );
+    });
+    const runtime = section(container, 'runtime').textContent;
+    expect(runtime).toContain('Workspace default');
+    expect(runtime).not.toContain('None');
+    expect(section(mount(BEFORE), 'runtime').textContent).toContain('local-default');
+  });
+
+  it('says what changed in words, not field paths (UX-11)', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const after = definitionBody({ agent: { model: null, modelConnectionName: null } });
+    flushSync(() => {
+      createRoot(container).render(
+        <DefinitionPreview body={after} previous={BEFORE} onAskBuilder={() => undefined} />,
+      );
+    });
+    expect(section(container, 'model').querySelector('p')?.textContent).toBe(
+      'changedModel, Model connection',
+    );
+  });
+
   it('leaves every unchanged section plain', () => {
     const container = mount(BEFORE);
     for (const name of DEFINITION_SECTIONS.filter((candidate) => candidate !== 'permissions')) {

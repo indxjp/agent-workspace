@@ -14,9 +14,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { NO_INVITATION_CAPABILITY } from '../../contracts/invitations';
-import { conferRole } from '../rbac/conferral';
+import { conferRole } from '../rbac/core/conferral';
 import { decide, type Ownership } from '../rbac/decide';
-import { ROLES, type Role } from '../rbac/roles';
+import { ROLES, type Role } from '../rbac/core/roles';
 import { invitationCapabilityForViewer, invitationGrantsForRole } from './invitation-capability';
 
 /** What the invitation routes' own policy answers for this role. */
@@ -62,7 +62,7 @@ describe('invitationGrantsForRole', () => {
   );
 
   it('admits resend at the same width as the other writes, which is what the declaration says', () => {
-    // `rbac/declarations/W9-TEAM-121.ts` declares `resend` a sub-resource of `invitations`, so
+    // `rbac/core/declarations/W9-TEAM-121.ts` declares `resend` a sub-resource of `invitations`, so
     // `decide()` answers it at the parent's width. Asking it separately is what proves that: an
     // undeclared sub-resource would answer `refuse`, and this cell would read `false` for an Owner.
     expect(invitationGrantsForRole('owner').canResendInvitation).toBe(true);

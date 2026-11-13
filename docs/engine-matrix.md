@@ -19,7 +19,7 @@ Every cell is derived: the capability rows from each adapter's own declaration â
 | Budget enforced by | native | adapter | adapter | adapter |
 | Gateway dialects | anthropic-messages | openai-responses, openai-chat-completions, anthropic-messages | anthropic-messages | anthropic-messages, openai-responses, openai-chat-completions |
 | Protected config directory | `.claude` | `.openai-agents` | `.pi` | `.mastra` |
-| Adapter version | 0.3.310 | 0.0.0+0.21.0 | 0.0.0+1.4.0 | 0.0.0+1.79.0 |
+| Adapter version | 0.3.316 | 0.0.0+0.21.0 | 0.0.0+1.4.0 | 0.0.0+1.81.0 |
 | Conformance (compile scenarios) | 9/9 PASS | 9/9 PASS | 9/9 PASS | 9/9 PASS |
 
 The conformance row reports the **compile-only** scenarios, which are the ones a generator

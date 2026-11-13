@@ -15,7 +15,7 @@ import {
   clearedInvitationIdentityCookie,
   mintSessionToken,
   newSessionClaims,
-  readSessionSecret,
+  sessionSecret,
   sessionCookie,
   verifyInvitationIdentityToken,
   verifySessionToken,
@@ -57,7 +57,7 @@ export async function POST(
     );
   }
 
-  const secret = readSessionSecret(process.env);
+  const secret = sessionSecret();
   if (!secret.ok) {
     return responseFor(
       problem(503, 'server_not_configured', 'Invitation identity verification is unavailable.'),

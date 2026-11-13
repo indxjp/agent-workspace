@@ -33,6 +33,7 @@ a Node service, or an edge runtime.
 | `@indx-workspace/contracts/feedback`         | `RunFeedbackRequestSchema` (`{ rating: 'up' \| 'down', comment? }`, C19), `RUN_FEEDBACK_RATINGS`, `RUN_FEEDBACK_COMMENT_MAX_LENGTH`          |
 | `@indx-workspace/contracts/evaluations`      | `EvalCaseFileSchema` (`evals/<agent>.yaml`), `CreateEvaluationRequestSchema`, `EvaluationResourceSchema`, `EVALUATION_PROBLEM_CODES`         |
 | `@indx-workspace/contracts/features`         | `FEATURE_IDS`, `FeatureId`, `ROUTE_FEATURES`, `RouteFeature`: what can be switched off (ADR-0160)                                            |
+| `@indx-workspace/contracts/token-exchange`   | `TokenExchangeRequestSchema`, `TokenExchangeResponseSchema`, `TOKEN_EXCHANGE_PROBLEM_CODES`, `OAUTH_ACCESS_TOKEN_PATTERN` (ADR-0161)         |
 
 ## Reading a response
 

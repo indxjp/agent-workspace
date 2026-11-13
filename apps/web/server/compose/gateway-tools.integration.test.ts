@@ -204,15 +204,12 @@ async function composeOrdersRequest(
 ) {
   const { context, runAgent } = await launchContext(runId, identity ?? {});
   if (identity !== null) identityRuns.add(runId);
-  return buildRunRequestFor(
+  return buildRunRequestFor({
     context,
     runAgent,
-    { runnerUrl: 'http://runner:8080', workspaceRoot: '/workspace' },
-    issuer(),
-    {},
-    undefined,
-    null,
-    {
+    settings: { runnerUrl: 'http://runner:8080', workspaceRoot: '/workspace' },
+    gateway: issuer(),
+    resourceLoader: {
       load: () =>
         Promise.resolve({
           files: [],
@@ -229,15 +226,12 @@ async function composeOrdersRequest(
           ],
         }),
     },
-    undefined,
-    null,
-    undefined,
-    (snapshotRunId, ids) => {
+    snapshotTools: (snapshotRunId, ids) => {
       snapshots.set(snapshotRunId, ids);
       return Promise.resolve();
     },
     ceiling,
-  );
+  });
 }
 
 /** {@link composeOrdersRequest} without a ceiling, and the `orders` gateway entry it holds. */

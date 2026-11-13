@@ -5,6 +5,85 @@ description: "The `@indx-workspace/sdk/project` exports: readProjectFileText, pa
 
 <Note>This page is generated from `packages/sdk/src/project/index.ts`, `packages/sdk/src/project/reader.ts`, `packages/sdk/src/project/writer.ts`, `packages/sdk/src/project/parse.ts`, `packages/sdk/src/project/render.ts`, `packages/sdk/src/project/errors.ts` by `scripts/docs/generate-sdk-reference.mjs`. Do not edit it by hand — run `pnpm docs:generate`.</Note>
 
+## addGeneratedEntry
+
+Adds one entry.
+
+```ts
+addGeneratedEntry(manifest: GeneratedManifest, key: string, entry: GeneratedEntry): GeneratedManifest
+```
+
+## APP_PRESETS
+
+The presets by template id.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `chat` | `AppPreset` | Yes |  |
+| `wiki` | `AppPreset` | Yes |  |
+| `crm` | `AppPreset` | Yes |  |
+| `desk` | `AppPreset` | Yes |  |
+
+## APP_TEMPLATES
+
+The app templates `create --template` writes: the portal, and the presets over it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `0` | `"portal"` | Yes |  |
+| `1` | `"chat"` | Yes |  |
+| `2` | `"wiki"` | Yes |  |
+| `3` | `"crm"` | Yes |  |
+| `4` | `"desk"` | Yes |  |
+| `length` | `5` | Yes |  |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<"chat" \| "wiki" \| "crm" \| "desk" \| "portal">[]): ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]; (...items: ("chat" \| "wiki" \| "crm" \| "desk" \| "portal" \| ConcatArray<"chat" \| "wiki" \| "crm" \| "desk" \| "portal">)[]): ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends "chat" \| "wiki" \| "crm" \| "desk" \| "portal">(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends "chat" \| "wiki" \| "crm" \| "desk" \| "portal">(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => value is S, thisArg?: any): S[]; (predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any): ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentIndex: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => "chat" \| "wiki" \| "crm" \| "desk" \| "portal"): "chat" \| "wiki" \| "crm" \| "desk" \| "portal"; (callbackfn: (previousValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentIndex: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => "chat" \| "wiki" \| "crm" \| "desk" \| "portal", initialValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal"): "chat" \| "wiki" \| "crm" \| "desk" \| "portal"; <U>(callbackfn: (previousValue: U, currentValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentIndex: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentIndex: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => "chat" \| "wiki" \| "crm" \| "desk" \| "portal"): "chat" \| "wiki" \| "crm" \| "desk" \| "portal"; (callbackfn: (previousValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentIndex: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => "chat" \| "wiki" \| "crm" \| "desk" \| "portal", initialValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal"): "chat" \| "wiki" \| "crm" \| "desk" \| "portal"; <U>(callbackfn: (previousValue: U, currentValue: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", currentIndex: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends "chat" \| "wiki" \| "crm" \| "desk" \| "portal">(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, obj: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, obj: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any): "chat" \| "wiki" \| "crm" \| "desk" \| "portal" \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, obj: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, "chat" \| "wiki" \| "crm" \| "desk" \| "portal"]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<"chat" \| "wiki" \| "crm" \| "desk" \| "portal">` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => "chat" \| "wiki" \| "crm" \| "desk" \| "portal" \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends "chat" \| "wiki" \| "crm" \| "desk" \| "portal">(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any): "chat" \| "wiki" \| "crm" \| "desk" \| "portal" \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", index: number, array: readonly ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: "chat" \| "wiki" \| "crm" \| "desk" \| "portal", b: "chat" \| "wiki" \| "crm" \| "desk" \| "portal") => number) \| undefined) => ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]): ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]; (start: number, deleteCount?: number): ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: "chat" \| "wiki" \| "crm" \| "desk" \| "portal") => ("chat" \| "wiki" \| "crm" \| "desk" \| "portal")[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<"chat" \| "wiki" \| "crm" \| "desk" \| "portal">` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## appConfigLines
+
+The two `app.config.ts` lines that add one resource to the app: its import and its entry.
+
+```ts
+appConfigLines(resource: string): { readonly import: string; readonly entry: string; }
+```
+
+## appConfigRecipeLines
+
+The two `app.config.ts` lines that add one recipe to the app: its import and its entry.
+
+```ts
+appConfigRecipeLines(recipe: string): { readonly import: string; readonly entry: string; }
+```
+
 ## appendEvalCase
 
 `text` (an `evals/<agent>.yaml`, or empty for a new file) with `added` appended to `cases`.
@@ -14,6 +93,104 @@ The result is not validated: read it back with `readEvalCaseFile`.
 ```ts
 appendEvalCase(text: string, added: ProjectFileMapping, label: string): string
 ```
+
+## appKitPackages
+
+The packages an app needs in `package.json`, at exact versions: the app kit in lock-step with
+`version`, and the Next.js, React, Drizzle and PostgreSQL versions this release builds and tests
+the app kit with (`aw`'s `app-kit.test.ts` holds them equal to the repository's), plus
+dependency-cruiser for the app's import boundary check.
+
+```ts
+appKitPackages(version: string): readonly PinnedPackage[]
+```
+
+## appKitSatisfies
+
+Whether the installed app-kit `version` lies in a blueprint's `appKit` `range` (ADR-0166 D5).
+The range is an exact version, `^x.y.z` or `~x.y.z`, with npm's meaning: `^1.2.3` is
+`>=1.2.3 <2.0.0`, `^0.9.0` is `>=0.9.0 <0.10.0`, `^0.0.3` is `0.0.3` only, and `~1.2.3` is
+`>=1.2.3 <1.3.0`. A pre-release matches only exactly. Anything else, a malformed range or
+version included, does not match.
+
+```ts
+appKitSatisfies(range: string, version: string): boolean
+```
+
+## AppNavItem
+
+The portal pages a preset's navigation may list.
+
+- `"chat"`
+- `"files"`
+- `"runs"`
+- `"wiki"`
+- `"home"`
+- `"dashboard"`
+- `"recipes"`
+
+## AppPreset
+
+One preset of `APP_PRESETS`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `parts` | `readonly "recipes"[]` | Yes | The shared parts it includes, rendered after the portal template in this order. |
+| `directory` | `"chat" \| "wiki" \| "crm" \| "desk"` | Yes | Its overlay, `templates/presets/<directory>/`, rendered last. |
+| `replaces` | `readonly string[]` | Yes | The paths an earlier layer writes that this preset writes on purpose; any other is refused. |
+| `home` | `string` | Yes | The route the app opens on. |
+| `nav` | `readonly ("chat" \| "files" \| "runs" \| "wiki" \| "home" \| "dashboard" \| "recipes")[]` | Yes | The navigation's entries, in order. |
+| `theme` | `"knowledge" \| "support" \| "copilot" \| "automation" \| "review" \| "blank"` | Yes | The `setup.theme` answer when `--theme` is not given. |
+| `tokens` | `Readonly<Record<string, string \| number>>` | Yes | Theme tokens beyond the portal's locale and radius, as `app/theme.ts` lines. |
+| `resources` | `readonly AppPresetResource[]` | Yes | The resources it ships, in `app.config.ts` order. |
+| `page` | `undefined \| { readonly name: string; readonly kind: "dashboard"; }` | No | A `page/<kind>` generator template it renders as a layer, recorded as `page:<name>`. |
+
+## AppPresetPart
+
+The shared parts a preset may include, each a directory `templates/parts/<part>/`.
+
+`"recipes"`
+
+## AppPresetResource
+
+A resource a preset ships, recorded as `resource:<name>` so `aw destroy resource` removes it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | Its name, as `resources/<name>.ts` and its `app.config.ts` entry spell it. |
+| `plural` | `string` | Yes | Its table and route name: `app/api/<plural>/`. |
+| `owns` | `readonly string[]` | Yes | Paths, or directories ending in `/`, it owns beyond its file, routes and pages. |
+| `migration` | `undefined \| string` | No | The tag of the migration it adds to the journal, when it carries one. |
+| `pages` | `undefined \| readonly string[]` | No | The `name:type` fields its list, detail and new pages are generated with, when the preset ships them: the pages `aw generate resource` writes, from the same template. |
+
+## AppScript
+
+One script a generated app adds to `package.json`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes | The script's name, as `npm run <name>` runs it. |
+| `command` | `string` | Yes | The command it runs. |
+
+## appScripts
+
+The scripts an app adds to `package.json`: `build` is `next build`, which the `Dockerfile` runs
+(issue #1531), and `image` builds the app's image from that `Dockerfile`, tagged with the app's
+name, for `aw deploy` to run once it is pushed (issue #1512).
+
+```ts
+appScripts(appName: string): readonly AppScript[]
+```
+
+## AppTemplate
+
+One of `APP_TEMPLATES`.
+
+- `"chat"`
+- `"wiki"`
+- `"crm"`
+- `"desk"`
+- `"portal"`
 
 ## askSetupQuestions
 
@@ -35,6 +212,298 @@ above is used. Text questions are always typed.
 ```ts
 async askSetupQuestions(prompt: (question: string) => Promise<string>, say: (line: string) => void, preset?: SetupAnswers, choose?: Choose): Promise<CompleteSetupAnswers>
 ```
+
+## BLUEPRINT_ARCHIVE_MAX_BYTES
+
+The most bytes the files of one blueprint hold together (ADR-0166 D4).
+
+`number`
+
+## BLUEPRINT_MANIFEST_FILE
+
+The manifest's file name, at the package root. It is never written into the app (D2).
+
+`"blueprint.json"`
+
+## BLUEPRINT_PACKAGE_KEYWORD
+
+The keyword every blueprint package carries in its `package.json` (ADR-0166 D4).
+
+`"indx-workspace-blueprint"`
+
+## BLUEPRINT_PART_KINDS
+
+The kinds of part a blueprint holds (ADR-0166 D2); migrations are listed on their own.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `0` | `"resource"` | Yes |  |
+| `1` | `"recipe"` | Yes |  |
+| `2` | `"page"` | Yes |  |
+| `3` | `"agent"` | Yes |  |
+| `4` | `"skill"` | Yes |  |
+| `5` | `"test"` | Yes |  |
+| `length` | `6` | Yes |  |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<"agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">[]): ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]; (...items: ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test" \| ConcatArray<"agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">)[]): ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => value is S, thisArg?: any): S[]; (predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any): ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentIndex: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"): "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; (callbackfn: (previousValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentIndex: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", initialValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"): "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; <U>(callbackfn: (previousValue: U, currentValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentIndex: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentIndex: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"): "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; (callbackfn: (previousValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentIndex: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", initialValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"): "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; <U>(callbackfn: (previousValue: U, currentValue: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", currentIndex: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, obj: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, obj: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any): "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test" \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, obj: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<"agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test" \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any): "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test" \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", index: number, array: readonly ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test", b: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test") => number) \| undefined) => ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]): ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]; (start: number, deleteCount?: number): ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test") => ("agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test")[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<"agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test">` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## BlueprintAppState
+
+What the planners need to know about the installing app.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `paths` | `readonly string[]` | Yes | Every file path in the app, relative to its root. |
+| `appKitVersion` | `undefined \| string` | Yes | The installed `@indx-workspace/app` version; `undefined` when it is not installed. |
+| `manifest` | `GeneratedManifest` | Yes | The app's `aw-generated.json`. |
+| `agents` | `readonly string[]` | Yes | The agents the project defines already. |
+| `connectors` | `readonly string[]` | Yes | The connectors and secrets `agent-workspace.yaml` defines, for each slot's status. |
+| `secrets` | `readonly string[]` | Yes |  |
+| `nextMigrationIndex` | `number` | Yes | The index the app's next migration takes in its journal. |
+
+## BlueprintArchive
+
+One blueprint package, read: its manifest, its npm name and version, and its listed files.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `manifest` | `{ name: string; version: string; appKit: string; parts: { path: string; kind: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; }[]; slots: { connectors: { slot: string; kind: "mcp"; identity?: boolean \| undefined; }[]; secrets: { slot: string; }[]; agents: { name: string; }[]; }; migrations: string[]; }` | Yes |  |
+| `packageName` | `string` | Yes | The `name` and `version` of the package's `package.json`. |
+| `packageVersion` | `string` | Yes |  |
+| `files` | `readonly ProjectFile[]` | Yes | Every part and then every migration `blueprint.json` lists, in its order, as text. |
+
+## BlueprintFile
+
+One file of a blueprint release: its path in the package, its rendered text and its sha256.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `contents` | `string` | Yes |  |
+| `sha256` | `string` | Yes | The sha256 of `contents`, lower-case hex, computed by the caller. |
+
+## BlueprintFileAction
+
+What `update` proposes for one file (ADR-0166 D7).
+
+- `"add"`
+- `"update"`
+- `"remove"`
+- `"conflict"`
+- `"unchanged"`
+
+## BlueprintFileChange
+
+One file of an update's proposal.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes | The file's path in the app. |
+| `action` | `"add" \| "update" \| "remove" \| "conflict" \| "unchanged"` | Yes |  |
+| `from` | `undefined \| string` | No | The file's path in the package, when the new version has the file. |
+| `write` | `undefined \| string` | No | Where `--yes` writes the new version's text: the file itself for `add` and `update`, and the `<file>.blueprint-<version>` sidecar for a `conflict` the new version changes. Absent when nothing is written. |
+| `contents` | `undefined \| string` | No | The new version's text, when it has the file. |
+
+## BlueprintInstallPlan
+
+What `aw blueprint add` writes and records.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | Yes | `blueprint:<name>`. |
+| `writes` | `readonly BlueprintWrite[]` | Yes | Every part and migration, at its path in the app, sorted by path. |
+| `migrations` | `readonly BlueprintMigrationWrite[]` | Yes |  |
+| `slots` | `readonly BlueprintSlotStatus[]` | Yes |  |
+| `wiring` | `BlueprintWiring` | Yes |  |
+| `entry` | `GeneratedEntry` | Yes | The entry to record: each written file's sha256, the source and the migrations. Its `edits` are empty: the caller adds the journal and `app.config.ts` edits it makes. |
+
+## BlueprintLocalState
+
+The app as `update` finds it: the app state, and the sha256 of each recorded file on disk.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `hashes` | `Readonly<Record<string, string>>` | Yes | Each recorded file's sha256 on disk; a recorded file that is missing has no key. |
+| `paths` | `readonly string[]` | Yes | Every file path in the app, relative to its root. |
+| `appKitVersion` | `undefined \| string` | Yes | The installed `@indx-workspace/app` version; `undefined` when it is not installed. |
+| `manifest` | `GeneratedManifest` | Yes | The app's `aw-generated.json`. |
+| `agents` | `readonly string[]` | Yes | The agents the project defines already. |
+| `connectors` | `readonly string[]` | Yes | The connectors and secrets `agent-workspace.yaml` defines, for each slot's status. |
+| `secrets` | `readonly string[]` | Yes |  |
+| `nextMigrationIndex` | `number` | Yes | The index the app's next migration takes in its journal. |
+
+## BlueprintManifest
+
+A parsed `blueprint.json`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `version` | `string` | Yes |  |
+| `appKit` | `string` | Yes |  |
+| `parts` | `{ path: string; kind: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; }[]` | Yes |  |
+| `slots` | `{ connectors: { slot: string; kind: "mcp"; identity?: boolean \| undefined; }[]; secrets: { slot: string; }[]; agents: { name: string; }[]; }` | Yes |  |
+| `migrations` | `string[]` | Yes |  |
+
+## BlueprintManifestSchema
+
+The strict schema of `blueprint.json` (ADR-0166 D5). Unknown keys are refused at every level,
+so a manifest cannot carry a connector URL, a secret value or any other field.
+
+Too large to expand (66 properties): `z.ZodObject<{ name: z.ZodString; version: z.ZodString; appKit: z.ZodString; parts: z.ZodArray<z.ZodObject<{ path: z.ZodString; kind: z.ZodEnum<{ agent: "agent"; page: "page"; skill: "skill"; resource: "resource"; recipe: "recipe"; test: "test"; }>; }, z.core.$strict>>; slots: z.ZodObject<{ connectors: z.ZodArray<z.ZodObject<{ slot: z.ZodString; kind: z.ZodLiteral<"mcp">; identity: z.ZodOptional<z.ZodBoolean>; }, z.core.$strict>>; secrets: z.ZodArray<z.ZodObject<{ slot: z.ZodString; }, z.core.$strict>>; agents: z.ZodArray<z.ZodObject<{ name: z.ZodString; }, z.core.$strict>>; }, z.core.$strict>; migrations: z.ZodArray<z.ZodString>; }, z.core.$strict>`
+
+## BlueprintMigrationWrite
+
+A migration to write and append to the journal: its index, its tag and where it lands.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `from` | `string` | Yes | Its path in the package: `migrations/<NNNN>_<tag>.sql`. |
+| `path` | `string` | Yes | Its path in the app: `db/migrations/<tag>.sql`. |
+| `idx` | `number` | Yes | Its journal index. |
+| `tag` | `string` | Yes | Its journal tag, `<idx as NNNN>_<the package tag>`, as `aw generate resource` writes one. |
+
+## BlueprintPartKind
+
+One of `BLUEPRINT_PART_KINDS`.
+
+- `"agent"`
+- `"page"`
+- `"skill"`
+- `"resource"`
+- `"recipe"`
+- `"test"`
+
+## BlueprintRelease
+
+One version of a blueprint, fetched, verified and rendered by the caller.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `manifest` | `{ name: string; version: string; appKit: string; parts: { path: string; kind: "agent" \| "page" \| "skill" \| "resource" \| "recipe" \| "test"; }[]; slots: { connectors: { slot: string; kind: "mcp"; identity?: boolean \| undefined; }[]; secrets: { slot: string; }[]; agents: { name: string; }[]; }; migrations: string[]; }` | Yes |  |
+| `files` | `readonly BlueprintFile[]` | Yes | Every listed part and migration, and nothing else (not `package.json` or `blueprint.json`). |
+| `source` | `Readonly<{ package: string; version: string; integrity: string; }>` | Yes |  |
+
+## blueprintSidecarPath
+
+The sidecar a conflicted file's new version is written to: `<file>.blueprint-<version>`.
+
+```ts
+blueprintSidecarPath(path: string, version: string): string
+```
+
+## BlueprintSlotStatus
+
+A connector or secret slot, and whether `agent-workspace.yaml` binds it already (D3).
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `kind` | `"secret" \| "connector"` | Yes |  |
+| `slot` | `string` | Yes |  |
+| `bound` | `false \| true` | Yes |  |
+
+## BlueprintSource
+
+Where an installed app blueprint came from: `{ package, version, integrity }`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `package` | `string` | Yes |  |
+| `version` | `string` | Yes |  |
+| `integrity` | `string` | Yes |  |
+
+## BlueprintUpdatePlan
+
+What `aw blueprint update` proposes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `string` | Yes |  |
+| `from` | `Readonly<{ package: string; version: string; integrity: string; }>` | Yes |  |
+| `to` | `Readonly<{ package: string; version: string; integrity: string; }>` | Yes |  |
+| `changes` | `readonly BlueprintFileChange[]` | Yes | Every file of the installed and the new version, sorted by path. |
+| `migrations` | `readonly BlueprintMigrationWrite[]` | Yes | The new version's new migrations, renumbered from the app's next journal index. |
+| `slots` | `readonly BlueprintSlotStatus[]` | Yes |  |
+| `wiring` | `{ readonly add: BlueprintWiring; readonly remove: BlueprintWiring; readonly keep: BlueprintWiring; }` | Yes | The `app.config.ts` wiring to add (the parts added), to remove (the parts removed unedited), and to keep (the parts the new version drops that the developer edited: the file becomes theirs, D7, so its wiring stays and its edits leave the entry). |
+| `entry` | `GeneratedEntry` | Yes | The entry to record after `--yes`: the new version's hash for every file it has (a conflicted one included, D7), the source, the migrations, and the installed entry's edits; the caller adds and reverts the edits of the parts added and removed. |
+
+## BlueprintWiring
+
+The resources and recipes whose `app.config.ts` lines the caller adds or removes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `resources` | `readonly string[]` | Yes |  |
+| `recipes` | `readonly string[]` | Yes |  |
+
+## BlueprintWrite
+
+A file to write: where in the app, its text, and its path in the package.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `contents` | `string` | Yes |  |
+| `from` | `string` | Yes |  |
+
+## ChannelRouteEdit
+
+One edit of a generated route file: the import it adds, and the line it replaces.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `import` | `string` | Yes |  |
+| `replaced` | `string` | Yes |  |
+| `added` | `string` | Yes |  |
+
+## channelRouteEdits
+
+The two edits `aw generate channel` makes to a resource's generated route files: each imports
+the channel and passes `{ publish: <channel> }` to `resourceRoutes` or `resourceItemRoutes`, so
+every write of the resource through either publishes.
+
+```ts
+channelRouteEdits(name: string): readonly ChannelRouteEdit[]
+```
+
+## ChannelSpecOptions
+
+What `renderChannelSpec` reads besides the resource's name.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `key` | `undefined \| string` | No | `--key`: the `ref()` field whose value is the channel key; found when not given. |
+| `refs` | `readonly RefFieldSpec[]` | Yes | The resource's `ref()` fields, from `refFieldsOf`. |
 
 ## Choose
 
@@ -58,6 +527,40 @@ A Yes/No menu defaulting to Yes; `false` for No.
 ```ts
 async confirmMenu(choose: Choose, title: string): Promise<boolean>
 ```
+
+## DestructiveMigration
+
+One expand-only rule a statement broke: the migration, the rule's name and the statement.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `rule` | `string` | Yes |  |
+| `statement` | `string` | Yes |  |
+
+## destructiveMigrations
+
+The statements of one migration that are not expand-only (ADR-0166 D8): a `DROP` (other than
+`DROP DEFAULT` or `DROP NOT NULL`), a `RENAME`, a `SET NOT NULL`, an `ALTER COLUMN … TYPE`, or a
+`CHECK` added without `NOT VALID`, as `pnpm migrations:lint` refuses them; and, for a blueprint
+only, a `TRUNCATE`, a `DELETE FROM`, a `DO` block, an `EXECUTE` (other than a trigger's
+`EXECUTE FUNCTION`), or a change to `standard_conforming_strings` or `backslash_quote`.
+Statements are split at `--> statement-breakpoint` and read with their comments removed by a
+reader that respects quoted strings, quoted names and dollar quoting. The repository lint's
+`-- safe:` exception does not apply.
+
+```ts
+destructiveMigrations(path: string, sql: string): readonly DestructiveMigration[]
+```
+
+## EMPTY_GENERATED_MANIFEST
+
+The manifest of a project nothing has been generated in yet.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `1` | Yes |  |
+| `entries` | `Readonly<Record<string, GeneratedEntry>>` | Yes |  |
 
 ## ENGINE_PACKAGES
 
@@ -83,6 +586,224 @@ A workspace skill's name and the same digest of its exported files.
 | --- | --- | --- | --- |
 | `name` | `string` | Yes |  |
 | `hash` | `string` | Yes |  |
+
+## FieldSpec
+
+One parsed `name:type` argument. `args` are the parenthesised arguments as written (already
+validated for the type): `text`'s maximum, `number`'s minimum and maximum, `money`'s currency,
+`enumOf`'s values, `ref`'s resource.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | `string` | Yes |  |
+| `type` | `"number" \| "files" \| "date" \| "text" \| "richText" \| "money" \| "bool" \| "dateTime" \| "enumOf" \| "person" \| "ref" \| "tags"` | Yes |  |
+| `args` | `readonly string[]` | Yes |  |
+| `optional` | `false \| true` | Yes |  |
+
+## GENERATED_ENTRY_KINDS
+
+The kinds of thing a generator writes, the first half of an entry's key. `project` is what
+`create --template` writes besides the app (issue #1531): `package.json`, the project file, the
+starter agent and the rest of the shell, so every file `create` writes is recorded. `aw destroy`
+refuses it: those files are the project itself. `blueprint` is an installed app blueprint
+(ADR-0166): its parts, its migrations and its wiring edits.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `0` | `"app"` | Yes |  |
+| `1` | `"resource"` | Yes |  |
+| `2` | `"agent"` | Yes |  |
+| `3` | `"page"` | Yes |  |
+| `4` | `"recipe"` | Yes |  |
+| `5` | `"channel"` | Yes |  |
+| `6` | `"project"` | Yes |  |
+| `7` | `"blueprint"` | Yes |  |
+| `length` | `8` | Yes |  |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<"agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">[]): ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]; (...items: ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint" \| ConcatArray<"agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">)[]): ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => value is S, thisArg?: any): S[]; (predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any): ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentIndex: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"): "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"; (callbackfn: (previousValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentIndex: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", initialValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"): "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"; <U>(callbackfn: (previousValue: U, currentValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentIndex: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentIndex: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"): "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"; (callbackfn: (previousValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentIndex: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", initialValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"): "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"; <U>(callbackfn: (previousValue: U, currentValue: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", currentIndex: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, obj: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, obj: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any): "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint" \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, obj: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint"]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<"agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint" \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any): "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint" \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", index: number, array: readonly ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint", b: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint") => number) \| undefined) => ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]): ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]; (start: number, deleteCount?: number): ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: "agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint") => ("agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint")[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<"agent" \| "page" \| "project" \| "resource" \| "recipe" \| "app" \| "channel" \| "blueprint">` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## GENERATED_MANIFEST_FILE
+
+The manifest's file name, at the project root.
+
+`"aw-generated.json"`
+
+## GeneratedEdit
+
+One edit a generator made to a file it did not write.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `path` | `string` | Yes |  |
+| `added` | `string` | Yes | The line the generator added, verbatim; one line, so it is reverted only if still present. |
+| `replaced` | `undefined \| string` | No | The line `added` took the place of, when it replaced one rather than being inserted: a revert puts it back, only while `added` is still there verbatim. |
+
+## GeneratedEditRevert
+
+What reverting one edit found: the text without it, the line already gone, or a refusal.
+
+- `{ readonly kind: "reverted"; readonly text: string; }`
+- `{ readonly kind: "absent"; }`
+- `{ readonly kind: "refused"; readonly reason: string; }`
+
+## GeneratedEntry
+
+What one generator run wrote: each file's sha256, and its one-line edits. A `blueprint:<name>`
+entry also has its `source` and its `migrations`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `Readonly<Record<string, string>>` | Yes |  |
+| `edits` | `readonly Readonly<{ path: string; added: string; replaced?: string \| undefined; }>[]` | Yes |  |
+| `source` | `undefined \| Readonly<{ package: string; version: string; integrity: string; }>` | No |  |
+| `migrations` | `undefined \| Readonly<Record<string, string>>` | No |  |
+
+## generatedEntryKey
+
+The key of an entry: `resource:ticket`.
+
+```ts
+generatedEntryKey(kind: GeneratedEntryKind, name: string): string
+```
+
+## GeneratedEntryKind
+
+One of `GENERATED_ENTRY_KINDS`.
+
+- `"agent"`
+- `"page"`
+- `"project"`
+- `"resource"`
+- `"recipe"`
+- `"app"`
+- `"channel"`
+- `"blueprint"`
+
+## GeneratedManifest
+
+The parsed `aw-generated.json`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `1` | Yes |  |
+| `entries` | `Readonly<Record<string, GeneratedEntry>>` | Yes |  |
+
+## GENERATOR_FIELD_TYPES
+
+The app kit's field builders, one per field type, in the order its field table lists them.
+
+Too large to expand (44 properties): `readonly ["text", "richText", "number", "money", "bool", "date", "dateTime", "enumOf", "person", "ref", "files", "tags"]`
+
+## GENERATOR_PAGE_KINDS
+
+The kinds of page `aw generate page` writes.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `0` | `"dashboard"` | Yes |  |
+| `1` | `"list"` | Yes |  |
+| `2` | `"custom"` | Yes |  |
+| `length` | `3` | Yes |  |
+| `toString` | `() => string` | Yes | Returns a string representation of an array. |
+| `toLocaleString` | `{ (): string; (locales: string \| string[], options?: Intl.NumberFormatOptions & Intl.DateTimeFormatOptions): string; }` | Yes | Returns a string representation of an array. The elements are converted to string using their toLocaleString methods. |
+| `concat` | `{ (...items: ConcatArray<"custom" \| "dashboard" \| "list">[]): ("custom" \| "dashboard" \| "list")[]; (...items: ("custom" \| "dashboard" \| "list" \| ConcatArray<"custom" \| "dashboard" \| "list">)[]): ("custom" \| "dashboard" \| "list")[]; }` | Yes | Combines two or more arrays. |
+| `join` | `(separator?: string) => string` | Yes | Adds all the elements of an array separated by the specified separator string. |
+| `slice` | `(start?: number, end?: number) => ("custom" \| "dashboard" \| "list")[]` | Yes | Returns a section of an array. |
+| `indexOf` | `(searchElement: "custom" \| "dashboard" \| "list", fromIndex?: number) => number` | Yes | Returns the index of the first occurrence of a value in an array. |
+| `lastIndexOf` | `(searchElement: "custom" \| "dashboard" \| "list", fromIndex?: number) => number` | Yes | Returns the index of the last occurrence of a specified value in an array. |
+| `every` | `{ <S extends "custom" \| "dashboard" \| "list">(predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => value is S, thisArg?: any): this is readonly S[]; (predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any): boolean; }` | Yes | Determines whether all the members of an array satisfy the specified test. |
+| `some` | `(predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any) => boolean` | Yes | Determines whether the specified callback function returns true for any element of an array. |
+| `forEach` | `(callbackfn: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => void, thisArg?: any) => void` | Yes | Performs the specified action for each element in an array. |
+| `map` | `<U>(callbackfn: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => U, thisArg?: any) => U[]` | Yes | Calls a defined callback function on each element of an array, and returns an array that contains the results. |
+| `filter` | `{ <S extends "custom" \| "dashboard" \| "list">(predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => value is S, thisArg?: any): S[]; (predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any): ("custom" \| "dashboard" \| "list")[]; }` | Yes | Returns the elements of an array that meet the condition specified in a callback function. |
+| `reduce` | `{ (callbackfn: (previousValue: "custom" \| "dashboard" \| "list", currentValue: "custom" \| "dashboard" \| "list", currentIndex: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => "custom" \| "dashboard" \| "list"): "custom" \| "dashboard" \| "list"; (callbackfn: (previousValue: "custom" \| "dashboard" \| "list", currentValue: "custom" \| "dashboard" \| "list", currentIndex: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => "custom" \| "dashboard" \| "list", initialValue: "custom" \| "dashboard" \| "list"): "custom" \| "dashboard" \| "list"; <U>(callbackfn: (previousValue: U, currentValue: "custom" \| "dashboard" \| "list", currentIndex: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `reduceRight` | `{ (callbackfn: (previousValue: "custom" \| "dashboard" \| "list", currentValue: "custom" \| "dashboard" \| "list", currentIndex: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => "custom" \| "dashboard" \| "list"): "custom" \| "dashboard" \| "list"; (callbackfn: (previousValue: "custom" \| "dashboard" \| "list", currentValue: "custom" \| "dashboard" \| "list", currentIndex: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => "custom" \| "dashboard" \| "list", initialValue: "custom" \| "dashboard" \| "list"): "custom" \| "dashboard" \| "list"; <U>(callbackfn: (previousValue: U, currentValue: "custom" \| "dashboard" \| "list", currentIndex: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => U, initialValue: U): U; }` | Yes | Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function. |
+| `find` | `{ <S extends "custom" \| "dashboard" \| "list">(predicate: (value: "custom" \| "dashboard" \| "list", index: number, obj: readonly ("custom" \| "dashboard" \| "list")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "custom" \| "dashboard" \| "list", index: number, obj: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any): "custom" \| "dashboard" \| "list" \| undefined; }` | Yes | Returns the value of the first element in the array where predicate is true, and undefined otherwise. |
+| `findIndex` | `(predicate: (value: "custom" \| "dashboard" \| "list", index: number, obj: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the first element in the array where predicate is true, and -1 otherwise. |
+| `entries` | `() => ArrayIterator<[number, "custom" \| "dashboard" \| "list"]>` | Yes | Returns an iterable of key, value pairs for every entry in the array |
+| `keys` | `() => ArrayIterator<number>` | Yes | Returns an iterable of keys in the array |
+| `values` | `() => ArrayIterator<"custom" \| "dashboard" \| "list">` | Yes | Returns an iterable of values in the array |
+| `includes` | `(searchElement: "custom" \| "dashboard" \| "list", fromIndex?: number) => boolean` | Yes | Determines whether an array includes a certain element, returning true or false as appropriate. |
+| `flatMap` | `<U, This = undefined>(callback: (this: This, value: "custom" \| "dashboard" \| "list", index: number, array: ("custom" \| "dashboard" \| "list")[]) => U \| readonly U[], thisArg?: This \| undefined) => U[]` | Yes | Calls a defined callback function on each element of an array. Then, flattens the result into a new array. This is identical to a map followed by flat with depth 1. |
+| `flat` | `<A, D extends number = 1>(this: A, depth?: D \| undefined) => FlatArray<A, D>[]` | Yes | Returns a new array with all sub-array elements concatenated into it recursively up to the specified depth. |
+| `at` | `(index: number) => "custom" \| "dashboard" \| "list" \| undefined` | Yes | Returns the item located at the specified index. |
+| `findLast` | `{ <S extends "custom" \| "dashboard" \| "list">(predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => value is S, thisArg?: any): S \| undefined; (predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any): "custom" \| "dashboard" \| "list" \| undefined; }` | Yes | Returns the value of the last element in the array where predicate is true, and undefined otherwise. |
+| `findLastIndex` | `(predicate: (value: "custom" \| "dashboard" \| "list", index: number, array: readonly ("custom" \| "dashboard" \| "list")[]) => unknown, thisArg?: any) => number` | Yes | Returns the index of the last element in the array where predicate is true, and -1 otherwise. |
+| `toReversed` | `() => ("custom" \| "dashboard" \| "list")[]` | Yes | Copies the array and returns the copied array with all of its elements reversed. |
+| `toSorted` | `(compareFn?: ((a: "custom" \| "dashboard" \| "list", b: "custom" \| "dashboard" \| "list") => number) \| undefined) => ("custom" \| "dashboard" \| "list")[]` | Yes | Copies and sorts the array. |
+| `toSpliced` | `{ (start: number, deleteCount: number, ...items: ("custom" \| "dashboard" \| "list")[]): ("custom" \| "dashboard" \| "list")[]; (start: number, deleteCount?: number): ("custom" \| "dashboard" \| "list")[]; }` | Yes | Copies an array and removes elements while, if necessary, inserting new elements in their place, returning the remaining elements. |
+| `with` | `(index: number, value: "custom" \| "dashboard" \| "list") => ("custom" \| "dashboard" \| "list")[]` | Yes | Copies an array, then overwrites the value at the provided index with the given value. If the index is negative, then it replaces from the end of the array |
+| `[Symbol.iterator]` | `() => ArrayIterator<"custom" \| "dashboard" \| "list">` | Yes | Iterator of values in the array. |
+| `[Symbol.unscopables]` | `{ readonly [x: number]: boolean \| undefined; readonly length?: boolean; toString?: boolean; toLocaleString?: boolean; concat?: boolean; join?: boolean; slice?: boolean; indexOf?: boolean; lastIndexOf?: boolean; every?: boolean; some?: boolean; forEach?: boolean; map?: boolean; filter?: boolean; reduce?: boolean; reduceRight?: boolean; find?: boolean; findIndex?: boolean; entries?: boolean; keys?: boolean; values?: boolean; includes?: boolean; flatMap?: boolean; flat?: boolean; at?: boolean; findLast?: boolean; findLastIndex?: boolean; toReversed?: boolean; toSorted?: boolean; toSpliced?: boolean; with?: boolean; [Symbol.iterator]?: boolean; readonly [Symbol.unscopables]?: boolean; }` | Yes | Is an object whose properties have the value 'true' when they will be absent when used in a 'with' statement. |
+
+## GeneratorFieldType
+
+One of `GENERATOR_FIELD_TYPES`: the builder a field is written with.
+
+- `"number"`
+- `"files"`
+- `"date"`
+- `"text"`
+- `"richText"`
+- `"money"`
+- `"bool"`
+- `"dateTime"`
+- `"enumOf"`
+- `"person"`
+- `"ref"`
+- `"tags"`
+
+## GeneratorPageKind
+
+One of `GENERATOR_PAGE_KINDS`.
+
+- `"custom"`
+- `"dashboard"`
+- `"list"`
+
+## GeneratorTemplate
+
+The template directories under `templates/`: one per generator, the resource's pages (written
+by `generate resource` with the same values as `resource`), and one per page kind.
+
+- `"agent"`
+- `"resource"`
+- `"recipe"`
+- `"app"`
+- `"channel"`
+- `"resource-pages"`
+- `"page/custom"`
+- `"page/dashboard"`
+- `"page/list"`
 
 ## InteractionFacts
 
@@ -144,6 +865,88 @@ other's.
 mergeSetupAnswers(file: SetupAnswers, flags: SetupAnswers): SetupAnswers
 ```
 
+## MIGRATION_JOURNAL_FILE
+
+The app's migration journal, which `generate resource` adds each migration to.
+
+`"db/migrations/meta/_journal.json"`
+
+## MigrationJournal
+
+The migration journal, as `readMigrationJournal` reads it.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `version` | `string` | Yes |  |
+| `dialect` | `"postgresql"` | Yes |  |
+| `entries` | `{ idx: number; version: string; when: number; tag: string; breakpoints: boolean; }[]` | Yes |  |
+
+## MigrationJournalEntry
+
+One migration of a `MigrationJournal`.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `idx` | `number` | Yes |  |
+| `version` | `string` | Yes |  |
+| `when` | `number` | Yes |  |
+| `tag` | `string` | Yes |  |
+| `breakpoints` | `false \| true` | Yes |  |
+
+## PACKAGE_MANIFEST_FILE
+
+The project's npm manifest, which `generate app` adds its packages and scripts to.
+
+`"package.json"`
+
+## PackageManifest
+
+`package.json` as `readPackageManifest` reads it: its own keys, in its own order.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `dependencies` | `undefined \| Record<string, string>` | No |  |
+| `devDependencies` | `undefined \| Record<string, string>` | No |  |
+| `scripts` | `undefined \| Record<string, string>` | No |  |
+
+## parseBlueprintManifest
+
+Reads `blueprint.json`. A file that is not JSON, or that the strict schema refuses, is refused.
+
+```ts
+parseBlueprintManifest(text: string): BlueprintManifest
+```
+
+## parseFieldSpec
+
+Parses one `aw generate resource` field argument: `title:text`, `title:text(200)`,
+`count:number(0,10)`, `amount:money(JPY)`, `done:bool`, `due:date`, `at:dateTime`,
+`status:enum(new,closed)`, `owner:person`, `parent:ref(ticket)`, `notes:richText`,
+`attachments:files` or `labels:tags`; a trailing `?` makes the field optional.
+
+```ts
+parseFieldSpec(argument: string): FieldSpec
+```
+
+## parseFieldSpecs
+
+Parses every field argument of one resource, refusing a repeated name as well as each bad
+argument, all at once.
+
+```ts
+parseFieldSpecs(argumentList: readonly string[]): readonly FieldSpec[]
+```
+
+## parseGeneratedManifest
+
+Reads `aw-generated.json`. A file that is not JSON, or does not match the schema exactly (an
+unknown key included), is refused: the caller must not fall back to an empty manifest, which
+would let a destroy forget what it may delete.
+
+```ts
+parseGeneratedManifest(text: string): GeneratedManifest
+```
+
 ## parseProjectFile
 
 Reads `agent-workspace.yaml`'s text into a project: a v2 `Project` document as written, or a v1
@@ -170,6 +973,40 @@ refused value throws the interview's own message, prefixed with its flag.
 
 ```ts
 parseSetupFlags(given: Readonly<Record<string, string | undefined>>): SetupAnswers
+```
+
+## PinnedPackage
+
+One package a generated app depends on, at an exact version.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `section` | `"dependencies" \| "devDependencies"` | Yes | The `package.json` section it goes in. |
+| `name` | `string` | Yes | The npm name. |
+| `version` | `string` | Yes | The exact version, never a range. |
+
+## planBlueprintInstall
+
+Plans `aw blueprint add` (ADR-0166 D6): each part at its own path, each migration renumbered to
+the app's next journal index, each slot's status, and the entry to record.
+
+```ts
+planBlueprintInstall(release: BlueprintRelease, app: BlueprintAppState): BlueprintInstallPlan
+```
+
+## planBlueprintUpdate
+
+Plans `aw blueprint update` and `aw blueprint diff` (ADR-0166 D7) as a per-file proposal:
+
+- unedited on disk: `update` when the new version changes the file, `remove` when it drops it,
+  `unchanged` otherwise;
+- edited or missing on disk: `conflict` when the new version changes or drops it, written only
+  to the `<file>.blueprint-<version>` sidecar (or, when dropped, left as the developer's own);
+  `unchanged` when the new version leaves it as installed or already matches it;
+- new in this version: `add`.
+
+```ts
+planBlueprintUpdate(installed: GeneratedEntry, release: BlueprintRelease, local: BlueprintLocalState): BlueprintUpdatePlan
 ```
 
 ## PlannedTool
@@ -213,7 +1050,7 @@ What `planProjectResources` reads; every field is already schema-parsed.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `project` | `Readonly<{ apiVersion: "agentworkspace.dev/v2"; kind: "Project"; name: string; environments: Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; }> \| undefined; }>; engine?: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| undefined; models?: Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>> \| undefined; connectors?: Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "api-key" \| "bearer"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>> \| undefined; policy?: Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: number \| undefined; builder?: Readonly<{ allow: readonly string[]; }> \| undefined; network?: undefined; approval?: undefined; }> \| undefined; platforms?: Readonly<{ 'claude-managed-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'copilot-studio'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'm365-declarative-agent'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'microsoft-foundry'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'gemini-enterprise'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'aws-agentcore'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-claude-agent-sdk'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-mastra'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-openai-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; }> \| undefined; features?: readonly ("builder" \| "chat" \| "projects" \| "files" \| "skills" \| "connectors" \| "runs" \| "sharing" \| "surfaces" \| "triggers" \| "evaluations")[] \| undefined; }>` | Yes | The v2 project file, as `parseProjectFile` returns it. |
+| `project` | `Readonly<{ apiVersion: "agentworkspace.dev/v2"; kind: "Project"; name: string; environments: Readonly<{ local: Readonly<{ cloud: "local"; identity: Readonly<{ bootstrapAdmin: string; oidc?: string \| undefined; }>; runtime?: Readonly<{ default: "local" \| "sandbox-runtime" \| "docker" \| "kubernetes" \| "aca-sessions" \| "cloud-run-service"; }> \| undefined; port?: number \| undefined; policy?: undefined; }>; production?: Readonly<{ target: "kubernetes" \| "single-vm" \| "gcp-cloudrun" \| "vercel"; url: string; apps?: Readonly<Record<string, Readonly<{ image: string; url: string; }>>> \| undefined; gcp?: Readonly<{ project: string; region: string; domain?: string \| undefined; armor?: boolean \| undefined; iap?: boolean \| undefined; oidc?: Readonly<{ issuer: string; clientId: string; }> \| undefined; modelLocation?: "global" \| "us" \| "eu" \| undefined; size?: "small" \| "standard" \| undefined; dataProtection?: boolean \| undefined; alertsEmail?: string \| undefined; sandboxInternet?: boolean \| undefined; }> \| undefined; }> \| undefined; }>; engine?: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| undefined; models?: Readonly<Record<string, Readonly<{ provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex"; credential: Readonly<{ secret: string; }>; baseUrl?: string \| undefined; deployment?: string \| undefined; apiVersion?: string \| undefined; model?: undefined; }>>> \| undefined; connectors?: Readonly<Record<string, Readonly<{ url: string; transport?: "http" \| "sse" \| undefined; auth?: Readonly<{ scheme: "api-key" \| "bearer"; credential: Readonly<{ secret: string; }>; }> \| undefined; identity?: Readonly<{ secret: string; }> \| undefined; }>>> \| undefined; policy?: Readonly<{ permissions?: Readonly<{ readFiles?: boolean \| undefined; writeFiles?: boolean \| undefined; runCommands?: boolean \| undefined; unrestrictedNetwork?: boolean \| undefined; }> \| undefined; limits?: Readonly<{ maxTurns?: number \| undefined; maxBudgetUsd?: number \| undefined; }> \| undefined; engines?: readonly ("claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra")[] \| undefined; models?: readonly string[] \| undefined; tools?: readonly string[] \| undefined; promotion?: Readonly<{ minEvalScore: number; }> \| undefined; maxCostPerDayUsd?: number \| undefined; builder?: Readonly<{ allow: readonly string[]; }> \| undefined; network?: undefined; approval?: undefined; }> \| undefined; platforms?: Readonly<{ 'claude-managed-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'copilot-studio'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'm365-declarative-agent'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'microsoft-foundry'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'gemini-enterprise'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'aws-agentcore'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-claude-agent-sdk'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-mastra'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; 'eject-openai-agents'?: Readonly<{ enabled: boolean; options?: Readonly<Record<string, unknown>> \| undefined; environments?: Readonly<{ local?: Readonly<Record<string, unknown>> \| undefined; production?: Readonly<Record<string, unknown>> \| undefined; }> \| undefined; }> \| undefined; }> \| undefined; features?: readonly ("builder" \| "chat" \| "projects" \| "files" \| "skills" \| "connectors" \| "runs" \| "sharing" \| "surfaces" \| "triggers" \| "evaluations")[] \| undefined; }>` | Yes | The v2 project file, as `parseProjectFile` returns it. |
 | `tools` | `readonly ({ readonly definition: OpenApiToolDefinition; readonly document: string; readonly digest: string; } \| { readonly definition: PostgresToolDefinition; })[]` | Yes | The catalog tools of the project's agents, each name once. |
 | `existing` | `{ readonly modelConnections: readonly ModelConnectionResource[]; readonly connectors: readonly ConnectorResource[]; readonly skills?: readonly ExistingSkill[]; }` | Yes | The workspace's connections and connectors, as the client lists them. |
 | `skills` | `undefined \| readonly ProjectSkill[]` | No | The project's `skills/<name>/` folders; left out, none. |
@@ -402,11 +1239,19 @@ only connections and connectors.
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `action` | `"create" \| "update" \| "unchanged"` | Yes |  |
+| `action` | `"update" \| "unchanged" \| "create"` | Yes |  |
 | `path` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
 | `files` | `readonly Readonly<{ path: string; contentBase64: string; }>[]` | Yes |  |
 | `hash` | `string` | Yes |  |
+
+## readBlueprintArchive
+
+Reads a blueprint package from its tar bytes (ADR-0166 D4), gunzipped by the caller.
+
+```ts
+readBlueprintArchive(tar: Uint8Array): BlueprintArchive
+```
 
 ## readEvalCaseFile
 
@@ -419,6 +1264,22 @@ contract's `EvalCaseFileSchema`: 1 to 200 cases with unique names, each expectin
 readEvalCaseFile(text: string, label: string): EvalCaseFile
 ```
 
+## readMigrationJournal
+
+The journal parsed, or `undefined` when it is not one whose entries count up from 0.
+
+```ts
+readMigrationJournal(text: string): MigrationJournal | undefined
+```
+
+## readPackageManifest
+
+`package.json` parsed, or `undefined` when it is not a JSON object with string dependencies.
+
+```ts
+readPackageManifest(text: string): PackageManifest | undefined
+```
+
 ## readProjectFileText
 
 Reads the file's text into the untrusted value a schema then validates. `label` is the file the
@@ -426,6 +1287,143 @@ refusals name: `agent-workspace.yaml` unless another file is read with the same 
 
 ```ts
 readProjectFileText(text: string, label?: string): ProjectFileReading
+```
+
+## RecipeSpecOptions
+
+The `--on` and `--tz` of `aw generate recipe`, and the resources the app has.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `on` | `string` | Yes | `resource:<resource>.<created\|updated\|deleted>` or `schedule:<cron>`. |
+| `tz` | `undefined \| string` | No | The schedule's IANA time zone; `UTC` when not given. Only a schedule takes one. |
+| `resources` | `readonly string[]` | Yes | The app's resources (`resources/<name>.ts`); a `resource:` trigger must name one. |
+
+## RecipeTriggerSpec
+
+What starts a generated recipe: a committed write to a resource, or a cron slot.
+
+- `{ readonly kind: "resourceEvent"; readonly resource: string; readonly event: string; }`
+- `{ readonly kind: "schedule"; readonly cron: string; readonly timezone: string; }`
+
+## refFieldsOf
+
+The `ref()` fields of a resource file's source, in order, as `aw generate resource` writes them
+(one field per line). A field written another way is not found, and `aw generate channel`
+then asks for `--key` or refuses.
+
+```ts
+refFieldsOf(source: string): readonly RefFieldSpec[]
+```
+
+## RefFieldSpec
+
+One `ref()` field of a resource file: the field and the resource it refers to.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `field` | `string` | Yes |  |
+| `resource` | `string` | Yes |  |
+
+## removeGeneratedEntry
+
+Removes one entry.
+
+```ts
+removeGeneratedEntry(manifest: GeneratedManifest, key: string): GeneratedManifest
+```
+
+## renderAgentSpec
+
+The values of the `agent` template: an agent wired to the app's MCP connector (named as the
+app) whose instructions name the `<resource>_*` tools of the resources it works with.
+
+The connector has no per-tool allowlist, so the agent reaches every tool of the app; each call
+is still limited to what the person may do (`access` ∩ `agents.write`).
+
+```ts
+renderAgentSpec(name: string, options: { readonly appName: string; readonly resources: readonly string[] }): TemplateValues
+```
+
+## renderAppSpec
+
+The values of the `app` template: the app's name, its schema `app_<name>` (hyphens as
+underscores) and the `app.config.ts` lines of the resources it starts with.
+
+```ts
+renderAppSpec(appName: string, resources?: readonly string[]): TemplateValues
+```
+
+## renderAppTemplate
+
+Renders `template` for the app `appName`: the `app` template, the portal's pages over it and,
+for a preset, its shared parts, its generated pages and its own overlay, each later layer
+writing over an earlier one only where it says so (`mergeTemplateLayers`). The app's name
+is always `appName`, the project's directory name, never the template id. A `README.md` the
+project already has is kept, as `aw generate app` keeps it; a preset's README section, the
+commands that build the app on, follows it.
+
+`aw-generated.json` records the files as the generators that write them would: a preset's
+resources as `resource:<name>`, with their `app.config.ts` lines and journal entry as edits, a
+preset's page as `page:<name>`, and the rest as `app:<appName>` with the package and script
+edits. The project's own files (`projectFiles`, the shell and setup files `create` renders) come
+first in the result, `package.json` with the packages and scripts added and `README.md` with the
+preset's section, and are recorded as they are written as `project:<appName>` (issue #1531), so
+every file `create` writes is in the manifest.
+
+```ts
+async renderAppTemplate(template: AppTemplate, project: { readonly appName: string; readonly version: string; readonly projectFiles?: readonly ProjectFile[]; }): Promise<RenderedAppTemplate>
+```
+
+## renderChannelSpec
+
+The values of the `channel` template for a resource and its `ref()` fields: the channel's name
+(the resource's), its key field and the resource that field refers to, whose `read` access on
+the key's record admits a subscriber, and the variable each file binds.
+
+```ts
+renderChannelSpec(name: string, options: ChannelSpecOptions): TemplateValues
+```
+
+## RenderedAppTemplate
+
+What `renderAppTemplate` renders.
+
+| Name | Type | Required | Description |
+| --- | --- | --- | --- |
+| `files` | `readonly ProjectFile[]` | Yes | The files to write: the project's own (its `package.json` with the packages and scripts added), then the app's, `aw-generated.json` last. |
+| `packages` | `readonly PinnedPackage[]` | Yes | The packages added to the project's `package.json`, the edits the manifest records. |
+| `scripts` | `readonly AppScript[]` | Yes | The scripts added to the project's `package.json`, recorded after the packages. |
+
+## renderFieldCode
+
+The line of a resource file's `fields` that a spec becomes, such as
+`status: enumOf(['new', 'closed'])` or `title: text({ max: 200, optional: true })`. Every
+literal in it was validated by `parseFieldSpec`, so it needs no escaping.
+
+```ts
+renderFieldCode(spec: FieldSpec): string
+```
+
+## renderGeneratorTemplate
+
+Renders one generator's template directory (`templates/<kind>/`, copied beside this module by
+the build) with values from `renderAppSpec`, `renderResourceSpec` (for `resource`
+and `resource-pages`), `renderPageSpec` (for `page/<kind>`), `renderAgentSpec`,
+`renderRecipeSpec` (for `recipe`) or `renderChannelSpec` (for `channel`).
+
+```ts
+renderGeneratorTemplate(kind: GeneratorTemplate, values: TemplateValues): readonly ProjectFile[]
+```
+
+## renderPageSpec
+
+The values of a `page/<kind>` template: the page's route segment (`route`), its component name
+and heading, and for a `list` page the resource it lists. Whether that resource exists, and
+whether the name is taken by a resource's own pages, is the caller's to check.
+
+```ts
+renderPageSpec(name: string, options: { readonly kind: string; readonly resource?: string | undefined }): { readonly kind: GeneratorPageKind; readonly values: TemplateValues }
 ```
 
 ## renderProjectFiles
@@ -452,7 +1450,7 @@ which it keeps. `AGENTS.md` tells a coding agent how to run the project without 
 - A features answer that is not every feature adds a `features:` list (in `FEATURE_IDS` order);
   an absent answer or every feature writes no key, which means all installed (ADR-0160 D5).
 - An OpenAPI tool is named after its document's file name up to the first `.`, reads its token
-  from `<NAME>_TOKEN` and allows only `GET` and `HEAD`; the PostgreSQL tool reads its URL from
+  from `<NAME>_TOKEN` and allows only `GET`; the PostgreSQL tool reads its URL from
   `POSTGRES_URL` and names one placeholder table.
 - Every definition is passed through its `define*` call before it is printed, so a file this
   writes always loads.
@@ -477,6 +1475,85 @@ which pnpm 11 requires, and its security overrides) and `.gitignore`. The result
 renderProjectShell(project: { readonly name: string; readonly version: string; readonly engine: EngineId; }): readonly ProjectFile[]
 ```
 
+## renderRecipeSpec
+
+The values of the `recipe` template and the trigger they were made from: the recipe's name,
+its `on` (`resourceEvent('contact', 'created')` or `schedule('0 9 * * 1', 'UTC')`), the
+builder it imports, the environment variable naming its example step's agent, and the input its
+generated test starts it with. Whether croner accepts the cron is the app kit's to check
+(`aw-app recipe-on`); the grammar, the characters and the resource are checked here.
+
+```ts
+renderRecipeSpec(name: string, options: RecipeSpecOptions): { readonly trigger: RecipeTriggerSpec; readonly values: TemplateValues }
+```
+
+## renderResourceSpec
+
+The values of the `resource` template for a resource and its parsed fields: its file's imports
+and fields, its `search` (the `text` and `richText` fields) and `board`, its plural, and the
+record its generated test creates. The same values render `resource-pages`: the component
+names (`component`, `components`) and the list page's part, `ResourceBoard` when the resource
+has a `board` and `ResourceList` otherwise (`listPart`).
+
+```ts
+renderResourceSpec(name: string, specs: readonly FieldSpec[], options?: { readonly board?: string }): TemplateValues
+```
+
+## renderTemplateDirectory
+
+Renders a directory of real files with placeholders into project files (issue #1488): every
+file under `root`, recursively, sorted by path. `{{key}}` in a file's text and `__key__` in its
+path become `values[key]`; a trailing `.template.txt` is dropped from the path (the file stays
+inert in the repository); a `README.md`'s file maps are re-aligned after the substitution.
+Nothing else is changed.
+
+`aw init` and `create` render their setup starters through this, so identical values give
+identical files.
+
+```ts
+renderTemplateDirectory(root: URL, values: Readonly<Record<string, string>>, subject: string, options?: { readonly optional?: boolean; readonly missingMessage?: (key: string) => string; }): readonly ProjectFile[]
+```
+
+## revertGeneratedEdit
+
+Reverts one recorded edit of the file whose text is `text`.
+
+```ts
+revertGeneratedEdit(text: string, edit: GeneratedEdit): GeneratedEditRevert
+```
+
+## scriptEdit
+
+The recorded edit of one script added to `package.json`, as `aw generate app` records it.
+
+```ts
+scriptEdit(script: AppScript): GeneratedEdit
+```
+
+## serializeGeneratedManifest
+
+Writes a manifest as `aw-generated.json`'s text: sorted keys, two-space indent, final newline.
+
+```ts
+serializeGeneratedManifest(manifest: GeneratedManifest): string
+```
+
+## serializeMigrationJournal
+
+The journal as Drizzle and the app template write it: two-space JSON and a final newline.
+
+```ts
+serializeMigrationJournal(journal: MigrationJournal): string
+```
+
+## serializePackageManifest
+
+`manifest` written back with the indentation and final newline of `original`.
+
+```ts
+serializePackageManifest(original: string, manifest: PackageManifest): string
+```
+
 ## setupFlagsHelp
 
 One `--help` entry per setup flag: two lines, the flag, then the question and its default.
@@ -494,6 +1571,12 @@ export; only names are ever written, never a value.
 ```ts
 setupSecretNames(answers: CompleteSetupAnswers): readonly string[]
 ```
+
+## TemplateValues
+
+The placeholder values of one template directory, keyed as its `{{key}}` tokens.
+
+`Readonly<Record<string, string>>`
 
 ## toolConnectorBody
 
@@ -513,6 +1596,16 @@ Checked before anything is rendered or written.
 
 ```ts
 unansweredSetupRefusal(answers: SetupAnswers): { readonly message: string; readonly fix: string } | null
+```
+
+## withAppPackages
+
+`package.json`'s text with `packages` added to their sections (created when missing), each
+section's keys sorted, and `scripts` added after the scripts it has (one it already has under
+that name is kept), written back with two-space indent and a final newline.
+
+```ts
+withAppPackages(text: string, packages: readonly PinnedPackage[], scripts?: readonly AppScript[]): string
 ```
 
 ## writeProjectFileText

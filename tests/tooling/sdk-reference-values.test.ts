@@ -19,6 +19,13 @@ const SOURCE = [
   "const PREFIX = 'aw-';",
   "export const JOINED = PREFIX + 'control';",
   'export const ALIAS_JOINED = JOINED;',
+  "const FIRST_ROUTES = [{ path: '/first' }] as const;",
+  'const FIRST_ALIAS = FIRST_ROUTES;',
+  "const NESTED_ROUTES = [...FIRST_ALIAS, { path: '/second' }];",
+  'export const ROUTES = [...NESTED_ROUTES, ...FIRST_ROUTES];',
+  "let mutableRoutes = [{ path: '/mutable' }];",
+  'const cyclicRoutes = [...cyclicRoutes];',
+  'export const UNKNOWN_SPREADS = [...mutableRoutes, ...cyclicRoutes];',
   'let mutable = 1;',
   'export const ALIAS_MUTABLE = mutable;',
   '',
@@ -74,6 +81,19 @@ describe('reference values', () => {
     expect(renderLiteralConst(of('ALIAS_JOINED'), checker)).toBe(
       "Value: `JOINED` (`'aw-control'`)",
     );
+  });
+
+  it('expands nested constant array spreads in order instead of printing internal names', () => {
+    expect(renderLiteralConst(of('ROUTES'), checker)).toBe(
+      ["- `{ path: '/first' }`", "- `{ path: '/second' }`", "- `{ path: '/first' }`"].join('\n'),
+    );
+  });
+
+  it('keeps unresolved, mutable and cyclic spreads as written', () => {
+    expect(renderLiteralConst(of('UNKNOWN_SPREADS'), checker)).toBe(
+      '- `...mutableRoutes`\n- `...cyclicRoutes`',
+    );
+    expect(renderLiteralConst(of('ROUTES'))).toBe('- `...NESTED_ROUTES`\n- `...FIRST_ROUTES`');
   });
 
   it('leaves a literal, a computed value and a non-literal name as written', () => {

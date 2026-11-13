@@ -1,11 +1,17 @@
 import {
   MODEL_CONNECTION_CONFIG_FIELDS,
   MODEL_PROVIDER_CONFIG_RULES,
+  VERTEX_LOCATIONS,
+  isKeylessProvider,
   type CreateModelConnectionInput,
+  type ModelConnectionConfigInput,
   type ModelConnectionConfigField,
   type UpdateModelConnectionPatch,
+  type VertexLocation,
 } from '@indx-workspace/contracts/models';
 import type { ModelProvider } from '@indx-workspace/contracts/runs';
+
+import { modelsStrings, type ModelsStrings } from './models-messages';
 
 export const PROVIDER_CHOICES = [
   {
@@ -33,6 +39,11 @@ export const PROVIDER_CHOICES = [
     label: 'OpenAI-compatible endpoint',
     description: 'A configurable endpoint such as vLLM, Ollama, or a vendor gateway.',
   },
+  {
+    id: 'vertex',
+    label: 'Claude on Google Cloud (Vertex AI)',
+    description: "Claude through this install's Google Cloud identity. No API key.",
+  },
 ] as const satisfies readonly {
   readonly id: ModelProvider;
   readonly label: string;
@@ -49,6 +60,8 @@ export type ModelConnectionView = {
     readonly baseUrl?: string;
     readonly deployment?: string;
     readonly apiVersion?: string;
+    readonly projectId?: string;
+    readonly location?: VertexLocation;
   };
   readonly hasCredential: boolean;
   /**
@@ -66,12 +79,18 @@ export type ProviderFormValues = {
   readonly baseUrl: string;
   readonly deployment: string;
   readonly apiVersion: string;
+  readonly projectId: string;
+  readonly location: string;
 };
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function isVertexLocation(value: unknown): value is VertexLocation {
+  return VERTEX_LOCATIONS.some((location) => location === value);
 }
 
 function readConfig(value: unknown): ModelConnectionView['config'] {
@@ -81,6 +100,8 @@ function readConfig(value: unknown): ModelConnectionView['config'] {
     ...(typeof source['baseUrl'] === 'string' ? { baseUrl: source['baseUrl'] } : {}),
     ...(typeof source['deployment'] === 'string' ? { deployment: source['deployment'] } : {}),
     ...(typeof source['apiVersion'] === 'string' ? { apiVersion: source['apiVersion'] } : {}),
+    ...(typeof source['projectId'] === 'string' ? { projectId: source['projectId'] } : {}),
+    ...(isVertexLocation(source['location']) ? { location: source['location'] } : {}),
   };
 }
 
@@ -124,26 +145,40 @@ export function providerLabel(provider: ModelConnectionView['provider']): string
  * Minimum implementation) — `ready` is `hasCredential` plus every config field the provider
  * requires, computed server-side by `toModelConnectionResource`, never re-derived here.
  */
+export type ConnectionStatusKind = 'credential-missing' | 'incomplete' | 'ready';
+
 export type ConnectionStatus = {
+  /** Which of the three it is, for a screen that words it in the reader's language. */
+  readonly kind: ConnectionStatusKind;
   readonly text: string;
   readonly tone: 'ok' | 'warn' | 'danger';
 };
 
 export function connectionStatus(
-  connection: Pick<ModelConnectionView, 'hasCredential' | 'ready'>,
+  connection: Pick<ModelConnectionView, 'provider' | 'hasCredential' | 'ready'>,
 ): ConnectionStatus {
-  if (!connection.hasCredential) return { text: 'Credential missing', tone: 'danger' };
-  if (!connection.ready) return { text: 'Configuration incomplete', tone: 'warn' };
-  return { text: 'Ready', tone: 'ok' };
+  // A keyless provider never has a credential; only its configuration can be incomplete.
+  if (!connection.hasCredential && !isKeylessProvider(connection.provider))
+    return { kind: 'credential-missing', text: 'Credential missing', tone: 'danger' };
+  if (!connection.ready)
+    return { kind: 'incomplete', text: 'Configuration incomplete', tone: 'warn' };
+  return { kind: 'ready', text: 'Ready', tone: 'ok' };
 }
 
-export function connectionDetail(connection: ModelConnectionView): string {
-  const details = [providerLabel(connection.provider)];
+/** The row's detail line, worded by `strings` (English by default); the values are the server's. */
+export function connectionDetail(
+  connection: ModelConnectionView,
+  strings: ModelsStrings = modelsStrings('en'),
+): string {
+  const details = [strings.providerLabel[connection.provider]];
   if (connection.config.baseUrl !== undefined) details.push(connection.config.baseUrl);
   if (connection.config.deployment !== undefined)
-    details.push(`deployment ${connection.config.deployment}`);
+    details.push(strings.detailDeployment(connection.config.deployment));
   if (connection.config.apiVersion !== undefined)
-    details.push(`API version ${connection.config.apiVersion}`);
+    details.push(strings.detailApiVersion(connection.config.apiVersion));
+  if (connection.config.projectId !== undefined)
+    details.push(strings.detailProject(connection.config.projectId));
+  if (connection.config.location !== undefined) details.push(connection.config.location);
   return details.join(' · ');
 }
 
@@ -151,21 +186,28 @@ export function connectionDetail(connection: ModelConnectionView): string {
 function configPayload(
   values: Readonly<Record<ModelConnectionConfigField, string>>,
   provider: ProviderId,
-): { baseUrl?: string; deployment?: string; apiVersion?: string } {
-  const config: { baseUrl?: string; deployment?: string; apiVersion?: string } = {};
+): ModelConnectionConfigInput {
+  const config: { -readonly [field in keyof ModelConnectionConfigInput]: string } & {
+    location?: VertexLocation;
+  } = {};
   for (const field of editableConfigFields(provider)) {
-    if (values[field].trim() !== '') config[field] = values[field].trim();
+    const value = values[field].trim();
+    if (value === '') continue;
+    if (field === 'location') {
+      if (isVertexLocation(value)) config.location = value;
+    } else {
+      config[field] = value;
+    }
   }
   return config;
 }
 
 export function createConnectionPayload(values: ProviderFormValues): CreateModelConnectionInput {
-  return {
-    name: values.name.trim(),
-    provider: values.provider,
-    apiKey: values.apiKey,
-    config: configPayload(values, values.provider),
-  };
+  const base = { name: values.name.trim(), provider: values.provider };
+  // A keyless provider takes no key at all: the server refuses one.
+  return isKeylessProvider(values.provider)
+    ? { ...base, config: configPayload(values, values.provider) }
+    : { ...base, apiKey: values.apiKey, config: configPayload(values, values.provider) };
 }
 
 /** The config fields the provider accepts, in the form's display order. */
@@ -190,8 +232,10 @@ function hasRequiredConfig(
 }
 
 export function isProviderFormComplete(values: ProviderFormValues): boolean {
-  if (values.name.trim() === '' || values.apiKey === '') return false;
-  return hasRequiredConfig(values, values.provider);
+  if (values.name.trim() === '') return false;
+  // A keyless provider needs no key, and the server fills in the install's project when none is typed.
+  if (isKeylessProvider(values.provider)) return true;
+  return values.apiKey !== '' && hasRequiredConfig(values, values.provider);
 }
 
 // ── The provider detail/edit panel (`#128`) ─────────────────────────────────────────────────────
@@ -201,6 +245,8 @@ export type EditFormValues = {
   readonly baseUrl: string;
   readonly deployment: string;
   readonly apiVersion: string;
+  readonly projectId: string;
+  readonly location: string;
 };
 
 export function isEditFormValid(values: EditFormValues, provider: ProviderId): boolean {

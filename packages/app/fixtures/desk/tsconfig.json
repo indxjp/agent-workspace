@@ -1,0 +1,17 @@
+{
+  // The desk fixture's own view, as a generated app's tsconfig is: Next.js builds it, so nothing is
+  // emitted. `pnpm --filter @indx-workspace/app typecheck` checks it beside the package's `src`.
+  "extends": "../../../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "types": ["node"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "plugins": [{ "name": "next" }]
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", ".next"]
+}

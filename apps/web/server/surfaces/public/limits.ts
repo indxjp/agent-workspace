@@ -24,7 +24,8 @@ import {
   MINUTE_MS,
   type Admission,
 } from '../../http/rate-limit';
-import { applicationContext } from '../../application-context';
+import { clientIdentityFromEnvironment } from '../../client-identity';
+import { installedEnvironment, surfaceSessions } from './installed';
 
 /** Per minute: sessions per client, and turns and ratings per visitor session and per client. */
 export const SURFACE_RATE_LIMITS = {
@@ -85,9 +86,16 @@ export function turnsPerConversation(surface: SurfaceDefinition): number | null 
 export function admitSurfaceSession(
   headers: Headers,
   nowMs: number = Date.now(),
-  env: Environment = process.env,
+  env: Environment = installedEnvironment(),
 ): Admission {
-  return admitClient(sessionsByClient, SURFACE_RATE_LIMITS.sessionsPerClient, headers, nowMs, env);
+  const identity = clientIdentityFromEnvironment(env);
+  return admitClient(
+    sessionsByClient,
+    SURFACE_RATE_LIMITS.sessionsPerClient,
+    headers,
+    nowMs,
+    identity,
+  );
 }
 
 /**
@@ -101,8 +109,9 @@ export function admitVisitorWrite(
   kind: VisitorWriteKind,
   headers: Headers,
   nowMs: number = Date.now(),
-  env: Environment = process.env,
+  env: Environment = installedEnvironment(),
 ): SurfaceLimitRefusal | null {
+  const identity = clientIdentityFromEnvironment(env);
   if (kind === 'feedback' || kind === 'attachment') {
     const [sessionLimiter, clientLimiter, clientLimit] =
       kind === 'feedback'
@@ -110,7 +119,7 @@ export function admitVisitorWrite(
         : [attachmentsBySession, attachmentsByClient, SURFACE_RATE_LIMITS.attachmentsPerClient];
     const bySession = sessionLimiter.admit(sessionId, nowMs);
     if (!bySession.admitted) return rateLimited(bySession.retryAfterSeconds);
-    const byClient = admitClient(clientLimiter, clientLimit, headers, nowMs, env);
+    const byClient = admitClient(clientLimiter, clientLimit, headers, nowMs, identity);
     return byClient.admitted ? null : rateLimited(byClient.retryAfterSeconds);
   }
   const cap = surface === null ? DEFAULT_TURNS_PER_CONVERSATION : turnsPerConversation(surface);
@@ -129,7 +138,7 @@ export function admitVisitorWrite(
     SURFACE_RATE_LIMITS.turnsPerClient,
     headers,
     nowMs,
-    env,
+    identity,
   );
   if (!byClient.admitted) return rateLimited(byClient.retryAfterSeconds);
   turnCounts.set(sessionId, sent + 1);
@@ -147,13 +156,11 @@ export async function admitSurfaceVisitorWrite(
   kind: VisitorWriteKind,
   headers: Headers,
 ): Promise<SurfaceLimitRefusal | null> {
-  const surfaces = applicationContext()?.surfaces;
-  const visitor =
-    surfaces?.kind === 'serving'
-      ? await surfaces.runtime.visitorSurface(workspaceId, sessionId)
-      : undefined;
-  if (visitor === undefined || visitor === null) return null;
-  return admitVisitorWrite(visitor.surface, sessionId, kind, headers);
+  const runtime = surfaceSessions();
+  if (runtime === null) return null;
+  const visitor = await runtime.visitorSurface(workspaceId, sessionId);
+  if (visitor === null) return null;
+  return admitVisitorWrite(visitor.surface, sessionId, kind, headers, Date.now(), runtime.env());
 }
 
 /** Forget every count. Tests only. */

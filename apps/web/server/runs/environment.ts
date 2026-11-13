@@ -20,17 +20,18 @@
  * See `docs/adr/W1-CP-04-run-api-is-installed-not-imported.md`.
  */
 import type { AgentPermissions } from '@agent-workspace/run-protocol';
-import type { StoredAgentVersionEvaluation } from '@agent-workspace/core/db';
 import type { Logger } from '@agent-workspace/core/telemetry';
+
+import type { IdGenerator } from '../ids';
+import type { EvaluationRunStatus } from '@indx-workspace/contracts/evaluations';
 import type { MembershipRoleName } from '@indx-workspace/contracts/team';
 import type { ProjectPolicyLimits } from '@indx-workspace/contracts/policy-ceiling';
 import type { RunFeedbackRating, RunFeedbackRequest } from '@indx-workspace/contracts/feedback';
 import type { RunStartProblemCode } from '@indx-workspace/contracts/runs';
 import type { SurfaceLimitProblemCode } from '@indx-workspace/contracts/surfaces';
-import type { CeilingFor } from '../policy-ceiling/ceiling';
+import type { CeilingFor } from '../agents';
 import type { DailyCostCap } from '../usage/daily-cost';
-import type { PrincipalKind, Via } from '../rbac/principal';
-import type { TokenScope } from '../rbac/token-scope';
+import type { PrincipalKind, TokenScope, Via } from '../identity';
 import type { ResolvedAttachment } from './attachments';
 import type { SseEvent } from './sse';
 import type { RunRecord, RunStore } from './store';
@@ -65,7 +66,7 @@ export interface RunPrincipal {
    * The principal that owns what this caller writes and that own/other is decided against
    * (`rbac/principal.ts`'s `ownerPrincipalId`). Equal to `principalId` except for a local
    * runtime key, which writes for the member it acts for (issue #509, S1-24). Every composition
-   * root sets it, so it is required (`rbac/owner-principal.ts`).
+   * root sets it, so it is required (`rbac/core/owner-principal.ts`).
    */
   readonly ownerPrincipalId: string;
   readonly userId: string | null;
@@ -235,8 +236,17 @@ export interface LaunchContext {
    * refuses a path the agent is not granted with `run_file_scope_not_granted`.
    */
   readonly fileScope?: readonly string[];
-  /** Lowers this run's limits; like `fileScope` it lives only in this context, and an approval continuation does not inherit it. */
+  /**
+   * Lowers this run's limits. The run row stores the same override (`runs.limits_override`), which
+   * an approval continuation reads from the paused run, so the cap survives the pause (#1963).
+   */
   readonly limits?: RunLimitsOverride;
+  /**
+   * A team lead run's members (ADR-0104 acceptance decisions 3, 4 and 6): the lead run's member
+   * endpoint and each member's team-local name. Set by the launcher only for a root run of a team
+   * version, read from the run's `agent_team_version_id`; compose gives a child run none.
+   */
+  readonly team?: { readonly url: string; readonly names: readonly string[] };
 }
 
 /** The judge model's reply: its text, and why it stopped (`max_tokens`, …) when the provider said. */
@@ -245,7 +255,34 @@ export interface JudgeReply {
   readonly stopReason: string | null;
 }
 
-export interface RunApiEnvironment {
+/**
+ * A stored evaluation run as the run API reads it (issue #799): the agent and version it scores,
+ * whether it is still running, and its cases and results. The PostgreSQL adapter returns its row,
+ * which has exactly this shape (`environment.evaluation-record.test.ts` pins that both ways), so the
+ * run API names no persistence type (refactoring plan part 09, step 6; F-15).
+ */
+interface EvaluationRunRecord {
+  readonly id: string;
+  readonly createdAt: Date;
+  readonly agentId: string;
+  readonly versionId: string;
+  readonly version: number;
+  readonly status: EvaluationRunStatus;
+  /** `passed / total` rounded to four places, as `pg` reads `numeric`: a string. */
+  readonly score: string;
+  readonly passed: number;
+  readonly total: number;
+  /** The cases as sent and each finished case's result; the server parses both. */
+  readonly casesSnapshot: unknown;
+  readonly results: unknown;
+}
+
+/**
+ * The caller and the run: who is asking, which agent, whether the run is theirs, the run store, and the controls on a live run. Every run route reads this slice.
+ * Part of {@link RunApiEnvironment} (refactoring plan part 09, step 7): a caller names only the
+ * slices it uses.
+ */
+export interface RunReadEnvironment {
   /**
    * Resolve the caller. `null` means unauthenticated and the route answers 401.
    *
@@ -263,6 +300,33 @@ export interface RunApiEnvironment {
     agentId: string,
     sessionId?: string | null,
   ): Promise<AgentRef | null>;
+  /** Establish row ownership through the run's persisted session owner. */
+  ownsRun(principal: RunPrincipal, run: RunRecord): Promise<boolean>;
+  readonly store: RunStore;
+  /** Revoke one token id, or every active token when tokenId is null. */
+  readonly revokeRunTokens?: (
+    principal: RunPrincipal,
+    runId: string,
+    tokenId: string | null,
+  ) => Promise<{ readonly revoked: number; readonly outcome: string }>;
+  /**
+   * Stop `run` (issue #235, S-14): write its terminal `cancelled` status, revoke its gateway
+   * tokens, and best-effort signal the runtime holding it. The caller has already established that
+   * `run` is not yet terminal; this performs the action and does not itself re-read the record —
+   * `interruptRun` in `./api.ts` does that after calling it, so the response always reflects what
+   * was actually written rather than what was asked for.
+   */
+  readonly interruptRun?: (principal: RunPrincipal, run: RunRecord) => Promise<void>;
+  /** Where the run routes log what no caller is told (F-04); absent in a test that does not care. */
+  readonly logger?: Logger;
+}
+
+/**
+ * What starting a run needs beyond the read slice: the session, the version, the checks before start, the spend limits, the run target, ids and the launch.
+ * Part of {@link RunApiEnvironment} (refactoring plan part 09, step 7): a caller names only the
+ * slices it uses.
+ */
+export interface RunStartEnvironment {
   /**
    * The session this run joins. `requested` is the caller's `sessionId`, or `null` to start a new
    * one. `null` back means the requested session is not usable — a wrong workspace, or an agent
@@ -323,6 +387,19 @@ export interface RunApiEnvironment {
     },
   ) => Promise<{ readonly code: RunStartProblemCode; readonly message: string } | null>;
   /**
+   * The spend limit a run of `agent` composes with (ADR-0162 decision 2): its `limits.maxBudgetUsd`
+   * as the run will read it (the session's pinned version, or `agentVersionId` / `local`'s for a new
+   * session) met with the deployment ceiling's, or `null` for no limit. The start stores the lower
+   * of it and the body's `spendCeilingUsd` on the run, and refuses a body value above it. Absent: only
+   * the body's value (and a trusted override) sets the ceiling.
+   */
+  readonly spendLimitFor?: (
+    principal: RunPrincipal,
+    agent: AgentRef,
+    sessionId: string | null,
+    agentVersionId?: string,
+  ) => Promise<number | null>;
+  /**
    * The deployment's policy ceiling (issue #535): `startRun` refuses an explicit `modelOverride`
    * outside its `models` with `403 policy_cannot_widen`. Absent when `AW_DEPLOYMENT_POLICY` is unset.
    */
@@ -338,23 +415,21 @@ export interface RunApiEnvironment {
     workspaceId: string,
     agentId: string,
   ) => Promise<RunTargetDescriptions | null>;
-  /** Establish row ownership through the run's persisted session owner. */
-  ownsRun(principal: RunPrincipal, run: RunRecord): Promise<boolean>;
-  readonly store: RunStore;
-  /** Revoke one token id, or every active token when tokenId is null. */
-  readonly revokeRunTokens?: (
-    principal: RunPrincipal,
-    runId: string,
-    tokenId: string | null,
-  ) => Promise<{ readonly revoked: number; readonly outcome: string }>;
+  /** Where a new run's id comes from. `randomIds` unless given; for tests (part 09 step 5). */
+  readonly ids?: IdGenerator;
   /**
-   * Stop `run` (issue #235, S-14): write its terminal `cancelled` status, revoke its gateway
-   * tokens, and best-effort signal the runtime holding it. The caller has already established that
-   * `run` is not yet terminal; this performs the action and does not itself re-read the record —
-   * `interruptRun` in `./api.ts` does that after calling it, so the response always reflects what
-   * was actually written rather than what was asked for.
+   * Start producing events for a run. Returns immediately; the run's outcome is written to the
+   * store, never to the HTTP response that started it (R-13 finding 8, spec §14.6).
    */
-  readonly interruptRun?: (principal: RunPrincipal, run: RunRecord) => Promise<void>;
+  launch(context: LaunchContext): void;
+}
+
+/**
+ * Feedback on a run and the visitor-write admission (issues #796, #862).
+ * Part of {@link RunApiEnvironment} (refactoring plan part 09, step 7): a caller names only the
+ * slices it uses.
+ */
+export interface RunFeedbackEnvironment {
   /**
    * Append one rating of `run` (issue #539, S2-05c, C19). The caller has already found the run,
    * checked a session scope's row identity and §21, and parsed the body; this only stores it.
@@ -388,6 +463,14 @@ export interface RunApiEnvironment {
     readonly message: string;
     readonly retryAfterSeconds: number | null;
   } | null>;
+}
+
+/**
+ * Evaluations of an agent version: the judge, the recorded result and the evaluation runs (issues #618, #799).
+ * Part of {@link RunApiEnvironment} (refactoring plan part 09, step 7): a caller names only the
+ * slices it uses.
+ */
+export interface RunEvaluationEnvironment {
   /**
    * Ask the model version `agentVersionId` of `agent` resolves to for one reply to `prompt`
    * (issue #618's `judge` check). Throws on any failure; the evaluation handler records that as
@@ -430,13 +513,13 @@ export interface RunApiEnvironment {
     readonly find: (
       principal: RunPrincipal,
       evaluationId: string,
-    ) => Promise<StoredAgentVersionEvaluation | null>;
+    ) => Promise<EvaluationRunRecord | null>;
     /** Take the run's lease for `leaseMs`; `null` when it is not running or already leased. */
     readonly claim: (
       principal: RunPrincipal,
       evaluationId: string,
       leaseMs: number,
-    ) => Promise<StoredAgentVersionEvaluation | null>;
+    ) => Promise<EvaluationRunRecord | null>;
     readonly progress: (
       principal: RunPrincipal,
       evaluationId: string,
@@ -448,14 +531,13 @@ export interface RunApiEnvironment {
       },
     ) => Promise<void>;
   };
-  /**
-   * Start producing events for a run. Returns immediately; the run's outcome is written to the
-   * store, never to the HTTP response that started it (R-13 finding 8, spec §14.6).
-   */
-  launch(context: LaunchContext): void;
-  /** Where the run routes log what no caller is told (F-04); absent in a test that does not care. */
-  readonly logger?: Logger;
 }
+
+/** The whole run API: every slice. A composition root builds one; a caller asks for what it uses. */
+export type RunApiEnvironment = RunReadEnvironment &
+  RunStartEnvironment &
+  RunFeedbackEnvironment &
+  RunEvaluationEnvironment;
 
 /**
  * The run routes as the application context holds them. `disabled` is a deployment with no run

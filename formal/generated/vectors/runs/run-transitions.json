@@ -2,6 +2,7 @@
  [{"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"op": "markRunning"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"markRunning\"}",
@@ -9,6 +10,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "queued", "op": "finish"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"finish\",\"target\":\"queued\"}",
@@ -16,6 +18,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "running", "op": "finish"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"finish\",\"target\":\"running\"}",
@@ -23,6 +26,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "awaiting_approval", "op": "finish"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"finish\",\"target\":\"awaiting_approval\"}",
@@ -30,6 +34,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "completed", "op": "finish"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"finish\",\"target\":\"completed\"}",
@@ -37,6 +42,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "failed", "op": "finish"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"finish\",\"target\":\"failed\"}",
@@ -44,6 +50,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "cancelled", "op": "finish"}, "from": "queued"},
    "id": "transition/queued/{\"op\":\"finish\",\"target\":\"cancelled\"}",
@@ -51,6 +58,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"op": "markRunning"}, "from": "running"},
    "id": "transition/running/{\"op\":\"markRunning\"}",
@@ -58,6 +66,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "queued", "op": "finish"}, "from": "running"},
    "id": "transition/running/{\"op\":\"finish\",\"target\":\"queued\"}",
@@ -65,6 +74,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "running", "op": "finish"}, "from": "running"},
    "id": "transition/running/{\"op\":\"finish\",\"target\":\"running\"}",
@@ -72,6 +82,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "awaiting_approval", "op": "finish"}, "from": "running"},
    "id": "transition/running/{\"op\":\"finish\",\"target\":\"awaiting_approval\"}",
@@ -79,6 +90,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "completed", "op": "finish"}, "from": "running"},
    "id": "transition/running/{\"op\":\"finish\",\"target\":\"completed\"}",
@@ -86,6 +98,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "failed", "op": "finish"}, "from": "running"},
    "id": "transition/running/{\"op\":\"finish\",\"target\":\"failed\"}",
@@ -93,6 +106,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "cancelled", "op": "finish"}, "from": "running"},
    "id": "transition/running/{\"op\":\"finish\",\"target\":\"cancelled\"}",
@@ -100,6 +114,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"op": "markRunning"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"markRunning\"}",
@@ -107,6 +122,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "queued", "op": "finish"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"finish\",\"target\":\"queued\"}",
@@ -114,6 +130,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "running", "op": "finish"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"finish\",\"target\":\"running\"}",
@@ -121,6 +138,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "awaiting_approval", "op": "finish"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"finish\",\"target\":\"awaiting_approval\"}",
@@ -128,6 +146,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "completed", "op": "finish"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"finish\",\"target\":\"completed\"}",
@@ -135,13 +154,15 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "failed", "op": "finish"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"finish\",\"target\":\"failed\"}",
-   "expected": {"status": "failed", "kind": "moved"}},
+   "expected": {"kind": "noOp"}},
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "cancelled", "op": "finish"}, "from": "awaiting_approval"},
    "id": "transition/awaiting_approval/{\"op\":\"finish\",\"target\":\"cancelled\"}",
@@ -149,6 +170,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"op": "markRunning"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"markRunning\"}",
@@ -156,6 +178,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "queued", "op": "finish"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"finish\",\"target\":\"queued\"}",
@@ -163,6 +186,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "running", "op": "finish"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"finish\",\"target\":\"running\"}",
@@ -170,6 +194,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "awaiting_approval", "op": "finish"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"finish\",\"target\":\"awaiting_approval\"}",
@@ -177,6 +202,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "completed", "op": "finish"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"finish\",\"target\":\"completed\"}",
@@ -184,6 +210,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "failed", "op": "finish"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"finish\",\"target\":\"failed\"}",
@@ -191,6 +218,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "cancelled", "op": "finish"}, "from": "completed"},
    "id": "transition/completed/{\"op\":\"finish\",\"target\":\"cancelled\"}",
@@ -198,6 +226,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"op": "markRunning"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"markRunning\"}",
@@ -205,6 +234,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "queued", "op": "finish"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"finish\",\"target\":\"queued\"}",
@@ -212,6 +242,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "running", "op": "finish"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"finish\",\"target\":\"running\"}",
@@ -219,6 +250,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "awaiting_approval", "op": "finish"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"finish\",\"target\":\"awaiting_approval\"}",
@@ -226,6 +258,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "completed", "op": "finish"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"finish\",\"target\":\"completed\"}",
@@ -233,6 +266,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "failed", "op": "finish"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"finish\",\"target\":\"failed\"}",
@@ -240,6 +274,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "cancelled", "op": "finish"}, "from": "failed"},
    "id": "transition/failed/{\"op\":\"finish\",\"target\":\"cancelled\"}",
@@ -247,6 +282,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"op": "markRunning"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"markRunning\"}",
@@ -254,6 +290,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "queued", "op": "finish"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"finish\",\"target\":\"queued\"}",
@@ -261,6 +298,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "running", "op": "finish"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"finish\",\"target\":\"running\"}",
@@ -268,6 +306,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "awaiting_approval", "op": "finish"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"finish\",\"target\":\"awaiting_approval\"}",
@@ -275,6 +314,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "completed", "op": "finish"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"finish\",\"target\":\"completed\"}",
@@ -282,6 +322,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "failed", "op": "finish"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"finish\",\"target\":\"failed\"}",
@@ -289,6 +330,7 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.Normative.Runs.running_is_entered_only_from_queued",
     "AgentWorkspace.Theorems.Normative.Runs.finish_requires_terminal_target",
+    "AgentWorkspace.Theorems.Normative.Runs.finish_moves_iff_the_rule_allows",
     "AgentWorkspace.Theorems.Invariants.Runs.run_terminal_is_absorbing"],
    "input": {"operation": {"target": "cancelled", "op": "finish"}, "from": "cancelled"},
    "id": "transition/cancelled/{\"op\":\"finish\",\"target\":\"cancelled\"}",

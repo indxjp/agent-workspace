@@ -16,6 +16,7 @@ import {
 import { encodeUstar, type TarEntry } from '@agent-workspace/runtime/transfer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { fixedClock, type Clock } from '../clock';
 import { captureLog } from '../telemetry/capture-log';
 import { log } from '../telemetry/logger';
 import {
@@ -64,6 +65,8 @@ interface BucketSeams {
 function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = {}) {
   const objects = new Map(Object.entries(initial));
   const attempts: string[] = [];
+  /** The signal each read and write was given, in call order. */
+  const signals: (AbortSignal | undefined)[] = [];
   const etag = (text: string) => `"${sha(text)}"`;
   const bodyBytes = async (key: string, body: ReadableStream<Uint8Array>): Promise<Uint8Array> => {
     if (seams.duringWrite === undefined) return streamToBytes(body);
@@ -76,7 +79,8 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
     return Buffer.concat(chunks);
   };
   const store: Pick<ObjectStore, 'read' | 'write'> = {
-    read: (key) => {
+    read: (key, readOptions) => {
+      signals.push(readOptions?.signal);
       const failure = seams.failRead?.(key);
       if (failure !== undefined) return Promise.reject(failure);
       const text = objects.get(key);
@@ -96,6 +100,7 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
       );
     },
     write: async (key, body, options: WriteOptions) => {
+      signals.push(options.signal);
       attempts.push(key);
       seams.beforeWrite?.(key, objects);
       if (seams.hangWrite === true) return new Promise<never>(() => undefined);
@@ -123,7 +128,7 @@ function bucket(initial: Readonly<Record<string, string>>, seams: BucketSeams = 
       };
     },
   };
-  return { store, objects, attempts };
+  return { store, objects, attempts, signals };
 }
 
 function tarOf(files: Readonly<Record<string, string>>, folder = FOLDER): Uint8Array {
@@ -192,6 +197,7 @@ interface Setup {
   readonly audit?: (event: StorageWriteBackAuditEvent) => Promise<void>;
   /** Whether the stored run is still `running`, asked between files; always by default. */
   readonly stillRunning?: () => Promise<boolean>;
+  readonly clock?: Clock;
   /** Folder contents by connection prefix; streamed, for archives too large to build in memory. */
   readonly streams?: (path: string) => ReadableStream<Uint8Array> | null;
 }
@@ -213,6 +219,7 @@ async function writeBack(setup: Setup) {
   const audit = vi.fn(setup.audit ?? (() => Promise.resolve()));
   const reads: string[] = [];
   const opened: string[] = [];
+  const openSignals: (AbortSignal | undefined)[] = [];
   const grants: readonly Grant[] = setup.grants ?? DEFAULT_GRANTS;
   const launchGrants: readonly Grant[] = setup.launchGrants ?? grants;
   const folders =
@@ -297,13 +304,15 @@ async function writeBack(setup: Setup) {
           const row = rows[connectionId] ?? null;
           return row instanceof Error ? Promise.reject(row) : Promise.resolve(row);
         },
-        openWritable: (_workspaceId, connectionId) => {
+        openWritable: (_workspaceId, connectionId, signal) => {
           opened.push(connectionId);
+          openSignals.push(signal);
           return Promise.resolve(bucketOf(connectionId).store);
         },
       },
       audit,
       stillRunning: setup.stillRunning ?? (() => Promise.resolve(true)),
+      ...(setup.clock === undefined ? {} : { clock: setup.clock }),
     },
   );
   return {
@@ -312,6 +321,7 @@ async function writeBack(setup: Setup) {
     audit,
     reads,
     opened,
+    openSignals,
     counts: counts.get(CONNECTION),
     all: counts,
     labels: () => audit.mock.calls.map(([event]) => event.subjectLabel),
@@ -876,6 +886,26 @@ describe('the write-back deadline', () => {
     ]);
   });
 
+  // #1835 (STO-509): a hung store SDK call is stopped by the store itself, not only abandoned.
+  it('[US-STO-12][unit][run] passes its signal to the open, every read and every write', async () => {
+    const deadline = new AbortController();
+    const result = await writeBack({
+      delivered: { 'a.md': 'old' },
+      bucket: { 'reports/a.md': 'old' },
+      files: { 'a.md': 'new', 'b.md': 'b' },
+      signal: deadline.signal,
+    });
+
+    expect(result.counts).toMatchObject({ written: 2 });
+    // One signal for the save: the run's deadline, or a cancel the stored status shows.
+    const [saving] = result.openSignals;
+    expect(saving).toBeInstanceOf(AbortSignal);
+    expect(result.signals).toHaveLength(3);
+    expect(result.signals.every((signal) => signal === saving)).toBe(true);
+    deadline.abort(timedOut());
+    expect(saving?.aborted).toBe(true);
+  });
+
   it('[US-STO-12][unit][run] starts no grant once the deadline has passed', async () => {
     const controller = new AbortController();
     controller.abort(timedOut());
@@ -1020,10 +1050,11 @@ describe('a run stopped while it is being saved', () => {
   it('[US-STO-12][unit][run] stops between files once the stored run is no longer running', async () => {
     // Another replica cancelled the run: only the stored status says so, not this signal. Each
     // file comes a status interval after the last, so each one asks the store again.
-    let clock = 0;
-    vi.spyOn(Date, 'now').mockImplementation(() => (clock += STORAGE_WRITEBACK_STATUS_INTERVAL_MS));
+    let time = 0;
+    const clock: Clock = { now: () => new Date((time += STORAGE_WRITEBACK_STATUS_INTERVAL_MS)) };
     let checks = 0;
     const result = await writeBack({
+      clock,
       files: { 'a.md': 'a', 'b.md': 'b', 'c.md': 'c' },
       stillRunning: () => Promise.resolve((checks += 1) === 1),
     });
@@ -1035,14 +1066,47 @@ describe('a run stopped while it is being saved', () => {
     ]);
   });
 
+  it('[US-STO-12][unit][run] reads the current time for the status interval when no clock is given', async () => {
+    // Pinned before the write-back took a Clock (refactoring plan part 07, step 7): a frozen time
+    // asks once; a time an interval later asks again.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-03-01T00:00:00.000Z'));
+      let checks = 0;
+      const files = { 'a.md': 'a', 'b.md': 'b', 'c.md': 'c' };
+      await writeBack({
+        files,
+        stillRunning: () => {
+          checks += 1;
+          vi.setSystemTime(Date.now() + STORAGE_WRITEBACK_STATUS_INTERVAL_MS);
+          return Promise.resolve(true);
+        },
+      });
+      expect(checks).toBe(3);
+
+      let frozen = 0;
+      await writeBack({
+        files,
+        stillRunning: () => {
+          frozen += 1;
+          return Promise.resolve(true);
+        },
+      });
+      expect(frozen).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('[US-STO-12][unit][run] asks the stored status at most once per interval, first before any write', async () => {
     // A folder of many changed files must not cost one database read per file.
-    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const clock = fixedClock(new Date(1_000_000));
     let checks = 0;
     const files = Object.fromEntries(
       Array.from({ length: 20 }, (_, index) => [`f${String(index)}.md`, 'x']),
     );
     const result = await writeBack({
+      clock,
       files,
       stillRunning: () => {
         checks += 1;
@@ -1055,6 +1119,7 @@ describe('a run stopped while it is being saved', () => {
 
     let stopped = 0;
     const cancelled = await writeBack({
+      clock,
       files,
       stillRunning: () => {
         stopped += 1;

@@ -3,7 +3,7 @@
  *
  * Neither is printed by spec §34 (`tests/route-declarations/W9-WS-119.ts` carries the mandate).
  * Both are `own`-grant, `not-applicable`-ownership requests — see
- * `apps/web/server/rbac/permissions.ts`'s `WORKSPACE_MEMBER_SCOPED` comment — which `decide()`
+ * `apps/web/server/rbac/core/permissions.ts`'s `WORKSPACE_MEMBER_SCOPED` comment — which `decide()`
  * allows for every one of §21's four roles: #119 puts no role gate on who may create a workspace
  * or list their own memberships, only on who may administer one that already exists.
  *

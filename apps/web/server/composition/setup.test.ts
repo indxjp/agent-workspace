@@ -210,3 +210,12 @@ describe('selectGeneralReconciliation (issue #393)', () => {
     ).toBeNull();
   });
 });
+
+describe('selectSetupSeededModel — vertex', () => {
+  it('seeds the Vertex default model and rejects an unrelated list', () => {
+    expect(selectSetupSeededModel('vertex', ['claude-opus-5-5', 'claude-sonnet-5-5'])).toBe(
+      'claude-sonnet-5-5',
+    );
+    expect(selectSetupSeededModel('vertex', ['claude-opus-5-5'])).toBeNull();
+  });
+});

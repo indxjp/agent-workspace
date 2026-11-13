@@ -42,7 +42,7 @@ const REGUARDED_CHECKS = [
 /** The migration's SQL statements, comment lines removed. */
 async function migrationStatements(): Promise<readonly string[]> {
   const source = await readFile(
-    path.join(resolveMigrationsDir(), `${CONNECTOR_KINDS_MIGRATION}.sql`),
+    path.join(resolveMigrationsDir(process.env), `${CONNECTOR_KINDS_MIGRATION}.sql`),
     'utf8',
   );
   return source
@@ -109,7 +109,7 @@ describe.skipIf(!hasDatabase)('0036 against MCP connectors and runs that already
   const sseId = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-connector-kinds-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
     const journal = JSON.parse(

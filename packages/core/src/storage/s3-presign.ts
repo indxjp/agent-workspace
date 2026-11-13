@@ -33,6 +33,45 @@ export interface S3PresignInput {
   readonly now: Date;
 }
 
+/** The endpoint a presigned URL names, in the shape the S3 client's own endpoint resolves to. */
+export interface PresignEndpoint {
+  readonly protocol: string;
+  readonly hostname: string;
+  readonly port?: number | undefined;
+  readonly path?: string;
+}
+
+interface PresignLocationInput {
+  readonly region: string;
+  /** Absent: AWS's own regional host. */
+  readonly endpoint: PresignEndpoint | undefined;
+  readonly forcePathStyle: boolean;
+  readonly bucket: string;
+  readonly objectKey: string;
+}
+
+/** A bucket name that can be a host label; any other bucket is addressed path-style. */
+const VIRTUAL_HOST_BUCKET = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/u;
+
+/** The scheme, host and path a presigned URL for one object names. */
+export function presignLocation(
+  input: PresignLocationInput,
+): Pick<S3PresignInput, 'scheme' | 'host' | 'path'> {
+  const { endpoint, bucket, objectKey } = input;
+  const scheme = endpoint?.protocol === 'http:' ? 'http' : 'https';
+  const baseHost =
+    endpoint === undefined ? `s3.${input.region}.amazonaws.com` : hostWithPort(endpoint);
+  const basePath = (endpoint?.path ?? '').replace(/\/+$/u, '');
+  if (input.forcePathStyle || !VIRTUAL_HOST_BUCKET.test(bucket)) {
+    return { scheme, host: baseHost, path: `${basePath}/${bucket}/${objectKey}` };
+  }
+  return { scheme, host: `${bucket}.${baseHost}`, path: `${basePath}/${objectKey}` };
+}
+
+function hostWithPort(endpoint: PresignEndpoint): string {
+  return endpoint.port === undefined ? endpoint.hostname : `${endpoint.hostname}:${endpoint.port}`;
+}
+
 /** RFC 3986 unreserved set, as SigV4 requires. */
 function encode(value: string): string {
   return encodeURIComponent(value).replace(

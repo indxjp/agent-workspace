@@ -1,4 +1,4 @@
-import type { EgressPolicyConfig } from '@agent-workspace/core';
+import type { EgressPolicyConfig, OutboundProxyConfig } from '@agent-workspace/core';
 
 import type { StorageConnectionsStoreProvider } from './store';
 
@@ -24,6 +24,11 @@ export interface StorageConnectionsRuntime {
   readonly fileRoots: readonly string[];
   /** The deployment's egress policy; `test` and `browse` dial customer endpoints under it. */
   readonly egress: EgressPolicyConfig;
+  /**
+   * The deployment's outbound proxy (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`); `test` and `browse`
+   * tunnel through it once the endpoint has passed the egress check. Absent means none.
+   */
+  readonly proxy?: OutboundProxyConfig;
   /** Whether an agent version of the workspace still grants a folder of connection `connectionId`. */
   isConnectionGranted(workspaceId: string, connectionId: string): Promise<boolean>;
   audit(event: StorageConnectionAuditEvent): Promise<void>;

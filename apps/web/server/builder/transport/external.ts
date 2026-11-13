@@ -6,7 +6,7 @@
  * client reaches an executor. A read tool runs the core (`handleToolCall`) as the member who
  * authorised the client, with that member's role, so RBAC applies as in the console.
  */
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import {
   BUILDER_TOOL_NAMES,
@@ -15,13 +15,14 @@ import {
 } from '@indx-workspace/contracts/builder';
 
 import { applicationContext } from '../../application-context';
-import { endpointCredentialKey } from '../../endpoints/request';
+import { systemClock } from '../../clock';
+import { admitToolEndpointCall, endpointCredentialKey } from '../../integrations';
+import { randomIds, type IdGenerator } from '../../ids';
 import { featureRefusalResponse } from '../../features/guard';
 import { BUILDER_RESOURCE_PATH, bearerChallenge, resourceUrl } from '../../oauth/resource';
-import type { Principal } from '../../rbac/principal';
-import { apiError } from '../../runs/http';
+import type { Principal } from '../../identity';
+import { apiError } from '../../execution';
 import { answerLocally, readCall, toolCallName } from '../../tool-endpoint/handler';
-import { admitToolEndpointCall } from '../../tool-endpoint/limits';
 import type { CallContext } from '../ports';
 import { handleToolCall } from '../shell';
 import type { BuilderPorts } from '../tools/types';
@@ -57,14 +58,18 @@ const SESSION_ID = /^[A-Za-z0-9._~-]{1,64}$/;
  * or a run count;
  * the trace id is minted here; model and prompt version are the fixed value `external`.
  */
-export function toExternalCallContext(principal: ExternalPrincipal, headers: Headers): CallContext {
+export function toExternalCallContext(
+  principal: ExternalPrincipal,
+  headers: Headers,
+  ids: IdGenerator = randomIds,
+): CallContext {
   const session = headers.get('mcp-session-id');
   const clientId = principal.oauth?.clientId;
   const bound = session !== null && clientId !== undefined && SESSION_ID.test(session);
   return {
     workspaceId: principal.workspaceId,
     door: { kind: 'external' },
-    runId: bound ? `ext:${clientId}:${session}` : `ext:${randomUUID()}`,
+    runId: bound ? `ext:${clientId}:${session}` : `ext:${ids.newId()}`,
     traceId: randomBytes(16).toString('hex'),
     caller: {
       kind: 'person',
@@ -122,7 +127,7 @@ export async function serveExternalBuilderMcp(
   }
   const admission = admitToolEndpointCall(
     endpointCredentialKey({ principal, apiKeyId: principal.apiKeyId, oauth: principal.oauth }),
-    Date.now(),
+    systemClock.now().getTime(),
   );
   if (!admission.admitted) {
     const response = apiError(429, 'builder_rate_limited', 'too many requests; retry later.');
@@ -176,10 +181,11 @@ function callTool(
   if (BUILDER_TOOLS[name].kind !== 'read') return Promise.resolve(refusal('read_only_client'));
   if (ports === null) return Promise.resolve(refusal('builder_disabled'));
   const { arguments: args } = params as { arguments?: unknown };
-  const raw = { name, arguments: args, callId: randomUUID() };
+  const ids = ports.ids ?? randomIds;
+  const raw = { name, arguments: args, callId: ids.newId() };
   return handleToolCall(
     raw,
-    toExternalCallContext(principal, request.headers),
+    toExternalCallContext(principal, request.headers, ids),
     ports,
     request.signal,
   );

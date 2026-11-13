@@ -109,4 +109,27 @@ describe('ProviderDetailPanel', () => {
     expect(html).toContain('Remove connection…');
     expect(html).not.toContain('Type');
   });
+
+  it('for Claude on Google Cloud shows project and location and no key controls', () => {
+    const html = renderToStaticMarkup(
+      createElement(ProviderDetailPanel, {
+        connection: connection({
+          provider: 'vertex',
+          config: { projectId: 'my-project-1', location: 'eu' },
+          hasCredential: false,
+          ready: true,
+        }),
+        onUpdated: NOOP,
+        onRemoved: NOOP,
+        onClose: NOOP,
+      }),
+    );
+    expect(html).toContain('my-project-1');
+    expect(html).toContain('Location');
+    expect(html).toContain('Uses this install&#x27;s Google Cloud identity');
+    expect(html).not.toContain('New API key');
+    expect(html).not.toContain('Rotate credential');
+    expect(html).not.toContain('Credential missing');
+    expect(html).toContain('Ready');
+  });
 });

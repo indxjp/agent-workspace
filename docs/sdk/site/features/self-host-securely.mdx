@@ -33,7 +33,7 @@ log that only the Owner can read.
 | Hosting         | Self-hosted, five services                           |
 | Public port     | `web` on `3000`, and nothing else                    |
 | Provider keys   | Held by the gateway only, never in a sandbox         |
-| Runtime drivers | 11 ids; 6 implemented; 2 live-verified (`docker`, `kubernetes` on kind) |
+| Runtime drivers | 11 ids; 6 implemented; 3 with a live isolation proof (`docker`, `kubernetes` on kind, `cloud-run-service` network isolation) |
 | Roles           | 4: `owner`, `admin`, `builder`, `viewer`             |
 | Single sign-on  | Any OIDC issuer                                      |
 | Audit           | 21 actions; only an Owner can read the trail         |
@@ -66,11 +66,20 @@ sixth service.
 
 | Service    | Does                                                                                                                                    | Exposed                           |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `web`      | The UI, `/api/**`, authentication, the setup wizard                                                                                     | Port `3000`, the only public one  |
+| `web`      | The UI, `/api/**`, authentication, the setup wizard                                                                                     | Port `3000`, public               |
 | `gateway`  | The model gateway. Swaps a per-run token for the stored provider credential. Serves an Anthropic-compatible `/v1/messages`              | Private; reachable from sandboxes |
 | `runner`   | Allocates a sandbox through the chosen runtime driver and relays the agent's events. The Docker socket is mounted here and nowhere else | Private                           |
 | `postgres` | PostgreSQL 18. Every durable row: workspaces, principals, agents, runs, events                                                          | Private                           |
 | `storage`  | SeaweedFS, S3 or native GCS. Workspace files, skills, transcripts                                                                       | Private                           |
+
+On Google Cloud Run (`aw deploy production` with a `gcp` block) the same services have this shape:
+
+| Service          | Exposed on Cloud Run                                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `web`            | Public: its `run.app` address, or your domain behind a load balancer                                                   |
+| `gateway`        | Internal ingress only; sandboxes reach it inside your VPC with the per-run token; reaches Cloud SQL over the VPC         |
+| `runner` manager | Internal only, no public access; `web` calls it with its Google identity and the manager's own bearer token            |
+| Cloud SQL        | Private IP only, encrypted connections only                                                                            |
 
 **Why it matters:** a security review starts with "what is exposed, and where does data rest".
 Here the answer is one port and three stores, all in your network.
@@ -231,6 +240,14 @@ Use the Helm chart `infra/helm/agent-workspace` with the values file for your pl
 **Credentials never enter a sandbox.** The agent runs in the sandbox, but the key that pays for its
 model calls stays with the gateway.
 
+On `gcp-cloudrun` with the default configuration, the gateway sends the prompt to
+`aiplatform.googleapis.com` (Claude on Vertex AI) with a short-lived token from the gateway's own
+service account. The path is sandbox, gateway, `aiplatform.googleapis.com`, and no model key is
+stored anywhere. Claude engine sandboxes also set `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`,
+`DISABLE_TELEMETRY` and `DISABLE_ERROR_REPORTING`, so the engine does not send telemetry or error
+reports of its own. This describes what the default configuration does; it is not yet a verified
+guarantee about where every byte goes.
+
 | Guarantee                                 | What it means                                                                                                                                                                                                                   |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Gateway-resolved provider keys            | Provider credentials are stored encrypted and resolved only by the gateway. Never by the runner, never by the sandbox                                                                                                           |
@@ -273,7 +290,7 @@ exactly what has been verified.
 | `docker`            | P0   | One container per session; the Docker socket is mounted into `runner` only       | A Docker host                                    | Self-hosting on one VM: **the recommended default** | Implemented; isolation live-verified                                                |
 | `kubernetes`        | P1   | One Pod per session, optionally with a gVisor RuntimeClass                       | Your cluster: EKS, GKE, AKS, OpenShift           | Many teams, NetworkPolicy, resource limits          | Implemented; isolation live-verified on kind with Calico, no managed-cluster proof |
 | `aca-sessions`      | P2   | Hyper-V microVM per session, no persistent file system                           | Azure Container Apps dynamic sessions            | Teams that want no sandbox hosts of their own       | Implemented; not exercised by the live driver suite                                |
-| `cloud-run-service` | P1   | One private Cloud Run v2 service per session                                     | Google Cloud Run                                 | Teams that want no sandbox hosts of their own       | Implemented; not exercised by the live driver suite                                |
+| `cloud-run-service` | P1   | One private Cloud Run v2 service per session                                     | Google Cloud Run                                 | Teams that want no sandbox hosts of their own       | Implemented; under `none` the sandbox has no route to the internet, private ranges or Google's private API ranges (live-verified) |
 | `gke-agent-sandbox` | P2   | gVisor, managed by GKE                                                           | GKE                                              | —                                                   | Roadmap: named only, not implemented                                               |
 | `aws-agentcore`     | P2   | Firecracker microVM per session                                                  | Bedrock AgentCore Runtime                        | —                                                   | Roadmap: named only, not implemented                                               |
 | `aws-ecs`           | P2   | VM-isolated Fargate task                                                         | ECS on Fargate                                   | —                                                   | Roadmap: named only, not implemented                                               |
@@ -346,7 +363,7 @@ sessions**, to explain the two kinds of finding a switch can have:
   **Today:** that comparison panel is a fixed illustration on the screen. It is not computed for
   your agent and does not stop **Save**. What does stop a bad configuration is the server: an
   unenforceable network policy is refused (see [Set a network policy](#set-a-network-policy)), and a
-  `stdio` connector runs only in the tool sandbox, which is off by default.
+  `stdio` connector runs only in the per-session tool sandbox.
 </Note>
 
 ### What survives a runtime switch
@@ -367,7 +384,7 @@ Each runtime profile states its network policy. It is a required, explicit choic
 | Policy       | Meaning                                                                                                                                                                          |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `none`       | The model gateway and nothing else. On `docker` the sandbox sits on a dedicated egress network that reaches only the gateway; on `kubernetes` it is a default-deny NetworkPolicy |
-| `restricted` | The gateway plus the profile's `allowedDomains`, through an allowlist proxy. `docker` and `kubernetes` accept it only when the deployment sets the proxy image (see below)        |
+| `restricted` | The gateway plus the profile's `allowedDomains`, through an allowlist proxy. `docker` and `kubernetes` accept it only when the deployment sets the proxy image; Cloud Run only with `gcp.sandboxInternet: true` (see below) |
 | `open`       | Everything. Choose it deliberately                                                                                                                                               |
 
 **A policy the driver cannot enforce is refused**, not silently downgraded. Where it is caught
@@ -378,7 +395,8 @@ depends on the driver:
 | `aca-sessions` | Anything but the one policy its pool is set to (`none` or `open`)                                    | When you save the profile: `422 network_policy_not_enforceable`, naming the policies it accepts |
 | `docker`       | `restricted` and any `allowedDomains` unless `AGENT_WORKSPACE_EGRESS_PROXY_IMAGE` is set            | When a run starts, before any container is created                                              |
 | `kubernetes`   | `restricted` and any `allowedDomains` unless the driver is given the egress proxy image              | When a run starts, before any Pod is created                                                    |
-| Cloud Run, ACA | `restricted`                                                                                         | When a run starts, before any sandbox is created                                                |
+| Cloud Run      | `restricted`, `allowedDomains` and `open` unless `gcp.sandboxInternet: true`; the message names that option | When a run starts, before any sandbox is created                                                |
+| `aca-sessions` | `restricted`                                                                                         | When a run starts, before any sandbox is created                                                |
 | `local`        | Nothing, because it enforces nothing: egress is whatever the host can reach                          | Never. Development only                                                                         |
 
 <Tip>
@@ -590,31 +608,77 @@ flowchart TD
 | 21     | Audited actions, from permissions to runtime switches                   |
 | 0      | Proprietary agent formats: skills stay `SKILL.md`                       |
 
+### The path a prompt takes on Google Cloud Run
+
+The path above, on Google Cloud Run, runs through your project's network:
+
+1. The browser reaches `web` at its public `run.app` address or your own domain.
+2. `web` calls the runner manager, which is internal-only, with a Google ID token.
+3. The runner manager creates the sandbox: an internal Cloud Run service on your VPC (Direct VPC
+   egress) behind a firewall that denies all egress except one destination.
+4. The sandbox calls the gateway through the gateway's internal Application Load Balancer, in plain
+   HTTP inside the VPC, holding only the run token.
+5. The gateway calls Claude on Vertex AI with its own Google identity, so no model key is stored.
+
+The deployment is implemented to this path. In the live test project the browser journey reaches
+Vertex AI through the gateway and ends with HTTP 429, because that project's Vertex AI Claude quota
+is 0; a full answer from Claude on Vertex AI has not been shown yet, so it is not claimed here.
+
 ## Limits today
 
 Read these before you plan a production rollout.
 
 <Warning>
-  - **No managed-cloud driver has a live isolation proof.** `aca-sessions` and `cloud-run-service`
-  are implemented but not exercised by the live driver suite. Tracked as
+  - **On Google Cloud Run, DNS is still an open channel under every network policy.** Each
+  sandbox is an internal Cloud Run service on your sandbox subnet. A firewall denies all its egress
+  except plain HTTP to one private address: the gateway's internal load balancer, the only thing a
+  sandbox reaches. Google's private ranges (`private.googleapis.com` and
+  `restricted.googleapis.com`) are denied on every port, so a sandbox reaches no Google API and no
+  `run.app` service, its own install's included. The live workflow proves from inside the VPC that
+  a `none` sandbox gets no answer from a public host, a private address, either Google range or the
+  gateway's `run.app` URL, and that the gateway answers through the load balancer. Two paths remain.
+  First, public names still resolve through the metadata server's resolver, so DNS is an
+  exfiltration channel. Second, an adopted network must have no firewall policy that allows egress
+  from instances tagged `aw-sandbox`. Traffic from the sandbox to the load balancer is not
+  encrypted by TLS (a sandbox could only verify a certificate from a public domain or a private CA it
+  trusts); it stays on your network, and the per-run token it carries is short-lived and scoped to
+  one run. The gateway is internal-only; the per-run token is its gate. Cloud Run's metadata server
+  is reachable inside every instance and cannot be firewalled, so the sandbox service account holds
+  no roles and its token is refused by Google APIs. `open` and `restricted` are available on Cloud Run only when the project file sets
+  `gcp.sandboxInternet: true`. That adds one proxy VM with no external IP on its own subnet (without
+  Private Google Access) behind a Cloud NAT gateway; a sandbox may open port 3128 to it and nothing
+  else. Each run carries a credential, signed with a key in Secret Manager, that names its
+  allowlist; the proxy refuses private ranges, the metadata server and the Google private-access
+  ranges for every run. The credential expires with the runtime, which is then replaced for the
+  session's next run. The live workflow proves the `none` isolation (10 checks, run 42141442053,
+  repeated in run 42199357493) and the allow-list lane `sandbox-internet` (run 42452148886) is
+  green. The proxy VM and NAT are billed while they exist.
+  - **`aca-sessions` has no live isolation proof.** `cloud-run-service` has a live network-isolation
+  proof; `aca-sessions` is implemented but not exercised by the live driver suite. Tracked as
   [D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud). - **`kubernetes` is
   verified on kind only.** The isolation workflow checks it on a kind cluster with Calico; no
   managed-cluster proof has been published. - **Five driver ids are roadmap only:** `gke-agent-sandbox`, `aws-agentcore`,
   `aws-ecs`, `cloud-run-sandbox`, `external`
   ([D-4](/concepts/roadmap#d-4-a-verified-managed-cloud-sandbox-per-cloud)). - **`stdio` MCP
-  connectors run only in the tool sandbox,** which is off by default and not yet wired end to end.
-  Use `http` or `sse` ([Connect an
-  MCP server](/building/mcp-servers)). - **`restricted` needs the egress proxy image.** `docker` and `kubernetes`
+  connectors and code tools run only in the per-session tool sandbox.** On Docker it is off by
+  default until the deployment sets `TOOL_HOST_IMAGE`. On Cloud Run it is an internal service with the
+  sandbox firewall: no network at all unless the tools declare domains, which needs
+  `gcp.sandboxInternet`. The live workflow checks that a tool sandbox, like an agent sandbox, reaches
+  no public host, private address, Google range or app service. Otherwise use `http` or `sse`
+  ([Connect an MCP server](/building/mcp-servers)). - **`restricted` needs the egress proxy image.** `docker` and `kubernetes`
   refuse `restricted` and `allowedDomains` when a run starts unless it is set; the isolation
-  workflow's docker and kind lanes verify `restricted`, metadata refusal and no DNS egress. Cloud Run and ACA sessions refuse `restricted`. Only `aca-sessions` refuses an unenforceable policy
+  workflow's docker and kind lanes verify `restricted`, metadata refusal and no DNS egress. Cloud Run accepts `restricted` and `open` only with `gcp.sandboxInternet: true`; ACA sessions refuse `restricted`. Only `aca-sessions` refuses an unenforceable policy
   earlier, at save time. - **Deny-by-default networking is the design intent, not the shipped
   default.** Set each runtime profile's policy deliberately. - **The runtime-switch comparison on
   the Runtimes screen is illustrative**, not computed for your agent. - **Key backends other than
   Azure Key Vault, and native per-cloud object stores, await live proof**
   ([D-2](/concepts/roadmap#d-2-object-storage-on-every-cloud-natively),
   [D-3](/concepts/roadmap#d-3-secret-backends-on-every-cloud)). - **Not yet a declared release.**
-  The npm packages and images are published, but the platform's release verdict is still blocked
-  (signed images with SBOM and provenance are pending). Tracked as
+  The npm packages and images are published. The platform images (`images-v0.6.12`) are signed
+  keyless, with an SBOM and SLSA provenance, and, from the first `packages-v*` release built with the pin step
+  (earlier npm versions carry no digests), the CLI pins each one by digest and verifies its
+  signature when cosign v3 or newer is installed. No `v*` platform release has been declared, so the release verdict is
+  still open. Tracked as
   [P-6](/concepts/roadmap#p-6-a-published-release-with-signed-images-and-the-installer).
 </Warning>
 

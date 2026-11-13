@@ -6,6 +6,8 @@
 import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { describe, expect, it, vi } from 'vitest';
 
+import { withRunnerManagerIdentity } from '../../compose/runtime-manager-client';
+import { registerLiveRun, resetLiveRuns } from '../../runs/interrupt';
 import { startRunOnSession } from '../../runs/service';
 import { wireRunApi } from './run-api';
 
@@ -101,5 +103,33 @@ describe('wireRunApi findAgent and an archived agent (issue #1851)', () => {
 
     expect(found).not.toBeNull();
     expect(found).not.toHaveProperty('archived');
+  });
+});
+
+describe('wireRunApi interrupt', () => {
+  it('signals the runtime through the runner manager fetch, so the ID token travels with it', async () => {
+    const AUDIENCE = 'https://manager-abc.a.run.app';
+    const base = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({}));
+    const runnerManagerFetch = withRunnerManagerIdentity(base, AUDIENCE, () =>
+      Promise.resolve('google-id-token'),
+    );
+    const finish = vi.fn(() => Promise.resolve());
+    const { environment } = wireWith(null, vi.fn(), {
+      runs: { create: vi.fn(), finish },
+      runnerManagerFetch,
+      root: {
+        runs: { forScope: () => ({}) },
+        runTokens: { forScope: () => ({ revokeForRun: () => Promise.resolve(0) }) },
+        browserTokens: { forScope: () => ({ revokeForRun: () => Promise.resolve(0) }) },
+      },
+    });
+    registerLiveRun('run-1', { base: AUDIENCE, headers: { authorization: 'Bearer runner' } });
+
+    await environment.interruptRun?.(PRINCIPAL, { id: 'run-1' } as never);
+    resetLiveRuns();
+
+    expect(base).toHaveBeenCalledOnce();
+    const headers = new Headers(base.mock.calls[0]?.[1]?.headers);
+    expect(headers.get('X-Serverless-Authorization')).toBe('Bearer google-id-token');
   });
 });

@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the other refusals, whole result > carryEngineSwitch refusing denials: two labelled, one raw 1`] = `
+{
+  "ok": false,
+  "result": {
+    "body": {
+      "error": {
+        "code": "engine_switch_would_widen",
+        "details": [
+          "mcp__connector-00000000-0000-4000-8000-0000000000b2__delete",
+          "mcp__connector-00000000-0000-4000-8000-0000000000c3__drop",
+        ],
+        "message": "Moving this agent from 'claude-agent-sdk' to 'openai-agents' would drop denials the 'openai-agents' policy cannot express, so the agent could use a tool its owner denied. Remove each named rule from the current policy first (or turn off the permission it guards), then switch. The rules: mcp__connector-00000000-0000-4000-8000-0000000000b2__delete (file-finder), mcp__connector-00000000-0000-4000-8000-0000000000c3__drop.",
+      },
+    },
+    "status": 422,
+  },
+}
+`;
+
+exports[`the other refusals, whole result > carryEngineSwitch refusing denials: two labelled, one raw 2`] = `
+{
+  "ok": false,
+  "result": {
+    "body": {
+      "error": {
+        "code": "engine_switch_would_widen",
+        "details": [
+          "mcp__connector-00000000-0000-4000-8000-0000000000b2__delete",
+        ],
+        "message": "Moving this agent from 'claude-agent-sdk' to 'openai-agents' would drop a denial the 'openai-agents' policy cannot express, so the agent could use a tool its owner denied. Remove each named rule from the current policy first (or turn off the permission it guards), then switch. The rules: mcp__connector-00000000-0000-4000-8000-0000000000b2__delete.",
+      },
+    },
+    "status": 422,
+  },
+}
+`;
+
+exports[`the other refusals, whole result > engineCapabilityRefusal for an engine without MCP 1`] = `
+{
+  "body": {
+    "error": {
+      "code": "engine_capability_unsupported",
+      "details": [
+        "mcp",
+      ],
+      "message": "The engine 'claude-agent-sdk' does not support mcp, and this agent is assigned connectors. Remove the connectors or choose an engine that supports mcp; they are never silently dropped from a run.",
+    },
+  },
+  "status": 422,
+}
+`;

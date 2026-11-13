@@ -1,0 +1,13 @@
+# The Agent Workspace project file: what `aw dev` runs, and where.
+# No secret belongs in this file; it is meant to be committed.
+# `aw dev` reads the model key from ANTHROPIC_API_KEY in its own environment.
+# To deploy to your Google Cloud project: add this under environments, then `aw deploy production`.
+#   production: { target: gcp-cloudrun, url: https://<host>, gcp: { project: <id>, region: asia-northeast1 } }
+apiVersion: agentworkspace.dev/v2
+kind: Project
+name: service-desk
+environments:
+  local:
+    cloud: local
+    identity:
+      bootstrapAdmin: admin@localhost.test

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -15,7 +15,6 @@ import type { ProfileProbes } from '../validate.js';
 import { PROJECT_KIND_REFUSAL } from '../profile.js';
 import type { DoctorCheck } from './checks.js';
 import { runDoctorCommand, type DoctorOptions } from './index.js';
-import { LEGACY_COUNT_CAP } from './layout.js';
 
 const created: string[] = [];
 afterEach(async () => {
@@ -116,7 +115,6 @@ async function doctor(
       () =>
         runDoctorCommand(argv, {
           probes: answeringProbes,
-          layout: { bucket: () => Promise.resolve(0) },
           command: toolsOnPath(),
           fetch: server([CONTRACTS_VERSION, CONTRACTS_VERSION]),
           ...environment,
@@ -741,203 +739,3 @@ describe('agent-workspace doctor: storage', () => {
 });
 
 // @story US-STO-13
-describe('agent-workspace doctor: storage layout', () => {
-  /** A `file://` storage root holding the given objects, as the old layout placed them. */
-  async function oldLayout(objects: readonly string[]): Promise<string> {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'agent-workspace-layout-'));
-    created.push(root);
-    for (const object of objects) {
-      await mkdir(path.dirname(path.join(root, object)), { recursive: true });
-      await writeFile(path.join(root, object), 'x');
-    }
-    return root;
-  }
-
-  const fileSetting = (root: string) => ({
-    environment: {
-      ...LOCAL_ORIGINS,
-      AGENT_WORKSPACE_URL: 'https://aw.example',
-      AW_STORAGE_URL: `file://${root}`,
-    },
-  });
-
-  const bucketSetting = (storageUrl: string, secret: string) => ({
-    environment: {
-      AGENT_WORKSPACE_URL: 'https://aw.example',
-      DATABASE_URL: 'postgres://u@db.example/aw',
-      AW_STORAGE_URL: storageUrl,
-      OBJECT_STORAGE_ACCESS_KEY_ID: 'access-id',
-      OBJECT_STORAGE_SECRET_ACCESS_KEY: secret,
-    },
-  });
-
-  it('[US-STO-13][api][cli] doctor reports files still in the old layout', async () => {
-    const root = await oldLayout([
-      'files/workspaces/ws-one/a.txt',
-      'files/workspaces/ws-one/b.txt',
-      'sessions/workspaces/ws-one/s.json',
-    ]);
-
-    const { checks, code } = await doctor(
-      await project(await fixtureProfile('local')),
-      fileSetting(root),
-    );
-
-    expect(find(checks, 'storage-layout', 'files')).toMatchObject({
-      status: 'warn',
-      detail: '2 objects in the old layout',
-      advice: expect.stringContaining('AW_STORAGE_MIGRATE=copy') as unknown,
-    });
-    expect(find(checks, 'storage-layout', 'session-state')).toMatchObject({
-      status: 'warn',
-      detail: '1 object in the old layout',
-      advice: expect.stringContaining('AW_STORAGE_MIGRATE=copy') as unknown,
-    });
-    expect(find(checks, 'storage-layout', 'skills')).toMatchObject({
-      status: 'pass',
-      detail: 'no objects in the old layout',
-      advice: null,
-    });
-    const layoutText = JSON.stringify(checks.filter(({ check }) => check === 'storage-layout'));
-    for (const hidden of [root, 'ws-one', 'a.txt', 's.json']) {
-      expect(layoutText).not.toContain(hidden);
-    }
-    expect(code).toBe(0);
-  });
-
-  it('[US-STO-13][api][cli] doctor passes a storage root with nothing in the old layout', async () => {
-    const root = await oldLayout(['files/.keep']);
-
-    const { checks, code } = await doctor(
-      await project(await fixtureProfile('local')),
-      fileSetting(root),
-    );
-
-    const rows = checks.filter(({ check }) => check === 'storage-layout');
-    expect(rows.map(({ status }) => status)).toEqual(['pass', 'pass', 'pass']);
-    expect(code).toBe(0);
-  });
-
-  it('[US-STO-13][api][cli] doctor does not read a storage root it cannot see as empty', async () => {
-    const root = path.join(os.tmpdir(), `agent-workspace-absent-${randomBytes(6).toString('hex')}`);
-
-    const { checks } = await doctor(
-      await project(await fixtureProfile('local')),
-      fileSetting(root),
-    );
-
-    expect(find(checks, 'storage-layout', 'files')).toMatchObject({
-      status: 'warn',
-      detail: 'not counted: the storage root is not on this host',
-    });
-    expect(JSON.stringify(find(checks, 'storage-layout', 'files'))).not.toContain(root);
-  });
-
-  it('[US-STO-13][api][cli] doctor counts a bucket up to the cap and says "at least"', async () => {
-    const secret = randomBytes(12).toString('hex');
-    const asked: { prefix: string; cap: number }[] = [];
-    const layout = {
-      bucket: (_input: unknown, prefix: string, cap: number) => {
-        asked.push({ prefix, cap });
-        return Promise.resolve(prefix === 'files/workspaces/' ? cap : 0);
-      },
-    };
-
-    const { checks, code } = await doctor(await project(await fixtureProfile('aws')), {
-      ...bucketSetting('s3://acme-ai-files', secret),
-      layout,
-    });
-
-    expect(find(checks, 'storage-layout', 'files')).toMatchObject({
-      status: 'warn',
-      detail: `at least ${LEGACY_COUNT_CAP.toLocaleString('en-US')} objects in the old layout`,
-    });
-    expect(find(checks, 'storage-layout', 'skills')?.status).toBe('pass');
-    expect(asked).toContainEqual({ prefix: 'files/workspaces/', cap: LEGACY_COUNT_CAP });
-    expect(code).toBe(0);
-  });
-
-  it("[US-STO-13][api][cli] doctor lists a bucket under the storage URL's own prefix", async () => {
-    const asked: string[] = [];
-    const layout = {
-      bucket: (_input: unknown, prefix: string) => {
-        asked.push(prefix);
-        return Promise.resolve(0);
-      },
-    };
-
-    await doctor(await project(await fixtureProfile('aws')), {
-      ...bucketSetting('s3://acme-ai-files/tenant-a', randomBytes(12).toString('hex')),
-      layout,
-    });
-
-    expect(asked).toContain('tenant-a/files/workspaces/');
-  });
-
-  it('[US-STO-13][api][cli] doctor does not count the old layout when .env cannot be read', async () => {
-    const directory = await project(await fixtureProfile('aws'), 'GATEWAY_TOKEN_SECRET tok-ABC\n');
-
-    const { checks } = await doctor(directory, { projectEnvironment: true });
-
-    expect(checks.filter(({ check }) => check === 'storage-layout')).toEqual([
-      expect.objectContaining({
-        subject: 'storage',
-        status: 'warn',
-        detail: 'not checked: .env could not be read',
-      }),
-    ]);
-  });
-
-  it('[US-STO-13][api][cli] doctor never prints a credential from a failed bucket listing', async () => {
-    const secret = randomBytes(12).toString('hex');
-    const layout = {
-      bucket: () => Promise.reject(new Error(`denied for ${secret}`)),
-    };
-
-    // The region is the one query value the URL accepts that a credential can be shaped as.
-    const { checks, stdout, stderr } = await doctor(await project(await fixtureProfile('aws')), {
-      ...bucketSetting(`s3://acme-ai-files?region=${secret}`, secret),
-      layout,
-    });
-
-    expect(find(checks, 'storage-layout', 'files')).toMatchObject({
-      status: 'warn',
-      detail: 'not counted: the old layout could not be listed',
-    });
-    expect(stdout).not.toContain(secret);
-    expect(stderr).not.toContain(secret);
-  });
-
-  it('[US-STO-13][api][cli] doctor counts nothing for a storage URL it refuses, and prints no credential', async () => {
-    const secret = randomBytes(12).toString('hex');
-
-    const { checks, stdout, stderr } = await doctor(await project(await fixtureProfile('aws')), {
-      ...bucketSetting(`s3://acme-ai-files?X-Amz-Credential=${secret}`, secret),
-    });
-
-    expect(checks.filter(({ check }) => check === 'storage-layout')).toEqual([]);
-    expect(stdout).not.toContain(secret);
-    expect(stderr).not.toContain(secret);
-  });
-
-  it('[US-STO-13][api][cli] doctor counts a bucket only after the object store answered', async () => {
-    const secret = randomBytes(12).toString('hex');
-    let listed = false;
-
-    const { checks } = await doctor(await project(await fixtureProfile('aws')), {
-      ...bucketSetting('s3://acme-ai-files', secret),
-      probes: { ...answeringProbes, objects: () => Promise.reject(new Error('unreachable')) },
-      layout: {
-        bucket: () => {
-          listed = true;
-          return Promise.resolve(0);
-        },
-      },
-    });
-
-    expect(find(checks, 'storage-layout', 'files')?.detail).toBe(
-      'not counted: the object store did not answer from this host',
-    );
-    expect(listed).toBe(false);
-  });
-});

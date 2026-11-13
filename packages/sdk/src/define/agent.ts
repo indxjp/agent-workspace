@@ -13,6 +13,7 @@ import {
   RequireApprovalRuleSchema,
   claudeDeniedToolsFor,
   conflictingApprovalRules,
+  type AgentMemoryScope,
   type AgentPermissionKey,
   type AgentPolicyLimits,
 } from '@indx-workspace/contracts/agents';
@@ -98,9 +99,18 @@ export type EngineSettings = {
  */
 export type EngineChoice = EngineId | EngineSettings;
 
-/** The four permission switches; a switch left out is off (least privilege). */
+/**
+ * The four permission switches; a switch left out is off (least privilege). `memory: 'agent'` keeps
+ * a memory folder across sessions while both file switches are on (ADR-0163); left out, none.
+ * The folder belongs to the agent, not to a person: every person who runs the agent is handed what
+ * any earlier run wrote there, including facts from another person's prompt or files and any
+ * instruction a hostile input made the agent save. Turn it on only for an agent whose users may see
+ * each other's facts; per-person memory waits for per-person file grants (#1281).
+ */
 export type DefinePermissions = {
-  readonly [K in AgentPermissionKey]?: boolean | undefined;
+  readonly [K in AgentPermissionKey | 'memory']?: K extends 'memory'
+    ? AgentMemoryScope | undefined
+    : boolean | undefined;
 };
 
 /** Per-run limits; a limit left out is `null`, the engine's own default. */

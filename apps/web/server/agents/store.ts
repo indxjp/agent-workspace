@@ -27,10 +27,10 @@
  *
  * The obligation this shifts onto an implementation is stated once, here, so that every adapter
  * inherits it: **an implementation must bind the workspace id at `forWorkspace` time and apply it
- * to every read, every write and every uniqueness check.** `store.test.ts` states that obligation
- * as a conformance suite written against the port rather than against any implementation, and
- * there is no separate `memory-store.test.ts`: `store.test.ts` is the only suite an adapter author
- * has to satisfy.
+ * to every read, every write and every uniqueness check.** `store.conformance.ts` states that
+ * obligation as a conformance suite written against the port rather than against any
+ * implementation, and there is no separate `memory-store.test.ts`: that suite is the only one an
+ * adapter author has to satisfy.
  *
  * ## Two implementations, one suite
  *
@@ -38,9 +38,9 @@
  * below is the PostgreSQL half — an adapter onto `packages/core/src/db/repositories/agents.ts`,
  * where the tenant is a `WorkspaceScope` the compiler will not let a caller fabricate. Both are
  * kept, because they are for different deployments and not for different stages of one:
- * `store.test.ts` runs its conformance suite — cross-workspace isolation section included —
- * against **both**, and that suite passing is the only reason to believe the two are the same
- * thing. Neither was written by reading the other (ADR-0024 §3).
+ * `store.test.ts` runs the conformance suite in `store.conformance.ts` — cross-workspace isolation
+ * section included — against **both**, and that suite passing is the only reason to believe the two
+ * are the same thing. Neither was written by reading the other (ADR-0024 §3).
  *
  * ## Why a "not found" and not a "forbidden"
  *
@@ -50,6 +50,9 @@
  */
 import {
   UnknownWorkspaceError,
+  type AgentGrantRepositoryProvider as CoreAgentGrantRepositoryProvider,
+  type AgentResourceRepository as CoreAgentResourceRepository,
+  type AgentResourceRepositoryProvider as CoreAgentResourceRepositoryProvider,
   type AgentResourceAssignments,
   type AgentResourceAssignmentsInput,
   type ReplaceAgentResourcesOutcome,
@@ -62,7 +65,9 @@ import {
 } from '@agent-workspace/core/db';
 
 import type { AgentPolicy, CreateAgentInput, UpdateAgentPatch } from '../../contracts/agents';
+import type { AgentGrantStoreProvider, WorkspaceAgentGrantStore } from './agent-grants-store';
 import type { AgentRecord } from './contract';
+import type { AgentResourceStoreProvider } from './resource-store';
 
 /**
  * What creating an agent can produce.
@@ -255,6 +260,76 @@ export function createRepositoryAgentStoreProvider(
         },
         async restore(id: string, actor: AgentRestoreActor): Promise<RestoreAgentOutcome> {
           return (await repository()).restore(id, actor);
+        },
+      };
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// The PostgreSQL implementations of the resource-assignment and grant ports
+// (`./resource-store.ts`, `./agent-grants-store.ts`), kept here so this is the one file of the
+// domain that names `@agent-workspace/core/db` (refactoring plan part 07, step 2).
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The database-backed {@link AgentResourceStoreProvider}. */
+export function createRepositoryAgentResourceStoreProvider(dependencies: {
+  readonly repositories: CoreAgentResourceRepositoryProvider;
+  readonly scopes: CoreWorkspaceScopeResolver;
+}): AgentResourceStoreProvider {
+  return {
+    forWorkspace(workspaceId) {
+      let pending: Promise<CoreAgentResourceRepository> | null = null;
+      const repository = async () => {
+        pending ??= dependencies.scopes.forWorkspaceId(workspaceId).then((scope) => {
+          if (scope === null) throw new Error(`workspace ${workspaceId} no longer exists`);
+          return dependencies.repositories.forScope(scope);
+        });
+        return pending;
+      };
+      return {
+        async get(agentId) {
+          return (await repository()).get(agentId);
+        },
+        async replace(agentId, assignments) {
+          return (await repository()).replace(agentId, assignments);
+        },
+      };
+    },
+  };
+}
+
+/** What {@link createRepositoryAgentGrantStoreProvider} needs, and the whole of it. */
+export interface RepositoryAgentGrantStoreDependencies {
+  readonly repositories: CoreAgentGrantRepositoryProvider;
+  readonly scopes: CoreWorkspaceScopeResolver;
+}
+
+/** The database-backed {@link AgentGrantStoreProvider}. Copies `store.ts`'s memoised-scope shape. */
+export function createRepositoryAgentGrantStoreProvider(
+  dependencies: RepositoryAgentGrantStoreDependencies,
+): AgentGrantStoreProvider {
+  return {
+    forWorkspace(workspaceId: string): WorkspaceAgentGrantStore {
+      let pending: Promise<ReturnType<CoreAgentGrantRepositoryProvider['forScope']>> | null = null;
+      const repository = (): Promise<ReturnType<CoreAgentGrantRepositoryProvider['forScope']>> => {
+        pending ??= (async () => {
+          const scope = await dependencies.scopes.forWorkspaceId(workspaceId);
+          if (scope === null) throw new UnknownWorkspaceError(workspaceId);
+          return dependencies.repositories.forScope(scope);
+        })();
+        return pending;
+      };
+
+      return {
+        async hasGrant(agentId: string, userId: string): Promise<boolean> {
+          return (await repository()).hasGrant(agentId, userId);
+        },
+        async listPrincipalIds(agentId: string): Promise<readonly string[] | null> {
+          return (await repository()).listPrincipalIds(agentId);
+        },
+        async replacePrincipalIds(agentId: string, principalIds: readonly string[]) {
+          return (await repository()).replacePrincipalIds(agentId, principalIds);
         },
       };
     },

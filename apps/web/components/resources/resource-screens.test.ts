@@ -5,20 +5,15 @@ import { describe, expect, it } from 'vitest';
 import {
   ApiKeyRoleSelect,
   ApiKeyRow,
-  breadcrumbSegments,
   Breadcrumbs,
-  canonicalizeFolderPath,
   ConnectorNewScreen,
   ConnectorsScreen,
   FilePicker,
   FilesScreen,
   FileTable,
   formatModified,
-  formatSize,
   SkillDetailScreen,
   SkillsScreen,
-  sortedRows,
-  toFileRows,
   updateSkillSource,
   type FileRow,
 } from './resource-screens';
@@ -56,7 +51,9 @@ describe('resource screens', () => {
     expect(html).not.toContain('No skills yet.');
     expect(html).not.toContain('No connectors yet.');
   });
+});
 
+describe('resource screens: connectors and skill detail', () => {
   it('offers every connector authentication mode and keeps the credential masked', () => {
     const html = renderToStaticMarkup(createElement(ConnectorNewScreen));
     expect(html).toContain('No authentication');
@@ -72,7 +69,9 @@ describe('resource screens', () => {
     expect(html).toContain('Loading skill…');
     expect(html).not.toContain('Save changes');
   });
+});
 
+describe('resource screens: skill source frontmatter', () => {
   it('preserves allowed-tools and unknown frontmatter while editing instructions', () => {
     const source =
       '---\nname: old\ndescription: old\nallowed-tools: Read, Grep\nx-vendor: keep\n---\nold body\n';
@@ -81,6 +80,23 @@ describe('resource screens', () => {
     );
   });
 
+  it('writes frontmatter values as YAML that reads back, quoting what plain YAML would misread', () => {
+    const quoted =
+      '---\nname: kb\ndescription: "Use when: the user says \\"hi\\" # now"\n---\n\nbody\n';
+    expect(updateSkillSource(quoted, 'kb', 'Use when: a # b', 'body')).toBe(
+      '---\nname: kb\ndescription: "Use when: a # b"\n---\n\nbody\n',
+    );
+    expect(updateSkillSource('', 'null', '- leading\nnewline', 'x')).toBe(
+      '---\nname: "null"\ndescription: "- leading\\nnewline"\n---\n\nx\n',
+    );
+    const folded = '---\nname: a\ndescription: >\n  folded\n  text\nx-keep: 1\n---\n\nb\n';
+    expect(updateSkillSource(folded, 'a', 'plain words', 'b')).toBe(
+      '---\nname: a\ndescription: plain words\nx-keep: 1\n---\n\nb\n',
+    );
+  });
+});
+
+describe('resource screens: the files screen', () => {
   it('does not render the empty-folder message while the files listing is still loading', () => {
     const html = renderToStaticMarkup(createElement(FilesScreen));
     expect(html).toContain('Loading files…');
@@ -100,84 +116,13 @@ describe('resource screens', () => {
   });
 });
 
-describe('canonicalizeFolderPath', () => {
-  it('passes through an ordinary nested path unchanged', () => {
-    expect(canonicalizeFolderPath('a/b/c')).toBe('a/b/c');
-  });
-
-  it('treats null, undefined and the empty string as the root', () => {
-    expect(canonicalizeFolderPath(null)).toBe('');
-    expect(canonicalizeFolderPath(undefined)).toBe('');
-    expect(canonicalizeFolderPath('')).toBe('');
-  });
-
-  it('drops "." segments', () => {
-    expect(canonicalizeFolderPath('a/./b')).toBe('a/b');
-  });
-
-  // Verifier attack 1: hand-editing the URL to a traversal, an absolute path, or a
-  // percent-encoded dot-segment must never leave as a request containing a traversal — it is
-  // clamped inside the workspace instead of being forwarded as-is.
-  it('clamps a "../../../" climb at the root rather than escaping it', () => {
-    expect(canonicalizeFolderPath('a/b/../../../etc')).toBe('etc');
-  });
-
-  it('clamps a lone ".." at the root to the empty (root) path', () => {
-    expect(canonicalizeFolderPath('..')).toBe('');
-    expect(canonicalizeFolderPath('../../..')).toBe('');
-  });
-
-  it('treats a leading "/" as relative to the workspace root, not as an absolute path', () => {
-    expect(canonicalizeFolderPath('/absolute/path')).toBe('absolute/path');
-  });
-
-  it('resolves a percent-encoded dot-segment the same way as a literal one', () => {
-    expect(canonicalizeFolderPath('a/b/%2e%2e/')).toBe('a');
-  });
-
-  it('keeps a malformed percent-encoding as a literal, harmless segment rather than throwing', () => {
-    expect(canonicalizeFolderPath('a/50%/b')).toBe('a/50%/b');
-  });
-
-  it('never returns a path containing a "." or ".." segment, for a battery of hostile inputs', () => {
-    const hostile = [
-      'a/b/../../../etc',
-      '../../../../etc/passwd',
-      '/etc/passwd',
-      'a/../../b',
-      '%2e%2e/%2e%2e/root',
-      'a/./././b',
-    ];
-    for (const raw of hostile) {
-      const result = canonicalizeFolderPath(raw);
-      expect(result.split('/')).not.toContain('..');
-      expect(result.split('/')).not.toContain('.');
-      expect(result.startsWith('/')).toBe(false);
-    }
-  });
-});
-
-describe('breadcrumbSegments', () => {
-  it('is empty at the root', () => {
-    expect(breadcrumbSegments('')).toEqual([]);
-  });
-
-  it('accumulates the path up to each segment', () => {
-    expect(breadcrumbSegments('a/b/c')).toEqual([
-      { name: 'a', path: 'a' },
-      { name: 'b', path: 'a/b' },
-      { name: 'c', path: 'a/b/c' },
-    ]);
-  });
-});
-
 describe('Breadcrumbs', () => {
   it('renders Home plus every segment, and disables Back at the root', () => {
     const html = renderToStaticMarkup(
       createElement(Breadcrumbs, { path: '', onNavigate: () => {} }),
     );
     expect(html).toContain('Home');
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>\s*Back/u);
+    expect(html).toMatch(/<button[^>]*\sdisabled=""[^>]*>\s*Back/u);
   });
 
   it('renders every crumb of a nested path and enables Back', () => {
@@ -186,141 +131,28 @@ describe('Breadcrumbs', () => {
     );
     expect(html).toContain('contracts');
     expect(html).toContain('2026-q3');
-    expect(html).not.toMatch(/<button[^>]*disabled[^>]*>\s*Back/u);
+    expect(html).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>\s*Back/u);
   });
 });
 
-describe('formatSize', () => {
-  it('renders an em dash for an unknown size', () => {
-    expect(formatSize(null)).toBe('—');
-  });
-
-  it('renders sub-kilobyte sizes in bytes', () => {
-    expect(formatSize(0)).toBe('0 B');
-    expect(formatSize(512)).toBe('512 B');
-  });
-
-  it('renders one decimal place under 10 units, none at or above it', () => {
-    expect(formatSize(1024)).toBe('1.0 KB');
-    expect(formatSize(1536)).toBe('1.5 KB');
-    expect(formatSize(10240)).toBe('10 KB');
-  });
-
-  it('climbs units for a megabyte-sized file', () => {
-    expect(formatSize(1024 * 1024)).toBe('1.0 MB');
-  });
-});
-
-describe('formatModified', () => {
-  it('renders an em dash for a folder (no lastModified)', () => {
-    expect(formatModified(null)).toBe('—');
-  });
-
-  it('renders a UTC timestamp without a locale/timezone dependency', () => {
-    expect(formatModified('2026-09-11T10:15:30.000Z')).toBe('2026-09-11 10:15 UTC');
-  });
-
-  it('falls back to the raw string when it is not the expected ISO shape', () => {
-    expect(formatModified('not-a-date')).toBe('not-a-date');
-  });
-});
-
-describe('toFileRows and sortedRows', () => {
-  it('narrows the loosely-typed API body and defaults a missing kind to "file"', () => {
-    const rows = toFileRows({
-      files: [
-        { id: '1', path: 'a.txt', sizeBytes: 3, contentType: 'text/plain', lastModified: 'x' },
-        { id: '2', path: 'sub', kind: 'folder' },
-        'not-an-object',
-      ],
-    });
-    expect(rows).toEqual([
-      {
-        id: '1',
-        path: 'a.txt',
-        kind: 'file',
-        sizeBytes: 3,
-        contentType: 'text/plain',
-        lastModified: 'x',
-      },
-      {
-        id: '2',
-        path: 'sub',
-        kind: 'folder',
-        sizeBytes: null,
-        contentType: null,
-        lastModified: null,
-      },
-    ]);
-  });
-
-  it('returns no rows when "files" is missing or not an array', () => {
-    expect(toFileRows({})).toEqual([]);
-    expect(toFileRows({ files: 'nope' })).toEqual([]);
-  });
-
-  it('sorts folders before files, each group alphabetically by name', () => {
-    const unsorted: FileRow[] = [
-      {
-        id: '1',
-        path: 'zeta.txt',
-        kind: 'file',
-        sizeBytes: 0,
-        contentType: null,
-        lastModified: null,
-      },
-      {
-        id: '2',
-        path: 'beta',
-        kind: 'folder',
-        sizeBytes: null,
-        contentType: null,
-        lastModified: null,
-      },
-      {
-        id: '3',
-        path: 'alpha.txt',
-        kind: 'file',
-        sizeBytes: 0,
-        contentType: null,
-        lastModified: null,
-      },
-      {
-        id: '4',
-        path: 'alpha',
-        kind: 'folder',
-        sizeBytes: null,
-        contentType: null,
-        lastModified: null,
-      },
-    ];
-    expect(sortedRows(unsorted).map((row) => row.path)).toEqual([
-      'alpha',
-      'beta',
-      'alpha.txt',
-      'zeta.txt',
-    ]);
-  });
-});
+const file: FileRow = {
+  id: 'file-1',
+  path: 'contracts/agreement.pdf',
+  kind: 'file',
+  sizeBytes: 2048,
+  contentType: 'application/pdf',
+  lastModified: '2026-08-12T09:00:00.000Z',
+};
+const folder: FileRow = {
+  id: 'folder-1',
+  path: 'contracts',
+  kind: 'folder',
+  sizeBytes: null,
+  contentType: null,
+  lastModified: null,
+};
 
 describe('FileTable', () => {
-  const file: FileRow = {
-    id: 'file-1',
-    path: 'contracts/agreement.pdf',
-    kind: 'file',
-    sizeBytes: 2048,
-    contentType: 'application/pdf',
-    lastModified: '2026-08-12T09:00:00.000Z',
-  };
-  const folder: FileRow = {
-    id: 'folder-1',
-    path: 'contracts',
-    kind: 'folder',
-    sizeBytes: null,
-    contentType: null,
-    lastModified: null,
-  };
-
   it('renders the explicit empty-folder state for an empty listing', () => {
     const html = renderToStaticMarkup(createElement(FileTable, { rows: [], onNavigate: () => {} }));
     expect(html).toContain('This folder is empty.');
@@ -348,9 +180,21 @@ describe('FileTable', () => {
     );
     expect(html).toContain('2.0 KB');
     expect(html).toContain('application/pdf');
-    expect(html).toContain('2026-08-12 09:00 UTC');
+    expect(html).toContain(formatModified(file.lastModified, 'en'));
   });
 
+  it('prints the modified time in the language it is given (UX-15)', () => {
+    const html = renderToStaticMarkup(
+      createElement(FileTable, { rows: [file], onNavigate: () => {}, locale: 'ja' }),
+    );
+    expect(html).toContain(formatModified(file.lastModified, 'ja'));
+    expect(html).toContain('2026年');
+    // <html> stays en, so the Japanese date says its own language.
+    expect(html).toMatch(/<td lang="ja"[^>]*>2026年/u);
+  });
+});
+
+describe('FileTable actions and selection', () => {
   it('renders no Actions column and no Download when neither rename nor delete is offered', () => {
     const html = renderToStaticMarkup(
       createElement(FileTable, { rows: [file], onNavigate: () => {} }),

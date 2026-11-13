@@ -75,8 +75,8 @@ theorem specification_column_list_is_a_strict_subset :
       "created_by", "revoked_at"]
     specified.all (catalogue .shares).hasColumn = true ∧
       (catalogue .shares).columnNames.filter (fun c => !specified.contains c) =
-        ["token", "subject_label", "stopped", "publisher_principal_id", "suspended_at",
-          "created_at"] := by
+        ["token", "token_hash", "subject_label", "stopped", "publisher_principal_id",
+          "suspended_at", "created_at"] := by
   decide +kernel
 
 private def workspaceShare : Share :=

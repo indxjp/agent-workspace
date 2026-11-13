@@ -48,6 +48,8 @@ tests/
 internal/
 **/*.test.ts
 **/*.test.tsx
+**/*.test-support.ts
+**/*.test-support.tsx
 # Agent and contributor instructions, the formal model, the marketing sites, and the repository's
 # own build, test and lint configuration (BH061-059). The Dockerfiles themselves are read by the
 # builder whether or not they are in the context; excluded here, no image can copy them.

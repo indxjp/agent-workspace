@@ -90,7 +90,7 @@ import {
   unsupportedEngineRefusal,
   withStoredConnectorIds,
 } from '../agents/policy';
-import { registeredEngineIds } from '../engines/registry';
+import { registeredEngineIds } from '../execution';
 import { ceilingStep, type RequestCeiling } from '../policy-ceiling/ceiling';
 import type { ToolBundleLookup } from '../tool-bundles/handlers';
 import {

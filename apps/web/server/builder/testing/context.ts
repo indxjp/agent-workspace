@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-import type { Role } from '../../rbac/roles';
+import type { Role } from '../../identity';
 import type { CallContext, CallDoor } from '../ports';
 
 /** The door of a test call: a run of an agent that no test registers, pinned to version 1. */

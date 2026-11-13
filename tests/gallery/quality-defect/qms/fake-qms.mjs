@@ -167,19 +167,17 @@ function lines(body, key) {
   return value.map((line) => line.trim());
 }
 
-/**
- * Start the fake QMS. Resolves with its base URL (ending in `/api/v1`), the `requests` it received and
- * a `close()`. `identity` is what verifies the caller: `{ key, audience, workspace }`, `key` a string
- * or a list while it rotates. `dataDir` holds `defects/*.json` and `access.json`.
- */
-export function startFakeQms({ token, identity, port = 0, dataDir = DATA_DIR }) {
-  const access = JSON.parse(readFileSync(path.join(dataDir, 'access.json'), 'utf8'));
+/** Every exported report in `dataDir/defects`, by file name, as records. */
+function loadRecords(dataDir) {
   const defectsDir = path.join(dataDir, 'defects');
-  const records = readdirSync(defectsDir)
+  return readdirSync(defectsDir)
     .filter((name) => name.endsWith('.json'))
     .sort()
     .map((name) => recordOf(JSON.parse(readFileSync(path.join(defectsDir, name), 'utf8'))));
-  const byId = new Map(records.map((record) => [record.id, record]));
+}
+
+/** The records by Q-number, and the search index over them. */
+function storeOf(records) {
   // The phenomenon is the title, so it carries the most weight; the cause and its category let a
   // query such as 「金型摩耗」 find cases whose phenomenon differs.
   const index = createIndex(
@@ -189,74 +187,148 @@ export function startFakeQms({ token, identity, port = 0, dataDir = DATA_DIR }) 
       text: `${record.partName} ${record.causeCode} ${record.cause}`,
     })),
   );
-  const requests = [];
+  return { size: records.length, byId: new Map(records.map((r) => [r.id, r])), index };
+}
 
-  /** The optional filters both searches take, validated, and the 工程 the caller may see. */
-  function filtersOf(params, processes) {
-    const process = params.get('process');
-    if (process !== null && !PROCESSES.includes(process)) {
-      throw badRequest(`process must be one of ${PROCESSES.join(' / ')}`);
-    }
-    const partNo = params.get('partNo');
-    if (partNo !== null && partNo.trim() === '')
-      throw badRequest('partNo must be a non-empty string');
-    const prefix = partNo === null ? null : partNo.trim().toUpperCase();
-    return (record) =>
-      processes.includes(record.process) &&
-      (process === null || record.process === process) &&
-      (prefix === null || record.partNo.startsWith(prefix));
+/** `process` when it is one of the 工程 the QMS knows; a 400 otherwise. */
+function knownProcess(process) {
+  if (!PROCESSES.includes(process))
+    throw badRequest(`process must be one of ${PROCESSES.join(' / ')}`);
+  return process;
+}
+
+/** The optional filters both searches take, validated, and the 工程 the caller may see. */
+function filtersOf(params, processes) {
+  const process = params.get('process');
+  if (process !== null) knownProcess(process);
+  const partNo = params.get('partNo');
+  if (partNo !== null && partNo.trim() === '')
+    throw badRequest('partNo must be a non-empty string');
+  const prefix = partNo === null ? null : partNo.trim().toUpperCase();
+  return (record) =>
+    processes.includes(record.process) &&
+    (process === null || record.process === process) &&
+    (prefix === null || record.partNo.startsWith(prefix));
+}
+
+function matches(store, params, max, processes) {
+  const q = (params.get('q') ?? '').trim();
+  if (q === '') throw badRequest('q must be a non-empty string');
+  return store.index.search(q, {
+    limit: max,
+    filter: filtersOf(params, processes),
+    minCoverage: 0.5,
+  });
+}
+
+/** Register the approved 8D as a new 過去トラ in a 工程 the caller may see. */
+function register(store, body, processes) {
+  const process = knownProcess(required(body, 'process'));
+  if (!processes.includes(process)) {
+    throw new Refusal(403, 'no access: this caller may not register a case of this process');
   }
-
-  function matches(params, max, processes) {
-    const q = (params.get('q') ?? '').trim();
-    if (q === '') throw badRequest('q must be a non-empty string');
-    return index.search(q, { limit: max, filter: filtersOf(params, processes), minCoverage: 0.5 });
+  const partNo = required(body, 'partNo').toUpperCase();
+  if (!PART_NO.test(partNo)) throw badRequest('partNo must look like BRK-2201');
+  const fourM = required(body, 'fourM');
+  if (!FOUR_M.includes(fourM)) throw badRequest(`fourM must be one of ${FOUR_M.join(' / ')}`);
+  if (!Number.isInteger(body.count) || body.count < 1) {
+    throw badRequest('count must be a positive integer');
   }
+  const next = Math.max(0, ...[...store.byId.keys()].map((key) => Number(key.slice(2)))) + 1;
+  if (next > 9999) throw badRequest('no Q-number left');
+  const id = `Q-${String(next).padStart(4, '0')}`;
+  const record = recordOf({
+    不具合番号: id,
+    品番: partNo,
+    品名: partNo,
+    工程: process,
+    現象: required(body, 'title'),
+    発生日: new Date().toISOString().slice(0, 10),
+    ロット: required(body, 'lot'),
+    発生数: body.count,
+    流出区分: null,
+    原因: required(body, 'cause'),
+    原因区分: required(body, 'causeCode'),
+    '4M分類': fourM,
+    なぜなぜ: lines(body, 'whys'),
+    対策: required(body, 'countermeasure'),
+    水平展開: required(body, 'horizontalDeployment'),
+    再発有無: '無',
+    関連不具合: [],
+    '8D': required(body, 'report'),
+  });
+  store.byId.set(id, record);
+  return { qNo: id, citation: record.citation };
+}
 
-  /** Register the approved 8D as a new 過去トラ in a 工程 the caller may see. */
-  function register(body, processes) {
-    const process = required(body, 'process');
-    if (!PROCESSES.includes(process)) {
-      throw badRequest(`process must be one of ${PROCESSES.join(' / ')}`);
-    }
-    if (!processes.includes(process)) {
-      throw new Refusal(403, 'no access: this caller may not register a case of this process');
-    }
-    const partNo = required(body, 'partNo').toUpperCase();
-    if (!PART_NO.test(partNo)) throw badRequest('partNo must look like BRK-2201');
-    const fourM = required(body, 'fourM');
-    if (!FOUR_M.includes(fourM)) throw badRequest(`fourM must be one of ${FOUR_M.join(' / ')}`);
-    if (!Number.isInteger(body.count) || body.count < 1) {
-      throw badRequest('count must be a positive integer');
-    }
-    const next = Math.max(0, ...[...byId.keys()].map((key) => Number(key.slice(2)))) + 1;
-    if (next > 9999) throw badRequest('no Q-number left');
-    const id = `Q-${String(next).padStart(4, '0')}`;
-    const record = recordOf({
-      不具合番号: id,
-      品番: partNo,
-      品名: partNo,
-      工程: process,
-      現象: required(body, 'title'),
-      発生日: new Date().toISOString().slice(0, 10),
-      ロット: required(body, 'lot'),
-      発生数: body.count,
-      流出区分: null,
-      原因: required(body, 'cause'),
-      原因区分: required(body, 'causeCode'),
-      '4M分類': fourM,
-      なぜなぜ: lines(body, 'whys'),
-      対策: required(body, 'countermeasure'),
-      水平展開: required(body, 'horizontalDeployment'),
-      再発有無: '無',
-      関連不具合: [],
-      '8D': required(body, 'report'),
-    });
-    byId.set(id, record);
-    return { qNo: id, citation: record.citation };
+/** `GET /defects`: similar past cases, best first, or the no-match answer. */
+function searchDefects(store, { url, processes }) {
+  const hits = matches(store, url.searchParams, SEARCH_LIMIT, processes);
+  return hits.length === 0 ? { noMatch: true, message: NO_MATCH } : hits.map(summaryOf);
+}
+
+/** `GET /defects/stats`: 4M counts over every matched case. */
+function causeStats(store, { url, processes }) {
+  const groupBy = url.searchParams.get('groupBy');
+  if (groupBy !== null && groupBy !== '4m') throw badRequest('groupBy must be 4m');
+  return {
+    query: (url.searchParams.get('q') ?? '').trim(),
+    process: url.searchParams.get('process'),
+    partNo: url.searchParams.get('partNo'),
+    ...causeStatsOf(matches(store, url.searchParams, store.size, processes)),
+  };
+}
+
+/** `GET /defects/{qNo}`: one report in full; another 工程's case reads as one that does not exist. */
+function getDefect(store, { processes }, qNo) {
+  const id = decodeURIComponent(qNo).toUpperCase();
+  if (!ID.test(id)) throw badRequest('qNo must look like Q-1234');
+  const record = store.byId.get(id);
+  if (record === undefined || !processes.includes(record.process)) {
+    throw new Refusal(404, `no past defect ${id}; call searchDefects first`);
   }
+  return {
+    ...record,
+    related: record.related.filter((other) => processes.includes(store.byId.get(other)?.process)),
+  };
+}
 
-  const server = createServer(async (request, response) => {
+/** `POST /defects`: the approved 8D, logged with its body and who it is for, then registered. */
+async function createCase(store, { request, entry, sub, processes }) {
+  let body;
+  try {
+    body = JSON.parse(await readBody(request));
+  } catch {
+    throw badRequest('the body must be JSON');
+  }
+  Object.assign(entry, { body, by: sub });
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw badRequest('the body must be a JSON object');
+  }
+  return register(store, body, processes);
+}
+
+/** The status and body for an authenticated request: its route's answer, or a 404. */
+async function dispatch(store, context) {
+  if (context.request.method === 'POST') return [201, await createCase(store, context)];
+  const { pathname } = context.url;
+  const route = pathname.startsWith(`${BASE_PATH}/`) ? pathname.slice(BASE_PATH.length) : null;
+  if (route === '/defects') return [200, searchDefects(store, context)];
+  if (route === '/defects/stats') return [200, causeStats(store, context)];
+  const defect = /^\/defects\/([^/]+)$/u.exec(route ?? '');
+  if (defect) return [200, getDefect(store, context, defect[1])];
+  return [404, { error: 'no such route' }];
+}
+
+/** A refusal as the agent reads it; anything else is not the caller's to see. */
+const failureOf = (error) =>
+  error instanceof Refusal
+    ? [error.status, { error: error.message }]
+    : [500, { error: 'internal error' }];
+
+/** The HTTP handler: log the request, check the bearer token, the method and the caller, dispatch. */
+function handlerOf({ token, identity, access, store, requests }) {
+  return async (request, response) => {
     const send = (status, body) => {
       response.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
       response.end(JSON.stringify(body));
@@ -291,63 +363,23 @@ export function startFakeQms({ token, identity, port = 0, dataDir = DATA_DIR }) 
     }
     const { processes } = access[caller.payload.sub];
     try {
-      if (request.method === 'POST') {
-        let body;
-        try {
-          body = JSON.parse(await readBody(request));
-        } catch {
-          throw badRequest('the body must be JSON');
-        }
-        entry.body = body;
-        entry.by = caller.payload.sub;
-        if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-          throw badRequest('the body must be a JSON object');
-        }
-        send(201, register(body, processes));
-        return;
-      }
-      const route = url.pathname.startsWith(`${BASE_PATH}/`)
-        ? url.pathname.slice(BASE_PATH.length)
-        : null;
-      if (route === '/defects') {
-        const hits = matches(url.searchParams, SEARCH_LIMIT, processes);
-        send(200, hits.length === 0 ? { noMatch: true, message: NO_MATCH } : hits.map(summaryOf));
-        return;
-      }
-      if (route === '/defects/stats') {
-        const groupBy = url.searchParams.get('groupBy');
-        if (groupBy !== null && groupBy !== '4m') throw badRequest('groupBy must be 4m');
-        send(200, {
-          query: (url.searchParams.get('q') ?? '').trim(),
-          process: url.searchParams.get('process'),
-          partNo: url.searchParams.get('partNo'),
-          ...causeStatsOf(matches(url.searchParams, records.length, processes)),
-        });
-        return;
-      }
-      const defect = /^\/defects\/([^/]+)$/u.exec(route ?? '');
-      if (defect) {
-        const id = decodeURIComponent(defect[1]).toUpperCase();
-        if (!ID.test(id)) throw badRequest('qNo must look like Q-1234');
-        const record = byId.get(id);
-        if (record === undefined || !processes.includes(record.process)) {
-          throw new Refusal(404, `no past defect ${id}; call searchDefects first`);
-        }
-        send(200, {
-          ...record,
-          related: record.related.filter((other) => processes.includes(byId.get(other)?.process)),
-        });
-        return;
-      }
-      send(404, { error: 'no such route' });
+      send(...(await dispatch(store, { request, url, entry, sub: caller.payload.sub, processes })));
     } catch (error) {
-      if (!(error instanceof Refusal)) {
-        send(500, { error: 'internal error' });
-        return;
-      }
-      send(error.status, { error: error.message });
+      send(...failureOf(error));
     }
-  });
+  };
+}
+
+/**
+ * Start the fake QMS. Resolves with its base URL (ending in `/api/v1`), the `requests` it received and
+ * a `close()`. `identity` is what verifies the caller: `{ key, audience, workspace }`, `key` a string
+ * or a list while it rotates. `dataDir` holds `defects/*.json` and `access.json`.
+ */
+export function startFakeQms({ token, identity, port = 0, dataDir = DATA_DIR }) {
+  const access = JSON.parse(readFileSync(path.join(dataDir, 'access.json'), 'utf8'));
+  const store = storeOf(loadRecords(dataDir));
+  const requests = [];
+  const server = createServer(handlerOf({ token, identity, access, store, requests }));
 
   return new Promise((resolve) => {
     server.listen(port, '127.0.0.1', () => {

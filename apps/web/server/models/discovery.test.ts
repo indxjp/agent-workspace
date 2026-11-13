@@ -6,6 +6,7 @@ import { EgressRefusedError } from '@agent-workspace/core';
 import type { ModelConnectionRecord } from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { counterIds } from '../ids';
 import { createModelDiscovery, discoveryCacheFingerprint } from './discovery';
 import type { ResolvedModelConnection } from './store';
 
@@ -97,6 +98,45 @@ describe('createModelDiscovery', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('unreachable');
     expect(result.models.map((model) => model.providerModelId)).toEqual(['claude-house-blend']);
+    // Prompt caching was verified live against the Anthropic API only, not a compatible server.
+    expect(result.models[0]?.capabilities.promptCaching).toBe(false);
+    expect(result.models[0]?.capabilities.streaming).toBe(true);
+  });
+
+  it('declares prompt caching for an Anthropic API connection, as the adapter does', async () => {
+    const server = await fixtureServer((_req, res) => modelsResponse(res, ['claude-haiku-5-5']));
+    const discover = createModelDiscovery();
+    const result = await discover(connection('anthropic', { baseUrl: server.baseUrl }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.models[0]?.capabilities.promptCaching).toBe(true);
+  });
+
+  it('lists the scripted models the composition root passes, beside the upstream ones', async () => {
+    const server = await fixtureServer((_req, res) => modelsResponse(res, ['claude-house-blend']));
+    const discover = createModelDiscovery({
+      scripted: {
+        isScripted: (model) => model.startsWith('scripted:'),
+        listModels: () =>
+          Promise.resolve([
+            {
+              id: 'scripted:fixture',
+              type: 'model' as const,
+              display_name: 'Scripted: fixture',
+              created_at: '2026-01-01T00:00:00Z',
+            },
+          ]),
+        createMessage: () => Promise.resolve(Response.json({})),
+        countTokens: () => Promise.resolve({ input_tokens: 1 }),
+      },
+    });
+    const result = await discover(connection('anthropic-compatible', { baseUrl: server.baseUrl }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.models.map((model) => model.providerModelId)).toEqual([
+      'claude-house-blend',
+      'scripted:fixture',
+    ]);
   });
 
   it("treats Azure's configured deployment as the connection's single model, with no network call", async () => {
@@ -137,6 +177,32 @@ describe('createModelDiscovery', () => {
     expect(second.ok).toBe(true);
     if (!second.ok) throw new Error('unreachable');
     expect(second.stale).toBe(false);
+    expect(server.requests).toBe(1);
+  });
+
+  it('reads the system clock by default, so a list older than the TTL is fetched again', async () => {
+    const server = await fixtureServer((_req, res) => modelsResponse(res, ['m1']));
+    const discover = createModelDiscovery({ ttlMs: 1 });
+    const target = connection('openai-compatible', { baseUrl: server.baseUrl });
+
+    await discover(target);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await discover(target);
+    expect(server.requests).toBe(2);
+  });
+
+  it('takes one request id per provider call from the id generator, none for a cached answer', async () => {
+    const server = await fixtureServer((_req, res) => modelsResponse(res, ['m1']));
+    const minted: string[] = [];
+    const ids = counterIds();
+    const discover = createModelDiscovery({
+      ids: { newId: () => minted[minted.push(ids.newId()) - 1] ?? '' },
+    });
+    const target = connection('openai-compatible', { baseUrl: server.baseUrl });
+
+    await discover(target);
+    await discover(target);
+    expect(minted).toEqual(['00000000-0000-4000-8000-000000000001']);
     expect(server.requests).toBe(1);
   });
 
@@ -447,5 +513,28 @@ describe('createModelDiscovery', () => {
       failWith = fetchFailed('ECONNRESET');
       expect(await discover(target)).toMatchObject({ ok: false, failure: { kind: 'unreachable' } });
     });
+  });
+});
+
+describe('createModelDiscovery — vertex', () => {
+  it('lists the static Claude models for a keyless connection without a credential or a fetch', async () => {
+    const resolved: ResolvedModelConnection = {
+      ...connection('vertex', { projectId: 'my-project-123' }),
+      credential: '',
+    };
+    const calls: unknown[] = [];
+    const discover = createModelDiscovery({
+      fetch: (...args) => {
+        calls.push(args);
+        return Promise.reject(new Error('vertex discovery must not fetch'));
+      },
+    });
+    const result = await discover(resolved);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.models.map((model) => model.providerModelId)).toContain('claude-sonnet-5-5');
+    }
+    expect(calls).toHaveLength(0);
+    expect(discoveryCacheFingerprint(resolved, new Uint8Array(32))).toMatch(/^[0-9a-f]{64}$/u);
   });
 });

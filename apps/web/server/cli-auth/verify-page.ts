@@ -27,6 +27,7 @@ import { CLI_DEVICE_CODE_TTL_SECONDS } from '@indx-workspace/contracts/cli-auth'
 
 import { applicationContext } from '../application-context';
 import { checkRequestOrigin } from '../auth/origin';
+import { systemClock } from '../clock';
 import type { Principal } from '../rbac/principal';
 import { displayUserCode, normaliseUserCode } from './device-code';
 import { refuseOverLimit } from './handlers';
@@ -176,7 +177,7 @@ async function readForm(request: Request): Promise<{
 /** `POST /api/auth/cli-verify` — record the person's answer to a user code. */
 export async function submitVerifyPage(
   request: Request,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
 ): Promise<Response> {
   const runtime = applicationContext()?.cliAuth ?? null;
   if (runtime === null) {

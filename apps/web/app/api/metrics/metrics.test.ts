@@ -24,7 +24,7 @@ import { describe, expect, it, afterEach } from 'vitest';
 
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
-import { ROLES, type Role } from '../../../server/rbac/roles';
+import { ROLES, type Role } from '../../../server/rbac/core/roles';
 import { type RbacRuntime } from '../../../server/rbac/runtime';
 import { recordRunTelemetry } from '../../../server/telemetry/runtime';
 

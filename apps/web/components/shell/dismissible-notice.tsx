@@ -41,6 +41,8 @@ export interface DismissibleNoticeProps {
   readonly className: string;
   readonly role?: 'alert' | 'status';
   readonly testId?: string;
+  /** The × button's name, in the reader's language. */
+  readonly dismissLabel?: string;
   readonly children: ReactNode;
 }
 
@@ -50,6 +52,7 @@ export function DismissibleNotice({
   className,
   role,
   testId,
+  dismissLabel = 'Dismiss',
   children,
 }: DismissibleNoticeProps) {
   const [hidden, setHidden] = useState(false);
@@ -63,8 +66,8 @@ export function DismissibleNotice({
       <div className="min-w-0 flex-1">{children}</div>
       <button
         type="button"
-        aria-label="Dismiss"
-        title="Dismiss"
+        aria-label={dismissLabel}
+        title={dismissLabel}
         className="flex-none cursor-pointer leading-none opacity-70 hover:opacity-100"
         onClick={() => {
           setHidden(true);

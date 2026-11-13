@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   checkPullRequest,
   collectFragments,
+  isEmptyChangelog,
   mergeIntoChangelog,
   parseFragment,
   validateFragments,
@@ -208,6 +209,46 @@ describe('checkPullRequest', () => {
       failures: [],
       warnings: [],
     });
+  });
+
+  it('passes a pull request that adds a new package with an empty changelog', async () => {
+    const { root, base } = await repo(true);
+    await mkdir(path.join(root, 'packages', 'app'), { recursive: true });
+    const head = await commit(
+      root,
+      'packages/app/CHANGELOG.md',
+      '# Changelog — `@indx-workspace/app`\n\n## Unreleased\n',
+    );
+    expect(checkPullRequest({ root, base, head, headRef: 'feature/x' })).toEqual({
+      failures: [],
+      warnings: [],
+    });
+  });
+
+  it('fails an added changelog that holds entries, and a modified one emptied to the same text', async () => {
+    const { root, base } = await repo(true);
+    await mkdir(path.join(root, 'packages', 'app'), { recursive: true });
+    await writeFile(
+      path.join(root, 'packages', 'app', 'CHANGELOG.md'),
+      '# Changelog — app\n\n## Unreleased\n\n### Added\n\n- Everything.\n',
+    );
+    const head = await commit(
+      root,
+      'packages/sdk/CHANGELOG.md',
+      '# Changelog — sdk\n\n## Unreleased\n',
+    );
+    expect(checkPullRequest({ root, base, head, headRef: 'feature/x' }).failures).toEqual([
+      'packages/app/CHANGELOG.md: CHANGELOG_EDITED_OUTSIDE_RELEASE: add a changes/<slug>.md fragment instead (changes/README.md)',
+      'packages/sdk/CHANGELOG.md: CHANGELOG_EDITED_OUTSIDE_RELEASE: add a changes/<slug>.md fragment instead (changes/README.md)',
+    ]);
+  });
+
+  it('reads an empty changelog as exactly a title and an empty Unreleased', () => {
+    expect(isEmptyChangelog('# Changelog — app\n\n## Unreleased\n')).toBe(true);
+    expect(isEmptyChangelog('# Changelog — app\r\n\r\n## Unreleased\r\n')).toBe(true);
+    expect(isEmptyChangelog('# Changelog — app\n\n## Unreleased\n\n- X.\n')).toBe(false);
+    expect(isEmptyChangelog('# Changelog — app\n\nIntro.\n\n## Unreleased\n')).toBe(false);
+    expect(isEmptyChangelog('# Changelog — app\n\n## 0.1.0\n')).toBe(false);
   });
 
   it('lets a release/* branch edit CHANGELOG.md', async () => {

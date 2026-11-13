@@ -155,6 +155,34 @@ describe('the trigger subject', () => {
   });
 });
 
+describe("UpdateTriggerRequestSchema: a schedule's time (ADR-0144 D5)", () => {
+  it('takes a cron, a time zone or both, each a field of its own for the empty-patch rule', () => {
+    expect(UpdateTriggerRequestSchema.safeParse({ cron: '0 9 * * 1-5' }).success).toBe(true);
+    expect(UpdateTriggerRequestSchema.safeParse({ timezone: 'Asia/Tokyo' }).success).toBe(true);
+    expect(
+      UpdateTriggerRequestSchema.safeParse({ cron: '0 9 * * *', timezone: 'UTC' }).success,
+    ).toBe(true);
+    expect(UpdateTriggerRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('bounds them as create does and never takes null', () => {
+    for (const patch of [
+      { cron: '' },
+      { cron: 'x'.repeat(257) },
+      { timezone: '' },
+      { timezone: 'x'.repeat(65) },
+      { cron: null },
+      { timezone: null },
+    ]) {
+      expect(UpdateTriggerRequestSchema.safeParse(patch).success, JSON.stringify(patch)).toBe(
+        false,
+      );
+    }
+    expect(UpdateTriggerRequestSchema.safeParse({ cron: 'x'.repeat(256) }).success).toBe(true);
+    expect(UpdateTriggerRequestSchema.safeParse({ timezone: 'x'.repeat(64) }).success).toBe(true);
+  });
+});
+
 describe('CreateTriggerRequestSchema', () => {
   const webhook = { kind: 'webhook', name: 'inbox', agentId: AGENT, prompt: 'Read {{body}}' };
 

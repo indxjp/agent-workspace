@@ -29,6 +29,7 @@
  */
 
 import {
+  isPlatformOwnedSecretName as contractsIsPlatformOwned,
   isStorageConnectionSecretName,
   STORAGE_CONNECTION_SECRET_PREFIX,
 } from '@indx-workspace/contracts/secret-reference';
@@ -48,6 +49,34 @@ export const SECRET_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
  * owns it. The contracts define the prefix once, for every check that reads it.
  */
 export { isStorageConnectionSecretName, STORAGE_CONNECTION_SECRET_PREFIX };
+
+/**
+ * A webhook's signing secret (ADR-SDK-18-N3-250 D1) is named `WEBHOOK_<id without dashes,
+ * upper-case>_SIGNING_SECRET` and written only by `/api/webhooks`, at create. It is the key the
+ * platform signs `run.*` events with, so whoever reads it can forge them: a tool, a connector
+ * identity or a tool endpoint never resolves one, and the generic secrets routes refuse to create
+ * or replace one (rotation is remove and create). Only that exact shape is reserved, so a
+ * workspace's own `WEBHOOK_STRIPE_SIGNING_SECRET` stays an ordinary secret.
+ */
+const WEBHOOK_SIGNING_SECRET = /^WEBHOOK_[0-9A-F]{32}_SIGNING_SECRET$/u;
+
+/** The secret name a webhook's signing secret is stored under (ADR D1). */
+export function webhookSigningSecretName(webhookId: string): string {
+  return `WEBHOOK_${webhookId.replaceAll('-', '').toUpperCase()}_SIGNING_SECRET`;
+}
+
+/** True when `name` is the shape {@link webhookSigningSecretName} produces. */
+export function isWebhookSigningSecretName(name: string): boolean {
+  return WEBHOOK_SIGNING_SECRET.test(name);
+}
+
+/**
+ * True for a credential the platform owns: a storage, model or runtime connection's credential or a webhook's signing secret.
+ * Such a secret is never handed to a run, whatever the tool or connector declares.
+ */
+export function isPlatformOwnedSecretName(name: string): boolean {
+  return contractsIsPlatformOwned(name) || isWebhookSigningSecretName(name);
+}
 
 const STORAGE_CONNECTION_SECRET = new RegExp(
   `^${STORAGE_CONNECTION_SECRET_PREFIX}([0-9A-F]{8})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{4})([0-9A-F]{12})$`,

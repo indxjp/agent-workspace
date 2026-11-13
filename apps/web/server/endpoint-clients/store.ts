@@ -8,11 +8,11 @@ import type {
   DirectoryApiKeyRecord,
   EndpointClientRecord,
 } from '@agent-workspace/core/db';
+import type { DeploymentPosture } from '@agent-workspace/core/posture';
 import type { ApiKeyResource } from '@indx-workspace/contracts/api-keys';
 import type { EndpointClientResource } from '@indx-workspace/contracts/endpoint-clients';
 
-import { resolveAgentRunOwnership } from '../agents/run-ownership';
-import { mintApiKey } from '../rbac/api-key';
+import { mintApiKey, type ResolveRunOwnership } from '../identity';
 import type { EndpointClientsRuntime } from './runtime';
 
 type StoreRoot = Pick<
@@ -31,6 +31,7 @@ function resource(record: EndpointClientRecord): EndpointClientResource {
     apiKeyIds: record.apiKeyIds,
     redirectUris: record.redirectUris,
     hasClientSecret: record.hasClientSecret,
+    oidcAudience: record.oidcAudience,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
@@ -52,7 +53,11 @@ function apiKeyResource(row: DirectoryApiKeyRecord): ApiKeyResource {
 
 export function createRepositoryEndpointClientsRuntime(
   root: StoreRoot,
+  /** Who may run an agent: the agents implementation, handed in by the composition root. */
+  agentOwnership: ResolveRunOwnership,
   now: () => Date = () => new Date(),
+  /** The deployment posture the composition root read (ADR-0161 amendment DI10). */
+  posture: DeploymentPosture = 'production',
 ): EndpointClientsRuntime {
   const repository = async (workspaceId: string) => {
     const scope = await root.scopes.forWorkspaceId(workspaceId);
@@ -61,6 +66,7 @@ export function createRepositoryEndpointClientsRuntime(
   };
 
   return {
+    isLocalPosture: () => Promise.resolve(posture === 'local'),
     async list(workspaceId) {
       return (await (await repository(workspaceId)).list()).map(resource);
     },
@@ -132,7 +138,7 @@ export function createRepositoryEndpointClientsRuntime(
         }
       }
     },
-    agentOwnership: (principal, agentId) => resolveAgentRunOwnership(principal, agentId),
+    agentOwnership: (principal, agentId) => agentOwnership(principal, agentId),
     async audit(principal, event) {
       const scope = await root.scopes.forWorkspaceId(principal.workspaceId);
       if (scope === null) throw new Error('endpoint-client audit workspace no longer exists');

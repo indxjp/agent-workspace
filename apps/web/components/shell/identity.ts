@@ -11,6 +11,8 @@
  * ends in an explicit refusal that says what it refused, rather than in an empty circle.
  */
 
+import { japaneseRole, shellStrings, type ShellLocale } from './shell-messages';
+
 /** What the avatar shows when the address yields no letters at all. */
 export const UNKNOWN_INITIALS = '?';
 
@@ -23,8 +25,12 @@ export function initialsFrom(email: unknown): string {
   return `${(words[0] ?? '').slice(0, 1)}${(words[1] ?? '').slice(0, 1)}`.toUpperCase();
 }
 
-/** `'owner'` → `'Owner'`. Spec §21 names the four roles in lower case; the chip shows them capitalised. */
-export function roleLabel(role: unknown): string {
-  if (typeof role !== 'string' || role.length === 0) return 'Unknown role';
-  return `${role.slice(0, 1).toUpperCase()}${role.slice(1)}`;
+/**
+ * `'owner'` → `'Owner'`, or `'オーナー'` for a `ja` reader (UX-15 in #2086). Spec §21 names the four
+ * roles in lower case; the chip shows them capitalised.
+ */
+export function roleLabel(role: unknown, locale: ShellLocale = 'en'): string {
+  if (typeof role !== 'string' || role.length === 0) return shellStrings(locale).unknownRole;
+  const japanese = locale === 'ja' ? japaneseRole(role) : undefined;
+  return japanese ?? `${role.slice(0, 1).toUpperCase()}${role.slice(1)}`;
 }

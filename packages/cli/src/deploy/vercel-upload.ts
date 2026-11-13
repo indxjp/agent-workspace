@@ -50,7 +50,7 @@ const EXCLUDED_NAMES: ReadonlySet<string> = new Set([
   'coverage',
   'next-env.d.ts',
 ]);
-const EXCLUDED_PATTERN = /\.tsbuildinfo$|\.test\.tsx?$|^\.env(\..*)?$/u;
+const EXCLUDED_PATTERN = /\.tsbuildinfo$|\.(?:test|test-support)\.tsx?$|^\.env(\..*)?$/u;
 
 /** Whether `name`, the last segment of a path inside the upload, stays out of it. */
 export function isExcluded(name: string): boolean {

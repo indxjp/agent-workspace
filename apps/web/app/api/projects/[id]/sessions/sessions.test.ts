@@ -1,242 +1,16 @@
-import type {
-  AgentRecord,
-  AgentRepository,
-  AgentVersionPointerRecord,
-  AuditEventRepository,
-  EnsureSessionInput,
-  EnsureSessionOutcome,
-  ProjectFileRepository,
-  ProjectMcpServerRepository,
-  ProjectRecord,
-  ProjectRepository,
-  SessionRecord,
-  SessionRepository,
-} from '@agent-workspace/core/db';
 import { afterEach, describe, expect, it } from 'vitest';
-
-import { createMemoryDirectory } from '../../../../../server/rbac/memory-directory';
-import { Principal } from '../../../../../server/rbac/principal';
-import { POST } from './route';
-import { installTestDomains } from '../../../../../server/application-context-fixtures';
 import { clearApplicationContext } from '../../../../../server/application-context';
-
-const WORKSPACE = '55555555-5555-4555-8555-555555555555';
-const WORKSPACE_HEADER = 'x-test-workspace';
-const ACTOR_HEADER = 'x-test-actor';
-const BUILDER_A_PRINCIPAL_ID = 'a7367c68-ea61-4b03-bbf1-3cfd0fcac445';
-const BUILDER_B_PRINCIPAL_ID = 'bf655e39-5833-4ea7-a8d9-28337906dc54';
-
-function principalIdFor(actor: string): string {
-  return actor === 'builder-a@example.test' ? BUILDER_A_PRINCIPAL_ID : BUILDER_B_PRINCIPAL_ID;
-}
-
-function agentRecord(id: string): AgentRecord {
-  return {
-    id,
-    workspaceId: WORKSPACE,
-    name: 'Agent',
-    instructions: '',
-    modelConnectionId: null,
-    model: null,
-    runtimeProfileId: null,
-    permissions: {
-      readFiles: true,
-      writeFiles: true,
-      runCommands: true,
-      unrestrictedNetwork: true,
-    },
-    policy: null,
-    createdBy: 'builder-a@example.test',
-    ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-}
-
-interface Fixture {
-  agents: Map<string, AgentRecord>;
-  projects: Map<string, ProjectRecord>;
-  sessions: Map<string, SessionRecord>;
-  /** Session ids that have at least one run — mirrors the `runs` table `moveSession` checks. */
-  sessionsWithRuns: Set<string>;
-  /** Each versioned agent's pointers; an agent absent here is a legacy, unversioned one. */
-  pointers: Map<string, readonly AgentVersionPointerRecord[]>;
-}
-
-/** The narrow slice of each repository `POST /api/projects/:id/sessions` actually calls. */
-function useMemoryRuntime(): Fixture {
-  const fixture: Fixture = {
-    agents: new Map(),
-    projects: new Map(),
-    sessions: new Map(),
-    sessionsWithRuns: new Set(),
-    pointers: new Map(),
-  };
-  const agentVersions = {
-    list: (agentId: string) =>
-      Promise.resolve({
-        versions: [],
-        pointers: fixture.pointers.get(agentId) ?? [],
-        materialisedVersionId: null,
-      }),
-  };
-
-  const projects: ProjectRepository = {
-    list: () => Promise.resolve([...fixture.projects.values()]),
-    get: (id) => Promise.resolve(fixture.projects.get(id) ?? null),
-    create: () => Promise.reject(new Error('unused')),
-    createWithAssociations: () => Promise.reject(new Error('unused')),
-    update: () => Promise.reject(new Error('unused')),
-    updateWithAssociations: () => Promise.reject(new Error('unused')),
-    moveSession: (projectId, sessionId) => {
-      const session = fixture.sessions.get(sessionId);
-      if (session === undefined || !fixture.projects.has(projectId))
-        return Promise.resolve({ kind: 'not-found' });
-      // Mirrors `moveSession`'s own guard in packages/core/src/db/repositories/projects.ts: a
-      // session that already has a run never moves, so its runs' project attribution stays
-      // historical.
-      if (fixture.sessionsWithRuns.has(sessionId)) return Promise.resolve({ kind: 'has-runs' });
-      fixture.sessions.set(sessionId, { ...session, projectId });
-      return Promise.resolve({ kind: 'moved' });
-    },
-    archive: () => Promise.reject(new Error('unused')),
-    restore: () => Promise.reject(new Error('unused')),
-  };
-  const files: ProjectFileRepository = {
-    list: () => Promise.resolve([]),
-    add: () => Promise.reject(new Error('unused')),
-    remove: () => Promise.reject(new Error('unused')),
-  };
-  const mcpServers: ProjectMcpServerRepository = {
-    list: () => Promise.resolve([]),
-    add: () => Promise.reject(new Error('unused')),
-    remove: () => Promise.reject(new Error('unused')),
-  };
-  const audit: AuditEventRepository = {
-    write: () => Promise.resolve(),
-    count: () => Promise.reject(new Error('unused')),
-    list: () => Promise.reject(new Error('unused')),
-  };
-  const agents: AgentRepository = {
-    list: () => Promise.reject(new Error('unused')),
-    get: (id) => Promise.resolve(fixture.agents.get(id) ?? null),
-    create: () => Promise.reject(new Error('unused')),
-    createWithAssignments: () => Promise.reject(new Error('unused')),
-    update: () => Promise.reject(new Error('unused')),
-    delete: () => Promise.reject(new Error('unused')),
-    replacePolicy: () => Promise.reject(new Error('unused')),
-    listArchiveCandidates: () => Promise.reject(new Error('unused')),
-    archive: () => Promise.reject(new Error('unused')),
-    restore: () => Promise.reject(new Error('unused')),
-  };
-  let sessionSeq = 0;
-  const sessions: SessionRepository = {
-    ensure: (input: EnsureSessionInput): Promise<EnsureSessionOutcome> => {
-      if (!fixture.agents.has(input.agentId)) {
-        return Promise.resolve({ kind: 'unknown-agent', agentId: input.agentId });
-      }
-      sessionSeq += 1;
-      const record: SessionRecord = {
-        engine: null,
-        agentVersionId: input.agentVersionId ?? null,
-        id: input.id,
-        workspaceId: WORKSPACE,
-        agentId: input.agentId,
-        userId: input.userId ?? null,
-        ownerPrincipalId: input.ownerPrincipalId,
-        projectId: input.projectId ?? null,
-        engineSessionId: null,
-        title: input.title ?? null,
-        status: 'active',
-        createdAt: new Date(sessionSeq),
-        updatedAt: new Date(sessionSeq),
-      };
-      fixture.sessions.set(record.id, record);
-      return Promise.resolve({ kind: 'created', session: record });
-    },
-    get: (id) => Promise.resolve(fixture.sessions.get(id) ?? null),
-    getByEngineSessionId: () => Promise.reject(new Error('unused')),
-    list: () => Promise.reject(new Error('unused')),
-    update: () => Promise.reject(new Error('unused')),
-    archive: () => Promise.reject(new Error('unused')),
-    restore: () => Promise.reject(new Error('unused')),
-    discardIfUnused: () => Promise.resolve(false),
-  };
-
-  installTestDomains({
-    projects: {
-      resolveActor: (request) => {
-        const workspaceId = request.headers.get(WORKSPACE_HEADER);
-        const actor = request.headers.get(ACTOR_HEADER);
-        return Promise.resolve(
-          workspaceId === null || actor === null
-            ? { kind: 'unauthenticated', reason: 'no test workspace header' }
-            : {
-                kind: 'workspace',
-                workspaceId,
-                principalId: principalIdFor(actor),
-                ownerPrincipalId: principalIdFor(actor),
-                userId: actor,
-                userLabel: actor,
-              },
-        );
-      },
-      forWorkspace: () =>
-        Promise.resolve({ projects, files, mcpServers, audit, agents, sessions, agentVersions }),
-    },
-  });
-
-  installTestDomains({
-    rbac: {
-      directory: createMemoryDirectory({
-        users: [
-          { email: 'builder-a@example.test', name: 'A', workspaceId: WORKSPACE, role: 'builder' },
-          { email: 'builder-b@example.test', name: 'B', workspaceId: WORKSPACE, role: 'builder' },
-        ],
-      }),
-      identify: (request) => {
-        const workspaceId = request.headers.get(WORKSPACE_HEADER);
-        const actor = request.headers.get(ACTOR_HEADER);
-        return Promise.resolve(
-          workspaceId === null || actor === null
-            ? null
-            : Principal.fromApiKey({
-                principalId: principalIdFor(actor),
-                apiKeyId:
-                  actor === 'builder-a@example.test'
-                    ? '9a5f38dd-dc4f-4b8d-8ccb-7e4578489b01'
-                    : 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-                workspaceId,
-                role: 'builder',
-                label:
-                  actor === 'builder-a@example.test'
-                    ? 'Builder A session key'
-                    : 'Builder B session key',
-              }),
-        );
-      },
-    },
-  });
-
-  return fixture;
-}
-
-function request(url: string, body: unknown, actor = 'builder-a@example.test'): Request {
-  return new Request(`https://example.invalid${url}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      [WORKSPACE_HEADER]: WORKSPACE,
-      [ACTOR_HEADER]: actor,
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-function idContext(id: string): { params: Promise<{ id: string }> } {
-  return { params: Promise.resolve({ id }) };
-}
-
+import { POST } from './route';
+import {
+  BUILDER_B_PRINCIPAL_ID,
+  agentRecord,
+  existingProject,
+  idContext,
+  projectRecord,
+  request,
+  sessionRecord,
+  useMemoryRuntime,
+} from './sessions.test-support';
 describe('POST /api/projects/:id/sessions (issue #125)', () => {
   afterEach(() => {
     clearApplicationContext();
@@ -245,21 +19,7 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it("starts a session, resolving and persisting the project's default agent in the same write", async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('project-1', {
-      id: 'project-1',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('project-1', projectRecord({ id: 'project-1' }));
 
     const response = await POST(
       request('/api/projects/project-1/sessions', {}),
@@ -290,21 +50,7 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
       pointer('production', 'version-1', 1),
       pointer('local', 'version-2', 2),
     ]);
-    fixture.projects.set('project-1', {
-      id: 'project-1',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: 'legacy',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('project-1', projectRecord({ id: 'project-1', defaultAgentId: 'legacy' }));
     const start = async (agentId: string) => {
       const response = await POST(
         request('/api/projects/project-1/sessions', { agentId }),
@@ -324,21 +70,10 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('default-agent', agentRecord('default-agent'));
     fixture.agents.set('selected-agent', agentRecord('selected-agent'));
-    fixture.projects.set('project-1', {
-      id: 'project-1',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: 'default-agent',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set(
+      'project-1',
+      projectRecord({ id: 'project-1', defaultAgentId: 'default-agent' }),
+    );
 
     const response = await POST(
       request('/api/projects/project-1/sessions', { agentId: 'selected-agent' }),
@@ -354,21 +89,10 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it('names an unresolvable composer-selected agent separately from a broken project default', async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('default-agent', agentRecord('default-agent'));
-    fixture.projects.set('project-1', {
-      id: 'project-1',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: 'default-agent',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set(
+      'project-1',
+      projectRecord({ id: 'project-1', defaultAgentId: 'default-agent' }),
+    );
 
     const response = await POST(
       request('/api/projects/project-1/sessions', { agentId: 'deleted-agent' }),
@@ -383,42 +107,17 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
 
   it('refuses to start a session when defaultAgentId is unresolvable — missing or deleted', async () => {
     const fixture = useMemoryRuntime();
-    fixture.projects.set('no-default', {
-      id: 'no-default',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: null,
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('no-default', projectRecord({ id: 'no-default', defaultAgentId: null }));
     const noDefault = await POST(
       request('/api/projects/no-default/sessions', {}),
       idContext('no-default'),
     );
     expect(noDefault.status).toBe(422);
 
-    fixture.projects.set('ghost-agent', {
-      id: 'ghost-agent',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: 'does-not-exist',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set(
+      'ghost-agent',
+      projectRecord({ id: 'ghost-agent', defaultAgentId: 'does-not-exist' }),
+    );
     const ghostAgent = await POST(
       request('/api/projects/ghost-agent/sessions', {}),
       idContext('ghost-agent'),
@@ -431,21 +130,7 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
     fixture.agents.set('agent-2', agentRecord('agent-2'));
-    fixture.projects.set('project-1', {
-      id: 'project-1',
-      workspaceId: WORKSPACE,
-      name: 'P',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('project-1', projectRecord({ id: 'project-1' }));
 
     const first = await POST(
       request('/api/projects/project-1/sessions', {}),
@@ -456,7 +141,7 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
     // The project's default agent changes; nothing in this route (or in `sessions.update`, which
     // carries no `agentId` field at all) can reach back and rewrite the already-started session.
     fixture.projects.set('project-1', {
-      ...fixture.projects.get('project-1')!,
+      ...existingProject(fixture, 'project-1'),
       defaultAgentId: 'agent-2',
     });
     expect(fixture.sessions.get(sessionId)?.agentId).toBe('agent-1');
@@ -465,51 +150,25 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it('moving a session requires authorisation on both the destination and the source project', async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('mine', {
-      id: 'mine',
-      workspaceId: WORKSPACE,
-      name: 'Mine',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.projects.set('theirs', {
-      id: 'theirs',
-      workspaceId: WORKSPACE,
-      name: 'Theirs',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-b@example.test',
-      ownerPrincipalId: BUILDER_B_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.sessions.set('session-in-theirs', {
-      engine: null,
-      agentVersionId: null,
-      id: 'session-in-theirs',
-      workspaceId: WORKSPACE,
-      agentId: 'agent-1',
-      userId: 'builder-b@example.test',
-      ownerPrincipalId: BUILDER_B_PRINCIPAL_ID,
-      projectId: 'theirs',
-      engineSessionId: null,
-      title: null,
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('mine', projectRecord({ id: 'mine', name: 'Mine' }));
+    fixture.projects.set(
+      'theirs',
+      projectRecord({
+        id: 'theirs',
+        name: 'Theirs',
+        createdBy: 'builder-b@example.test',
+        ownerPrincipalId: BUILDER_B_PRINCIPAL_ID,
+      }),
+    );
+    fixture.sessions.set(
+      'session-in-theirs',
+      sessionRecord({
+        id: 'session-in-theirs',
+        userId: 'builder-b@example.test',
+        ownerPrincipalId: BUILDER_B_PRINCIPAL_ID,
+        projectId: 'theirs',
+      }),
+    );
 
     // Builder A owns "mine" (the destination) but not "theirs" (the session's current project).
     const denied = await POST(
@@ -528,51 +187,9 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it("refuses to move a session that already has a run, so a run's project attribution can never be rewritten", async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('origin', {
-      id: 'origin',
-      workspaceId: WORKSPACE,
-      name: 'Origin',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.projects.set('destination', {
-      id: 'destination',
-      workspaceId: WORKSPACE,
-      name: 'Destination',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.sessions.set('ran-already', {
-      engine: null,
-      agentVersionId: null,
-      id: 'ran-already',
-      workspaceId: WORKSPACE,
-      agentId: 'agent-1',
-      userId: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      projectId: 'origin',
-      engineSessionId: null,
-      title: null,
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('origin', projectRecord({ id: 'origin', name: 'Origin' }));
+    fixture.projects.set('destination', projectRecord({ id: 'destination', name: 'Destination' }));
+    fixture.sessions.set('ran-already', sessionRecord({ id: 'ran-already', projectId: 'origin' }));
     fixture.sessionsWithRuns.add('ran-already');
 
     const response = await POST(
@@ -590,51 +207,9 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it('still moves a session that has no runs at all', async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('origin', {
-      id: 'origin',
-      workspaceId: WORKSPACE,
-      name: 'Origin',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.projects.set('destination', {
-      id: 'destination',
-      workspaceId: WORKSPACE,
-      name: 'Destination',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.sessions.set('never-run', {
-      engine: null,
-      agentVersionId: null,
-      id: 'never-run',
-      workspaceId: WORKSPACE,
-      agentId: 'agent-1',
-      userId: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      projectId: 'origin',
-      engineSessionId: null,
-      title: null,
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set('origin', projectRecord({ id: 'origin', name: 'Origin' }));
+    fixture.projects.set('destination', projectRecord({ id: 'destination', name: 'Destination' }));
+    fixture.sessions.set('never-run', sessionRecord({ id: 'never-run', projectId: 'origin' }));
 
     const response = await POST(
       request('/api/projects/destination/sessions', { sessionId: 'never-run' }),
@@ -650,21 +225,14 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it('refuses to start a session in an archived project, and starts one again once it is restored', async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('retired', {
-      id: 'retired',
-      workspaceId: WORKSPACE,
-      name: 'Retired',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: new Date('2026-09-13T00:00:00.000Z'),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set(
+      'retired',
+      projectRecord({
+        id: 'retired',
+        name: 'Retired',
+        archivedAt: new Date('2026-09-13T00:00:00.000Z'),
+      }),
+    );
 
     const refused = await POST(request('/api/projects/retired/sessions', {}), idContext('retired'));
     expect(refused.status, await refused.clone().text()).toBe(409);
@@ -674,7 +242,10 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
     expect(fixture.sessions.size).toBe(0);
 
     // The positive control: the refusal above was the archived state and nothing else.
-    fixture.projects.set('retired', { ...fixture.projects.get('retired')!, archivedAt: null });
+    fixture.projects.set('retired', {
+      ...existingProject(fixture, 'retired'),
+      archivedAt: null,
+    });
     const allowed = await POST(request('/api/projects/retired/sessions', {}), idContext('retired'));
     expect(allowed.status, await allowed.clone().text()).toBe(201);
     expect(fixture.sessions.size).toBe(1);
@@ -683,66 +254,17 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it('refuses to move a session into an archived project, while moving one OUT of it still works', async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('retired', {
-      id: 'retired',
-      workspaceId: WORKSPACE,
-      name: 'Retired',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: new Date('2026-09-13T00:00:00.000Z'),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.projects.set('live', {
-      id: 'live',
-      workspaceId: WORKSPACE,
-      name: 'Live',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.sessions.set('stranded', {
-      engine: null,
-      agentVersionId: null,
-      id: 'stranded',
-      workspaceId: WORKSPACE,
-      agentId: 'agent-1',
-      userId: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      projectId: 'retired',
-      engineSessionId: null,
-      title: null,
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    fixture.sessions.set('elsewhere', {
-      engine: null,
-      agentVersionId: null,
-      id: 'elsewhere',
-      workspaceId: WORKSPACE,
-      agentId: 'agent-1',
-      userId: 'builder-a@example.test',
-      ownerPrincipalId: BUILDER_A_PRINCIPAL_ID,
-      projectId: 'live',
-      engineSessionId: null,
-      title: null,
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set(
+      'retired',
+      projectRecord({
+        id: 'retired',
+        name: 'Retired',
+        archivedAt: new Date('2026-09-13T00:00:00.000Z'),
+      }),
+    );
+    fixture.projects.set('live', projectRecord({ id: 'live', name: 'Live' }));
+    fixture.sessions.set('stranded', sessionRecord({ id: 'stranded', projectId: 'retired' }));
+    fixture.sessions.set('elsewhere', sessionRecord({ id: 'elsewhere', projectId: 'live' }));
 
     const intoArchived = await POST(
       request('/api/projects/retired/sessions', { sessionId: 'elsewhere' }),
@@ -767,21 +289,15 @@ describe('POST /api/projects/:id/sessions (issue #125)', () => {
   it('starting a session in a project the caller does not own is refused before any session is written', async () => {
     const fixture = useMemoryRuntime();
     fixture.agents.set('agent-1', agentRecord('agent-1'));
-    fixture.projects.set('theirs', {
-      id: 'theirs',
-      workspaceId: WORKSPACE,
-      name: 'Theirs',
-      instructions: null,
-      defaultAgentId: 'agent-1',
-      visibility: 'private',
-      defaultModelConnectionId: null,
-      defaultModel: null,
-      createdBy: 'builder-b@example.test',
-      ownerPrincipalId: BUILDER_B_PRINCIPAL_ID,
-      archivedAt: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    fixture.projects.set(
+      'theirs',
+      projectRecord({
+        id: 'theirs',
+        name: 'Theirs',
+        createdBy: 'builder-b@example.test',
+        ownerPrincipalId: BUILDER_B_PRINCIPAL_ID,
+      }),
+    );
 
     const response = await POST(
       request('/api/projects/theirs/sessions', {}, 'builder-a@example.test'),

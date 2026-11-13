@@ -136,6 +136,7 @@ export {
 export {
   CatalogPathPendingError,
   CatalogPathTakenError,
+  listCatalogFiles,
   renamedKey,
   type CatalogFile,
   type CatalogPort,
@@ -150,6 +151,8 @@ export {
   type ResourceCatalogRepositoryProvider,
 } from './resource-catalogs.js';
 export { createInMemoryCatalog } from './memory-catalog.js';
+export { createInMemorySessionStateBlobs } from './memory-session-state-blobs.js';
+export { seedCatalogFile, type CatalogFileFixture } from './catalog-fixtures.js';
 export {
   createInMemoryStorageMigrationRuns,
   type StorageMigrationRun,
@@ -269,6 +272,7 @@ export {
 } from './browser-tokens.js';
 export {
   type ActiveOAuthAccessToken,
+  type ExchangedTokenAudit,
   type IssueOAuthTokenInput,
   type OAuthClientRecord,
   type OAuthConsumeOutcome,
@@ -295,8 +299,9 @@ export {
 
 export {
   SESSION_STATE_PAGE_LIMIT,
-  type LegacySessionStateBlob,
-  type SessionStateBlobInput,
+  type SessionStateBlobClaim,
+  type SessionStateBlobConfirmation,
+  type SessionStateBlobRepository,
   type SessionStateEntryInput,
   type SessionStateRepository,
   type SessionStateRepositoryProvider,

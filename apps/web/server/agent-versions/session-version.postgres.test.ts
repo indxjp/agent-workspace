@@ -24,8 +24,10 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createRepositoryAgentResourceStoreProvider } from '../agents/resource-store';
-import { createRepositoryAgentStoreProvider } from '../agents/store';
+import {
+  createRepositoryAgentResourceStoreProvider,
+  createRepositoryAgentStoreProvider,
+} from '../agents/store';
 import type { RegisteredComposition } from '../composition/register';
 import { getRunApi, type LaunchContext } from '../runs/environment';
 import { FIXTURE_PERMISSIONS, FIXTURE_POLICY, versionRequest, type FixtureEdits } from './fixtures';
@@ -276,7 +278,7 @@ describe.skipIf(!hasDatabase)('a session runs the version it started with (Postg
     const shares = applicationContext()?.shares ?? null;
     if (shares === null) throw new Error('the shares runtime was installed');
     const share = await root.shares.forScope(scope).create({
-      token: `pub_${agentId}`,
+      tokenHash: `pub_${agentId}`,
       subjectType: 'agent',
       subjectId: agentId,
       subjectLabel: 'Shared',

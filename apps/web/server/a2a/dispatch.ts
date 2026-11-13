@@ -5,14 +5,12 @@
 import { buildA2aAgentCard } from '@indx-workspace/contracts/a2a';
 
 import { applicationContext } from '../application-context';
-import { resolveAgentRunOwnership } from '../agents/run-ownership';
 import { readPublicUrl } from '../endpoints/public-url';
 import { endpointCredentialKey, readCappedBody } from '../endpoints/request';
 import { a2aResourcePath, bearerChallenge, resourceUrl } from '../oauth/resource';
-import { decide } from '../rbac/decide';
-import { parseRole } from '../rbac/roles';
+import { decide, parseRole } from '../identity';
 import { getRunApi } from '../runs/environment';
-import { apiError } from '../runs/http';
+import { apiError } from '../execution';
 import type { A2aEnvironment, A2aIdentity, PublishedAgent } from './env';
 import { admitA2aCall, admitA2aCardFetch } from './limits';
 import { A2A_BLOCKING_WAIT_MS, handleV03, rateLimited, type A2aCall } from './v0_3/rpc';
@@ -121,7 +119,7 @@ async function authorise(
     role,
     method: 'POST',
     path: `/api/agents/${agent.agentId}/runs`,
-    ownership: await resolveAgentRunOwnership(principal, agent.agentId),
+    ownership: await a2a.agentOwnership(principal, agent.agentId),
     scope: principal.scope ?? null,
   });
   if (decision.effect !== 'allow') {

@@ -21,7 +21,7 @@ export type { AgentPermissions, CreateShareInput, ShareRecord };
 export type ShareRows = Pick<
   ShareRepository,
   | 'create'
-  | 'findByToken'
+  | 'findByTokenHash'
   | 'get'
   | 'list'
   | 'revoke'

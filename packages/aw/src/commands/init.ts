@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -30,6 +30,7 @@ import {
   type LocalCommand,
   type LocalCommandContext,
 } from '../command.js';
+import { conflicts, occupied, writeNewFiles } from '../generate/write.js';
 import { CommandRefusedError, UsageError, type CliIo } from '../io.js';
 import { errorCode } from '../local-runtime/project.js';
 import { AW_VERSION } from '../version.js';
@@ -66,48 +67,6 @@ function render(cwd: string, answers: CompleteSetupAnswers): readonly ProjectFil
     });
   } catch (error) {
     if (error instanceof ProjectRenderError) throw new UsageError(error.message);
-    throw error;
-  }
-}
-
-/**
- * What already occupies a path `aw init` needs: a rendered file that exists (`lstat`, so a
- * dangling symlink counts too), or a parent such as `agents` that exists but is not a directory.
- * An existing `README.md` or `AGENTS.md` is not a conflict (`runInit` keeps them). Every conflict
- * is found before anything is written, so a refusal never leaves a half-written project behind.
- */
-async function conflicts(cwd: string, files: readonly ProjectFile[]): Promise<string[]> {
-  const found = new Set<string>();
-  for (const file of files) {
-    const parts = file.path.split('/');
-    for (let depth = 1; depth < parts.length; depth += 1) {
-      const parent = parts.slice(0, depth).join('/');
-      if (!(await isDirectoryOrAbsent(path.join(cwd, parent)))) found.add(parent);
-    }
-    if (!isKept(file.path) && (await occupied(path.join(cwd, file.path)))) found.add(file.path);
-  }
-  return [...found];
-}
-
-/** `true` when nothing is at `target` or it is a directory (a symlink to one counts). */
-async function isDirectoryOrAbsent(target: string): Promise<boolean> {
-  try {
-    return (await stat(target)).isDirectory();
-  } catch (error) {
-    if (errorCode(error) === 'ENOENT') return true;
-    if (errorCode(error) === 'ENOTDIR') return false;
-    throw error;
-  }
-}
-
-/** `true` when anything, a dangling symlink included, is at `target`. */
-async function occupied(target: string): Promise<boolean> {
-  try {
-    await lstat(target);
-    return true;
-  } catch (error) {
-    // ENOTDIR: a parent is a file, which `conflicts` already lists by the parent's own path.
-    if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') return false;
     throw error;
   }
 }
@@ -209,35 +168,6 @@ async function confirmed(
   if (io.isTty && io.choose !== undefined) return confirmMenu(io.choose, title);
   const answer = await terminalPrompt(io)(`write these ${String(files.length)} files? [y/N] `);
   return YES_ANSWERS.has(answer.trim().toLowerCase());
-}
-
-/** A path that appeared since the check: refused by name, never overwritten. */
-function appeared(relative: string): CommandRefusedError {
-  return new CommandRefusedError(`${relative} appeared while aw init was writing`);
-}
-
-async function writeFiles(cwd: string, files: readonly ProjectFile[], io: CliIo): Promise<void> {
-  // Every directory first, so a parent that turned into a file is refused before any file exists.
-  for (const file of files) {
-    const directory = path.dirname(file.path);
-    try {
-      await mkdir(path.join(cwd, directory), { recursive: true });
-    } catch (error) {
-      const code = errorCode(error);
-      if (code === 'EEXIST' || code === 'ENOTDIR') throw appeared(directory);
-      throw error;
-    }
-  }
-  for (const file of files) {
-    try {
-      // `wx`: a file that appeared since the check is never overwritten.
-      await writeFile(path.join(cwd, file.path), file.contents, { flag: 'wx' });
-    } catch (error) {
-      if (errorCode(error) === 'EEXIST') throw appeared(file.path);
-      throw error;
-    }
-    io.stdout(`wrote ${file.path}\n`);
-  }
 }
 
 /** What `aw dev` writes or reads that must never be committed, as `.gitignore` lines. */
@@ -346,7 +276,8 @@ async function runInit(context: LocalCommandContext): Promise<void> {
   }
   const answers = await answersFor(context, cwd);
   const files = render(cwd, answers);
-  const existing = await conflicts(cwd, files);
+  // An existing `README.md` or `AGENTS.md` is not a conflict: it is kept.
+  const existing = await conflicts(cwd, files, isKept);
   if (existing.length > 0) {
     throw new CommandRefusedError(
       `aw init would overwrite existing files:\n${existing.map((file) => `  ${file}`).join('\n')}`,
@@ -363,7 +294,7 @@ async function runInit(context: LocalCommandContext): Promise<void> {
     io.stderr('nothing written\n');
     return;
   }
-  await writeFiles(cwd, toWrite, io);
+  await writeNewFiles(cwd, toWrite, io, 'aw init');
   for (const name of kept) io.stdout(`kept the existing ${name}\n`);
   await ensureGitignore(cwd, io);
   await printInstallHint(cwd, io, answers);

@@ -51,9 +51,19 @@ The components, their ports and how they talk are in
    an existing domain to this layout as a side effect of another change.
 2. **A core does no I/O.** Code under a domain's `core/` folder imports only that `core/`,
    `packages/contracts` and `zod`. It reads no clock, random value, environment variable, file,
-   network or database; those come in as arguments. `builder-core-is-pure` checks this for
-   `apps/web/server/builder/core/`. `apps/web/server/shares/core/` does not follow this rule yet;
-   do not copy it.
+   network or database; those come in as arguments. `domain-core-is-pure` checks the imports of
+   every top-level `apps/web/server/<domain>/core/`, and ESLint refuses the clock, random,
+   `process`, `fetch`, `crypto`, `performance`, timer and network globals there, and the global
+   object under any name (`globalThis`, `global`, `window`, `self`). No core is left out of either
+   check; `apps/web/server/shares/core/` (refactoring plan part 05) is the smallest example, and
+   `apps/web/server/rbac/core/` (part 06) shows a fact from another domain passed in: the shell
+   `rbac/decide.ts` classifies the path with `auth/paths` and hands the verdict to `decideRoute`.
+   Outside a core, server code takes the time from a `Clock` (`apps/web/server/clock.ts`) and ids
+   from an `IdGenerator` (`apps/web/server/ids.ts`); the direct calls left are counted by
+   `pnpm clock:check`, whose ceiling only goes down. A duration, size or limit of `1_000` or more
+   is the initializer of a `const` that names it (`LEASE_TTL_MS`), never a bare number:
+   `pnpm durations:check` counts the bare ones in web server, runner and gateway code, and its
+   ceiling only goes down.
 3. **Only a store names persistence.** Only a domain's `store.ts` (and the test-only
    `resources/catalog-store.memory.ts`) imports `packages/core/src/db`
    (`domain-does-not-import-persistence`). The imports that already exist elsewhere, the composition

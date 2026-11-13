@@ -18,7 +18,11 @@ export async function POST(request: Request): Promise<Response> {
     async (context) => {
       const body = await readJsonBody(request);
       if (!body.ok) return body.result;
-      const created = await createModelConnection(context.store, body.value);
+      const created = await createModelConnection(
+        context.store,
+        body.value,
+        context.vertexDefaults,
+      );
       if (created.status === 201) {
         const resource = created.body as { id: string; name: string };
         await context.audit({ subjectId: resource.id, subjectLabel: resource.name });

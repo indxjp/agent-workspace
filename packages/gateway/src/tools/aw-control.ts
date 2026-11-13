@@ -4,7 +4,6 @@
  * credential it carries. The control-plane origin is set once, at deploy time; it never comes from
  * a request, a header or a run row, so nothing a run controls decides where its token goes.
  */
-import type { DatabaseRoot } from '@agent-workspace/core/db';
 import {
   AW_CONTROL_CONNECTOR,
   TOOL_GATEWAY_PROBLEM_CODES,
@@ -12,43 +11,11 @@ import {
 import { z } from 'zod';
 
 import { verifyRunToken } from '../auth.js';
+import type { GatewayRunTokens } from '../ports.js';
 import type { RunTokenClaims, RunTokenCodec } from '../tokens/run-token.js';
 import { awControlApprovalDecision, type ToolApproval, type ToolRefusal } from './authorize.js';
 import { upstreamFailure } from './openapi.js';
 import { liveRun, toolProblem } from './sandbox.js';
-
-/**
- * An http(s) origin with no credentials, path, query or fragment, as the deployment sets
- * `GATEWAY_CONTROL_PLANE_ORIGIN`; parsed to its normalised `URL.origin`.
- */
-const ControlPlaneOriginSchema = z
-  .url({ protocol: /^https?$/u })
-  .transform((value) => new URL(value))
-  .refine(
-    (url) =>
-      url.username === '' &&
-      url.password === '' &&
-      url.pathname === '/' &&
-      url.search === '' &&
-      url.hash === '',
-  )
-  .transform((url) => url.origin);
-
-/**
- * The control-plane origin from `GATEWAY_CONTROL_PLANE_ORIGIN`, checked once at startup: `undefined`
- * when unset (every `aw-control` call is then refused), and a startup error when it is not an
- * http(s) origin. The error never repeats the value.
- */
-export function parseControlPlaneOrigin(value: string | undefined): string | undefined {
-  if (value === undefined || value.trim() === '') return undefined;
-  const parsed = ControlPlaneOriginSchema.safeParse(value.trim());
-  if (!parsed.success) {
-    throw new Error(
-      'GATEWAY_CONTROL_PLANE_ORIGIN must be an http(s) origin with no credentials, path or query.',
-    );
-  }
-  return parsed.data;
-}
 
 type AwControlResolution = { readonly ok: true; readonly approval: ToolApproval } | ToolRefusal;
 
@@ -59,7 +26,7 @@ export interface AwControlResolver {
 
 export type AwControlDependencies = {
   readonly tokens: RunTokenCodec;
-  /** From {@link parseControlPlaneOrigin}; without it every call is refused. */
+  /** From `GATEWAY_CONTROL_PLANE_ORIGIN` (`settings.ts`); without it every call is refused. */
   readonly origin?: string;
   readonly runs?: AwControlResolver;
   readonly fetch?: typeof fetch;
@@ -123,7 +90,7 @@ function invalid(message: string, status: 400 | 413): Response {
 }
 
 /** The token is live and its run is not over; the run's approved calls feed the backstop. */
-export function createDatabaseAwControlResolver(database: DatabaseRoot): AwControlResolver {
+export function createDatabaseAwControlResolver(database: GatewayRunTokens): AwControlResolver {
   return {
     async resolve(claims, tokenHash): Promise<AwControlResolution> {
       const notActive: ToolRefusal = {

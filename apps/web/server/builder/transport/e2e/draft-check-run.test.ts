@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { draftBody } from '../../adapters/checker/checker.contract';
 import { BUILDER_PROMPT_VERSION } from '../../agent/prompt-version';
-import { WORKSPACE, builderDoor, scriptedModel, toolUse } from './harness';
+import { WORKSPACE, builderDoor, scriptedModel, toolUse } from './harness.test-support';
 
 const scopes = () => createInMemoryWorkspaceScopeResolver([{ id: WORKSPACE, slug: 'acme' }]);
 

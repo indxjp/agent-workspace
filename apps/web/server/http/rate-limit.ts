@@ -22,7 +22,9 @@
  * Per process: several replicas each admit their own limit. That bounds abuse per replica, which
  * is what the in-memory state here must guarantee.
  */
+import type { ClientIdentitySettings } from '../client-identity';
 import { resolvePublicVisitorIdentity } from '../shares/runnable/visitor-identity';
+import { Milliseconds } from '../newtypes';
 
 export class BoundedRecencyMap<V> {
   readonly #entries = new Map<string, V>();
@@ -69,11 +71,11 @@ export type Admission =
 export class FixedWindowLimiter {
   readonly #windows: BoundedRecencyMap<Window>;
   readonly #limit: number;
-  readonly #windowMs: number;
+  readonly #windowMs: Milliseconds;
 
   public constructor(options: {
     readonly limit: number;
-    readonly windowMs: number;
+    readonly windowMs: Milliseconds;
     readonly capacity: number;
   }) {
     this.#limit = options.limit;
@@ -114,7 +116,8 @@ export class FixedWindowLimiter {
 
 /** Distinct keys remembered per limiter; beyond it the stalest key's count is forgotten. */
 export const CLIENT_MEMORY = 10_000;
-export const MINUTE_MS = 60_000;
+const ONE_MINUTE_MS = 60_000;
+export const MINUTE_MS = Milliseconds.parse(ONE_MINUTE_MS);
 
 /** A limiter admitting `limit` requests per key per minute. */
 export const perMinuteLimiter = (limit: number): FixedWindowLimiter =>
@@ -133,9 +136,9 @@ export function admitClient(
   limit: number,
   headers: Headers,
   nowMs: number,
-  env: Readonly<Record<string, string | undefined>>,
+  identity: ClientIdentitySettings,
 ): Admission {
-  const bucket = clientBucket(limit, headers, env);
+  const bucket = clientBucket(limit, headers, identity);
   return limiter.admit(bucket.key, nowMs, bucket.limit);
 }
 
@@ -143,9 +146,9 @@ export function admitClient(
 export function clientBucket(
   limit: number,
   headers: Headers,
-  env: Readonly<Record<string, string | undefined>>,
+  identity: ClientIdentitySettings,
 ): { readonly key: string; readonly limit: number } {
-  const client = resolvePublicVisitorIdentity(headers, env);
+  const client = resolvePublicVisitorIdentity(headers, identity);
   return client.ok
     ? { key: client.visitorKey, limit }
     : { key: SHARED_BUCKET_KEY, limit: limit * SHARED_BUCKET_FACTOR };

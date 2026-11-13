@@ -6,7 +6,7 @@ import { resolveAgentRunOwnership } from '../../agents/run-ownership';
 import { readToolBundle } from '../../tool-bundles/handlers';
 import { openToolBundleStore } from '../../tool-bundles/http';
 import type { ToolEndpointEnvironment } from '../../tool-endpoint/env';
-import { createToolEndpointSources } from '../../tool-endpoint/sources';
+import { createToolEndpointSources } from './tool-endpoint-sources';
 import { resolveDeploymentScope } from '../../surfaces/public/composition';
 import type { AgentsWiring } from './agents';
 import type { RunRuntimeWiring } from './run-runtime';
@@ -71,6 +71,7 @@ export function wireEndpoints({
       };
     },
     findPublishedAgent: publishedAgentIn,
+    agentOwnership: resolveAgentRunOwnership,
     // The workspace of the deployment, resolved as the hosted surfaces resolve theirs.
     findDeploymentAgent: async (name) => {
       const scope = await resolveDeploymentScope(process.env, scopes);

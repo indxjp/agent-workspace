@@ -83,6 +83,13 @@ export const auditEvents = pgTable(
     index('audit_events_workspace_created_idx').on(table.workspaceId, table.createdAt),
     // "Everything this person did", which the index above cannot serve.
     index('audit_events_actor_idx').on(table.actorUserId),
+    // The auto-archive sweep's "was this agent restored since ..." lookup (`notRestoredSince` in
+    // repositories/agents.ts) asks for one agent's restore rows by subject and time. A partial index
+    // on exactly that predicate keeps it to the few restore rows instead of every audit row of the
+    // workspace (#1851, B3-05).
+    index('audit_events_agent_restore_idx')
+      .on(table.workspaceId, table.subjectId, table.createdAt)
+      .where(sql`${table.action} = 'agent-changed' and ${table.details}->>'archived' = 'false'`),
     index('audit_events_actor_principal_idx').on(table.actorPrincipalId),
     // PostgreSQL can clear only the nullable actor principal in this tenant-paired FK with
     // `ON DELETE SET NULL (actor_principal_id)`, preserving the required workspace id and the

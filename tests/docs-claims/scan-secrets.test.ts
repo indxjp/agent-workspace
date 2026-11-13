@@ -35,6 +35,41 @@ describe('the key scan', () => {
     expect(keyLines('the sk-ant- prefix')).toEqual([]);
   });
 
+  // EVL-04: a model or a tool can echo any credential shape, not only the Anthropic one. Each is
+  // built from parts so this file holds no key-shaped text itself.
+  it.each([
+    ['OpenAI', ['sk', 'proj', 'AbCdEfGh1234567890abcdefGH'].join('-')],
+    ['OpenAI legacy', ['sk', 'AbCdEfGh1234567890abcdefGHIJ'].join('-')],
+    ['Google', ['AI', 'zaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q'].join('')],
+    ['AWS', ['AK', 'IA', 'IOSFODNN7EXAMPLE'].join('')],
+    ['Slack', ['xo', 'xb-1234567890-abcdefghij'].join('')],
+    ['GitHub', ['gh', 'p_', 'a'.repeat(36)].join('')],
+    ['GitHub fine-grained', ['github', 'pat', 'A'.repeat(24)].join('_')],
+    ['API key', ['ak', 'live', 'AbCdEfGh12345678_secret'].join('_')],
+    ['Console token', ['awt', 'live', 'AbCdEfGh12345678'].join('_')],
+    ['session cookie', ['aw_session', '=abcDEF0123456789.signedtoken'].join('')],
+    ['bearer', `Authorization: ${['Bear', 'er'].join('')} abcdefghijklmnopqrstuvwxyz012345`],
+    ['JWT', ['eyJhbGciOiJIUzI1', 'eyJzdWIiOiIxMjM0NTY3', 'SflKxwRJSMeKKF2QT4fw'].join('.')],
+    ['private key', ['-----BEGIN', 'RSA PRIVATE KEY-----'].join(' ')],
+  ])('finds a %s credential', (_name, text) => {
+    expect(keyLines(`fine\n${text}\nfine`)).toEqual([2]);
+  });
+
+  it('passes prose and placeholders that merely look close', () => {
+    for (const text of [
+      'ask-the-owner-before-saving-anything-at-all',
+      'a risk-assessment-for-the-whole-programme-plan',
+      'Authorization: Bearer <token>',
+      'send the bearer token in the header',
+      'ak_live_...',
+      'AKIA...',
+      'ghp_...',
+      '-----BEGIN CERTIFICATE-----',
+    ]) {
+      expect(keyLines(text), text).toEqual([]);
+    }
+  });
+
   it('walks nested directories and names file:line, never the key', () => {
     const directory = scratch({
       'logs/a.log': `fine\n${KEY}\n`,

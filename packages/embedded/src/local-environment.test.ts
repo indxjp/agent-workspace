@@ -7,6 +7,7 @@ import { EMBEDDED_DATABASE_PORT } from './embedded-db.js';
 import {
   applyLocalRuntimeEnvironment,
   derivedServicePorts,
+  HAND_SET_FEATURES_WARNING,
   HAND_SET_POLICY_WARNING,
   LOCAL_DEPLOYMENT_DEFAULT_MODELS_JSON,
   LocalRuntimeEnvironmentError,
@@ -405,6 +406,86 @@ describe('applyLocalRuntimeEnvironment policy ceiling (C13, SD5, #534)', () => {
   });
 });
 
+describe('applyLocalRuntimeEnvironment features (ADR-0160 D5, #1495)', () => {
+  const withFeatures: LocalRuntimeStartMessage = {
+    ...start,
+    environment: { ...start.environment, features: ['chat', 'files'] },
+  };
+
+  it('writes start.environment.features as a comma-separated list, with no warning', () => {
+    const env: Record<string, string | undefined> = {};
+    expect(applyLocalRuntimeEnvironment(env, withFeatures, options)).toStrictEqual({
+      warnings: [],
+    });
+    expect(env['AW_DEPLOYMENT_FEATURES']).toBe('chat,files');
+  });
+
+  it('leaves AW_DEPLOYMENT_FEATURES unset when neither start nor the environment sets it', () => {
+    const env: Record<string, string | undefined> = {};
+    expect(applyLocalRuntimeEnvironment(env, start, options)).toStrictEqual({ warnings: [] });
+    expect('AW_DEPLOYMENT_FEATURES' in env).toBe(false);
+  });
+
+  describe.each([
+    ['without features', start],
+    ['with features', withFeatures],
+  ])('%s', (_label, message) => {
+    it.each(['', '   ', 'nope', 'chat,chat', 'surfaces', 'chat,,files', 'Chat'])(
+      'refuses the hand-set value %j as invalid_value, naming the variable and not the value',
+      (value) => {
+        const error = expectRefusal(
+          refusal({ AW_DEPLOYMENT_FEATURES: value }, message),
+          'invalid_value',
+          'AW_DEPLOYMENT_FEATURES',
+        );
+        expect(error.message).toContain('comma-separated list of feature ids');
+        if (value.trim() !== '') expect(error.message).not.toContain(value);
+      },
+    );
+  });
+
+  it('refuses a hand-set value that differs from features as conflicting_value', () => {
+    for (const value of ['chat', 'chat,files,runs']) {
+      const error = expectRefusal(
+        refusal({ AW_DEPLOYMENT_FEATURES: value }, withFeatures),
+        'conflicting_value',
+        'AW_DEPLOYMENT_FEATURES',
+      );
+      expect(error.message).not.toContain(value);
+    }
+  });
+
+  it('starts on a hand-set value naming the same features in another order and spacing', () => {
+    const env: Record<string, string | undefined> = { AW_DEPLOYMENT_FEATURES: ' files , chat ' };
+    expect(applyLocalRuntimeEnvironment(env, withFeatures, options)).toStrictEqual({
+      warnings: [],
+    });
+    expect(env['AW_DEPLOYMENT_FEATURES']).toBe('chat,files');
+  });
+
+  it('keeps a valid hand-set value byte for byte when start sends no features, and warns', () => {
+    const handSet = 'chat, runs';
+    const env: Record<string, string | undefined> = { AW_DEPLOYMENT_FEATURES: handSet };
+    expect(applyLocalRuntimeEnvironment(env, start, options)).toStrictEqual({
+      warnings: [HAND_SET_FEATURES_WARNING],
+    });
+    expect(env['AW_DEPLOYMENT_FEATURES']).toBe(handSet);
+    expect(HAND_SET_FEATURES_WARNING).toBe(
+      'warning: AW_DEPLOYMENT_FEATURES is set in the environment or .env and agent-workspace.yaml has no features; that list applies',
+    );
+  });
+
+  it('returns both hand-set warnings, policy first, when neither key is sent', () => {
+    const env: Record<string, string | undefined> = {
+      AW_DEPLOYMENT_POLICY: '{"limits":{"maxTurns":3}}',
+      AW_DEPLOYMENT_FEATURES: 'chat',
+    };
+    expect(applyLocalRuntimeEnvironment(env, start, options)).toStrictEqual({
+      warnings: [HAND_SET_POLICY_WARNING, HAND_SET_FEATURES_WARNING],
+    });
+  });
+});
+
 describe('applyLocalRuntimeEnvironment withheld secret names (SD17, C10, #534)', () => {
   const withheld: LocalRuntimeStartMessage = {
     ...start,
@@ -478,13 +559,17 @@ describe('the names applyLocalRuntimeEnvironment and applyLocalSecrets write (dr
     const env: Record<string, string | undefined> = {};
     applyLocalRuntimeEnvironment(
       env,
-      { ...withPolicy, environment: { ...withPolicy.environment, modelSecrets: ['MODEL_KEY'] } },
+      {
+        ...withPolicy,
+        environment: { ...withPolicy.environment, modelSecrets: ['MODEL_KEY'], features: ['chat'] },
+      },
       options,
     );
     applyLocalSecrets(env, secrets);
     const reserved: readonly string[] = RESERVED_SECRET_NAMES;
     const written = Object.keys(env);
     expect(written).toContain('AW_DEPLOYMENT_POLICY');
+    expect(written).toContain('AW_DEPLOYMENT_FEATURES');
     expect(written).toContain('RUNTIME_DRIVER');
     expect(written).toContain('SESSION_SECRET');
     expect(written).toContain('AW_LOCAL_MODEL_SECRETS');
@@ -552,5 +637,62 @@ describe('LocalRuntimePortsBusyError (#660)', () => {
       '  port 3000 (web) is already in use: stop the process that holds it, or set environments.local.port in agent-workspace.yaml to a free port below 49152',
       '  port 4000 (gateway) is already in use: stop the process that holds it, or set GATEWAY_PORT in .env to a free port below 49152',
     ]);
+  });
+});
+
+describe('applyLocalRuntimeEnvironment devIssuer (ADR-0161 amendment DI2, DI5; issue #2075)', () => {
+  const clientSecret = 'k'.repeat(43);
+  const withIssuer: LocalRuntimeStartMessage = {
+    ...start,
+    environment: {
+      ...start.environment,
+      devIssuer: {
+        issuer: 'http://127.0.0.1:3300',
+        clientId: 'aw-local-console',
+        clientSecret,
+        redirectUri: 'http://127.0.0.1:3100/api/auth/callback',
+        ownerSubject: `local:${'o'.repeat(43)}`,
+      },
+    },
+  };
+
+  it('becomes the four OIDC_* variables, and a start without it sets none', () => {
+    const env: Record<string, string | undefined> = {};
+    applyLocalRuntimeEnvironment(env, withIssuer, options);
+    expect(env).toMatchObject({
+      OIDC_ISSUER_URL: 'http://127.0.0.1:3300',
+      OIDC_CLIENT_ID: 'aw-local-console',
+      OIDC_CLIENT_SECRET: clientSecret,
+      OIDC_REDIRECT_URI: 'http://127.0.0.1:3100/api/auth/callback',
+    });
+    const without: Record<string, string | undefined> = {};
+    applyLocalRuntimeEnvironment(without, start, options);
+    expect(Object.keys(without).filter((name) => name.startsWith('OIDC_'))).toEqual([]);
+  });
+
+  it.each(['OIDC_ISSUER_URL', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'OIDC_REDIRECT_URI'])(
+    'refuses a hand-set %s by name, never echoing its value',
+    (name) => {
+      const handSet = 'https://hand-set.example.test/SENTINEL';
+      const error = refusal({ [name]: handSet }, withIssuer);
+      expect(error).toBeInstanceOf(LocalRuntimeEnvironmentError);
+      expect(error).toMatchObject({ code: 'dev_issuer_oidc_set', variable: name });
+      expect(String((error as Error).message)).toContain(name);
+      expect(String((error as Error).message)).not.toContain('SENTINEL');
+    },
+  );
+
+  it('refuses a blank hand-set OIDC_ISSUER_URL too, and leaves one alone without devIssuer', () => {
+    expect(refusal({ OIDC_ISSUER_URL: '' }, withIssuer)).toMatchObject({
+      code: 'dev_issuer_oidc_set',
+    });
+    expect(refusal({ OIDC_ISSUER_URL: 'https://idp.example.test' })).toBeUndefined();
+  });
+
+  it('writes only reserved names', () => {
+    const env: Record<string, string | undefined> = {};
+    applyLocalRuntimeEnvironment(env, withIssuer, options);
+    const reserved: readonly string[] = RESERVED_SECRET_NAMES;
+    expect(Object.keys(env).filter((name) => !reserved.includes(name))).toStrictEqual([]);
   });
 });

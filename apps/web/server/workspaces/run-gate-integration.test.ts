@@ -266,7 +266,7 @@ describe.skipIf(!hasDatabase)(
         const scope = await root.scopes.forWorkspaceId(workspace.id);
         if (scope === null) throw new Error('scope resolution failed for the seeded workspace');
         const share = await root.shares.forScope(scope).create({
-          token: 'run-gate-it-public-token',
+          tokenHash: 'run-gate-it-public-token',
           subjectType: 'agent',
           subjectId: agentId,
           subjectLabel: 'Run Gate Agent',

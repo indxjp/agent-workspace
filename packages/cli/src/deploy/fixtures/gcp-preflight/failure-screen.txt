@@ -1,0 +1,23 @@
+Checking your Google Cloud project acme-prod (europe-west1)
+
+[ ok  ] The Google Cloud command line (gcloud) is installed
+[FAIL ] You are not signed in to Google Cloud
+         fix: gcloud auth application-default login
+[FAIL ] The gcloud command line has no active account
+         fix: gcloud auth login
+[ ok  ] Your Google Cloud project acme-prod exists (number 123456789)
+[FAIL ] Could not check what you may do in your Google Cloud project
+         fix: gcloud auth login
+[ ok  ] Billing is enabled on your Google Cloud project
+[warn ] 14 Google Cloud API(s) still need enabling: sqladmin.googleapis.com, sql-component.googleapis.com, secretmanager.googleapis.com, cloudkms.googleapis.com, artifactregistry.googleapis.com, storage.googleapis.com, iam.googleapis.com, cloudresourcemanager.googleapis.com, logging.googleapis.com, monitoring.googleapis.com, compute.googleapis.com, servicenetworking.googleapis.com, dns.googleapis.com, aiplatform.googleapis.com
+         fix: gcloud services enable sqladmin.googleapis.com sql-component.googleapis.com secretmanager.googleapis.com cloudkms.googleapis.com artifactregistry.googleapis.com storage.googleapis.com iam.googleapis.com cloudresourcemanager.googleapis.com logging.googleapis.com monitoring.googleapis.com compute.googleapis.com servicenetworking.googleapis.com dns.googleapis.com aiplatform.googleapis.com --project acme-prod
+[warn ] Claude is checked once the Vertex AI API is enabled
+[ ok  ] Your organisation lets the web app be reached publicly
+[warn ] Your organisation restricts Cloud Run networking; run.allowedIngress: the web app stays public (internal-and-cloud-load-balancing, behind the load balancer for agents.example.com) and the runner manager is internal; run.allowedVPCEgress: the services use private-ranges-only
+[FAIL ] Terraform 1.8.0 or newer is not installed
+         fix: tmp="$(mktemp -d)" && mkdir -p ~/bin && curl -fsSLo "$tmp/terraform_1.9.8_linux_amd64.zip" https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip && curl -fsSLo "$tmp/SHA256SUMS" https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_SHA256SUMS && (cd "$tmp" && grep " terraform_1.9.8_linux_amd64.zip$" SHA256SUMS | (sha256sum -c - 2>/dev/null || shasum -a 256 -c -)) && unzip -oq "$tmp/terraform_1.9.8_linux_amd64.zip" -d ~/bin && export PATH="$HOME/bin:$PATH"
+[ ok  ] Docker buildx is available to copy the images
+[warn ] DNS for agents.example.com does not point here yet (203.0.113.7); the certificate is issued once it does
+         fix: create this record at your DNS provider: agents.example.com. A 203.0.113.7
+
+Some checks failed. Nothing was created. Run the fix commands above and try again.

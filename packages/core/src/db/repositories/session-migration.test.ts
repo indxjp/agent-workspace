@@ -26,7 +26,7 @@ describe.skipIf(!hasDatabase)('0019 session identity backfill', () => {
   const unusedSessionId = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0019-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
 

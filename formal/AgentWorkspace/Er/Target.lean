@@ -167,7 +167,7 @@ def schema : Schema :=
     (extend [] [] [.other "session_transcripts_project_key_is_workspace"])
   let s := s.update .runUsageRecords
     (extend [] [] [.oneOf "run_usage_records_provider_valid" "provider"
-      ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible"]])
+      ["anthropic", "anthropic-compatible", "openai", "azure-openai", "openai-compatible", "vertex"]])
   s
 
 /-- The target's `NON_REFERENCE_ID_COLUMNS`: today's, less `shares.subject_id`, which the typed
@@ -507,6 +507,17 @@ def glossary : List Term :=
      [.builderToolCalls]⟩,
    ⟨"workspace feature", "one product feature a workspace has switched off; no row means it is on",
      ["workspace_features", "disabled feature"], [.workspaceFeatures]⟩,
+   ⟨"webhook", "an endpoint a workspace has the outcomes of its runs posted to",
+     ["webhook endpoint"], [.webhooks]⟩,
+   ⟨"webhook delivery", "one run outcome owed to one webhook, retried until it is delivered or given up",
+     ["webhook_deliveries", "outbox"], [.webhookDeliveries]⟩,
+   ⟨"agent team", "a lead agent and up to eight member agents of one workspace, published as one unit",
+     ["agent_teams"], [.agentTeams]⟩,
+   ⟨"agent team version",
+     "one immutable, numbered snapshot of an agent team that pins the lead's and each member's agent version",
+     ["agent_team_versions", "team member"], [.agentTeamVersions, .agentTeamVersionMembers]⟩,
+   ⟨"child run", "a run a lead run started by calling a team member; it names the lead as its parent",
+     ["parent_run_id"], []⟩,
    ⟨"storage migration run", "one verify pass of the move off the old object naming", [],
      [.storageMigrationRuns]⟩,
    ⟨"audit event", "one recorded control-plane action", [], [.auditEvents]⟩,

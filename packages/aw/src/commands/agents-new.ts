@@ -14,7 +14,12 @@ import { ENGINE_CATALOGUE, mcpToolName } from '@indx-workspace/contracts/engines
 import type { RunResource } from '@indx-workspace/contracts/runs';
 import { ApiProblemError, runFailure } from '@indx-workspace/sdk';
 import { toAgentEvent } from '@indx-workspace/sdk/events';
-import { diffBodies, uncoveredKeys } from '@indx-workspace/sdk/portable';
+import {
+  diffBodies,
+  revealInvisible,
+  stripControlSequences,
+  uncoveredKeys,
+} from '@indx-workspace/sdk/portable';
 import { z } from 'zod';
 
 import { command, value, type CommandContext } from '../command.js';
@@ -47,55 +52,20 @@ const WIRE_NAMES: ReadonlyMap<string, ApprovalTool> = new Map(
   ]),
 );
 
-/** Zero-width and bidirectional controls: they reorder or hide the text around them. */
-const isBidiOrZeroWidth = (code: number): boolean =>
-  (code >= 0x200b && code <= 0x200f) ||
-  (code >= 0x202a && code <= 0x202e) ||
-  (code >= 0x2066 && code <= 0x2069);
+/**
+ * Model output as inert streamed or error text: control sequences are dropped, which a terminal
+ * needs, and every character that draws nothing is shown as its code point.
+ */
+const terminalText = (text: string): string => revealInvisible(stripControlSequences(text));
 
 /**
- * Model output as inert text: escape sequences (CSI, OSC and the other `ESC` forms) are dropped with
- * their payload, and every other control character but tab and newline goes too, so nothing the
- * model wrote can move the cursor, retitle the window or hide the line being approved.
+ * A value as JSON for the approval, with every string in it, nested ones included, revealed: a
+ * control character or a character that draws nothing is written as its code point, never deleted,
+ * so nothing the model proposes can be hidden from the person deciding.
  */
-function terminalText(text: string): string {
-  let out = '';
-  for (let at = 0; at < text.length; at += 1) {
-    const code = text.charCodeAt(at);
-    if (code === 0x1b) {
-      at = escapeEnd(text, at);
-    } else if (
-      code === 0x09 ||
-      code === 0x0a ||
-      (code >= 0x20 && code !== 0x7f && !(code >= 0x80 && code <= 0x9f) && !isBidiOrZeroWidth(code))
-    ) {
-      out += text.charAt(at);
-    }
-  }
-  return out;
-}
-
-/** The index of the last character of the escape sequence that starts at `start`. */
-function escapeEnd(text: string, start: number): number {
-  const kind = text.charAt(start + 1);
-  if (kind === '[') {
-    // CSI: parameter and intermediate bytes, then one final byte.
-    let at = start + 2;
-    while (at < text.length && (text.charCodeAt(at) < 0x40 || text.charCodeAt(at) > 0x7e)) at += 1;
-    return Math.min(at, text.length - 1);
-  }
-  if (kind !== '' && ']PX^_'.includes(kind)) {
-    // OSC and the other string sequences end at BEL or ESC \; an unterminated one runs to the end.
-    const ends = [text.indexOf('\x07', start + 2), text.indexOf('\x1b\\', start + 2) + 1];
-    return Math.min(...ends.filter((end) => end > 0), text.length - 1);
-  }
-  return Math.min(start + 1, text.length - 1);
-}
-
-/** A value as JSON with every string in it, nested ones included, free of control sequences. */
 const show = (shown: unknown): string =>
   JSON.stringify(shown, (_key, part: unknown) =>
-    typeof part === 'string' ? terminalText(part) : part,
+    typeof part === 'string' ? revealInvisible(part) : part,
   ) ?? '(removed)';
 
 const ApprovalCall = z.object({ input: z.unknown() });
@@ -210,7 +180,10 @@ async function describe(
   return {
     lines: [
       `Evaluation of ${heading}: ${String(cases.length)} case(s)`,
-      ...cases.map((evalCase) => `  - ${show(evalCase.name)}`),
+      ...cases.map(
+        (evalCase) =>
+          `  - ${show(evalCase.name)} with input ${show(evalCase.input)} expecting ${show(evalCase.expect)}`,
+      ),
       `${cap} per case`,
       ...agent.warning,
     ],
@@ -288,14 +261,15 @@ async function decide(
     io.stdout('The Builder asked for something this command cannot show, so it was refused.\n');
     return 'reject';
   }
-  io.stdout(`${terminalText(proposal.lines.join('\n'))}\n`);
-  // Keystrokes typed while the run streamed are not an answer to this question.
-  await io.discardInput?.();
+  io.stdout(`${revealInvisible(proposal.lines.join('\n'))}\n`);
   let answer: string;
   try {
+    // Keystrokes typed while the run streamed are not an answer to this question.
+    await io.discardInput?.();
     answer = await io.prompt(proposal.question, context.signal);
   } catch (error) {
-    // End of input or Ctrl-C: nothing was approved, so the paused run is stopped, not left waiting.
+    // End of input or Ctrl-C, at the prompt or while typed-ahead keys were dropped: nothing was
+    // approved, so the paused run is stopped, not left waiting.
     await interruptRun(context, run.id);
     throw error;
   }

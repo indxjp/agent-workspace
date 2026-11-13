@@ -82,18 +82,25 @@ The platforms setup offers (ADR-0133): every hosted platform, and `none`, chosen
 eject-* ids are one-off exports (`aw platforms export`), not a project binding, so setup does not
 offer them.
 
-- `...HOSTED_PLATFORM_IDS`
+- `'claude-managed-agents'`
+- `'copilot-studio'`
+- `'m365-declarative-agent'`
+- `'microsoft-foundry'`
+- `'gemini-enterprise'`
+- `'aws-agentcore'`
 - `'none'`
 
 ## SETUP_PROVIDERS
 
 The model providers first-run setup offers: `MODEL_PROVIDERS` without
-`anthropic-compatible`, which setup does not ask about.
+`anthropic-compatible`, which setup does not ask about. `vertex` is keyless and is set up in the
+web first-run setup only.
 
 - `'anthropic'`
 - `'openai'`
 - `'azure-openai'`
 - `'openai-compatible'`
+- `'vertex'`
 
 ## SETUP_QUESTIONS
 
@@ -196,6 +203,7 @@ Answers given so far, keyed by question id; any may be missing, an unknown id is
 - `"openai"`
 - `"azure-openai"`
 - `"openai-compatible"`
+- `"vertex"`
 
 ## SetupQuestion
 

@@ -28,6 +28,8 @@ const LOCAL_RUNTIME_STOP_GRACE_MS = 10_000;
 interface LocalRuntimeReady {
   /** The URL the runtime announced; its origin is `localProjectUrl(port)`. */
   readonly url: string;
+  /** Issue #1506: the runtime's loopback PostgreSQL, for a generated app; never printed. */
+  readonly databaseUrl?: string;
 }
 
 /** `aw` holds the local runtime's API key for its local workspace (ADR-0109, S1-21). */
@@ -39,6 +41,8 @@ export interface LocalRuntimeSession {
    * written anywhere but the credentials file; the runtime revokes it when it stops.
    */
   readonly apiKey: string;
+  /** The local workspace's id: what an app's identity assertions name (issue #1506). */
+  readonly workspaceId: string;
   readonly workspaceSlug: string;
 }
 
@@ -237,7 +241,10 @@ export function superviseLocalRuntime(options: SuperviseOptions): Promise<never>
             return;
           }
           state = 'ready';
-          await hooks.onReady?.({ url: message.url });
+          await hooks.onReady?.({
+            url: message.url,
+            ...(message.databaseUrl === undefined ? {} : { databaseUrl: message.databaseUrl }),
+          });
           return;
         }
         case 'credential': {
@@ -261,6 +268,7 @@ export function superviseLocalRuntime(options: SuperviseOptions): Promise<never>
           await hooks.onSignedIn?.({
             baseUrl: expectedOrigin,
             apiKey: message.token,
+            workspaceId: message.workspaceId,
             workspaceSlug: message.workspaceSlug,
           });
           return;

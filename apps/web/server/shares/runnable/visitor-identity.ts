@@ -1,12 +1,12 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, hkdfSync } from 'node:crypto';
 import { isIP } from 'node:net';
 
-import { readSessionSecret } from '../../auth/session';
+import { keyDerivation } from '../../auth/core/key-ring.ts';
+import { installedClientIdentity, type ClientIdentitySettings } from '../../client-identity';
 
 const FORWARDED_FOR_HEADER = 'x-forwarded-for';
 const MAX_FORWARDED_FOR_BYTES = 2_048;
 const MAX_FORWARDED_ADDRESSES = 32;
-const MAX_TRUSTED_PROXY_HOPS = 16;
 const VISITOR_KEY_CONTEXT = 'agent-workspace/public-share-visitor/v1';
 
 export type VisitorIdentityFailureCode =
@@ -20,13 +20,20 @@ export type VisitorIdentityResult =
       readonly message: string;
     };
 
-function trustedProxyHops(env: Readonly<Record<string, string | undefined>>): number | null {
-  const raw = env['AW_TRUSTED_PROXY_HOPS'];
-  if (raw === undefined || raw.trim().length === 0) return null;
-  const trimmed = raw.trim();
-  if (!/^\d+$/u.test(trimmed)) return null;
-  const hops = Number(trimmed);
-  return Number.isSafeInteger(hops) && hops >= 1 && hops <= MAX_TRUSTED_PROXY_HOPS ? hops : null;
+const derivedKeys = new Map<string, Buffer>();
+
+/**
+ * The visitor key's own key, derived from the session secret (part 06 step 5,
+ * `auth/core/key-ring.ts`). It replaced the raw secret, so the key's prefix moved from `v1_` to
+ * `v2_`: a visitor keyed the old way never matches a new key. Runnable links are still off (D-06).
+ */
+function visitorHmacKey(secret: string): Buffer {
+  const cached = derivedKeys.get(secret);
+  if (cached !== undefined) return cached;
+  const { salt, info, lengthBytes } = keyDerivation('share-visitor');
+  const key = Buffer.from(hkdfSync('sha256', secret, salt, info, lengthBytes));
+  derivedKeys.set(secret, key);
+  return key;
 }
 
 function canonicalIp(raw: string): string | null {
@@ -52,11 +59,11 @@ function canonicalIp(raw: string): string | null {
  */
 export function resolvePublicVisitorIdentity(
   headers: Headers,
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  identity: ClientIdentitySettings = installedClientIdentity(),
 ): VisitorIdentityResult {
-  const hops = trustedProxyHops(env);
-  const secret = readSessionSecret(env);
-  if (hops === null || !secret.ok) {
+  const hops = identity.trustedProxyHops;
+  const secret = identity.sessionSecret;
+  if (hops === null || secret === null) {
     return {
       ok: false,
       code: 'visitor_identity_not_configured',
@@ -92,10 +99,10 @@ export function resolvePublicVisitorIdentity(
       message: 'The trusted proxy did not provide a usable client address.',
     };
   }
-  const digest = createHmac('sha256', secret.secret)
+  const digest = createHmac('sha256', visitorHmacKey(secret))
     .update(VISITOR_KEY_CONTEXT)
     .update('\0')
     .update(address)
     .digest('base64url');
-  return { ok: true, visitorKey: `v1_${digest}` };
+  return { ok: true, visitorKey: `v2_${digest}` };
 }

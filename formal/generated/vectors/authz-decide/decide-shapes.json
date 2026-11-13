@@ -3422,6 +3422,120 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "GET"},
+   "id": "shape/owner/GET /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "shape/owner/HEAD /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "POST"},
+   "id": "shape/owner/POST /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "PUT"},
+   "id": "shape/owner/PUT /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "shape/owner/PATCH /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "shape/owner/DELETE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "shape/owner/OPTIONS /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks", "method": "TRACE"},
+   "id": "shape/owner/TRACE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_workspaces",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
@@ -6940,6 +7054,120 @@
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
    "input": {"scope": null, "role": "owner", "path": "/api/users/row-a", "method": "TRACE"},
    "id": "shape/owner/TRACE /api/users/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "shape/owner/GET /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "shape/owner/HEAD /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "shape/owner/POST /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "shape/owner/PUT /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "shape/owner/PATCH /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_owner_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "shape/owner/DELETE /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "shape/owner/OPTIONS /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "owner", "path": "/api/webhooks/row-a", "method": "TRACE"},
+   "id": "shape/owner/TRACE /api/webhooks/row-a",
    "expected":
    {"outcomes":
     {"facts": null,
@@ -15722,6 +15950,120 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "GET"},
+   "id": "shape/admin/GET /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "shape/admin/HEAD /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "POST"},
+   "id": "shape/admin/POST /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "PUT"},
+   "id": "shape/admin/PUT /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "shape/admin/PATCH /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "shape/admin/DELETE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "shape/admin/OPTIONS /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks", "method": "TRACE"},
+   "id": "shape/admin/TRACE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_workspaces",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
@@ -19240,6 +19582,120 @@
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
    "input": {"scope": null, "role": "admin", "path": "/api/users/row-a", "method": "TRACE"},
    "id": "shape/admin/TRACE /api/users/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "shape/admin/GET /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "shape/admin/HEAD /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "shape/admin/POST /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "shape/admin/PUT /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "shape/admin/PATCH /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_admin_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "shape/admin/DELETE /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "any"},
+     "effects": {"unknown": "allow", "permitted": "allow", "own": "allow", "other": "allow", "not-applicable": "allow"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "shape/admin/OPTIONS /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "admin", "path": "/api/webhooks/row-a", "method": "TRACE"},
+   "id": "shape/admin/TRACE /api/webhooks/row-a",
    "expected":
    {"outcomes":
     {"facts": null,
@@ -28022,6 +28478,120 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "GET"},
+   "id": "shape/builder/GET /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "shape/builder/HEAD /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "POST"},
+   "id": "shape/builder/POST /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "PUT"},
+   "id": "shape/builder/PUT /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "shape/builder/PATCH /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "shape/builder/DELETE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "shape/builder/OPTIONS /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks", "method": "TRACE"},
+   "id": "shape/builder/TRACE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_workspaces",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
@@ -31540,6 +32110,120 @@
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
    "input": {"scope": null, "role": "builder", "path": "/api/users/row-a", "method": "TRACE"},
    "id": "shape/builder/TRACE /api/users/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "shape/builder/GET /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "shape/builder/HEAD /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "shape/builder/POST /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "shape/builder/PUT /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "shape/builder/PATCH /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_builder_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "shape/builder/DELETE /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "shape/builder/OPTIONS /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "builder", "path": "/api/webhooks/row-a", "method": "TRACE"},
+   "id": "shape/builder/TRACE /api/webhooks/row-a",
    "expected":
    {"outcomes":
     {"facts": null,
@@ -40323,6 +41007,120 @@
   {"witnesses":
    ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "GET"},
+   "id": "shape/viewer/GET /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "HEAD"},
+   "id": "shape/viewer/HEAD /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "POST"},
+   "id": "shape/viewer/POST /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "PUT"},
+   "id": "shape/viewer/PUT /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "PATCH"},
+   "id": "shape/viewer/PATCH /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "DELETE"},
+   "id": "shape/viewer/DELETE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "OPTIONS"},
+   "id": "shape/viewer/OPTIONS /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks", "method": "TRACE"},
+   "id": "shape/viewer/TRACE /api/webhooks",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_workspaces",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
     "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
@@ -43841,6 +44639,120 @@
     "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
    "input": {"scope": null, "role": "viewer", "path": "/api/users/row-a", "method": "TRACE"},
    "id": "shape/viewer/TRACE /api/users/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "is not an HTTP method"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "GET"},
+   "id": "shape/viewer/GET /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "HEAD"},
+   "id": "shape/viewer/HEAD /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "read", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "POST"},
+   "id": "shape/viewer/POST /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "PUT"},
+   "id": "shape/viewer/PUT /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "PATCH"},
+   "id": "shape/viewer/PATCH /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.WellFormed.AuthzDecide.decide_decides_every_classified_query",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.decide_evaluation_order",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.role_table_viewer_webhooks",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.apply_grant_table",
+    "AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.Invariants.AuthzDecide.every_allow_is_backed_by_the_table"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "DELETE"},
+   "id": "shape/viewer/DELETE /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": {"resource": "webhooks", "operation": "write", "grant": "none"},
+     "effects": {"unknown": "deny", "permitted": "deny", "own": "deny", "other": "deny", "not-applicable": "deny"},
+     "code": null,
+     "because": null}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.method_maps_to_operation",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "OPTIONS"},
+   "id": "shape/viewer/OPTIONS /api/webhooks/row-a",
+   "expected":
+   {"outcomes":
+    {"facts": null,
+     "effects":
+     {"unknown": "refuse", "permitted": "refuse", "own": "refuse", "other": "refuse", "not-applicable": "refuse"},
+     "code": null,
+     "because": "OPTIONS is not an operation"}}},
+  {"witnesses":
+   ["AgentWorkspace.Theorems.Normative.AuthzDecide.unknown_method_is_refused",
+    "AgentWorkspace.Theorems.WellFormed.AuthzDecide.every_refusal_names_the_failed_step"],
+   "input": {"scope": null, "role": "viewer", "path": "/api/webhooks/row-a", "method": "TRACE"},
+   "id": "shape/viewer/TRACE /api/webhooks/row-a",
    "expected":
    {"outcomes":
     {"facts": null,

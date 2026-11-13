@@ -20,6 +20,11 @@ const IPV4_RANGES: readonly (readonly [DeniedAddressReason, readonly Range[]])[]
       ['172.16.0.0', 12],
       ['192.168.0.0', 16],
       ['100.64.0.0', 10],
+      // Private Google Access VIPs (private.googleapis.com and restricted.googleapis.com).
+      // Behind them Google serves every Google API and every *.run.app host of any project, so a
+      // sandbox must never reach them, whatever the allowlist says.
+      ['199.36.153.4', 30],
+      ['199.36.153.8', 30],
     ],
   ],
   [
@@ -38,6 +43,15 @@ const IPV6_RANGES: readonly (readonly [DeniedAddressReason, readonly Range[]])[]
   ['address_loopback', [['::1', 128]]],
   ['address_link_local', [['fe80::', 10]]],
   ['address_unique_local', [['fc00::', 7]]],
+  // The IPv6 Private Google Access VIPs (see the IPv4 note above). They sit inside 2000::/3 and
+  // would otherwise be allowed.
+  [
+    'address_private',
+    [
+      ['2600:2d00:2:1000::', 56],
+      ['2600:2d00:2:2000::', 56],
+    ],
+  ],
   [
     'address_reserved',
     [

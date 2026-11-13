@@ -352,7 +352,7 @@ describe.skipIf(!hasDatabase)('0040 materialised-version backfill', () => {
   const unpointed = crypto.randomUUID();
 
   beforeAll(async () => {
-    const migrationsDir = resolveMigrationsDir();
+    const migrationsDir = resolveMigrationsDir(process.env);
     priorMigrationsDir = await mkdtemp(path.join(tmpdir(), 'aw-pre-0040-'));
     await mkdir(path.join(priorMigrationsDir, 'meta'));
     const journal = JSON.parse(

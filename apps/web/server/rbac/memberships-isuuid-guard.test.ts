@@ -31,7 +31,7 @@ import {
 } from '@agent-workspace/core/db/unscoped';
 
 import type { WorkspaceDirectory } from './directory';
-import { changeMembershipRole, deleteMembership } from './handlers';
+import { changeMembershipRole, deleteMembership } from './membership-handlers';
 import type { ApiResult } from '../http/result';
 import { createPostgresDirectory } from './postgres-directory';
 

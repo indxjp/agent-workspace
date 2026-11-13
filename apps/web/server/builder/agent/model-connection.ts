@@ -13,7 +13,7 @@
 import type { SetupProvider } from '@indx-workspace/contracts/setup';
 
 import type { DefinitionReferences, ResolveDefinitionOutcome } from '../../agent-versions/store';
-import { setupConnectionName } from '../../setup/runtime';
+import { setupConnectionName } from '../../identity';
 
 /** The provider that serves `BUILDER_MODEL`, whose setup connection the Builder falls back to. */
 const BUILDER_PROVIDER: SetupProvider = 'anthropic';

@@ -18,7 +18,7 @@ import type { SurfaceDefinition } from '@indx-workspace/contracts/surfaces';
 
 import { isLoopbackHost } from '@agent-workspace/core/posture';
 
-import { checkRequestOrigin } from '../../auth/origin';
+import { checkRequestOrigin } from '../../identity';
 
 /** Which of ADR-0105's four conditions refused the request. */
 export type SurfaceConditionFailure = 'flag' | 'listen-host' | 'request-host' | 'same-origin';

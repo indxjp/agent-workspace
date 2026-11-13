@@ -10,5 +10,11 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test-support.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
 }

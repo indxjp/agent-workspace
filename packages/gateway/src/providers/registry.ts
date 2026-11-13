@@ -1,20 +1,6 @@
-import {
-  MODEL_PROVIDER_CONFIG_RULES,
-  type ModelConnectionConfig,
-} from '@indx-workspace/contracts/models';
-import type { ModelProvider as ConnectionProvider } from '@indx-workspace/contracts/runs';
+import { VERTEX_LOCATIONS, type VertexLocation } from '@indx-workspace/contracts/models';
 import { ModelConnectionIncompleteError } from '../types.js';
-import type {
-  AnthropicCountTokensRequest,
-  AnthropicMessageRequest,
-  ForwardRequest,
-  ModelCapabilities,
-  ModelInfo,
-  ModelProvider,
-  RequestContext,
-  WireProtocol,
-  WireProtocolForwarder,
-} from '../types.js';
+import type { ModelCapabilities, ModelInfo, ModelProvider, RequestContext } from '../types.js';
 import { ANTHROPIC_CAPABILITIES, createAnthropicProvider } from './anthropic.js';
 import { AZURE_OPENAI_CAPABILITIES, createAzureOpenAIProvider } from './azure-openai.js';
 import {
@@ -22,8 +8,10 @@ import {
   OPENAI_COMPATIBLE_CAPABILITIES,
 } from './openai-compatible.js';
 import { createOpenAIProvider, OPENAI_CAPABILITIES } from './openai.js';
-import { OPENAI_WIRE_PROTOCOLS } from './passthrough.js';
-import { scriptedModelsFromEnv, type ScriptedModels } from './scripted.js';
+import { forwardingRow, row } from './registry-rows.js';
+import { optionalSetting, requiredSetting } from './registry-settings.js';
+import { VERTEX_CAPABILITIES, vertexModels, vertexTarget } from './vertex.js';
+import { createScriptedModels, scriptedModelsFromEnv, type ScriptedModels } from './scripted.js';
 
 // Re-exported so a consumer of this subpath (issue #129's control-plane discovery module) needs
 // only this one import; see `package.json`'s `./providers/registry` export, added for exactly
@@ -35,161 +23,68 @@ export {
   AZURE_OPENAI_CAPABILITIES,
   OPENAI_CAPABILITIES,
   OPENAI_COMPATIBLE_CAPABILITIES,
+  VERTEX_CAPABILITIES,
 };
-
-export const PROVIDER_IDS = ['anthropic', 'openai', 'azure-openai', 'openai-compatible'] as const;
-
-export type RegisteredProviderId = (typeof PROVIDER_IDS)[number];
-
-/** The registry row that serves a connection; `anthropic-compatible` has no row of its own. */
-export function registryProviderId(provider: ConnectionProvider): RegisteredProviderId {
-  return provider === 'anthropic-compatible' ? 'anthropic' : provider;
-}
+export { createScriptedModels, scriptedModelsFromEnv, type ScriptedModels };
+export { PROVIDER_IDS, registryProviderId, type RegisteredProviderId } from './registry-ids.js';
 
 export type ProviderRegistryOptions = {
   readonly fetch?: typeof fetch;
   /**
-   * Scripted models, a test tool (see `scripted.ts`). Omitted: read `AW_SCRIPTED_MODELS_DIR` from
-   * the process environment, which throws outside the `local` posture. `null`: off.
+   * Scripted models, a test tool (see `scripted.ts`). Omitted or `null`: off. An entry point that
+   * offers them passes `scriptedModelsFromEnv(env)`, which reads `AW_SCRIPTED_MODELS_DIR` and throws
+   * outside the `local` posture (refactoring part 03, step 5: the registry reads no environment).
    */
   readonly scripted?: ScriptedModels | null;
 };
 
-function optionalSetting(
-  context: RequestContext,
-  name: keyof ModelConnectionConfig,
-): string | undefined {
-  const value = context.settings[name];
-  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+function isVertexLocation(value: string): value is VertexLocation {
+  return VERTEX_LOCATIONS.some((location) => location === value);
 }
 
-function requiredSetting(
-  context: RequestContext,
-  name: keyof ModelConnectionConfig,
-  providerId: RegisteredProviderId,
-): string {
-  const value = optionalSetting(context, name);
-  if (value === undefined) throw new ModelConnectionIncompleteError(providerId, name);
-  return value;
+/** The adapter option that injects the registry's `fetch`, present only when one was given. */
+function fetchOption(request: typeof fetch | undefined): { readonly fetch?: typeof fetch } {
+  return request === undefined ? {} : { fetch: request };
 }
 
-/**
- * Check `MODEL_PROVIDER_CONFIG_RULES[id].required` before an adapter is built, so a stored
- * connection that predates a rule (or a row that forgets to read a field) is a typed refusal
- * rather than an opaque 500.
- */
-function withRequiredConfig<Adapter extends ModelProvider>(
-  id: RegisteredProviderId,
-  create: (context: RequestContext) => Adapter,
-): (context: RequestContext) => Adapter {
-  return (context) => {
-    for (const field of MODEL_PROVIDER_CONFIG_RULES[id].required) {
-      if (optionalSetting(context, field) === undefined) {
-        throw new ModelConnectionIncompleteError(id, field);
-      }
-    }
-    return create(context);
-  };
+/** The connection's optional `baseUrl`, the only setting Anthropic and OpenAI rows read. */
+function baseUrlOption(context: RequestContext): { readonly baseUrl?: string } {
+  const baseUrl = optionalSetting(context, 'baseUrl');
+  return baseUrl === undefined ? {} : { baseUrl };
 }
 
-/**
- * A registry row is deliberately a request-time delegate. Endpoint settings belong to the model
- * connection named by the run token, not to this process, so constructing one global Azure or
- * compatible adapter at startup would silently ignore the connection selected in the UI.
- */
-function row(
-  id: RegisteredProviderId,
-  capabilities: ModelCapabilities,
-  createUnchecked: (context: RequestContext) => ModelProvider,
-  scripted?: ScriptedModels,
-): ModelProvider {
-  const create = withRequiredConfig(id, createUnchecked);
+/** Each row builds its adapter from the connection the run selected, one factory per provider. */
+function adapterFactories(request: typeof fetch | undefined) {
   return {
-    id,
-    capabilities,
-    async listModels(context: RequestContext): Promise<ModelInfo[]> {
-      if (scripted === undefined) return create(context).listModels(context);
-      const scriptedModels = await scripted.listModels();
-      try {
-        const upstream = await create(context).listModels(context);
-        return [...upstream, ...scriptedModels];
-      } catch (error) {
-        // A placeholder key is expected in scripted mode; scripted ids stay usable without it.
-        if (scriptedModels.length === 0) throw error;
-        return scriptedModels;
+    anthropic: (context: RequestContext) =>
+      createAnthropicProvider({ ...baseUrlOption(context), ...fetchOption(request) }),
+    openai: (context: RequestContext) =>
+      createOpenAIProvider({ ...baseUrlOption(context), ...fetchOption(request) }),
+    azureOpenai: (context: RequestContext) =>
+      createAzureOpenAIProvider({
+        endpoint: requiredSetting(context, 'baseUrl', 'azure-openai'),
+        deployment: requiredSetting(context, 'deployment', 'azure-openai'),
+        apiVersion: requiredSetting(context, 'apiVersion', 'azure-openai'),
+        ...fetchOption(request),
+      }),
+    openaiCompatible: (context: RequestContext) =>
+      createOpenAICompatibleProvider({
+        baseUrl: requiredSetting(context, 'baseUrl', 'openai-compatible'),
+        ...fetchOption(request),
+      }),
+    vertex: (context: RequestContext) => {
+      const location = optionalSetting(context, 'location') ?? 'global';
+      if (!isVertexLocation(location)) {
+        throw new ModelConnectionIncompleteError('vertex', 'location');
       }
-    },
-    createMessage(request: AnthropicMessageRequest, context: RequestContext): Promise<Response> {
-      if (scripted?.isScripted(request.model) === true) {
-        return scripted.createMessage(request, context);
-      }
-      return create(context).createMessage(request, context);
-    },
-    countTokens(request: AnthropicCountTokensRequest, context: RequestContext) {
-      if (scripted?.isScripted(request.model) === true) return scripted.countTokens(request);
-      const provider = create(context);
-      if (provider.countTokens === undefined) {
-        throw new Error(`${id} does not support token counting.`);
-      }
-      return provider.countTokens(request, context);
-    },
-  };
-}
-
-/** The typed refusal for a scripted id on a route that does not serve it (issue #798). */
-function scriptedProtocolUnsupported(protocol: WireProtocol, context: RequestContext): Response {
-  return Response.json(
-    {
-      type: 'error',
-      error: {
-        type: 'scripted_model_protocol_unsupported',
-        message: `A scripted model is only served on the anthropic-messages protocol, not ${protocol}.`,
-      },
-      request_id: context.requestId,
-    },
-    { status: 400 },
-  );
-}
-
-/**
- * An OpenAI-family row, which relays the two OpenAI dialects in addition to the published
- * `ModelProvider` members (ADR-0068 D3). `anthropic` deliberately has no such row: the absence of
- * `forward` is what makes `/v1/responses` answer `protocol_not_supported_for_connection`.
- *
- * A scripted id never reaches the upstream here: messages and the OpenAI dialects refuse, and token
- * counting answers with the scripted local estimate (its contract has no error envelope).
- */
-function forwardingRow(
-  id: RegisteredProviderId,
-  capabilities: ModelCapabilities,
-  createUnchecked: (context: RequestContext) => ModelProvider & WireProtocolForwarder,
-  scripted?: ScriptedModels,
-): ModelProvider & WireProtocolForwarder {
-  const create = withRequiredConfig(id, createUnchecked);
-  const base = row(id, capabilities, createUnchecked);
-  return {
-    ...base,
-    countTokens(request: AnthropicCountTokensRequest, context: RequestContext) {
-      if (scripted?.isScripted(request.model) === true) return scripted.countTokens(request);
-      if (base.countTokens === undefined) throw new Error(`${id} does not support token counting.`);
-      return base.countTokens(request, context);
-    },
-    createMessage(request: AnthropicMessageRequest, context: RequestContext): Promise<Response> {
-      if (scripted?.isScripted(request.model) === true) {
-        return Promise.resolve(scriptedProtocolUnsupported('anthropic-messages', context));
-      }
-      return create(context).createMessage(request, context);
-    },
-    forwards: OPENAI_WIRE_PROTOCOLS,
-    forward(
-      body: ForwardRequest,
-      protocol: WireProtocol,
-      context: RequestContext,
-    ): Promise<Response> {
-      if (scripted?.isScripted(body.model) === true) {
-        return Promise.resolve(scriptedProtocolUnsupported(protocol, context));
-      }
-      return create(context).forward(body, protocol, context);
+      return createAnthropicProvider({
+        models: vertexModels(),
+        target: vertexTarget({
+          projectId: requiredSetting(context, 'projectId', 'vertex'),
+          location,
+        }),
+        ...fetchOption(request),
+      });
     },
   };
 }
@@ -198,58 +93,18 @@ function forwardingRow(
 export function createProviderRegistry(
   options: ProviderRegistryOptions = {},
 ): readonly ModelProvider[] {
-  const request = options.fetch;
-  const scripted =
-    options.scripted === undefined
-      ? scriptedModelsFromEnv(process.env)
-      : (options.scripted ?? undefined);
+  const scripted = options.scripted ?? undefined;
+  const create = adapterFactories(options.fetch);
   return [
-    row(
-      'anthropic',
-      ANTHROPIC_CAPABILITIES,
-      (context) => {
-        const baseUrl = optionalSetting(context, 'baseUrl');
-        return createAnthropicProvider({
-          ...(baseUrl === undefined ? {} : { baseUrl }),
-          ...(request === undefined ? {} : { fetch: request }),
-        });
-      },
-      scripted,
-    ),
-    forwardingRow(
-      'openai',
-      OPENAI_CAPABILITIES,
-      (context) => {
-        const baseUrl = optionalSetting(context, 'baseUrl');
-        return createOpenAIProvider({
-          ...(baseUrl === undefined ? {} : { baseUrl }),
-          ...(request === undefined ? {} : { fetch: request }),
-        });
-      },
-      scripted,
-    ),
-    forwardingRow(
-      'azure-openai',
-      AZURE_OPENAI_CAPABILITIES,
-      (context) => {
-        return createAzureOpenAIProvider({
-          endpoint: requiredSetting(context, 'baseUrl', 'azure-openai'),
-          deployment: requiredSetting(context, 'deployment', 'azure-openai'),
-          apiVersion: requiredSetting(context, 'apiVersion', 'azure-openai'),
-          ...(request === undefined ? {} : { fetch: request }),
-        });
-      },
-      scripted,
-    ),
+    row('anthropic', ANTHROPIC_CAPABILITIES, create.anthropic, scripted),
+    forwardingRow('openai', OPENAI_CAPABILITIES, create.openai, scripted),
+    forwardingRow('azure-openai', AZURE_OPENAI_CAPABILITIES, create.azureOpenai, scripted),
     forwardingRow(
       'openai-compatible',
       OPENAI_COMPATIBLE_CAPABILITIES,
-      (context) =>
-        createOpenAICompatibleProvider({
-          baseUrl: requiredSetting(context, 'baseUrl', 'openai-compatible'),
-          ...(request === undefined ? {} : { fetch: request }),
-        }),
+      create.openaiCompatible,
       scripted,
     ),
+    row('vertex', VERTEX_CAPABILITIES, create.vertex),
   ];
 }

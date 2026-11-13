@@ -1,7 +1,8 @@
+data "google_project" "current" {}
+
 locals {
   required_apis = toset([
     "run.googleapis.com",
-    "cloudbuild.googleapis.com",
     "sqladmin.googleapis.com",
     "sql-component.googleapis.com",
     "secretmanager.googleapis.com",
@@ -12,12 +13,44 @@ locals {
     "cloudresourcemanager.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
+    "compute.googleapis.com",
+    "servicenetworking.googleapis.com",
+    "dns.googleapis.com",
+    "aiplatform.googleapis.com",
   ])
+  # Only needed (and only enabled) when IAP fronts web, so the default stack is unchanged.
+  iap_api = "iap.googleapis.com"
   common_labels = {
     application = "agent-workspace"
     managed-by  = "terraform"
   }
+  # D-12: one size knob instead of per-resource tuning variables.
+  size = {
+    small = {
+      db_tier            = "db-f1-micro"
+      db_availability    = "ZONAL"
+      gateway_min        = 0
+      runner_manager_min = 0
+      web_min            = 1
+      sandbox_alert_cap  = 20
+    }
+    standard = {
+      db_tier            = "db-custom-2-7680"
+      db_availability    = "REGIONAL"
+      gateway_min        = 1
+      runner_manager_min = 1
+      web_min            = 1
+      sandbox_alert_cap  = 100
+    }
+  }[var.size]
   cloud_sql_proxy_image = "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.0"
+  # web's own public origin: the deterministic Cloud Run URL, because the web service's `uri` would
+  # be a cycle (web depends on the gateway, which is told where web is).
+  run_app_origin = "https://${var.name}-web-${data.google_project.current.number}.${var.region}.run.app"
+  # With a custom domain the browser-facing origin (the OIDC redirect URI) is the domain.
+  web_origin = var.domain == "" ? local.run_app_origin : "https://${var.domain}"
+  # IAP fronts web only when there is a load balancer to put it on.
+  iap_enabled = var.iap && var.domain != ""
 }
 
 resource "google_project_service" "required" {
@@ -59,26 +92,63 @@ resource "google_service_account" "runtime" {
 
 # ── The runner manager needs to create/delete Cloud Run services (the driver's create()/destroy())
 # and to deploy them running as the runtime service account, plus invoke the private ones it stood
-# up. `run.developer` deliberately does not include setIamPolicy — this driver never calls it; the
+# up. Its custom roles below deliberately hold no setIamPolicy — this driver never calls it; the
 # invoker grant below is what authorizes the manager instead. ────────────────────────────────────
-
 #
 # Both grants are conditioned to the services the driver creates, which it always names `rt-<id>`
-# (packages/runtime/src/cloud-run.ts). Without the condition a leaked RUNNER_MANAGER_TOKEN could
+# (packages/runtime/src/cloud-run.ts). Without the conditions a leaked RUNNER_MANAGER_TOKEN could
 # redeploy or delete web, the gateway and the manager itself, and call every private service.
-# Non-service resources (locations, operations, revisions) stay unconditioned so a create, whose
-# check may be made against the parent location, still succeeds.
+# The create/delete grant matches by resource name; non-service resources (locations, operations,
+# revisions) stay unconditioned so a create, whose check may be made against the parent location,
+# still succeeds. The invoke grant matches by host (see runner_manager_run_invoker).
 
 locals {
+  # Never a Job: run.developer and run.invoker both carry run.jobs.run(WithOverrides), and the
+  # app_role job holds the database owner's password.
   runtime_services_only = <<-CEL
-    resource.type != "run.googleapis.com/Service" ||
-    resource.name.extract("/services/{service}").startsWith("rt-")
+    resource.type != "run.googleapis.com/Job" &&
+    (resource.type != "run.googleapis.com/Service" ||
+    resource.name.extract("/services/{service}").startsWith("rt-"))
   CEL
+}
+
+# The suffix is kept in state: GCP reserves a deleted custom role id for weeks (it is only
+# undeleted for 7 days), so a destroy followed by a deploy under the same name would otherwise fail.
+resource "random_id" "role_suffix" {
+  byte_length = 3
+}
+
+# Custom roles, not roles/run.developer and roles/run.invoker: both predefined roles carry
+# run.jobs.run(WithOverrides), and Cloud Run does not evaluate the Job clause above reliably for
+# every method (a DELETE of web passed the rt- condition live). These hold only what the driver calls
+# (packages/runtime/src/cloud-run.ts), so no run.jobs.* permission can be reached at all.
+resource "google_project_iam_custom_role" "runner_manager" {
+  role_id = "${replace(var.name, "-", "_")}_runner_manager_${random_id.role_suffix.hex}"
+  title   = "${var.name} runner manager"
+  project = var.project_id
+  permissions = [
+    "run.locations.list",
+    "run.operations.get",
+    "run.operations.list",
+    "run.services.create",
+    "run.services.delete",
+    "run.services.get",
+    "run.services.list",
+  ]
+  depends_on = [google_project_service.required]
+}
+
+resource "google_project_iam_custom_role" "runner_manager_invoker" {
+  role_id     = "${replace(var.name, "-", "_")}_runner_manager_invoker_${random_id.role_suffix.hex}"
+  title       = "${var.name} runner manager invoker"
+  project     = var.project_id
+  permissions = ["run.routes.invoke"]
+  depends_on  = [google_project_service.required]
 }
 
 resource "google_project_iam_member" "runner_manager_run_developer" {
   project = var.project_id
-  role    = "roles/run.developer"
+  role    = "projects/${var.project_id}/roles/${google_project_iam_custom_role.runner_manager.role_id}"
   member  = google_service_account.runner_manager.member
   condition {
     title      = "runtime-services-only"
@@ -86,13 +156,44 @@ resource "google_project_iam_member" "runner_manager_run_developer" {
   }
 }
 
+# Cloud Run offers the invoke check request.host, not resource.name or resource.type (live run
+# 42577620759 proved a request.host condition on a project-level invoke binding), so a name
+# condition here would match every non-Job service: web, the gateway and the apps. The manager
+# calls each sandbox at its own URL, https://rt-<id>-<hash>-<region>.a.run.app (agent sandboxes
+# rt-<uuid>, tool sandboxes rt-tool-<id>), and var.name may not start with rt-, so no host of this
+# stack's own services matches. The role holds run.routes.invoke alone, so no Job can run.
 resource "google_project_iam_member" "runner_manager_run_invoker" {
   project = var.project_id
-  role    = "roles/run.invoker"
+  role    = "projects/${var.project_id}/roles/${google_project_iam_custom_role.runner_manager_invoker.role_id}"
   member  = google_service_account.runner_manager.member
   condition {
-    title      = "runtime-services-only"
-    expression = local.runtime_services_only
+    title      = "sandbox-hosts-only"
+    expression = <<-CEL
+      request.host.startsWith("rt-") && request.host.endsWith(".run.app")
+    CEL
+  }
+}
+
+# The gateway calls the code-tool sandboxes the manager creates (named rt-tool-<id>), and nothing
+# else of the manager's: never the model-runtime sandboxes (rt-<uuid>), which call the gateway, so a
+# leaked gateway identity cannot invoke them. Cloud Run does not offer resource.name or
+# resource.type to the invoke check (neither is in IAM's attribute reference for Cloud Run), so a
+# name condition grants no invoke: live run 42525921402 got 403 with one, and run 42550494860 got
+# 403 for run.services.setIamPolicy under the same condition on run.admin. What Cloud Run does
+# offer when a service is invoked is the request's host (request.host, and request.path), and a
+# tool sandbox's URL is https://rt-tool-<id>-<hash>-<region>.a.run.app, which no rt-<uuid> host or
+# other service of this stack starts with. run.servicesInvoker holds run.routes.invoke alone, so
+# the grant can never run a Job (the app_role job holds the database owner's password). The runner
+# manager refuses a tool sandbox whose URL this condition would not match (manager-driver-cloud-run.ts).
+resource "google_project_iam_member" "gateway_invokes_tool_sandboxes" {
+  project = var.project_id
+  role    = "roles/run.servicesInvoker"
+  member  = google_service_account.gateway.member
+  condition {
+    title      = "tool-sandbox-hosts-only"
+    expression = <<-CEL
+      request.host.startsWith("rt-tool-") && request.host.endsWith(".run.app")
+    CEL
   }
 }
 
@@ -114,6 +215,32 @@ resource "google_artifact_registry_repository_iam_member" "runner_manager_artifa
   member     = google_service_account.runner_manager.member
 }
 
+# The runtime image is not always in that repository: `aw deploy` copies only images that are not
+# already in Artifact Registry, and uses one that is (an operator's own repository, CI's staging
+# repository) in place. The manager names var.images.runtime in every create, so it also reads the
+# repository that image is in, and only that one. terraform_data.input_checks refuses a runtime
+# image outside this project's Artifact Registry, which this module cannot grant on.
+locals {
+  runtime_image_repository = try(
+    regex("^(?P<location>[a-z0-9-]+)-docker\\.pkg\\.dev/(?P<project>[a-z][a-z0-9-]*[a-z0-9])/(?P<repository>[a-z][a-z0-9-]*)/", var.images.runtime),
+    null,
+  )
+  runtime_image_in_project = try(local.runtime_image_repository.project == var.project_id, false)
+  runtime_image_elsewhere = local.runtime_image_in_project && !(
+    local.runtime_image_repository.location == var.region &&
+    local.runtime_image_repository.repository == var.name
+  )
+}
+
+resource "google_artifact_registry_repository_iam_member" "runner_manager_runtime_image_reader" {
+  count      = local.runtime_image_elsewhere ? 1 : 0
+  project    = var.project_id
+  location   = local.runtime_image_repository.location
+  repository = local.runtime_image_repository.repository
+  role       = "roles/artifactregistry.reader"
+  member     = google_service_account.runner_manager.member
+}
+
 resource "google_project_iam_member" "web_cloudsql_client" {
   project = var.project_id
   role    = "roles/cloudsql.client"
@@ -126,32 +253,34 @@ resource "google_project_iam_member" "gateway_cloudsql_client" {
   member  = google_service_account.gateway.member
 }
 
-# ── Cloud Build ───────────────────────────────────────────────────────────────────────────────────
-# Projects created after Google stopped auto-granting `roles/editor` to the default Compute Engine
-# service account start with that account holding no project roles at all. `gcloud builds submit`
-# with no `serviceAccount:` in its build config runs as exactly that account (the dedicated
-# `<project-number>@cloudbuild.gserviceaccount.com` identity cannot be set via `build.service_account`
-# — Cloud Build rejects it as not "user-managed"), so it is this account, not the Cloud Build service
-# agent, that needs to read its own staged source, push to Artifact Registry, and write build logs.
-
-data "google_project" "current" {}
-
-resource "google_project_iam_member" "cloudbuild_storage_viewer" {
-  project = var.project_id
-  role    = "roles/storage.objectViewer"
-  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+# Earlier versions granted the project's default Compute Engine service account three roles for
+# Cloud Build. Forget them without revoking: the grant may be shared with something outside this module.
+removed {
+  from = google_project_iam_member.cloudbuild_storage_viewer
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "google_project_iam_member" "cloudbuild_artifact_writer" {
-  project = var.project_id
-  role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+removed {
+  from = google_project_iam_member.cloudbuild_artifact_writer
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "google_project_iam_member" "cloudbuild_log_writer" {
+removed {
+  from = google_project_iam_member.cloudbuild_log_writer
+  lifecycle {
+    destroy = false
+  }
+}
+
+# D-3: only the gateway calls Claude on Vertex AI; the web and runtime service accounts hold no Vertex role.
+resource "google_project_iam_member" "gateway_aiplatform_user" {
   project = var.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${data.google_project.current.number}-compute@developer.gserviceaccount.com"
+  role    = "roles/aiplatform.user"
+  member  = google_service_account.gateway.member
 }
 
 # ── Cloud SQL ─────────────────────────────────────────────────────────────────────────────────────
@@ -165,16 +294,36 @@ resource "google_sql_database_instance" "main" {
   name                = "${var.name}-pg"
   database_version    = "POSTGRES_16"
   region              = var.region
-  deletion_protection = true
+  deletion_protection = var.data_protection
   settings {
-    tier    = var.db_tier
-    edition = "ENTERPRISE" # ENTERPRISE_PLUS, this org's project default, rejects shared-core tiers
+    tier              = local.size.db_tier
+    availability_type = local.size.db_availability
+    edition           = "ENTERPRISE" # ENTERPRISE_PLUS, this org's project default, rejects shared-core tiers
+    ip_configuration {
+      ipv4_enabled    = false
+      private_network = local.network_id
+      ssl_mode        = "ENCRYPTED_ONLY"
+    }
     backup_configuration {
       enabled                        = true
       point_in_time_recovery_enabled = true
+      transaction_log_retention_days = 7
+      backup_retention_settings {
+        retained_backups = 14
+        retention_unit   = "COUNT"
+      }
+    }
+    # Sunday 18:00 UTC is Monday 03:00 in Tokyo.
+    maintenance_window {
+      day          = 7
+      hour         = 18
+      update_track = "stable"
     }
   }
-  depends_on = [google_project_service.required]
+  depends_on = [
+    google_project_service.required,
+    google_service_networking_connection.psa,
+  ]
 }
 
 resource "google_sql_database" "main" {
@@ -182,10 +331,15 @@ resource "google_sql_database" "main" {
   instance = google_sql_database_instance.main.name
 }
 
+# The application's migrations make this role own the schema's tables, and Cloud SQL refuses to
+# drop a PostgreSQL role that owns objects ("role cannot be dropped because some objects depend on
+# it"), so a destroy that deletes the user fails. ABANDON removes it from state only: the role goes
+# with the instance. The database keeps the default DELETE: it drops once the services are gone.
 resource "google_sql_user" "main" {
-  name     = "agent_workspace"
-  instance = google_sql_database_instance.main.name
-  password = random_password.db.result
+  name            = "agent_workspace"
+  instance        = google_sql_database_instance.main.name
+  password        = random_password.db.result
+  deletion_policy = "ABANDON"
 }
 
 # ── Object storage ────────────────────────────────────────────────────────────────────────────────
@@ -196,9 +350,24 @@ resource "google_storage_bucket" "objects" {
   location = var.region
   # Workload identity authorizes through IAM. Legacy per-object ACLs are deliberately unavailable.
   uniform_bucket_level_access = true
-  force_destroy               = true # test/demo deployment; tighten before any real data lands
+  force_destroy               = !var.data_protection
   labels                      = local.common_labels
-  depends_on                  = [google_project_service.required]
+  versioning {
+    enabled = true
+  }
+  soft_delete_policy {
+    retention_duration_seconds = 604800
+  }
+  # Versioning must not grow without bound.
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+  depends_on = [google_project_service.required]
 }
 
 resource "google_storage_bucket_iam_member" "web_objects" {
@@ -222,9 +391,24 @@ resource "google_storage_bucket" "state" {
   name                        = "${var.project_id}-${var.name}-state"
   location                    = var.region
   uniform_bucket_level_access = true
-  force_destroy               = true
+  force_destroy               = !var.data_protection
   labels                      = local.common_labels
-  depends_on                  = [google_project_service.required]
+  versioning {
+    enabled = true
+  }
+  soft_delete_policy {
+    retention_duration_seconds = 604800
+  }
+  # Versioning must not grow without bound.
+  lifecycle_rule {
+    condition {
+      days_since_noncurrent_time = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+  depends_on = [google_project_service.required]
 }
 
 resource "google_storage_bucket_iam_member" "web_state" {
@@ -289,6 +473,17 @@ resource "google_project_service_identity" "secret_manager" {
   depends_on = [google_project_service.required]
 }
 
+# The Secret Manager service agent is created on the project's first request for it, and
+# generateServiceIdentity returns its email before IAM can resolve it: a binding made at once fails
+# with "Service account ... does not exist". Waiting once, on create, lets the new agent propagate;
+# the binding reads the member through the wait, so the order needs no depends_on.
+resource "time_sleep" "secret_manager_identity" {
+  create_duration = "60s"
+  triggers = {
+    member = google_project_service_identity.secret_manager.member
+  }
+}
+
 resource "google_kms_key_ring" "secrets" {
   name     = "${var.name}-secrets"
   location = var.region
@@ -307,7 +502,7 @@ resource "google_kms_crypto_key" "secret_manager" {
 resource "google_kms_crypto_key_iam_member" "secret_manager" {
   crypto_key_id = google_kms_crypto_key.secret_manager.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:${google_project_service_identity.secret_manager.email}"
+  member        = time_sleep.secret_manager_identity.triggers["member"]
 }
 
 resource "google_secret_manager_secret" "master_key" {
@@ -398,22 +593,43 @@ resource "google_secret_manager_secret_iam_member" "runner_manager_access" {
 # ── Cloud Run: gateway ────────────────────────────────────────────────────────────────────────────
 # `--allow-unauthenticated` at the Cloud Run IAM layer, deliberately: apps/web and the runtime
 # containers authenticate to it with GATEWAY_TOKEN_SECRET, an application-level bearer the app was
-# already written to use (packages/gateway/src/auth.ts) — not a GCP identity token. The application
-# layer is the real gate here, the same way it is for `docker`/`kubernetes` deployments; see
-# docs/adr/ADR-cloud-run-service-driver.md for why this driver does not attempt VPC-level isolation
-# on Cloud Run for these two long-lived services.
+# already written to use (packages/gateway/src/auth.ts) - not a GCP identity token. Sandboxes cannot
+# present Google ID tokens, so the run token stays the gate. Its ingress is internal: web and the
+# sandboxes reach it at the internal load balancer in network.tf (local.gateway_internal_url), the
+# only address the sandbox firewall allows. Its own Direct VPC egress is its private route to Cloud SQL.
 
 resource "google_cloud_run_v2_service" "gateway" {
-  name                = "${var.name}-gateway"
+  name                = local.gateway_service_name
   location            = var.region
   project             = var.project_id
-  ingress             = "INGRESS_TRAFFIC_ALL"
-  deletion_protection = false
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = var.data_protection
+
+  # Service-level scaling, declared to match what the API reads back. The google provider (6.50.0)
+  # gives this block no Computed default, yet its read-back of a service fills it as
+  # { min_instance_count = 0, manual_instance_count = 0 } (scaling_mode left unset), so leaving it
+  # out plans a removal on every apply — a perpetual 3-to-change diff. Zeros are dropped by the
+  # provider's expand (IsEmptyValue), so declaring them sends nothing new: the service keeps
+  # AUTOMATIC scaling and the template-level min/max below. manual_instance_count only applies in
+  # MANUAL mode; it is 0 here solely so the plan converges. scaling_mode is left unset on purpose:
+  # the read-back leaves it empty, so declaring "AUTOMATIC" would risk trading one diff for another.
+  # The per-size minimum lives on the template-level scaling block below, not here.
+  scaling {
+    min_instance_count    = 0
+    manual_instance_count = 0
+  }
 
   template {
     service_account = google_service_account.gateway.email
+    vpc_access {
+      network_interfaces {
+        network    = local.network_id
+        subnetwork = local.services_subnet_id
+      }
+      egress = "PRIVATE_RANGES_ONLY"
+    }
     scaling {
-      min_instance_count = 0
+      min_instance_count = local.size.gateway_min
       max_instance_count = 2
     }
     containers {
@@ -423,6 +639,7 @@ resource "google_cloud_run_v2_service" "gateway" {
         container_port = 4000
       }
       resources {
+        startup_cpu_boost = true
         limits = {
           cpu    = "1"
           memory = "512Mi"
@@ -433,19 +650,33 @@ resource "google_cloud_run_v2_service" "gateway" {
         value = var.gateway_pricing_json
       }
       env {
+        # Opts the gateway in to keyless Vertex AI calls as its own service account, for this
+        # project only; a connection naming any other project is refused.
+        name  = "GATEWAY_VERTEX_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
         # aw-control MCP calls go to web at its deterministic Cloud Run URL: the web service's `uri`
         # would be a cycle, since web already depends on this service for MODEL_GATEWAY_URL.
-        name  = "GATEWAY_CONTROL_PLANE_ORIGIN"
-        value = "https://${var.name}-web-${data.google_project.current.number}.${var.region}.run.app"
+        name = "GATEWAY_CONTROL_PLANE_ORIGIN"
+        # Always the run.app URL, even with a domain: the gateway reaches web through the VPC, and
+        # internal-and-load-balancer ingress accepts internal traffic, so it bypasses the domain.
+        value = local.run_app_origin
       }
       env {
         name = "DATABASE_URL"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-database-url"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-database-url"].version
           }
         }
+      }
+      env {
+        # The gateway calls tool sandboxes (rt-tool-*) with a Google ID token minted as its own
+        # service account; see gateway_invokes_tool_sandboxes.
+        name  = "GATEWAY_TOOL_SANDBOX_AUTH"
+        value = "google-id-token"
       }
       env {
         name  = "MASTER_KEY_PROVIDER"
@@ -453,14 +684,14 @@ resource "google_cloud_run_v2_service" "gateway" {
       }
       env {
         name  = "GCP_MASTER_KEY_SECRET"
-        value = "${google_secret_manager_secret.master_key.id}/versions/latest"
+        value = "${google_secret_manager_secret.master_key.id}/versions/${google_secret_manager_secret_version.master_key.version}"
       }
       env {
         name = "GATEWAY_TOKEN_SECRET"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-gateway-token-secret"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-gateway-token-secret"].version
           }
         }
       }
@@ -473,6 +704,7 @@ resource "google_cloud_run_v2_service" "gateway" {
         "--structured-logs",
         "--address=0.0.0.0",
         "--port=5432",
+        "--private-ip",
         google_sql_database_instance.main.connection_name,
       ]
       resources {
@@ -497,6 +729,9 @@ resource "google_cloud_run_v2_service" "gateway" {
     google_secret_manager_secret_iam_member.gateway_access,
     google_secret_manager_secret_iam_member.gateway_master_key_access,
     google_project_iam_member.gateway_cloudsql_client,
+    # The gateway connects at start; without these it can start before its database user exists.
+    google_sql_database.main,
+    google_sql_user.main,
   ]
 }
 
@@ -509,23 +744,39 @@ resource "google_cloud_run_v2_service_iam_member" "gateway_public" {
 }
 
 # ── Cloud Run: runner manager ─────────────────────────────────────────────────────────────────────
-# Same `--allow-unauthenticated` reasoning as the gateway: apps/web authenticates with
-# RUNNER_MANAGER_TOKEN, not a GCP identity token. What Cloud Run IAM *does* gate here is the
-# manager's own outbound calls into the ephemeral per-session services it creates — those carry a
-# real Google-signed identity token (RunnerManagerOptions.runtimeAuthHeaders), which the manager can
-# mint because it runs as google_service_account.runner_manager.
+# Internal ingress, and no allUsers binding: only callers inside the project's network that Cloud Run
+# IAM lets in can reach it. web is the one caller - it authenticates with a Google ID token for the
+# manager's URL (sent in X-Serverless-Authorization, the audience is RUNNER_MANAGER_ID_TOKEN_AUDIENCE)
+# plus RUNNER_MANAGER_TOKEN. The manager's own outbound calls into the ephemeral per-session
+# services it creates carry a Google-signed identity token (RunnerManagerOptions.runtimeAuthHeaders),
+# which it can mint because it runs as google_service_account.runner_manager. It has Direct VPC egress
+# (private ranges only) so it reaches those internal services privately, the way web reaches it. The
+# runtime service account they run as holds no role.
 
 resource "google_cloud_run_v2_service" "runner_manager" {
   name                = "${var.name}-runner-mgr"
   location            = var.region
   project             = var.project_id
-  ingress             = "INGRESS_TRAFFIC_ALL"
-  deletion_protection = false
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = var.data_protection
+
+  # Service-level scaling: declared so the plan converges; see the gateway service for why.
+  scaling {
+    min_instance_count    = 0
+    manual_instance_count = 0
+  }
 
   template {
     service_account = google_service_account.runner_manager.email
+    vpc_access {
+      network_interfaces {
+        network    = local.network_id
+        subnetwork = local.services_subnet_id
+      }
+      egress = "PRIVATE_RANGES_ONLY"
+    }
     scaling {
-      min_instance_count = 0
+      min_instance_count = local.size.runner_manager_min
       max_instance_count = 3
     }
     containers {
@@ -535,6 +786,7 @@ resource "google_cloud_run_v2_service" "runner_manager" {
         container_port = 8090
       }
       resources {
+        startup_cpu_boost = true
         limits = {
           cpu    = "1"
           memory = "512Mi"
@@ -566,6 +818,14 @@ resource "google_cloud_run_v2_service" "runner_manager" {
         value = google_service_account.runtime.email
       }
       env {
+        name  = "RUNTIME_NETWORK"
+        value = local.network_id
+      }
+      env {
+        name  = "RUNTIME_SUBNETWORK"
+        value = local.sandbox_subnet_id
+      }
+      env {
         # A brand-new Cloud Run service's default URL needs longer than the 30s default to become
         # reachable end-to-end (routing/DNS, not just the revision reporting ready) — unlike
         # docker/kubernetes, where the manager reaches an address on a network it is already on.
@@ -577,13 +837,50 @@ resource "google_cloud_run_v2_service" "runner_manager" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-runner-manager-token"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-runner-manager-token"].version
           }
+        }
+      }
+      # Sandbox internet: absent when off, so the default stack gets no new revision.
+      dynamic "env" {
+        # The code-tool host image. Web reads it as the "tool host on" switch. Absent when unset.
+        for_each = var.images.tool_host == "" ? [] : [var.images.tool_host]
+        content {
+          name  = "AGENT_WORKSPACE_TOOL_HOST_IMAGE"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        for_each = var.sandbox_internet ? [1] : []
+        content {
+          name  = "RUNTIME_EGRESS_PROXY_URL"
+          value = "http://${google_compute_address.egress_proxy[0].address}:${local.egress_proxy_port}"
+        }
+      }
+      dynamic "env" {
+        for_each = var.sandbox_internet ? [1] : []
+        content {
+          name = "RUNTIME_EGRESS_PROXY_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.egress_credential_key[0].secret_id
+              version = google_secret_manager_secret_version.egress_credential_key[0].version
+            }
+          }
+        }
+      }
+      dynamic "env" {
+        # The gateway's address: sandboxes reach it directly, never through the proxy.
+        for_each = var.sandbox_internet ? [1] : []
+        content {
+          name  = "RUNTIME_PROXY_BYPASS"
+          value = google_compute_address.gateway_internal.address
         }
       }
     }
   }
   depends_on = [
+    google_secret_manager_secret_iam_member.runner_manager_egress_key_access,
     google_secret_manager_secret_iam_member.runner_manager_access,
     google_project_iam_member.runner_manager_run_developer,
     google_project_iam_member.runner_manager_run_invoker,
@@ -591,12 +888,12 @@ resource "google_cloud_run_v2_service" "runner_manager" {
   ]
 }
 
-resource "google_cloud_run_v2_service_iam_member" "runner_manager_public" {
+resource "google_cloud_run_v2_service_iam_member" "web_invokes_runner_manager" {
   name     = google_cloud_run_v2_service.runner_manager.name
   location = google_cloud_run_v2_service.runner_manager.location
   project  = var.project_id
   role     = "roles/run.invoker"
-  member   = "allUsers"
+  member   = google_service_account.web.member
 }
 
 # ── Cloud Run: web control plane ──────────────────────────────────────────────────────────────────
@@ -607,13 +904,26 @@ resource "google_cloud_run_v2_service" "web" {
   name                = "${var.name}-web"
   location            = var.region
   project             = var.project_id
-  ingress             = "INGRESS_TRAFFIC_ALL"
-  deletion_protection = false
+  ingress             = var.domain == "" ? "INGRESS_TRAFFIC_ALL" : "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+  deletion_protection = var.data_protection
+
+  # Service-level scaling: declared so the plan converges; see the gateway service for why.
+  scaling {
+    min_instance_count    = 0
+    manual_instance_count = 0
+  }
 
   template {
     service_account = google_service_account.web.email
+    vpc_access {
+      network_interfaces {
+        network    = local.network_id
+        subnetwork = local.services_subnet_id
+      }
+      egress = "PRIVATE_RANGES_ONLY"
+    }
     scaling {
-      min_instance_count = 0
+      min_instance_count = local.size.web_min
       max_instance_count = var.web_max_instance_count
     }
     volumes {
@@ -630,6 +940,7 @@ resource "google_cloud_run_v2_service" "web" {
         container_port = 3000
       }
       resources {
+        startup_cpu_boost = true
         limits = {
           cpu    = "1"
           memory = "1Gi"
@@ -658,6 +969,15 @@ resource "google_cloud_run_v2_service" "web" {
         # (issue #797). Blank means no ceiling.
         name  = "AW_DEPLOYMENT_POLICY"
         value = var.deployment_policy
+      }
+      dynamic "env" {
+        # ADR-0160 D5: the features this deployment installs. Absent when unset, so an existing
+        # service gets no new revision and installs every feature.
+        for_each = var.deployment_features == "" ? [] : [var.deployment_features]
+        content {
+          name  = "AW_DEPLOYMENT_FEATURES"
+          value = env.value
+        }
       }
       dynamic "env" {
         # ADR-0135: the origin A2A agent cards advertise. Absent when unset, so an existing service
@@ -694,15 +1014,26 @@ resource "google_cloud_run_v2_service" "web" {
         value = "cloud-run-service"
       }
       env {
+        # The gateway's internal load balancer, not its run.app URL: web hands this address to every
+        # sandbox, whose firewall allows nothing else.
         name  = "MODEL_GATEWAY_URL"
-        value = google_cloud_run_v2_service.gateway.uri
+        value = local.gateway_internal_url
+      }
+      env {
+        # D-1: setup's default model connection is Claude on this install's own Vertex AI.
+        name  = "AW_VERTEX_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "AW_VERTEX_LOCATION"
+        value = var.vertex_location
       }
       env {
         name = "DATABASE_URL"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-database-url"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-database-url"].version
           }
         }
       }
@@ -712,14 +1043,14 @@ resource "google_cloud_run_v2_service" "web" {
       }
       env {
         name  = "GCP_MASTER_KEY_SECRET"
-        value = "${google_secret_manager_secret.master_key.id}/versions/latest"
+        value = "${google_secret_manager_secret.master_key.id}/versions/${google_secret_manager_secret_version.master_key.version}"
       }
       env {
         name = "GATEWAY_TOKEN_SECRET"
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-gateway-token-secret"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-gateway-token-secret"].version
           }
         }
       }
@@ -728,7 +1059,7 @@ resource "google_cloud_run_v2_service" "web" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-session-secret"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-session-secret"].version
           }
         }
       }
@@ -737,7 +1068,7 @@ resource "google_cloud_run_v2_service" "web" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-bootstrap-admin-password"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-bootstrap-admin-password"].version
           }
         }
       }
@@ -746,8 +1077,64 @@ resource "google_cloud_run_v2_service" "web" {
         value_source {
           secret_key_ref {
             secret  = google_secret_manager_secret.deployment["${var.name}-runner-manager-token"].secret_id
-            version = "latest"
+            version = google_secret_manager_secret_version.deployment["${var.name}-runner-manager-token"].version
           }
+        }
+      }
+      dynamic "env" {
+        # The code-tool host image. Web reads it as the "tool host on" switch. Absent when unset.
+        for_each = var.images.tool_host == "" ? [] : [var.images.tool_host]
+        content {
+          name  = "AGENT_WORKSPACE_TOOL_HOST_IMAGE"
+          value = env.value
+        }
+      }
+      dynamic "env" {
+        # Web uses it only to accept a restricted network policy. Absent when sandbox_internet is off.
+        for_each = var.sandbox_internet ? [1] : []
+        content {
+          name  = "RUNTIME_EGRESS_PROXY_URL"
+          value = "http://${google_compute_address.egress_proxy[0].address}:${local.egress_proxy_port}"
+        }
+      }
+      env {
+        # The audience of the Google ID token web sends to the internal runner manager.
+        name  = "RUNNER_MANAGER_ID_TOKEN_AUDIENCE"
+        value = google_cloud_run_v2_service.runner_manager.uri
+      }
+      # Single sign-on: absent when unset, so an existing service gets no new revision.
+      dynamic "env" {
+        for_each = var.oidc_issuer == "" ? [] : [1]
+        content {
+          name  = "OIDC_ISSUER_URL"
+          value = var.oidc_issuer
+        }
+      }
+      dynamic "env" {
+        for_each = var.oidc_issuer == "" ? [] : [1]
+        content {
+          name  = "OIDC_CLIENT_ID"
+          value = var.oidc_client_id
+        }
+      }
+      dynamic "env" {
+        for_each = var.oidc_issuer == "" ? [] : [1]
+        content {
+          name = "OIDC_CLIENT_SECRET"
+          value_source {
+            secret_key_ref {
+              secret = google_secret_manager_secret.oidc_client_secret[0].secret_id
+              # Rotation is a new secret version plus a deploy; the CLI adds OIDC versions with gcloud.
+              version = "latest"
+            }
+          }
+        }
+      }
+      dynamic "env" {
+        for_each = var.oidc_issuer == "" ? [] : [1]
+        content {
+          name  = "OIDC_REDIRECT_URI"
+          value = "${local.web_origin}/api/auth/callback"
         }
       }
       depends_on = ["cloud-sql-proxy"]
@@ -759,6 +1146,7 @@ resource "google_cloud_run_v2_service" "web" {
         "--structured-logs",
         "--address=0.0.0.0",
         "--port=5432",
+        "--private-ip",
         google_sql_database_instance.main.connection_name,
       ]
       resources {
@@ -783,18 +1171,54 @@ resource "google_cloud_run_v2_service" "web" {
     google_secret_manager_secret_iam_member.web_access,
     google_secret_manager_secret_iam_member.web_master_key_access,
     google_project_iam_member.web_cloudsql_client,
+    google_sql_database.main,
+    google_sql_user.main,
     google_storage_bucket_iam_member.web_objects,
     google_storage_bucket_iam_member.web_objects_metadata,
     google_storage_bucket_iam_member.web_state,
     google_cloud_run_v2_service.gateway,
     google_cloud_run_v2_service.runner_manager,
+    google_cloud_run_v2_service_iam_member.web_invokes_runner_manager,
+    google_secret_manager_secret_iam_member.web_oidc_client_secret,
   ]
 }
 
 resource "google_cloud_run_v2_service_iam_member" "web_public" {
+  # Public at the Cloud Run level on purpose: with a domain, ingress is INTERNAL_LOAD_BALANCER, so
+  # the only way in from the internet is the load balancer (where IAP sits when enabled).
   name     = google_cloud_run_v2_service.web.name
   location = google_cloud_run_v2_service.web.location
   project  = var.project_id
   role     = "roles/run.invoker"
   member   = "allUsers"
+}
+
+# ── Single sign-on client secret ──────────────────────────────────────────────────────────────────
+# Only the secret container: the CLI adds the version through gcloud, so the value never enters
+# Terraform state.
+
+resource "google_secret_manager_secret" "oidc_client_secret" {
+  count     = var.oidc_issuer == "" ? 0 : 1
+  secret_id = "${var.name}-oidc-client-secret"
+  labels    = local.common_labels
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.required]
+}
+
+resource "google_secret_manager_secret_iam_member" "web_oidc_client_secret" {
+  count     = var.oidc_issuer == "" ? 0 : 1
+  secret_id = google_secret_manager_secret.oidc_client_secret[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = google_service_account.web.member
+}
+
+# ── Identity-Aware Proxy (only with a domain and iap = true) ──────────────────────────────────────
+
+resource "google_project_service" "iap" {
+  count              = local.iap_enabled ? 1 : 0
+  project            = var.project_id
+  service            = local.iap_api
+  disable_on_destroy = false
 }

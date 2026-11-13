@@ -15,6 +15,7 @@
 import { usePathname } from 'next/navigation';
 
 import { crumbsFor } from './navigation';
+import { shellStrings, type ShellLocale } from './shell-messages';
 
 export interface RuntimeChip {
   /** What the chip says after "Runtime: ". */
@@ -30,11 +31,21 @@ export interface RuntimeChip {
 const CHIP =
   'inline-flex min-w-0 max-w-full items-center justify-center gap-[7px] whitespace-normal rounded-[999px] border px-[9px] py-1 text-center text-[12px] leading-tight no-underline sm:whitespace-nowrap';
 
-export function Topbar({ runtime }: { readonly runtime: RuntimeChip }) {
-  const crumbs = crumbsFor(usePathname());
+export function Topbar({
+  runtime,
+  locale = 'en',
+}: {
+  readonly runtime: RuntimeChip;
+  /** The reader's language (UX-15); English unless it is `ja`. */
+  readonly locale?: ShellLocale;
+}) {
+  const crumbs = crumbsFor(usePathname(), locale);
 
   return (
-    <header className="sticky top-0 z-20 flex min-h-[52px] min-w-0 flex-col items-stretch gap-2 border-b border-border bg-bg px-4 py-2 sm:h-[52px] sm:flex-row sm:items-center sm:gap-3 sm:px-6 sm:py-0">
+    <header
+      lang={locale}
+      className="sticky top-0 z-20 flex min-h-[52px] min-w-0 flex-col items-stretch gap-2 border-b border-border bg-bg px-4 py-2 sm:h-[52px] sm:flex-row sm:items-center sm:gap-3 sm:px-6 sm:py-0"
+    >
       <div className="flex min-w-0 max-w-full flex-wrap items-center gap-[7px] text-[13px] text-muted">
         {crumbs.map((crumb, index) => (
           <span key={crumb} className="flex items-center gap-[7px]">
@@ -48,30 +59,37 @@ export function Topbar({ runtime }: { readonly runtime: RuntimeChip }) {
         ))}
       </div>
       <div className="hidden flex-1 sm:block" />
-      <RuntimeIndicator runtime={runtime} />
+      <RuntimeIndicator runtime={runtime} locale={locale} />
     </header>
   );
 }
 
-export function RuntimeIndicator({ runtime }: { readonly runtime: RuntimeChip }) {
+export function RuntimeIndicator({
+  runtime,
+  locale = 'en',
+}: {
+  readonly runtime: RuntimeChip;
+  readonly locale?: ShellLocale;
+}) {
+  const strings = shellStrings(locale);
   const tone = runtime.warn
     ? 'border-warn bg-warn-soft text-warn'
     : 'border-border-strong bg-surface text-text-2';
   const dot = `size-[7px] flex-none rounded-[50%] ${runtime.warn ? 'bg-warn' : 'bg-ok'}`;
-  const title = runtime.reason ?? 'Runtime driver in force for this workspace';
+  const title = runtime.reason ?? strings.runtimeTitle;
 
   if (runtime.href === null) {
     return (
       <span className={`${CHIP} ${tone}`} title={title}>
         <span className={dot} />
-        Runtime: {runtime.label}
+        {strings.runtimePrefix} {runtime.label}
       </span>
     );
   }
   return (
     <a className={`${CHIP} ${tone} hover:no-underline`} href={runtime.href} title={title}>
       <span className={dot} />
-      Runtime: {runtime.label}
+      {strings.runtimePrefix} {runtime.label}
     </a>
   );
 }

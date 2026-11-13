@@ -52,7 +52,7 @@ import {
   clearedSelectionCookie,
   mintSessionToken,
   newSessionClaims,
-  readSessionSecret,
+  sessionSecret,
   safeNextPath,
   sessionCookie,
   verifySelectionToken,
@@ -92,7 +92,7 @@ async function readSelection(request: Request, secret: string): Promise<Selectio
 }
 
 export async function GET(request: Request): Promise<Response> {
-  const secret = readSessionSecret(process.env);
+  const secret = sessionSecret();
   if (!secret.ok) return NextResponse.json({ error: 'server_not_configured' }, { status: 503 });
 
   const selection = await readSelection(request, secret.secret);
@@ -146,7 +146,7 @@ export async function POST(request: Request): Promise<Response> {
       : NextResponse.json({ error: 'cross_origin' }, { status: 403 });
   }
 
-  const secret = readSessionSecret(process.env);
+  const secret = sessionSecret();
   const runtime = applicationContext()?.rbac ?? null;
   if (!secret.ok || runtime === null) {
     return isJson

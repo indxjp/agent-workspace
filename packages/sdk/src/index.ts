@@ -26,6 +26,7 @@ import type { MeResponse } from '@indx-workspace/contracts/team';
 
 import { HttpClient, type ClientOptions, type RequestOptions } from './http.js';
 import { readMe } from './me.js';
+import { AgentTeamsClient } from './resources/agentTeams.js';
 import { AgentsClient } from './resources/agents.js';
 import { ConnectorsClient } from './resources/connectors.js';
 import { EndpointClientsClient } from './resources/endpointClients.js';
@@ -47,6 +48,7 @@ import { TeamClient } from './resources/team.js';
 import { AuthClient } from './resources/auth.js';
 import { TokensClient } from './resources/tokens.js';
 import { TriggersClient } from './resources/triggers.js';
+import { WebhooksClient } from './resources/webhooks.js';
 import { WorkspacesClient } from './resources/workspaces.js';
 
 export type { ClientAuth, ClientOptions, RequestOptions } from './http.js';
@@ -146,10 +148,31 @@ export type {
   TeamClient,
   UsersClient,
 } from './resources/team.js';
-export type { AuthClient } from './resources/auth.js';
+export type { AuthClient, TokenExchangeInput } from './resources/auth.js';
 export type { MintTokenOptions, TokensClient } from './resources/tokens.js';
 export type { BuiltinAgentProblemCode } from '@indx-workspace/contracts/agents';
+export type {
+  AgentTeamListQuery,
+  AgentTeamRunInput,
+  AgentTeamsClient,
+  AgentTeamVersionsClient,
+} from './resources/agentTeams.js';
 export type { TriggersClient } from './resources/triggers.js';
+export type { CreateWebhookInput, WebhooksClient } from './resources/webhooks.js';
+export {
+  verifyWebhookSignature,
+  WebhookVerificationError,
+  type VerifyWebhookSignatureInput,
+  type WebhookHeaders,
+  type WebhookVerificationErrorCode,
+} from './webhooks/verify.js';
+export type {
+  CreateWebhookRequest,
+  CreateWebhookResponse,
+  WebhookEndpoint,
+  WebhookEvent,
+  WebhookEventType,
+} from '@indx-workspace/contracts/webhooks';
 export type {
   SharingPolicyClient,
   WorkspaceFeaturesClient,
@@ -182,6 +205,11 @@ export interface AgentWorkspaceClient {
   me(options?: RequestOptions): Promise<MeResponse>;
   readonly workspaces: WorkspacesClient;
   readonly agents: AgentsClient;
+  /**
+   * `/api/agent-teams` — ADR-0104 (handoff mode), issue #1516: a lead agent and up to eight member
+   * agents it calls as tools, versioned so a team run is reproducible.
+   */
+  readonly agentTeams: AgentTeamsClient;
   readonly runs: RunsClient;
   readonly sessions: SessionsClient;
   readonly projects: ProjectsClient;
@@ -211,6 +239,11 @@ export interface AgentWorkspaceClient {
   readonly endpointClients: EndpointClientsClient;
   /** `/api/triggers` — issue #1295, ADR-0144: start a run of one agent from a webhook URL. */
   readonly triggers: TriggersClient;
+  /**
+   * `/api/webhooks` — issue #250 (N-3), ADR-SDK-18-N3-250: the endpoints a run's outcome is posted
+   * to, signed; a receiver checks a delivery with {@link verifyWebhookSignature}.
+   */
+  readonly webhooks: WebhooksClient;
   readonly team: TeamClient;
   readonly shares: SharesClient;
   readonly observability: ObservabilityClient;
@@ -226,6 +259,7 @@ export function createClient(options: ClientOptions): AgentWorkspaceClient {
     me: (requestOptions: RequestOptions = {}) => readMe(http, requestOptions),
     workspaces: new WorkspacesClient(http),
     agents: new AgentsClient(http),
+    agentTeams: new AgentTeamsClient(http),
     runs: new RunsClient(http),
     sessions: new SessionsClient(http),
     projects: new ProjectsClient(http),
@@ -241,6 +275,7 @@ export function createClient(options: ClientOptions): AgentWorkspaceClient {
     platforms: new PlatformsClient(http),
     endpointClients: new EndpointClientsClient(http),
     triggers: new TriggersClient(http),
+    webhooks: new WebhooksClient(http),
     team: new TeamClient(http),
     shares: new SharesClient(http),
     observability: new ObservabilityClient(http),

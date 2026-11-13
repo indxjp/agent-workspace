@@ -156,6 +156,11 @@ describe('the skills adopt stage on two servers, PostgreSQL and S3', () => {
       '.skills/raced/SKILL.md',
       '.skills/raced/s/run.sh',
     ]);
+    // Each racing pass records the old objects it counted after its own conversion, and either may
+    // record last; a count taken before the other pass moved the skill is stale. Stale only ever
+    // means "more left" (no release writes an old form), so `skillsAdoptProven` stays false until a
+    // pass sees nothing left. That is the promise: the next pass, alone, records none.
+    await runSkillsAdoptStage(deps);
     expect(await root.storageMigrationRuns.latest('skills')).toMatchObject({
       legacyRows: 0,
       mismatches: 0,

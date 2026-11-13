@@ -189,7 +189,6 @@ const REFUSAL_MARKERS: Readonly<Record<string, string>> = {
   gateway: 'gateway connection',
   wireProtocols: 'speaks',
   database: 'holds no database credential',
-  maxBudget: 'provisional price table',
   connector: 'connector record',
   approvals: 'human approval',
   fork: 'fork: false',
@@ -212,7 +211,6 @@ describe('engine-mastra: compile', () => {
         connection,
         model: compiled.agent.model,
         maxSteps: compiled.limits.maxSteps,
-        budgetCap: compiled.limits.budget !== null,
         grants: compiled.workspace.grants.map((grant) => ({
           directory: grant.kind === 'directory',
           path: grant.path,
@@ -375,7 +373,6 @@ function eventFrom(value: unknown): MastraEvent {
                 cacheWriteInputTokens:
                   optNumber(usage['cacheCreationInputTokens'], 'cacheCreation') ?? 0,
                 reasoningTokens: optNumber(usage['reasoningTokens'], 'reasoningTokens'),
-                costUsd: 0,
               },
         finish: null,
       };
@@ -456,7 +453,6 @@ describe('engine-mastra: the stop reason', () => {
       steps: optNumber(input['steps'], 'steps') ?? 0,
       lastStepReason: optString(input['lastStepReason'], 'lastStepReason'),
       maxSteps: optNumber(input['maxSteps'], 'maxSteps'),
-      limit: bool(input['overBudget'], 'overBudget') ? 'max_budget' : null,
       interrupted: bool(input['interrupted'], 'interrupted'),
     });
     expect({ stopReason }).toEqual(vector.expected);

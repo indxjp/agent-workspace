@@ -109,12 +109,23 @@ the cancellation underneath.
 
 ## Reconnection
 
-`follow` reconnects for you. Defaults: up to `maxReconnects` 5 attempts, `reconnectDelayMs` 3000 ms
-apart (both are `follow` options).
+`follow` reconnects for you, and backs off while reconnects keep failing. Defaults: up to
+`maxReconnects` 5 failed reconnects in a row, a base delay of `reconnectDelayMs` 3000 ms, and a
+ceiling of `maxReconnectDelayMs` 30000 ms (all three are `follow` options).
 
 - On a dropped connection (a `TransportError` whose cause isn't the caller's own signal), `follow`
-  waits `reconnectDelayMs`, then reconnects `events` with `after` set to the last durable event id
-  it saw (`run-status` or `runtime` frame with a non-null `id`) — sent as `Last-Event-ID`.
+  waits, then reconnects `events` with `after` set to the last durable event id it saw
+  (`run-status` or `runtime` frame with a non-null `id`) — sent as `Last-Event-ID`.
+- **How long it waits.** The base is the last `retry:` value the stream sent; before the stream
+  has sent one, it is `reconnectDelayMs`. The _n_-th reconnect in a row has the ceiling
+  `d = min(maxReconnectDelayMs, base × 2^(n−1))` and waits a random time between `d / 2` and `d`,
+  so followers dropped together do not all return at once. A connection that delivers a new event
+  starts the count again.
+- A `429` or `5xx` answer to a reconnect that carries `Retry-After` is waited exactly that long, with
+  no ceiling and no jitter: the server's instruction wins over the client's schedule.
+- `reconnectDelayMs` and `maxReconnectDelayMs` must be non-negative finite numbers, with
+  `reconnectDelayMs ≤ maxReconnectDelayMs`; anything else throws a `TypeError` before the first
+  request. A ceiling under 3000 therefore needs a `reconnectDelayMs` too.
 - It gives up and rethrows once `reconnects >= maxReconnects`.
 - It **never re-sends a `start`** — reconnecting only re-opens the read side of an already-queued
   run. If `runs.start` itself never got a response, that's a separate concern; see
@@ -126,12 +137,15 @@ apart (both are `follow` options).
 - A `200` that isn't an event stream (a `ContractViolationError`) is never retried — drift is not a
   dropped connection.
 
-<Note>
-  **Today:** `follow` waits a fixed `reconnectDelayMs` between attempts and ignores the stream's
-  `retry:` field. **Target:** the follower observes `retry:` and backs off exponentially. Tracked as
-  [K-3](/concepts/roadmap#k-3-backoff-and-retry-hints-in-follow). Build on the reconnect; do not
-  build on the fixed delay.
-</Note>
+```ts title="sdk (illustrative)" claim="illustrative"
+for await (const frame of aw.runs.follow(runId, {
+  maxReconnects: 8, //            failed reconnects in a row before follow gives up
+  reconnectDelayMs: 1000, //      the base until the stream sends `retry:`
+  maxReconnectDelayMs: 60_000, // the backoff's ceiling
+})) {
+  render(frame);
+}
+```
 
 ## Resuming with after and Last-Event-ID
 

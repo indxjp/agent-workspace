@@ -54,8 +54,12 @@ async start(agentId: string, input: StartRunInput, options?: RequestOptions): Pr
 
 ## get
 
+One run, with `parentRunId` and, on this read only, its tree (ADR-0104): `children`, the runs a
+team's lead started through member tools (at most 16, oldest first), and `treeCost`, the exact
+sum of `cost` over the run and its children. A list item carries neither.
+
 ```ts
-async get(runId: string, options?: RequestOptions): Promise<RunResource>
+async get(runId: string, options?: RequestOptions): Promise<RunDetail>
 ```
 
 | Name | Type | Required |
@@ -63,7 +67,7 @@ async get(runId: string, options?: RequestOptions): Promise<RunResource>
 | `runId` | `string` | Yes |
 | `options` | `RequestOptions` | No |
 
-**Returns:** `Promise<RunResource>`
+**Returns:** `Promise<RunDetail>`
 
 **Route:** `GET /api/runs/:runId`
 
@@ -226,8 +230,6 @@ async *events(runId: string, options?: RunEventsOptions): AsyncGenerator<RunEven
 
 **Returns:** `AsyncGenerator<RunEventFrame, RunStreamEnd, void>`
 
-**Route:** `GET /api/runs/:runId/events`
-
 ## follow
 
 `events`, resuming with `Last-Event-ID` when a connection drops before `done`. A
@@ -235,6 +237,11 @@ async *events(runId: string, options?: RunEventsOptions): AsyncGenerator<RunEven
 that renders a transcript must discard what it has. Aborting `signal` ends the stream with a
 `TransportError` whose `aborted` is `true`, like every other operation; catch it, or
 return early yourself — stopping iteration early closes the connection either way.
+
+Reconnects back off (issue #250, K-3): the base is the last `retry:` the stream sent, else
+`reconnectDelayMs`; the n-th failed reconnect in a row waits between half and all of
+`min(maxReconnectDelayMs, base × 2^(n−1))`; a connection that delivers a new event starts the
+count again; a `429` or `5xx` naming `Retry-After` is waited exactly that long.
 
 ```ts
 async *follow(runId: string, options?: FollowRunOptions): AsyncGenerator<RunEventFrame, RunStreamEnd, void>
@@ -313,7 +320,8 @@ async result(runId: string, options?: RunResultOptions<z.ZodType | undefined>): 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
 | `maxReconnects` | `undefined \| number` | No | How many reconnects in a row may fail to deliver a new event before `follow` gives up; a connection that delivers one resets the count. Default 5. |
-| `reconnectDelayMs` | `undefined \| number` | No | Pause between reconnects, in milliseconds. Default 3000, the server's own `retry:` value. |
+| `reconnectDelayMs` | `undefined \| number` | No | The base pause before a reconnect, in milliseconds, until the stream sends a `retry:` value; from then on that value is the base (issue #250, K-3). Default 3000, the server's own `retry:`. The n-th reconnect in a row waits a uniform random time between half and all of `min(maxReconnectDelayMs, base × 2^(n−1))`. A non-negative finite number no larger than `maxReconnectDelayMs`; anything else throws a `TypeError` before the first request. |
+| `maxReconnectDelayMs` | `undefined \| number` | No | The ceiling of the reconnect backoff, in milliseconds; a `retry:` above it is capped. Default 30000. A non-negative finite number at least `reconnectDelayMs`, so a ceiling under 3000 needs a `reconnectDelayMs` too; anything else throws a `TypeError` before the first request. A `429` or `5xx` that names `Retry-After` is waited exactly, past this ceiling. |
 | `after` | `undefined \| null \| string` | No | Resume after this event id (`Last-Event-ID`); omit to replay from the beginning. |
 | `signal` | `undefined \| AbortSignal` | No |  |
 
@@ -336,7 +344,7 @@ What `RunsClient.result` returns: the settled run, its prose and its structured 
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
-| `run` | `Readonly<{ id: string; workspaceId: string; agentId: string; projectId: string \| null; initiatingUserId: string \| null; sessionId: string; agentVersion: number \| null; status: "completed" \| "failed" \| "cancelled" \| "queued" \| "running" \| "awaiting_approval"; createdAt: string; startedAt: string \| null; endedAt: string \| null; durationMs: number \| null; model: string \| null; provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| null; modelConnectionId: string \| null; engine: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| null; engineVersion: string \| null; usage: Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; totalTokens: number; toolCalls: number; }>; cost: Readonly<{ amount: string; currency: string; priceTableVersion: string \| null; }>; error: string \| null; output: Readonly<{ text: string; structured: unknown; }> \| null; pendingApproval: Readonly<{ toolName: string; canonicalCall: string; }> \| null; accountingState: "failed" \| "pending" \| "complete" \| "partial" \| "unavailable"; accountingError: string \| null; }>` | Yes |  |
+| `run` | `Readonly<{ id: string; workspaceId: string; agentId: string; projectId: string \| null; initiatingUserId: string \| null; sessionId: string; agentVersion: number \| null; status: "completed" \| "failed" \| "cancelled" \| "queued" \| "running" \| "awaiting_approval"; createdAt: string; startedAt: string \| null; endedAt: string \| null; durationMs: number \| null; model: string \| null; provider: "anthropic" \| "anthropic-compatible" \| "openai" \| "azure-openai" \| "openai-compatible" \| "vertex" \| null; modelConnectionId: string \| null; engine: "claude-agent-sdk" \| "openai-agents" \| "pi" \| "mastra" \| null; engineVersion: string \| null; usage: Readonly<{ inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; totalTokens: number; toolCalls: number; }>; cost: Readonly<{ amount: string; currency: string; priceTableVersion: string \| null; }>; spendCeilingUsd: string \| null; error: string \| null; output: Readonly<{ text: string; structured: unknown; }> \| null; pendingApproval: Readonly<{ toolName: string; canonicalCall: string; }> \| null; accountingState: "failed" \| "pending" \| "complete" \| "partial" \| "unavailable"; accountingError: string \| null; parentRunId: string \| null; }>` | Yes |  |
 | `text` | `null \| string` | Yes | The run's answer as text; `null` unless the run `completed`. |
 | `output` | `null \| Output` | Yes | The structured answer; `null` unless the run `completed` with one. |
 
@@ -346,7 +354,8 @@ What `RunsClient.result` returns: the settled run, its prose and its structured 
 | --- | --- | --- | --- |
 | `schema` | `undefined \| Schema` | No | Validate the structured answer against this and return it typed. |
 | `maxReconnects` | `undefined \| number` | No | How many reconnects in a row may fail to deliver a new event before `follow` gives up; a connection that delivers one resets the count. Default 5. |
-| `reconnectDelayMs` | `undefined \| number` | No | Pause between reconnects, in milliseconds. Default 3000, the server's own `retry:` value. |
+| `reconnectDelayMs` | `undefined \| number` | No | The base pause before a reconnect, in milliseconds, until the stream sends a `retry:` value; from then on that value is the base (issue #250, K-3). Default 3000, the server's own `retry:`. The n-th reconnect in a row waits a uniform random time between half and all of `min(maxReconnectDelayMs, base × 2^(n−1))`. A non-negative finite number no larger than `maxReconnectDelayMs`; anything else throws a `TypeError` before the first request. |
+| `maxReconnectDelayMs` | `undefined \| number` | No | The ceiling of the reconnect backoff, in milliseconds; a `retry:` above it is capped. Default 30000. A non-negative finite number at least `reconnectDelayMs`, so a ceiling under 3000 needs a `reconnectDelayMs` too; anything else throws a `TypeError` before the first request. A `429` or `5xx` that names `Retry-After` is waited exactly, past this ceiling. |
 | `after` | `undefined \| null \| string` | No | Resume after this event id (`Last-Event-ID`); omit to replay from the beginning. |
 | `signal` | `undefined \| AbortSignal` | No |  |
 
@@ -372,4 +381,5 @@ What a caller supplies to start a run; the wire body is derived from it.
 | `outputSchema` | `undefined \| Readonly<Record<string, unknown>> \| z.ZodType<unknown, unknown, z.core.$ZodTypeInternals<unknown, unknown>>` | No | Ask for an answer that matches this schema (ADR-0143): a Zod schema, sent as JSON Schema 2020-12, or a JSON Schema object as is. Its root must be an object. Refused `400 invalid_body` when it is over a limit, and `422 engine_capability_unsupported` when the agent's engine cannot produce structured output; neither creates a run. Read the answer with `RunsClient.result`. |
 | `subject` | `undefined \| string` | No | The person this run acts for (ADR-0142 D2): it becomes the `sub` of the identity assertion every opted-in connector receives. Only an API-key caller may set it; any other caller is `403 run_subject_forbidden`. A connector verifies the assertion with `verifyIdentity`. |
 | `fileScope` | `undefined \| readonly string[]` | No | Narrow the run's file grants (ADR-0147): workspace paths, files or folders, one to 100, each inside what the agent is granted. Built-in `search_files` and the files the sandbox receives cover only these. A path the agent is not granted, a parent of a granted file, or any path when the agent has no files fails the run with `403 run_file_scope_not_granted`, read through `runFailure`. Omit it to keep all the agent's grants; a continuation after an approval keeps the scope of the run it continues. |
+| `spendCeilingUsd` | `undefined \| number` | No | Lower the run's spend ceiling, in USD (ADR-0162): positive, at most 1000000 and at most six decimal places. The run's ceiling is the lowest of this, the agent's `limits.maxBudgetUsd` and the deployment ceiling's, and is returned as `RunResource.spendCeilingUsd`. It only narrows: a value above the agent's or the deployment's limit is `403 policy_cannot_widen` with the detail `spendCeilingUsd`. Once the run's cost reaches it, the gateway refuses the run's next model call and the run fails with the code `run_budget_reached`, read through `runFailure`. |
 | `idempotencyKey` | `undefined \| string` | No | Sent as the `Idempotency-Key` header (ADR-0151): a start sent again with the same key and the same input answers `202` with the run the first one started, whatever its status, instead of starting another. Use one key per logical start and reuse it when you retry that start. The same key with a different input is `409 run_idempotency_conflict`; a blank key or one over 255 characters is `400 invalid_idempotency_key`. A key is scoped to the caller and never freed. |

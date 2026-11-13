@@ -7,6 +7,7 @@ import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import {
   createRuntimeManagerClient,
   probeRuntimeManager,
+  withRunnerManagerIdentity,
   type RuntimeManagerClient,
 } from '../../compose/runtime-manager-client';
 import { createProviderCredentialResolver } from '../../compose/runtime-provider-credential';
@@ -85,15 +86,25 @@ export async function wireSubsystems({
   );
   const runnerManagerUrl = configuredPath('RUNNER_MANAGER_URL');
   const runnerManagerToken = configuredPath('RUNNER_MANAGER_TOKEN');
+  const runnerManagerAudience = configuredPath('RUNNER_MANAGER_ID_TOKEN_AUDIENCE');
+  // Unset: the manager is reached exactly as before. Set: its private Cloud Run URL also wants a
+  // Google ID token, which travels beside (not instead of) the manager bearer.
+  let runnerManagerFetch: typeof globalThis.fetch = globalThis.fetch;
   let runnerManager: RuntimeManagerClient | null = null;
   let runnerManagerVerificationPolicy: RuntimeRunSpec['networkPolicy'] = 'none';
   if (runnerManagerUrl !== null && runnerManagerToken !== null) {
     try {
+      if (runnerManagerAudience !== null) {
+        if (new URL(runnerManagerAudience).protocol !== 'https:') {
+          throw new Error('RUNNER_MANAGER_ID_TOKEN_AUDIENCE must be an https URL');
+        }
+        runnerManagerFetch = withRunnerManagerIdentity(globalThis.fetch, runnerManagerAudience);
+      }
       runnerManagerVerificationPolicy = runtimeVerificationNetworkPolicy(process.env);
       runnerManager = createRuntimeManagerClient(
         runnerManagerUrl,
         runnerManagerToken,
-        globalThis.fetch,
+        runnerManagerFetch,
         { verificationNetworkPolicy: runnerManagerVerificationPolicy },
       );
     } catch (error) {
@@ -131,28 +142,22 @@ export async function wireSubsystems({
     setupRuntimeDetectionInputs(
       runnerManager === null ? null : runnerManagerUrl,
       runnerManagerDriverId(process.env),
-      probeRuntimeManager,
+      (url) => probeRuntimeManager(url, runnerManagerFetch),
     ),
   );
   const files = await installFilesApi(
-    resolveWorkspace,
-    scopes,
-    resourceCatalog,
+    { resolveWorkspace, scopes, catalog: resourceCatalog },
     root.fileTexts,
-    root.workspaces,
     root.sessionState,
     {
       lock: (name, work) => root.withNamedLock(name, work),
       workspaceIds: () => root.listWorkspaceIds(),
-      migrationRuns: root.storageMigrationRuns,
       audit: (event) => root.recordAuditEvent(event),
       stopOnClose,
     },
   );
   const skills = await installSkillsApi(
-    resolveWorkspace,
-    scopes,
-    resourceCatalog,
+    { resolveWorkspace, scopes, catalog: resourceCatalog },
     files.kind === 'serving' ? files.runtime.storage : undefined,
     {
       lock: (name, work) => root.withNamedLock(name, work),
@@ -181,6 +186,7 @@ export async function wireSubsystems({
     endpointClients,
     files,
     runnerManager,
+    runnerManagerFetch,
     runnerManagerUrl,
     resolveProviderCredential,
     oauth,

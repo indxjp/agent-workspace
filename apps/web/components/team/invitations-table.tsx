@@ -28,10 +28,19 @@ import {
   type InvitationResource,
 } from './invitations-model';
 import { describeRole } from './model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 const CARD = 'rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
 const CELL = 'border-b border-border px-4 py-3 text-[13px] align-top';
-const HEAD_CELL = 'border-b border-border px-4 py-2 text-left text-[12px] font-semibold text-muted';
+/**
+ * Japanese has no spaces, so a narrow cell breaks it after any character: on a phone a role or a
+ * date became one character per line. Short cells keep to one line, and a sentence gets a minimum
+ * width; the table scrolls inside its card instead, as it already does for English.
+ */
+const HEAD_CELL =
+  'whitespace-nowrap border-b border-border px-4 py-2 text-left text-[12px] font-semibold text-muted';
+const ONE_LINE = 'whitespace-nowrap';
+const SENTENCE = 'min-w-[14rem]';
 const BTN =
   'inline-flex h-8 items-center rounded-(--radius-sm) border px-[13px] text-[13px] font-medium';
 const BTN_DEFAULT = 'border-border-strong bg-surface text-text';
@@ -69,6 +78,8 @@ interface InvitationsTableProps {
   readonly actionProblem: string | null;
   readonly onResend: (invitation: InvitationResource) => void;
   readonly onRevoke: (invitation: InvitationResource) => void;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  readonly strings?: TeamStrings;
 }
 
 export function InvitationsTable({
@@ -78,19 +89,19 @@ export function InvitationsTable({
   actionProblem,
   onResend,
   onRevoke,
+  strings = teamStrings('en'),
 }: Readonly<InvitationsTableProps>) {
   switch (state.kind) {
     case 'loading':
       return (
         <p className={`${CARD} p-5 text-[13px] text-muted`} role="status">
-          Loading invitations…
+          {strings.loadingInvitations}
         </p>
       );
     case 'refused':
       return (
         <p className={`${CARD} p-5 text-[13px] text-text-2`} role="status">
-          Inviting people is not part of your role in this workspace, so its invitations are not
-          shown here. Ask an Owner or an Admin if someone needs access.
+          {strings.invitationsRefused}
         </p>
       );
     case 'failed':
@@ -108,11 +119,7 @@ export function InvitationsTable({
   }
 
   if (state.invitations.length === 0) {
-    return (
-      <p className={`${CARD} p-5 text-[13px] text-muted`}>
-        No invitations have been sent from this workspace.
-      </p>
-    );
+    return <p className={`${CARD} p-5 text-[13px] text-muted`}>{strings.noInvitations}</p>;
   }
 
   const showActions = capability.canResendInvitation || capability.canRevokeInvitation;
@@ -132,22 +139,22 @@ export function InvitationsTable({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <caption className="px-4 py-3 text-left text-[12.5px] text-muted">
-              Invitations this workspace has sent, and what became of each one.
+              {strings.invitationsCaption}
             </caption>
             <thead>
               <tr>
                 <th className={HEAD_CELL} scope="col">
-                  Invitee
+                  {strings.invitee}
                 </th>
                 <th className={HEAD_CELL} scope="col">
-                  Role
+                  {strings.role}
                 </th>
                 <th className={HEAD_CELL} scope="col">
-                  Status
+                  {strings.status}
                 </th>
                 {showActions ? (
                   <th className={HEAD_CELL} scope="col">
-                    Actions
+                    {strings.actions}
                   </th>
                 ) : null}
               </tr>
@@ -163,6 +170,7 @@ export function InvitationsTable({
                   busy={busyInvitationId === invitation.id}
                   onResend={onResend}
                   onRevoke={onRevoke}
+                  strings={strings}
                 />
               ))}
             </tbody>
@@ -181,6 +189,7 @@ interface InvitationRowProps {
   readonly busy: boolean;
   readonly onResend: (invitation: InvitationResource) => void;
   readonly onRevoke: (invitation: InvitationResource) => void;
+  readonly strings: TeamStrings;
 }
 
 function InvitationRow({
@@ -191,21 +200,22 @@ function InvitationRow({
   busy,
   onResend,
   onRevoke,
+  strings,
 }: Readonly<InvitationRowProps>) {
   const state = invitationStateOf(invitation, nowMs);
   const resendable = canResendInvitation(state, capability);
   const revocable = canRevokeInvitation(state, capability);
-  const settled = describeSettledInvitation(state, capability);
+  const settled = describeSettledInvitation(state, capability, strings);
 
   return (
     <tr>
       <td className={CELL}>
         <div className="font-semibold text-text">{invitation.email}</div>
       </td>
-      <td className={CELL}>{describeRole(invitation.role)}</td>
-      <td className={CELL}>
-        <div className="text-text">{describeInvitationState(state)}</div>
-        <div className="text-muted">{describeInvitationTiming(invitation, state)}</div>
+      <td className={`${CELL} ${ONE_LINE}`}>{describeRole(invitation.role, strings)}</td>
+      <td className={`${CELL} ${ONE_LINE}`}>
+        <div className="text-text">{describeInvitationState(state, strings)}</div>
+        <div className="text-muted">{describeInvitationTiming(invitation, state, strings)}</div>
       </td>
       {showActions ? (
         <td className={CELL}>
@@ -213,26 +223,28 @@ function InvitationRow({
             {resendable ? (
               <button
                 type="button"
-                aria-label={`Resend the invitation for ${invitation.email}`}
+                aria-label={strings.resendLabel(invitation.email)}
                 className={`${BTN} ${BTN_DEFAULT} ${busy ? BTN_DISABLED : ''}`}
                 disabled={busy}
                 onClick={() => onResend(invitation)}
               >
-                Resend
+                {strings.resend}
               </button>
             ) : null}
             {revocable ? (
               <button
                 type="button"
-                aria-label={`Revoke the invitation for ${invitation.email}`}
+                aria-label={strings.revokeLabel(invitation.email)}
                 className={`${BTN} ${BTN_DANGER} ${busy ? BTN_DISABLED : ''}`}
                 disabled={busy}
                 onClick={() => onRevoke(invitation)}
               >
-                Revoke
+                {strings.revoke}
               </button>
             ) : null}
-            {settled === null ? null : <span className="text-[12.5px] text-muted">{settled}</span>}
+            {settled === null ? null : (
+              <span className={`${SENTENCE} text-[12.5px] text-muted`}>{settled}</span>
+            )}
           </div>
         </td>
       ) : null}

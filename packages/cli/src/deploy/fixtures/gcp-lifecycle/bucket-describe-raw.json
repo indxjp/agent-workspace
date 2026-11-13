@@ -1,0 +1,36 @@
+{
+  "etag": "CAI=",
+  "hierarchicalNamespace": {
+    "enabled": false
+  },
+  "iamConfiguration": {
+    "bucketPolicyOnly": {
+      "enabled": true,
+      "lockedTime": "2027-02-02T15:46:12.519000+00:00"
+    },
+    "publicAccessPrevention": "enforced",
+    "uniformBucketLevelAccess": {
+      "enabled": true,
+      "lockedTime": "2027-02-02T15:46:12.519000+00:00"
+    }
+  },
+  "id": "acme-prod-aw-tfstate",
+  "kind": "storage#bucket",
+  "location": "ASIA-NORTHEAST1",
+  "locationType": "region",
+  "metageneration": "2",
+  "name": "acme-prod-aw-tfstate",
+  "projectNumber": "123456789",
+  "rpo": "DEFAULT",
+  "selfLink": "https://www.googleapis.com/storage/v1/b/acme-prod-aw-tfstate",
+  "softDeletePolicy": {
+    "effectiveTime": "2026-11-04T15:46:12.519000+00:00",
+    "retentionDurationSeconds": "604800"
+  },
+  "storageClass": "STANDARD",
+  "timeCreated": "2026-11-04T15:46:12.519000+00:00",
+  "updated": "2026-11-04T15:46:14.102000+00:00",
+  "versioning": {
+    "enabled": true
+  }
+}

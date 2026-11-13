@@ -7,8 +7,10 @@
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { createJsonLogger } from '@agent-workspace/core/telemetry';
+
 import { createRunnerManagerListener } from './manager.js';
-import { runnerManagerOptionsFromEnvironment } from './manager-start.js';
+import { readRunnerManagerOptions, startFailureFields } from './manager-settings.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 type Listener = (req: IncomingMessage, res: ServerResponse) => void;
@@ -18,14 +20,16 @@ export function createRunnerManagerFunction(env: Environment = process.env): Lis
   return (req, res) => {
     if (listener === undefined) {
       try {
-        const { options } = runnerManagerOptionsFromEnvironment({
+        const { options } = readRunnerManagerOptions({
           ...env,
           RUNNER_MANAGER_STATELESS: 'true',
         });
         listener = createRunnerManagerListener(options);
       } catch (error) {
-        process.stderr.write(
-          `runner manager failed to start: ${error instanceof Error ? error.message : String(error)}\n`,
+        // Each refused setting in its own field: the logger cuts a string field at 200 characters.
+        createJsonLogger({ service: 'runner-manager' }).error(
+          'runner manager failed to start',
+          startFailureFields(error),
         );
         res.writeHead(500, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: 'runner_manager_unavailable' }));

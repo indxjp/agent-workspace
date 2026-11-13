@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 
 import { SETUP_QUESTIONS, type SetupAnswers } from '@indx-workspace/contracts/setup';
-import { parseSetupFlags, setupFlagsHelp } from '@indx-workspace/sdk/project';
+import { APP_TEMPLATES, parseSetupFlags, setupFlagsHelp } from '@indx-workspace/sdk/project';
 
 import { CreateUsageError, errorCode } from '../cli-failure.ts';
 import { DEPLOYMENT_CLOUDS, type DeploymentCloud } from '../profile.ts';
@@ -25,6 +25,15 @@ export const DEFAULT_ANSWERS: GeneratorAnswers = {
   authentication: 'local administrator',
 };
 
+/**
+ * The app templates `--template` names (issue #1510): an app over the v2 project, a different
+ * axis from `--theme`, which picks the agent's setup starter.
+ */
+const CREATE_TEMPLATES = APP_TEMPLATES;
+
+/** One of {@link CREATE_TEMPLATES}. */
+export type CreateTemplate = (typeof CREATE_TEMPLATES)[number];
+
 /** `create <dir> [--yes]`: the v2 project `aw dev` runs (S1-16). */
 export interface CreateProjectArguments {
   readonly kind: 'project';
@@ -41,6 +50,8 @@ export interface CreateProjectArguments {
   readonly start: boolean | undefined;
   /** `--answers <file>`: setup answers keyed by question id, under the flags (#879). */
   readonly answersFile: string | undefined;
+  /** `--template <id>`: the app written over the project, recorded in `aw-generated.json`. */
+  readonly template: CreateTemplate | undefined;
 }
 
 /** `create --help`: the usage text, generated from the setup questions. */
@@ -84,6 +95,12 @@ export function createHelp(): string {
     '  --install / --no-install   install the dependencies after writing (asked on a terminal)',
     '  --start / --no-start       run `dev` after installing (asked on a terminal); it stays in',
     '                             the foreground until Ctrl-C and create exits with its code',
+    `  --template <${CREATE_TEMPLATES.join(' | ')}>`,
+    '              also write an app (not with --cloud): portal adds a Next.js app with dashboard,',
+    '              chat, files and runs pages; chat, wiki, crm and desk are presets over it with',
+    '              the recipe pages, the wiki its spaces and pages, the desk its dashboard; a',
+    '              preset takes --theme blank unless --theme is given; the README lists the',
+    '              commands that build the app on',
     '  --help      print this text',
     '',
     'With no terminal, or with CI set, nothing is asked: flags, --answers and defaults are used.',
@@ -123,6 +140,7 @@ const PARSE_ARGS_OPTIONS = {
   runtime: { type: 'string' },
   auth: { type: 'string' },
   port: { type: 'string' },
+  template: { type: 'string' },
   ...Object.fromEntries(SETUP_QUESTIONS.map((question) => [question.flag, { type: 'string' }])),
 } as const;
 
@@ -192,6 +210,7 @@ export function parseCreateArguments(argv: readonly string[]): CreateCommandArgu
     cloud: cloudFlag(flag('cloud')),
     install: flag('install') as boolean | undefined,
     start: flag('start') as boolean | undefined,
+    template: templateFlag(flag('template')),
   };
   if (parsed.start === true && parsed.install === false) {
     throw new CreateUsageError(
@@ -228,6 +247,18 @@ interface ParsedFlags {
   readonly cloud: DeploymentCloud | null;
   readonly install: boolean | undefined;
   readonly start: boolean | undefined;
+  readonly template: CreateTemplate | undefined;
+}
+
+function templateFlag(requested: string | boolean | undefined): CreateTemplate | undefined {
+  if (typeof requested !== 'string') return undefined;
+  const template = CREATE_TEMPLATES.find((candidate) => candidate === requested);
+  if (template === undefined) {
+    throw new CreateUsageError(
+      `Unknown --template ${JSON.stringify(requested)}. Choose one of ${CREATE_TEMPLATES.join(', ')}.`,
+    );
+  }
+  return template;
 }
 
 function generatorFlags(
@@ -297,6 +328,7 @@ function projectArguments(
     install: parsed.start === true ? true : parsed.install,
     start: parsed.start,
     answersFile: parsed.answersFile,
+    template: parsed.template,
   };
 }
 
@@ -307,6 +339,12 @@ function deploymentArguments(
   directory: string,
   port: number | undefined,
 ): CreateDeploymentArguments {
+  if (parsed.template !== undefined) {
+    throw new CreateUsageError(
+      '--template writes an app over the project create writes without --cloud; a deployment ' +
+        'project has no app. Pass one or the other.',
+    );
+  }
   if (parsed.install !== undefined || parsed.start !== undefined) {
     throw new CreateUsageError(
       '--install and --start belong to the project create writes without --cloud.',

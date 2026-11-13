@@ -16,9 +16,11 @@
  * verified). `unavailable` is what `installSkillsApi` leaves behind when the storage root is unset,
  * overlaps the files root, or its bucket was refused or could not be reached; the root logs which.
  */
-import type { WorkspaceSkillsStoreProvider } from '../storage/store';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
-import type { StorageService } from '../storage/service';
+import type {
+  ResourceCatalogStoreProvider,
+  StorageService,
+  WorkspaceSkillsStoreProvider,
+} from '../storage-and-sharing';
 
 /** Who the caller is, as far as the skills routes need to know. Mirrors `files/runtime.ts`'s. */
 export type WorkspaceResolution =

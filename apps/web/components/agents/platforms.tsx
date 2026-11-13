@@ -48,19 +48,29 @@ export function AgentTabs({
   agentId,
   current,
   locale,
-}: Readonly<{ agentId: string; current: AgentTab; locale: VersionsLocale }>) {
+  schedules = true,
+}: Readonly<{
+  agentId: string;
+  current: AgentTab;
+  locale: VersionsLocale;
+  /** Whether the Schedules tab shows: hidden while the workspace has triggers switched off. */
+  schedules?: boolean;
+}>) {
   const strings = versionsStrings(locale);
   const base = `/agents/${encodeURIComponent(agentId)}`;
   const tabs: readonly { tab: AgentTab; href: string; label: string }[] = [
     { tab: 'configuration', href: base, label: strings.tabConfiguration },
     { tab: 'versions', href: `${base}?tab=versions`, label: strings.tabVersions },
     { tab: 'platforms', href: `${base}?tab=platforms`, label: strings.tabPlatforms },
+    ...(schedules
+      ? [{ tab: 'schedules' as const, href: `${base}?tab=schedules`, label: strings.tabSchedules }]
+      : []),
   ];
   return (
     <nav
       aria-label={strings.tabsLabel}
       lang={locale}
-      className="flex gap-4 px-8 pt-[26px] text-[13px]"
+      className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-[26px] text-[13px] sm:px-8"
     >
       {tabs.map(({ tab, href, label }) => (
         <Link

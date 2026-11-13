@@ -1,3 +1,5 @@
+import { createVercelHttp } from './vercel/http.js';
+import { asRecord, failure, failed } from './vercel/errors.js';
 /**
  * The Vercel Sandbox provider behind the `vercel-sandbox` driver (ADR-0120 LC1-LC4, LC6), over REST
  * with `fetch`: `@vercel/sandbox` is on `denyByName`, and no Vercel type leaves this file. It plugs
@@ -54,7 +56,7 @@ const RUNNER_PORT = 8080;
 /** `runtime.Dockerfile`'s `CMD`: Vercel does not run an image's ENTRYPOINT or CMD (LC2). */
 const RUNNER_ENTRY = '/srv/apps/runner/dist/index.js';
 const RUNNER_CWD = '/workspace';
-const REQUEST_TIMEOUT_MS = 30_000;
+
 const CREATE_TIMEOUT_MS = 120_000;
 const NAMED_CREATE_ATTEMPTS = 30;
 const NAMED_RETRY_DELAY_MS = 1_000;
@@ -92,15 +94,6 @@ function networkPolicyBody(request: ExternalSandboxRequest): Record<string, unkn
  * short redacted reason (`providerDetail`). A transport error may echo the token, so it is never put
  * in an error (LC6).
  */
-function failure(operation: string, status?: number, detail?: string): Error {
-  return new Error(
-    `vercel-sandbox runtime: provider vercel ${operation} failed${status === undefined ? '' : ` with status ${String(status)}`}${detail === undefined ? '' : ` (${detail})`}.`,
-  );
-}
-
-const DETAIL_MAX_BYTES = 4_096;
-const DETAIL_REASON_MAX = 160;
-const ERROR_CODE = /^[A-Za-z0-9_.-]{1,64}$/u;
 
 /**
  * Reads at most 4 KiB of a failed response and reduces `{ error: { code, message } }` to
@@ -108,57 +101,6 @@ const ERROR_CODE = /^[A-Za-z0-9_.-]{1,64}$/u;
  * literal token, any `Bearer` value and any long opaque run, and is capped. It never throws: an
  * unreadable, oversized or non-JSON body gives `undefined` and the message keeps only the status.
  */
-async function providerDetail(response: Response, token: string): Promise<string | undefined> {
-  try {
-    const reader = response.body?.getReader();
-    if (reader === undefined) return undefined;
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (size < DETAIL_MAX_BYTES) {
-      const next = await reader.read();
-      const value: unknown = next.value;
-      if (next.done || !(value instanceof Uint8Array)) break;
-      chunks.push(value);
-      size += value.length;
-    }
-    await reader.cancel();
-    const error = asRecord(
-      asRecord(
-        JSON.parse(
-          new TextDecoder().decode(Buffer.concat(chunks).subarray(0, DETAIL_MAX_BYTES)),
-        ) as unknown,
-      )['error'],
-    );
-    const code = error['code'];
-    const message = error['message'];
-    const reason =
-      typeof message === 'string'
-        ? message
-            .split(token)
-            .join('[redacted]')
-            .replace(/Bearer\s+\S+/giu, 'Bearer [redacted]')
-            .replace(/[A-Za-z0-9_~+=-]{20,}/gu, '[redacted]')
-            .replace(/\s+/gu, ' ')
-            .trim()
-            .slice(0, DETAIL_REASON_MAX)
-        : '';
-    const codePart = typeof code === 'string' && ERROR_CODE.test(code) ? `code ${code}` : '';
-    if (codePart === '') return reason === '' ? undefined : reason;
-    return reason === '' ? codePart : `${codePart}: ${reason}`;
-  } catch {
-    return undefined;
-  }
-}
-
-async function failed(operation: string, response: Response, token: string): Promise<Error> {
-  return failure(operation, response.status, await providerDetail(response, token));
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
 
 /** The public origin of the runner port, taken from the create response's `routes` (LC3). */
 function runnerOrigin(routes: unknown): string | undefined {
@@ -178,77 +120,51 @@ function runnerOrigin(routes: unknown): string | undefined {
   return undefined;
 }
 
-export function createVercelSandboxProvider(
-  options: Readonly<{
-    teamId: string;
-    projectId: string;
-    tier?: VercelPlanTier;
-    apiBase?: string;
-    fetch?: typeof globalThis.fetch;
-    /** Pause between looks at a sandbox another create of the same session is still bringing up. */
-    retryDelayMs?: number;
-  }>,
-): ExternalProvider {
-  const retryDelayMs = options.retryDelayMs ?? NAMED_RETRY_DELAY_MS;
-  const doFetch = options.fetch ?? globalThis.fetch;
-  const apiBase = (options.apiBase ?? 'https://api.vercel.com').replace(/\/+$/u, '');
-  const capabilities = vercelSandboxRuntimeCapabilities(options.tier);
+function waitForNamedSandbox(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
 
-  async function call(
-    operation: string,
-    path: string,
-    token: string,
-    init: RequestInit,
-    query: Record<string, string> = {},
-    timeoutMs: number = REQUEST_TIMEOUT_MS,
-  ): Promise<Response> {
-    const search = new URLSearchParams({ teamId: options.teamId, ...query });
-    try {
-      return await doFetch(`${apiBase}${path}?${search.toString()}`, {
-        ...init,
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        redirect: 'error',
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch {
-      throw failure(operation);
-    }
+type VercelSandboxOptions = Readonly<{
+  teamId: string;
+  projectId: string;
+  tier?: VercelPlanTier;
+  apiBase?: string;
+  fetch?: typeof globalThis.fetch;
+  /** Pause between looks at a sandbox another create of the same session is still bringing up. */
+  retryDelayMs?: number;
+}>;
+
+type NamedState =
+  | Readonly<{ kind: 'absent' | 'stopped' | 'busy' }>
+  | Readonly<{ kind: 'usable'; sandbox: FoundExternalSandbox }>;
+
+class VercelSandboxLifecycle {
+  private readonly projectId: string;
+  private readonly retryDelayMs: number;
+  private readonly call: ReturnType<typeof createVercelHttp>['call'];
+  private readonly post: ReturnType<typeof createVercelHttp>['post'];
+  private readonly get: ReturnType<typeof createVercelHttp>['get'];
+
+  constructor(options: VercelSandboxOptions) {
+    this.projectId = options.projectId;
+    this.retryDelayMs = options.retryDelayMs ?? NAMED_RETRY_DELAY_MS;
+    const { call, post, get } = createVercelHttp(options);
+    this.call = call;
+    this.post = post;
+    this.get = get;
   }
 
-  async function post(
-    operation: string,
-    path: string,
-    token: string,
-    body: unknown,
-    timeoutMs?: number,
-  ): Promise<unknown> {
-    const response = await call(
-      operation,
-      path,
-      token,
-      { method: 'POST', body: JSON.stringify(body) },
-      {},
-      timeoutMs,
-    );
-    if (!response.ok) throw await failed(operation, response, token);
-    try {
-      return await response.json();
-    } catch {
-      throw failure(operation);
-    }
-  }
-
-  async function destroy(sandboxName: string, token: string): Promise<void> {
+  async destroy(sandboxName: string, token: string): Promise<void> {
     // DELETE /v2/sandboxes/{name} stops a running session first and answers 404 for an unknown or
     // already-deleted sandbox (https://vercel.com/docs/rest-api/sandboxes/delete-a-sandbox,
     // checked 2026-10-08). Deleting the named sandbox also drops its snapshots with it.
-    const response = await call(
-      'destroy',
-      `/v2/sandboxes/${encodeURIComponent(sandboxName)}`,
-      token,
-      { method: 'DELETE' },
-      { projectId: options.projectId },
-    );
+    const response = await this.call({
+      operation: 'destroy',
+      path: `/v2/sandboxes/${encodeURIComponent(sandboxName)}`,
+      token: token,
+      init: { method: 'DELETE' },
+      query: { projectId: this.projectId },
+    });
     if (response.ok || response.status === 404) {
       await response.body?.cancel();
       return;
@@ -265,20 +181,20 @@ export function createVercelSandboxProvider(
    * without a description; it is read as "that name is taken" (undefined here) and nothing is
    * deleted on it. That meaning is not yet proven live (E7), so the caller re-reads the name.
    */
-  async function postCreate(
+  async postCreate(
     request: ExternalSandboxRequest,
     token: string,
     name: string,
   ): Promise<Record<string, unknown> | undefined> {
-    const response = await call(
-      'create',
-      '/v4/sandboxes',
-      token,
-      {
+    const response = await this.call({
+      operation: 'create',
+      path: '/v4/sandboxes',
+      token: token,
+      init: {
         method: 'POST',
         body: JSON.stringify({
           name,
-          projectId: options.projectId,
+          projectId: this.projectId,
           image: request.image,
           ports: [RUNNER_PORT],
           timeout: request.timeoutSeconds * 1_000,
@@ -286,9 +202,9 @@ export function createVercelSandboxProvider(
           networkPolicy: networkPolicyBody(request),
         }),
       },
-      {},
-      CREATE_TIMEOUT_MS,
-    );
+      query: {},
+      timeoutMs: CREATE_TIMEOUT_MS,
+    });
     if (response.status === 409) {
       await response.body?.cancel();
       return undefined;
@@ -301,7 +217,7 @@ export function createVercelSandboxProvider(
     }
   }
 
-  async function startCreated(
+  async startCreated(
     request: ExternalSandboxRequest,
     token: string,
     name: string,
@@ -320,14 +236,14 @@ export function createVercelSandboxProvider(
     // 2026-10-08).
     const grantedMs = session['timeout'];
     if (typeof grantedMs === 'number' && grantedMs < requestedMs) {
-      await post('extend', `/v2/sandboxes/sessions/${sessionId}/extend-timeout`, token, {
+      await this.post('extend', `/v2/sandboxes/sessions/${sessionId}/extend-timeout`, token, {
         duration: requestedMs - grantedMs,
       });
     }
     // POST .../cmd without `wait` returns at once with the command id
     // (https://vercel.com/docs/rest-api/sandboxes/execute-a-command, checked 2026-10-08). The
     // image's own ENV is not assumed to apply, so the runner's settings are spelled out.
-    await post('start the runner', `/v2/sandboxes/sessions/${sessionId}/cmd`, token, {
+    await this.post('start the runner', `/v2/sandboxes/sessions/${sessionId}/cmd`, token, {
       command: 'node',
       args: [RUNNER_ENTRY],
       cwd: RUNNER_CWD,
@@ -341,29 +257,6 @@ export function createVercelSandboxProvider(
     return { sandboxId: name, origin, accessHeaders: {} };
   }
 
-  async function get(
-    operation: string,
-    path: string,
-    token: string,
-    query: Record<string, string> = {},
-  ): Promise<unknown> {
-    const response = await call(operation, path, token, { method: 'GET' }, query);
-    if (response.status === 404) {
-      await response.body?.cancel();
-      return undefined;
-    }
-    if (!response.ok) throw await failed(operation, response, token);
-    try {
-      return await response.json();
-    } catch {
-      throw failure(operation);
-    }
-  }
-
-  type NamedState =
-    | Readonly<{ kind: 'absent' | 'stopped' | 'busy' }>
-    | Readonly<{ kind: 'usable'; sandbox: FoundExternalSandbox }>;
-
   /**
    * GET /v2/sandboxes/{name} answers the named sandbox with `status` (running | stopping |
    * stopped), `currentSessionId` and, while a session runs, `expiresAt` in epoch milliseconds; 404
@@ -373,11 +266,11 @@ export function createVercelSandboxProvider(
    * checked 2026-10-08). `stopped` is the only state read as dead; anything else that is not yet
    * usable is `busy`, because another create of the same session may still be starting it.
    */
-  async function namedState(name: string, token: string): Promise<NamedState> {
+  async namedState(name: string, token: string): Promise<NamedState> {
     const named = asRecord(
       asRecord(
-        await get('find', `/v2/sandboxes/${encodeURIComponent(name)}`, token, {
-          projectId: options.projectId,
+        await this.get('find', `/v2/sandboxes/${encodeURIComponent(name)}`, token, {
+          projectId: this.projectId,
         }),
       )['sandbox'],
     );
@@ -395,7 +288,7 @@ export function createVercelSandboxProvider(
       return { kind: 'busy' };
     }
     const session = asRecord(
-      await get('find', `/v2/sandboxes/sessions/${encodeURIComponent(sessionId)}`, token),
+      await this.get('find', `/v2/sandboxes/sessions/${encodeURIComponent(sessionId)}`, token),
     );
     const origin = runnerOrigin(session['routes']);
     if (origin === undefined || asRecord(session['session'])['status'] !== 'running') {
@@ -414,35 +307,40 @@ export function createVercelSandboxProvider(
    * between the two round trips can lose its fresh sandbox; closing that needs a conditional delete
    * from the provider. Add it when the live lane (E7) shows it matters.
    */
-  async function createNamed(
+  async createNamed(
     request: ExternalSandboxRequest,
     token: string,
     name: string,
   ): Promise<ExternalSandbox> {
     for (let attempt = 0; attempt < NAMED_CREATE_ATTEMPTS; attempt += 1) {
-      const state = await namedState(name, token);
+      const state = await this.namedState(name, token);
       if (state.kind === 'usable') return state.sandbox;
       if (state.kind === 'busy') {
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        await waitForNamedSandbox(this.retryDelayMs);
         continue;
       }
-      if (state.kind === 'stopped') await destroy(name, token);
-      const created = await postCreate(request, token, name);
+      if (state.kind === 'stopped') await this.destroy(name, token);
+      const created = await this.postCreate(request, token, name);
       if (created === undefined) {
         // A lost race: the rival's sandbox may not be readable yet, so wait as for `busy`.
-        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        await waitForNamedSandbox(this.retryDelayMs);
         continue;
       }
       try {
-        return await startCreated(request, token, name, created);
+        return await this.startCreated(request, token, name, created);
       } catch (error) {
         // Our own POST succeeded, so this sandbox is ours to remove; a 404 is accepted.
-        await destroy(name, token).catch(() => undefined);
+        await this.destroy(name, token).catch(() => undefined);
         throw error;
       }
     }
     throw failure('create');
   }
+}
+
+export function createVercelSandboxProvider(options: VercelSandboxOptions): ExternalProvider {
+  const lifecycle = new VercelSandboxLifecycle(options);
+  const capabilities = vercelSandboxRuntimeCapabilities(options.tier);
 
   return {
     id: 'vercel',
@@ -454,30 +352,30 @@ export function createVercelSandboxProvider(
       // collides and no session key reaches the provider. A stateless driver (ADR-0126) names it
       // from its lookup key instead, so `find` can reach it; `createNamed` makes that idempotent.
       if (request.lookupKey !== undefined) {
-        return await createNamed(request, token, `aw-${request.lookupKey}`);
+        return await lifecycle.createNamed(request, token, `aw-${request.lookupKey}`);
       }
       const name = `aw-${randomBytes(18).toString('base64url')}`;
       try {
-        const created = await postCreate(request, token, name);
+        const created = await lifecycle.postCreate(request, token, name);
         if (created === undefined) throw failure('create', 409);
-        return await startCreated(request, token, name, created);
+        return await lifecycle.startCreated(request, token, name, created);
       } catch (error) {
         // The sandbox may exist (a later step failed, or a response was lost): do not leave it
         // running. Deleting an unknown name is a 404, which `destroy` accepts.
-        await destroy(name, token).catch(() => undefined);
+        await lifecycle.destroy(name, token).catch(() => undefined);
         throw error;
       }
     },
 
     async destroy(sandboxId, token): Promise<void> {
       if (!SANDBOX_NAME.test(sandboxId)) throw failure('destroy');
-      await destroy(sandboxId, token);
+      await lifecycle.destroy(sandboxId, token);
     },
 
     async find(lookupKey, token): Promise<FoundExternalSandbox | undefined> {
       const name = `aw-${lookupKey}`;
       if (!SANDBOX_NAME.test(name)) throw failure('find');
-      const state = await namedState(name, token);
+      const state = await lifecycle.namedState(name, token);
       return state.kind === 'usable' ? state.sandbox : undefined;
     },
   };

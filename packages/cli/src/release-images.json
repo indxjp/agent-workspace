@@ -5,6 +5,8 @@
     "web": "web",
     "gateway": "gateway",
     "runner": "runner",
-    "runtime": "runtime-claude-agent-sdk"
+    "runtime": "runtime-claude-agent-sdk",
+    "egressProxy": "egress-proxy",
+    "toolHost": "tool-host"
   }
 }

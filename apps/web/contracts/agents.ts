@@ -24,6 +24,7 @@ export {
   AgentSkillPolicySchema,
   AgentToolPermissionModeSchema,
   AgentToolPolicySchema,
+  agentMemoryEnabled,
   agentRequestIssueMessages,
   BUILTIN_AGENT_PROBLEM_CODES,
   type BuiltinAgentProblemCode,

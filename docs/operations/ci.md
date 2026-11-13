@@ -15,18 +15,28 @@ opens or updates an issue (`nightly-alarm.yml`). The label `ci:full` on a pull r
 tier early, from the next push after it is added. A body edit re-runs the fast checks only, even on a
 `ci:full` pull request.
 
-Every Linux job runs on the organisation's self-hosted MS-A2 pool, `[self-hosted, ms-a2]`: eight
-runners on one host (`ito-MS-A2`, `ito-MS-A2-2` … `-8`), so up to eight jobs run at once and share
-its Docker daemon. The Windows jobs (`blacksmith-4vcpu-windows-2025`) and the macOS install
+The light jobs every pull request and queue group waits on run on GitHub's hosted `ubuntu-latest`:
+`fast checks`, the two `cancel-on-*` jobs and `CI success` in `ci.yml`, and every job of
+`quality.yml`, `security.yml`, `internal-checks.yml`, `ci-nx-cache.yml` and `nightly-alarm.yml`.
+They only check, call an API or summarise, and on the pool they waited 5-18 minutes for a slot that a
+hosted runner gives in seconds (ADR-0053, Amendment 2026-11-05). `build` and `build-embedded` run on
+`blacksmith-8vcpu-ubuntu-2404`. The other Linux jobs run on the organisation's self-hosted MS-A2
+pool, `[self-hosted, ms-a2]`: eight runners on one host (`ito-MS-A2`, `ito-MS-A2-2` … `-8`), so up
+to eight jobs run at once and share its Docker daemon and its apt lock. Every Chromium install
+therefore goes through `scripts/ci/playwright-install.sh install|install-deps`: when Playwright's
+apt step fails because another job holds the apt/dpkg lock, it waits and tries again (up to 8
+attempts, at most about 7 minutes); any other failure is returned at once. The Windows jobs (`blacksmith-4vcpu-windows-2025`) and the macOS install
 lane (`blacksmith-6vcpu-macos-latest`) stay on Blacksmith, and so do the few long Linux jobs that held
 a pool slot longest per Blacksmith dollar or need a Docker daemon of their own: the inner-loop
-`typecheck · Nx task graph`, `lint · Nx task graph` and the four `tests · <shard>` jobs (ADR-0053,
-Amendment 2026-10-25), `formal`,
+`typecheck and lint · Nx task graph` (ADR-0053, Amendments 2026-10-25 and 2026-11-10), `formal`,
 `journey-e2e`, `docs-claims`, `tool-sandbox-e2e` and `browser` (`blacksmith-8vcpu-ubuntu-2404`), `OSS export ·
-dry run` (`blacksmith-2vcpu-ubuntu-2404`) and the isolation `kind` and `kind-deploy` lanes
-(`blacksmith-4vcpu-ubuntu-2404`) (ADR-0053, second Amendment 2026-10-23). In `ci.yml`, `quality.yml`,
+dry run` and the Lean cache lookup on main, `formal-cache-lookup` (`blacksmith-2vcpu-ubuntu-2404`; Amendment 2026-11-10) and the isolation `kind` and `kind-deploy` lanes
+(`blacksmith-4vcpu-ubuntu-2404`) (ADR-0053, second Amendment 2026-10-23). The four `tests · <shard>`
+jobs (`heavy-checks`) run on the organisation's runner group `heavy-ci` with the labels
+`[self-hosted, docker]`: the MS-A2 runners and the GX10's CI runners (arm64) that have Docker, and
+GitHub hands each shard to whichever is idle (ADR-0053, Amendment 2026-11-08). In `ci.yml`, `quality.yml`,
 `security.yml`, `internal-checks.yml` and `ci-nx-cache.yml`, `scripts/check-workflows.mjs` refuses any
-label but `[self-hosted, ms-a2]`, except the Blacksmith label of the `ci.yml` jobs above (`OFFLOADED_JOBS`; ADR-0053, Amendments 2026-10-23 and 2026-10-25). The same files run in the public export, so each of those `runs-on` is an expression on
+label but `[self-hosted, ms-a2]`, except the Blacksmith label of the `ci.yml` jobs above (`OFFLOADED_JOBS`; ADR-0053, Amendments 2026-10-23, 2026-10-25 and 2026-11-05), the `heavy-ci` group on `heavy-checks` (`HEAVY_CI_JOBS`, Amendment 2026-11-08) and plain `ubuntu-latest` on the light jobs (`HOSTED_JOBS`, which may use nothing else). The same files run in the public export, so each of those `runs-on` is an expression on
 `github.repository_owner` that falls back to `ubuntu-latest` (or `windows-latest`) outside INDXDev,
 and every job of the workflows that spend money (the live, cloud and deployment lanes, the Nx cache
 gate and the nightly alarm) starts with `if: github.repository_owner == 'INDXDev'`; the export gate
@@ -37,14 +47,15 @@ per runner (`$RUNNER_NAME`) and removes them when it ends. The two Compose E2Es
 not 3000, and the coverage floors cap Vitest at 8 workers; the steps that delete preinstalled SDKs,
 prune Docker or add swap are skipped on it. In `ci.yml`, the `build` job runs `nx run-many -t build`
 once for every workspace but `@indx-workspace/embedded` and uploads the outputs as the
-`workspace-build` artifact; on MS-A2 it also copies the archive into the host's handoff directory
-(`$AW_CI_HANDOFF_DIR`), which the jobs there read instead of downloading. Beside it, `build-embedded` runs embedded's webpack build, uploads
+`workspace-build` artifact. (On MS-A2 it also copied the archive into the host's handoff directory,
+`$AW_CI_HANDOFF_DIR`; since it runs on Blacksmith that step does nothing and the jobs download the
+artifact.) Beside it, `build-embedded` runs embedded's webpack build, uploads
 `embedded-build` and runs embedded's tests. The jobs that
 need built packages restore them (`.github/actions/workspace-build`) instead of building; only
 `release-checks`, `generated-project-e2e`, `journey-e2e` and `docs-claims` wait for embedded. `release-images` (the runtime, gateway and egress-proxy image
 checks) needs neither build and starts at once:
 `typecheck-lint`
-(typecheck and lint, one target per runner), `heavy-checks` (four test shards, one Vitest task per
+(typecheck and lint one after the other on one runner, ADR-0053, Amendment 2026-11-10), `heavy-checks` (four test shards, one Vitest task per
 project), `release-checks`, `formal`, `generated-project-e2e`, `journey-e2e` (then
 `tests/journey/run.mjs`, the slice-1 developer-journey exit test), `docs-claims` and
 `tool-sandbox-e2e`. Their Nx targets run with `--excludeTaskDependencies`, so nothing is rebuilt.
@@ -77,6 +88,13 @@ check and not a `ci-success` need, so a model outage never blocks a merge. It ne
 secret `ANTHROPIC_API_KEY` and fails at its first step, naming the secret, when it is missing. Its
 `journey-live-timings` artifact holds the same record as `journey-timings`, with `model: "live"`
 and each widget answer's first-token latency under `firstTokenSeconds`.
+
+`model-providers-live.yml` checks prompt caching against the real Anthropic API, weekly and on
+`workflow_dispatch` (`node tests/providers-live/prompt-caching.live.mjs`). It sends three small
+requests through the gateway's own `anthropic` provider: one that writes a ~6,000-token cache, then
+one plain and one streamed request that must read it. It fails when a request does not, or when the
+gateway's usage record differs from the API's. It is not a required check. It needs the same
+`ANTHROPIC_API_KEY` secret, and its `anthropic-prompt-caching` artifact holds the usage counts only.
 
 **Nx OSS stays; Nx Cloud is gone.** The task graph, `nx affected`, hashing, the inputs and outputs
 declared in `nx.json` and each `package.json`'s `nx` block, and the local cache are all Nx OSS.

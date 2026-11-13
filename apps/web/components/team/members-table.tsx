@@ -25,10 +25,19 @@ import {
   type MembershipResource,
   type MembershipRoleName,
 } from './model';
+import { teamStrings, type TeamStrings } from './team-messages';
 
 const CARD = 'rounded-(--radius) border border-border bg-surface shadow-(--shadow)';
 const CELL = 'border-b border-border px-4 py-3 text-[13px] align-top';
-const HEAD_CELL = 'border-b border-border px-4 py-2 text-left text-[12px] font-semibold text-muted';
+/**
+ * Japanese has no spaces, so a narrow cell breaks it after any character: on a phone a role or a
+ * date became one character per line. Short cells keep to one line, and a sentence gets a minimum
+ * width; the table scrolls inside its card instead, as it already does for English.
+ */
+const HEAD_CELL =
+  'whitespace-nowrap border-b border-border px-4 py-2 text-left text-[12px] font-semibold text-muted';
+const ONE_LINE = 'whitespace-nowrap';
+const SENTENCE = 'min-w-[16rem]';
 const CONTROL =
   'h-8 rounded-(--radius-sm) border border-border-strong bg-surface px-2 text-[13px] text-text';
 const BTN =
@@ -57,6 +66,8 @@ interface MembersTableProps {
   readonly roleProblem: string | null;
   readonly onChangeRole: (member: MembershipResource, role: MembershipRoleName) => void;
   readonly onRemove: (member: MembershipResource) => void;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  readonly strings?: TeamStrings;
 }
 
 export function MembersTable({
@@ -66,12 +77,13 @@ export function MembersTable({
   roleProblem,
   onChangeRole,
   onRemove,
+  strings = teamStrings('en'),
 }: Readonly<MembersTableProps>) {
   switch (state.kind) {
     case 'loading':
       return (
         <p className={`${CARD} p-5 text-[13px] text-muted`} role="status">
-          Loading members…
+          {strings.loadingMembers}
         </p>
       );
     case 'refused':
@@ -79,8 +91,7 @@ export function MembersTable({
       // and the only honest rendering of a refusal is to say it was refused.
       return (
         <p className={`${CARD} p-5 text-[13px] text-text-2`} role="status">
-          Managing members is not part of your role in this workspace, so its member list is not
-          shown here. Ask an Owner or an Admin if you need a change made.
+          {strings.membersRefused}
         </p>
       );
     case 'failed':
@@ -98,11 +109,7 @@ export function MembersTable({
   }
 
   if (state.members.length === 0) {
-    return (
-      <p className={`${CARD} p-5 text-[13px] text-muted`}>
-        This workspace has no members yet. Members join by accepting an invitation.
-      </p>
-    );
+    return <p className={`${CARD} p-5 text-[13px] text-muted`}>{strings.noMembers}</p>;
   }
 
   const soleOwner = soleOwnerUserId(state.members);
@@ -126,22 +133,22 @@ export function MembersTable({
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <caption className="px-4 py-3 text-left text-[12.5px] text-muted">
-              Active members of this workspace and the role each one holds.
+              {strings.membersCaption}
             </caption>
             <thead>
               <tr>
                 <th className={HEAD_CELL} scope="col">
-                  Member
+                  {strings.member}
                 </th>
                 <th className={HEAD_CELL} scope="col">
-                  Role
+                  {strings.role}
                 </th>
                 <th className={HEAD_CELL} scope="col">
-                  Joined
+                  {strings.joined}
                 </th>
                 {showActions ? (
                   <th className={HEAD_CELL} scope="col">
-                    Actions
+                    {strings.actions}
                   </th>
                 ) : null}
               </tr>
@@ -157,6 +164,7 @@ export function MembersTable({
                   busy={busyMembershipId === member.id}
                   onChangeRole={onChangeRole}
                   onRemove={onRemove}
+                  strings={strings}
                 />
               ))}
             </tbody>
@@ -175,6 +183,7 @@ interface MemberRowProps {
   readonly busy: boolean;
   readonly onChangeRole: (member: MembershipResource, role: MembershipRoleName) => void;
   readonly onRemove: (member: MembershipResource) => void;
+  readonly strings: TeamStrings;
 }
 
 function MemberRow({
@@ -185,10 +194,11 @@ function MemberRow({
   busy,
   onChangeRole,
   onRemove,
+  strings,
 }: Readonly<MemberRowProps>) {
   const roles = roleOptionsFor(member, capability, soleOwner);
   const removable = canRemoveMember(member, capability, soleOwner);
-  const withheld = describeWithheldControls(member, capability, soleOwner);
+  const withheld = describeWithheldControls(member, capability, soleOwner, strings);
 
   return (
     <tr>
@@ -197,20 +207,20 @@ function MemberRow({
           {member.name}
           {isCurrentUser(member, capability) ? (
             <span className="ml-2 rounded-(--radius-sm) border border-border-strong px-1.5 py-0.5 text-[11px] font-normal text-muted">
-              You
+              {strings.you}
             </span>
           ) : null}
         </div>
         <div className="text-muted">{member.email}</div>
       </td>
-      <td className={CELL}>{describeRole(member.role)}</td>
-      <td className={CELL}>{formatTeamDate(member.createdAt)}</td>
+      <td className={`${CELL} ${ONE_LINE}`}>{describeRole(member.role, strings)}</td>
+      <td className={`${CELL} ${ONE_LINE}`}>{formatTeamDate(member.createdAt, strings)}</td>
       {showActions ? (
         <td className={CELL}>
           <div className="flex items-center gap-2">
             {roles.length === 0 ? null : (
               <select
-                aria-label={`Role for ${member.name}`}
+                aria-label={strings.roleFor(member.name)}
                 className={CONTROL}
                 disabled={busy}
                 value={member.role}
@@ -221,10 +231,10 @@ function MemberRow({
               >
                 {/* The held role is an option so the control shows it, and choosing it is a no-op
                     the `onChange` above never turns into a request. */}
-                <option value={member.role}>{describeRole(member.role)}</option>
+                <option value={member.role}>{describeRole(member.role, strings)}</option>
                 {roles.map((role) => (
                   <option key={role} value={role}>
-                    {describeRole(role)}
+                    {describeRole(role, strings)}
                   </option>
                 ))}
               </select>
@@ -232,16 +242,16 @@ function MemberRow({
             {removable ? (
               <button
                 type="button"
-                aria-label={`Remove ${member.name}`}
+                aria-label={strings.removeLabel(member.name)}
                 className={`${BTN} ${busy ? BTN_DISABLED : ''}`}
                 disabled={busy}
                 onClick={() => onRemove(member)}
               >
-                Remove
+                {strings.remove}
               </button>
             ) : null}
             {withheld === null ? null : (
-              <span className="text-[12.5px] text-muted">{withheld}</span>
+              <span className={`${SENTENCE} text-[12.5px] text-muted`}>{withheld}</span>
             )}
           </div>
         </td>

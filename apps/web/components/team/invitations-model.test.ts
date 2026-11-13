@@ -124,7 +124,7 @@ describe('describeInvitationState and describeInvitationTiming', () => {
   const states: readonly InvitationState[] = ['pending', 'expired', 'accepted', 'revoked'];
 
   it('names every state', () => {
-    expect(states.map(describeInvitationState)).toEqual([
+    expect(states.map((state) => describeInvitationState(state))).toEqual([
       'Pending',
       'Expired',
       'Accepted',

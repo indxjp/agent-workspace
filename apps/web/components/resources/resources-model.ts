@@ -3,7 +3,12 @@
  * functions over an SDK client so they are testable with the SDK's `fetchDouble`. The client
  * validates every answer against the contracts, so a screen never reads an unchecked body.
  */
-import type { FileResource } from '@indx-workspace/contracts/files';
+import {
+  MAX_SEARCH_LIMIT,
+  MAX_UPLOAD_BYTES,
+  type FileResource,
+  type FileSearchResponse,
+} from '@indx-workspace/contracts/files';
 import type { ConnectorAuthType, CreateConnectorInput } from '@indx-workspace/contracts/connectors';
 import { MEMBERSHIP_ROLES } from '@indx-workspace/contracts/team';
 import {
@@ -11,6 +16,8 @@ import {
   ContractViolationError,
   type AgentWorkspaceClient,
 } from '@indx-workspace/sdk';
+
+import { ENGLISH_FILES_STRINGS as EN_FILES, type FilesStrings } from './files-messages';
 
 /** What a failed call says: the server's message and details, as the screens always showed. */
 /** The SDK client the screens hand to the model; only this file imports the SDK. */
@@ -24,13 +31,19 @@ export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** A failed call as the one-line `<what> returned <status>.` a few screens use. */
-function statusText(error: unknown, what: string): Error {
-  return error instanceof ApiProblemError
-    ? new Error(`${what} returned ${String(error.status)}.`)
-    : error instanceof Error
-      ? error
-      : new Error(String(error));
+/**
+ * A failure the Files screen worded itself, not the server: `message` is the English sentence the
+ * screen always printed, and `say` words it for another reader (UX-15 in #2086).
+ */
+export class FilesClientError extends Error {
+  constructor(
+    message: string,
+    readonly say: (words: FilesStrings) => string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'FilesClientError';
+  }
 }
 
 function base64(value: string): string {
@@ -49,8 +62,43 @@ export function listFiles(
   return client.files.list({ path });
 }
 
+/** The text search of the workspace's files, as many passages as one answer may carry. */
+export function searchFiles(
+  client: AgentWorkspaceClient,
+  query: string,
+): Promise<FileSearchResponse> {
+  return client.files.search(query, { limit: MAX_SEARCH_LIMIT });
+}
+
+/** `bytes` in MiB, one decimal under 10 MiB: "64 MiB", "2.5 MiB". */
+function mebibytes(bytes: number): string {
+  const value = bytes / 1024 / 1024;
+  return `${value < 10 ? String(Math.round(value * 10) / 10) : String(Math.round(value))} MiB`;
+}
+
+/** The status and code of a refused call, or `null` when it failed some other way. */
+export function problemOf(
+  error: unknown,
+): { readonly status: number; readonly code: string } | null {
+  return error instanceof ApiProblemError ? { status: error.status, code: error.code } : null;
+}
+
 export async function createFolder(client: AgentWorkspaceClient, path: string): Promise<void> {
   await client.files.createFolder(path);
+}
+
+/**
+ * Create the empty folder at `path` for a folder upload. One already there (`409 name_conflict`)
+ * is the result the upload asked for, so it is not a failure.
+ */
+export async function ensureFolder(client: AgentWorkspaceClient, path: string): Promise<void> {
+  try {
+    await client.files.createFolder(path);
+  } catch (error) {
+    if (error instanceof ApiProblemError && error.status === 409 && error.code === 'name_conflict')
+      return;
+    throw error;
+  }
 }
 
 export async function uploadFile(
@@ -64,9 +112,28 @@ export async function uploadFile(
     // The relay answers 413 above its limit, and the SDK falls back to it when the deployment
     // cannot sign (no direct transfer, or a size over the signed-upload limit).
     if (error instanceof ApiProblemError && error.status === 413) {
-      throw new Error('This file is too large for this deployment.', { cause: error });
+      // Two limits answer 413: the relay's fixed MAX_UPLOAD_BYTES, and a signing deployment's own
+      // AW_STORAGE_SIGNED_UPLOAD_MAX_BYTES, which the browser cannot read (the problem envelope
+      // carries no number). The relay's limit is the one size every deployment accepts, so it is
+      // named as that, not as the maximum, beside the file's own size (UX-16 in #2086).
+      const size = mebibytes(file.size);
+      const always = mebibytes(MAX_UPLOAD_BYTES);
+      throw new FilesClientError(
+        EN_FILES.overDeployment(file.name, size, always),
+        (words) => words.overDeployment(file.name, size, always),
+        { cause: error },
+      );
     }
-    throw statusText(error, 'Upload');
+    if (error instanceof ApiProblemError) {
+      const status = String(error.status);
+      throw new FilesClientError(
+        EN_FILES.uploadReturned(status),
+        (words) => words.uploadReturned(status),
+        { cause: error },
+      );
+    }
+    // No answer at all, or one that broke the contract: that failure's own sentence.
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 
@@ -81,8 +148,10 @@ export async function renameFile(
 ): Promise<void> {
   const result = await client.files.move(path, newPath);
   if ('status' in result && result.status === 'partial') {
-    throw new Error(
-      `Move did not finish: ${String(result.moved)} of ${String(result.total)} items moved; the rest are still at the old location.`,
+    const moved = String(result.moved);
+    const total = String(result.total);
+    throw new FilesClientError(EN_FILES.moveUnfinished(moved, total), (words) =>
+      words.moveUnfinished(moved, total),
     );
   }
 }
@@ -105,8 +174,10 @@ export async function deleteFile(
     outcome = await client.files.remove(path, { recursive: true });
   }
   if (outcome?.status === 'partial') {
-    throw new Error(
-      `Delete did not finish: ${String(outcome.deleted.length)} removed, ${String(outcome.remaining.length)} still present. Try again.`,
+    const deleted = String(outcome.deleted.length);
+    const remaining = String(outcome.remaining.length);
+    throw new FilesClientError(EN_FILES.deleteUnfinished(deleted, remaining), (words) =>
+      words.deleteUnfinished(deleted, remaining),
     );
   }
 }

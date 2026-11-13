@@ -1,15 +1,16 @@
 import process from 'node:process';
 
-import { loadConfig } from './config.js';
+import { loadProxyConfig } from './config.js';
 import { createEgressProxy } from './proxy.js';
 
 const SHUTDOWN_GRACE_MS = 10_000;
 
 try {
-  const config = loadConfig(process.env);
+  const { mode, config } = loadProxyConfig(process.env);
   const server = createEgressProxy({
-    sessionId: config.sessionId,
-    allowlist: config.allowlist,
+    ...(mode === 'shared'
+      ? { credentialKey: config.credentialKey }
+      : { sessionId: config.sessionId, allowlist: config.allowlist }),
     ...(config.allowedPorts === undefined ? {} : { allowedPorts: config.allowedPorts }),
   });
   server.listen(config.port, config.host);

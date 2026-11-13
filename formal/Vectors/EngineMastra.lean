@@ -93,7 +93,7 @@ private def outcomeJson : Outcome → Json
       [("ok", true), ("cwd", c.cwd), ("tools", Lean.toJson (c.tools.map Tool.name)),
        ("skillTools", c.skillTools), ("networkEgress", c.networkEgress),
        ("connection", connectionJson c.connection), ("model", c.model),
-       ("maxSteps", optNatJson c.maxSteps), ("budgetCap", c.budgetCap),
+       ("maxSteps", optNatJson c.maxSteps),
        ("grants", Json.arr (c.grants.map grantJson).toArray), ("skills", Lean.toJson c.skills),
        ("connectors", Lean.toJson c.connectors), ("memory", memoryJson c.memory),
        ("observability",
@@ -104,7 +104,6 @@ private def outcomeJson : Outcome → Json
 private def refusalWitness (r : Behaviour.Engines.OpenAiAgents.Refusal) : List String :=
   match r.names with
   | "fork" => [t "Normative" "a_fork_is_refused_by_name"]
-  | "maxBudget" => [t "Normative" "an_unpriced_budget_cap_is_refused_by_name"]
   | "wireProtocols" => [t "Normative" "an_unspoken_protocol_is_refused_by_name"]
   | "approvals" => [t "Normative" "an_approval_is_refused_by_name"]
   | "database" => [t "Adversarial" "no_accepted_run_carries_a_database_credential"]
@@ -123,7 +122,8 @@ private def compileVector (id : String) (r : Request) : Vector :=
          t "Adversarial" "the_model_is_an_explicit_provider_at_the_gateway",
          t "Adversarial" "observability_is_off_for_every_compiled_agent",
          t "Adversarial" "no_accepted_run_carries_a_database_credential",
-         t "Invariants" "the_step_limit_is_max_turns"]
+         t "Invariants" "the_step_limit_is_max_turns"] ++
+        (if r.budgetCap then [t "Normative" "a_budget_cap_never_changes_the_compile"] else [])
       | .refused refusal => refusalWitness refusal }
 
 private def everything : Behaviour.Engines.OpenAiAgents.Permissions :=
@@ -155,7 +155,7 @@ def compileVectors : List Vector :=
      { base with session := .resume "thread-earlier", skills := ["writer", "reviewer", "writer"] },
    compileVector "connectors-in-order"
      { base with connectors := [⟨"docs", true, false⟩, ⟨"search", true, false⟩] },
-   compileVector "priced-cap" { base with budgetCap := true },
+   compileVector "cap-on-a-listed-model" { base with budgetCap := true },
    compileVector "nothing-permitted"
      { base with skills := [],
                  permissions := { readFiles := false, writeFiles := false, runCommands := false,
@@ -174,7 +174,8 @@ def compileVectors : List Vector :=
    compileVector "database-variable-turso" { base with envNames := ["TURSO_AUTH_TOKEN"] },
    compileVector "database-look-alikes-accepted"
      { base with envNames := ["_DATABASE_URL", "DATABASE_URLS", "PGDATA", "MY_DATABASE", "TURSO"] },
-   compileVector "unpriced-cap" { base with budgetCap := true, model := some "unpriced-model" },
+   compileVector "cap-on-an-unlisted-model"
+     { base with budgetCap := true, model := some "unpriced-model" },
    compileVector "unreadable-connector" { base with connectors := [⟨"docs", false, false⟩] },
    compileVector "connector-asks-approval" { base with connectors := [⟨"docs", true, true⟩] },
    compileVector "fork" { base with session := .fork "parent-1" }]
@@ -232,7 +233,7 @@ private def writeCompiled : Compiled :=
   | some grants =>
     { cwd := writeCwd, tools := [], skillTools := false, networkEgress := false,
       connection := connectionFor .anthropicMessages "http://gw" "tok",
-      model := "claude-sonnet-4-5", maxSteps := none, budgetCap := false, grants,
+      model := "claude-sonnet-4-5", maxSteps := none, grants,
       skills := [], connectors := [], memory := memoryFor "s" "tenant",
       observability := observabilityOff }
   | none => default
@@ -399,26 +400,23 @@ def memoryVectors : List Vector :=
 /-! ## stop.json -/
 
 private def stopVector (id : String) (steps : Nat) (last : Option String) (maxSteps : Option Nat)
-    (overBudget interrupted : Bool) : Vector :=
+    (interrupted : Bool) : Vector :=
   { id,
     input := Json.mkObj [("steps", Json.num steps), ("lastStepReason", optStrJson last),
-      ("maxSteps", optNatJson maxSteps), ("overBudget", overBudget),
-      ("interrupted", interrupted)],
+      ("maxSteps", optNatJson maxSteps), ("interrupted", interrupted)],
     expected := Json.mkObj
-      [("stopReason", (stopReason steps last maxSteps overBudget interrupted).toWire)],
+      [("stopReason", (stopReason steps last maxSteps interrupted).toWire)],
     witnesses := [t "Invariants" "the_stop_reason_follows_the_precedence"] }
 
 def stopVectors : List Vector :=
-  [stopVector "no-limit" 3 (some "stop") none false false,
-   stopVector "no-limit-tool-calls" 3 (some "tool-calls") none false false,
-   stopVector "at-limit-asking-for-tools" 2 (some "tool-calls") (some 2) false false,
-   stopVector "at-limit-final-stop" 2 (some "stop") (some 2) false false,
-   stopVector "below-limit-asking-for-tools" 1 (some "tool-calls") (some 2) false false,
-   stopVector "past-limit-asking-for-tools" 3 (some "tool-calls") (some 2) false false,
-   stopVector "no-step-reason" 2 none (some 2) false false,
-   stopVector "interrupted" 1 (some "tool-calls") (some 1) false true,
-   stopVector "over-budget" 1 (some "tool-calls") (some 1) true false,
-   stopVector "over-budget-and-interrupted" 0 none none true true]
+  [stopVector "no-limit" 3 (some "stop") none false,
+   stopVector "no-limit-tool-calls" 3 (some "tool-calls") none false,
+   stopVector "at-limit-asking-for-tools" 2 (some "tool-calls") (some 2) false,
+   stopVector "at-limit-final-stop" 2 (some "stop") (some 2) false,
+   stopVector "below-limit-asking-for-tools" 1 (some "tool-calls") (some 2) false,
+   stopVector "past-limit-asking-for-tools" 3 (some "tool-calls") (some 2) false,
+   stopVector "no-step-reason" 2 none (some 2) false,
+   stopVector "interrupted" 1 (some "tool-calls") (some 1) true]
 
 /-! ## process-env.json -/
 
@@ -459,7 +457,7 @@ def files : List (String × Json) :=
       "readMastraThread: a thread journalled into the engine-scoped store, folded back by key"
       memoryVectors),
    ("stop.json", file "engine-mastra"
-      "mastraStopReason: the budget cap, then an interrupt, then max_turns exactly when the last allowed step asked for tools"
+      "mastraStopReason: an interrupt, then max_turns exactly when the last allowed step asked for tools"
       stopVectors),
    ("process-env.json", file "engine-mastra"
       "mastraInstalledEnvironment: the process environment Mastra loads under, telemetry and the catalogue refresh off"

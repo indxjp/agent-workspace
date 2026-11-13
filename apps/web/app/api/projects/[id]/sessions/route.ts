@@ -4,7 +4,7 @@ import {
   requireProjectAccess,
   withProjects,
 } from '../../../../../server/projects/http';
-import { ownerPrincipalIdOf } from '../../../../../server/rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../../../../../server/rbac/core/owner-principal';
 import { isProjectUsableForNewWork } from '../../../../../server/projects/archive-gate';
 import { versionToPin } from '../../../../../server/agent-versions/session-version';
 export const dynamic = 'force-dynamic';

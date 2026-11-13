@@ -1,4 +1,7 @@
-import type { UnavailableModelConnection } from '@indx-workspace/contracts/models';
+import {
+  isKeylessProvider,
+  type UnavailableModelConnection,
+} from '@indx-workspace/contracts/models';
 
 import {
   isUuid,
@@ -7,6 +10,7 @@ import {
   type ModelConnectionResource,
 } from './contract';
 import { problem, type ApiResult } from '../http/result';
+import { vertexConfigWithDefaults, type VertexDefaults } from './vertex-defaults';
 import type { ModelDiscovery } from './discovery';
 import type { TestConnectionResult } from './probe';
 import type { WorkspaceModelsStore } from './store';
@@ -82,11 +86,34 @@ export async function listDiscoveredModels(
   };
 }
 
+/** A `vertex` create that omits `projectId` or `location` takes the install's defaults. */
+function withVertexDefaults(raw: unknown, defaults: VertexDefaults): unknown {
+  const body = asObject(raw);
+  if (body === null || body['provider'] !== 'vertex') return raw;
+  const config = body['config'] === undefined ? {} : asObject(body['config']);
+  if (config === null) return raw;
+  return { ...body, config: vertexConfigWithDefaults(config, defaults) };
+}
+
 export async function createModelConnection(
   store: WorkspaceModelsStore,
   raw: unknown,
+  vertexDefaults: VertexDefaults = {},
 ): Promise<ApiResult> {
-  const parsed = await parseCreateModelConnection(raw);
+  // Without the install's own project the gateway has no cloud identity to serve a keyless
+  // connection with, so it would report ready and then fail every run.
+  if (asObject(raw)?.['provider'] === 'vertex' && vertexDefaults.projectId === undefined) {
+    return problem(
+      422,
+      'vertex_not_configured',
+      'Claude on Google Cloud needs a Google Cloud install. Choose another provider, or deploy on Cloud Run with `aw deploy`.',
+    );
+  }
+  const parsed = await parseCreateModelConnection(
+    withVertexDefaults(raw, vertexDefaults),
+    undefined,
+    vertexDefaults.projectId,
+  );
   if (!parsed.ok)
     return problem(
       400,
@@ -125,6 +152,7 @@ export async function updateModelConnection(
   store: WorkspaceModelsStore,
   rawId: unknown,
   raw: unknown,
+  vertexDefaults: VertexDefaults = {},
 ): Promise<ApiResult> {
   const parsedId = id(rawId);
   if (!parsedId.ok) return parsedId.result;
@@ -132,7 +160,12 @@ export async function updateModelConnection(
   // the existing row is read before the body is validated — never the other way around.
   const existing = await store.get(parsedId.value);
   if (existing === null) return notFound();
-  const parsed = await parseUpdateModelConnection(raw, existing.provider);
+  const parsed = await parseUpdateModelConnection(
+    raw,
+    existing.provider,
+    undefined,
+    vertexDefaults.projectId,
+  );
   if (!parsed.ok)
     return problem(
       400,
@@ -217,6 +250,14 @@ export async function rotateModelConnectionCredential(
     return problem(400, 'invalid_body', 'The credential could not be rotated.', errors);
   }
   const apiKey = (body as Record<string, unknown>)['apiKey'] as string;
+  const existing = await store.get(parsed.value);
+  if (existing !== null && isKeylessProvider(existing.provider)) {
+    return problem(
+      409,
+      'credential_not_used',
+      "This connection uses this install's Google Cloud identity and stores no credential.",
+    );
+  }
   const rotated = await store.replaceCredential(parsed.value, apiKey);
   // Never a body: the one job of this route is to not say anything about the key it just wrote.
   return rotated ? { status: 204, body: null } : notFound();

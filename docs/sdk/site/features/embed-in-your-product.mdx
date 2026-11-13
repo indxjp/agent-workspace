@@ -122,9 +122,8 @@ share (`tests/gallery/shared/run-answer.ts` in the repository), and you write yo
 [Manual search agent](/tutorials/manual-search) walks through the example step by step.
 
 <Note>
-  `follow` waits a fixed delay between reconnects and ignores the stream's `retry:` field today.
-  Backoff is tracked as [K-3](/concepts/roadmap#k-3-backoff-and-retry-hints-in-follow). Build on the
-  reconnect, not on the delay.
+  `follow` backs off between reconnects from the stream's own `retry:` value, doubling up to
+  `maxReconnectDelayMs` with jitter ([Reconnection](/guides/streaming#reconnection)).
 </Note>
 
 ## Keep the key on the server
@@ -407,9 +406,8 @@ user identity, rate limits and product logic.
 - **Visitor limits are counted per control-plane process,** and per client only when
   `AW_TRUSTED_PROXY_HOPS` is set; without it, every client shares one bucket. Several replicas
   each admit their own limit, and a restart resets the turn counts.
-- **`follow` reconnects after a fixed delay** and ignores `retry:`
-  ([K-3](/concepts/roadmap#k-3-backoff-and-retry-hints-in-follow)). Pass `runs.start` an
-  `idempotencyKey` to retry it safely ([S-6](/concepts/roadmap#s-6-idempotency-keys)).
+- **A retried `runs.start` needs an `idempotencyKey`** to be safe
+  ([Retries and idempotency](/guides/retries-and-idempotency#make-runs-start-idempotent-with-a-key)).
 - **A run's files pass through your backend.** A session token can mint presigned download URLs only for
   `.attachments/<sessionId>/` ([Files](/resources/files#createdownloadurl)); it uploads through
   `POST /api/sessions/:id/attachments`.

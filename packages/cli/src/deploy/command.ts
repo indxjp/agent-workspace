@@ -147,7 +147,7 @@ function runTarget(
 ): Promise<DeployOutcome> {
   switch (target.kind) {
     case 'compose':
-      return deployWithCompose(context, project(), apply);
+      return deployWithCompose(context, project(), apply, dotEnv['COMPOSE_FILE']);
     case 'helm':
       return deployWithHelm(context, target, apply);
     case 'terraform':

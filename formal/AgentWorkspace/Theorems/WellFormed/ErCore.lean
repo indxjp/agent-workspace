@@ -63,7 +63,7 @@ private def classTerm : FkClass → Name
 private def erDoc : String := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces"
 private def tablesDoc : String := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables"
 private def isolationDoc : String := "docs/formal/inventory.md#4-tenant-isolation-predicates"
-private def tenancyTest : String := "packages/core/src/db/schema/tenancy.test.ts#"
+private def tenancyTest : String := "packages/core/src/db/tenancy-readers.test-support.ts#"
 
 /-- The document and the `tenancy.test.ts` rule each foreign-key class is cited to. -/
 private def classCitation : FkClass → String × String
@@ -401,7 +401,7 @@ theorem every_table_is_well_formed (t : TableName) : tableWellFormed catalogue t
 /-- No foreign key of the catalogue is unpaired: every reference between two tenant-carrying
 tables is tenant-paired, by itself or by a sibling. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem catalogue_pairing_is_complete : pairingComplete catalogue = true := by
   decide +kernel
 
@@ -460,6 +460,8 @@ theorem every_id_kind_names_a_table (k : IdKind) : ∃ t, TableName.idKind? t = 
     | exact ⟨.triggers, rfl⟩ | exact ⟨.triggerDeliveries, rfl⟩
     | exact ⟨.builderToolCalls, rfl⟩ | exact ⟨.storageConnections, rfl⟩ | exact ⟨.storageMigrationRuns, rfl⟩
     | exact ⟨.workspaceFeatures, rfl⟩
+    | exact ⟨.webhooks, rfl⟩ | exact ⟨.webhookDeliveries, rfl⟩
+    | exact ⟨.agentTeams, rfl⟩ | exact ⟨.agentTeamVersions, rfl⟩
 
 /-- Every closed-set check constrains a `text` column. -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
@@ -506,7 +508,7 @@ theorem slug_of_65_characters_is_refused :
 /-- A foreign key to a global identity table that includes `workspace_id` is a fault: the target
 has no tenant column to pair it with, so `classify` calls it unpaired. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#isTenantScoped")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#isTenantScoped")]
 theorem global_reference_with_workspace_column_is_unpaired (S : Schema) (t : TableName)
     (fk : ForeignKey) (hg : (S fk.refTable).tenancy = .global)
     (hw : fk.columns.contains "workspace_id" = true) : classify S t fk = .unpaired := by
@@ -524,7 +526,7 @@ example : classify catalogue .agents
 non-references (`NON_REFERENCE_ID_COLUMNS`) with the type the declaration pins, and no declared
 column is also covered by a foreign key. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem every_id_column_is_a_reference_or_declared :
     idColumnsCovered catalogue nonReferenceIdColumns = true := by
   decide +kernel
@@ -535,7 +537,7 @@ id, the SDK's resume id, the run that made an agent, the runtime driver a verifi
 and the `uuid` that groups the codes and tokens of one OAuth grant, and the `uuid` a file's, or a
 session-state blob's, object is stored under. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem uncovered_id_columns :
     allTables.flatMap (fun t => ((catalogue t).columns.filter fun c =>
         isIdColumn c.name && !(catalogue t).foreignKeys.any (·.columns.contains c.name)).map
@@ -612,15 +614,15 @@ theorem uuid_with_a_non_hex_digit_is_refused :
 /-- The foreign-key classes are spelled, in order, `root-reference`, `global-reference`,
 `tenant-paired`, `sibling-paired` and `unpaired` in the vectors, after the buckets of
 `tenancy.test.ts`. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/tenancy.test.ts#referenceIdentityOf")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+@[aw_spec (tier := T0) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#referenceIdentityOf")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem fk_class_wires :
     WireEnum.wires FkClass =
       ["root-reference", "global-reference", "tenant-paired", "sibling-paired", "unpaired"] := by
   decide +kernel
 
 /-- The tenancy classes are spelled `root`, `global` and `scoped`. -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+@[aw_spec (tier := T0) (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem tenancy_wires : WireEnum.wires Tenancy = ["root", "global", "scoped"] := by
   decide +kernel
 
@@ -643,7 +645,7 @@ theorem unique_kind_wires : WireEnum.wires UniqueKind = ["constraint", "index"] 
 
 /-- Every tenant-scoped table has exactly one reference to the tenant root. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem scoped_tables_reference_the_root_once (t : TableName)
     (h : (catalogue t).tenancy = .scoped) :
     ((catalogue t).foreignKeys.filter fun fk => classify catalogue t fk == .rootReference).length
@@ -804,7 +806,7 @@ theorem fk_type_mismatch_is_ill_formed :
 /-- A foreign key whose target columns are not a primary or total unique key of the parent is
 ill formed. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#hasUniqueKeyOver")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#hasUniqueKeyOver")]
 theorem fk_to_a_non_key_is_ill_formed :
     fkVerdict Mutant.nonKeyTarget .agentFiles "agent_files_agent_workspace_fk" =
         some (false, .tenantPaired) ∧
@@ -873,7 +875,7 @@ theorem malformed_closed_set_checks_are_ill_formed :
 /-- A scoped table breaks the tenancy rule when its `workspace_id` is nullable, is not `uuid`,
 or when it has no reference, or two, to the tenant root. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem scoped_tenancy_faults_are_refused :
     tenancyWellFormed Mutant.nullableWorkspace .agentFiles = false ∧
       tenancyWellFormed Mutant.textWorkspace .agentFiles = false ∧
@@ -885,7 +887,7 @@ theorem scoped_tenancy_faults_are_refused :
 /-- An exempt table breaks the tenancy rule when it carries a `workspace_id`, and the root does
 when it is keyed by anything other than `id`. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_EXEMPT")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_EXEMPT")]
 theorem exempt_tenancy_faults_are_refused :
     tenancyWellFormed Mutant.rootWithWorkspaceColumn .workspaces = false ∧
       tenancyWellFormed Mutant.rootKeyedBySlug .workspaces = false ∧
@@ -911,8 +913,8 @@ end Mutant
 key to `workspaces`, even one that pairs `workspace_id` with `id`, is not a root reference but
 `unpaired`, so the table loses its root reference and the schema its pairing. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#tenantPairingFault")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#tenantPairingFault")]
 theorem composite_root_reference_is_unpaired :
     (fkVerdict Mutant.compositeRootReference .agentFiles
         "agent_files_workspace_id_workspaces_id_fk").map (·.2) = some .unpaired ∧
@@ -924,7 +926,7 @@ theorem composite_root_reference_is_unpaired :
 `agents.model_connection_id`, which two foreign keys cover, as a non-reference fails the gate,
 although the declaration names an existing column of the right type. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#4-tenant-isolation-predicates")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#NON_REFERENCE_ID_COLUMNS")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#NON_REFERENCE_ID_COLUMNS")]
 theorem declared_reference_column_is_refused :
     (catalogue .agents).column? "model_connection_id" =
         some ⟨"model_connection_id", .uuid, false⟩ ∧

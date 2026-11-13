@@ -43,7 +43,7 @@ export type PiUsage = {
   readonly outputTokens: number;
   readonly cacheReadInputTokens: number;
   readonly cacheWriteInputTokens: number;
-  /** pi's own estimate, priced with the model's `cost` — the provisional table under a cap. */
+  /** pi's own estimate, from its catalogue's `cost`. Informational, never billing or a cap. */
   readonly costUsd: number;
 };
 
@@ -258,8 +258,8 @@ export function createPiFrameMapper(): PiFrameMapper {
           frame: 'agent.result',
           stopReason: event.stopReason,
           turns: event.turns,
-          // pi's `usage.cost` is priced from a table this adapter chose (the provisional one under
-          // a cap), so it is not the engine's own figure; billing is the gateway's (ADR-0065 D6).
+          // pi's `usage.cost` is priced from its own catalogue, not the deployment's; billing is the
+          // gateway's (ADR-0065 D6).
           engineCostUsd: null,
         },
         event,

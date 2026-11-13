@@ -13,9 +13,10 @@ import {
   type ModelConnectionResource,
   type UpdateModelConnectionPatch,
 } from '@indx-workspace/contracts/models';
-import type {
-  ProjectDocument,
-  ProjectModelConnection,
+import {
+  PROJECT_FILE_CONFIG_FIELDS,
+  type ProjectDocument,
+  type ProjectModelConnection,
 } from '@indx-workspace/contracts/project-file';
 import type { SkillFile } from '@indx-workspace/contracts/skills';
 import { POSTGRES_DEFAULT_MAX_ROWS } from '@indx-workspace/contracts/tool-connectors';
@@ -220,8 +221,8 @@ function secretState(
 
 /** The declared config fields of a model connection; an undeclared one is absent. */
 function declaredConfig(declared: ProjectModelConnection): ModelConnectionConfigInput {
-  const config: { -readonly [Field in keyof ModelConnectionConfigInput]: string } = {};
-  for (const field of MODEL_CONNECTION_CONFIG_FIELDS) {
+  const config: { -readonly [Field in (typeof PROJECT_FILE_CONFIG_FIELDS)[number]]?: string } = {};
+  for (const field of PROJECT_FILE_CONFIG_FIELDS) {
     const value = declared[field];
     if (value !== undefined) config[field] = value;
   }

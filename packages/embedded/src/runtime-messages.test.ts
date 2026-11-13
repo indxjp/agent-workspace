@@ -136,6 +136,32 @@ describe('sendChildMessage', () => {
     ).rejects.toMatchObject({ code: 'invalid_outgoing' });
     expect(fake.sent).toStrictEqual([]);
   });
+
+  // Issue #1506: `ready` names the workspace's database for a local app, loopback only.
+  it('sends a ready that carries a loopback databaseUrl', async () => {
+    const fake = fakeChannel();
+    const ready = {
+      type: 'ready',
+      url: 'http://127.0.0.1:3000',
+      contractsVersion: '0.2.1',
+      databaseUrl: 'postgresql://agent_workspace:agent_workspace_local@127.0.0.1:25432/postgres',
+    } as const;
+    await sendChildMessage(fake.channel, ready);
+    expect(fake.sent).toStrictEqual([ready]);
+  });
+
+  it('refuses a ready whose databaseUrl is not loopback, before sending it', async () => {
+    const fake = fakeChannel();
+    await expect(
+      sendChildMessage(fake.channel, {
+        type: 'ready',
+        url: 'http://127.0.0.1:3000',
+        contractsVersion: '0.2.1',
+        databaseUrl: 'postgresql://app:secret@db.example.com:5432/postgres',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_outgoing' });
+    expect(fake.sent).toStrictEqual([]);
+  });
 });
 
 describe('failureMessage', () => {

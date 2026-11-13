@@ -17,7 +17,7 @@
  * | file grants                       | `workspace.grants`, enforced by the Editor            |
  * | connectors                        | `mcpServers` (stdio, streamable HTTP, SSE)            |
  * | `limits.maxTurns`                 | `limits.maxTurns`, the SDK's native `maxTurns`        |
- * | `limits.maxBudgetUsd`             | `limits.budget`, priced by `./budget.ts` (provisional) |
+ * | `limits.maxBudgetUsd`             | nothing: enforced by the gateway (ADR-0162)           |
  * | the gateway connection            | `connection` — endpoint, protocol and bearer          |
  *
  * ## What is refused, by code
@@ -26,10 +26,10 @@
  *   normalise or lands in {@link OPENAI_AGENTS_PROTECTED_CONFIG_DIRECTORY}; a connector record this
  *   adapter cannot read.
  * * `engine_capability_unsupported` — an `outputSchema` Zod cannot read for validation (the answer
- *   would go unchecked), a skill (`skills: false`, ADR-0074), a fork, a
- *   `maxBudgetUsd` on a model the provisional price table cannot price (ADR-0074 D7), a wire protocol this engine does not speak, an
- *   MCP tool whose policy asks for a human approval (no HITL, ADR-0065 D9), or an Anthropic-family
- *   connection with no model named.
+ *   would go unchecked), a skill (`skills: false`, ADR-0074), a fork, a wire protocol this engine
+ *   does not speak, an MCP tool whose policy asks for a human approval (no HITL, ADR-0065 D9), or
+ *   an Anthropic-family connection with no model named. A `maxBudgetUsd` is never refused: the
+ *   gateway enforces it for every engine (ADR-0162).
  * * `engine_credential_refused` — no gateway connection, or a credential-shaped variable in the
  *   environment that is not this run's token (spec A.11).
  */
@@ -41,7 +41,6 @@ import { McpServerRecordSchema } from '@indx-workspace/contracts';
 import { ENGINE_CATALOGUE } from '@indx-workspace/contracts/engines';
 import {
   forkRefusal,
-  subagentBudgetRefusal,
   subagentsRefusal,
   subagentToolNames,
   normaliseRequestGrants,
@@ -57,11 +56,6 @@ import {
 } from '@agent-workspace/engine';
 import { z } from 'zod';
 
-import {
-  OPENAI_AGENTS_PRICES_CHECKED_ON,
-  openAiAgentsPriceFor,
-  type OpenAiAgentsBudget,
-} from './budget.js';
 import { OpenAiAgentsRunPolicy } from './policy.js';
 import { openAiAgentsToolPlan } from './tools.js';
 import type { OpenAiAgentsWorkspace } from './workspace.js';
@@ -149,8 +143,6 @@ export type OpenAiAgentsCompiled = {
   readonly mcpServers: readonly OpenAiAgentsMcpServer[];
   readonly limits: {
     readonly maxTurns: number | null;
-    /** The provisional cap and its rates, or `null` when the run carries no cap (ADR-0074 D7). */
-    readonly budget: OpenAiAgentsBudget | null;
   };
   readonly workspace: OpenAiAgentsWorkspace;
   /**
@@ -289,30 +281,6 @@ export function compileOpenAiAgentsRun(
     request.portable.subagents,
   );
   if (!toolNames.ok) return toolNames;
-  // ADR-0074 D7, provisional (#342): the cap is enforced here from the usage the gateway reports
-  // back, priced with `./budget.ts`. A cap this adapter cannot price is refused, never ignored.
-  const maxBudgetUsd = request.portable.limits.maxBudgetUsd;
-  let budget: OpenAiAgentsBudget | null = null;
-  if (maxBudgetUsd !== null) {
-    const price = openAiAgentsPriceFor(request.portable.model);
-    if (price === null || request.portable.model === null) {
-      return refuse(
-        'engine_capability_unsupported',
-        request.portable.model === null
-          ? `${OPENAI_AGENTS_ENGINE_ID} enforces maxBudget from a provisional price table (ADR-0074), and this run names no model to price its ${String(maxBudgetUsd)} USD cap with. Name the model on the agent or the run, or remove the cap.`
-          : `${OPENAI_AGENTS_ENGINE_ID} enforces maxBudget from a provisional price table (ADR-0074), (checked ${OPENAI_AGENTS_PRICES_CHECKED_ON}) which has no row for ${JSON.stringify(request.portable.model)}, so a ${String(maxBudgetUsd)} USD cap cannot be enforced. Choose a priced model or remove the cap.`,
-      );
-    }
-    budget = { maxBudgetUsd, model: request.portable.model, price };
-    const mispriced = subagentBudgetRefusal(
-      OPENAI_AGENTS_ENGINE_ID,
-      request.portable.model,
-      maxBudgetUsd,
-      request.portable.subagents,
-    );
-    if (mispriced !== null) return mispriced;
-  }
-
   const connection = requireGateway(OPENAI_AGENTS_ENGINE_ID, request, OPENAI_AGENTS_WIRE_PROTOCOLS);
   if (!connection.ok) return connection;
   const { gateway, protocol } = connection;
@@ -374,7 +342,7 @@ export function compileOpenAiAgentsRun(
       connection: openAiAgentsModelConnection(protocol, gateway),
       networkEgress: plan.networkEgress,
       mcpServers: mcp.servers,
-      limits: { maxTurns: request.portable.limits.maxTurns, budget },
+      limits: { maxTurns: request.portable.limits.maxTurns },
       workspace: {
         cwd: request.cwd.replace(/\/+$/u, ''),
         grants: grants.grants,

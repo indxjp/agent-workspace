@@ -16,11 +16,14 @@ import { renderTriggerPrompt } from '@indx-workspace/contracts/triggers';
 
 import { enabledFeaturesFor } from '../features/runtime';
 import { getRunApi } from '../runs/environment';
-import { deliver, ownerFor, type Runs } from './fire';
+import { deliver, type Runs } from './fire';
+import { ownerFor } from './fire';
 import type { TriggerRecord, TriggersRuntime } from './runtime';
 import { dueSlot } from './schedule';
 
 const LEASE_NAME = 'trigger-schedule';
+/** Held for one pass: the schedule pass runs every minute (`composition/wiring/triggers.ts`). */
+const LEASE_TTL_MS = 60_000;
 
 /** The slice of the database root the pass needs; the lease is the one session retention uses. */
 export interface ScheduleRoot {
@@ -55,7 +58,7 @@ export interface SchedulePassResult {
 
 /** One pass over every workspace. */
 export async function runSchedulePass(deps: SchedulePassDependencies): Promise<SchedulePassResult> {
-  const held = await deps.root.tryAcquireMaintenanceLease(LEASE_NAME, 60_000);
+  const held = await deps.root.tryAcquireMaintenanceLease(LEASE_NAME, LEASE_TTL_MS);
   if (held === null) return { leaseHeld: true, workspaces: 0, fired: 0, skipped: 0, failed: 0 };
   try {
     const runs = (deps.runs ?? getRunApi)();
@@ -119,9 +122,11 @@ async function fireIfDue(
     key: `schedule:${slot.toISOString()}`,
   });
   if (outcome.kind === 'started') return 'fired';
-  // The slot is claimed, so its run started; if recording the firing failed, record it now so the
-  // next pass counts from here instead of re-firing this slot once the claim window lapses.
-  if (outcome.kind === 'duplicate') {
+  // A claim with a run id means the run started; if recording the firing failed, record it now so
+  // the next pass counts from here instead of re-firing this slot once the claim window lapses. A
+  // claim with no run id is still starting (or its release failed): marking the slot fired would
+  // lose the firing, so leave it for a later pass to find the claim lapsed.
+  if (outcome.kind === 'duplicate' && outcome.runId !== null) {
     await (await runtime.repository(trigger.workspaceId)).markFired(trigger.id, runtime.now());
   }
   if (outcome.kind === 'refused') {

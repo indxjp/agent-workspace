@@ -1,16 +1,47 @@
-import { decodeJwt } from 'jose';
+import { hkdfSync } from 'node:crypto';
+
+import { SignJWT, decodeJwt, jwtVerify } from 'jose';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { beginOidcLogin, finishOidcLogin, readOidcConfiguration } from './oidc';
+import * as oidcClient from 'openid-client';
+
+import {
+  allowsInsecureDiscovery,
+  beginOidcLogin,
+  finishOidcLogin,
+  oidcDiscoveryOptions,
+  readOidcConfiguration,
+} from './oidc';
 
 let idTokenClaims: Record<string, unknown> = {};
 
+const { discovery, buildAuthorizationUrl, metadata } = vi.hoisted(() => {
+  const served: { current: Record<string, unknown> } = { current: {} };
+  return {
+    metadata: served,
+    discovery: vi.fn<(...args: readonly unknown[]) => Promise<unknown>>(() =>
+      Promise.resolve({ serverMetadata: () => served.current }),
+    ),
+    buildAuthorizationUrl: vi.fn<(...args: readonly unknown[]) => URL>(
+      () => new URL('https://identity.example/authorize'),
+    ),
+  };
+});
+
 vi.mock('openid-client', () => ({
-  discovery: () => Promise.resolve({}),
+  discovery,
+  allowInsecureRequests: () => undefined,
+  ClientSecretBasic: (secret: string) => ({ basic: secret }),
+  Configuration: class {
+    readonly args: readonly unknown[];
+    constructor(...args: readonly unknown[]) {
+      this.args = args;
+    }
+  },
   randomPKCECodeVerifier: () => 'verifier',
   calculatePKCECodeChallenge: () => Promise.resolve('challenge'),
   randomState: () => 'state',
-  buildAuthorizationUrl: () => new URL('https://identity.example/authorize'),
+  buildAuthorizationUrl,
   authorizationCodeGrant: () => Promise.resolve({ claims: () => idTokenClaims }),
 }));
 
@@ -77,9 +108,152 @@ describe('the OIDC transaction carries the post-sign-in destination', () => {
     });
   });
 
+  it('issues the transaction now when no time is given (refactoring part 06, step 8)', async () => {
+    const nowMs = Date.parse('2026-11-11T09:30:00.000Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(nowMs);
+      const { transaction } = await beginOidcLogin(configuration, secret);
+      expect(decodeJwt(transaction).iat).toBe(Math.floor(nowMs / 1000));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  const transactionKey = (purpose: string) =>
+    new Uint8Array(
+      hkdfSync('sha256', secret, 'agent-workspace/key-ring', `agent-workspace/${purpose}/v1`, 32),
+    );
+  const transactionSignedWith = (key: Uint8Array) =>
+    new SignJWT({ verifier: 'verifier', state: 'state' })
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuedAt()
+      .setExpirationTime('10m')
+      .sign(key);
+
+  it('signs the transaction with its purpose key, not the raw secret', async () => {
+    const { transaction } = await beginOidcLogin(configuration, secret);
+    await expect(jwtVerify(transaction, transactionKey('oidc-transaction'))).resolves.toBeDefined();
+    await expect(jwtVerify(transaction, new TextEncoder().encode(secret))).rejects.toThrow();
+  });
+
+  it('finishes a sign-in that began before the deploy (raw-secret transaction, roll-over)', async () => {
+    const legacy = await transactionSignedWith(new TextEncoder().encode(secret));
+    expect(await finishOidcLogin(configuration, secret, callback, legacy)).toMatchObject({
+      email: 'a@example.com',
+    });
+  });
+
+  it('refuses a transaction signed with another purpose key', async () => {
+    const crossed = await transactionSignedWith(transactionKey('session'));
+    await expect(finishOidcLogin(configuration, secret, callback, crossed)).rejects.toThrow(
+      /signature/,
+    );
+  });
+
+  it('refuses an expired transaction without trying the old key', async () => {
+    const expired = await new SignJWT({ verifier: 'verifier', state: 'state' })
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setIssuedAt(1_000)
+      .setExpirationTime(1_600)
+      .sign(transactionKey('oidc-transaction'));
+    await expect(finishOidcLogin(configuration, secret, callback, expired)).rejects.toThrow(/exp/);
+  });
+
   it('leaves `next` out when there is none, so an older cookie still verifies', async () => {
     const { transaction } = await beginOidcLogin(configuration, secret);
     expect(decodeJwt(transaction)).not.toHaveProperty('next');
     expect((await finishOidcLogin(configuration, secret, callback, transaction)).next).toBeNull();
+  });
+});
+
+describe('plain http discovery (ADR-0161 amendment DI9, issue #2075)', () => {
+  const local = { AW_DEPLOYMENT_POSTURE: 'local', HOST: '127.0.0.1' };
+  const production = { AW_DEPLOYMENT_POSTURE: 'production' };
+
+  it('is allowed only in the local posture, for an http issuer on a loopback host', () => {
+    expect(allowsInsecureDiscovery('http://127.0.0.1:3200', local)).toBe(true);
+    expect(allowsInsecureDiscovery('http://localhost:3200', local)).toBe(true);
+    expect(allowsInsecureDiscovery('http://[::1]:3200', local)).toBe(true);
+    // A derived local posture (NODE_ENV is not production) counts as local too.
+    expect(allowsInsecureDiscovery('http://127.0.0.1:3200', {})).toBe(true);
+  });
+
+  it('is refused for a non-loopback host, an https issuer, or any other posture', () => {
+    expect(allowsInsecureDiscovery('http://idp.example.test', local)).toBe(false);
+    expect(allowsInsecureDiscovery('http://10.0.0.1:3200', local)).toBe(false);
+    expect(allowsInsecureDiscovery('https://127.0.0.1:3200', local)).toBe(false);
+    expect(allowsInsecureDiscovery('not a url', local)).toBe(false);
+    expect(allowsInsecureDiscovery('http://127.0.0.1:3200', production)).toBe(false);
+    expect(allowsInsecureDiscovery('http://127.0.0.1:3200', { NODE_ENV: 'production' })).toBe(
+      false,
+    );
+  });
+
+  it('passes allowInsecureRequests to discovery only then, and no option otherwise', async () => {
+    const read = (issuer: string, env: Record<string, string>) => {
+      const configuration = readOidcConfiguration({
+        ...env,
+        OIDC_ISSUER_URL: issuer,
+        OIDC_CLIENT_ID: 'aw-local-console',
+        OIDC_CLIENT_SECRET: 'secret',
+        OIDC_REDIRECT_URI: 'http://127.0.0.1:3000/api/auth/callback',
+      });
+      if (configuration === null) throw new Error('no configuration');
+      return configuration;
+    };
+    expect(oidcDiscoveryOptions(read('http://127.0.0.1:3200', local))).toEqual({
+      execute: [oidcClient.allowInsecureRequests],
+    });
+    expect(oidcDiscoveryOptions(read('https://identity.example', local))).toBeUndefined();
+    // Production refuses the http issuer outright, so it is never discovered.
+    expect(() => read('http://127.0.0.1:3200', production)).toThrow(/must be an https: URL/u);
+    expect(oidcDiscoveryOptions(read('https://identity.example', production))).toBeUndefined();
+    // The browser flow passes the same options: https here, so none.
+    discovery.mockClear();
+    await beginOidcLogin(
+      {
+        issuer: 'https://identity.example',
+        clientId: 'client',
+        clientSecret: 'secret',
+        redirectUri: 'https://app.example/api/auth/callback',
+        scopes: ['openid'],
+      },
+      'a-secure-test-secret-with-at-least-32-characters',
+    );
+    expect(discovery.mock.calls[0]?.[4]).toBeUndefined();
+  });
+});
+
+describe('the token endpoint method (ADR-0161 amendment DI4, issue #2075)', () => {
+  const configuration = {
+    issuer: 'https://identity.example',
+    clientId: 'client',
+    clientSecret: 'secret',
+    redirectUri: 'https://app.example/api/auth/callback',
+    scopes: ['openid'],
+  };
+  const signing = 'a-secure-test-secret-with-at-least-32-characters';
+
+  it('uses client_secret_basic for an issuer that serves only that, as the dev issuer does', async () => {
+    metadata.current = { token_endpoint_auth_methods_supported: ['client_secret_basic'] };
+    buildAuthorizationUrl.mockClear();
+    await beginOidcLogin(configuration, signing);
+    const client = buildAuthorizationUrl.mock.calls[0]?.[0] as { args?: readonly unknown[] };
+    expect(client.args?.[3]).toEqual({ basic: 'secret' });
+  });
+
+  it('keeps the default method for an issuer that lists post, or lists nothing', async () => {
+    for (const served of [
+      { token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'] },
+      {},
+    ]) {
+      metadata.current = served;
+      buildAuthorizationUrl.mockClear();
+      await beginOidcLogin(configuration, signing);
+      const client = buildAuthorizationUrl.mock.calls[0]?.[0] as { args?: unknown };
+      expect(client.args).toBeUndefined();
+    }
+    metadata.current = {};
   });
 });

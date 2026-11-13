@@ -12,6 +12,8 @@ import { sessionCookieValue } from '../composition/identity';
 import {
   clearedInvitationIdentityCookie,
   clearedSelectionCookie,
+  clearedSessionCookie,
+  sessionCookie,
   invitationIdentityCookie,
   invitationIdentityCookieName,
   oidcTransactionCookieName,
@@ -19,12 +21,11 @@ import {
   selectionCookieName,
 } from '.';
 import {
-  clearedSessionCookie,
+  cookieInstanceId,
   DEFAULT_SESSION_COOKIE_NAME,
   MIN_SESSION_SECRET_LENGTH,
   mintSessionToken,
   newSessionClaims,
-  sessionCookie,
   scopedCookieName,
   sessionCookieName,
 } from './session';
@@ -67,10 +68,12 @@ describe('the session cookie name', () => {
 
   it('scopes every auth cookie with the same suffix, through one helper', () => {
     const env = { AW_INSTANCE_ID: 'acme-ai' };
-    expect(scopedCookieName('__Host-aw_workspace_selection', env)).toBe(
+    expect(scopedCookieName('__Host-aw_workspace_selection', cookieInstanceId(env))).toBe(
       '__Host-aw_workspace_selection_acme-ai',
     );
-    expect(scopedCookieName('aw_oidc_transaction', {})).toBe('aw_oidc_transaction');
+    expect(scopedCookieName('aw_oidc_transaction', cookieInstanceId({}))).toBe(
+      'aw_oidc_transaction',
+    );
     vi.stubEnv('AW_INSTANCE_ID', 'acme-ai');
     expect(selectionCookieName()).toBe('__Host-aw_workspace_selection_acme-ai');
     expect(invitationIdentityCookieName()).toBe('__Host-aw_invitation_identity_acme-ai');
@@ -120,5 +123,21 @@ describe('the session cookie name', () => {
 
     const another = await proxy(request(`__Host-aw_session_other=${token}`));
     expect(another.status).toBe(401);
+  });
+
+  it("lets a page through on this deployment's cookie, and sends another's to sign-in", async () => {
+    vi.stubEnv('SESSION_SECRET', SECRET);
+    vi.stubEnv('AW_INSTANCE_ID', 'acme-ai');
+    const token = await mintSessionToken(newSessionClaims('owner@example.test', 'default'), SECRET);
+    const page = (cookie: string) =>
+      new NextRequest(new URL('/agents', 'http://localhost:3000'), { headers: { cookie } });
+
+    const own = await proxy(page(`__Host-aw_session_acme-ai=${token}`));
+    expect(own.headers.get('x-middleware-next')).toBe('1');
+
+    const another = await proxy(page(`__Host-aw_session_other=${token}`));
+    expect(another.status).toBeGreaterThanOrEqual(300);
+    expect(another.status).toBeLessThan(400);
+    expect(another.headers.get('location')).toContain('/signin');
   });
 });

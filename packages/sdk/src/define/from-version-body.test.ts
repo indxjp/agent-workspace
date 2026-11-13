@@ -166,7 +166,11 @@ describe('agentFromVersionBody', () => {
         },
       }));
       expect(dropped).toStrictEqual([
-        { path: 'definition.agent.runtimeProfileName', reason: 'not reproduced by defineAgent()' },
+        {
+          path: 'definition.agent.runtimeProfileName',
+          reason:
+            'the runtime profile "gpu" is an Agent Workspace resource defineAgent() cannot name; switch it with aw agents update',
+        },
       ]);
     });
 
@@ -179,6 +183,9 @@ describe('agentFromVersionBody', () => {
         },
       }));
       expect(dropped.map(({ path }) => path)).toStrictEqual(['definition.policy.skills.names.1']);
+      expect(dropped[0]?.reason).toBe(
+        'defineAgent() writes no skill allowlist, so every assigned skill stays allowed; set the allowlist with aw agents policy set',
+      );
     });
 
     it('reports a stored tool policy that is not the base policy plus autoApprove', () => {
@@ -201,6 +208,11 @@ describe('agentFromVersionBody', () => {
       expect(baseDeny).toBeGreaterThan(1);
       expect(dropped.map(({ path }) => path)).toStrictEqual(
         Array.from({ length: baseDeny }, (_, index) => `definition.policy.tools.deny.${index}`),
+      );
+      expect(new Set(dropped.map(({ reason }) => reason))).toStrictEqual(
+        new Set([
+          'defineAgent() writes the base tool policy plus engine.autoApprove only; set any other tool rule with aw agents policy set',
+        ]),
       );
     });
 
@@ -239,8 +251,8 @@ describe('toolModulesOf', () => {
     ]);
   });
 
-  it('lets the first tool of a name win', () => {
-    const { value } = agentFromVersionBody({
+  it('lets the first tool of a name win, and reports the one it ignored', () => {
+    const { value, dropped } = agentFromVersionBody({
       body: toAgentVersionBody(
         defineAgent({ name: 'helper', instructions: 'Help.', tools: [crm] }),
       ),
@@ -251,5 +263,36 @@ describe('toolModulesOf', () => {
     });
     expect(value.imports[0]?.module).toBe('tools/a.ts');
     expect(value.agent.tools).toStrictEqual([crm]);
+    expect(dropped).toStrictEqual([
+      {
+        path: 'toolModules.1',
+        reason:
+          'crm: tools/b.ts#crm repeats the name of tools/a.ts#crm, which is used; rename one of them',
+      },
+    ]);
+  });
+
+  it('does not report the same tool exported twice, or a repeated name the body does not use', () => {
+    const { dropped } = agentFromVersionBody({
+      body: toAgentVersionBody(
+        defineAgent({ name: 'helper', instructions: 'Help.', tools: [crm] }),
+      ),
+      toolModules: toolModulesOf([
+        { path: 'tools/a.ts', namespace: { crm, alias: crm } },
+        { path: 'tools/b.ts', namespace: { ledger } },
+        {
+          path: 'tools/c.ts',
+          namespace: {
+            ledger: postgresTool({
+              name: 'ledger',
+              url: secret('OTHER_URL'),
+              tables: ['public.other'],
+              readOnly: true,
+            }),
+          },
+        },
+      ]),
+    });
+    expect(dropped).toStrictEqual([]);
   });
 });

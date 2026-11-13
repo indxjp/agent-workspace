@@ -31,6 +31,13 @@
  * and nothing on the site offers it as an authoring choice; see the implementation plan's open
  * question 6).
  *
+ * ## Shell and core (refactoring plan part 07)
+ *
+ * The rules themselves are pure and live in `./core/policy.ts`, which answers a refusal as data.
+ * This file is the shell: it loads the assignments and the catalog, reads the engine registry, and
+ * turns a core refusal into the route's problem answer. The pure rules are re-exported here under
+ * their old names, so every caller keeps its import.
+ *
  * ## An engine switch carries the narrowing across (ADR-0074 D12)
  *
  * A `PUT` that changes `engine` is translated against the stored arm by the contracts'
@@ -39,104 +46,61 @@
  * arm, and a denial the new arm cannot express is refused `422 engine_switch_would_widen`, naming
  * each rule. See {@link carryEngineSwitch}.
  */
-import type { AgentResourceAssignments } from '@agent-workspace/core/db';
-import {
-  connectorServerKey,
-  describeToolRule,
-  toolRuleConnectorServer,
-} from '@indx-workspace/contracts/tool-connectors';
+import { connectorServerKey } from '@indx-workspace/contracts/tool-connectors';
 
+import { AGENT_POLICY_PROBLEM_CODES, type AgentPolicy } from '../../contracts/agents';
 import {
-  AGENT_POLICY_PROBLEM_CODES,
-  AgentPolicySchema,
-  claudeBaseToolPolicyFor,
-  translatePolicyForEngineSwitch,
-  type AgentPolicy,
-  type AgentPolicySource,
-  type AgentPermissions,
-} from '../../contracts/agents';
-import {
-  engineCapabilityRefusalMessage,
-  unsupportedEngineCapability,
   type EngineCapabilityDemand,
-} from '../engines/capabilities';
-import { registeredEngine, registeredEngineIds } from '../engines/registry';
-import { DEFAULT_ENGINE_ID } from '../engines/session-engine';
+  engineCapabilityRefusalMessage,
+  registeredEngine,
+  registeredEngineIds,
+  unsupportedEngineCapability,
+} from '../execution';
 import { formatIssues, problem, type ApiResult } from '../http/result';
-import type { AgentRecord } from './contract';
+import {
+  carryEngineSwitch as carryEngineSwitchRule,
+  CONNECTOR_SERVER_PREFIX,
+  dangerousPermissionMode,
+  parsePolicy,
+  storedConnectorServers,
+  unsupportedEngine,
+  type AssignedResourceIds,
+  type PolicyRefusal,
+} from './core/policy';
 import type { AgentResourceStoreProvider } from './resource-store';
-import type { ResourceCatalogStoreProvider } from '../resources/catalog-store';
+import type { ResourceCatalogStoreProvider } from '../storage-and-sharing';
 
-/**
- * The compiled `tools`/`skills`/`limits`, built from the same permission floor a run compiles.
- *
- * `claudeBaseToolPolicyFor` is `packages/contracts`', and its own doc comment explains why that
- * table lives there rather than in the Claude adapter (ENG-04b, #325): this route and the adapter
- * are the two callers, `apps/web` may never import an adapter, and two spellings of one security
- * decision is the drift this repository refuses. The engine that runs the agent reads the very same
- * function, so the policy this route serves and the policy a run compiles cannot disagree about the
- * floor.
- *
- * This is the **base** policy, not the effective one. The engine's adapter applies two further
- * layers when it compiles a run, and neither is visible here: an `mcp__<server>__*` auto-approval
- * for every connector assigned to the agent, and `Write(…)`/`Edit(…)`/`NotebookEdit(…)`/`Bash`
- * denials for every read-only file grant. So the `autoApprove` and `deny` this returns — and that
- * `GET /api/agents/:id/policy` therefore answers — are what a run starts from, never the full set it
- * ends up with. Deliberate: the route reports what is stored or configured, and the run-time layers
- * depend on resources loaded per run. The same caveat is written on `AgentPolicySchema`
- * (`packages/contracts/src/agents.ts`) and in `docs/sdk/site/building/agents.mdx`, so a client
- * reading either is not misled.
- */
-export function compiledPolicyFor(
-  permissions: AgentPermissions,
-  assignedEnabledSkillNames: readonly string[],
-): Extract<AgentPolicy, { engine: typeof DEFAULT_ENGINE_ID }> {
-  const tools = claudeBaseToolPolicyFor(permissions);
-  return {
-    // The same constant a run reads for an agent with no stored policy, so the policy this route
-    // serves and the engine that run records cannot disagree (ADR-0065).
-    engine: DEFAULT_ENGINE_ID,
-    tools: {
-      base: tools.base,
-      autoApprove: [...tools.autoApprove],
-      deny: [...tools.deny],
-      permissionMode: tools.permissionMode,
-      allowDangerouslySkipPermissions: tools.allowDangerouslySkipPermissions,
-    },
-    skills: { mode: 'allowlist', names: [...assignedEnabledSkillNames] },
-    limits: { maxTurns: null, maxBudgetUsd: null },
-  };
-}
+export {
+  compiledPolicyFor,
+  demandsConnectors,
+  demandsSkills,
+  firstUnassignedSkillName,
+  mcpRuleServerNames,
+  policyFor,
+  policySourceOf,
+  storedConnectorServers,
+  withStoredConnectorIds,
+} from './core/policy';
 
-/** The policy `GET` answers: the stored one, or the compiled one when the column is NULL. */
-export function policyFor(
-  agent: AgentRecord,
-  assignedEnabledSkillNames: readonly string[],
-): AgentPolicy {
-  return agent.policy ?? compiledPolicyFor(agent.permissions, assignedEnabledSkillNames);
-}
-
-/**
- * Whether {@link policyFor} answers a stored policy or a compiled one — the `source` of
- * `AgentPolicyResponseSchema`. A client that copies the policy elsewhere (K-1 export, ADR-0076 D2)
- * needs it so a compiled policy is not frozen into a stored one.
- */
-export function policySourceOf(agent: AgentRecord): AgentPolicySource {
-  return agent.policy === null ? 'compiled' : 'stored';
+/** A core refusal as the route answers it. */
+function refusalResult(refusal: PolicyRefusal): ApiResult {
+  const details =
+    refusal.details ?? (refusal.issues === undefined ? undefined : formatIssues(refusal.issues));
+  return problem(refusal.status, refusal.code, refusal.message, details);
 }
 
 /**
  * Every catalog skill an agent's assignment row names, by name — regardless of whether it is
  * currently enabled. Assignment, not enablement, is the membership a `PUT` is checked against (see
- * the file header); enablement narrows what {@link compiledPolicyFor} lists for a `GET`.
+ * the file header); enablement narrows what `compiledPolicyFor` lists for a `GET`.
  *
- * It takes the row rather than reading it, so a caller that also asks {@link demandsConnectors}
+ * It takes the row rather than reading it, so a caller that also asks `demandsConnectors`
  * decides both against one read of the assignments, not two that a concurrent
  * `PUT /api/agents/:id/resources` could land between.
  */
 export async function assignedSkillNames(
   workspaceId: string,
-  assigned: AgentResourceAssignments | null,
+  assigned: Pick<AssignedResourceIds, 'skillIds'> | null,
   catalog: ResourceCatalogStoreProvider,
 ): Promise<ReadonlySet<string>> {
   if (assigned === null || assigned.skillIds.length === 0) return new Set();
@@ -150,7 +114,7 @@ export async function assignedSkillNames(
   return names;
 }
 
-/** The same, but only the assigned skills that are also enabled — what {@link compiledPolicyFor} lists. */
+/** The same, but only the assigned skills that are also enabled — what `compiledPolicyFor` lists. */
 export async function assignedEnabledSkillNames(
   workspaceId: string,
   agentId: string,
@@ -173,14 +137,9 @@ export type ParsedPolicyBody =
   | { readonly ok: true; readonly policy: AgentPolicy }
   | { readonly ok: false; readonly result: ApiResult };
 
-/** A plain JSON object: not null, not an array. */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /**
- * Parse a `PUT` body against {@link AgentPolicySchema}, refusing a dangerous permission mode
- * before anything is stored.
+ * Parse a `PUT` body against `AgentPolicySchema`, refusing a dangerous permission mode
+ * before anything is stored (the rules: `parsePolicy` in `./core/policy.ts`).
  *
  * Three refusals are told apart from the generic shape failure, because each names a different
  * thing the client can fix:
@@ -201,36 +160,8 @@ export function parsePolicyBody(
   raw: unknown,
   registered: readonly string[] = registeredEngineIds(),
 ): ParsedPolicyBody {
-  if (isPlainObject(raw) && !('engine' in raw) && 'provider' in raw) {
-    return {
-      ok: false,
-      result: problem(
-        AGENT_POLICY_PROBLEM_CODES.invalid_body,
-        'invalid_body',
-        "The policy discriminant is 'engine', naming the harness that runs the agent loop. " +
-          "'provider' names the model provider and is no longer accepted here (ADR-0065).",
-      ),
-    };
-  }
-  if (isPlainObject(raw) && 'engine' in raw) {
-    const unsupported = unsupportedEngineRefusal(raw['engine'], registered);
-    if (unsupported !== null) return { ok: false, result: unsupported };
-  }
-  const parsed = AgentPolicySchema.safeParse(raw);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      result: problem(
-        AGENT_POLICY_PROBLEM_CODES.invalid_policy,
-        'invalid_policy',
-        'The policy body does not match the published shape.',
-        formatIssues(parsed.error.issues),
-      ),
-    };
-  }
-  const dangerous = dangerousPermissionModeRefusal(parsed.data);
-  if (dangerous !== null) return { ok: false, result: dangerous };
-  return { ok: true, policy: parsed.data };
+  const parsed = parsePolicy(raw, registered);
+  return parsed.ok ? parsed : { ok: false, result: refusalResult(parsed.refusal) };
 }
 
 /**
@@ -248,13 +179,8 @@ export function unsupportedEngineRefusal(
   registered: readonly string[],
   details?: readonly string[],
 ): ApiResult | null {
-  if (registered.includes(String(engine))) return null;
-  return problem(
-    AGENT_POLICY_PROBLEM_CODES.unsupported_engine,
-    'unsupported_engine',
-    `This deployment registers the engines ${registered.map((id) => `'${id}'`).join(', ')}; received ${JSON.stringify(engine)}.`,
-    details,
-  );
+  const refusal = unsupportedEngine(engine, registered, details);
+  return refusal === null ? null : refusalResult(refusal);
 }
 
 /**
@@ -263,61 +189,8 @@ export function unsupportedEngineRefusal(
  * {@link parsePolicyBody} and the version pipeline (S1-05).
  */
 export function dangerousPermissionModeRefusal(policy: AgentPolicy): ApiResult | null {
-  if (!('tools' in policy) || policy.tools.permissionMode !== 'bypassPermissions') {
-    return null;
-  }
-  return problem(
-    AGENT_POLICY_PROBLEM_CODES.dangerous_permission_mode_refused,
-    'dangerous_permission_mode_refused',
-    "permissionMode 'bypassPermissions' cannot be set through this route.",
-  );
-}
-
-/** `null` when every allowlisted name is assigned; otherwise the first name that is not. */
-export function firstUnassignedSkillName(
-  policy: AgentPolicy,
-  assigned: ReadonlySet<string>,
-): string | null {
-  if (policy.skills.mode !== 'allowlist') return null;
-  for (const name of policy.skills.names) {
-    if (!assigned.has(name)) return name;
-  }
-  return null;
-}
-
-/**
- * Whether the saved `policy` lets any of this agent's **assigned** skills reach its engine.
- *
- * The demand is about assignment, narrowed only by what is saved: `mode: 'all'` demands every
- * assigned skill, an allowlist demands the assigned ones it names, and an allowlist naming nothing
- * demands none and is therefore not refused. `null` is the NULL column a one-call create leaves
- * behind, which a run reads as `compiledPolicyFor`'s allowlist of the assigned skills enabled *at
- * that run* — so, like `mode: 'all'`, it demands every assigned skill.
- *
- * This is deliberately not the whole of `apps/web/server/compose/run-request.ts`'s `agentConfigFor`
- * narrowing: a run also drops **disabled** skills and connectors
- * (`apps/web/server/compose/resource-loader.ts`), and this check does not. Enablement is flipped by
- * `PATCH /api/skills/:name` and the connector routes, which never pass through a save of the agent,
- * so a check that trusted today's enablement would let an agent be saved and then hand its engine
- * a skill it cannot honour the moment one is re-enabled — the silent drop ADR-0065 D3 forbids. The
- * same reason makes assignment, not enablement, what `skill_not_assigned` checks (the file header).
- *
- * `assigned` is read for its emptiness under `null` and `mode: 'all'`, and for membership by name
- * under an allowlist.
- */
-export function demandsSkills(policy: AgentPolicy | null, assigned: ReadonlySet<string>): boolean {
-  if (policy === null || policy.skills.mode === 'all') return assigned.size > 0;
-  return policy.skills.names.some((name) => assigned.has(name));
-}
-
-/**
- * Whether this assignment row carries at least one MCP connector — assigned, whether or not it is
- * currently enabled, for the reason {@link demandsSkills} gives.
- */
-export function demandsConnectors(
-  assigned: Pick<AgentResourceAssignments, 'connectorIds'> | null,
-): boolean {
-  return assigned !== null && assigned.connectorIds.length > 0;
+  const refusal = dangerousPermissionMode(policy);
+  return refusal === null ? null : refusalResult(refusal);
 }
 
 /**
@@ -344,79 +217,6 @@ export function engineCapabilityRefusal(
     engineCapabilityRefusalMessage(engineId, capability),
     [capability],
   );
-}
-
-/** The server of an `mcp__<server>__…` rule: everything up to the first `__` after the prefix. */
-const MCP_RULE_SERVER = /^mcp__(.+?)__/u;
-
-const CONNECTOR_SERVER_PREFIX = 'connector-';
-
-/** A server written as the fallback key `connector-<id>`: already the stored form. */
-const CONNECTOR_ID_SERVER = /^connector-/u;
-
-/**
- * Every server an MCP rule of `policy` names by a connector name rather than by `connector-<id>`,
- * de-duplicated: the names {@link withStoredConnectorIds} needs looked up.
- */
-export function mcpRuleServerNames(policy: AgentPolicy): readonly string[] {
-  if (!('tools' in policy)) return [];
-  const { base, autoApprove, deny } = policy.tools;
-  const rules = [...(base === 'claude_code_preset' ? [] : base), ...autoApprove, ...deny];
-  const names = new Set<string>();
-  for (const rule of rules) {
-    const server = MCP_RULE_SERVER.exec(rule)?.[1];
-    if (server !== undefined && !CONNECTOR_ID_SERVER.test(server)) names.add(server);
-  }
-  return [...names];
-}
-
-/**
- * `policy` with every rule written as `mcp__<name>__…`, where `<name>` names an MCP connector of the
- * workspace (`ids`, by name), stored as `mcp__connector-<id>__…` (ADR-0113 SD13, #1109).
- *
- * A run keys an MCP connector by its name when it can, so an owner writes rules that way, but a
- * name is not stable: a rename, or a same-named tool connector that sends the connector back to its
- * `connector-<id>` key, would make a stored `deny` stop matching, and a stored `autoApprove`
- * transfer to whichever connector next takes the name. Stored by id, compose points the rule at the
- * connector's key in that run (`withRunConnectorKeys`, `../compose/run-request.ts`). A name no MCP
- * connector has is left as written.
- */
-export function withStoredConnectorIds(
-  policy: AgentPolicy,
-  ids: ReadonlyMap<string, string>,
-): AgentPolicy {
-  if (!('tools' in policy) || ids.size === 0) return policy;
-  const rewrite = (rules: readonly string[]): string[] => [
-    ...new Set(
-      rules.map((rule) =>
-        rule.replace(MCP_RULE_SERVER, (prefix, server: string) => {
-          const id = ids.get(server);
-          return id === undefined ? prefix : `mcp__connector-${id}__`;
-        }),
-      ),
-    ),
-  ];
-  const { tools } = policy;
-  return {
-    ...policy,
-    tools: {
-      ...tools,
-      base: tools.base === 'claude_code_preset' ? tools.base : rewrite(tools.base),
-      autoApprove: rewrite(tools.autoApprove),
-      deny: rewrite(tools.deny),
-    },
-  };
-}
-
-/**
- * Every `connector-<id>` server a rule of `policy` names (a rule stored by connector id,
- * ADR-0113 SD13), de-duplicated: the connectors whose current names a view looks up.
- */
-export function storedConnectorServers(policy: AgentPolicy): readonly string[] {
-  if (!('tools' in policy)) return [];
-  const { base, autoApprove, deny } = policy.tools;
-  const rules = [...(base === 'claude_code_preset' ? [] : base), ...autoApprove, ...deny];
-  return [...new Set(rules.flatMap((rule) => toolRuleConnectorServer(rule) ?? []))];
 }
 
 /**
@@ -466,20 +266,6 @@ export function carryEngineSwitch(
   next: AgentPolicy,
   connectorNames: Readonly<Record<string, string>> = {},
 ): CarriedPolicy {
-  if (stored === null) return { ok: true, policy: next };
-  const translation = translatePolicyForEngineSwitch(stored, next);
-  if (translation.ok) return { ok: true, policy: translation.policy };
-  const rules = translation.refused.map((rule) => describeToolRule(rule, connectorNames));
-  return {
-    ok: false,
-    result: problem(
-      AGENT_POLICY_PROBLEM_CODES.engine_switch_would_widen,
-      'engine_switch_would_widen',
-      `Moving this agent from '${stored.engine}' to '${next.engine}' would drop ` +
-        `${translation.refused.length === 1 ? 'a denial' : 'denials'} the '${next.engine}' policy cannot express, ` +
-        'so the agent could use a tool its owner denied. Remove each named rule from the current ' +
-        `policy first (or turn off the permission it guards), then switch. The rules: ${rules.join(', ')}.`,
-      translation.refused,
-    ),
-  };
+  const carried = carryEngineSwitchRule(stored, next, connectorNames);
+  return carried.ok ? carried : { ok: false, result: refusalResult(carried.refusal) };
 }

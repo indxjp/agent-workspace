@@ -440,4 +440,28 @@ describe('er-synthesis: the concept page', () => {
       }
     });
   }
+
+  // Refactoring plan part 04, step 3: the glossary's 日本語 column is prose beside the Lean terms,
+  // and every term has one.
+  it('gives every glossary term a Japanese name in the 日本語 column', () => {
+    const cells = (line: string): string[] =>
+      line
+        .split('|')
+        .slice(1, -1)
+        .map((cell) => cell.trim());
+    const lines = page.split('\n');
+    const header = lines.find((line) => line.startsWith('| Term '));
+    expect(header, 'the glossary table header').toBeDefined();
+    const column = cells(header ?? '').indexOf('日本語');
+    expect(column).toBe(1);
+    const japanese = /[\u3040-\u30ff\u4e00-\u9fff]/u;
+    const missing = glossaryVectors
+      .map((vector) => asString(input(vector.input, vector.id)['term'], vector.id))
+      .filter((term) => {
+        const row = lines.find((line) => line.startsWith(`| **${term}** `));
+        const cell = row === undefined ? '' : (cells(row)[column] ?? '');
+        return !japanese.test(cell);
+      });
+    expect(missing).toStrictEqual([]);
+  });
 });

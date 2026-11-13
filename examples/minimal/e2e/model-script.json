@@ -1,0 +1,8 @@
+{
+  "conversations": [
+    {
+      "when": "e2e-minimal-helper",
+      "turns": [{ "tool": "note_list", "input": {} }, { "text": "The helper read the notes as you." }]
+    }
+  ]
+}

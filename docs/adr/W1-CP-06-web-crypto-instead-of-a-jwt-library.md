@@ -109,3 +109,27 @@ W2's schema task opening `pnpm-lock.yaml`. At that point: add `jose`, replace `m
 and `verifySessionToken` with `SignJWT`/`jwtVerify`, keep the cookie attributes and the classifier
 exactly as they are, and keep every rejection test — they are written against the public functions,
 not against the format.
+
+## Amendment — one key per purpose, derived from `SESSION_SECRET` (refactoring part 06 step 5, 2026-11-10)
+
+"One `SESSION_SECRET`, one key" had become one secret for six jobs: the session,
+workspace-selection and invitation-identity cookies, the OIDC transaction, CLI device codes and
+the public-share visitor key. Only a format tag or a purpose string kept a token for one job from
+being tried as another.
+
+**The rule from here.** Each job signs with its own key, derived from `SESSION_SECRET` with
+HKDF-SHA-256 (RFC 5869), a fixed salt and the job's label (`apps/web/server/auth/core/key-ring.ts`).
+A signature made for one job does not verify for any other. The derivation runs on Web Crypto, so
+the edge proxy and the routes derive the same key; the two synchronous Node readers (device codes
+and the visitor key) derive the same bytes with `hkdfSync`, and a test holds the two equal.
+
+**The roll-over.** Tokens are signed only with the derived key. Verifiers also accept the raw
+secret, the key every token was signed with before this change, so a deploy signs nobody out and
+breaks no sign-in, invitation or `aw login` in flight. That is no weaker than before. No old token
+outlives the deploy by more than twelve hours (the session's absolute lifetime; the others last ten
+minutes), and part 06 step 6, the single token codec, removes the fallback. The visitor key has no
+roll-over: its prefix moved from `v1_` to `v2_`, and runnable links are still off (release gate
+D-06).
+
+Rotation is still not implemented: changing `SESSION_SECRET` still changes every derived key at
+once.

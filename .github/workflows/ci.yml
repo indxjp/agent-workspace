@@ -8,8 +8,11 @@
 # disk, and nothing is thrown away after a job (docs/adr/0053, Amendment 2026-10-23). A job therefore
 # publishes its services on random host ports, names its containers per runner and removes them when
 # it ends. scripts/check-workflows.mjs holds every job to `[self-hosted, ms-a2]` except the few it
-# lists in OFFLOADED_JOBS, which run on `blacksmith-8vcpu-ubuntu-2404`: typecheck and lint, the test
-# shards, formal, the Docker E2Es and browser (ADR-0053, Amendments 2026-10-23 and 2026-10-25).
+# lists in OFFLOADED_JOBS, which run on `blacksmith-8vcpu-ubuntu-2404`: build and build-embedded,
+# typecheck and lint, formal, the Docker E2Es and browser (ADR-0053, Amendments
+# 2026-10-23, 2026-10-25 and 2026-11-05), the test shards (heavy-checks), which run on the org runner
+# group heavy-ci in HEAVY_CI_JOBS (MS-A2 and the GX10, Amendment 2026-11-08), and the light jobs in HOSTED_JOBS (fast-checks, the two
+# cancel jobs and ci-success), which run on GitHub's plain `ubuntu-latest` (Amendment 2026-11-05).
 # Each runs-on is an expression on github.repository_owner: those runners in INDXDev, a free
 # GitHub-hosted runner in the public export and in any fork (ADR-0053, Amendment 2026-10-26).
 # The run is shaped so no work is done twice: the `build` job builds every
@@ -40,8 +43,8 @@
 # tiers. The pull request runs the inner loop (fast checks, build, typecheck and lint, tests). The
 # merge queue runs the same inner loop on the merged commit, plus `formal` and `image-scan` when the
 # diff reaches what they read (their `scope` steps). The heavy tier (release checks and images,
-# generated-project-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser, and formal
-# and image-scan unscoped) runs nightly on main (`schedule`), on a dispatch, on a pull request
+# generated-project-e2e, app-kit-e2e, apps-e2e, journey-e2e, docs-claims, tool-sandbox-e2e, coverage, browser,
+# and formal and image-scan unscoped) runs nightly on main (`schedule`), on a dispatch, on a pull request
 # labelled `ci:full` before its next push (never on its `edited` runs, which skip `build`), and as
 # the release gate: publish-packages.yml and images.yml call this workflow with `full: true` on the
 # tagged commit before they publish. A failed nightly opens or updates one issue
@@ -113,7 +116,7 @@ env:
 jobs:
   fast-checks:
     name: fast checks · PR contract · workflow policy
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     # id-token: the job's GitHub OIDC token is its only remote-cache credential (see the header).
     permissions:
       contents: read
@@ -129,6 +132,10 @@ jobs:
       # Node built-ins only, so it runs before the install.
       - name: Infra contract tests
         run: node --test infra/tests/contracts.test.mjs
+
+      # Node built-ins and bash only; the Chromium install steps below depend on this wrapper.
+      - name: Chromium install wrapper tests
+        run: node --test scripts/ci/playwright-install.test.mjs
 
       # No Nx Cloud path, no CI write credential, no bucket cache, every cached nx call through
       # scripts/ci/nx.sh (docs/adr/0110). Node built-ins only, so it runs before the install.
@@ -207,6 +214,33 @@ jobs:
             echo "The base has no eslint-suppressions.json; this PR introduces it."
           fi
 
+      # Refactoring plan §07: the clock ceiling (scripts/clock-ceiling.json) is lowered, never raised.
+      # pnpm clock:check holds the code to it; this refuses a ceiling raised above the base's. Node
+      # built-ins only, so it needs no install.
+      - name: Clock ceiling does not grow
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$BASE_SHA:scripts/clock-ceiling.json" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/clock-ceiling.json" > "$RUNNER_TEMP/base-clock-ceiling.json"
+          fi
+          node scripts/clock-ceiling.mjs "$RUNNER_TEMP/base-clock-ceiling.json" scripts/clock-ceiling.json
+
+      # Refactoring part 03, step 8: the duration ceiling (scripts/duration-ceiling.json) is lowered,
+      # never raised, the same way. Node built-ins only.
+      - name: Duration ceiling does not grow
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          if git cat-file -e "$BASE_SHA:scripts/duration-ceiling.json" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/duration-ceiling.json" > "$RUNNER_TEMP/base-duration-ceiling.json"
+          fi
+          node scripts/duration-ceiling.mjs "$RUNNER_TEMP/base-duration-ceiling.json" scripts/duration-ceiling.json
+
       - name: Diff gates do not run on push
         if: github.event_name != 'pull_request'
         run: |
@@ -223,6 +257,8 @@ jobs:
       # pinned by version and SHA-256 (from the project's published checksums); no marketplace
       # action, because gitleaks-action needs a paid licence for organisation repositories.
       # Scans the commits this run adds, not history; findings are redacted in the log.
+      # Both downloads retry for up to three minutes: github.com release assets answer 504 in bursts.
+      # If gitleaks still cannot be fetched, the same version is built from the Go module proxy.
       - name: Secret scan (gitleaks)
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
@@ -233,9 +269,15 @@ jobs:
           sha256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
           dir="$RUNNER_TEMP/gitleaks"
           mkdir -p "$dir"
-          curl -fsSL --retry 3 -o "$dir/gitleaks.tar.gz"             "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
-          echo "$sha256  $dir/gitleaks.tar.gz" | sha256sum --check --strict -
-          tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks
+          if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 -o "$dir/gitleaks.tar.gz"             "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"; then
+            echo "$sha256  $dir/gitleaks.tar.gz" | sha256sum --check --strict -
+            tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks
+          else
+            # The same pinned version from the Go module proxy, verified against sum.golang.org.
+            echo "::warning title=Secret scan::the gitleaks release download failed; building v${version} with go install"
+            GOBIN="$dir" GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GOTOOLCHAIN=auto \
+              go install "github.com/zricethezav/gitleaks/v8@v${version}"
+          fi
           # A new branch or a manual run has no usable base: scan just the head commit. A pull request
           # or a merge-queue group must have one (fail closed).
           if [ -n "${BASE_SHA:-}" ] && [ "$BASE_SHA" != 0000000000000000000000000000000000000000 ]             && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
@@ -271,7 +313,7 @@ jobs:
           sha256=160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
           dir="$RUNNER_TEMP/osv-scanner"
           mkdir -p "$dir"
-          curl -fsSL --retry 3 -o "$dir/osv-scanner"             "https://github.com/google/osv-scanner/releases/download/v${version}/osv-scanner_linux_amd64"             || fail "could not download osv-scanner"
+          curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 -o "$dir/osv-scanner"             "https://github.com/google/osv-scanner/releases/download/v${version}/osv-scanner_linux_amd64"             || fail "could not download osv-scanner"
           echo "$sha256  $dir/osv-scanner" | sha256sum --check --strict - || fail "osv-scanner checksum mismatch"
           chmod +x "$dir/osv-scanner"
           # Exit 1 means "vulnerabilities found" and is judged against the baseline below; any
@@ -321,12 +363,12 @@ jobs:
       - name: Generated SDK reference and llms.txt are current
         run: pnpm docs:check
 
-      # Design §07: gaps print, a malformed story tag fails, and a cell covered at the base that is
-      # uncovered here fails. #1703 will require zero gaps.
+      # Design §07: a malformed story tag fails, a cell covered at the base that is uncovered here
+      # fails, and so does any gap of a storage story (#1703). A Builder gap prints until its issue.
       - name: Storage story coverage
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
-        run: pnpm stories:check --base "${BASE_SHA:-origin/main}"
+        run: pnpm stories:check --base "${BASE_SHA:-origin/main}" --require-complete
 
       - name: Licence gate
         run: |
@@ -345,7 +387,7 @@ jobs:
     name: build · every workspace but embedded
     if: >-
       github.event.action != 'edited'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -537,7 +579,7 @@ jobs:
     name: build · embedded and its tests
     if: >-
       github.event.action != 'edited'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 40
     permissions:
       contents: read
@@ -649,24 +691,25 @@ jobs:
       - name: No test in the run was skipped
         run: node scripts/ci/vitest-no-skip.mjs
 
-  # Typecheck and lint, as Nx tasks, one target per runner. A pull request runs only the projects
+  # Typecheck and lint, as Nx tasks, one after the other in one job. A pull request runs only the projects
   # its diff reaches (the base is the merge base with `main`, hence `fetch-depth: 0`); a push to
   # `main` runs every project so a gap in affected-detection can never hide behind "nothing
   # looked affected". The builds both targets depend on come from the `build` job, so Nx is told
   # not to run them (`--excludeTaskDependencies`). The repository-wide static checks that read
-  # built packages run once, on the typecheck runner.
+  # built packages run once, in this job.
   typecheck-lint:
-    name: ${{ matrix.target }} · Nx task graph
+    name: typecheck and lint · Nx task graph
     if: >-
       (github.event_name != 'push' || inputs.full) && github.event.action != 'edited'
     needs: build
     # Blacksmith, not the pool (ADR-0053, Amendment 2026-10-25): with `tests` these are the jobs every
     # pull request and queue group waits on after `build`, and on the pool they waited longest for a slot.
+    # COST (ADR-0053, Amendment 2026-11-10): one job for both targets, not a matrix of two. Each
+    # target took about a minute on its own 8-vCPU runner and most of that was the shared setup
+    # (checkout, install, restore), billed twice and rounded up to whole minutes twice. Every check
+    # below runs even when an earlier one failed (`!cancelled()` and a restored build), so a red
+    # typecheck still reports lint, and the job fails if any of them failed.
     runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [typecheck, lint]
     permissions:
       contents: read
       # .github/actions/workspace-build waits for the build artifacts through the run's API.
@@ -703,31 +746,53 @@ jobs:
           server: ${{ vars.NX_SELF_HOSTED_REMOTE_CACHE_SERVER }}
 
       - name: Restore the workspace build
+        id: workspace
         uses: ./.github/actions/workspace-build
 
-      - name: Typecheck or lint through the Nx task graph
+      - name: Typecheck through the Nx task graph
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         run: |
           set -euo pipefail
           if [ -n "$DIFF_BASE" ]; then
-            scripts/ci/nx.sh affected -t ${{ matrix.target }} --base="$DIFF_BASE" --head=HEAD --excludeTaskDependencies --parallel=2 --output-style=static
+            scripts/ci/nx.sh affected -t typecheck --base="$DIFF_BASE" --head=HEAD --excludeTaskDependencies --parallel=4 --output-style=static
           else
-            scripts/ci/nx.sh run-many -t ${{ matrix.target }} --excludeTaskDependencies --parallel=2 --output-style=static
+            scripts/ci/nx.sh run-many -t typecheck --excludeTaskDependencies --parallel=4 --output-style=static
+          fi
+
+      - name: Lint through the Nx task graph
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$DIFF_BASE" ]; then
+            scripts/ci/nx.sh affected -t lint --base="$DIFF_BASE" --head=HEAD --excludeTaskDependencies --parallel=4 --output-style=static
+          else
+            scripts/ci/nx.sh run-many -t lint --excludeTaskDependencies --parallel=4 --output-style=static
           fi
 
       - name: Complexity ceiling equals the measured maximum
-        if: matrix.target == 'lint'
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         run: pnpm complexity:check
 
+      # Refactoring plan §07: direct clock and random-id calls in server code can only go down.
+      - name: Clock ceiling equals the direct calls counted
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
+        run: pnpm clock:check
+
+      # Refactoring part 03, step 8: bare durations in server code can only go down.
+      - name: Duration ceiling equals the bare durations counted
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
+        run: pnpm durations:check
+
       - name: Architecture boundaries
-        if: matrix.target == 'typecheck'
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         run: pnpm architecture:check
 
       - name: Dead code and dependency declarations
-        if: matrix.target == 'typecheck'
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         run: pnpm deadcode:check
 
       - name: Duplication budget
-        if: matrix.target == 'typecheck'
+        if: ${{ !cancelled() && steps.workspace.outcome == 'success' }}
         run: pnpm duplication:check
 
   heavy-checks:
@@ -752,9 +817,11 @@ jobs:
             projects: '@agent-workspace/web @agent-workspace/core'
           - shard: rest
             projects: ''
-    # Blacksmith, not the pool (ADR-0053, Amendment 2026-10-25): the four shards held more MS-A2
-    # runner-minutes than any other job of a pull request or a queue group.
-    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    # The org runner group heavy-ci (ADR-0053, Amendment 2026-11-08): the costliest Blacksmith job,
+    # so it runs on our own machines (MS-A2, x86_64, and the GX10's CI runners, arm64), on the
+    # runners with Docker (label `docker`). GitHub hands each shard to whichever of them is idle.
+    # Several jobs share one host, so the services keep their random ports and per-runner names.
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('{"group":"heavy-ci","labels":["self-hosted","docker"]}') || 'ubuntu-latest' }}
 
     # A REAL PostgreSQL 18, for the whole job. Before this existed, `pnpm test` reported
     # `150 passed | 14 skipped` and a green tick: W1-DB-01's migration, its seed, the "exactly
@@ -835,13 +902,21 @@ jobs:
           # Full history: the ownership and suppression gates diff base...head.
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
+
+      # Not pnpm/action-setup: its self-installer runs the runner's bundled npm, which is broken on
+      # the GX10's runners, and the default ~/setup-pnpm is one directory for all of them (they share
+      # one home). setup-node's npm installs the pinned pnpm (package.json packageManager) into
+      # this runner's own temp instead.
+      - name: Set up pnpm
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+          npm install --global --no-fund --no-audit --prefix "$RUNNER_TEMP/pnpm" "pnpm@$version"
+          echo "$RUNNER_TEMP/pnpm/bin" >> "$GITHUB_PATH"
 
       - name: Install
         run: pnpm install --frozen-lockfile
@@ -1338,17 +1413,26 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         uses: ./.github/actions/free-disk
 
+      # When github.com release assets stay unreachable, the cached toolchain below is used instead.
       - name: Install elan from a checksum-verified release
+        id: elan
         if: steps.scope.outputs.applies == 'true'
         run: |
           set -euo pipefail
           archive="elan-x86_64-unknown-linux-gnu.tar.gz"
-          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/$archive" \
-            "https://github.com/leanprover/elan/releases/download/${ELAN_VERSION}/${archive}"
+          # github.com release assets answer 504 in bursts: retry for up to three minutes.
+          if ! curl --fail --silent --show-error --location --retry 6 --retry-delay 10 --retry-all-errors \
+            --retry-max-time 180 --output "$RUNNER_TEMP/$archive" \
+            "https://github.com/leanprover/elan/releases/download/${ELAN_VERSION}/${archive}"; then
+            echo "::warning title=elan::the elan release could not be downloaded"
+            echo "installed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "${ELAN_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/elan-init" -y --no-modify-path --default-toolchain none
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          echo "installed=true" >> "$GITHUB_OUTPUT"
 
       # Restore only. A cache saved here would sit on this run's gh-readonly-queue/* ref, which no
       # later run can read, so every group rebuilt the same stale delta (~220 of 463 Lake jobs,
@@ -1363,6 +1447,21 @@ jobs:
           key: formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-${{ hashFiles('formal/**/*.lean') }}
           restore-keys: |
             formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-
+
+      # elan only selects the toolchain formal/lean-toolchain pins; the cache key above includes that
+      # file, so a restored cache holds exactly that toolchain and its bin directory can stand in.
+      - name: Use the cached Lean toolchain when elan could not be downloaded
+        if: steps.scope.outputs.applies == 'true' && steps.elan.outputs.installed == 'false'
+        run: |
+          set -euo pipefail
+          version="$(sed 's/.*://' formal/lean-toolchain)"
+          bin="$(find "$HOME/.elan/toolchains" -maxdepth 1 -type d -name "*${version}" 2>/dev/null | head -n 1)/bin"
+          if [ ! -x "$bin/lake" ]; then
+            echo "::error title=Lean toolchain::elan could not be downloaded and no cached ${version} toolchain was restored"
+            exit 1
+          fi
+          echo "::warning title=Lean toolchain::the elan download failed; using the cached ${version} toolchain"
+          echo "$bin" >> "$GITHUB_PATH"
 
       - name: Set up pnpm
         if: steps.scope.outputs.applies == 'true'
@@ -1425,20 +1524,22 @@ jobs:
         run: pnpm vitest run tests/formal apps/web/formal apps/runner/formal --reporter=verbose
 
   # COST: keeps main's Lean build cache current, the only one a merge-queue group can restore
-  # (`formal` restores, never saves). A push whose Lean sources already have a main entry stops
-  # after the lookup; otherwise it builds incrementally from the newest main entry and saves.
-  # Not required by ci-success: a miss only makes the next group's `formal` slower. Blacksmith,
-  # like `formal`, because Blacksmith runners read Blacksmith's cache, not the MS-A2 pool's.
-  formal-cache:
-    name: formal · warm the Lean cache on main
+  # (`formal` restores, never saves). Two jobs (ADR-0053, Amendment 2026-11-10): the lookup runs on
+  # the smallest Blacksmith runner, because a push whose Lean sources already have a main entry stops
+  # there (most pushes, in seconds); only a miss starts `formal-cache`, which builds incrementally
+  # from the newest main entry on 8 vCPU and saves. Neither is required by ci-success: a miss only
+  # makes the next group's `formal` slower. Both on Blacksmith, like `formal`, because Blacksmith
+  # runners read Blacksmith's cache, not the MS-A2 pool's.
+  formal-cache-lookup:
+    name: formal · look up the Lean cache on main
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
-    timeout-minutes: 40
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-2vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    timeout-minutes: 10
     permissions:
       contents: read
-    env:
-      ELAN_VERSION: v4.2.4
-      ELAN_SHA256: 42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63
+    outputs:
+      hit: ${{ steps.lookup.outputs.cache-hit }}
+      key: ${{ steps.lookup.outputs.cache-primary-key }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -1452,12 +1553,28 @@ jobs:
             formal/.lake
           key: formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-${{ hashFiles('formal/**/*.lean') }}
 
+  formal-cache:
+    name: formal · warm the Lean cache on main
+    needs: formal-cache-lookup
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.formal-cache-lookup.outputs.hit != 'true'
+    runs-on: ${{ github.repository_owner == 'INDXDev' && 'blacksmith-8vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      ELAN_VERSION: v4.2.4
+      ELAN_SHA256: 42b94d4244e8353142c456ec0e4ca6528fd898a6c604d4059f494e706e431f63
+      FORMAL_CACHE_KEY: ${{ needs.formal-cache-lookup.outputs.key }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
       - name: Install elan from a checksum-verified release
-        if: steps.lookup.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           archive="elan-x86_64-unknown-linux-gnu.tar.gz"
-          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/$archive" \
+          # github.com release assets answer 504 in bursts: retry for up to three minutes.
+          curl --fail --silent --show-error --location --retry 6 --retry-delay 10 --retry-all-errors \
+            --retry-max-time 180 --output "$RUNNER_TEMP/$archive" \
             "https://github.com/leanprover/elan/releases/download/${ELAN_VERSION}/${archive}"
           echo "${ELAN_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP"
@@ -1465,29 +1582,26 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
       - name: Restore the newest Lean cache on main
-        if: steps.lookup.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.elan/toolchains
             formal/.lake
-          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          key: ${{ env.FORMAL_CACHE_KEY }}
           restore-keys: |
             formal-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain', 'formal/lake-manifest.json') }}-
 
       # The same targets as `pnpm formal:build`; lake.mjs needs only Node, no install.
       - name: Build the Lean model and its tools
-        if: steps.lookup.outputs.cache-hit != 'true'
         run: node scripts/formal/lake.mjs build AgentWorkspace catalogue axioms imports vectors
 
       - name: Save the Lean cache for main
-        if: steps.lookup.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.elan/toolchains
             formal/.lake
-          key: ${{ steps.lookup.outputs.cache-primary-key }}
+          key: ${{ env.FORMAL_CACHE_KEY }}
 
   # #373 (docs/adr/0087): the release vulnerability gate, on every pull request. It builds each
   # image of the release plan (infra/release/images.mjs) for linux/amd64 and runs
@@ -1542,10 +1656,38 @@ jobs:
         with:
           node-version: 24
 
-      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+      # setup-trivy does not retry its github.com download, which answers 504 in bursts; on failure
+      # the same pinned version is built from the Go module proxy, verified against sum.golang.org.
+      - name: Set up Trivy
+        id: trivy
         if: steps.scope.outputs.applies == 'true'
+        continue-on-error: true
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
         with:
           version: v0.76.1
+
+      - name: Build Trivy from the Go module proxy (release download failed)
+        if: steps.scope.outputs.applies == 'true' && steps.trivy.outcome == 'failure'
+        env:
+          # The MS-A2 runners have no Go: a pinned toolchain from go.dev (not a GitHub release),
+          # checked against the SHA-256 go.dev publishes. Caches stay in this job's temp directory.
+          GO_VERSION: go1.27.3
+          GO_SHA256: 65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
+        run: |
+          set -euo pipefail
+          echo "::warning title=Trivy::the release download failed; building v0.76.1 with go install"
+          export GOPATH="$RUNNER_TEMP/gopath" GOCACHE="$RUNNER_TEMP/gocache"
+          if ! command -v go >/dev/null; then
+            archive="$RUNNER_TEMP/$GO_VERSION.linux-amd64.tar.gz"
+            curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors --retry-max-time 180 \
+              -o "$archive" "https://go.dev/dl/$GO_VERSION.linux-amd64.tar.gz"
+            echo "$GO_SHA256  $archive" | sha256sum --check --strict -
+            tar -xzf "$archive" -C "$RUNNER_TEMP"
+            export PATH="$RUNNER_TEMP/go/bin:$PATH"
+          fi
+          GOBIN="$RUNNER_TEMP/trivy-bin" GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org GOTOOLCHAIN=auto \
+            go install github.com/aquasecurity/trivy/cmd/trivy@v0.76.1
+          echo "$RUNNER_TEMP/trivy-bin" >> "$GITHUB_PATH"
 
       - name: Wait for the freed disk
         if: steps.scope.outputs.applies == 'true'
@@ -1638,7 +1780,7 @@ jobs:
 
       - name: Install Chromium
         if: steps.scope.outputs.applies == 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        run: scripts/ci/playwright-install.sh install
 
       - name: Wait for the freed disk
         if: steps.scope.outputs.applies == 'true'
@@ -1657,6 +1799,14 @@ jobs:
         with:
           embedded: 'true'
 
+      # Issue #1512: the single-vm app overlay (compose.apps.yaml) boots a stand-in app on its own
+      # database role, which is refused a platform table and another app's schema. The script reads
+      # the restored packages/cli build; it and the overlay's source are under paths the scope
+      # pattern above already matches.
+      - name: Boot the single-vm app overlay
+        if: steps.scope.outputs.applies == 'true'
+        run: node tests/generated-project/compose-apps.mjs
+
       # MS-A2 runs several jobs on one Docker daemon, so the project publishes on free ports, not
       # 3000 and 8333.
       - name: Pick free host ports
@@ -1669,6 +1819,29 @@ jobs:
           GP_WORK_DIR: ${{ runner.temp }}/generated-project
         run: node tests/generated-project/run.mjs
 
+      # The suite stops the project in its own last test; a cancelled or timed-out job never gets
+      # there, and on MS-A2 the whole stack (services, runtime sandboxes, volumes) then kept running
+      # on the shared daemon for hours. This reaps whatever a project under GP_WORK_DIR left behind;
+      # after a passing run it finds nothing.
+      - name: Remove what the generated project left running
+        if: always() && steps.scope.outputs.applies == 'true'
+        env:
+          GP_WORK_DIR: ${{ runner.temp }}/generated-project
+        run: |
+          set -uo pipefail
+          projects="$(docker ps --all --format '{{.Label "com.docker.compose.project"}} {{.Label "com.docker.compose.project.working_dir"}}' |
+            awk -v dir="$GP_WORK_DIR/" '$1 != "" && index($2, dir) == 1 { print $1 }' | sort -u)"
+          for project in $projects; do
+            echo "::warning title=Generated project left running::removing $project"
+            { docker ps --all --quiet --filter "label=com.docker.compose.project=$project"
+              docker ps --all --quiet --filter "label=agent-workspace.compose-project=$project"; } |
+              sort -u | xargs --no-run-if-empty docker rm --force --volumes > /dev/null
+            docker network ls --quiet --filter "label=com.docker.compose.project=$project" |
+              xargs --no-run-if-empty docker network rm > /dev/null
+            docker volume ls --quiet --filter "label=com.docker.compose.project=$project" |
+              xargs --no-run-if-empty docker volume rm > /dev/null
+          done
+
       - name: Keep the Playwright report and failure evidence
         if: failure() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -1677,6 +1850,194 @@ jobs:
           path: |
             playwright-report/generated-project/
             test-results/generated-project/
+          retention-days: 14
+
+  # #1506: a generated app under `aw dev`, end to end, against this change's own packages
+  # (tests/app-kit/run.mjs): the nine published packages are packed and installed from `file:`,
+  # `create` writes the project, `aw generate` adds the app `desk`, a resource and an agent on a
+  # scripted model, `aw dev` migrates and starts the app and registers its identity-signed MCP
+  # connector, and a ticket the signed-in person created is closed by the agent acting as them, with
+  # its audit row carrying the run id. A second `aw dev` changes nothing. No Docker, no secret, no
+  # model key: the embedded PostgreSQL and the `local` driver run on the runner itself, so a
+  # GitHub-hosted runner is enough (the standard pool expression: MS-A2 here, ubuntu-latest
+  # elsewhere).
+  #
+  # PATH FILTER INSIDE THE JOB, as its neighbour does: ci-success treats a skipped job as a failure.
+  app-kit-e2e:
+    name: app kit · aw dev runs a generated app, an agent writes as the person
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    needs: build
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    # Packing and the three npm installs take about 5 minutes, `next dev`'s first compile and the
+    # runtime's first start about 3; run.mjs caps itself at 40 (APP_KIT_TIMEOUT_MS).
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches a generated app
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What the generated app installs and runs: the published packages, the local runtime's
+          # apps and migrations, how they are packed, and this test and its job.
+          pattern='^(packages/|apps/(web|runner)/|migrations/|tests/app-kit/|tests/generated-project/project\.mjs$|scripts/release/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/ci\.yml$)'
+          # Read the whole list before matching (see generated-project-e2e).
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=App-kit E2E not applicable::the diff touches nothing a generated app installs or runs."
+          fi
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: steps.scope.outputs.applies == 'true'
+        run: scripts/ci/playwright-install.sh install
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Run the generated app end to end
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          APP_KIT_WORK_DIR: ${{ runner.temp }}/app-kit
+        run: node tests/app-kit/run.mjs
+
+      - name: Keep the failure evidence
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: app-kit-e2e
+          path: |
+            ${{ runner.temp }}/app-kit/desk-project/.aw/logs/
+          retention-days: 14
+
+  # #1531: the apps benchmark's installed cells for every app under examples/ (tests/apps/lane.mjs),
+  # against this change's own packages: the app regenerated from its commands.sh (Generated),
+  # installed from the packed tarballs, built with `next build` and its own tests run (Agent on
+  # data), its import boundary cruised (No fork), its Playwright journeys under `aw dev` on the
+  # embedded runtime with the scripted fake model, in en and in ja (Journeys,
+  # playwright.apps.config.mjs), and `aw deploy production` rendered into Compose and Helm, its
+  # image built (its `npm ci` from the lane's loopback registry of the packed packages, so the
+  # build runs with --network host) and the platform booted with it (Self-host, Docker). A cell an app claims but the lane measures as a gap fails the job;
+  # a declared gap does not. No root gate sees an example, so this lane is what keeps them
+  # compiling. No secret, no model key.
+  #
+  # PATH FILTER INSIDE THE JOB, as its neighbours do: ci-success treats a skipped job as a failure.
+  apps-e2e:
+    name: apps · the example apps' benchmark cells, installed
+    if: >-
+      github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || inputs.full || (github.event.action != 'edited' && contains(github.event.pull_request.labels.*.name, 'ci:full'))
+    needs: build
+    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    # For examples/minimal the lane took about 10 minutes locally without Docker (pack 1,
+    # regenerate 3, install, build and tests 2, journeys in both languages 3); the app image's
+    # npm ci and next build add about 3. lane.mjs caps itself at 80 (APPS_LANE_TIMEOUT_MS): the
+    # platform boot, once an app image builds, adds the four platform images (about 16 cold, as in
+    # generated-project-e2e), and each reference app adds its own install, build and journeys.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      # .github/actions/workspace-build waits for the build artifacts through the run's API.
+      actions: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the diff reaches an example app
+        id: scope
+        run: |
+          set -euo pipefail
+          if [ -z "$DIFF_BASE" ]; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # What an example installs and runs: the published packages, the local runtime's apps and
+          # migrations, how they are packed, the examples and this lane, and its job.
+          pattern='^(packages/|apps/(web|runner)/|examples/|tests/apps/|tests/generated-project/(fake-anthropic|project)\.mjs$|scripts/release/|migrations/|pnpm-lock\.yaml$|package\.json$|\.github/workflows/ci\.yml$|playwright\.apps\.config\.mjs$)'
+          # Read the whole list before matching (see generated-project-e2e).
+          changed="$(git diff --name-only "$DIFF_BASE...HEAD")"
+          if grep -Eq "$pattern" <<<"$changed"; then
+            echo "applies=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applies=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Apps E2E not applicable::the diff touches nothing an example app installs or runs."
+          fi
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+
+      - name: Install
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        if: steps.scope.outputs.applies == 'true'
+        run: scripts/ci/playwright-install.sh install
+
+      # Built once by the `build` job; nothing in this job runs an Nx build.
+      - name: Restore the workspace build
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/workspace-build
+        with:
+          embedded: 'true'
+
+      - name: Run the apps lane
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          APPS_WORK_DIR: ${{ runner.temp }}/apps-lane
+        run: node tests/apps/lane.mjs
+
+      - name: Keep the failure evidence
+        if: failure() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: apps-e2e
+          path: |
+            ${{ runner.temp }}/apps-lane/lane-report.json
+            ${{ runner.temp }}/apps-lane/*-aw-dev.log
+            ${{ runner.temp }}/apps-lane/reports/
+            playwright-report/apps/
+            test-results/apps/
           retention-days: 14
 
   # Developer journey — the slice-1 exit test (delivery unit S1-19, issue #457; plan §7 "S1-19").
@@ -1701,6 +2062,12 @@ jobs:
   # policy_cannot_widen) with Bash denied at compose, and the token absent from every file but the
   # sealed store, every log and transcript, and the runtime's environment. The timings go under
   # `budgets` in journey-timings.json.
+  #
+  # J1 (issue #1510) closes the journey, on its own clock and fixed 600 s budget
+  # (JOURNEY_PORTAL_BUDGET_SECONDS): `npm create @indx-workspace@latest portal -- --template portal
+  # --theme blank --features chat,files,connectors --yes`, npm install, npm run dev, and the portal's
+  # /sign-in through aw dev's development OIDC issuer until the first signed-in page; then, untimed,
+  # the console shows only the chosen features. Recorded under `budgets.portal`.
   #
   # NO SECRET IS USED. The model answers through the fake Anthropic provider
   # (tests/generated-project/fake-anthropic.mjs, wrapped by tests/journey/fake-anthropic-tools.mjs)
@@ -1738,13 +2105,14 @@ jobs:
         part: [journey, first-hour]
     # Every phase has its own cap, so a slow run fails inside run.mjs with a named reason and its
     # `finally` still collects the evidence: checkout and setup (~2 min), install (8), build (10),
-    # then the journey step (80 = JOURNEY_PREPARE_TIMEOUT_MS 10 + B1's 600 s budget and its 60 s
+    # then the journey step (96 = JOURNEY_PREPARE_TIMEOUT_MS 10 + B1's 600 s budget and its 60 s
     # grace, 11 + JOURNEY_CHECKS_TIMEOUT_MS 10 + B2's 60 s + 60 s, 2 + B3b's and B3a's 900 s +
-    # 60 s each, 16 + 16 + the ceiling and secret checks' JOURNEY_CHECKS_TIMEOUT_MS 10 + 3 for
-    # cleanup = 78, and 2 to spare), the first-hour step (25 = JOURNEY_PREPARE_TIMEOUT_MS 10 + the
+    # 60 s each, 16 + 16 + the ceiling and secret checks' JOURNEY_CHECKS_TIMEOUT_MS 10 + J1's
+    # 600 s budget and its 60 s grace, 11 + its console check's PORTAL_CHECKS_MS 5 + 3 for
+    # cleanup = 94, and 2 to spare), the first-hour step (25 = JOURNEY_PREPARE_TIMEOUT_MS 10 + the
     # stopwatch's 11 + 1 to read its record + 3 for cleanup), and the uploads (~3). harness.test.ts
     # checks this arithmetic.
-    timeout-minutes: 130
+    timeout-minutes: 140
     permissions:
       contents: read
       # .github/actions/workspace-build waits for the build artifacts through the run's API.
@@ -1813,7 +2181,7 @@ jobs:
           wait: 'true'
 
       - name: Run the developer journey on a clean container
-        timeout-minutes: 80
+        timeout-minutes: 96
         if: matrix.part == 'journey' && steps.scope.outputs.applies == 'true'
         env:
           JOURNEY_WORK_DIR: ${{ runner.temp }}/journey
@@ -2415,9 +2783,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: scripts/ci/playwright-install.sh install-deps
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        run: scripts/ci/playwright-install.sh install
       - run: pnpm db:migrate
       - run: pnpm db:seed
       - name: Restore the workspace build
@@ -2434,6 +2802,12 @@ jobs:
       # A skipped or flaky browser test passes Playwright but not this (audit F-14).
       - name: No browser test was skipped or flaky
         run: node scripts/ci/playwright-no-skip.mjs
+      # The app kit's J3 journey (#1509) against the desk fixture app, which its own config builds
+      # and starts from the restored package dist/; the platform's servers above never serve an app.
+      - name: App kit journeys
+        run: pnpm exec playwright test -c playwright.app-kit.config.mjs
+      - name: No app kit browser test was skipped
+        run: node scripts/ci/playwright-no-skip.mjs playwright-report/app-kit-results.json
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -2453,7 +2827,7 @@ jobs:
     name: end the run when fast checks fail
     needs: fast-checks
     if: failure()
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
@@ -2466,7 +2840,7 @@ jobs:
     name: end the run when a build fails
     needs: [build, build-embedded]
     if: failure()
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       actions: write
     steps:
@@ -2478,7 +2852,7 @@ jobs:
   # The one status check to require. fast-checks and heavy-checks run side by side, so a
   # branch rule pointing at either would see the other's result only by accident; this job
   # fails if any required job (the two gate jobs, `formal`, `image-scan`,
-  # `generated-project-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
+  # `generated-project-e2e`, `app-kit-e2e`, `apps-e2e`, the developer journey `journey-e2e` and `docs-claims`) did not SUCCEED — a skip
   # or a cancellation is a failure here, not a pass, because a gate that did not run has not
   # passed, except where the COST note skips a tier on purpose. full-e2e is on demand and is left out on purpose. No checkout, no install: a `jq`
   # over the `needs` context on the smallest runner size.
@@ -2497,13 +2871,15 @@ jobs:
         formal,
         image-scan,
         generated-project-e2e,
+        app-kit-e2e,
+        apps-e2e,
         journey-e2e,
         docs-claims,
         tool-sandbox-e2e,
         coverage,
         browser,
       ]
-    runs-on: ${{ github.repository_owner == 'INDXDev' && fromJSON('["self-hosted","ms-a2"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     steps:
       - name: Every required job succeeded
         env:

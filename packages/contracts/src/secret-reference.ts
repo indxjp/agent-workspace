@@ -7,11 +7,12 @@ import { SECRET_NAME_MAX_LENGTH, SECRET_NAME_PATTERN } from './secrets.js';
  * environment, so no project secret may take one. A secret named `PORT` or `PATH` would reach the
  * runtime's environment and change how it starts, so a reference to one is refused at its path.
  *
- * In order: the C1 set, `AW_DEPLOYMENT_POLICY`, the names `applyLocalRuntimeEnvironment` writes,
- * the names `applyLocalSecrets` writes, `DATABASE_URL` and the process variables. Every name
- * starting with {@link RESERVED_SECRET_NAME_PREFIX} is reserved as well; the `AW_` names stay in
- * this list so a drift test can compare against it directly. Matching ignores case
- * ({@link isReservedSecretName}). The list is frozen, so it always matches what is enforced.
+ * In order: the C1 set, `AW_DEPLOYMENT_POLICY`, `AW_DEPLOYMENT_FEATURES`, the names
+ * `applyLocalRuntimeEnvironment` writes, the names `applyLocalSecrets` writes, `DATABASE_URL` and
+ * the process variables. Every name starting with {@link RESERVED_SECRET_NAME_PREFIX} is reserved
+ * as well; the `AW_` names stay in this list so a drift test can compare against it directly.
+ * Matching ignores case ({@link isReservedSecretName}). The list is frozen, so it always matches
+ * what is enforced.
  */
 export const RESERVED_SECRET_NAMES = [
   'HOST',
@@ -22,6 +23,7 @@ export const RESERVED_SECRET_NAMES = [
   'RUNTIME_DRIVER',
   'WORKSPACE_SLUG',
   'AW_DEPLOYMENT_POLICY',
+  'AW_DEPLOYMENT_FEATURES',
   'NODE_ENV',
   'MIGRATIONS_DIR',
   'GATEWAY_PRICING_JSON',
@@ -43,6 +45,11 @@ export const RESERVED_SECRET_NAMES = [
   'TMP',
   'TMPDIR',
   'NODE_OPTIONS',
+  // ADR-0161's 2026-11-01 amendment (DI5): the local runtime sets these from `devIssuer`.
+  'OIDC_ISSUER_URL',
+  'OIDC_CLIENT_ID',
+  'OIDC_CLIENT_SECRET',
+  'OIDC_REDIRECT_URI',
 ] as const;
 Object.freeze(RESERVED_SECRET_NAMES);
 
@@ -62,6 +69,20 @@ export const STORAGE_CONNECTION_SECRET_PREFIX = 'STORAGE_CONNECTION_';
 /** True when `name` is reserved for a storage connection's credential ({@link STORAGE_CONNECTION_SECRET_PREFIX}). */
 export function isStorageConnectionSecretName(name: string): boolean {
   return name.startsWith(STORAGE_CONNECTION_SECRET_PREFIX);
+}
+
+/**
+ * Secrets the platform owns besides a storage connection's: a model connection's provider key
+ * (`MODEL_CONNECTION_<id>`), a runtime connection's credential (`RUNTIME_CONNECTION__...`) and a
+ * webhook's signing secret (`WEBHOOK_<id>_SIGNING_SECRET`). A tool, a connector identity or a
+ * tool endpoint never receives one.
+ */
+const PLATFORM_OWNED_SECRET_NAME =
+  /^(?:MODEL_CONNECTION_|RUNTIME_CONNECTION__|WEBHOOK_[0-9A-F]{32}_SIGNING_SECRET$)/u;
+
+/** True for any credential the platform owns: a storage, model or runtime connection's, or a webhook's signing secret. */
+export function isPlatformOwnedSecretName(name: string): boolean {
+  return isStorageConnectionSecretName(name) || PLATFORM_OWNED_SECRET_NAME.test(name);
 }
 
 const RESERVED_SECRET_NAME_SET: ReadonlySet<string> = new Set<string>(RESERVED_SECRET_NAMES);

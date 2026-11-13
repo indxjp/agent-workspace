@@ -1,14 +1,15 @@
 import { createInMemoryWorkspaceScopeResolver } from '@agent-workspace/core/db';
 import { AgentVersionBodySchema } from '@indx-workspace/contracts/agent-versions';
 import { FEATURE_IDS, type FeatureId } from '@indx-workspace/contracts/features';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { clearFeatureSwitches, configureFeatureSwitches } from '../../features/runtime';
+import { randomIds } from '../../ids';
 import { versionRequest } from '../../agent-versions/fixtures';
 import { createInMemoryAgentVersionStoreProvider } from '../../agent-versions/memory-store';
 import { createInMemoryAgentStoreProvider } from '../../agents/memory-store';
 import { createInMemoryConnectorsStoreProvider } from '../../connectors/memory-store';
-import { createInMemoryModelsStoreProvider } from '../../models/memory-store';
+import { createInMemoryModelsStoreProvider } from '../../models/store';
 import { createMemoryDirectory } from '../../rbac/memory-directory';
 import { createInMemoryRuntimeProfileStoreProvider } from '../../runtimes/memory-store';
 import { callContextOf } from '../testing/context';
@@ -68,6 +69,18 @@ function portsOver(directory: BuilderCompositionRoot['directory']) {
 }
 
 describe('productionBuilderPorts', () => {
+  it('reads the system clock and mints random ids (refactoring plan part 07, step 8)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-03-01T00:00:00.000Z'));
+      const { ports } = portsOver(createMemoryDirectory({ users: [] }));
+      expect(ports.clock()).toEqual(new Date('2026-03-01T00:00:00.000Z'));
+      expect(ports.ids).toBe(randomIds);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   afterEach(clearFeatureSwitches);
 
   it('reads the builder feature from the workspace switch, and asks for the call’s own workspace', async () => {
@@ -94,7 +107,7 @@ describe('productionBuilderPorts', () => {
       'missing',
     );
     await expect(
-      ports.runner.evaluate(callContextOf(WORKSPACE, null), 'agent-1', 1),
+      ports.runner.evaluate(callContextOf(WORKSPACE, null), 'agent-1', 1, 0.3),
     ).resolves.toMatchObject({ ok: false, code: 'no_caller' });
   });
 

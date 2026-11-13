@@ -1,3 +1,5 @@
+import { systemClock } from '../clock';
+
 export interface SessionRetentionPolicy {
   readonly transcriptDays: number;
   readonly leaseTtlMs: number;
@@ -103,7 +105,7 @@ export async function runSessionRetention(
   );
   if (held === null) return { kind: 'lease-held' };
   try {
-    const now = input.now ?? new Date();
+    const now = input.now ?? systemClock.now();
     const cutoff = new Date(now.getTime() - input.policy.transcriptDays * 86_400_000);
     if (input.policy.dryRun) return { kind: 'dry-run', cutoff };
     const transcripts = await input.store.purgeBefore(input.workspaceId, cutoff);

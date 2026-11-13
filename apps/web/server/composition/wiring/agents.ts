@@ -4,16 +4,21 @@ import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 
 import type { AgentVersionsRuntime } from '../../agent-versions/runtime';
 import { createRepositoryAgentVersionStoreProvider } from '../../agent-versions/store';
-import { createRepositoryAgentGrantStoreProvider } from '../../agents/agent-grants-store';
-import { createRepositoryAgentResourceStoreProvider } from '../../agents/resource-store';
+import {
+  createRepositoryAgentGrantStoreProvider,
+  createRepositoryAgentResourceStoreProvider,
+  createRepositoryAgentStoreProvider,
+} from '../../agents/store';
 import type { AgentsRuntime, WorkspaceResolution } from '../../agents/runtime';
-import { createRepositoryAgentStoreProvider } from '../../agents/store';
 import type { AuditRuntime } from '../../audit/runtime';
 import { readDeploymentDefaultModels } from '../../models/deployment-default';
 import { createCeilingFor, type DeploymentCeiling } from '../../policy-ceiling/ceiling';
-import { createResourceCatalogStoreProvider } from '../../resources/catalog-store';
+import { createResourceCatalogStoreProvider } from '../../storage/store';
 import type { RunPrincipal } from '../../runs/environment';
-import { restrictedUnenforceableReason } from '../../runtimes/network-policy';
+import {
+  egressProxyConfiguredFromEnv,
+  restrictedUnenforceableReason,
+} from '../../runtimes/network-policy';
 import { createRunGate } from '../../workspaces/run-gate';
 import { runnerManagerDriverId } from '../config';
 import { installRbacApi } from '../session-rbac';
@@ -26,7 +31,7 @@ import { installRbacApi } from '../session-rbac';
 function toolDomainsRefusalFromEnv(env: NodeJS.ProcessEnv): string | null {
   return restrictedUnenforceableReason(
     runnerManagerDriverId(env),
-    (env['AGENT_WORKSPACE_EGRESS_PROXY_IMAGE']?.trim() ?? '') !== '',
+    egressProxyConfiguredFromEnv(env),
   );
 }
 

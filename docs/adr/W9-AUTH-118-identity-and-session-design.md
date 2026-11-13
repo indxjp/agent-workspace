@@ -69,3 +69,24 @@ for display, `apps/web/app/(shell)/layout.tsx`, is the bug issue #118 names.
 - A selection cookie can be replayed for as long as ten minutes against any membership that still
   exists. That is a stated property, not a silent one: `apps/web/app/api/auth/workspace/workspace.test.ts`
   proves the replay is bounded by re-reading membership, not by a nonce.
+
+## Amendment — the session's `role` is no longer read, and stops being written one release later (refactoring part 06, step 9, 2026-11-12)
+
+Decision 2 kept `role: 'owner'` in every session because the wire format had always carried it.
+Nothing has ever read it for authorization, but it was still exposed on the verified claims and on
+`WorkspaceScope`, where it reads as if it were the caller's role. Part 06 calls this the misleading
+role claim, and ADR FORMAL-P1 (`FORMAL-P1-identity-permission-tenant-selection.md`)
+decided to drop it. This amendment is the release-safe first half of that.
+
+**This release.**
+
+- A session with no `role` is accepted. A session whose `role` is present and is anything but
+  `'owner'` (including `null` or `"Owner"`) is still refused as malformed.
+- The verified claims (`VerifiedClaims` in `session.ts`) and `WorkspaceScope` no longer have a
+  `role` field. Nothing outside tests read either.
+- Every session this build mints **still carries `role: 'owner'`**, so a rollback to a build that
+  requires it keeps accepting cookies minted by this one. The token bytes are unchanged; the golden
+  test in `session-golden.test.ts` pins them.
+
+**Next release.** `sessionClaimsAt` stops writing `role`. That is safe once no running build
+requires it, which this release guarantees. Cookies minted before it keep verifying.

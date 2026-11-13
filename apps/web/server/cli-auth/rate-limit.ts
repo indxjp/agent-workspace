@@ -3,6 +3,8 @@
  * pre-authentication routes and its approval `POST`. ADR-0083 §9. The counters and the client key
  * are the shared ones in `../http/rate-limit.ts`.
  */
+import { installedClientIdentity, type ClientIdentitySettings } from '../client-identity';
+import { systemClock } from '../clock';
 import {
   admitClient,
   CLIENT_MEMORY,
@@ -46,10 +48,10 @@ const limiters: Record<CliAuthRoute, FixedWindowLimiter> = {
 export function admitCliAuthRequest(
   route: CliAuthRoute,
   headers: Headers,
-  nowMs: number = Date.now(),
-  env: Readonly<Record<string, string | undefined>> = process.env,
+  nowMs: number = systemClock.now().getTime(),
+  identity: ClientIdentitySettings = installedClientIdentity(),
 ): Admission {
-  return admitClient(limiters[route], CLI_AUTH_LIMITS[route], headers, nowMs, env);
+  return admitClient(limiters[route], CLI_AUTH_LIMITS[route], headers, nowMs, identity);
 }
 
 /** Forget every client's count. Tests only. */

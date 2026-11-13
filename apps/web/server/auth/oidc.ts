@@ -1,7 +1,11 @@
 import * as oidc from 'openid-client';
-import { SignJWT, jwtVerify } from 'jose';
+import { SignJWT, errors, jwtVerify, type JWTVerifyResult } from 'jose';
 
 import type { OidcConfiguration, OidcIdentity } from '@agent-workspace/core/auth';
+import { isLoopbackHost, readDeploymentPosture } from '@agent-workspace/core/posture';
+
+import { systemClock } from '../clock.ts';
+import { derivePurposeKey, verificationKeys } from './core/key-ring.ts';
 
 const encoder = new TextEncoder();
 /** The unscoped base name; routes use `oidcTransactionCookieName()` from `index.ts` (issue #394). */
@@ -14,9 +18,18 @@ export interface OidcTransaction {
   readonly expiresAt: number;
 }
 
+/**
+ * The OIDC configuration with what the environment says about discovering it (ADR-0161 amendment
+ * DI9): `allowInsecureDiscovery` is read with the rest, so discovery reads no environment itself.
+ * Absent means `false`.
+ */
+export interface DiscoverableOidcConfiguration extends OidcConfiguration {
+  readonly allowInsecureDiscovery?: boolean;
+}
+
 export function readOidcConfiguration(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): OidcConfiguration | null {
+  env: Readonly<Record<string, string | undefined>>,
+): DiscoverableOidcConfiguration | null {
   const issuer = env['OIDC_ISSUER_URL']?.trim();
   const clientId = env['OIDC_CLIENT_ID']?.trim();
   const clientSecret = env['OIDC_CLIENT_SECRET']?.trim();
@@ -27,15 +40,86 @@ export function readOidcConfiguration(
       'OIDC requires OIDC_ISSUER_URL, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET and OIDC_REDIRECT_URI together.',
     );
   }
-  return { issuer, clientId, clientSecret, redirectUri, scopes: ['openid', 'profile', 'email'] };
+  return {
+    issuer,
+    clientId,
+    clientSecret,
+    redirectUri,
+    scopes: ['openid', 'profile', 'email'],
+    allowInsecureDiscovery: allowsInsecureDiscovery(issuer, env),
+  };
 }
 
-async function discover(configuration: OidcConfiguration): Promise<oidc.Configuration> {
-  return oidc.discovery(
+/**
+ * ADR-0161's 2026-11-01 amendment (DI9, issue #2075): whether discovery of `issuer` may use plain
+ * `http:`. Only when the deployment posture is `local` **and** the issuer is `http:` on a loopback
+ * host, which is `aw dev`'s development issuer on `127.0.0.1`. Everywhere else discovery is
+ * `https:` only, as `openid-client` enforces by default; the production posture refuses a
+ * non-`https:` issuer at boot (`oidc_issuer_not_https`).
+ */
+export function allowsInsecureDiscovery(
+  issuer: string,
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === 'http:' &&
+    isLoopbackHost(url.hostname) &&
+    readDeploymentPosture(env) === 'local'
+  );
+}
+
+/**
+ * The options every discovery of the configured issuer passes: `allowInsecureRequests` only where
+ * {@link allowsInsecureDiscovery} said so when the configuration was read, otherwise none, exactly
+ * as before.
+ */
+export function oidcDiscoveryOptions(
+  configuration: DiscoverableOidcConfiguration,
+): oidc.DiscoveryRequestOptions | undefined {
+  return configuration.allowInsecureDiscovery === true
+    ? { execute: [oidc.allowInsecureRequests] }
+    : undefined;
+}
+
+/**
+ * True when the issuer advertises `client_secret_basic` and not `client_secret_post`, the method
+ * `openid-client` uses by default. `aw dev`'s development issuer serves Basic only (ADR-0161
+ * amendment DI4); an issuer that lists post, or lists nothing, keeps today's method.
+ */
+function basicOnly(metadata: oidc.ServerMetadata): boolean {
+  const methods = metadata.token_endpoint_auth_methods_supported;
+  return (
+    methods !== undefined &&
+    methods.includes('client_secret_basic') &&
+    !methods.includes('client_secret_post')
+  );
+}
+
+async function discover(configuration: DiscoverableOidcConfiguration): Promise<oidc.Configuration> {
+  const options = oidcDiscoveryOptions(configuration);
+  const discovered = await oidc.discovery(
     new URL(configuration.issuer),
     configuration.clientId,
     configuration.clientSecret,
+    undefined,
+    options,
   );
+  const metadata = discovered.serverMetadata();
+  if (!basicOnly(metadata)) return discovered;
+  const basic = new oidc.Configuration(
+    metadata,
+    configuration.clientId,
+    configuration.clientSecret,
+    oidc.ClientSecretBasic(configuration.clientSecret),
+  );
+  if (options !== undefined) oidc.allowInsecureRequests(basic);
+  return basic;
 }
 
 /** What the transaction cookie carries beyond the PKCE pair: where to land after sign-in. */
@@ -44,11 +128,37 @@ export type OidcLoginResult = OidcIdentity & {
   readonly next?: string | null;
 };
 
+/** The transaction's own key, derived from the secret (part 06 step 5, `./core/key-ring.ts`). */
+function transactionKey(signingSecret: string): Promise<Uint8Array<ArrayBuffer>> {
+  return derivePurposeKey(crypto.subtle, signingSecret, 'oidc-transaction');
+}
+
+/**
+ * The purpose key, then the raw secret every transaction was signed with before step 5, so a
+ * sign-in that began before a deploy still finishes. Only a bad signature moves on to the next
+ * key; an expired or malformed transaction is refused as it was.
+ */
+async function verifyTransaction(token: string, signingSecret: string): Promise<JWTVerifyResult> {
+  const keys = verificationKeys(
+    () => transactionKey(signingSecret),
+    () => Promise.resolve(encoder.encode(signingSecret)),
+  );
+  for (const [index, key] of keys.entries()) {
+    try {
+      return await jwtVerify(token, await key(), { algorithms: ['HS256'] });
+    } catch (error) {
+      const lastKey = index === keys.length - 1;
+      if (lastKey || !(error instanceof errors.JWSSignatureVerificationFailed)) throw error;
+    }
+  }
+  throw new Error('OIDC transaction has no verification key.');
+}
+
 /** `next` must already have passed `safeNextPath`; it rides in the signed transaction. */
 export async function beginOidcLogin(
-  configuration: OidcConfiguration,
+  configuration: DiscoverableOidcConfiguration,
   signingSecret: string,
-  nowMs: number = Date.now(),
+  nowMs: number = systemClock.now().getTime(),
   next: string | null = null,
 ): Promise<{ readonly url: URL; readonly transaction: string }> {
   const client = await discover(configuration);
@@ -69,19 +179,17 @@ export async function beginOidcLogin(
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt(Math.floor(nowMs / 1000))
     .setExpirationTime(Math.floor(nowMs / 1000) + TRANSACTION_TTL_SECONDS)
-    .sign(encoder.encode(signingSecret));
+    .sign(await transactionKey(signingSecret));
   return { url, transaction };
 }
 
 export async function finishOidcLogin(
-  configuration: OidcConfiguration,
+  configuration: DiscoverableOidcConfiguration,
   signingSecret: string,
   callbackUrl: URL,
   transactionToken: string,
 ): Promise<OidcLoginResult> {
-  const verified = await jwtVerify(transactionToken, encoder.encode(signingSecret), {
-    algorithms: ['HS256'],
-  });
+  const verified = await verifyTransaction(transactionToken, signingSecret);
   const verifier = verified.payload['verifier'];
   const state = verified.payload['state'];
   const next = verified.payload['next'];

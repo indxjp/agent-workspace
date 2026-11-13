@@ -270,6 +270,47 @@ describe('an OAuth-token principal is the consenting member, narrowed to one end
     expect(Principal.isPrincipal(principal)).toBe(true);
   });
 
+  it('accepts an app-backend scope on an OAuth token only, and only with its bound agents (ADR-0161 D8)', async () => {
+    const agent = '0b9ad1fc-9a3a-4f0b-9a37-1d6d1a7c5b11';
+    const appGrant = {
+      clientId: grant.clientId,
+      audience: `urn:agent-workspace:app-backend:${grant.clientId}`,
+    };
+    const bound = Principal.fromOAuthToken(
+      await member(),
+      { kind: 'app-backend', id: grant.clientId, agentIds: [agent] },
+      appGrant,
+    );
+    expect(Principal.isPrincipal(bound)).toBe(true);
+    const unbound = Principal.fromOAuthToken(
+      await member(),
+      { kind: 'app-backend', id: grant.clientId, agentIds: [] },
+      appGrant,
+    );
+    expect(Principal.isPrincipal(unbound)).toBe(false);
+    const missing = Principal.fromOAuthToken(
+      await member(),
+      { kind: 'app-backend', id: grant.clientId },
+      appGrant,
+    );
+    expect(Principal.isPrincipal(missing)).toBe(false);
+    const stray = Principal.fromOAuthToken(
+      await member(),
+      { kind: 'mcp-project', id: grant.clientId, agentIds: [agent] },
+      grant,
+    );
+    expect(Principal.isPrincipal(stray)).toBe(false);
+    const key = Principal.fromApiKey({
+      principalId: 'c58a0886-0011-4d53-bdfd-e5acd233b341',
+      apiKeyId: '45ce8116-ab8f-4815-a972-a74c8473f989',
+      workspaceId: '3f4f9b90-dda6-4da9-874c-daa5b578bdf0',
+      role: 'builder',
+      label: 'CI key',
+      scope: { kind: 'app-backend', id: grant.clientId, agentIds: [agent] },
+    });
+    expect(Principal.isPrincipal(key)).toBe(false);
+  });
+
   it('is refused outside its endpoint by the scope grammar', async () => {
     const agent = '0b9ad1fc-9a3a-4f0b-9a37-1d6d1a7c5b11';
     const principal = Principal.fromOAuthToken(

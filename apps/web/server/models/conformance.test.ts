@@ -21,7 +21,7 @@ import { createSecretsService, type SecretsService } from '@agent-workspace/core
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { CreateModelConnectionInput } from './contract';
-import { createInMemoryModelsStoreProvider } from './memory-store';
+import { createInMemoryModelsStoreProvider } from './store';
 import {
   createRepositoryModelsStoreProvider,
   type ModelsStoreProvider,

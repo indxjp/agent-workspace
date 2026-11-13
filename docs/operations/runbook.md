@@ -78,6 +78,22 @@ a separate failure domain. During a restore, recover the database and object-sto
 consistent window, then verify sampled file and skill object checksums through tenant-scoped APIs.
 Orphan cleanup must begin with a report-only pass.
 
+## Storage grants that fail closed
+
+A run reads the storage-connection folders its agent version was deployed with, by connection id.
+A version deployed before grants were recorded per version, or one whose connection was deleted
+since, is refused with `run_storage_grant_unavailable` until it is redeployed. After an upgrade,
+list those versions with the read-only report, then redeploy each one or point its environments at a
+version that runs:
+
+```sh
+psql "$DATABASE_URL" -f docs/operations/storage-grants-report.sql
+```
+
+A migration copies an agent's current grants to the version its row was last written from, so that
+version is listed only when a grant could not be bound safely, for example to a connection
+recreated after the version under the same name.
+
 ## Secret and signing-key rotation
 
 Store database, object-store, application, gateway-token, and encryption keys in an external secret

@@ -1,4 +1,4 @@
-import type { RuntimeProfileStoreProvider } from '../runtimes/store';
+import type { RuntimeProfileStoreProvider } from '../execution';
 import type { AgentsRuntime } from './runtime';
 
 export interface RuntimeSwitchActor {

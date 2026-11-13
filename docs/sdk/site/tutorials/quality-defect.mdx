@@ -272,7 +272,7 @@ policy:
 The test checks the ceiling with the contract's own `policyWidenings`. If someone later adds web
 search "to compare with industry cases", the push is refused on three counts:
 
-```ts title="quality-defect.test.ts (excerpt)" file="tests/gallery/quality-defect/quality-defect.test.ts#excerpt"
+```ts title="quality-defect.definition.test-support.ts (excerpt)" file="tests/gallery/quality-defect/quality-defect.definition.test-support.ts#excerpt"
 const widened = defineAgent({
   ...agent,
   permissions: { ...agent.permissions, unrestrictedNetwork: true },

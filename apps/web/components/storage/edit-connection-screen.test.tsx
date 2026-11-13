@@ -83,6 +83,16 @@ function click(target: HTMLElement) {
 /** True when the element or one of its ancestors is inert. */
 const isInert = (element: Element) => element.closest('[inert]') !== null;
 
+describe('the Allow writing note', () => {
+  it('says what turning it on does, now that writing back works', async () => {
+    const { host } = await mountScreen();
+    expect(host.textContent).toContain(
+      "Off by default. With a read/write grant, a run's new and changed files are written back; nothing is deleted.",
+    );
+    expect(host.textContent).not.toContain('write-back');
+  });
+});
+
 describe('the delete dialog', () => {
   it('makes everything behind it inert, and only that, while it is open', async () => {
     const { host, sidebar } = await mountScreen();

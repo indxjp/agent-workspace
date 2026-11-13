@@ -13,18 +13,303 @@ import type { CreatePostgresConnectorInput } from '@indx-workspace/contracts/too
 import { EngineId } from '@indx-workspace/contracts/engines';
 import { EvalCaseFile } from '@indx-workspace/contracts/evaluations';
 import { ModelConnectionResource } from '@indx-workspace/contracts/models';
-import type { ProjectDocument } from '@indx-workspace/contracts/project-file';
+import { ProjectDocument } from '@indx-workspace/contracts/project-file';
 import { ProjectRead } from '@indx-workspace/contracts/project-file';
+import type { SETUP_THEMES } from '@indx-workspace/contracts/setup';
 import { SetupAnswers } from '@indx-workspace/contracts/setup';
 import type { SkillFile } from '@indx-workspace/contracts/skills';
 import { UpdateConnectorInput } from '@indx-workspace/contracts/connectors';
 import { UpdateModelConnectionPatch } from '@indx-workspace/contracts/models';
+import { z } from 'zod';
+
+// @public
+export function addGeneratedEntry(manifest: GeneratedManifest, key: string, entry: GeneratedEntry): GeneratedManifest;
+
+// @public
+export const APP_PRESETS: Readonly<Record<'chat' | 'wiki' | 'crm' | 'desk', AppPreset>>;
+
+// @public
+export const APP_TEMPLATES: readonly ["portal", "chat", "wiki", "crm", "desk"];
+
+// @public
+export function appConfigLines(resource: string): {
+    readonly import: string;
+    readonly entry: string;
+};
+
+// @public
+export function appConfigRecipeLines(recipe: string): {
+    readonly import: string;
+    readonly entry: string;
+};
 
 // @public
 export function appendEvalCase(text: string, added: ProjectFileMapping, label: string): string;
 
 // @public
+export function appKitPackages(version: string): readonly PinnedPackage[];
+
+// @public
+export function appKitSatisfies(range: string, version: string): boolean;
+
+// @public
+export type AppNavItem = 'home' | 'dashboard' | 'wiki' | 'chat' | 'files' | 'runs' | 'recipes';
+
+// @public
+export interface AppPreset {
+    readonly directory: 'chat' | 'wiki' | 'crm' | 'desk';
+    readonly home: string;
+    readonly nav: readonly AppNavItem[];
+    readonly page?: {
+        readonly name: string;
+        readonly kind: 'dashboard';
+    };
+    readonly parts: readonly AppPresetPart[];
+    readonly replaces: readonly string[];
+    readonly resources: readonly AppPresetResource[];
+    readonly theme: (typeof SETUP_THEMES)[number];
+    readonly tokens: Readonly<Record<string, string | number>>;
+}
+
+// @public
+export type AppPresetPart = 'recipes';
+
+// @public
+export interface AppPresetResource {
+    readonly migration?: string;
+    readonly name: string;
+    readonly owns: readonly string[];
+    readonly pages?: readonly string[];
+    readonly plural: string;
+}
+
+// @public
+export interface AppScript {
+    readonly command: string;
+    readonly name: string;
+}
+
+// @public
+export function appScripts(appName: string): readonly AppScript[];
+
+// @public
+export type AppTemplate = (typeof APP_TEMPLATES)[number];
+
+// @public
 export function askSetupQuestions(prompt: (question: string) => Promise<string>, say: (line: string) => void, preset?: SetupAnswers, choose?: Choose): Promise<CompleteSetupAnswers>;
+
+// @public
+export const BLUEPRINT_ARCHIVE_MAX_BYTES: number;
+
+// @public
+export const BLUEPRINT_MANIFEST_FILE = "blueprint.json";
+
+// @public
+export const BLUEPRINT_PACKAGE_KEYWORD = "indx-workspace-blueprint";
+
+// @public
+export const BLUEPRINT_PART_KINDS: readonly ["resource", "recipe", "page", "agent", "skill", "test"];
+
+// @public
+export interface BlueprintAppState {
+    readonly agents: readonly string[];
+    readonly appKitVersion: string | undefined;
+    readonly connectors: readonly string[];
+    readonly manifest: GeneratedManifest;
+    readonly nextMigrationIndex: number;
+    readonly paths: readonly string[];
+    // (undocumented)
+    readonly secrets: readonly string[];
+}
+
+// @public
+export interface BlueprintArchive {
+    readonly files: readonly ProjectFile[];
+    // (undocumented)
+    readonly manifest: BlueprintManifest;
+    readonly packageName: string;
+    // (undocumented)
+    readonly packageVersion: string;
+}
+
+// @public
+export interface BlueprintFile {
+    // (undocumented)
+    readonly contents: string;
+    // (undocumented)
+    readonly path: string;
+    readonly sha256: string;
+}
+
+// @public
+export type BlueprintFileAction = 'add' | 'update' | 'remove' | 'conflict' | 'unchanged';
+
+// @public
+export interface BlueprintFileChange {
+    // (undocumented)
+    readonly action: BlueprintFileAction;
+    readonly contents?: string;
+    readonly from?: string;
+    readonly path: string;
+    readonly write?: string;
+}
+
+// @public
+export interface BlueprintInstallPlan {
+    readonly entry: GeneratedEntry;
+    readonly key: string;
+    // (undocumented)
+    readonly migrations: readonly BlueprintMigrationWrite[];
+    // (undocumented)
+    readonly slots: readonly BlueprintSlotStatus[];
+    // (undocumented)
+    readonly wiring: BlueprintWiring;
+    readonly writes: readonly BlueprintWrite[];
+}
+
+// @public
+export interface BlueprintLocalState extends BlueprintAppState {
+    readonly hashes: Readonly<Record<string, string>>;
+}
+
+// @public
+export type BlueprintManifest = z.infer<typeof BlueprintManifestSchema>;
+
+// @public
+export const BlueprintManifestSchema: z.ZodObject<{
+    name: z.ZodString;
+    version: z.ZodString;
+    appKit: z.ZodString;
+    parts: z.ZodArray<z.ZodObject<{
+        path: z.ZodString;
+        kind: z.ZodEnum<{
+            agent: "agent";
+            page: "page";
+            skill: "skill";
+            resource: "resource";
+            recipe: "recipe";
+            test: "test";
+        }>;
+    }, z.core.$strict>>;
+    slots: z.ZodObject<{
+        connectors: z.ZodArray<z.ZodObject<{
+            slot: z.ZodString;
+            kind: z.ZodLiteral<"mcp">;
+            identity: z.ZodOptional<z.ZodBoolean>;
+        }, z.core.$strict>>;
+        secrets: z.ZodArray<z.ZodObject<{
+            slot: z.ZodString;
+        }, z.core.$strict>>;
+        agents: z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+        }, z.core.$strict>>;
+    }, z.core.$strict>;
+    migrations: z.ZodArray<z.ZodString>;
+}, z.core.$strict>;
+
+// @public
+export interface BlueprintMigrationWrite {
+    readonly from: string;
+    readonly idx: number;
+    readonly path: string;
+    readonly tag: string;
+}
+
+// @public
+export type BlueprintPartKind = (typeof BLUEPRINT_PART_KINDS)[number];
+
+// @public
+export interface BlueprintRelease {
+    readonly files: readonly BlueprintFile[];
+    // (undocumented)
+    readonly manifest: BlueprintManifest;
+    // (undocumented)
+    readonly source: BlueprintSource;
+}
+
+// @public
+export function blueprintSidecarPath(path: string, version: string): string;
+
+// @public
+export interface BlueprintSlotStatus {
+    // (undocumented)
+    readonly bound: boolean;
+    // (undocumented)
+    readonly kind: 'connector' | 'secret';
+    // (undocumented)
+    readonly slot: string;
+}
+
+// Warning: (ae-forgotten-export) The symbol "BlueprintSourceSchema" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type BlueprintSource = Readonly<z.infer<typeof BlueprintSourceSchema>>;
+
+// @public
+const BlueprintSourceSchema: z.ZodObject<{
+    package: z.ZodString;
+    version: z.ZodString;
+    integrity: z.ZodString;
+}, z.core.$strict>;
+
+// @public
+export interface BlueprintUpdatePlan {
+    readonly changes: readonly BlueprintFileChange[];
+    readonly entry: GeneratedEntry;
+    // (undocumented)
+    readonly from: BlueprintSource;
+    // (undocumented)
+    readonly key: string;
+    readonly migrations: readonly BlueprintMigrationWrite[];
+    // (undocumented)
+    readonly slots: readonly BlueprintSlotStatus[];
+    // (undocumented)
+    readonly to: BlueprintSource;
+    readonly wiring: {
+        readonly add: BlueprintWiring;
+        readonly remove: BlueprintWiring;
+        readonly keep: BlueprintWiring;
+    };
+}
+
+// @public
+export interface BlueprintWiring {
+    // (undocumented)
+    readonly recipes: readonly string[];
+    // (undocumented)
+    readonly resources: readonly string[];
+}
+
+// @public
+export interface BlueprintWrite {
+    // (undocumented)
+    readonly contents: string;
+    // (undocumented)
+    readonly from: string;
+    // (undocumented)
+    readonly path: string;
+}
+
+// @public
+export interface ChannelRouteEdit {
+    // (undocumented)
+    readonly added: string;
+    // (undocumented)
+    readonly import: string;
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly replaced: string;
+}
+
+// @public
+export function channelRouteEdits(name: string): readonly ChannelRouteEdit[];
+
+// @public
+export interface ChannelSpecOptions {
+    readonly key?: string | undefined;
+    readonly refs: readonly RefFieldSpec[];
+}
 
 // @public
 export type Choose = (spec: MenuSpec) => Promise<readonly string[]>;
@@ -39,6 +324,22 @@ export function chooseFromMenu(spec: MenuSpec, input: MenuInput, output: MenuOut
 export function confirmMenu(choose: Choose, title: string): Promise<boolean>;
 
 // @public
+export interface DestructiveMigration {
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly rule: string;
+    // (undocumented)
+    readonly statement: string;
+}
+
+// @public
+export function destructiveMigrations(path: string, sql: string): readonly DestructiveMigration[];
+
+// @public
+export const EMPTY_GENERATED_MANIFEST: GeneratedManifest;
+
+// @public
 export const ENGINE_PACKAGES: Readonly<Record<EngineId, Readonly<Record<string, string>>>>;
 
 // @public
@@ -48,6 +349,88 @@ export interface ExistingSkill {
     // (undocumented)
     readonly name: string;
 }
+
+// @public
+export interface FieldSpec {
+    // (undocumented)
+    readonly args: readonly string[];
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly optional: boolean;
+    // (undocumented)
+    readonly type: GeneratorFieldType;
+}
+
+// @public
+export const GENERATED_ENTRY_KINDS: readonly ["app", "resource", "agent", "page", "recipe", "channel", "project", "blueprint"];
+
+// @public
+export const GENERATED_MANIFEST_FILE = "aw-generated.json";
+
+// Warning: (ae-forgotten-export) The symbol "GeneratedEditSchema" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type GeneratedEdit = Readonly<z.infer<typeof GeneratedEditSchema>>;
+
+// @public
+export type GeneratedEditRevert = {
+    readonly kind: 'reverted';
+    readonly text: string;
+} | {
+    readonly kind: 'absent';
+} | {
+    readonly kind: 'refused';
+    readonly reason: string;
+};
+
+// @public (undocumented)
+const GeneratedEditSchema: z.ZodObject<{
+    path: z.ZodString;
+    added: z.ZodString;
+    replaced: z.ZodOptional<z.ZodString>;
+}, z.core.$strict>;
+
+// @public
+export interface GeneratedEntry {
+    // (undocumented)
+    readonly edits: readonly GeneratedEdit[];
+    // (undocumented)
+    readonly files: Readonly<Record<string, string>>;
+    // (undocumented)
+    readonly migrations?: Readonly<Record<string, string>> | undefined;
+    // (undocumented)
+    readonly source?: BlueprintSource | undefined;
+}
+
+// @public
+export function generatedEntryKey(kind: GeneratedEntryKind, name: string): string;
+
+// @public
+export type GeneratedEntryKind = (typeof GENERATED_ENTRY_KINDS)[number];
+
+// @public
+export interface GeneratedManifest {
+    // (undocumented)
+    readonly entries: Readonly<Record<string, GeneratedEntry>>;
+    // (undocumented)
+    readonly version: 1;
+}
+
+// @public
+export const GENERATOR_FIELD_TYPES: readonly ["text", "richText", "number", "money", "bool", "date", "dateTime", "enumOf", "person", "ref", "files", "tags"];
+
+// @public
+export const GENERATOR_PAGE_KINDS: readonly ["dashboard", "list", "custom"];
+
+// @public
+export type GeneratorFieldType = (typeof GENERATOR_FIELD_TYPES)[number];
+
+// @public
+export type GeneratorPageKind = (typeof GENERATOR_PAGE_KINDS)[number];
+
+// @public
+export type GeneratorTemplate = 'app' | 'resource' | 'resource-pages' | 'agent' | 'recipe' | 'channel' | `page/${GeneratorPageKind}`;
 
 // @public
 export interface InteractionFacts {
@@ -61,6 +444,28 @@ export interface InteractionFacts {
 
 // @public
 export function isInteractive(input: InteractionFacts): boolean;
+
+// @public
+const JournalEntrySchema: z.ZodObject<{
+    idx: z.ZodInt;
+    version: z.ZodString;
+    when: z.ZodInt;
+    tag: z.ZodString;
+    breakpoints: z.ZodBoolean;
+}, z.core.$strict>;
+
+// @public
+const JournalSchema: z.ZodObject<{
+    version: z.ZodString;
+    dialect: z.ZodLiteral<"postgresql">;
+    entries: z.ZodArray<z.ZodObject<{
+        idx: z.ZodInt;
+        version: z.ZodString;
+        when: z.ZodInt;
+        tag: z.ZodString;
+        breakpoints: z.ZodBoolean;
+    }, z.core.$strict>>;
+}, z.core.$strict>;
 
 // @public (undocumented)
 type KeypressListener = (text: string | undefined, key: {
@@ -119,6 +524,19 @@ export interface MenuSpec {
 export function mergeSetupAnswers(file: SetupAnswers, flags: SetupAnswers): SetupAnswers;
 
 // @public
+export const MIGRATION_JOURNAL_FILE = "db/migrations/meta/_journal.json";
+
+// Warning: (ae-forgotten-export) The symbol "JournalSchema" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type MigrationJournal = z.infer<typeof JournalSchema>;
+
+// Warning: (ae-forgotten-export) The symbol "JournalEntrySchema" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type MigrationJournalEntry = z.infer<typeof JournalEntrySchema>;
+
+// @public
 interface OpenApiToolDefinition {
     // (undocumented)
     readonly allow: readonly string[];
@@ -139,6 +557,33 @@ interface OpenApiToolDefinition {
 }
 
 // @public
+export const PACKAGE_MANIFEST_FILE = "package.json";
+
+// Warning: (ae-forgotten-export) The symbol "PackageManifestSchema" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type PackageManifest = z.infer<typeof PackageManifestSchema>;
+
+// @public
+const PackageManifestSchema: z.ZodObject<{
+    dependencies: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    devDependencies: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    scripts: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+}, z.core.$loose>;
+
+// @public
+export function parseBlueprintManifest(text: string): BlueprintManifest;
+
+// @public
+export function parseFieldSpec(argument: string): FieldSpec;
+
+// @public
+export function parseFieldSpecs(argumentList: readonly string[]): readonly FieldSpec[];
+
+// @public
+export function parseGeneratedManifest(text: string): GeneratedManifest;
+
+// @public
 export function parseProjectFile(text: string): ProjectRead;
 
 // @public
@@ -146,6 +591,19 @@ export function parseSetupAnswersFile(text: string, source: string): SetupAnswer
 
 // @public
 export function parseSetupFlags(given: Readonly<Record<string, string | undefined>>): SetupAnswers;
+
+// @public
+export interface PinnedPackage {
+    readonly name: string;
+    readonly section: 'dependencies' | 'devDependencies';
+    readonly version: string;
+}
+
+// @public
+export function planBlueprintInstall(release: BlueprintRelease, app: BlueprintAppState): BlueprintInstallPlan;
+
+// @public
+export function planBlueprintUpdate(installed: GeneratedEntry, release: BlueprintRelease, local: BlueprintLocalState): BlueprintUpdatePlan;
 
 // @public
 export type PlannedTool = {
@@ -354,10 +812,92 @@ export interface ProjectSkillAction {
 }
 
 // @public
+export function readBlueprintArchive(tar: Uint8Array): BlueprintArchive;
+
+// @public
 export function readEvalCaseFile(text: string, label: string): EvalCaseFile;
 
 // @public
+export function readMigrationJournal(text: string): MigrationJournal | undefined;
+
+// @public
+export function readPackageManifest(text: string): PackageManifest | undefined;
+
+// @public
 export function readProjectFileText(text: string, label?: string): ProjectFileReading;
+
+// @public
+export interface RecipeSpecOptions {
+    readonly on: string;
+    readonly resources: readonly string[];
+    readonly tz?: string | undefined;
+}
+
+// @public
+export type RecipeTriggerSpec = {
+    readonly kind: 'resourceEvent';
+    readonly resource: string;
+    readonly event: string;
+} | {
+    readonly kind: 'schedule';
+    readonly cron: string;
+    readonly timezone: string;
+};
+
+// @public
+export function refFieldsOf(source: string): readonly RefFieldSpec[];
+
+// @public
+export interface RefFieldSpec {
+    // (undocumented)
+    readonly field: string;
+    // (undocumented)
+    readonly resource: string;
+}
+
+// @public
+export function removeGeneratedEntry(manifest: GeneratedManifest, key: string): GeneratedManifest;
+
+// @public
+export function renderAgentSpec(name: string, options: {
+    readonly appName: string;
+    readonly resources: readonly string[];
+}): TemplateValues;
+
+// @public
+export function renderAppSpec(appName: string, resources?: readonly string[]): TemplateValues;
+
+// @public
+export function renderAppTemplate(template: AppTemplate, project: {
+    readonly appName: string;
+    readonly version: string;
+    readonly projectFiles?: readonly ProjectFile[];
+}): Promise<RenderedAppTemplate>;
+
+// @public
+export function renderChannelSpec(name: string, options: ChannelSpecOptions): TemplateValues;
+
+// @public
+export interface RenderedAppTemplate {
+    readonly files: readonly ProjectFile[];
+    readonly packages: readonly PinnedPackage[];
+    readonly scripts: readonly AppScript[];
+}
+
+// @public
+export function renderFieldCode(spec: FieldSpec): string;
+
+// @public
+export function renderGeneratorTemplate(kind: GeneratorTemplate, values: TemplateValues): readonly ProjectFile[];
+
+// @public
+export function renderPageSpec(name: string, options: {
+    readonly kind: string;
+    readonly resource?: string | undefined;
+}): {
+    readonly kind: GeneratorPageKind;
+    readonly values: TemplateValues;
+};
 
 // @public
 export function renderProjectFiles(answers: CompleteSetupAnswers, project: {
@@ -373,10 +913,45 @@ export function renderProjectShell(project: {
 }): readonly ProjectFile[];
 
 // @public
+export function renderRecipeSpec(name: string, options: RecipeSpecOptions): {
+    readonly trigger: RecipeTriggerSpec;
+    readonly values: TemplateValues;
+};
+
+// @public
+export function renderResourceSpec(name: string, specs: readonly FieldSpec[], options?: {
+    readonly board?: string;
+}): TemplateValues;
+
+// @public
+export function renderTemplateDirectory(root: URL, values: Readonly<Record<string, string>>, subject: string, options?: {
+    readonly optional?: boolean;
+    readonly missingMessage?: (key: string) => string;
+}): readonly ProjectFile[];
+
+// @public
+export function revertGeneratedEdit(text: string, edit: GeneratedEdit): GeneratedEditRevert;
+
+// @public
+export function scriptEdit(script: AppScript): GeneratedEdit;
+
+// @public
+export function serializeGeneratedManifest(manifest: GeneratedManifest): string;
+
+// @public
+export function serializeMigrationJournal(journal: MigrationJournal): string;
+
+// @public
+export function serializePackageManifest(original: string, manifest: PackageManifest): string;
+
+// @public
 export function setupFlagsHelp(): readonly string[];
 
 // @public
 export function setupSecretNames(answers: CompleteSetupAnswers): readonly string[];
+
+// @public
+export type TemplateValues = Readonly<Record<string, string>>;
 
 // @public
 type ToolConnectorBody = Omit<CreateOpenApiConnectorInput, 'dryRun'> | Omit<CreatePostgresConnectorInput, 'dryRun'>;
@@ -395,6 +970,9 @@ export function unansweredSetupRefusal(answers: SetupAnswers): {
     readonly message: string;
     readonly fix: string;
 } | null;
+
+// @public
+export function withAppPackages(text: string, packages: readonly PinnedPackage[], scripts?: readonly AppScript[]): string;
 
 // @public
 type WithoutCredential<T> = T extends unknown ? Omit<T, 'credential'> : never;

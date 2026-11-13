@@ -1,0 +1,15 @@
+{
+  "conversations": [
+    {
+      "when": "Enrich a new CRM contact",
+      "turns": [{ "structured": { "company": "Example K.K.", "title": "Head of Sales" } }]
+    },
+    {
+      "when": "e2e-crm-sales-assistant",
+      "turns": [
+        { "tool": "deal_list", "input": {} },
+        { "text": "The sales assistant read the deals as you." }
+      ]
+    }
+  ]
+}

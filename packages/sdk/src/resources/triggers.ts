@@ -113,6 +113,8 @@ export class TriggersClient {
    * replaces the schema, `null` clears it, and leaving it out keeps it. `subject` works the same
    * way (ADR-0156). Setting it, or any change to a trigger that has one, needs a caller who may
    * create API keys (`403 trigger_subject_not_allowed`); anyone who may edit the trigger may clear it.
+   * `cron` and `timezone` re-time a `schedule` trigger, checked as on create, and restart its counting
+   * so no run is owed for the old time (ADR-0144 D5); a `webhook` trigger answers `400 invalid_field`.
    */
   public async update(
     id: string,

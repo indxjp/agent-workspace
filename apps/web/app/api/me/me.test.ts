@@ -37,7 +37,7 @@ import {
 } from '../../../server/auth/session';
 import { clearFeatureSwitches, configureFeatureSwitches } from '../../../server/features/runtime';
 import { sessionCookieValue } from '../../../server/composition/identity';
-import { conferredBy } from '../../../server/rbac/conferral';
+import { conferredBy } from '../../../server/rbac/core/conferral';
 import {
   parsePresentedKey,
   presentedKeyText,
@@ -258,7 +258,7 @@ describe('GET /api/me refuses a credential that stopped being usable', () => {
     const call = async (token: string): Promise<Response> =>
       GET(
         new Request('https://control-plane.test/api/me', {
-          headers: { cookie: `${sessionCookieName()}=${token}` },
+          headers: { cookie: `${sessionCookieName(process.env)}=${token}` },
         }),
       );
 

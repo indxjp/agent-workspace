@@ -28,7 +28,6 @@
  * input unchanged, so a caller cannot mistake "refused" for "nothing to do".
  */
 import { UuidSchema } from '@indx-workspace/contracts';
-import type { BuiltinAgentKey } from '@indx-workspace/contracts/agents';
 import { StartRunRequestSchema } from '@indx-workspace/contracts/runs';
 import type { Badge } from '@indx-workspace/react/run-model';
 
@@ -100,8 +99,6 @@ export interface ComposerAgent {
    * only models on these (`../models/engine-models.ts`).
    */
   readonly drivableProviders: readonly string[];
-  /** Present only on a built-in agent, such as the Builder: listed, but never picked by default. */
-  readonly builtin?: BuiltinAgentKey;
 }
 
 /**
@@ -245,6 +242,34 @@ export function pinnedAgentFrom(params: {
   return agentId.success && number.success ? { agentId: agentId.data, version: number.data } : null;
 }
 
+/** The most characters a chat's title takes from its first message. */
+export const CHAT_TITLE_MAX = 80;
+
+/**
+ * A new chat's title, from its first message (UX-05 in #2086): one line, spaces collapsed, cut to
+ * {@link CHAT_TITLE_MAX} characters with an ellipsis. `null` when the message has no text to show.
+ */
+export function chatTitleFrom(message: string): string | null {
+  const line = message.replace(/\s+/gu, ' ').trim();
+  if (line === '') return null;
+  return line.length <= CHAT_TITLE_MAX ? line : `${line.slice(0, CHAT_TITLE_MAX - 1).trimEnd()}…`;
+}
+
+/**
+ * The session `/?session=<id>` asks to continue (UX-05 in #2086), or `null` when the parameter is
+ * absent or is not one UUID. Whether the caller may continue it is the page's question, not this one.
+ */
+export function resumedSessionFrom(params: { readonly session?: SearchValue }): string | null {
+  // A repeated parameter (an array) or an absent one is not a UUID either.
+  const id = UuidSchema.safeParse(params.session);
+  return id.success ? id.data : null;
+}
+
+/** The home chat, continuing `sessionId`; {@link resumedSessionFrom} reads it back (UX-05). */
+export function continueChatHref(sessionId: string): string {
+  return `/?${new URLSearchParams({ session: sessionId }).toString()}`;
+}
+
 /** The home chat route, pinned to `version` of `agentId`; {@link pinnedAgentFrom} reads it back. */
 export function pinnedChatHref({ agentId, version }: PinnedAgent): string {
   return `/?${new URLSearchParams({ agent: agentId, version: String(version) }).toString()}`;
@@ -276,9 +301,6 @@ function isRunnable(agent: ComposerAgent): boolean {
  * 4. the first agent that can run at all;
  * 5. the remembered agent, the setup agent, then the first agent — so the screen still opens on
  *    something, and the composer says why it cannot run rather than hiding the agent.
- *
- * Steps 3 to 5 skip a built-in agent such as the Builder (#2012): every workspace has one, so it is
- * never the default unless it was remembered or is the only agent listed.
  */
 export function preferredAgent(
   agents: readonly ComposerAgent[],
@@ -289,16 +311,13 @@ export function preferredAgent(
   if (remembered !== null && isRunnable(remembered)) return remembered;
   const setup = findAgent(agents, setupAgentId);
   if (setup !== null && isRunnable(setup)) return setup;
-  const own = agents.filter((agent) => agent.builtin === undefined);
   return (
-    own.find(
+    agents.find(
       (agent) => agent.runTarget.kind === 'runnable' && agent.runTarget.source === 'agent',
     ) ??
-    own.find(isRunnable) ??
+    agents.find(isRunnable) ??
     remembered ??
     setup ??
-    own[0] ??
-    // Only a built-in agent is listed: open on it, because a screen with no session disables the picker.
     agents[0] ??
     null
   );

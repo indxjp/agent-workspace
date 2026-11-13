@@ -9,13 +9,13 @@ private def archived : ExistingSession :=
     active := false, engineSessionIdKnown := true }
 
 /-- The repaired composition root agrees with the target on existing-session acceptance. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/composition/wiring/run-api.ts#openSession")]
+@[aw_spec (tier := T4) (ts := "apps/web/server/composition/wiring/run-api-sessions.ts#openRunSession")]
 theorem target_agrees_with_current (w s : Bool) (session : ExistingSession) :
     openSessionTarget w s session = openSessionCurrent w s session := by
   rfl
 
 /-- An archived session is refused before its saved SDK id can select a resumed launch. -/
-@[aw_spec (tier := T4) (ts := "apps/web/server/composition/wiring/run-api.ts#openSession")]
+@[aw_spec (tier := T4) (ts := "apps/web/server/composition/wiring/run-api-sessions.ts#openRunSession")]
 theorem archived_session_reuse_refused :
     openSessionCurrent true true archived = false ∧
     openSessionTarget true true archived = false ∧

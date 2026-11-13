@@ -25,21 +25,44 @@ const TokenCountSchema = z
   .object({ input_tokens: z.number().int().nonnegative().safe() })
   .passthrough();
 
+/** One upstream messages call, fully decided: where it goes, how it authenticates, what it carries. */
+export type UpstreamCall = {
+  readonly url: string;
+  readonly headers: Headers;
+  readonly body: string;
+};
+
+/**
+ * Where an Anthropic-format adapter sends `createMessage`. The default target is the Anthropic API;
+ * another host that serves the same wire (Claude on Vertex AI) supplies its own URL, auth headers
+ * and body mapping. `prepare` answers a `Response` to refuse the request before any upstream call.
+ */
+export type AnthropicTarget = {
+  prepare(body: AnthropicMessageRequest, context: RequestContext): UpstreamCall | Response;
+  /** Reshapes a non-2xx upstream answer; absent means it is relayed as it came. */
+  mapError?(upstream: Response): Promise<Response>;
+};
+
 export type AnthropicProviderOptions = {
   readonly baseUrl?: string;
   readonly models?: readonly ModelInfo[];
   readonly fetch?: typeof fetch;
+  readonly target?: AnthropicTarget;
 };
 
 export const ANTHROPIC_CAPABILITIES: ModelCapabilities = {
   streaming: true,
   toolUse: true,
   thinking: true,
-  // R-03 requires these two claims to remain false until a credential-bound replay verifies them.
-  promptCaching: false,
+  // R-03 kept this false until a credential-bound replay showed it. model-providers-live.yml is
+  // that replay (a cache write, then a plain and a streamed read of it through this provider), and
+  // run 42873825961 verified it on claude-haiku-5-5. Only for the Anthropic API: Vertex declares
+  // its own capabilities (VERTEX_CAPABILITIES).
+  promptCaching: true,
   structuredOutput: true,
   contextManagement: true,
   webSearch: true,
+  // R-03 requires this claim to remain false until a credential-bound replay verifies it.
   tokenCounting: false,
 };
 
@@ -80,6 +103,50 @@ export function createAnthropicProvider(options: AnthropicProviderOptions = {}):
   const request = options.fetch ?? fetch;
   const policy = loadEgressPolicyFromEnv();
   const models = [...(options.models ?? [])];
+  const target: AnthropicTarget = options.target ?? {
+    prepare: (body, context) => ({
+      url: `${baseUrl}/v1/messages`,
+      headers: anthropicRequestHeaders(context),
+      body: JSON.stringify(body),
+    }),
+  };
+
+  async function send(call: UpstreamCall, context: RequestContext): Promise<Response> {
+    return guardedFetch(
+      call.url,
+      {
+        method: 'POST',
+        headers: call.headers,
+        body: call.body,
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+      },
+      policy,
+      request,
+    );
+  }
+
+  async function countTokens(body: AnthropicCountTokensRequest, context: RequestContext) {
+    const response = await guardedFetch(
+      `${baseUrl}/v1/messages/count_tokens`,
+      {
+        method: 'POST',
+        headers: anthropicRequestHeaders(context),
+        body: JSON.stringify(body),
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+      },
+      policy,
+      request,
+    );
+    if (!response.ok) {
+      throw new Error(`Anthropic token counting returned HTTP ${String(response.status)}.`);
+    }
+    const value: unknown = await response.json();
+    const parsed = TokenCountSchema.safeParse(value);
+    if (!parsed.success) {
+      throw new Error('Anthropic token counting returned an invalid input_tokens value.');
+    }
+    return { input_tokens: parsed.data.input_tokens };
+  }
 
   return {
     id: 'anthropic',
@@ -107,40 +174,22 @@ export function createAnthropicProvider(options: AnthropicProviderOptions = {}):
       return parsed.data.data;
     },
     async createMessage(body: AnthropicMessageRequest, context: RequestContext) {
-      const upstream = await guardedFetch(
-        `${baseUrl}/v1/messages`,
-        {
-          method: 'POST',
-          headers: anthropicRequestHeaders(context),
-          body: JSON.stringify(body),
-          ...(context.signal === undefined ? {} : { signal: context.signal }),
-        },
-        policy,
-        request,
-      );
+      const call = target.prepare(body, context);
+      if (call instanceof Response) return call;
+      let upstream = await send(call, context);
+      if (upstream.status === 401 && context.refreshCredential !== undefined) {
+        // A keyless token the cloud no longer accepts: renew it once and replay once.
+        await upstream.body?.cancel();
+        const retry = target.prepare(body, {
+          ...context,
+          credential: await context.refreshCredential(),
+        });
+        if (retry instanceof Response) return retry;
+        upstream = await send(retry, context);
+      }
+      if (!upstream.ok && target.mapError !== undefined) return target.mapError(upstream);
       return clientResponse(upstream);
     },
-    async countTokens(body: AnthropicCountTokensRequest, context: RequestContext) {
-      const response = await guardedFetch(
-        `${baseUrl}/v1/messages/count_tokens`,
-        {
-          method: 'POST',
-          headers: anthropicRequestHeaders(context),
-          body: JSON.stringify(body),
-          ...(context.signal === undefined ? {} : { signal: context.signal }),
-        },
-        policy,
-        request,
-      );
-      if (!response.ok) {
-        throw new Error(`Anthropic token counting returned HTTP ${String(response.status)}.`);
-      }
-      const value: unknown = await response.json();
-      const parsed = TokenCountSchema.safeParse(value);
-      if (!parsed.success) {
-        throw new Error('Anthropic token counting returned an invalid input_tokens value.');
-      }
-      return { input_tokens: parsed.data.input_tokens };
-    },
+    ...(options.target === undefined ? { countTokens } : {}),
   };
 }

@@ -37,8 +37,7 @@ import { agentVersionNotFound } from '../agent-versions/problems';
 import { toAgentVersionResource } from '../agent-versions/contract';
 import type { WorkspaceAgentVersionStore } from '../agent-versions/store';
 import { problem, type ApiResult } from '../http/result';
-import type { AnyConnectorResource } from '../connectors/contract';
-import type { WorkspaceConnectorsStore } from '../connectors/store';
+import type { AnyConnectorResource, WorkspaceConnectorsStore } from '../integrations';
 
 const NOTE_MAX_LENGTH = 1_024;
 const PATH_MAX_LENGTH = 512;

@@ -3,11 +3,14 @@ import {
   shareJson,
   shareProblem,
   withShares,
-} from '../../../server/shares/core/http';
-import { ownerPrincipalIdOf } from '../../../server/rbac/owner-principal';
-import { parsePublishShareRequest } from '../../../server/shares/core/input';
+} from '../../../server/shares/http';
+import { ownerPrincipalIdOf } from '../../../server/rbac/core/owner-principal';
 import {
+  parsePublishShareRequest,
   publishedSnapshot,
+} from '../../../server/shares/publish-request';
+import {
+  toShareListItem,
   toShareResource,
   visibleShares,
 } from '../../../server/shares/core/resource';
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
       });
       return Response.json({
         shares: await Promise.all(
-          visible.map(async (share) => toShareResource(share, await sharing.views.count(share.id))),
+          visible.map(async (share) => toShareListItem(share, await sharing.views.count(share.id))),
         ),
       });
     });
@@ -53,8 +56,8 @@ export async function POST(request: Request) {
         await context.sharingMaterials(),
         context.sessionRuns,
       );
-      const share = await context.service.publish({ ...body, snapshot }, context.actor);
-      return Response.json(toShareResource(share), { status: 201 });
+      const { share, token } = await context.service.publish({ ...body, snapshot }, context.actor);
+      return Response.json(toShareResource(share, token), { status: 201 });
     });
   } catch (error) {
     return errorResponse(error, { component: 'shares', operation: 'publish' });

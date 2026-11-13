@@ -41,8 +41,6 @@ export interface DailyCostRuleDependencies {
 export interface DailyCostRule {
   /** `null` while the workspace is under `capUsd` today. Rejects when the spend cannot be read. */
   readonly refusal: (workspaceId: string, capUsd: number) => Promise<DailyCostCapRefusal | null>;
-  /** The workspace's cost in the UTC day starting at `dayUtc`, as the cache last read it. */
-  readonly dailyCostUsd: (workspaceId: string, dayUtc: Date) => Promise<number>;
   /** How many workspaces' sums the cache holds; expired and previous-day ones are dropped on write. */
   readonly cachedWorkspaceCount: () => number;
 }
@@ -93,7 +91,6 @@ export function createDailyCostRule(dependencies: DailyCostRuleDependencies): Da
   };
 
   return {
-    dailyCostUsd: async (workspaceId, dayUtc) => (await read(workspaceId, dayUtc)).spentUsd,
     cachedWorkspaceCount: () => cache.size,
     async refusal(workspaceId, capUsd) {
       const dayUtc = utcDayStart(now());

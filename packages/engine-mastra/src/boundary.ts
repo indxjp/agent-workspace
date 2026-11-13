@@ -1,3 +1,11 @@
+import {
+  isRecord,
+  type RunState,
+  outputSchemaUnsatisfied,
+  observe,
+  stopReasonOf,
+} from './run-state.js';
+export { type MastraStopInput, mastraStopReason } from './run-state.js';
 /**
  * **The** import site of Mastra and the two AI SDK providers it is handed (ENG-10, #309; spec §42,
  * ADR-0065 D2.3).
@@ -41,13 +49,7 @@ import type * as MastraMcpModule from '@mastra/mcp';
 import type * as MastraMemoryModule from '@mastra/memory';
 
 import {
-  OUTPUT_SCHEMA_UNSATISFIED,
-  OUTPUT_SCHEMA_UNSATISFIED_MESSAGE,
-} from '@indx-workspace/contracts/runs';
-import {
-  credentialRejectedError,
   executeRunSkillScript,
-  isGatewayTokenRefusal,
   RUN_SKILL_SCRIPT_TOOL,
   skillScriptToolDescription,
   type SkillScriptSetup,
@@ -60,7 +62,7 @@ import {
   type MastraMcpServer,
   type MastraSubagent,
 } from './compile.js';
-import { addMastraUsage, type MastraEvent, type MastraUsage } from './frames.js';
+import { type MastraEvent } from './frames.js';
 import { mastraResolvedWriteVerdict } from './guard.js';
 import {
   messageEntry,
@@ -77,7 +79,7 @@ import {
 } from './workspace.js';
 
 /** The pinned Mastra release. `engine.test.ts` holds it to this package's manifest. */
-export const MASTRA_CORE_VERSION = '1.79.0';
+export const MASTRA_CORE_VERSION = '1.81.0';
 
 /**
  * What the runner process's environment must say before Mastra loads (ADR-0084 D4). Each is read
@@ -482,148 +484,6 @@ function skillScriptTool(modules: MastraModules, setup: SkillScriptSetup, signal
   });
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * The failure a run ends with when the model call came back `401` or `403` from the provider
- * (issue #690), or `null` for any other error. The adapter never holds the model key, so this is
- * the first moment it can see the key is wrong. A gateway refusal of the run token carries a
- * `token_*` code (`packages/gateway/src/auth.ts`) and is left alone, so nobody is told to replace
- * a good key. Only the status is read: no key and no provider text reaches the message.
- */
-function rejectedKeyFailure(error: unknown): Error | null {
-  if (!isRecord(error)) return null;
-  const status = error['statusCode'];
-  if (status !== 401 && status !== 403) return null;
-  const body = error['responseBody'];
-  if (typeof body === 'string' && isGatewayTokenRefusal(body)) return null;
-  return credentialRejectedError(status);
-}
-
-/** What the stream loop has seen. An object, so reads after the loop are not narrowed away. */
-type RunState = {
-  steps: number;
-  lastStepReason: unknown;
-  usage: MastraUsage | null;
-  limit: 'max_budget' | null;
-  finish: unknown;
-  errored: boolean;
-  /** Set when an error chunk is the provider refusing the key (issue #690). */
-  rejection: Error | null;
-  /** Set when an error chunk is Mastra's own structured-output check failing (ADR-0143). */
-  schemaFailure: boolean;
-  /** The validated value of Mastra's `object-result` chunk, once it has arrived. */
-  object: { readonly value: unknown } | null;
-};
-
-/**
- * Whether `error` is Mastra's structured-output failure: a `MastraError` whose `id` starts
- * `STRUCTURED_OUTPUT_` (schema mismatch, a truncated answer), or the AI SDK's
- * `NoObjectGeneratedError`. Read by id or name, never by message. Mastra's own
- * `isStructuredOutputFormatError` also counts `AI_JSONParseError` and `AI_TypeValidationError`,
- * but the AI SDK raises those for a malformed provider stream chunk too, which is not the answer
- * failing the schema, so they are left as a plain failed run.
- */
-function isStructuredOutputError(error: unknown): boolean {
-  if (!isRecord(error)) return false;
-  if (typeof error['id'] === 'string' && error['id'].startsWith('STRUCTURED_OUTPUT_')) return true;
-  return error['name'] === 'AI_NoObjectGeneratedError';
-}
-
-function outputSchemaUnsatisfied(): Error {
-  return new Error(`${OUTPUT_SCHEMA_UNSATISFIED}: ${OUTPUT_SCHEMA_UNSATISFIED_MESSAGE}`);
-}
-
-/** Fold one chunk into the run's state. Answers `true` when the budget cap has been reached. */
-function observe(state: RunState, chunk: unknown, compiled: MastraCompiled): boolean {
-  if (!isRecord(chunk)) return false;
-  const payload = isRecord(chunk['payload']) ? chunk['payload'] : {};
-  if (chunk['type'] === 'error') {
-    state.errored = true;
-    state.rejection = rejectedKeyFailure(payload['error']);
-    state.schemaFailure = isStructuredOutputError(payload['error']);
-  }
-  if (chunk['type'] === 'object-result') state.object = { value: chunk['object'] };
-  if (chunk['type'] === 'finish') state.finish = chunk;
-  if (chunk['type'] === 'tool-output') {
-    // A subagent's chunks arrive wrapped in its tool call's output. Its steps cost money, so they
-    // count against the cap and the usage; they are not the run's own steps, so `steps` and the
-    // `maxSteps` reading stay the parent's.
-    const inner = payload['output'];
-    if (!isRecord(inner) || inner['type'] !== 'step-finish') return false;
-    return meterStep(state, isRecord(inner['payload']) ? inner['payload'] : {}, compiled);
-  }
-  if (chunk['type'] !== 'step-finish') return false;
-  state.steps += 1;
-  state.lastStepReason = isRecord(payload['stepResult']) ? payload['stepResult']['reason'] : null;
-  return meterStep(state, payload, compiled);
-}
-
-/** Price one `step-finish` payload into the run's usage. Answers `true` when the cap is reached. */
-function meterStep(
-  state: RunState,
-  payload: Record<string, unknown>,
-  compiled: MastraCompiled,
-): boolean {
-  const output = isRecord(payload['output']) ? payload['output'] : {};
-  const budget = compiled.limits.budget;
-  state.usage = addMastraUsage(state.usage, output['usage'], budget?.price ?? null);
-  return budget !== null && (state.usage?.costUsd ?? 0) >= budget.maxBudgetUsd;
-}
-
-/** What {@link mastraStopReason} reads of a drained run. Plain data. */
-export type MastraStopInput = {
-  /** The `step-finish` chunks seen. */
-  readonly steps: number;
-  /** The last step's `stepResult.reason`, as Mastra reported it. */
-  readonly lastStepReason: unknown;
-  /** The compiled `limits.maxSteps`; `null` is Mastra's own default. */
-  readonly maxSteps: number | null;
-  /** `max_budget` once the priced usage reached the cap. */
-  readonly limit: 'max_budget' | null;
-  /** The caller interrupted the run. */
-  readonly interrupted: boolean;
-};
-
-/**
- * The run's stop reason, once the stream has drained without an `error` chunk. The budget cap
- * wins, then the caller's interrupt; otherwise a run whose last allowed step still asked for tools
- * was cut short (`max_turns`) and any other ends `end_turn` — including one that used exactly
- * `maxSteps` steps and stopped on its own.
- */
-export function mastraStopReason(
-  input: MastraStopInput,
-): 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled' {
-  if (input.limit !== null) return input.limit;
-  if (input.interrupted) return 'cancelled';
-  const cutShort =
-    input.maxSteps !== null &&
-    input.steps >= input.maxSteps &&
-    input.lastStepReason === 'tool-calls';
-  return cutShort ? 'max_turns' : 'end_turn';
-}
-
-/** {@link mastraStopReason} over the loop's state; a drained run with no `finish` is a failure. */
-function stopReasonOf(
-  state: RunState,
-  compiled: MastraCompiled,
-  interrupted: boolean,
-): 'end_turn' | 'max_turns' | 'max_budget' | 'cancelled' {
-  const input: MastraStopInput = {
-    steps: state.steps,
-    lastStepReason: state.lastStepReason,
-    maxSteps: compiled.limits.maxSteps,
-    limit: state.limit,
-    interrupted,
-  };
-  if (input.limit === null && !interrupted && state.finish === null) {
-    throw new Error("Mastra's stream ended without a finish chunk.");
-  }
-  return mastraStopReason(input);
-}
-
 /** What Mastra's `structuredOutput.schema` takes; the contract fixes the JSON Schema root at `object`. */
 type MastraOutputSchema = NonNullable<
   MastraAgentModule.AgentExecutionOptions['structuredOutput']
@@ -703,12 +563,79 @@ async function release(
 /**
  * Run one compiled agent on Mastra, yielding its chunks and, last, `run_completed`.
  *
- * `max_turns` (the last allowed step still asked for tools), `max_budget` (the priced usage
- * reaching the cap, which aborts the stream) and `cancelled` (the caller's interrupt) each end the
- * run with a terminal event. A Mastra `error` chunk is forwarded — it is the run's `agent.result
+ * `max_turns` (the last allowed step still asked for tools) and `cancelled` (the caller's
+ * interrupt) each end the run with a terminal event; a spend ceiling is the gateway's (ADR-0162),
+ * whose refused call arrives here as a Mastra `error` chunk. A Mastra `error` chunk is forwarded — it is the run's `agent.result
  * { stopReason: 'error' }` — and no second result follows it. A failure to release the workspace
  * or a connector is thrown after the run's own outcome, beside the run's own error if it had one.
  */
+
+function agentForRun({
+  modules,
+  compiled,
+  fetch,
+  tools,
+  delegates,
+  workspace,
+  memory,
+  signal,
+}: {
+  readonly modules: MastraModules;
+  readonly compiled: MastraCompiled;
+  readonly fetch: MastraRunDeps['fetch'];
+  readonly tools: Awaited<ReturnType<typeof connectorTools>>;
+  readonly delegates: readonly {
+    readonly subagent: MastraSubagent;
+    readonly view: MastraCompiled;
+    readonly workspace: ReturnType<typeof workspaceFor>;
+  }[];
+  readonly workspace: ReturnType<typeof workspaceFor>;
+  readonly memory: ReturnType<typeof memoryFor>;
+  readonly signal: AbortSignal;
+}) {
+  const agents = Object.fromEntries(
+    delegates.map(({ subagent, view, workspace: delegateWorkspace }, index) => [
+      subagent.toolName.slice(MASTRA_SUBAGENT_TOOL_PREFIX.length),
+      new modules.agent.Agent({
+        id: `agent-workspace-subagent-${String(index)}`,
+        name: subagent.name,
+        description: subagent.description,
+        instructions: subagent.instructions,
+        model: modelFor(modules, view, fetch),
+        tools,
+        workspace: delegateWorkspace,
+        // Its own memory, never journalled: an inherited one would write the sub-agent's thread
+        // into the session's stream, which a resume then refuses.
+        memory: memoryFor(
+          modules,
+          view,
+          new modules.storage.InMemoryMemory({ db: new modules.storage.InMemoryDB() }),
+        ),
+        // Mastra clamps the `maxSteps` the delegating model asks for to this; none means no cap.
+        ...(compiled.limits.maxSteps === null
+          ? {}
+          : { defaultOptions: { maxSteps: compiled.limits.maxSteps } }),
+      }),
+    ]),
+  );
+  return new modules.agent.Agent({
+    id: 'agent-workspace',
+    name: compiled.agent.name,
+    instructions: compiled.agent.instructions,
+    model: modelFor(modules, compiled, fetch),
+    tools:
+      compiled.skillScript === null
+        ? tools
+        : {
+            ...tools,
+            [RUN_SKILL_SCRIPT_TOOL]: skillScriptTool(modules, compiled.skillScript, signal),
+          },
+    ...(delegates.length === 0 ? {} : { agents }),
+    workspace,
+    memory,
+  });
+}
+
 export async function* startMastraRun(
   compiled: MastraCompiled,
   prompt: string,
@@ -747,7 +674,6 @@ export async function* startMastraRun(
     steps: 0,
     lastStepReason: null,
     usage: null,
-    limit: null,
     finish: null,
     errored: false,
     rejection: null,
@@ -761,46 +687,15 @@ export async function* startMastraRun(
       ...delegates.map((delegate) => delegate.workspace.init()),
     ]);
     const tools = client === null ? {} : await connectorTools(client, compiled.mcpServers);
-    const agents = Object.fromEntries(
-      delegates.map(({ subagent, view, workspace: delegateWorkspace }, index) => [
-        subagent.toolName.slice(MASTRA_SUBAGENT_TOOL_PREFIX.length),
-        new modules.agent.Agent({
-          id: `agent-workspace-subagent-${String(index)}`,
-          name: subagent.name,
-          description: subagent.description,
-          instructions: subagent.instructions,
-          model: modelFor(modules, view, deps.fetch),
-          tools,
-          workspace: delegateWorkspace,
-          // Its own memory, never journalled: an inherited one would write the sub-agent's thread
-          // into the session's stream, which a resume then refuses.
-          memory: memoryFor(
-            modules,
-            view,
-            new modules.storage.InMemoryMemory({ db: new modules.storage.InMemoryDB() }),
-          ),
-          // Mastra clamps the `maxSteps` the delegating model asks for to this; none means no cap.
-          ...(compiled.limits.maxSteps === null
-            ? {}
-            : { defaultOptions: { maxSteps: compiled.limits.maxSteps } }),
-        }),
-      ]),
-    );
-    const agent = new modules.agent.Agent({
-      id: 'agent-workspace',
-      name: compiled.agent.name,
-      instructions: compiled.agent.instructions,
-      model: modelFor(modules, compiled, deps.fetch),
-      tools:
-        compiled.skillScript === null
-          ? tools
-          : {
-              ...tools,
-              [RUN_SKILL_SCRIPT_TOOL]: skillScriptTool(modules, compiled.skillScript, abort.signal),
-            },
-      ...(delegates.length === 0 ? {} : { agents }),
+    const agent = agentForRun({
+      modules,
+      compiled,
+      fetch: deps.fetch,
+      tools,
+      delegates,
       workspace,
       memory,
+      signal: abort.signal,
     });
     const streamOptions = {
       memory: { thread: compiled.memory.threadId, resource: compiled.memory.resourceId },
@@ -825,14 +720,10 @@ export async function* startMastraRun(
     for await (const typed of output.fullStream) {
       // Read as data from here on: the frame mapper, not Mastra's types, decides what a chunk is.
       const chunk: unknown = typed;
-      const overBudget = observe(state, chunk, compiled);
+      observe(state, chunk);
       // `finish` is carried by `run_completed` below, which knows why the run ended.
       if (isRecord(chunk) && chunk['type'] === 'finish') continue;
       yield { kind: 'mastra', chunk };
-      if (overBudget && state.limit === null) {
-        state.limit = 'max_budget';
-        abort.abort(new Error('the run reached its maxBudgetUsd cap'));
-      }
     }
     if (state.errored) {
       // No `run_completed` follows an error, so a `finish` Mastra sent after it would otherwise

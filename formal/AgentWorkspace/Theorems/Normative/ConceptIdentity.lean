@@ -92,7 +92,7 @@ theorem the_role_is_on_the_membership_not_the_user :
 /-- "Every resource below belongs to exactly one [workspace]": each tenant-scoped identity table
 has exactly one reference to `workspaces`, over a `NOT NULL` `workspace_id`. -/
 @[aw_spec (tier := T1) (doc := "docs/sdk/04-api-specification.md#11-vocabulary")
-  (ts := "packages/core/src/db/schema/tenancy.test.ts#TENANT_COLUMN")]
+  (ts := "packages/core/src/db/tenancy-readers.test-support.ts#TENANT_COLUMN")]
 theorem identity_rows_belong_to_exactly_one_workspace :
     [TableName.memberships, .workspacePrincipals, .apiKeys, .invitations, .browserTokens,
       .cliSessions, .endpointClients, .endpointClientAgents, .endpointClientApiKeys,

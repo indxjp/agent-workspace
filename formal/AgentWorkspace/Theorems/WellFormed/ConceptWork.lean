@@ -97,13 +97,13 @@ theorem every_work_check_is_refined :
       workCheckSql.map Prod.fst = workTables.flatMap otherChecks := by
   decide +kernel
 
-/-- The work tables carry 25 checks that are not closed sets and 20 closed-set checks. -/
+/-- The work tables carry 34 checks that are not closed sets and 22 closed-set checks. -/
 @[aw_spec (tier := T0)
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/one-of.ts#oneOf")]
 theorem work_check_counts :
-    (workTables.flatMap otherChecks).length = 25 ∧
-      (workTables.flatMap fun t => (catalogue t).checks).length = 45 := by
+    (workTables.flatMap otherChecks).length = 34 ∧
+      (workTables.flatMap fun t => (catalogue t).checks).length = 56 := by
   decide +kernel
 
 /-! ## Foreign keys and their cardinality (generated) -/
@@ -161,13 +161,13 @@ end Generator
 
 aw_work_fk_cardinality_theorems
 
-/-- The work tables declare 50 foreign keys: 36 whose every column is `NOT NULL` and 14 with a
+/-- The work tables declare 66 foreign keys: 48 whose every column is `NOT NULL` and 18 with a
 nullable column. -/
 @[aw_spec (tier := T0)
   (doc := "docs/sdk/07-structure-map.md#3-er-diagram--the-tables-the-sdk-surfaces")]
 theorem work_foreign_key_counts :
-    workForeignKeys.length = 50 ∧
-      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 36 := by
+    workForeignKeys.length = 66 ∧
+      (workForeignKeys.filter fun p => fkCardinality catalogue p.1 p.2 == .exactlyOne).length = 48 := by
   decide +kernel
 
 /-! ## Concept rows -/
@@ -441,10 +441,27 @@ private theorem run_idempotency_check (r : Run) :
     rw [run_get]; simp [runCells, List.lookup_cons]
   simp [workCheckHolds, workCheck, h1, h2]
 
-/-- The run invariants are exactly the eleven row checks of `runs` that are not closed sets: a run
-is well formed if and only if its row passes all of them (`runs_output_only_when_completed`,
-`runs_consumed_approvals_never_queued` and `runs_idempotency_key_has_hash` hold trivially, since a
-run concept carries no output and none of the consumed-approval or idempotency columns). -/
+/-- `runs_parent_not_self` constrains `parent_run_id`, which the run concept does not carry (a
+child run's parent is the run tree's, `Concepts/RunTree.lean`), so it holds on every run's row. -/
+private theorem run_parent_check (r : Run) :
+    workCheckHolds "runs_parent_not_self" (ofCells (runCells r)) = true := by
+  have h : (ofCells (runCells r)).get "parent_run_id" = none := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp [workCheckHolds, workCheck, h]
+
+/-- `runs_spend_ceiling_positive` constrains `spend_ceiling_usd` (ADR-0162), which the run concept
+does not carry, so it holds on every run's row. -/
+private theorem run_spend_ceiling_check (r : Run) :
+    workCheckHolds "runs_spend_ceiling_positive" (ofCells (runCells r)) = true := by
+  have h : (ofCells (runCells r)).get "spend_ceiling_usd" = none := by
+    rw [run_get]; simp [runCells, List.lookup_cons]
+  simp [workCheckHolds, workCheck, h]
+
+/-- The run invariants are exactly the thirteen row checks of `runs` that are not closed sets: a
+run is well formed if and only if its row passes all of them (`runs_output_only_when_completed`,
+`runs_consumed_approvals_never_queued`, `runs_idempotency_key_has_hash`, `runs_parent_not_self` and
+`runs_spend_ceiling_positive` hold trivially, since a run concept carries no output and none of the
+consumed-approval, idempotency, parent or spend-ceiling columns). -/
 @[aw_spec (tier := T0) (ts := "packages/core/src/db/schema/runs.ts#runs_ended_at_iff_terminal")
   (ts := "packages/core/src/db/schema/runs.ts#runs_price_version_matches_accounting_state")
   (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")]
@@ -453,7 +470,8 @@ theorem run_invariants_are_the_row_checks (r : Run) :
   simp only [otherChecks, catalogue, List.filterMap_cons, List.filterMap_nil, List.all_cons,
     List.all_nil, Bool.and_true, run_ended_check, run_after_check, run_counters_check,
     run_currency_check, run_price_check, run_unpriced_check, run_output_check, run_pending_check,
-    run_deadline_check, run_consumed_check, run_idempotency_check, Run.wellFormed, Bool.and_assoc]
+    run_deadline_check, run_consumed_check, run_idempotency_check, run_parent_check,
+    run_spend_ceiling_check, Run.wellFormed, Bool.and_assoc]
   cases r.pendingWhenAwaiting <;> cases r.deadlineWhenAwaiting <;> simp
 
 private theorem event_nd (e : RunEvent) : ((runEventCells e).map Prod.fst).Nodup := by
@@ -594,9 +612,16 @@ def run : Run :=
 def queuedRun : Run := Run.create ⟨"r2"⟩ ⟨"w1"⟩ ⟨"s1"⟩ 6
 
 /-- The queued run's row: it continues the completed one, as a decision's continuation does
-(ADR-0151). The run concept does not carry `continues_run_id`, so the cell is added here. -/
+(ADR-0151), and runs the agent team's version, as a continuation of a team's lead run keeps it
+(ADR-0104 acceptance decision 4). The run concept carries neither `continues_run_id` nor
+`agent_team_version_id`, so the cells are added here. -/
 def queuedRunCells : List (String × Option String) :=
-  runCells queuedRun ++ [("continues_run_id", some "r1")]
+  runCells queuedRun ++ [("continues_run_id", some "r1"), ("agent_team_version_id", some "atv1")]
+
+/-- A queued child run that the completed run started by calling an agent-team member (ADR-0104
+acceptance decision 5). The run concept does not carry `parent_run_id`, so the cell is added here. -/
+def childRunCells : List (String × Option String) :=
+  runCells (Run.create ⟨"r3"⟩ ⟨"w1"⟩ ⟨"s1"⟩ 7) ++ [("parent_run_id", some "r1")]
 
 /-- The completed run's first durable event. -/
 def event : RunEvent :=
@@ -641,7 +666,7 @@ def stateBlobCells : List (String × Option String) :=
   [("workspace_id", some "w1"), ("session_id", some "s1"),
    ("engine", some "claude-agent-sdk"), ("blob_key", some "state.tar"),
    ("storage_key", some "session-state/s1/claude-agent-sdk/state.tar"),
-   ("status", some "ready"), ("size_bytes", some "3"), ("sha256", some "ab12"),
+   ("object_id", some "o3"), ("status", some "ready"), ("size_bytes", some "3"), ("sha256", some "ab12"),
    ("created_at", some (instant 3)), ("updated_at", some (instant 3))]
 
 /-- The `er-core` witness (two workspaces, a member, a principal, a connection, an agent) with a
@@ -656,7 +681,7 @@ def state : State
   | .sessionStateStreams => [ofCells stateStreamCells]
   | .sessionStateEntries => [ofCells stateEntryCells]
   | .sessionStateBlobs => [ofCells stateBlobCells]
-  | .runs => [ofCells (runCells run), ofCells queuedRunCells]
+  | .runs => [ofCells (runCells run), ofCells queuedRunCells, ofCells childRunCells]
   | .runEvents => [ofCells (runEventCells event)]
   -- A thumbs up, with a comment, on the completed run's answer.
   | .runFeedback =>
@@ -702,6 +727,17 @@ def state : State
   | .workspaceFeatures =>
     [ofCells [("id", some "wf1"), ("workspace_id", some "w1"), ("feature", some "surfaces"),
       ("created_at", some (instant 4))]]
+  -- A webhook subscribed to two outcomes, and the delivery the run's stop owes it
+  -- (ADR-SDK-18-N3-250 D3, D4).
+  | .webhooks =>
+    [ofCells [("id", some "wh1"), ("workspace_id", some "w1"),
+      ("url", some "https://hooks.example.com/"), ("events", some "{run.completed,run.failed}"),
+      ("created_at", some (instant 4))]]
+  | .webhookDeliveries =>
+    [ofCells [("id", some "wd1"), ("workspace_id", some "w1"), ("webhook_id", some "wh1"),
+      ("run_id", some "r1"), ("event_type", some "run.completed"), ("state", some "pending"),
+      ("attempts", some "0"), ("next_attempt_at", some (instant 4)),
+      ("created_at", some (instant 4))]]
   | .triggerDeliveries =>
     [ofCells [("id", some "td1"), ("workspace_id", some "w1"), ("trigger_id", some "tr1"),
       ("delivery_key", some "evt-1"), ("run_id", some "r1"), ("created_at", some (instant 4))]]
@@ -711,6 +747,20 @@ def state : State
     [ofCells [("id", some "av1"), ("workspace_id", some "w1"), ("agent_id", some "a1"),
       ("number", some "1"), ("summary", some "First version"), ("via", some "ui"),
       ("body", some "{}"), ("created_by_principal_id", some "p1"), ("created_at", some (instant 1))]]
+  -- An agent team whose one version pins `a1`'s version as the lead and as the member: that the
+  -- lead is not also a member is the writer's rule, not a constraint (ADR-0104 acceptance).
+  | .agentTeams =>
+    [ofCells [("id", some "at1"), ("workspace_id", some "w1"), ("name", some "Support"),
+      ("owner_principal_id", some "p1"), ("created_by", some "u1"),
+      ("created_at", some (instant 2)), ("updated_at", some (instant 2))]]
+  | .agentTeamVersions =>
+    [ofCells [("id", some "atv1"), ("workspace_id", some "w1"), ("team_id", some "at1"),
+      ("number", some "1"), ("mode", some "handoff"), ("lead_agent_id", some "a1"),
+      ("lead_agent_version_id", some "av1"), ("created_by", some "u1"),
+      ("created_at", some (instant 2))]]
+  | .agentTeamVersionMembers =>
+    [ofCells [("team_version_id", some "atv1"), ("workspace_id", some "w1"),
+      ("agent_id", some "a1"), ("agent_version_id", some "av1"), ("name", some "helper")]]
   | t => AgentWorkspace.Theorems.Invariants.ErCore.Witness.state t
 
 /-- Some row of `t` references a parent through `fk` in `st`. -/
@@ -795,7 +845,7 @@ private theorem sum_from (acc : Counters) : ∀ cs : List Counters,
 sum, tool calls included, as `recordUsage` adds each counter to the run's own column; it is a
 coherence lemma about the model's fold, not a model of settlement (de-duplication by
 `providerResponseId` is Phase-4 settlement). -/
-@[aw_spec (tier := T0) (ts := "packages/core/src/db/repositories/runs.ts#recordUsage")]
+@[aw_spec (tier := T0) (ts := "packages/core/src/db/repositories/runs/accounting.ts#recordUsage")]
 theorem counters_sum_is_componentwise (cs : List Counters) :
     Counters.sum cs =
       ⟨(cs.map (·.inputTokens)).sum, (cs.map (·.outputTokens)).sum,

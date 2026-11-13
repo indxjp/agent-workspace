@@ -19,6 +19,7 @@ export interface VersionsStrings {
   readonly tabConfiguration: string;
   readonly tabVersions: string;
   readonly tabPlatforms: string;
+  readonly tabSchedules: string;
   readonly heading: string;
   readonly loading: string;
   readonly loadFailed: string;
@@ -87,6 +88,7 @@ const EN: VersionsStrings = {
   tabConfiguration: 'Configuration',
   tabVersions: 'Versions',
   tabPlatforms: 'Platforms',
+  tabSchedules: 'Schedules',
   heading: 'Versions',
   loading: 'Loading versions…',
   loadFailed: 'The versions could not be loaded.',
@@ -200,6 +202,7 @@ const JA: VersionsStrings = {
   tabConfiguration: '設定',
   tabVersions: 'バージョン',
   tabPlatforms: 'プラットフォーム',
+  tabSchedules: 'スケジュール',
   heading: 'バージョン',
   loading: 'バージョンを読み込んでいます…',
   loadFailed: 'バージョンを読み込めませんでした。',

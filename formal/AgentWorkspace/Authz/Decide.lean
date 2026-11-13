@@ -4,11 +4,12 @@ import AgentWorkspace.Authz.TokenScope
 /-!
 # `decide()` — the authorisation decision function
 
-`apps/web/server/rbac/decide.ts`, whole. A query is a role (as an untyped string), an HTTP method
-(any string), a path in the specification's notation, an ownership fact the handler established
-and an optional browser-token scope. The answer is `allow` or `deny` (decisions, with the route
-facts when §21's table was consulted) or `refuse` (no decision could be made; the handler answers
-`500 authorisation_undecidable`). The evaluation order is observable and modelled exactly:
+`apps/web/server/rbac/decide.ts` and its core `rbac/core/decide.ts`, whole. A query is a role (as
+an untyped string), an HTTP method (any string), a path in the specification's notation, an
+ownership fact the handler established and an optional browser-token scope. The answer is `allow`
+or `deny` (decisions, with the route facts when §21's table was consulted) or `refuse` (no decision
+could be made; the handler answers `500 authorisation_undecidable`). The evaluation order is
+observable and modelled exactly:
 
 1. `parseRole` — an unrecognised role is refused (ADR-0015), never downgraded;
 2. `classifyPath` — `public` is allowed with no facts, `page` is refused;
@@ -30,7 +31,7 @@ open AgentWorkspace AgentWorkspace.Concepts.Membership AgentWorkspace.Concepts.B
   AgentWorkspace.Authz.TokenScope AgentWorkspace.Authz.Surface
 
 /-- `Ownership`: whose row is being acted on, as far as the handler could tell. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#OWNERSHIPS")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#OWNERSHIPS")
   (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")]
 inductive Ownership where
   | own | other | unknown | notApplicable | permitted
@@ -51,7 +52,7 @@ instance : WireEnum Ownership where
     cases a <;> cases b <;> first | rfl | exact absurd h (by decide)
 
 /-- `METHODS`: the methods a Next.js route handler may export, in `decide.ts` order. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#METHODS")]
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#METHODS")]
 def methods : List String := ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
 /-! ## The path grammar -/
@@ -72,7 +73,7 @@ inductive ParsedPath where
 /-- `parsePath` over the `split('/')` segments. -/
 def parseSegments : List String → ParsedPath
   | "" :: "api" :: seg :: rest =>
-    match parseResource seg with
+    match resourceOfSegment seg with
     | none => .unknownResource seg
     | some r =>
       match rest with
@@ -89,7 +90,7 @@ def parseSegments : List String → ParsedPath
 def segmentsOf (path : String) : List String := (splitSlash path.toList).map String.ofList
 
 /-- `parsePath`: `/api/<resource>`, `/api/<resource>/:id`, `/api/<resource>/:id/<sub>`. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#parsePath")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#parsePath")
   (doc := "docs/adr/0026-section-34-is-a-shape-rule-and-an-extra-route-cites-its-mandate.md#decision")]
 def parsePath (path : String) : ParsedPath := parseSegments (segmentsOf path)
 
@@ -111,7 +112,7 @@ inductive ParsedOperation where
 def runSubs : List String := ["runs", "messages", "interrupt", "feedback", "approval"]
 
 /-- `parseOperation`: a method and a sub-resource, as an operation. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#parseOperation")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#parseOperation")
   (doc := "docs/adr/SDK-03-RUN-235-an-interrupt-is-a-control-plane-transition.md#decision")]
 def parseOperation (method : String) (sub : Option String) : ParsedOperation :=
   if method = "POST" ∧ (sub.map runSubs.contains).getD false = true then .ok .run
@@ -143,7 +144,7 @@ def agreeOnReachable (resource : Resource) (a b : Grants) : Bool :=
 /-! ## Grants against ownership -/
 
 /-- `applyGrant`: whether a grant of this width admits a row of this ownership. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#applyGrant")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#applyGrant")
   (doc := "docs/adr/W9-AUTH-117-viewer-permitted-agent-grants.md#decision")
   (doc := "docs/adr/0031-a-static-gate-cannot-be-complete-so-undecidable-must-mean-refused.md#decision")
   (doc := "docs/adr/0152-roles-are-monotonic.md#decision")]
@@ -161,7 +162,7 @@ def applyGrant : Grant → Ownership → Bool
 
 /-- `AuthorisationQuery`. The role is the raw runtime value; `scope` is `null` for every
 credential but a browser token. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#AuthorisationQuery")]
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#AuthorisationQuery")]
 structure Query where
   role : RoleInput
   method : String
@@ -198,7 +199,7 @@ inductive RefuseReason where
 /-- `Decision`: `allow` and `deny` are decisions; `refuse` is the absence of one. A `deny` whose
 `scopeDenial` is set carries the code `token_out_of_scope`; otherwise the renderer's default
 `forbidden`. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#Decision")]
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#Decision")]
 inductive Decision where
   | allow (facts : Option RouteFacts)
   | deny (facts : Option RouteFacts) (scopeDenial : Option ScopeDenial)
@@ -301,12 +302,21 @@ structure DeclaredRoute where
   path : String
   deriving DecidableEq, Repr
 
-/-- The declared route union (187 routes). -/
+/-- The declared route union (199 routes). -/
 @[aw_spec (ts := "tests/inventory-support.ts#readDeclarationFiles")
-  (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#declaredRoutes")]
+  (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#declaredRoutes")]
 def declaredRoutes : List DeclaredRoute :=
   [ ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", "GET", "/api/workspaces/:id/features"⟩,
     ⟨"AP-U2-4C-WORKSPACE-FEATURES-1496", "PUT", "/api/workspaces/:id/features"⟩,
+    ⟨"AP-U2-5B-TOKEN-EXCHANGE-1499", "POST", "/api/auth/token-exchange"⟩,
+    ⟨"AP-U4-2B-AGENT-TEAMS-1516", "GET", "/api/agent-teams"⟩,
+    ⟨"AP-U4-2B-AGENT-TEAMS-1516", "POST", "/api/agent-teams"⟩,
+    ⟨"AP-U4-2B-AGENT-TEAMS-1516", "GET", "/api/agent-teams/:id"⟩,
+    ⟨"AP-U4-2B-AGENT-TEAMS-1516", "DELETE", "/api/agent-teams/:id"⟩,
+    ⟨"AP-U4-2B-AGENT-TEAMS-1516", "POST", "/api/agent-teams/:id/versions"⟩,
+    ⟨"AP-U4-2B-AGENT-TEAMS-1516", "GET", "/api/agent-teams/:id/versions"⟩,
+    ⟨"AP-U4-2C-AGENT-TEAM-RUNS-1517", "POST", "/api/agent-teams/:id/runs"⟩,
+    ⟨"AP-U4-2C-AGENT-TEAM-RUNS-1517", "POST", "/api/runs/:id/members/mcp"⟩,
     ⟨"BLD-3-BUILDER-MCP-1846", "POST", "/api/builder/mcp"⟩,
     ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "POST", "/mcp/builder"⟩,
     ⟨"BLD-5B-BUILDER-EXTERNAL-1846", "GET", "/.well-known/oauth-protected-resource/mcp/builder"⟩,
@@ -385,6 +395,9 @@ def declaredRoutes : List DeclaredRoute :=
     ⟨"SDK-10-CLI-AUTH-242", "POST", "/api/auth/cli-token"⟩,
     ⟨"SDK-10-CLI-AUTH-242", "DELETE", "/api/auth/cli-token"⟩,
     ⟨"SDK-10-CLI-AUTH-242", "POST", "/api/auth/cli-workspace"⟩,
+    ⟨"SDK-18-WEBHOOKS-250", "GET", "/api/webhooks"⟩,
+    ⟨"SDK-18-WEBHOOKS-250", "POST", "/api/webhooks"⟩,
+    ⟨"SDK-18-WEBHOOKS-250", "DELETE", "/api/webhooks/:id"⟩,
     ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/upload-urls"⟩,
     ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/upload-complete"⟩,
     ⟨"SDK-19-PRESIGNED-FILES-251", "POST", "/api/files/:id/download-urls"⟩,
@@ -494,12 +507,12 @@ def declaredRoutes : List DeclaredRoute :=
     ⟨"W9-WS-119", "PATCH", "/api/workspaces/:id"⟩ ]
 
 /-- `PUBLIC_ROUTES`: the pre-authentication routes the matrix exempts. -/
-@[aw_spec (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#PUBLIC_ROUTES")]
+@[aw_spec (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#PUBLIC_ROUTES")]
 def matrixPublicRoutes : List (String × String) :=
   [("GET", "/api/setup/runtime-detect"), ("GET", "/api/auth/login"), ("POST", "/api/auth/callback"),
     ("GET", "/api/auth/workspace"), ("POST", "/api/auth/workspace"),
     ("POST", "/api/auth/cli-device"), ("GET", "/api/auth/cli-verify"), ("POST", "/api/auth/cli-token"),
-    ("GET", "/api/cron/retention"), ("GET", "/.well-known/oauth-authorization-server"),
+    ("POST", "/api/auth/token-exchange"), ("GET", "/api/cron/retention"), ("GET", "/.well-known/oauth-authorization-server"),
     ("GET", "/.well-known/oauth-protected-resource/mcp/projects/:name"),
     ("GET", "/.well-known/oauth-protected-resource/mcp/builder"),
     ("GET", "/.well-known/oauth-protected-resource/api/a2a/agents/:agentName"),
@@ -507,14 +520,14 @@ def matrixPublicRoutes : List (String × String) :=
     ("GET", "/api/cron/triggers"), ("GET", "/api/cron/storage-cleanup"), ("GET", "/api/readyz")]
 
 /-- `IDENTITY_ONLY_ROUTES`: the identity-proof route the matrix exempts. -/
-@[aw_spec (ts := "apps/web/server/rbac/authorisation-matrix.test.ts#IDENTITY_ONLY_ROUTES")]
+@[aw_spec (ts := "apps/web/server/rbac/authorisation-matrix.test-support.ts#IDENTITY_ONLY_ROUTES")]
 def matrixIdentityOnlyRoutes : List (String × String) :=
   [("POST", "/api/invitations/:id/accept"), ("POST", "/api/auth/cli-verify"),
     ("DELETE", "/api/auth/cli-token"), ("POST", "/api/auth/cli-workspace"),
     ("POST", "/api/a2a/agents/:agentName"),
     ("GET", "/api/a2a/agents/:agentName/.well-known/agent-card.json"),
     ("POST", "/mcp/projects/:name"), ("GET", "/oauth/authorize"), ("POST", "/oauth/authorize"),
-    ("POST", "/api/builder/mcp"), ("POST", "/mcp/builder")]
+    ("POST", "/api/builder/mcp"), ("POST", "/api/runs/:id/members/mcp"), ("POST", "/mcp/builder")]
 
 /-- The routes the matrix decides: the union minus the exempt ones. -/
 def matrixRoutes : List DeclaredRoute :=

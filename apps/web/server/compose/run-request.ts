@@ -37,71 +37,70 @@
  * `docs/adr/0072-the-claude-tool-mapping-and-skills-live-in-the-claude-adapter.md` is the decision.
  */
 import { log } from '../telemetry/logger';
-import { isIP } from 'node:net';
 
-import {
-  RunRequest,
-  type AgentPermissions,
-  type PortableAgentConfig,
-} from '@agent-workspace/run-protocol';
+import { RunRequest, type AgentPermissions } from '@agent-workspace/run-protocol';
 
-import { claudeReadOnlyGrantDenials, engineSettingsOf } from '@indx-workspace/contracts/agents';
-import { isWithholdingEngine } from '@indx-workspace/contracts/engines';
-import {
-  meetPolicyCeiling,
-  policyWidenings,
-  type EffectivePolicyConfiguration,
-  type PolicyWidening,
-  type ProjectPolicy,
+import type {
+  EffectivePolicyConfiguration,
+  ProjectPolicy,
 } from '@indx-workspace/contracts/policy-ceiling';
-import { GATEWAY_TOOL_SANDBOX_ROUTE } from '@indx-workspace/contracts/tool-connectors';
 
-import { policyNarrowedPermissions } from '../../contracts/agents';
-import { DomainError } from '../errors';
-import { narrowFileGrants } from '../files/search-terms';
 import { atStep } from '../runs/failures';
-import { storedEffective } from '../policy-ceiling/ceiling';
 import type { AgentRecord } from '../agents/contract';
-import type { RunAgent, RunSubagent } from '../agent-versions/session-version';
+import type { RunAgent } from '../agent-versions/session-version';
 import type { ModelProvider } from '@indx-workspace/contracts/runs';
 
-import type { ModelDiscovery } from '../models/discovery';
-import { selectPreferredModel } from '../models/preferred-model';
-import type { WorkspaceModelsStore } from '../models/store';
-import type { RunTokenIssuer } from '../gateway/issuer';
-import { runCallerOf } from '../runs/caller';
-import type { LaunchContext, ModelSelection } from '../runs/environment';
-import {
-  assertRunFilesFit,
-  loadAttachedFiles,
-  withAttachedFiles,
-  type AgentRunResourceLoader,
-  type AgentRunResourceSelection,
+import type { ModelDiscovery, RunTokenIssuer, WorkspaceModelsStore } from '../integrations';
+import { type LaunchContext, type ModelSelection, type RunCaller, runCallerOf } from '../execution';
+import type {
+  AgentRunResourceLoader,
+  AgentRunResourceSelection,
+  PendingToolConnector,
 } from './resource-loader';
-import { ceilingRefusalMessage, loadResourcesWithinCeiling } from './run-request-ceiling';
-import { engineFor, wireProtocolFor } from './run-request-engine';
 import {
-  NO_DEFAULT_CONNECTION_REASON,
+  attachmentGrantsFor as attachmentGrantsOf,
+  portablePermissionsFor as portablePermissionsOf,
+  runEnvironment,
+  runModelFor as chooseRunModel,
+  sandboxFor as sandboxPathsFor,
+} from './core/run-request';
+import { assertWithinCeiling, loadResourcesWithinCeiling } from './run-request-ceiling';
+import { enginePolicyArmFor, engineFor, wireProtocolFor } from './run-request-engine';
+import {
   SELECTION_LAYERS,
   readyConnectionFor,
+  resolveDeploymentDefault,
   validateModel,
   type ModelResolution,
   type ModelResolutionLayers,
 } from './run-request-model-resolution';
+import { portableAgentConfigFor } from './run-request-portable';
+import {
+  attachedRunFiles,
+  narrowedToFileScope,
+  runLimitsFor,
+  type GrantedPath,
+} from './run-request-resources';
 import type { RuntimeSettings } from './run-request-runtime-settings';
 import {
   assertCallerForIdentity,
   assertMayReachAwControl,
-  awControlServerFor,
   assertToolNamesFit,
   codeToolsServedBySandbox,
-  toolMcpServersFor,
-  withIdentityHeaders,
-  withRunConnectorKeys,
-  withToolHostRunHeaders,
+  composeRunMcpServers,
 } from './run-request-tool-connectors';
 
-export { ceilingRefusalMessage } from './run-request-ceiling';
+export { ceilingRefusalMessage, meetRunCeiling } from './run-request-ceiling';
+export { applyFileGrantPolicy } from './run-request-engine';
+export { portableAgentConfigFor } from './run-request-portable';
+export {
+  attachedRunFiles,
+  launchLimits,
+  lowerLimits,
+  narrowedToFileScope,
+  runNetworkGrant,
+  runResourcesWithinCeiling,
+} from './run-request-resources';
 export {
   DEFAULT_MODEL_CONNECTION_NAME,
   NO_DEFAULT_CONNECTION_REASON,
@@ -116,14 +115,18 @@ export {
   readRuntimeSettings,
   type RuntimeSettings,
 } from './run-request-runtime-settings';
-export { assertToolNamesFit, withToolHostRunHeaders } from './run-request-tool-connectors';
+export {
+  assertToolNamesFit,
+  withToolHostRunHeaders,
+  type RunTeamMembers,
+} from './run-request-tool-connectors';
 
 /** Records the run's tool connector ids before the request is posted (C16). Throws on failure. */
 export type RunToolSnapshot = (runId: string, connectorIds: readonly string[]) => Promise<void>;
 
 // `ModelSelection` itself lives on `../runs/environment` — `LaunchContext.modelOverride` needs it
 // too, and that module has no reason to import this one back.
-export type { ModelSelection } from '../runs/environment';
+export type { ModelSelection } from '../execution';
 
 /**
  * Resolve one run's `(connection, model)` pair against the documented precedence, validating the
@@ -187,39 +190,8 @@ export async function resolveModelForRun(
     );
   }
 
-  const deployment = layers.deployment;
-  if (deployment !== null) {
-    if (deployment.connectionId === null) {
-      return {
-        ok: false,
-        layer: 'deployment',
-        code: 'model_connection_unresolved',
-        reason: NO_DEFAULT_CONNECTION_REASON,
-      };
-    }
-    const ready = await readyConnectionFor('deployment', deployment.connectionId, store);
-    if (!ready.ok) return ready;
-    const provider = ready.connection.provider;
-    const configured = deployment.defaults[provider];
-    if (configured === undefined) {
-      return {
-        ok: false,
-        layer: 'deployment',
-        code: 'model_connection_unresolved',
-        reason:
-          `the agent's model connection "${ready.connection.name}" names no model, no project or ` +
-          'workspace default model is configured, and this deployment sets no default model for ' +
-          `provider "${provider}".`,
-      };
-    }
-    return validateModel(
-      'deployment',
-      ready,
-      configured,
-      (ids) => selectPreferredModel(configured, ids),
-      discover,
-      warn,
-    );
+  if (layers.deployment !== null) {
+    return resolveDeploymentDefault(layers.deployment, store, discover, warn);
   }
 
   return {
@@ -229,188 +201,6 @@ export async function resolveModelForRun(
     reason:
       'no model connection resolves for this run: the agent names none and no workspace default is configured.',
   };
-}
-
-/**
- * The §17 agent record as the **portable core** of a run request (#299's portable/engine-native
- * table; ENG-04b, #325).
- *
- * Until ENG-04b this function also produced §17 Step 4's SDK-facing detail — `tools`, in the Claude
- * Agent SDK's own tool vocabulary, derived here from the four permission checkboxes and from the
- * assigned connectors. It does not any more: the checkboxes *are* the portable statement, and the
- * engine's adapter maps them onto its own tool names
- * (`packages/engine-claude-agent-sdk/src/tools.ts`). What is left here is everything that means the
- * same thing on every engine.
- *
- * Three of the fields have no column behind them in this wave and are set to the narrowest value
- * that is true rather than to the widest that would work, **when `agent.policy` is NULL** — every
- * agent until a `PUT /api/agents/:id/policy` replaces it (S-13):
- *
- *   * `skills: { mode: 'allowlist', names: [] }` — **not** `{ mode: 'all' }`. "All of a set nobody
- *     has chosen" is the reading that hands a run every skill directory on the image.
- *   * `mcpServers: {}` — an agent with no connector assignment gets none.
- *   * `limits` — `maxTurns: null` means the engine's own default, which is what an agent with no
- *     configured limit has; `maxBudgetUsd: null` is no per-run cap, and §20.6.3's budgets sit
- *     above it.
- *
- * `skills` is *intersected* with the skills currently assigned to the agent, and `limits` comes from
- * the stored policy verbatim when there is one. That intersection is what keeps a stored policy
- * strictly narrowing (`docs/adr/SDK-02-AGENT-POLICY-234-stored-policy-is-a-narrowing-jsonb-column.md`):
- * a stored `{ mode: 'all' }` is composed as "every skill *currently assigned*", never as the whole
- * discoverable surface, and a stored allowlist loses any name whose assignment has since been
- * revoked. The `409 skill_not_assigned` refusal at `PUT` checks the same membership at write time;
- * this is the read-time half, so a policy that was valid when it was stored cannot go stale into a
- * widening. The *tool* half of the same rule is now enforced by the adapter, which unions the
- * permission floor into whatever the stored arm says rather than letting it replace them.
- */
-export function portableAgentConfigFor(
-  agent: AgentRecord,
-  permissionOverride: AgentPermissions | undefined = undefined,
-  projectInstructions: string | null = null,
-  resources: AgentRunResourceSelection = { files: [], skills: [], mcpServers: {} },
-  // issue #129: the model the run actually resolved to, which may come from any layer — not only
-  // the agent's own stored default. Defaults to `agent.model` so a caller that has not yet wired
-  // resolution (or a test exercising this function directly) keeps today's behaviour unchanged.
-  model: string | null = agent.model,
-  subagents: readonly RunSubagent[] = [],
-): PortableAgentConfig {
-  const policy = agent.policy;
-  // ADR-0074 D12: a withholding arm (`openai-agents`, `pi`, `mastra`) may withhold switches an
-  // engine switch carried from the Claude arm's `tools.deny`/`permissionMode`. It only turns switches off, so it applies on top
-  // of a run-level override as well as on top of the checkboxes.
-  const permissions = policyNarrowedPermissions(permissionOverride ?? agent.permissions, policy);
-  const assignedSkillNames = new Set(resources.skills.map((skill) => skill.name));
-  const skills: PortableAgentConfig['skills'] =
-    policy === null || policy.skills.mode === 'all'
-      ? { mode: 'allowlist', names: [...assignedSkillNames] }
-      : {
-          mode: 'allowlist',
-          names: policy.skills.names.filter((name) => assignedSkillNames.has(name)),
-        };
-  const limits: PortableAgentConfig['limits'] =
-    policy === null ? { maxTurns: null, maxBudgetUsd: null } : { ...policy.limits };
-
-  return {
-    name: agent.name,
-    instructions:
-      projectInstructions === null || projectInstructions.length === 0
-        ? agent.instructions
-        : `${agent.instructions}\n\n${projectInstructions}`,
-    model,
-    permissions,
-    skills,
-    mcpServers: { ...resources.mcpServers },
-    limits,
-    // Only when non-empty, so a request without subagents is byte-identical to before.
-    ...(subagents.length === 0
-      ? {}
-      : {
-          subagents: subagents.map((sub) => {
-            const own = policyNarrowedPermissions(sub.permissions, sub.policy);
-            return {
-              name: sub.name,
-              description: sub.description,
-              instructions: sub.instructions,
-              model: sub.model,
-              // A subagent can only narrow its parent's composed permissions.
-              permissions: {
-                readFiles: own.readFiles && permissions.readFiles,
-                writeFiles: own.writeFiles && permissions.writeFiles,
-                runCommands: own.runCommands && permissions.runCommands,
-                unrestrictedNetwork: own.unrestrictedNetwork && permissions.unrestrictedNetwork,
-              },
-            };
-          }),
-        }),
-  };
-}
-
-/**
- * The engine-native arm of the private `/run` contract, for the engine this run is addressed to.
- *
- * The stored policy's engine-specific half, forwarded **verbatim** — never recomputed here. That is
- * the whole of ENG-04b's first item: `AgentPolicy` is discriminated by engine and its `tools` field
- * is *"engine-native: the Claude Agent SDK's own tool grammar. No other arm may reuse it"*
- * (`packages/contracts/src/agents.ts`), so this function's job is to hand it across, not to
- * interpret it. An agent with no stored policy sends `tools: null`, and the adapter compiles the
- * permission floor alone.
- *
- * A further engine of the withholding kind adds nothing here: its settings come from the engine
- * catalogue (ADR-0136).
- */
-function enginePolicyArmFor(
-  agent: AgentRecord,
-  cwd: string,
-  resources: Pick<AgentRunResourceSelection, 'connectorKeys' | 'toolConnectors'> & {
-    readonly files: GrantedFiles;
-  },
-  approvedToolCalls: readonly { readonly canonicalCall: string }[],
-): unknown {
-  const policy = agent.policy;
-  // A withholding arm is its engine-native settings, verbatim: the adapter compiles its tools from
-  // the portable permissions and enforces grants itself, and has no pre-ENG-04 image to be
-  // defended for (ADR-0072 D5).
-  if (policy !== null && isWithholdingEngine(policy.engine)) return engineSettingsOf(policy);
-  // Every write operation of an openapi tool is implicitly `requireApproval` (ADR-0113 SD4); the
-  // rules carry the run's own server keys, so they are added here rather than stored on the policy.
-  const requireApproval = [
-    ...new Set([
-      ...(policy !== null && 'tools' in policy ? (policy.requireApproval ?? []) : []),
-      ...(resources.toolConnectors ?? []).flatMap((connector) => connector.approvalRules ?? []),
-    ]),
-  ];
-  return {
-    tools:
-      policy !== null && 'tools' in policy
-        ? withRunConnectorKeys(policy.tools, resources.connectorKeys ?? {})
-        : null,
-    fileGrantDeny: applyFileGrantPolicy(cwd, resources.files),
-    // Left out when empty, so a run without a gate sends the arm an older runner image accepts.
-    ...(requireApproval.length === 0 ? {} : { requireApproval }),
-    ...(policy !== null && 'tools' in policy && policy.handoff === true ? { handoff: true } : {}),
-    ...(approvedToolCalls.length === 0
-      ? {}
-      : { approvedToolCalls: approvedToolCalls.map((call) => call.canonicalCall) }),
-  };
-}
-
-/** One granted path: what the read-only denials and the runner's materialisation need to know. */
-interface GrantedPath {
-  readonly path: string;
-  readonly kind: 'file' | 'directory';
-  readonly access: 'read' | 'read-write';
-}
-
-type GrantedFiles = AgentRunResourceSelection['files'] | readonly GrantedPath[];
-
-/**
- * File grants narrow the agent-wide permission switches: read-only paths are removed from the
- * engine's write tools, and command execution is removed because a shell redirect would otherwise
- * bypass those tool-specific rules. The runner also materialises these paths with read-only
- * filesystem modes; the two checks protect independent write paths.
- *
- * ## This is the legacy guard, and here is when it can be removed (ENG-04b, #325)
- *
- * The rules (`@indx-workspace/contracts`' `claudeReadOnlyGrantDenials`, shared with the adapter) are
- * written in the Claude Agent SDK's tool vocabulary — the one thing this unit
- * otherwise removed from compose — and they are kept deliberately, as **defence in depth on the
- * compose side**. `packages/engine-claude-agent-sdk`'s `claudeFileGrantDenials` derives the same
- * list from the same grants and the adapter de-duplicates the two in order, so this list can only
- * ever narrow a run and never widen or reorder one; ENG-04b's refinement theorem covers both the
- * request that carries it and the request that does not.
- *
- * It exists for a runner image whose Claude adapter predates ENG-04 (#324) — one that trusted the
- * control plane to have compiled grant denials, because at that point nothing else did. It may be
- * deleted once the minimum supported runtime image carries an adapter that compiles grants itself,
- * which is every image from ENG-04 onwards;
- * `docs/adr/0072-the-claude-tool-mapping-and-skills-live-in-the-claude-adapter.md` records the condition so
- * that removing it is a decision somebody takes rather than a line nobody dares touch.
- */
-export function applyFileGrantPolicy(cwd: string, files: GrantedFiles): readonly string[] {
-  return claudeReadOnlyGrantDenials(
-    cwd,
-    files.filter((file) => file.access === 'read'),
-  );
 }
 
 /**
@@ -434,162 +224,34 @@ export function sandboxFor(
   sessionId: string,
   settings: RuntimeSettings,
 ): { cwd: string; projectKey: string } {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(sessionId)) {
-    throw new Error(`session ${JSON.stringify(sessionId)} is not safe to use as a path segment`);
-  }
-  return { cwd: `${settings.workspaceRoot}/${workspaceId}/${sessionId}`, projectKey: workspaceId };
-}
-
-const lowest = (resolved: number | null, cap: number | undefined): number | null =>
-  cap === undefined ? resolved : resolved === null ? cap : Math.min(resolved, cap);
-
-/** The met limits under one run's override: the lower of each, so an override never raises a limit. */
-export function lowerLimits(
-  limits: PortableAgentConfig['limits'],
-  override: LaunchContext['limits'],
-): PortableAgentConfig['limits'] {
-  return {
-    maxTurns: lowest(limits.maxTurns, override?.maxTurns),
-    maxBudgetUsd: lowest(limits.maxBudgetUsd, override?.maxBudgetUsd),
-  };
+  return sandboxPathsFor(settings.workspaceRoot, workspaceId, sessionId);
 }
 
 /**
- * A run met with the deployment's policy ceiling (S2-04c, C14, ADR-0102 SD6): `met` is the stored
- * configuration (permissions after the stored arm's withholding, the stored limits, the engine and
- * the resolved `model`) narrowed by `meetPolicyCeiling`, and `refused` is what the meet cannot
- * narrow — by the contract only `engine:` and `model:` entries, which refuse the run. A `null`
- * ceiling meets to the input and refuses nothing. Tools are judged separately, once the loader has
- * named the run's connectors.
+ * What {@link buildRunRequestFor} composes one launch from. Every optional field defaults as its
+ * doc there says: `agentSecrets` to none, `projectInstructions`, `projectId` and `ceiling` to
+ * `null`, the rest to absent.
  */
-export function meetRunCeiling(
-  agent: Pick<AgentRecord, 'policy'>,
-  permissions: AgentPermissions,
-  model: string | null,
-  ceiling: ProjectPolicy | null,
-  subagentModels: readonly (string | null)[] = [],
-): { readonly met: EffectivePolicyConfiguration; readonly refused: readonly PolicyWidening[] } {
-  const met = meetPolicyCeiling(
-    storedEffective({ permissions, policy: agent.policy }, model, []),
-    ceiling,
-  );
-  const refused = [...policyWidenings(met, ceiling)];
-  // A subagent's own model is judged like the parent's; its other switches only ever narrow.
-  for (const subagentModel of subagentModels) {
-    if (subagentModel === null) continue;
-    for (const widening of policyWidenings({ ...met, model: subagentModel }, ceiling)) {
-      if (widening.startsWith('model:') && !refused.includes(widening)) refused.push(widening);
-    }
-  }
-  return { met, refused };
-}
-
-/**
- * What a run's sandbox may be granted on the network (ADR-0117 decision 9, issue #785): the met
- * `unrestrictedNetwork` switch and the DNS names of the met remote (`http`/`sse`) connectors, which
- * the sandbox itself calls. It narrows exactly as {@link buildRunRequestFor} does — the stored arm's
- * withholding, then the ceiling's meet, then the connectors the ceiling allows — so a switch the
- * ceiling turned off lowers the network too. IP-literal hosts are left out: the egress proxy
- * allowlist holds names only (ADR-0117 decision 3).
- */
-export async function runNetworkGrant(
-  context: LaunchContext,
-  runAgent: RunAgent,
-  resourceLoader: AgentRunResourceLoader | undefined,
-  ceiling: ProjectPolicy | null,
-  projectId: string | null,
-): Promise<{ readonly unrestrictedNetwork: boolean; readonly connectorHosts: readonly string[] }> {
-  const permissions = context.permissionOverride ?? runAgent.agent.permissions;
-  const { met } = meetRunCeiling(runAgent.agent, permissions, null, ceiling);
-  const resources = await runResourcesWithinCeiling(
-    context,
-    runAgent,
-    resourceLoader,
-    ceiling,
-    projectId,
-  );
-  const hosts: string[] = [];
-  for (const server of Object.values(resources.mcpServers)) {
-    if (!('url' in server) || !URL.canParse(server.url)) continue;
-    const host = new URL(server.url).hostname;
-    if (isIP(host.replace(/^\[|\]$/g, '')) === 0) hosts.push(host);
-  }
-  return { unrestrictedNetwork: met.permissions.unrestrictedNetwork, connectorHosts: hosts };
-}
-
-/**
- * The run's resources as {@link buildRunRequestFor} loads them — the session's assignments, the
- * project's (issue #125), capped by the met permissions and the ceiling — for a caller that runs
- * before compose: the network grant, and the input archive, whose files must be the ones the
- * `/run` body references.
- */
-export async function runResourcesWithinCeiling(
-  context: Pick<LaunchContext, 'permissionOverride'> & {
-    readonly principal: Pick<LaunchContext['principal'], 'workspaceId'>;
-  },
-  runAgent: RunAgent,
-  resourceLoader: AgentRunResourceLoader | undefined,
-  ceiling: ProjectPolicy | null,
-  projectId: string | null,
-): Promise<AgentRunResourceSelection> {
-  const permissions = context.permissionOverride ?? runAgent.agent.permissions;
-  const { met } = meetRunCeiling(runAgent.agent, permissions, null, ceiling);
-  return loadResourcesWithinCeiling(
-    context.principal.workspaceId,
-    runAgent,
-    permissions,
-    met,
-    resourceLoader,
-    ceiling,
-    projectId,
-  );
-}
-
-/**
- * The loaded resources with `files` narrowed to the run's `fileScope` (ADR-0147, issue #1539), or
- * unchanged when the run has none. A scope path outside the agent's effective grants (after the
- * readFiles switch and the ceiling) refuses the run, built here as `policy_cannot_widen` is.
- */
-export function narrowedToFileScope<R extends { readonly files: readonly GrantedPath[] }>(
-  resources: R,
-  fileScope: readonly string[] | undefined,
-): R {
-  if (fileScope === undefined) return resources;
-  const { kept, widens } = narrowFileGrants(resources.files, fileScope);
-  if (widens.length > 0) {
-    throw new DomainError({
-      category: 'validation',
-      code: 'run_file_scope_not_granted',
-      // Names no path: which ones failed would tell the caller what lies inside the grants.
-      publicMessage:
-        "run_file_scope_not_granted: fileScope names a path this run cannot narrow to. The scope can only narrow the agent's file grants.",
-    });
-  }
-  return { ...resources, files: kept };
-}
-
-/**
- * The `/run` body's `resources.files`: the run's grants, already narrowed by
- * {@link narrowedToFileScope}, with its attachments after them. Exported so the delivery tests'
- * runner double receives the body this composes.
- */
-export async function attachedRunFiles(
-  context: LaunchContext,
-  resources: Pick<AgentRunResourceSelection, 'files' | 'skills'>,
-  resourceLoader: AgentRunResourceLoader | undefined,
-): Promise<AgentRunResourceSelection['files']> {
-  // Each attachment is also a `read` reference in `resources.files`, so the runner checks it like
-  // any grant; its bytes arrive in the input archive.
-  // @story US-STO-11
-  const attached = await atStep('resources', () =>
-    loadAttachedFiles(resourceLoader, context.principal.workspaceId, context.attachments ?? []),
-  );
-  const runFiles = withAttachedFiles(resources.files, attached.files);
-  // The total after the scope narrowed the grants and the attachments joined them; the input
-  // archive judged the same total before the sandbox, so this is the backstop.
-  // @story US-STO-06
-  assertRunFilesFit(runFiles, resources.skills);
-  return runFiles;
+export interface BuildRunRequestInput {
+  readonly context: LaunchContext;
+  readonly runAgent: RunAgent;
+  readonly settings: RuntimeSettings;
+  readonly gateway: RunTokenIssuer;
+  readonly agentSecrets?: Readonly<Record<string, string>> | undefined;
+  readonly permissionOverride?: AgentPermissions | undefined;
+  readonly projectInstructions?: string | null | undefined;
+  readonly resourceLoader?: AgentRunResourceLoader | undefined;
+  readonly resolvedModel?: ModelSelection | undefined;
+  readonly projectId?: string | null | undefined;
+  /**
+   * ENG-04 (#303): the provider `resolveModelForRun` resolved this run's connection to. Optional
+   * because the pre-ENG-04 callers that do not resolve a model cannot supply one; when it is
+   * absent the protocol check has nothing to check and the request is composed on the
+   * gateway-native dialect, which is what every run uses today.
+   */
+  readonly modelProvider?: ModelProvider | undefined;
+  readonly snapshotTools?: RunToolSnapshot | undefined;
+  readonly ceiling?: ProjectPolicy | null | undefined;
 }
 
 /**
@@ -638,40 +300,11 @@ export async function attachedRunFiles(
  * permissions off and never touches the stored arm or the grant denials, so the adapter's deny list
  * keeps its documented order. `null` changes nothing.
  */
-export async function buildRunRequestFor(
-  context: LaunchContext,
-  runAgent: RunAgent,
-  settings: RuntimeSettings,
-  gateway: RunTokenIssuer,
-  agentSecrets: Readonly<Record<string, string>> = {},
-  permissionOverride: AgentPermissions | undefined = undefined,
-  projectInstructions: string | null = null,
-  resourceLoader: AgentRunResourceLoader | undefined = undefined,
-  resolvedModel: ModelSelection | undefined = undefined,
-  projectId: string | null = null,
-  // ENG-04 (#303): the provider `resolveModelForRun` resolved this run's connection to. Optional
-  // because the pre-ENG-04 callers that do not resolve a model cannot supply one; when it is
-  // absent the protocol check has nothing to check and the request is composed on the
-  // gateway-native dialect, which is what every run uses today.
-  modelProvider: ModelProvider | undefined = undefined,
-  snapshotTools: RunToolSnapshot | undefined = undefined,
-  ceiling: ProjectPolicy | null = null,
-): Promise<RunRequest> {
+export async function buildRunRequestFor(input: BuildRunRequestInput): Promise<RunRequest> {
+  const { context, runAgent, settings, gateway, resourceLoader, ceiling = null } = input;
   const workspaceId = context.principal.workspaceId;
   const { agent } = runAgent;
-  const modelConnectionId =
-    resolvedModel?.connectionId ??
-    context.modelOverride?.connectionId ??
-    context.modelConnectionId ??
-    agent.modelConnectionId;
-  if (modelConnectionId === null) {
-    throw new Error(
-      `agent ${agent.id} has no model connection; a run-scoped gateway token cannot be resolved`,
-    );
-  }
-  // `context.modelConnectionId` (pre-#129) never carries a model of its own — only the newer
-  // `resolvedModel`/`context.modelOverride` pairs do.
-  const model = resolvedModel?.model ?? context.modelOverride?.model ?? agent.model;
+  const { modelConnectionId, model } = runModelFor(context, agent, input.resolvedModel);
   // The same resolution `agentConfigFor` applies below: a run-level override only ever narrows
   // the stored agent permissions (`LaunchContext.permissionOverride`'s own doc comment), so it —
   // not the wider stored value — is issue #125's ceiling for a project's resources on THIS run.
@@ -679,33 +312,9 @@ export async function buildRunRequestFor(
   // way `portableAgentConfigFor` narrows the portable statement below — otherwise a withheld
   // `unrestrictedNetwork`/`readFiles` would still load a project's connectors/files. The deployment
   // ceiling's meet (S2-04c) narrows it once more, so a capped switch caps project resources too.
-  const { met, refused } = meetRunCeiling(
-    agent,
-    permissionOverride ?? agent.permissions,
-    model,
-    ceiling,
-    runAgent.subagents.map((sub) => sub.model),
-  );
-  if (refused.length > 0) {
-    // Built here rather than through `runStartRefusalError`, which would import this module back.
-    throw new DomainError({
-      category: 'validation',
-      code: 'policy_cannot_widen',
-      publicMessage: `policy_cannot_widen: ${ceilingRefusalMessage(refused)}`,
-    });
-  }
-  const loaded = await atStep('resources', () =>
-    loadResourcesWithinCeiling(
-      workspaceId,
-      runAgent,
-      permissionOverride ?? agent.permissions,
-      met,
-      resourceLoader,
-      ceiling,
-      projectId,
-    ),
-  );
-  const resources = narrowedToFileScope(loaded, context.fileScope);
+  const permissions = input.permissionOverride ?? agent.permissions;
+  const met = assertWithinCeiling(runAgent, permissions, model, ceiling);
+  const resources = await loadRunResources(input, permissions, met);
   const caller = runCallerOf(context.principal, context.subject);
   // Before a token is issued: a run that reaches the reserved `aw-control` name, then one that
   // reaches a connector wanting an identity it has none for.
@@ -714,20 +323,7 @@ export async function buildRunRequestFor(
   // Before a token is issued: a run that cannot serve its code tools never gets one.
   const sandboxed =
     runAgent.toolBundles.length > 0 && codeToolsServedBySandbox(runAgent, settings, resources);
-  const token = await atStep('token', () =>
-    gateway.issue({
-      runId: context.run.id,
-      sessionId: context.session.id,
-      workspaceId,
-      agentId: agent.id,
-      modelConnectionId,
-      ...(caller === null ? {} : { caller }),
-      // The gateway ends the run at its next model call once the workspace's spend reaches this.
-      ...(ceiling?.maxCostPerDayUsd === undefined
-        ? {}
-        : { dailyCostCapUsd: ceiling.maxCostPerDayUsd }),
-    }),
-  );
+  const token = await issueRunToken(input, modelConnectionId, caller);
   const { cwd, projectKey } = sandboxFor(workspaceId, context.session.id, settings);
 
   // ENG-04's protocol check, and it is a *refusal*, not a narrowing (ADR-0065 D3): an engine that
@@ -737,45 +333,22 @@ export async function buildRunRequestFor(
   // already happened at save time; this is the half that depends on which *connection* the run
   // resolved to, which is only known here.
   const engineId = engineFor(agent);
-  const wireProtocol = wireProtocolFor(engineId, modelProvider);
+  const wireProtocol = wireProtocolFor(engineId, input.modelProvider);
 
   const pendingTools = resources.toolConnectors ?? [];
   assertToolNamesFit(pendingTools, engineId);
-  // After the MCP connectors, so their keys and order are unchanged. An MCP connector whose name
-  // is a SD13 key of this run was keyed `connector-<id>` by the loader, so the two cannot collide.
-  const composedResources: AgentRunResourceSelection = {
-    ...resources,
-    mcpServers: {
-      ...(await withIdentityHeaders(
-        withToolHostRunHeaders(
-          resources,
-          context.run.id,
-          agent.name,
-          sandboxed
-            ? { url: `${gateway.baseUrl}${GATEWAY_TOOL_SANDBOX_ROUTE.path}`, token }
-            : undefined,
-        ),
-        resources.connectorIdentities,
-        caller,
-        workspaceId,
-        context.run.id,
-      )),
-      ...toolMcpServersFor(pendingTools, gateway.baseUrl, token),
-      ...awControlServerFor(agent, ceiling, gateway.baseUrl, token),
-    },
-  };
-
-  // ADR-0146 Decisions 2 and 3: an attachment is a read-only grant whose bytes never ride in this
-  // request (the runner's `POST /files` hydrate writes them), so the shell removal a read grant
-  // causes is applied here instead, for every engine.
-  const attachments = context.attachments ?? [];
-  const attachmentGrants: readonly GrantedPath[] = attachments.map(({ path, kind }) => ({
-    path,
-    kind,
-    access: 'read',
-  }));
-  const portablePermissions =
-    attachments.length === 0 ? met.permissions : { ...met.permissions, runCommands: false };
+  const runResources = await composeRunMcpServers({
+    context,
+    agent,
+    resources,
+    caller,
+    workspaceId,
+    sandboxed,
+    engineId,
+    gatewayBaseUrl: gateway.baseUrl,
+    token,
+    ceiling,
+  });
   const runFiles = await attachedRunFiles(context, resources, resourceLoader);
 
   const request = RunRequest.parse({
@@ -787,15 +360,14 @@ export async function buildRunRequestFor(
     projectKey,
     // `met.permissions` is already narrowed by the stored arm; narrowing it again is idempotent.
     portable: {
-      ...portableAgentConfigFor(
-        agent,
-        portablePermissions,
-        projectInstructions,
-        composedResources,
+      ...portableAgentConfigFor(agent, {
+        permissionOverride: portablePermissionsFor(met.permissions, context),
+        projectInstructions: input.projectInstructions ?? null,
+        resources: runResources,
         model,
-        runAgent.subagents,
-      ),
-      limits: lowerLimits(met.limits, context.limits),
+        subagents: runAgent.subagents,
+      }),
+      limits: runLimitsFor(met.limits, context),
     },
     // The engine-native arm, forwarded rather than computed (ENG-04b). Everything that used to be
     // derived here — the Claude tool names a permission switch removes, the `mcp__<server>__*`
@@ -803,7 +375,7 @@ export async function buildRunRequestFor(
     policy: enginePolicyArmFor(
       agent,
       cwd,
-      { ...resources, files: [...resources.files, ...attachmentGrants] },
+      { ...resources, files: [...resources.files, ...attachmentGrantsFor(context)] },
       context.run.approvedToolCalls ?? [],
     ),
     session: context.session.resume
@@ -816,29 +388,99 @@ export async function buildRunRequestFor(
     // them from this field alone. `packages/run-protocol/src/schemas.ts`'s `RunGatewayConnection`
     // records why the field exists at all.
     gateway: { baseUrl: gateway.baseUrl, token, protocol: wireProtocol },
-    env: {
-      ...agentSecrets,
-      ANTHROPIC_BASE_URL: gateway.baseUrl,
-      ANTHROPIC_AUTH_TOKEN: token,
-      // The same signed, registered per-run claim authenticates transcript mirroring. It is
-      // bound to workspace/run/session and contains no provider credential.
-      AW_SESSION_MIRROR_TOKEN: token,
-      NODE_USE_ENV_PROXY: '1',
-    },
-    resources: {
-      files: runFiles,
-      skills: resources.skills,
-    },
+    env: runEnvironment(input.agentSecrets ?? {}, gateway.baseUrl, token),
+    resources: { files: runFiles, skills: resources.skills },
     ...(context.outputSchema === undefined ? {} : { outputSchema: context.outputSchema }),
   });
-  if (pendingTools.length > 0) {
-    if (snapshotTools === undefined) {
-      throw new Error('this run has tool connectors, but no tool snapshot is configured');
-    }
-    await snapshotTools(
-      context.run.id,
-      pendingTools.map((connector) => connector.connectorId),
-    );
-  }
+  await snapshotRunTools(context.run.id, pendingTools, input.snapshotTools);
   return request;
+}
+
+/**
+ * The run's model connection and model: `resolvedModel`, then the context's override, then the
+ * pre-#129 `context.modelConnectionId`, then the agent's own. A run with no connection cannot be
+ * given a run-scoped gateway token, so it is refused here.
+ */
+function runModelFor(
+  context: LaunchContext,
+  agent: AgentRecord,
+  resolvedModel: ModelSelection | undefined,
+): { readonly modelConnectionId: string; readonly model: string | null } {
+  return chooseRunModel({
+    resolved: resolvedModel,
+    override: context.modelOverride,
+    legacyConnectionId: context.modelConnectionId,
+    agent,
+  });
+}
+
+/** The run's resources within the ceiling, narrowed to its file scope (#125, ADR-0147). */
+async function loadRunResources(
+  input: BuildRunRequestInput,
+  permissions: AgentPermissions,
+  met: EffectivePolicyConfiguration,
+): Promise<AgentRunResourceSelection> {
+  const { context, runAgent, resourceLoader, projectId = null, ceiling = null } = input;
+  const loaded = await atStep('resources', () =>
+    loadResourcesWithinCeiling(
+      context.principal.workspaceId,
+      runAgent,
+      { permissions, met },
+      { resourceLoader, ceiling, projectId },
+    ),
+  );
+  return narrowedToFileScope(loaded, context.fileScope);
+}
+
+/** The run's gateway token, bound to its run, session, agent, connection and caller. */
+function issueRunToken(
+  input: BuildRunRequestInput,
+  modelConnectionId: string,
+  caller: RunCaller | null,
+): Promise<string> {
+  const { context, gateway, ceiling = null } = input;
+  return atStep('token', () =>
+    gateway.issue({
+      runId: context.run.id,
+      sessionId: context.session.id,
+      workspaceId: context.principal.workspaceId,
+      agentId: input.runAgent.agent.id,
+      modelConnectionId,
+      ...(caller === null ? {} : { caller }),
+      // The gateway ends the run at its next model call once the workspace's spend reaches this.
+      ...(ceiling?.maxCostPerDayUsd === undefined
+        ? {}
+        : { dailyCostCapUsd: ceiling.maxCostPerDayUsd }),
+    }),
+  );
+}
+
+// ADR-0146 Decisions 2 and 3: an attachment is a read-only grant whose bytes never ride in this
+// request (the runner's `POST /files` hydrate writes them), so the shell removal a read grant
+// causes is applied here instead, for every engine.
+
+/** The run's attachments as read-only grants, for the engine arm's denials. */
+function attachmentGrantsFor(context: LaunchContext): readonly GrantedPath[] {
+  return attachmentGrantsOf(context.attachments ?? []);
+}
+
+/** The met permissions, without `runCommands` when the run carries an attachment. */
+function portablePermissionsFor(met: AgentPermissions, context: LaunchContext): AgentPermissions {
+  return portablePermissionsOf(met, (context.attachments ?? []).length);
+}
+
+/** Records the run's tool connectors (C16); a run with tool connectors and no sink is refused. */
+async function snapshotRunTools(
+  runId: string,
+  pendingTools: readonly PendingToolConnector[],
+  snapshotTools: RunToolSnapshot | undefined,
+): Promise<void> {
+  if (pendingTools.length === 0) return;
+  if (snapshotTools === undefined) {
+    throw new Error('this run has tool connectors, but no tool snapshot is configured');
+  }
+  await snapshotTools(
+    runId,
+    pendingTools.map((connector) => connector.connectorId),
+  );
 }

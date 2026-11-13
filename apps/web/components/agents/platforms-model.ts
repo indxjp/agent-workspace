@@ -84,8 +84,8 @@ export function checkFailure(platform: PlatformId, error: unknown): PlatformChec
     : { kind: 'failed', platform };
 }
 
-export type AgentTab = 'configuration' | 'versions' | 'platforms';
+export type AgentTab = 'configuration' | 'versions' | 'platforms' | 'schedules';
 
 /** The agent page's tab for a `?tab=` value; anything else is Configuration. */
 export const agentTab = (tab: string | string[] | undefined): AgentTab =>
-  tab === 'versions' || tab === 'platforms' ? tab : 'configuration';
+  tab === 'versions' || tab === 'platforms' || tab === 'schedules' ? tab : 'configuration';

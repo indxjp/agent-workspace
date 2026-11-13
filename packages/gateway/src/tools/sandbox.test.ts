@@ -9,6 +9,7 @@ import { createGatewayApplication } from '../index.js';
 import { createEndpointGrantCodec } from '../tokens/endpoint-grant.js';
 import { createRunTokenCodec, toolSandboxRunToken } from '../tokens/run-token.js';
 import { createDatabaseToolSandboxResolver, type ToolSandboxResolver } from './sandbox.js';
+import { parseToolSandboxAuth } from '../settings.js';
 
 const SECRET = 'fixture-signing-secret-that-is-longer-than-32-bytes';
 const WORKSPACE = '22222222-2222-4222-8222-222222222222';
@@ -52,7 +53,11 @@ afterAll(async () => {
 
 function gateway(
   resolve: ToolSandboxResolver['resolve'],
-  options: { readonly fetch?: typeof fetch; readonly runnerManagerToken?: string } = {},
+  options: {
+    readonly fetch?: typeof fetch;
+    readonly runnerManagerToken?: string;
+    readonly toolSandboxIdToken?: (audience: string) => Promise<string>;
+  } = {},
 ) {
   const model: GatewayRunResolver & { calls: number } = {
     calls: 0,
@@ -69,6 +74,9 @@ function gateway(
     ...(options.runnerManagerToken === undefined
       ? {}
       : { runnerManagerToken: options.runnerManagerToken }),
+    ...(options.toolSandboxIdToken === undefined
+      ? {}
+      : { toolSandboxIdToken: options.toolSandboxIdToken }),
   });
   return { application, model };
 }
@@ -439,5 +447,91 @@ describe('createDatabaseToolSandboxResolver', () => {
     await expect(
       createDatabaseToolSandboxResolver(fake.database).resolve(CLAIMS, 'hash'),
     ).resolves.toEqual({ ok: false, status: 403, code: 'tool_not_in_run' });
+  });
+});
+
+describe('the Google ID token for a Cloud Run tool sandbox', () => {
+  const RUN_APP = 'https://rt-tool-abc-uc.a.run.app';
+  const idToken = (audience: string) => Promise.resolve(`id-token-for:${audience}`);
+
+  function recordingFetch() {
+    const calls: Headers[] = [];
+    const fetcher: typeof fetch = (_input, init) => {
+      calls.push(new Headers(init?.headers));
+      return Promise.resolve(Response.json({ ok: true }));
+    };
+    return { calls, fetcher };
+  }
+
+  it('sends the token for the origin as the audience to an https run.app origin, beside authorization', async () => {
+    const { calls, fetcher } = recordingFetch();
+    const { application } = gateway(() => Promise.resolve({ ok: true, origin: `${RUN_APP}/` }), {
+      fetch: fetcher,
+      toolSandboxIdToken: idToken,
+    });
+    expect((await call(application)).status).toBe(200);
+    expect(calls[0]?.get('x-serverless-authorization')).toBe(`Bearer id-token-for:${RUN_APP}`);
+    expect(calls[0]?.get('authorization')).toBe(`Bearer ${await toolSandboxRunToken(SECRET, RUN)}`);
+  });
+
+  it('sends it on the endpoint route too', async () => {
+    const { calls, fetcher } = recordingFetch();
+    const { application } = gateway(() => Promise.reject(new Error('unused')), {
+      fetch: fetcher,
+      toolSandboxIdToken: idToken,
+    });
+    expect((await callEndpoint(application, { origin: RUN_APP })).status).toBe(200);
+    expect(calls[0]?.get('x-serverless-authorization')).toBe(`Bearer id-token-for:${RUN_APP}`);
+  });
+
+  it.each([
+    ['a Docker http origin', () => origin],
+    ['a manager route', () => `${origin}/tool-sandboxes/sealed-id`],
+    ['an http run.app origin', () => 'http://rt-tool-abc-uc.a.run.app'],
+    ['a non-run.app https host', () => 'https://tools.example.com'],
+    ['a look-alike host', () => 'https://run.app.evil.example'],
+  ])('never sends it to %s', async (_name, targetOrigin) => {
+    const target = targetOrigin();
+    const { calls, fetcher } = recordingFetch();
+    const { application } = gateway(() => Promise.resolve({ ok: true, origin: target }), {
+      fetch: fetcher,
+      runnerManagerToken: ENDPOINT_MANAGER_TOKEN,
+      toolSandboxIdToken: () => Promise.reject(new Error('must not be asked')),
+    });
+    expect((await call(application)).status).toBe(200);
+    expect(calls[0]?.has('x-serverless-authorization')).toBe(false);
+  });
+
+  it('sends nothing when the dependency is unset', async () => {
+    const { calls, fetcher } = recordingFetch();
+    const { application } = gateway(() => Promise.resolve({ ok: true, origin: RUN_APP }), {
+      fetch: fetcher,
+    });
+    expect((await call(application)).status).toBe(200);
+    expect(calls[0]?.has('x-serverless-authorization')).toBe(false);
+  });
+
+  it('answers 502 tool_upstream_failed without the error text when the token cannot be minted', async () => {
+    const { calls, fetcher } = recordingFetch();
+    const { application } = gateway(() => Promise.resolve({ ok: true, origin: RUN_APP }), {
+      fetch: fetcher,
+      toolSandboxIdToken: () => Promise.reject(new Error('metadata-secret-detail')),
+    });
+    const response = await call(application);
+    expect(response.status).toBe(502);
+    const text = await response.text();
+    expect(text).toContain('tool_upstream_failed');
+    expect(text).not.toContain('metadata-secret-detail');
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('GATEWAY_TOOL_SANDBOX_AUTH', () => {
+  it('parses google-id-token, treats unset and blank as off and refuses anything else', () => {
+    expect(parseToolSandboxAuth('google-id-token')).toBe('google-id-token');
+    expect(parseToolSandboxAuth(' google-id-token ')).toBe('google-id-token');
+    expect(parseToolSandboxAuth(undefined)).toBeUndefined();
+    expect(parseToolSandboxAuth('')).toBeUndefined();
+    expect(() => parseToolSandboxAuth('iap')).toThrow(/GATEWAY_TOOL_SANDBOX_AUTH/u);
   });
 });

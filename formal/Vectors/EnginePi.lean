@@ -78,14 +78,13 @@ private def outcomeJson : Outcome → Json
     Json.mkObj
       [("ok", true), ("cwd", c.cwd), ("tools", Lean.toJson (c.tools.map Tool.name)),
        ("networkEgress", c.networkEgress), ("connection", connectionJson c.connection),
-       ("model", c.model), ("maxTurns", optNatJson c.maxTurns), ("budgetCap", c.budgetCap),
+       ("model", c.model), ("maxTurns", optNatJson c.maxTurns),
        ("grants", Json.arr (c.grants.map grantJson).toArray), ("skills", Lean.toJson c.skills)]
   | .refused r => Json.mkObj [("ok", false), ("code", r.code), ("names", r.names)]
 
 private def refusalWitness (r : Behaviour.Engines.OpenAiAgents.Refusal) : List String :=
   match r.names with
   | "mcp" => [t "Normative" "a_connector_is_refused_by_name"]
-  | "maxBudget" => [t "Normative" "an_unpriced_budget_cap_is_refused_by_name"]
   | "wireProtocols" => [t "Normative" "an_unspoken_protocol_is_refused_by_name"]
   | _ => []
 
@@ -97,7 +96,8 @@ private def compileVector (id : String) (r : Request) : Vector :=
       | .ok _ =>
         [t "Normative" "accepted_agent_offers_exactly_the_permitted_tools",
          t "Normative" "no_accepted_agent_has_a_connector",
-         t "Adversarial" "every_model_request_goes_to_the_gateway_with_the_run_token"]
+         t "Adversarial" "every_model_request_goes_to_the_gateway_with_the_run_token"] ++
+        (if r.budgetCap then [t "Normative" "a_budget_cap_never_changes_the_compile"] else [])
       | .refused refusal => refusalWitness refusal }
 
 private def everything : Behaviour.Engines.OpenAiAgents.Permissions :=
@@ -124,7 +124,7 @@ def compileVectors : List Vector :=
                                                    unrestrictedNetwork := false } },
    compileVector "no-commands"
      { base with permissions := { everything with runCommands := false } },
-   compileVector "priced-cap" { base with budgetCap := true },
+   compileVector "cap-on-a-listed-model" { base with budgetCap := true },
    compileVector "skills-deduplicated-and-sorted" { base with skills := ["b", "a", "a"] },
    compileVector "cwd-trailing-slash" { base with cwd := "/workspace/" },
    compileVector "resume" { base with session := .resume },
@@ -134,8 +134,9 @@ def compileVectors : List Vector :=
      { base with grants := [(false, ".pi/settings.json", false)] },
    compileVector "grant-escaping-root" { base with grants := [(false, "../etc/passwd", true)] },
    compileVector "connector" { base with connectors := ["docs"] },
-   compileVector "unpriced-cap" { base with budgetCap := true, model := some "claude-unlisted" },
-   compileVector "unpriced-default-model-cap" { base with budgetCap := true, model := none },
+   compileVector "cap-on-an-unlisted-model"
+     { base with budgetCap := true, model := some "claude-unlisted" },
+   compileVector "cap-on-the-default-model" { base with budgetCap := true, model := none },
    compileVector "no-gateway" { base with gateway := none },
    compileVector "openai-dialect"
      { base with gateway := some ("http://gateway.invalid", "run-token", "openai-responses") },
@@ -191,7 +192,7 @@ private def guardVector (id : String) (tools : List Tool) (toolName : String)
     let c : Compiled :=
       { cwd := guardCwd, tools, networkEgress := false,
         connection := connectionFor "http://gw" "tok",
-        model := "claude-sonnet-4-5", maxTurns := none, budgetCap := false, grants,
+        model := "claude-sonnet-4-5", maxTurns := none, grants,
         skills := [] }
     { id,
       input := Json.mkObj

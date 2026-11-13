@@ -1,6 +1,11 @@
+import { headers } from 'next/headers';
 import { Suspense } from 'react';
 
+import { versionsLocaleOf } from '../../../components/agents/versions-messages';
+
 import { RunsHistoryScreen } from '../../../components/run/history-screen';
+import { runsStrings } from '../../../components/run/runs-messages';
+import { switchedOffPanel } from '../feature-gate';
 
 /**
  * `/runs` — durable run history and usage/cost detail (issue #136, the Wave 9 plan
@@ -16,10 +21,20 @@ import { RunsHistoryScreen } from '../../../components/run/history-screen';
  */
 export const dynamic = 'force-dynamic';
 
-export default function RunsPage() {
+export default async function RunsPage() {
+  const off = await switchedOffPanel('runs');
+  if (off !== null) return off;
+  // The reader's language (UX-15 in #2086), negotiated as the shell negotiates it.
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
   return (
-    <Suspense fallback={<main className="p-8 text-[13px] text-muted">Loading…</main>}>
-      <RunsHistoryScreen />
+    <Suspense
+      fallback={
+        <main lang={locale} className="p-8 text-[13px] text-muted">
+          {runsStrings(locale).loading}
+        </main>
+      }
+    >
+      <RunsHistoryScreen locale={locale} />
     </Suspense>
   );
 }

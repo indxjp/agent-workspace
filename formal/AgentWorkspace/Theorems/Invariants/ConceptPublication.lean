@@ -180,8 +180,8 @@ private theorem charge_get {x : ShareRunCharge} {c : String} {v : Option String}
   decide +kernel
 
 /-- A share's row stores each field in its own column: the subject type, the mode (absent when
-the share has none), the budget, the spend, the subject id, the visibility, the token and the
-publisher. -/
+the share has none), the budget, the spend, the subject id, the visibility, the hash of the token
+(never the token itself, part 06 step 3 phase 2) and the publisher. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares")
   (ts := "packages/core/src/db/repositories/shares.ts#ShareRecord")]
 theorem share_row_encodes_fields (s : Share) :
@@ -191,10 +191,11 @@ theorem share_row_encodes_fields (s : Share) :
       s.toRow.get "spent_usd" = some s.spentUsd ∧
       s.toRow.get "subject_id" = some s.subjectId ∧
       s.toRow.get "visibility" = some s.visibility.toWire ∧
-      s.toRow.get "token" = some s.token ∧
+      s.toRow.get "token" = none ∧
+      s.toRow.get "token_hash" = some (tokenHashOf s.token) ∧
       s.toRow.get "publisher_principal_id" = some s.publisher.val := by
   refine ⟨share_get ?_, share_get ?_, share_get ?_, share_get ?_, share_get ?_, share_get ?_,
-    share_get ?_, share_get ?_⟩ <;> simp [Share.cells]
+    share_get ?_, share_get ?_, share_get ?_⟩ <;> simp [Share.cells]
 
 /-- The four database checks of `shares` hold on a share's row exactly when the typed share is
 `dbValid`, so the typed invariant and the database constraint agree on every share. -/
@@ -219,7 +220,7 @@ theorem charge_db_valid_iff_row_check (x : ShareRunCharge) :
   simp [refinedCheckHolds, checkSemantics?, h, ShareRunCharge.dbValid, nullOrNonNegative]
 
 /-- A share as the service publishes it passes every database check of `shares`. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")
   (ts := "packages/core/src/db/schema/shares.ts#shares")]
 theorem well_published_share_passes_the_checks (s : Share) (h : s.wellPublished = true) :
     (["shares_agent_mode_only", "shares_budget_nonnegative", "shares_spend_nonnegative",
@@ -390,17 +391,18 @@ theorem run_is_funded_by_at_most_one_share (st : State)
   have := pk_unique hc (t := .shareRunCharges) rfl h1 h2 hs hrun
   exact ⟨this, by rw [this]⟩
 
-/-- In a consistent state a token names at most one share in the whole database, whatever the
-workspaces, so the unscoped `/p/<token>` lookup resolves at most one workspace. -/
+/-- In a consistent state a token's hash names at most one share in the whole database, whatever
+the workspaces, so the unscoped `/p/<token>` lookup (by `token_hash`) resolves at most one
+workspace. -/
 @[aw_spec (tier := T2) (ts := "packages/core/src/db/schema/shares.ts#shares")
   (ts := "packages/core/src/db/repositories/root.ts#findShareWorkspace")]
 theorem token_names_at_most_one_share (st : State)
     (hc : Er.Core.consistent catalogue st = true) {r1 r2 : Row} (h1 : r1 ∈ st .shares)
-    (h2 : r2 ∈ st .shares) (htok : r1.get "token" = r2.get "token") :
+    (h2 : r2 ∈ st .shares) (htok : r1.get "token_hash" = r2.get "token_hash") :
     r1 = r2 ∧ r1.get "workspace_id" = r2.get "workspace_id" := by
-  have hs : (r1.get "token").isSome = true := not_null hc (by decide +kernel) h1
+  have hs : (r1.get "token_hash").isSome = true := not_null hc (by decide +kernel) h1
   have := unique_single hc (t := .shares)
-    (u := { name := "shares_token_key", columns := ["token"], kind := .constraint,
+    (u := { name := "shares_token_hash_key", columns := ["token_hash"], kind := .constraint,
             partialNullColumns := [] }) (by decide +kernel) rfl rfl h1 h2 hs htok
   exact ⟨this, by rw [this]⟩
 
@@ -552,7 +554,7 @@ theorem charge_is_non_negative (st : State) (hc : Publication.consistent st = tr
 
 /-- A public link that does not open at an instant does not open at any later instant: every
 cause (visibility, revocation, suspension, the stop, expiry) persists as time passes. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2062-publishing-a-session-run-history")]
 theorem closed_link_stays_closed (s : Share) {t1 t2 : Nat} (hle : t1 ≤ t2)
     (h : s.publiclyOpen t1 = false) : s.publiclyOpen t2 = false := by
@@ -569,7 +571,7 @@ theorem closed_link_stays_closed (s : Share) {t1 t2 : Nat} (hle : t1 ≤ t2)
 
 /-- A share's derived state never returns to `live` once it has expired: expiry is permanent as
 time passes. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/formal/inventory.md#2-state-machines")]
 theorem expired_state_is_permanent (s : Share) {t1 t2 : Nat} (hle : t1 ≤ t2)
     (h : s.stateAt t1 = .expired) : s.stateAt t2 = .expired := by
@@ -587,14 +589,14 @@ theorem expired_state_is_permanent (s : Share) {t1 t2 : Nat} (hle : t1 ≤ t2)
 
 /-- A share whose token lacks the `pub_` prefix is not a share the service publishes, whatever
 its other fields. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem well_published_requires_the_pub_prefix (s : Share)
     (h : tokenPrefix.toList.isPrefixOf s.token.toList = false) : s.wellPublished = false := by
   simp [Share.wellPublished, h]
 
 /-- An admitted publish gives a mode exactly to an agent share, and a budget exactly to a
 runnable one: the two row-local halves of `wellPublished` hold for everything the service writes. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#27-minimal-database-model")]
 theorem published_mode_and_budget_fit (r : PublishRequest) (role : Membership.Role)
     (pse re : Bool) (now : Nat) (p : Published)
@@ -633,7 +635,7 @@ theorem no_runnable_share_is_published_today (r : PublishRequest) (role : Member
         simp_all
 
 /-- While public sharing is off, no admitted publish is a public share. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")
   (doc := "docs/spec.md#2064-administration")]
 theorem no_public_share_is_published_while_sharing_is_off (r : PublishRequest)
     (role : Membership.Role) (re : Bool) (now : Nat) (p : Published)
@@ -643,7 +645,7 @@ theorem no_public_share_is_published_while_sharing_is_off (r : PublishRequest)
 
 /-- An admitted publish expires exactly its expiry's lifetime after `now`, and never with
 `never` or no expiry. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#EXPIRY_MS")
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/rules.ts#EXPIRY_MS")
   (doc := "docs/spec.md#2062-publishing-a-session-run-history")]
 theorem published_expiry_counts_from_now (r : PublishRequest) (role : Membership.Role)
     (pse re : Bool) (now : Nat) (p : Published)
@@ -663,7 +665,7 @@ theorem published_expiry_counts_from_now (r : PublishRequest) (role : Membership
 
 /-- A link opens exactly when it is public and live and, if it has a passphrase, the right one is
 presented. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem resolve_opens_iff (s : Share) (now : Nat) (a : PassphraseAttempt) :
     s.resolveAt now a = .opened ↔
       s.publiclyOpen now = true ∧ (s.passphraseRequired = false ∨ a = .right) := by
@@ -672,7 +674,7 @@ theorem resolve_opens_iff (s : Share) (now : Nat) (a : PassphraseAttempt) :
 
 /-- A closed link answers `share_unavailable` whatever passphrase is presented, so a visitor of a
 closed link learns nothing about whether it has a passphrase. -/
-@[aw_spec (tier := T2) (ts := "apps/web/server/shares/core/service.ts#ShareService")]
+@[aw_spec (tier := T2) (ts := "apps/web/server/shares/service.ts#ShareService")]
 theorem closed_link_is_unavailable_whatever_the_passphrase (s : Share) (now : Nat)
     (h : s.publiclyOpen now = false) (a : PassphraseAttempt) :
     s.resolveAt now a = .unavailable := by

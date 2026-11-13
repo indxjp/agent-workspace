@@ -119,9 +119,10 @@ function hex(bytes: Uint8Array): string {
 /**
  * SHA-256 of the secret half, lower-case hex.
  *
- * Web Crypto, not a hand-rolled primitive and not `node:crypto` — the same choice
- * `apps/web/server/auth/session.ts` made and for the same reason: one cryptographic surface in
- * this application, available in every runtime it runs in.
+ * Web Crypto, not a hand-rolled primitive — the same choice `apps/web/server/auth/session.ts`
+ * made and for the same reason: it is available in every runtime this code runs in. (Two
+ * synchronous Node readers use `node:crypto` instead; see "Identity and access" in
+ * docs/architecture.md.)
  */
 export async function hashApiKeySecret(secret: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret));

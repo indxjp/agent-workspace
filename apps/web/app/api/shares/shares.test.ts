@@ -10,8 +10,8 @@ import { installTestDomains } from '../../../server/application-context-fixtures
 import type { Ownership } from '../../../server/rbac/decide';
 import { createMemoryDirectory } from '../../../server/rbac/memory-directory';
 import { Principal } from '../../../server/rbac/principal';
-import type { Role } from '../../../server/rbac/roles';
-import type { WorkspaceSharing } from '../../../server/shares/core/runtime';
+import type { Role } from '../../../server/rbac/core/roles';
+import type { WorkspaceSharing } from '../../../server/shares/runtime';
 import type { SharedRun } from '../../../server/shares/session-snapshot/snapshot';
 import { POST } from './route';
 

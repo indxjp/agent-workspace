@@ -16,6 +16,7 @@ const endpointClient = {
   agentIds: [AGENT_ID],
   toolNames: null,
   redirectUris: ['https://app.example.com/oauth/callback'],
+  oidcAudience: null,
   hasClientSecret: false,
   actsForPrincipalId: '33333333-3333-4333-8333-333333333333',
   apiKeyIds: [],

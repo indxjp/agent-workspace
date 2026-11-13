@@ -29,8 +29,10 @@ import {
 
 import { POST } from '../../app/api/agents/route';
 import { GET as listVersions } from '../../app/api/agents/[id]/versions/route';
-import { createRepositoryAgentResourceStoreProvider } from '../agents/resource-store';
-import { createRepositoryAgentStoreProvider } from '../agents/store';
+import {
+  createRepositoryAgentResourceStoreProvider,
+  createRepositoryAgentStoreProvider,
+} from '../agents/store';
 import { type WorkspaceResolution } from '../agents/runtime';
 import { createMemoryDirectory } from '../rbac/memory-directory';
 import { Principal } from '../rbac/principal';

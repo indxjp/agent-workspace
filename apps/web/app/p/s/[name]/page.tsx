@@ -30,7 +30,7 @@ export default async function SurfacePage({
 }) {
   const { name } = await params;
   const mode = surfaceModeOfQuery((await searchParams)['environment']);
-  const page = await readSurfacePage(name, await headers(), process.env, mode);
+  const page = await readSurfacePage(name, await headers(), undefined, mode);
   if (page === null) notFound();
   return (
     <Chat

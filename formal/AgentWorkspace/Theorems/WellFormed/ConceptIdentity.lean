@@ -7,7 +7,7 @@ T0 — the identity cluster's definitions are coherent.
 * The closed unions (roles, principal kinds in both spellings, scope kinds, verifiers, invitation
   states, multiplicities) have the spellings of their TypeScript lists, and the database checks
   hold the role, principal-kind and scope-kind columns to exactly those spellings.
-* The 36 refined checks cover exactly the checks `catalogue` records without a meaning. The
+* The 37 refined checks cover exactly the checks `catalogue` records without a meaning. The
   `aw_identity_check_theorems` elaborator generates, per check, `<check>_renders_as_snapshot`
   (its `render` is the body the latest snapshot (`Er.Snapshot.file`) records, read while this file
   elaborates) and `<check>_separates_its_samples` (its three-valued `eval` accepts and refuses the
@@ -31,7 +31,7 @@ open AgentWorkspace AgentWorkspace.Er.Core AgentWorkspace.Er.Current.Identity
 /-- The role spellings are exactly `MEMBERSHIP_ROLES`, in its order. -/
 @[aw_spec (tier := T0) (ts := "packages/contracts/src/team.ts#MEMBERSHIP_ROLES")
   (ts := "packages/core/src/db/schema/memberships.ts#membershipRoles")
-  (ts := "apps/web/server/rbac/roles.ts#ROLES")]
+  (ts := "apps/web/server/rbac/core/roles.ts#ROLES")]
 theorem role_wires_match_contract :
     WireEnum.wires Role = ["owner", "admin", "builder", "viewer"] := by decide +kernel
 
@@ -43,7 +43,7 @@ theorem role_json_round_trips (r : Role) :
 
 /-- `parseRole` refuses every string that is not exactly one of the four spellings: no case
 folding, no whitespace, no default. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/roles.ts#parseRole")]
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/core/roles.ts#parseRole")]
 theorem parse_role_refuses_unknown_spelling (s : String)
     (h : s ∉ ["owner", "admin", "builder", "viewer"]) : parseRole s = none := by
   unfold parseRole
@@ -89,7 +89,7 @@ theorem principal_kind_storage_round_trips (k : Kind) : Kind.ofStorage? k.toStor
 
 /-- `wireKind` maps each storage spelling to the wire spelling of the same kind, and a wire
 spelling is not a storage spelling. -/
-@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/handlers.ts#wireKind")]
+@[aw_spec (tier := T0) (ts := "apps/web/server/rbac/me.ts#wireKind")]
 theorem wire_kind_maps_storage_to_wire :
     wireKindOfStorage? "membership" = some "membership" ∧
       wireKindOfStorage? "api_key" = some "api-key" ∧ wireKindOfStorage? "api-key" = none := by
@@ -116,14 +116,14 @@ theorem invitation_state_wires :
 
 /-! ## The refined checks -/
 
-/-- The 36 refined checks cover exactly the checks `catalogue` records without a meaning on the
+/-- The 37 refined checks cover exactly the checks `catalogue` records without a meaning on the
 fourteen identity tables, in the same order, and no check is refined twice. -/
 @[aw_spec (tier := T0) (doc := "docs/formal/inventory.md#5-db-tables-packagescoresrcdbschemats-33-tables")
   (ts := "packages/core/src/db/schema/index.ts")]
 theorem refined_checks_cover_the_cluster :
     tables.all (fun t => (checksOf t).map (·.1) == otherCheckNames t) = true ∧
       checks.all (fun c => tables.contains c.1) = true ∧ (checks.map (·.2.1)).Nodup ∧
-      checks.length = 36 := by decide +kernel
+      checks.length = 37 := by decide +kernel
 
 section Generator
 

@@ -236,7 +236,7 @@ Severity: **security**, **correctness**, **documentation**, **naming**.
 
 - **Raised by.** P1-publication ([unit report](units/concept-publication.md)). Severity: naming.
 - **Finding.** Every publish is audited as session-published, whatever the subject type.
-- **Source.** apps/web/server/shares/core/service.ts#ShareService vs docs/spec.md §20.6.2 rule 6
+- **Source.** apps/web/server/shares/service.ts#ShareService vs docs/spec.md §20.6.2 rule 6
 - **Proposed resolution.** ADR: rename the action to share-published, or add the subject type to the audit label.
 - **Outcome.** open. To be triaged in its domain (handover §5.2 step 7).
 
@@ -812,56 +812,56 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 authorisation decision, AD-1 ([unit report](units/authz-decide.md)). Severity: documentation.
 - **Finding.** SPEC §3.3 misstates Admin access to secrets and projects and audit access for Admin, Builder and Viewer; it omits `me` and `setup`. Lean: `Normative.AuthzDecide.documented_table_diverges_exactly_at`.
-- **Source.** `docs/sdk/04-api-specification.md#33-role-resource-permission-table`; `apps/web/server/rbac/permissions.ts#POLICY`.
+- **Source.** `docs/sdk/04-api-specification.md#33-role-resource-permission-table`; `apps/web/server/rbac/core/permissions.ts#POLICY`.
 - **Resolution.** §3.3 and the concepts page now show the shipped Admin secrets/projects and audit cells plus `me` and `setup`. Outcome: documentation corrected in D1.
 
 ## F-088 — A granted Builder can be denied an agent run
 
 - **Raised by.** D1 authorisation decision, AD-2 ([unit report](units/authz-decide.md)). Severity: correctness.
 - **Finding.** A Builder's `own` run grant rejects `permitted` ownership, while a Viewer's `permitted` grant accepts it. Lean: `Adversarial.AuthzDecide.granted_builder_cannot_run_the_agent_a_granted_viewer_can`.
-- **Source.** `apps/web/server/agents/run-ownership.ts#resolveAgentRunOwnership`; `apps/web/server/rbac/decide.ts#applyGrant`.
+- **Source.** `apps/web/server/agents/run-ownership.ts#resolveAgentRunOwnership`; `apps/web/server/rbac/core/decide.ts#applyGrant`.
 - **Resolution.** ADR-0152 (roles are monotonic) gives Builder `run: permitted` on agents and makes `permitted` admit `own` as well as granted agents, so a granted Builder runs what a granted Viewer runs and still not an ungranted, unowned agent. Lean: `Meta.AuthzDecide.granted_builder_runs_the_agent_a_granted_viewer_can`, `Meta.AuthzDecide.roles_are_monotonic`. Outcome: fixed.
 
 ## F-089 — Admin token revocation differs between decision and handler
 
 - **Raised by.** D1 authorisation decision, AD-3 ([unit report](units/authz-decide.md)). Severity: correctness.
 - **Finding.** `decide()` denied Admin on the revoke route while the handler allowed Admin. The repaired Lean model proves `Normative.AuthzDecide.revoke_capability_matches_roles` and `Meta.AuthzDecide.decide_and_the_revoke_gate_agree_for_every_role`.
-- **Source.** `apps/web/server/runs/api.ts#revokeRunTokens`; `apps/web/server/rbac/permissions.ts#POLICY`.
+- **Source.** `apps/web/server/runs/api.ts#revokeRunTokens`; `apps/web/server/rbac/core/permissions.ts#POLICY`.
 - **Resolution.** [PR #294](https://github.com/indxjp/agent-workspace/pull/294) gave revocation a dedicated decision capability and routed the handler through it. Outcome: fixed; the role matrix and real route regressions failed before the repair.
 
 ## F-090 — Earlier Admin-run ADR lacks an amendment note
 
 - **Raised by.** D1 authorisation decision, AD-4 ([unit report](units/authz-decide.md)). Severity: documentation.
 - **Finding.** W9-AUTH-165 describes Admin runs as read-only; SDK-03-RUN-235 gives Admin the run verb that code implements. Lean: `Normative.AuthzDecide.admin_run_verbs_adrs_disagree_at_one_cell`.
-- **Source.** `docs/adr/W9-AUTH-165-admin-reads-workspace-run-history.md`; `apps/web/server/rbac/permissions.ts#POLICY`.
+- **Source.** `docs/adr/W9-AUTH-165-admin-reads-workspace-run-history.md`; `apps/web/server/rbac/core/permissions.ts#POLICY`.
 - **Resolution.** W9-AUTH-165 now names SDK-03-RUN-235 as its amendment. Outcome: documentation corrected in D1.
 
 ## F-091 — Run-scope UUID comparison is case sensitive
 
 - **Raised by.** D1 authorisation decision, AD-5 ([unit report](units/authz-decide.md)). Severity: correctness.
 - **Finding.** The same UUID spelled with upper-case hex passed identifier validation but failed run-scope matching. The repaired Lean model proves `Meta.AuthzDecide.run_scope_id_accepts_equivalent_uuid_spelling`.
-- **Source.** `apps/web/server/rbac/decide.ts#checkTokenScope`.
+- **Source.** `apps/web/server/rbac/core/decide.ts#checkTokenScope`.
 - **Resolution.** [PR #292](https://github.com/indxjp/agent-workspace/pull/292) compares validated UUIDs canonically while retaining exact comparison for other identifiers. The route-matrix regression failed before repair and passed afterward. Outcome: fixed and merged.
 
 ## F-092 — Run-scope prose lists fewer shapes than its grammar
 
 - **Raised by.** D1 authorisation decision, AD-6 ([unit report](units/authz-decide.md)). Severity: documentation.
 - **Finding.** SPEC §3.1.1 lists two run-scope routes, while the grammar permits GET and HEAD on additional run subresource shapes that later answer 405. Lean: `Adversarial.AuthzDecide.run_scope_passes_every_get_on_its_runs_shapes`.
-- **Source.** `docs/sdk/04-api-specification.md#311-browser-token-scope-grammar`; `apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR`.
+- **Source.** `docs/sdk/04-api-specification.md#311-browser-token-scope-grammar`; `apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR`.
 - **Resolution.** §3.1.1 now distinguishes scope classification from shipped route handlers. Outcome: documentation corrected in D1.
 
 ## F-093 — Classified sessions/messages route is undeclared
 
 - **Raised by.** D1 authorisation decision, AD-7 ([unit report](units/authz-decide.md)). Severity: documentation.
 - **Finding.** The authorisation subresource table classifies `sessions/messages`, while no route declares the POST described by SPEC §34. Lean: `Meta.AuthzDecide.classified_sub_without_a_declared_route`.
-- **Source.** `apps/web/server/rbac/permissions.ts#SPEC_34_SUB_RESOURCES`; `docs/sdk/04-api-specification.md#34-route-role-table`.
+- **Source.** `apps/web/server/rbac/core/permissions.ts#SPEC_34_SUB_RESOURCES`; `docs/sdk/04-api-specification.md#34-route-role-table`.
 - **Resolution.** SPEC §34 now marks the route as unshipped and points to the current session continuation route. Outcome: documentation corrected in D1.
 
 ## F-094 — Builder run grants on three resources are unreachable
 
 - **Raised by.** D1 authorisation decision, AD-8 ([unit report](units/authz-decide.md)). Severity: documentation.
 - **Finding.** `OWN_WRITES` has a run grant for skills, files and connectors, although none has a run subresource. Lean: `Normative.AuthzDecide.role_table_builder_skills`.
-- **Source.** `apps/web/server/rbac/permissions.ts#OWN_WRITES`.
+- **Source.** `apps/web/server/rbac/core/permissions.ts#OWN_WRITES`.
 - **Resolution.** The ownership concepts page now distinguishes those unused cells from callable run routes. Outcome: documentation corrected in D1.
 
 ## F-095 — Malformed workspace ids answer 404 despite the general malformed-input rule
@@ -875,7 +875,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 lifecycle ([unit report](units/lifecycle-run.md)). Severity: correctness.
 - **Finding.** Interrupt and launcher conclusion each appended a terminal event before the first-call-wins `finish`. Both appends could succeed while only one status was stored. The repaired Lean model proves `interrupt_conclude_race_agrees`.
-- **Source.** `apps/web/server/composition/wiring/run-api.ts#interruptRun`; `apps/web/server/runs/launcher.ts#conclude`.
+- **Source.** `apps/web/server/composition/wiring/run-api-credentials.ts#interruptRun`; `apps/web/server/runs/launcher.ts#conclude`.
 - **Resolution.** [PR #290](https://github.com/indxjp/agent-workspace/pull/290) commits the winning terminal state and event together under the existing per-run lock and transaction. The shared memory/PostgreSQL race regression failed before repair and passed afterward. Outcome: fixed and merged.
 
 ## F-097 — Ordinary finish leaves browser-token rows active
@@ -924,7 +924,7 @@ Raised by P1-publication. Details are in the private ledger, outside the reposit
 
 - **Raised by.** D1 run composition ([unit report](units/run-compose.md)). Severity: correctness.
 - **Finding.** The requested-session branch checked workspace, agent, owner and project but not session status. An archived session with a Claude session id was returned for resume. The original divergence was `archived_session_reuse_diverges`; the repaired model proves `archived_session_reuse_refused`.
-- **Source.** `apps/web/server/composition/wiring/run-api.ts#openSession`; `apps/web/server/composition/session-launch.ts#sessionForLaunch`.
+- **Source.** `apps/web/server/composition/wiring/run-api-sessions.ts#openRunSession`; `apps/web/server/composition/session-launch.ts#sessionForLaunch`.
 - **Resolution.** [PR #286](https://github.com/indxjp/agent-workspace/pull/286) added a PostgreSQL-backed regression through the composed run API and rejects archived requested sessions. The regression failed before repair and all four suite tests passed afterward. Outcome: fixed and merged.
 
 ## F-104 — Server start parser accepts an empty model rejected by the contract

@@ -55,6 +55,7 @@ import {
   type RevealedInvitation,
 } from './invitations-model';
 import { InvitationsTable, type InvitationsTableState } from './invitations-table';
+import { teamStrings, type TeamStrings } from './team-messages';
 import {
   issueInvitation,
   loadInvitations,
@@ -64,33 +65,14 @@ import {
 
 const HEADING_ID = 'team-invitations-heading';
 
-/**
- * What is said when a create succeeded but its body could not be read.
- *
- * It quotes no part of the response, deliberately: a body this screen failed to parse still has a
- * token somewhere in it, and an error message built from a fragment of it is precisely the leak
- * #186's "keep the token out of … error text" forbids. The invitation itself exists — the request
- * succeeded — so the honest instruction is to revoke it and start again rather than to retry.
- */
-const UNREADABLE_ISSUED =
-  'The invitation was created, but the response carrying its link could not be read, so the link ' +
-  'is gone. Revoke the invitation below and send a new one.';
-
-/**
- * The same failure on the resend path, which needs the opposite remedy.
- *
- * A resend created nothing: the row already existed and the server minted a replacement token for
- * it, invalidating the previous one. Revoking it — {@link UNREADABLE_ISSUED}'s instruction — would
- * destroy a live invitation over a parse failure, where resending rotates the token once more and
- * costs nothing. It quotes the response no more than the create message does.
- */
-const UNREADABLE_RESENT =
-  'The invitation was resent, but the response carrying its new link could not be read, so the ' +
-  'link is gone. Resend it again to get a fresh one.';
-
 export function InvitationsSection({
   capability = NO_INVITATION_CAPABILITY,
-}: Readonly<{ capability?: InvitationCapability }>) {
+  strings = teamStrings('en'),
+}: Readonly<{
+  capability?: InvitationCapability;
+  /** The reader's words (UX-15 in #2086); English by default. */
+  strings?: TeamStrings;
+}>) {
   // The refused state is the FIRST state for a caller the server will not give the list to, not one
   // reached after a 403 — the same reasoning `./team-screen.tsx` gives for the members table.
   const [table, setTable] = useState<InvitationsTableState>(
@@ -143,9 +125,9 @@ export function InvitationsSection({
         ? // The clock is read here, once, so the table stays a pure render of its props: the four
           // states are `expiresAt` compared against this number.
           { kind: 'ready', invitations: result.value, nowMs: Date.now() }
-        : { kind: 'failed', message: describeInvitationFailure(result.problem) },
+        : { kind: 'failed', message: describeInvitationFailure(result.problem, strings) },
     );
-  }, [capability.canListInvitations]);
+  }, [capability.canListInvitations, strings]);
 
   useEffect(() => {
     void load();
@@ -184,10 +166,10 @@ export function InvitationsSection({
     const result = await issueInvitation(browserClient(), request, window.location.origin);
     setSending(false);
     if (!result.ok) {
-      setCreateProblem(describeInvitationFailure(result.problem));
+      setCreateProblem(describeInvitationFailure(result.problem, strings));
       return;
     }
-    if (!showReveal(result.value)) setCreateProblem(UNREADABLE_ISSUED);
+    if (!showReveal(result.value)) setCreateProblem(strings.unreadableIssued);
     // The address is cleared so the next invitation starts from an empty field rather than from one
     // that looks like it still needs sending. The role is cleared with it: carrying the previous
     // choice forward would make the next invitation's grant something nobody chose for it.
@@ -206,10 +188,10 @@ export function InvitationsSection({
     const result = await resend(browserClient(), invitation.id, window.location.origin);
     setBusyInvitationId(null);
     if (!result.ok) {
-      setActionProblem(describeInvitationFailure(result.problem));
+      setActionProblem(describeInvitationFailure(result.problem, strings));
       return;
     }
-    if (!showReveal(result.value)) setActionProblem(UNREADABLE_RESENT);
+    if (!showReveal(result.value)) setActionProblem(strings.unreadableResent);
     // Reload rather than patch the row: the resend moved this row's expiry, and the state the table
     // shows is derived from it.
     await load();
@@ -223,7 +205,7 @@ export function InvitationsSection({
     const result = await revoke(browserClient(), invitation.id);
     setBusyInvitationId(null);
     if (!result.ok) {
-      setActionProblem(describeInvitationFailure(result.problem));
+      setActionProblem(describeInvitationFailure(result.problem, strings));
       return;
     }
     await load();
@@ -251,11 +233,9 @@ export function InvitationsSection({
         id={HEADING_ID}
         className="text-[18px] font-semibold text-text"
       >
-        Invitations
+        {strings.invitations}
       </h2>
-      <p className="mt-1 mb-4 text-sm text-muted">
-        People invited to this workspace, and what became of each invitation.
-      </p>
+      <p className="mt-1 mb-4 text-sm text-muted">{strings.invitationsIntro}</p>
       <InvitationForm
         capability={capability}
         draft={draft}
@@ -263,6 +243,7 @@ export function InvitationsSection({
         problem={createProblem}
         onChange={setDraft}
         onSubmit={() => void createInvitation()}
+        strings={strings}
       />
       {revealed === null ? null : (
         <InvitationReveal
@@ -270,6 +251,7 @@ export function InvitationsSection({
           copyState={copyState}
           onCopy={() => void copyLink()}
           onDismiss={clearReveal}
+          strings={strings}
         />
       )}
       <InvitationsTable
@@ -279,6 +261,7 @@ export function InvitationsSection({
         actionProblem={actionProblem}
         onResend={(invitation) => void resendInvitation(invitation)}
         onRevoke={(invitation) => void revokeInvitation(invitation)}
+        strings={strings}
       />
     </section>
   );

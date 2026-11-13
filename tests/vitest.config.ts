@@ -29,6 +29,8 @@
  * from the directory. Adding a config here would otherwise rename the project and change what
  * `--project tests` selects.
  */
+import { fileURLToPath } from 'node:url';
+
 import { configDefaults, defineConfig } from 'vitest/config';
 
 import rootConfig from '../vitest.config.js';
@@ -37,15 +39,36 @@ const rootAlias = rootConfig.resolve?.alias;
 if (!Array.isArray(rootAlias)) {
   throw new Error('vitest.config.ts: the root resolve.alias must be an array');
 }
+const rootAliases: readonly { readonly find: string | RegExp; readonly replacement: string }[] =
+  rootAlias;
 
 export default defineConfig({
   // A project does not inherit the root aliases. These two packages are read from `src`, because
   // `tests/platform-matrix.test.ts` runs in `pnpm docs:check` before any package is built; the
   // rest keep resolving through `node_modules`, as they always did here.
+  // `tests/settings-table.test.ts` also runs there. It imports `@agent-workspace/egress-proxy`, and
+  // the sign-in settings it reads import `@agent-workspace/core/posture`, so both come from `src`;
+  // so does `@agent-workspace/gateway/settings`, the gateway's settings module.
   resolve: {
-    alias: rootAlias.filter(({ find }) =>
-      /@indx-workspace\\?\/(contracts|platforms)/u.test(String(find)),
-    ),
+    alias: [
+      ...rootAliases.filter(({ find }) =>
+        /@indx-workspace\\?\/(contracts|platforms)/u.test(String(find)),
+      ),
+      {
+        find: /^@agent-workspace\/egress-proxy$/u,
+        replacement: fileURLToPath(
+          new URL('../packages/egress-proxy/src/index.ts', import.meta.url),
+        ),
+      },
+      {
+        find: /^@agent-workspace\/gateway\/settings$/u,
+        replacement: fileURLToPath(new URL('../packages/gateway/src/settings.ts', import.meta.url)),
+      },
+      {
+        find: /^@agent-workspace\/core\/posture$/u,
+        replacement: fileURLToPath(new URL('../packages/core/src/posture.ts', import.meta.url)),
+      },
+    ],
   },
   test: {
     name: 'tests',

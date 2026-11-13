@@ -144,9 +144,11 @@ export function createAgentArchiveSweep(
     if (held === null) {
       return { leaseHeld: true, throttled: false, workspaces: 0, archived: 0, failed: 0 };
     }
-    lastSweptAt = now;
     try {
       const workspaceIds = await deps.listWorkspaceIds();
+      // The hour starts only once the workspaces are listed: a read that failed sweeps nothing, so
+      // the next delivery tries again rather than waiting out an hour with nothing swept.
+      lastSweptAt = now;
       let archived = 0;
       let failed = 0;
       for (const workspaceId of workspaceIds) {

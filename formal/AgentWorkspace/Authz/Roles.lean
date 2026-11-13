@@ -5,7 +5,7 @@ import AgentWorkspace.Concepts.Membership
 
 The role vocabulary is the concept layer's `Concepts.Membership.Role` (spec §21's four, in
 `ROLES` order) and `parseRole` (an exact-spelling decoder). This module does not redefine either;
-it names what `apps/web/server/rbac/roles.ts` adds for the decision function:
+it names what `apps/web/server/rbac/core/roles.ts` adds for the decision function:
 
 - `decide()` receives the role as an untyped runtime value and **re-parses** it, so the model's
   query carries the role as the raw string (`RoleInput`), never as an already-trusted `Role`.
@@ -24,11 +24,11 @@ carried, before any parse. -/
 abbrev RoleInput := String
 
 /-- `ROLES`, in the order `roles.ts` lists them. -/
-@[aw_spec (ts := "apps/web/server/rbac/roles.ts#ROLES")]
+@[aw_spec (ts := "apps/web/server/rbac/core/roles.ts#ROLES")]
 def roles : List Role := WireEnum.all
 
 /-- `parseRole` at `decide()`'s first step: the role, or `none` (then `decide()` refuses). -/
-@[aw_spec (ts := "apps/web/server/rbac/roles.ts#parseRole")]
+@[aw_spec (ts := "apps/web/server/rbac/core/roles.ts#parseRole")]
 def parseRoleInput (s : RoleInput) : Option Role := parseRole s
 
 end AgentWorkspace.Authz.Roles

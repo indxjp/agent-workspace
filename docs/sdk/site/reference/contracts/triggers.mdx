@@ -254,12 +254,17 @@ trigger has no secret.
 | `zoomSecretToken` | `undefined \| null \| string` | No |  |
 | `outputSchema` | `undefined \| null \| Record<string, unknown>` | No |  |
 | `subject` | `undefined \| null \| string` | No |  |
+| `cron` | `undefined \| string` | No |  |
+| `timezone` | `undefined \| string` | No |  |
 
 ## UpdateTriggerRequestSchema
 
 The body of `PATCH /api/triggers/:id`. `zoomSecretToken` is write-only; `null` clears it, and the
 server refuses it on a `schedule` trigger. `outputSchema` replaces the trigger's schema; `null`
 clears it (ADR-0154). `subject` replaces the caller its runs act for; `null` clears it (ADR-0156).
+`cron` and `timezone` re-time a `schedule` trigger, checked as on create; a `webhook` trigger
+refuses them with `400 invalid_field`. A change restarts the schedule's counting, so it owes no
+run for windows before it (ADR-0144 D5).
 
 | Name | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -269,6 +274,8 @@ clears it (ADR-0154). `subject` replaces the caller its runs act for; `null` cle
 | `zoomSecretToken` | `undefined \| null \| string` | No |  |
 | `outputSchema` | `undefined \| null \| UpdateTriggerRequest` | No |  |
 | `subject` | `undefined \| null \| string` | No |  |
+| `cron` | `undefined \| string` | No |  |
+| `timezone` | `undefined \| string` | No |  |
 
 ## ZOOM_URL_VALIDATION_EVENT
 

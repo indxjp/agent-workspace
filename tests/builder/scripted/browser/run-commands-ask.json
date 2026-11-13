@@ -1,0 +1,43 @@
+{
+  "turns": [
+    {
+      "toolUses": [
+        {
+          "name": "Bash",
+          "input": {
+            "command": "mkdir -p outputs && printf '# Q3 refunds\\n\\n12 refunds approved.\\n' > outputs/q3-refunds.md",
+            "description": "Write the Q3 refunds report"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Not served: the resumed session counts the interrupted call as a second assistant turn."
+    },
+    {
+      "toolUses": [
+        {
+          "name": "Bash",
+          "input": {
+            "command": "mkdir -p outputs && printf '# Q3 refunds\\n\\n12 refunds approved.\\n' > outputs/q3-refunds.md",
+            "description": "Write the Q3 refunds report"
+          }
+        }
+      ]
+    },
+    {
+      "toolUses": [
+        {
+          "name": "Bash",
+          "input": {
+            "command": "ls outputs",
+            "description": "Check the report is there"
+          }
+        }
+      ]
+    },
+    {
+      "text": "I wrote the Q3 refunds report to outputs/q3-refunds.md."
+    }
+  ]
+}

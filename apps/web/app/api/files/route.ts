@@ -20,8 +20,8 @@ import {
 import { storageContextOf, toResponse, withCatalogService } from '../../../server/files/http';
 import { createCatalogFolder, saveUpload } from '../../../server/files/upload-route';
 import { route } from '../../../server/http/route';
-import { ownershipOfWriteTarget } from '../../../server/files/ownership';
-import { requireResourceAccess } from '../../../server/resources/authorise';
+import { ownershipOfFileOwner, ownershipOfWriteTarget } from '../../../server/files/ownership';
+import { recheckResourceAccess, requireResourceAccess } from '../../../server/resources/authorise';
 
 /**
  * A failed catalog write is logged server-side and answered with this typed 500; the cause text
@@ -128,7 +128,16 @@ async function serveUpload(request: Request): Promise<Response> {
         if (filePath === null || filePath.trim() === '') {
           return problem(400, 'missing_file_path', 'The "x-file-path" header is required.');
         }
-        return await saveUpload(request, access.principal, storage, filePath);
+        // The file the upload would replace, as the save read it under its lock (FX-1, #1991 C1).
+        const recheck = async (replaced: { readonly ownerPrincipalId: string }) => {
+          const denied = await recheckResourceAccess(
+            request,
+            access.principal,
+            ownershipOfFileOwner(replaced),
+          );
+          return denied === null ? null : ({ ...denied, kind: 'json' } as const);
+        };
+        return await saveUpload(request, access.principal, storage, filePath, recheck);
       } catch (error) {
         return catalogUnavailable(error);
       }

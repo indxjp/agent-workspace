@@ -88,3 +88,12 @@ describe('readDeploymentDefaultModels', () => {
     }
   });
 });
+
+describe('readDeploymentDefaultModels — vertex', () => {
+  it('accepts a default model for the vertex provider', () => {
+    expect(read('{"vertex":"claude-sonnet-5-5"}')).toEqual({
+      ok: true,
+      defaults: { vertex: 'claude-sonnet-5-5' },
+    });
+  });
+});

@@ -1,7 +1,7 @@
 // The shared in-memory catalog as a web catalog provider (the storage design, §07 rule 4).
 import { createInMemoryCatalog } from '@agent-workspace/core/db';
 
-import type { ResourceCatalogStoreProvider } from './catalog-store';
+import type { ResourceCatalogStoreProvider } from '../storage-and-sharing';
 
 /** The memory workspace catalog, which carries test hooks such as `assignSkill`. */
 type MemoryWorkspaceCatalog = ReturnType<ReturnType<typeof createInMemoryCatalog>['forWorkspace']>;

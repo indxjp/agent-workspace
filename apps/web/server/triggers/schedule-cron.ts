@@ -7,8 +7,7 @@
  */
 import type { Logger } from '@agent-workspace/core/telemetry';
 import { defineSlot } from '../runtime-slot';
-import { bearerMatches, problem } from '../sessions/retention-cron';
-import type { AgentArchiveSweepResult } from '../agents/archive/sweep';
+import { bearerMatches, problem } from '../http/cron';
 import type { SchedulePassResult } from './schedule-pass';
 
 /**
@@ -16,20 +15,21 @@ import type { SchedulePassResult } from './schedule-pass';
  * #1851) that rides the same delivery. `archive` is `null` when the sweep threw; it never fails the
  * delivery, because the schedule pass has already started its runs.
  */
-export type TriggerScheduleCronResult = SchedulePassResult & {
-  readonly archive?: AgentArchiveSweepResult | null;
+export type TriggerScheduleCronResult<Archive = unknown> = SchedulePassResult & {
+  readonly archive?: Archive | null;
 };
 
 export type TriggerScheduleCronPass = () => Promise<TriggerScheduleCronResult>;
 
 /** The schedule pass first, then the archive sweep; a sweep failure is logged, not thrown. */
-export async function runTriggerCronPass(
+export async function runTriggerCronPass<Archive>(
   deps: Readonly<{
     schedule: () => Promise<SchedulePassResult>;
-    archive: () => Promise<AgentArchiveSweepResult>;
+    /** The sweep's own result is reported as it is; triggers does not read it. */
+    archive: () => Promise<Archive>;
     log: Pick<Logger, 'error'>;
   }>,
-): Promise<TriggerScheduleCronResult> {
+): Promise<TriggerScheduleCronResult<Archive>> {
   const schedule = await deps.schedule();
   try {
     return { ...schedule, archive: await deps.archive() };

@@ -82,7 +82,6 @@ export const RECORDED_MASTRA_RUN: readonly MastraEvent[] = [
       cacheReadInputTokens: 0,
       cacheWriteInputTokens: 0,
       reasoningTokens: null,
-      costUsd: 0,
     },
     finish: { type: 'finish', payload: { stepResult: { reason: 'stop' } } },
   },

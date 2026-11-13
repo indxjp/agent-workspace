@@ -8,6 +8,7 @@ import type { ProjectPolicy } from '@indx-workspace/contracts/policy-ceiling';
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildRunRequestFor } from '../../compose/run-request';
+import type * as RunRequestModule from '../../compose/run-request';
 import type { AgentRunResourceLoader } from '../../compose/resource-loader';
 import { awControlServerFor } from '../../compose/run-request-tool-connectors';
 import type { RuntimeLaunchTarget } from '../../compose/runtime-profile';
@@ -30,7 +31,7 @@ import {
 
 /**
  * The compose arguments these tests read, by name. The return type is spelled out, so a signature
- * that moves one of them to another position fails `tsc` here rather than reading the wrong one.
+ * that renames one of them fails `tsc` here rather than reading the wrong one.
  */
 const { composeArguments } = vi.hoisted(() => ({
   composeArguments: (
@@ -40,9 +41,7 @@ const { composeArguments } = vi.hoisted(() => ({
     readonly projectId: string | null;
     readonly ceiling: ProjectPolicy | null;
   } => {
-    // context, runAgent, settings, gateway, agentSecrets, permissionOverride, projectInstructions,
-    // resourceLoader, resolvedModel, projectId, modelProvider, snapshotTools, ceiling.
-    const [, , , , , , , resourceLoader, , projectId, , , ceiling] = args;
+    const [{ resourceLoader, projectId, ceiling }] = args;
     return { resourceLoader, projectId: projectId ?? null, ceiling: ceiling ?? null };
   },
 }));
@@ -53,15 +52,23 @@ vi.mock('../../runs/launcher', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   createRunnerLauncher: vi.fn(() => () => undefined),
 }));
-vi.mock('../../compose/run-request', async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  buildRunRequestFor: vi.fn(async (...args: Parameters<typeof buildRunRequestFor>) => {
-    const { resourceLoader } = composeArguments(args);
-    // Each test's loader is a stub that reads no argument.
-    await (resourceLoader as unknown as { load: () => Promise<unknown> } | undefined)?.load();
-    return { resources: { files: [] } };
-  }),
-}));
+vi.mock('../../compose/run-request', async (importOriginal) => {
+  const original = await importOriginal<typeof RunRequestModule>();
+  return {
+    ...original,
+    buildRunRequestFor: vi.fn(async (...args: Parameters<typeof buildRunRequestFor>) => {
+      const [{ context, runAgent }] = args;
+      const { resourceLoader, projectId, ceiling } = composeArguments(args);
+      // The run's resources, loaded with the arguments compose loads them with.
+      await original.runResourcesWithinCeiling(context, runAgent, {
+        resourceLoader,
+        ceiling,
+        projectId,
+      });
+      return { resources: { files: [] } };
+    }),
+  };
+});
 vi.mock('../../compose/storage-writeback', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   writeBackStorage: vi.fn(() => Promise.resolve(new Map())),
@@ -208,6 +215,13 @@ describe('withTranscription (the launcher transcription step, issue #1313)', () 
 describe('the storage write-back wiring', () => {
   const ACME = { connectionId: '55555555-5555-4555-8555-555555555555', prefix: 'reports' };
   const BETA = { connectionId: '99999999-9999-4999-8999-999999999999', prefix: 'reports' };
+  const GRANT = { ...ACME, access: 'read-write' as const };
+  const PERMISSIONS = {
+    readFiles: true,
+    writeFiles: true,
+    runCommands: false,
+    unrestrictedNetwork: false,
+  };
   type Folders = ReadonlyMap<string, { connectionId: string; prefix: string }>;
 
   /**
@@ -239,7 +253,10 @@ describe('the storage write-back wiring', () => {
           }),
       },
       runAgentOf: () =>
-        Promise.resolve({ agent: { permissions: {}, policy: null }, assignments: {} }),
+        Promise.resolve({
+          agent: { permissions: PERMISSIONS, policy: null },
+          assignments: { files: [], skillIds: [], connectorIds: [], storageGrants: [GRANT] },
+        }),
       readRunAgent: () => Promise.reject(new Error('unused')),
       runStorageConnections: {},
       wave5Repositories: () => Promise.reject(new Error('unused')),
@@ -293,14 +310,15 @@ describe('the storage write-back wiring', () => {
     expect(run.hydrated).toBeUndefined();
   });
 
-  it('[US-STO-12][unit][run] hands the write-back the folders the input archive was loaded with', async () => {
-    // `acme-data` was BETA's name when the archive was loaded, and ACME's by the compose load.
+  it('[US-STO-12][unit][run] lists the granted folders once per launch: compose reuses the input archive’s load', async () => {
+    // Were the folders listed again, `acme-data` would by then be ACME's, not BETA's.
     const archived = new Map([['storage/acme-data/reports', BETA]]);
     const composed = new Map([['storage/acme-data/reports', ACME]]);
     const run = await writtenBack([archived, composed], true);
 
-    expect(run.loads).toBe(2);
-    expect(run.folders).toEqual(composed);
+    expect(run.loads).toBe(1);
+    // So the `/run` body and the archive name the same grant, and the write-back sees no mismatch.
+    expect(run.folders).toEqual(archived);
     expect(run.hydrated).toEqual(archived);
   });
 });
@@ -327,8 +345,21 @@ describe("the policy ceiling a run is composed under (#1851: a project's policy 
       runnerManager: null,
       resolveProviderCredential: () => Promise.resolve(null),
       filesRuntime: null,
-      runResources: { load: () => Promise.resolve({}) },
-      runAgentOf: () => Promise.resolve({ agent: { name: NAME } }),
+      runResources: { load: () => Promise.resolve({ files: [], skills: [], mcpServers: {} }) },
+      runAgentOf: () =>
+        Promise.resolve({
+          agent: {
+            name: NAME,
+            permissions: {
+              readFiles: true,
+              writeFiles: false,
+              runCommands: false,
+              unrestrictedNetwork: false,
+            },
+            policy: null,
+          },
+          assignments: { files: [], skillIds: [], connectorIds: [] },
+        }),
       readRunAgent: () => Promise.reject(new Error('unused')),
       runStorageConnections: null,
       wave5Repositories: () =>
@@ -412,6 +443,22 @@ describe('recordRunFileGrants', () => {
     expect(seen).toEqual([['run-1', ['manuals', 'solo.pdf']]]);
   });
 
+  it('leaves the memory folder out, so a search never reaches memory/ (ADR-0163)', async () => {
+    const seen: (readonly string[])[] = [];
+    const runs = {
+      snapshotFileGrants: (_runId: string, paths: readonly string[]) => {
+        seen.push(paths);
+        return Promise.resolve(true);
+      },
+    };
+    await recordRunFileGrants(runs, 'run-1', [
+      ...files,
+      { kind: 'directory' as const, path: 'memory' },
+      { kind: 'file' as const, path: 'memory/MEMORY.md' },
+    ]);
+    expect(seen).toEqual([['manuals', 'solo.pdf']]);
+  });
+
   it('fails the launch when the snapshot is not recorded', async () => {
     const refused = { snapshotFileGrants: () => Promise.resolve(false) };
     await expect(recordRunFileGrants(refused, 'run-1', files)).rejects.toThrow(
@@ -419,5 +466,17 @@ describe('recordRunFileGrants', () => {
     );
     await expect(recordRunFileGrants({}, 'run-1', files)).rejects.toThrow();
     await expect(recordRunFileGrants(null, 'run-1', files)).rejects.toThrow();
+  });
+});
+
+describe('the runner manager fetch of a run', () => {
+  it('is the fetch every runner call of the launcher uses', () => {
+    const runnerManagerFetch = vi.fn<typeof globalThis.fetch>();
+    createCompositionRunLauncher({
+      runnerManager: null,
+      runnerManagerFetch,
+      gatewaySettings: { ok: false },
+    } as never);
+    expect(vi.mocked(createRunnerLauncher).mock.calls.at(-1)?.[0].fetch).toBe(runnerManagerFetch);
   });
 });

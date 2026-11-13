@@ -11,6 +11,7 @@ import { isUuid } from '@indx-workspace/contracts';
 
 import { applicationContext } from '../application-context';
 import { checkRequestOrigin } from '../auth/origin';
+import { systemClock } from '../clock';
 import type { Principal } from '../rbac/principal';
 import {
   oauthError,
@@ -103,6 +104,10 @@ async function evaluate(
       status,
     ),
   });
+  // ADR-0161 D4: no member consents to an app-backend client; its tokens come from the exchange.
+  if (client.kind === 'app-backend') {
+    return fail('unauthorized_client', 'An app-backend client is not authorized here.');
+  }
 
   if (params.get('response_type') !== 'code') {
     return fail('unsupported_response_type', 'response_type must be code.');
@@ -213,7 +218,7 @@ export async function authorizePost(request: Request): Promise<Response> {
     forwardedHost: request.headers.get('x-forwarded-host'),
   });
   if (!origin.ok) return errorPage('This approval must come from the application itself.');
-  const admitted = admitOAuthSession(principal.principalId, Date.now());
+  const admitted = admitOAuthSession(principal.principalId, systemClock.now().getTime());
   if (!admitted.admitted) return oauthRateLimited(admitted.retryAfterSeconds);
 
   const form = await readForm(request);
@@ -240,7 +245,7 @@ export async function authorizePost(request: Request): Promise<Response> {
     familyId: crypto.randomUUID(),
     codeChallenge,
     redirectUri,
-    expiresAt: new Date(Date.now() + OAUTH_TOKEN_TTL_MS.code),
+    expiresAt: new Date(systemClock.now().getTime() + OAUTH_TOKEN_TTL_MS.code),
   });
   return redirectTo(redirectUri, { code: code.presented, state, iss: publicOrigin() }, 303);
 }

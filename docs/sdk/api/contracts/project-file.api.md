@@ -7,6 +7,9 @@
 import { z } from 'zod';
 
 // @public
+export function appSchemaName(name: string): string;
+
+// @public
 export const BOOTSTRAP_ADMIN_MAX_LENGTH = 320;
 
 // @public
@@ -138,6 +141,15 @@ export type PlatformOptions = z.infer<typeof PlatformOptionsSchema>;
 export const PlatformOptionsSchema: z.ZodPipe<z.ZodUnknown, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodUnknown>>>;
 
 // @public (undocumented)
+export type ProductionApp = z.infer<typeof ProductionAppSchema>;
+
+// @public
+export const ProductionAppSchema: z.ZodReadonly<z.ZodObject<{
+    image: z.ZodString;
+    url: z.ZodURL;
+}, z.core.$strict>>;
+
+// @public (undocumented)
 export type ProductionEnvironment = z.infer<typeof ProductionEnvironmentSchema>;
 
 // @public
@@ -149,6 +161,61 @@ export const ProductionEnvironmentSchema: z.ZodReadonly<z.ZodObject<{
         vercel: "vercel";
     }>;
     url: z.ZodURL;
+    apps: z.ZodOptional<z.ZodPipe<z.ZodUnknown, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodReadonly<z.ZodObject<{
+        image: z.ZodString;
+        url: z.ZodURL;
+    }, z.core.$strict>>>>>>;
+    gcp: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+        project: z.ZodString;
+        region: z.ZodString;
+        domain: z.ZodOptional<z.ZodString>;
+        armor: z.ZodOptional<z.ZodBoolean>;
+        iap: z.ZodOptional<z.ZodBoolean>;
+        oidc: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+            issuer: z.ZodURL;
+            clientId: z.ZodString;
+        }, z.core.$strict>>>;
+        modelLocation: z.ZodOptional<z.ZodEnum<{
+            global: "global";
+            us: "us";
+            eu: "eu";
+        }>>;
+        size: z.ZodOptional<z.ZodEnum<{
+            small: "small";
+            standard: "standard";
+        }>>;
+        dataProtection: z.ZodOptional<z.ZodBoolean>;
+        alertsEmail: z.ZodOptional<z.ZodEmail>;
+        sandboxInternet: z.ZodOptional<z.ZodBoolean>;
+    }, z.core.$strict>>>;
+}, z.core.$strict>>;
+
+// @public (undocumented)
+export type ProductionGcp = z.infer<typeof ProductionGcpSchema>;
+
+// @public
+export const ProductionGcpSchema: z.ZodReadonly<z.ZodObject<{
+    project: z.ZodString;
+    region: z.ZodString;
+    domain: z.ZodOptional<z.ZodString>;
+    armor: z.ZodOptional<z.ZodBoolean>;
+    iap: z.ZodOptional<z.ZodBoolean>;
+    oidc: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+        issuer: z.ZodURL;
+        clientId: z.ZodString;
+    }, z.core.$strict>>>;
+    modelLocation: z.ZodOptional<z.ZodEnum<{
+        global: "global";
+        us: "us";
+        eu: "eu";
+    }>>;
+    size: z.ZodOptional<z.ZodEnum<{
+        small: "small";
+        standard: "standard";
+    }>>;
+    dataProtection: z.ZodOptional<z.ZodBoolean>;
+    alertsEmail: z.ZodOptional<z.ZodEmail>;
+    sandboxInternet: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strict>>;
 
 // @public
@@ -165,6 +232,9 @@ export const PROJECT_CONNECTOR_TRANSPORTS: readonly ["http", "sse"];
 
 // @public
 export const PROJECT_DEPLOY_TARGETS: readonly ["single-vm", "gcp-cloudrun", "kubernetes", "vercel"];
+
+// @public
+export const PROJECT_FILE_CONFIG_FIELDS: ("apiVersion" | "baseUrl" | "deployment")[];
 
 // @public
 export const PROJECT_KIND = "Project";
@@ -229,6 +299,7 @@ export const ProjectDocumentSchema: z.ZodReadonly<z.ZodObject<{
             openai: "openai";
             "azure-openai": "azure-openai";
             "openai-compatible": "openai-compatible";
+            vertex: "vertex";
         }>;
         credential: z.ZodReadonly<z.ZodObject<{
             secret: z.ZodString;
@@ -401,6 +472,33 @@ export const ProjectDocumentSchema: z.ZodReadonly<z.ZodObject<{
                 vercel: "vercel";
             }>;
             url: z.ZodURL;
+            apps: z.ZodOptional<z.ZodPipe<z.ZodUnknown, z.ZodReadonly<z.ZodRecord<z.ZodString, z.ZodReadonly<z.ZodObject<{
+                image: z.ZodString;
+                url: z.ZodURL;
+            }, z.core.$strict>>>>>>;
+            gcp: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+                project: z.ZodString;
+                region: z.ZodString;
+                domain: z.ZodOptional<z.ZodString>;
+                armor: z.ZodOptional<z.ZodBoolean>;
+                iap: z.ZodOptional<z.ZodBoolean>;
+                oidc: z.ZodOptional<z.ZodReadonly<z.ZodObject<{
+                    issuer: z.ZodURL;
+                    clientId: z.ZodString;
+                }, z.core.$strict>>>;
+                modelLocation: z.ZodOptional<z.ZodEnum<{
+                    global: "global";
+                    us: "us";
+                    eu: "eu";
+                }>>;
+                size: z.ZodOptional<z.ZodEnum<{
+                    small: "small";
+                    standard: "standard";
+                }>>;
+                dataProtection: z.ZodOptional<z.ZodBoolean>;
+                alertsEmail: z.ZodOptional<z.ZodEmail>;
+                sandboxInternet: z.ZodOptional<z.ZodBoolean>;
+            }, z.core.$strict>>>;
         }, z.core.$strict>>>;
     }, z.core.$strict>>;
 }, z.core.$strict>>;
@@ -461,6 +559,7 @@ export const ProjectModelConnectionSchema: z.ZodReadonly<z.ZodObject<{
         openai: "openai";
         "azure-openai": "azure-openai";
         "openai-compatible": "openai-compatible";
+        vertex: "vertex";
     }>;
     credential: z.ZodReadonly<z.ZodObject<{
         secret: z.ZodString;

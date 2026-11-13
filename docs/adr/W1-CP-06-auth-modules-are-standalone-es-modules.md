@@ -100,3 +100,55 @@ mode is a build error.
 
 Both of these evaporate the moment `apps/web/package.json` can be edited: delete the nested
 `package.json`, add `"type": "module"` one level up, and rule 2 becomes optional.
+
+## Amendment — the auth modules may import a pure core with an explicit `.ts` path (refactoring part 06, 2026-11-09)
+
+The section above ends with the condition under which rule 2 becomes optional: `"type": "module"`
+in `apps/web/package.json`. That is now the case, and both facts that shaped the decision were
+re-checked on main `e1d2613fe`:
+
+- **Fact 2 no longer holds as written.** `apps/web/package.json` declares `"type": "module"`, so
+  the files below it are ES modules for NodeNext without the nested `package.json`. The root
+  program also sets `rewriteRelativeImportExtensions` (`tsconfig.root.json`), which accepts a
+  relative `.ts` specifier.
+- **Fact 1 still holds for `./x.js`, but not for `./x.ts`.** Turbopack resolves an explicit `.ts`
+  specifier, and `apps/web` already ships modules that use one (`cli-auth/local-credential.ts`,
+  `rbac/cli-token.ts`, `start.ts`).
+
+So one specifier now reads the same to both toolchains: an explicit `.ts` path.
+
+**The rule from here.** A module in `apps/web/server/auth/` may import a pure module under
+`apps/web/server/auth/core/` with an explicit `.ts` path (`./core/session-rules.ts`). Runtime
+imports between the other auth modules stay as rule 2 says: the shared logic goes into `core/`,
+where `domain-core-is-pure` and the core globals ban hold it to no I/O, no clock and no `crypto`.
+Signing and verifying stay in `session.ts`, which owns the key.
+
+**How it is proven.** `tests/auth.test.ts` starts `next dev` and compiles the whole auth graph
+through Turbopack, including the new import; `npx tsc -p tsconfig.root.json` type-checks the same
+files under NodeNext; and `session-golden.test.ts` pins the token bytes, the claims, every refusal
+and the cookie attributes, written before the rules moved and unchanged after.
+
+The nested `apps/web/server/auth/package.json` is now redundant for TypeScript. It stays only
+because the Dockerfile copies it; removing both is a separate change.
+
+## Amendment — the auth modules may import the clock port with an explicit `.ts` path (refactoring part 06, step 8, 2026-11-12)
+
+The clock ratchet (`scripts/check-clock-ceiling.mjs`) counts a `Date.now()` default argument as a
+direct clock read. `session.ts`, `selection.ts`, `invitation-identity.ts` and `oidc.ts` each took
+the time as an optional `nowMs` argument that defaulted to `Date.now()` (8 reads), and the rule
+above let them import only `core/`.
+
+**The rule from here.** These modules may also import `apps/web/server/clock.ts`, with the same
+explicit path form (`../clock.ts`), and default `nowMs` to `systemClock.now().getTime()`. The clock
+port imports nothing and does no I/O, so the edge bundle that `proxy.ts` builds from `session.ts`
+gains one frozen object and nothing else. The time stays an argument: every caller and test that
+passes `nowMs` today is unchanged.
+
+**Rejected:** making `nowMs` required. It removes the default but moves the clock read into about
+100 call sites, most of them tests, for no change in behaviour.
+
+**How it is proven.** `tests/auth.test.ts` compiles the auth graph through Turbopack with the new
+import; `npx tsc -p tsconfig.root.json` type-checks it under NodeNext; and
+`apps/web/server/auth/clock-defaults.test.ts` (with one case in `oidc.test.ts`) pins that an
+omitted `nowMs` is the current time for every one of the 8 functions. It passes on the code before
+and after this change, and it fails when any one default is moved.

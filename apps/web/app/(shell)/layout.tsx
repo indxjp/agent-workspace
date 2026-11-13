@@ -23,29 +23,34 @@
  *
  * A session token stays cryptographically valid — `getSession()` only checks its signature and
  * expiry — long after the membership it names has been deleted, or the workspace itself archived
- * out from under it. `resolveIdentity` already re-reads the directory on every request rather than
- * trusting the token, so it already notices; the only piece this task adds is acting on a `null`
- * it returns for the right reason. `shouldRecoverSession` (`components/shell/session-recovery.ts`)
- * is that positive check (ADR-0015): it tells "the caller's own membership is genuinely gone" apart
- * from "the RBAC runtime is not wired at all" (`server/rbac/runtime.ts`'s own declared gap, a
- * different task's), so this redirect fires for the first and never loops on the second.
+ * out from under it. `resolveIdentity` (`server/features/console.ts`) already re-reads the
+ * directory on every request rather than trusting the token, so it already notices; the only piece
+ * this task adds is acting on a `null` it returns for the right reason. `shouldRecoverSession`
+ * (`components/shell/session-recovery.ts`) is that positive check (ADR-0015): it tells "the
+ * caller's own membership is genuinely gone" apart from "the RBAC runtime is not wired at all"
+ * (`server/rbac/runtime.ts`'s own declared gap, a different task's), so this redirect fires for the
+ * first and never loops on the second.
  */
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { versionsLocaleOf } from '../../components/agents/versions-messages';
 import { initialsFrom, roleLabel } from '../../components/shell/identity';
+import { signOutAction } from '../signin/actions';
 import {
   SESSION_RECOVERY_PATH,
   shouldRecoverSession,
 } from '../../components/shell/session-recovery';
+import { SkipLink } from '../../components/shell/skip-link';
 import { Sidebar, type SidebarUser, type WorkspaceBrand } from '../../components/shell/sidebar';
 import { Topbar, type RuntimeChip } from '../../components/shell/topbar';
-import {
-  DeploymentDriverBanner,
-  LOCAL_ISOLATION_REASON,
-} from '../../components/shell/driver-banner';
-import { getSession, type VerifiedSessionClaims } from '../../server/auth';
+import { DeploymentDriverBanner } from '../../components/shell/driver-banner';
+import { shellStrings, type ShellLocale } from '../../components/shell/shell-messages';
+import { getSession } from '../../server/auth';
 import { applicationContext } from '../../server/application-context';
+import { currentWorkspaceFeatures, resolveIdentity } from '../../server/features/console';
+import { recentChatsFor } from '../../server/sessions/recent';
 
 import { roleManagesStorage } from './admin/storage/manages-storage';
 
@@ -65,57 +70,41 @@ const UNIDENTIFIED_WORKSPACE: WorkspaceBrand = {
  * chip carries the warn variant so it reads as a gap rather than as a healthy default. It links
  * nowhere because the Runtimes screen is not built.
  */
-function runtimeChip(): RuntimeChip {
+function runtimeChip(locale: ShellLocale): RuntimeChip {
+  const strings = shellStrings(locale);
   const driver = process.env['RUNTIME_DRIVER']?.trim();
   if (driver === 'local') {
     return {
       label: driver,
       warn: true,
       href: '/admin/runtimes',
-      reason: LOCAL_ISOLATION_REASON,
+      reason: strings.localIsolation,
     };
   }
   return driver
     ? { label: driver, warn: false, href: '/admin/runtimes' }
-    : { label: 'not configured', warn: true, href: '/admin/runtimes' };
+    : { label: strings.runtimeNotConfigured, warn: true, href: '/admin/runtimes' };
 }
 
 /**
- * The database name, the database role, and who they are — read fresh on every request, never
- * from the session token. Issue #118: the session's `role` claim is `'owner'` on every session
- * this build mints (`apps/web/server/auth/session.ts`'s deliberate non-widening — the runtime has
- * always re-read the role per request, e.g. `apps/web/server/rbac/principal.ts`'s
- * `Principal.fromSession`; only the shell had not caught up), so showing it here would show the
- * same word for every signed-in caller regardless of what `memberships.role` actually says.
- *
- * `null` when the RBAC runtime is not wired (a declared gap of a different task, per
- * `apps/web/server/rbac/runtime.ts`) or when the row this session named is gone — a membership
- * removed since the session was minted is exactly issue #118's "takes effect on the next
- * request", and the honest thing for the shell to do with a session that no longer resolves to
- * anything is to say less, not to keep repeating a claim from before.
+ * The chip links to the Runtimes screen only for a caller who may open it; for anyone else it is the
+ * same label without a link (UX-12 in #2086), so it still names the driver in force (A.3).
  */
-export interface ResolvedIdentity {
-  readonly userName: string;
-  readonly workspaceName: string;
-  readonly role: string;
-}
-
-export async function resolveIdentity(
-  session: VerifiedSessionClaims,
-): Promise<ResolvedIdentity | null> {
-  const runtime = applicationContext()?.rbac ?? null;
-  if (runtime === null) return null;
-  const user = await runtime.directory.findUserByEmail(session.sub);
-  if (user === null) return null;
-  const memberships = await runtime.directory.membershipsForUser(user.id);
-  const current = memberships.find((membership) => membership.workspaceSlug === session.ws);
-  if (current === undefined) return null;
-  return { userName: user.name, workspaceName: current.workspaceName, role: current.role };
+function runtimeChipFor(managers: boolean, locale: ShellLocale): RuntimeChip {
+  const chip = runtimeChip(locale);
+  return managers ? chip : { ...chip, href: null };
 }
 
 export default async function ShellLayout({ children }: { children: ReactNode }) {
+  // The reader's language (UX-15 in #2086), negotiated as `app/layout.tsx` negotiates `<html lang>`.
+  const locale = versionsLocaleOf((await headers()).get('accept-language'));
   const session = await getSession();
   const resolved = session === null ? null : await resolveIdentity(session);
+  // ADR-0160 D8: the sidebar hides a switched-off feature's entry. No session, no runtime and no
+  // switch all answer every feature, so the markup is then the one it always was.
+  const features = await currentWorkspaceFeatures(resolved);
+  // Spec §44: the person's own recent chats under New chat (UX-05 in #2086).
+  const recentChats = resolved === null ? [] : await recentChatsFor(resolved);
 
   if (
     shouldRecoverSession({
@@ -141,16 +130,30 @@ export default async function ShellLayout({ children }: { children: ReactNode })
       ? null
       : {
           name: resolved?.userName ?? session.sub,
-          role: roleLabel(resolved?.role),
+          role: roleLabel(resolved?.role, locale),
           initials: initialsFrom(resolved?.userName ?? session.sub),
         };
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <Sidebar workspace={workspace} user={user} managers={roleManagesStorage(resolved?.role)} />
+      <SkipLink label={shellStrings(locale).skipToContent} lang={locale} />
+      <Sidebar
+        workspace={workspace}
+        user={user}
+        managers={roleManagesStorage(resolved?.role)}
+        features={features}
+        locale={locale}
+        signOut={signOutAction}
+        recentChats={recentChats}
+      />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar runtime={runtimeChip()} />
-        <DeploymentDriverBanner />
+        <Topbar
+          runtime={runtimeChipFor(roleManagesStorage(resolved?.role), locale)}
+          locale={locale}
+        />
+        <div lang={locale} className="contents">
+          <DeploymentDriverBanner locale={locale} />
+        </div>
         {children}
       </div>
     </div>

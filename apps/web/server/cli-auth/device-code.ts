@@ -2,13 +2,16 @@
  * Issue #242 (SDK-10, S-22): the device code and the user code of `aw login`'s device
  * authorization grant (RFC 8628). ADR-0083.
  *
- * The device code is not stored. It is `v1.<user code>.<expiry>.<HMAC>` under the deployment's
- * session secret, with a purpose label inside the MAC so no other token this application signs
- * with that secret can be replayed as one. Only the CLI that asked holds it; the person holds only
- * the user code. Approving a user code writes a `cli_sessions` row, and only a caller presenting a
- * device code this server signed for that same user code can spend it.
+ * The device code is not stored. It is `v1.<user code>.<expiry>.<HMAC>` under the device-code key
+ * derived from the deployment's session secret (part 06 step 5, `auth/core/key-ring.ts`), with a
+ * purpose label inside the MAC as well, so no other token this application signs can be replayed
+ * as one. Only the CLI that asked holds it; the person holds only the user code. Approving a user
+ * code writes a `cli_sessions` row, and only a caller presenting a device code this server signed
+ * for that same user code can spend it.
  */
-import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, hkdfSync, randomInt, timingSafeEqual } from 'node:crypto';
+
+import { keyDerivation, verificationKeys } from '../auth/core/key-ring.ts';
 
 /** RFC 8628 §6.1: consonants only, so a code spells no word and survives being read aloud. */
 const USER_CODE_ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -42,14 +45,37 @@ export function normaliseUserCode(input: unknown): string | null {
   return code;
 }
 
-function mac(secret: string, body: string): Buffer {
-  return createHmac('sha256', secret).update(`${DEVICE_CODE_PURPOSE}.${body}`).digest();
+const derivedKeys = new Map<string, Buffer>();
+
+/** The device-code key: the same HKDF the signing modules run, synchronously, memoised by secret. */
+function deviceCodeKey(secret: string): Buffer {
+  const cached = derivedKeys.get(secret);
+  if (cached !== undefined) return cached;
+  const { salt, info, lengthBytes } = keyDerivation('cli-device-code');
+  const key = Buffer.from(hkdfSync('sha256', secret, salt, info, lengthBytes));
+  derivedKeys.set(secret, key);
+  return key;
+}
+
+function mac(key: Buffer | string, body: string): Buffer {
+  return createHmac('sha256', key).update(`${DEVICE_CODE_PURPOSE}.${body}`).digest();
+}
+
+/** Constant-time against each key: the device-code key, then the raw secret (roll-over). */
+function signedByAnyKey(secret: string, body: string, presented: Buffer): boolean {
+  return verificationKeys<() => Buffer | string>(
+    () => deviceCodeKey(secret),
+    () => secret,
+  ).some((key) => {
+    const expected = mac(key(), body);
+    return presented.length === expected.length && timingSafeEqual(presented, expected);
+  });
 }
 
 /** Sign a device code for `userCode`, valid until `expiresAtSeconds` (Unix seconds). */
 export function mintDeviceCode(userCode: string, expiresAtSeconds: number, secret: string): string {
   const body = `${DEVICE_CODE_VERSION}.${userCode}.${String(expiresAtSeconds)}`;
-  return `${body}.${mac(secret, body).toString('base64url')}`;
+  return `${body}.${mac(deviceCodeKey(secret), body).toString('base64url')}`;
 }
 
 export type DeviceCodeVerification =
@@ -73,9 +99,8 @@ export function verifyDeviceCode(
   ) {
     return { ok: false, reason: 'invalid' };
   }
-  const expected = mac(secret, `${version}.${userCode}.${expiry}`);
   const presented = Buffer.from(signature, 'base64url');
-  if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+  if (!signedByAnyKey(secret, `${version}.${userCode}.${expiry}`, presented)) {
     return { ok: false, reason: 'invalid' };
   }
   if (normaliseUserCode(userCode) !== userCode || !/^\d{1,12}$/u.test(expiry)) {

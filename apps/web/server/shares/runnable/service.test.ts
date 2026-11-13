@@ -1,13 +1,13 @@
 import type { ShareRecord } from '@agent-workspace/core/db';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { WorkspaceSharing } from '../core/runtime';
+import type { WorkspaceSharing } from '../runtime';
 import { publicPermissions, RunnableShareService, visitorSessionId } from './service';
 
 const share: ShareRecord = {
   id: '00000000-0000-4000-8000-000000000001',
   workspaceId: '00000000-0000-4000-8000-000000000002',
-  token: 'pub_runnable',
+  tokenHash: 'not-checked-here',
   subjectType: 'agent',
   subjectId: 'agent-1',
   subjectLabel: 'Agent',
@@ -34,7 +34,7 @@ function sharing() {
     shares: {
       list: vi.fn(),
       get: vi.fn(),
-      findByToken: vi.fn(),
+      findByTokenHash: vi.fn(),
       create: vi.fn(),
       getPublicSharingEnabled: vi.fn(),
       setPublicSharingEnabled: vi.fn(),

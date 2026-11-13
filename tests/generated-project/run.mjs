@@ -5,12 +5,12 @@
  *
  *   pnpm build && node tests/generated-project/run.mjs
  *
- * 1. Pack six of the eight `@indx-workspace` packages (`scripts/release/pack-packages.mjs
+ * 1. Pack six of the nine `@indx-workspace` packages (`scripts/release/pack-packages.mjs
  *    --packages contracts,platforms,sdk,aw,cli,create`, which also refuses an unpublishable tarball) and
  *    install them into an empty consumer project, the way a user's `npm create` and `npx aw` find
  *    them. `@indx-workspace/embedded` is left out: the v1 Compose project this run generates needs
  *    only the CLI, and the CI job builds only those six packages, so packing embedded would fail
- *    on its missing staging directory. The release and `pnpm release:pack --smoke` pack all eight.
+ *    on its missing staging directory. The release and `pnpm release:pack --smoke` pack all nine.
  * 2. Start a throwaway registry on the Docker host and push the platform images the generator pins,
  *    built from this checkout (`images.mjs`); hand them to `create` through the `AW_*_IMAGE`
  *    overrides it already reads.

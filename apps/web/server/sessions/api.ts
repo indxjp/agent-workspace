@@ -68,7 +68,7 @@
  * `sessions.id` first and `sessions.engine_session_id` second — the order `canAccessSession` uses —
  * and that one row decides both the archived refusal and the stream.
  */
-import { ownerPrincipalIdOf } from '../rbac/owner-principal';
+import { ownerPrincipalIdOf } from '../identity';
 import { featureRefusalResponse } from '../features/guard';
 import { apiError, isUuid, json, readJsonBody } from '../runs/http';
 import type { EngineId } from '@indx-workspace/contracts/engines';
@@ -82,12 +82,12 @@ import {
   type SessionApiPrincipal,
 } from './environment';
 import type { SessionStateStore } from './state';
+import { readWholeStream } from './read-stream';
 import type { KeysetPosition, SessionRecord, SessionVisibility } from './store';
 import {
   parseProjectKey,
   parseSubpath,
   parseTranscriptEntries,
-  type TranscriptEntry,
   type TranscriptKey,
 } from './transcript';
 
@@ -465,30 +465,6 @@ function claudeStateSession(
   if (row === null) return null;
   if (row.engine !== null && row.engine !== CLAUDE_ENGINE) return null;
   return { store, workspaceId: state.principal.workspaceId, sessionId: row.id };
-}
-
-/**
- * The whole of one stream, read page by page, or `null` when the stream was never written.
- *
- * Followed until a page comes back empty, because the repository caps a page and a short page is a
- * fact about that cap, not about the end of the stream.
- */
-async function readWholeStream(
-  store: SessionStateStore,
-  ref: Parameters<SessionStateStore['list']>[0],
-): Promise<TranscriptEntry[] | null> {
-  const collected: TranscriptEntry[] = [];
-  let afterSequence: number | undefined;
-  for (;;) {
-    const page = await store.list(ref, { afterSequence });
-    if (page === null) return collected.length === 0 ? null : collected;
-    const last = page.at(-1);
-    if (last === undefined) return collected;
-    // The store holds what the runner's Claude adapter appended, which is the Agent SDK's
-    // `SessionStoreEntry` verbatim; the store reads no field of it and neither does this route.
-    for (const one of page) collected.push(one.entry as TranscriptEntry);
-    afterSequence = last.sequence;
-  }
 }
 
 /**

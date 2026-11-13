@@ -24,8 +24,8 @@ import {
   type AgentPolicy,
 } from '../../contracts/agents';
 import { problem, type ApiResult } from '../http/result';
-import { engineForStoredPolicy } from '../engines/session-engine';
-import type { DeploymentDefaultModels } from '../models/deployment-default';
+import { engineForStoredPolicy } from '../execution';
+import type { DeploymentDefaultModels } from '../integrations';
 
 /** What a refusal's audit row names: the agent (`null` before it exists) and a readable label. */
 export interface CeilingSubject {

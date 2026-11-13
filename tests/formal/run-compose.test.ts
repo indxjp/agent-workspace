@@ -10,6 +10,7 @@ import {
   compileClaudeToolPolicy,
   compileRunRequest,
 } from '@agent-workspace/engine-claude-agent-sdk/testing';
+import { QUIET_CLAUDE_ENVIRONMENT } from '@agent-workspace/engine';
 import { AgentPermissionsSchema, AgentPolicyLimitsSchema } from '@indx-workspace/contracts/agents';
 import { EngineIdSchema } from '@indx-workspace/contracts/engines';
 import {
@@ -79,7 +80,16 @@ describe('run-compose: real SDK option environment', () => {
     if (expectedEnv === null) {
       expect(() => compileRunRequest(RunRequest.parse(candidate))).toThrow(/ANTHROPIC_API_KEY/iu);
     } else {
-      expect(compileRunRequest(RunRequest.parse(candidate)).env).toEqual(expectedEnv);
+      // The Lean model covers the contract's environment; the three quiet flags are the Claude
+      // engine's own always-set addition, so they are checked apart and removed from the replay.
+      const compiled = { ...compileRunRequest(RunRequest.parse(candidate)).env };
+      expect(
+        Object.fromEntries(
+          Object.keys(QUIET_CLAUDE_ENVIRONMENT).map((name) => [name, compiled[name]]),
+        ),
+      ).toEqual(QUIET_CLAUDE_ENVIRONMENT);
+      for (const name of Object.keys(QUIET_CLAUDE_ENVIRONMENT)) delete compiled[name];
+      expect(compiled).toEqual(expectedEnv);
     }
   });
 });

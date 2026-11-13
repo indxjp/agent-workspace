@@ -32,6 +32,9 @@ async function sha256(value: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/** The longest run-token lifetime `GATEWAY_TOKEN_TTL_SECONDS` may set: one hour. */
+const MAX_TOKEN_TTL_SECONDS = 3_600;
+
 /** Read the two shared-service values needed to mint, but never redeem, a run token. */
 export function readGatewayIssuerSettings(
   env: Readonly<Record<string, string | undefined>>,
@@ -58,7 +61,7 @@ export function readGatewayIssuerSettings(
   }
   const rawTtl = env['GATEWAY_TOKEN_TTL_SECONDS'];
   const ttlSeconds = rawTtl === undefined ? 300 : Number(rawTtl);
-  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > 3600) {
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > MAX_TOKEN_TTL_SECONDS) {
     return {
       ok: false,
       reason: 'GATEWAY_TOKEN_TTL_SECONDS must be an integer from 1 through 3600.',

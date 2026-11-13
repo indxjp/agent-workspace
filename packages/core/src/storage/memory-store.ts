@@ -49,7 +49,7 @@ import {
   type WriteOptions,
   compareEntryKeys,
 } from './object-store.js';
-import { listPageFrom, resolveRange, streamToBytes } from './streams.js';
+import { abortableBody, listPageFrom, resolveRange, streamToBytes } from './streams.js';
 
 interface StoredObject {
   readonly body: Uint8Array;
@@ -149,6 +149,7 @@ export function createInMemoryObjectStore(): ObjectStore {
     },
 
     read(key, options) {
+      options?.signal?.throwIfAborted();
       const found = objects.get(toObjectKey(key));
       if (found === undefined) return Promise.resolve(null);
       const range = resolveRange(options?.range, found.body.byteLength);
@@ -156,18 +157,22 @@ export function createInMemoryObjectStore(): ObjectStore {
       return Promise.resolve({
         meta: metaOf(found),
         range,
-        body: new ReadableStream<Uint8Array>({
-          start(controller) {
-            controller.enqueue(Uint8Array.from(bytes));
-            controller.close();
-          },
-        }),
+        body: abortableBody(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(Uint8Array.from(bytes));
+              controller.close();
+            },
+          }),
+          options?.signal,
+        ),
       });
     },
 
     async write(key, body, options: WriteOptions): Promise<ObjectMeta> {
       const safeKey = await validatedWriteKey(body, options, () => toObjectKey(key));
-      const bytes = body instanceof Uint8Array ? body : await streamToBytes(body);
+      const source = abortableBody(body, options.signal);
+      const bytes = source instanceof Uint8Array ? source : await streamToBytes(source);
       const current = objects.get(safeKey);
       if (options.ifNoneMatch === '*' && current !== undefined) throw new ObjectConflictError();
       if (options.ifMatch !== undefined && current?.etag !== options.ifMatch) {

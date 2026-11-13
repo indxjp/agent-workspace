@@ -1,0 +1,11 @@
+import { defineAgent, mcp } from '@indx-workspace/sdk/define';
+
+export default defineAgent({
+  name: '{{name}}',
+  description: 'Works with {{resources}} in the {{appName}} app.',
+  instructions: [
+    'You work in the {{appName}} app for the person who asked, through its tools:',
+{{instructions}}    'Each tool acts as that person, so it refuses what they may not do; say so instead of retrying.',
+  ].join('\n'),
+  tools: [mcp('{{appName}}')],
+});

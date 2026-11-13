@@ -398,8 +398,11 @@ export function filterAgentsByName<T extends { readonly name: string }>(
  * model connection, so the column says what the field means rather than naming today's resolution
  * of it.
  */
-export function describeModel(model: string | null): string {
-  return model === null ? 'Workspace default' : model;
+export function describeModel(
+  model: string | null,
+  workspaceDefault = 'Workspace default',
+): string {
+  return model === null ? workspaceDefault : model;
 }
 
 /** A one-line preview of `instructions` for the list's `.cell-sub`, or `''` for an empty agent. */
@@ -410,10 +413,15 @@ export function instructionsPreview(instructions: string, maxLength = 96): strin
 }
 
 /** `agents.createdAt`, already ISO-8601, as the list's Created column. No relative time — that ages. */
-export function formatCreatedAt(iso: string): string {
+export function formatCreatedAt(iso: string, locale?: 'en' | 'ja'): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  // English keeps the browser's own date format, as before; Japanese asks for Japanese dates.
+  return date.toLocaleDateString(locale === 'ja' ? 'ja-JP' : undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 // ── Talking to `/api/agents` ───────────────────────────────────────────────────────────────────

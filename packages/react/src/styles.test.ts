@@ -6,7 +6,9 @@ import { surfaceThemeStyle } from './theme.js';
 
 const read = (path: string): string => readFileSync(new URL(path, import.meta.url), 'utf8');
 const css = read('./styles.css');
-const sources = ['./layout.tsx', './parts.tsx', './surface-chat.tsx'].map(read);
+const sources = ['./approval-prompt.tsx', './layout.tsx', './parts.tsx', './surface-chat.tsx'].map(
+  read,
+);
 
 describe("styles.css (#699): the default parts look right without the host's Tailwind", () => {
   it('styles every aw- class the components use', () => {

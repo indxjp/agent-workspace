@@ -35,7 +35,7 @@ open AgentWorkspace AgentWorkspace.Authz.Resources AgentWorkspace.Authz.Permissi
 
 /-- `TOKEN_SCOPE_GRAMMAR`: the route shapes, as `(resource, operation, sub-resource)` cells, a kind
 may reach. A `none` sub-resource matches any sub-resource (see `inGrammar`). -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#TOKEN_SCOPE_GRAMMAR")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#TOKEN_SCOPE_GRAMMAR")
   (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def grammar : ScopeKind → List (Resource × Operation × Option String)
   | .run => [(.runs, .read, none)]
@@ -86,7 +86,7 @@ def sameRunId (pathId : Option String) (scopeId : String) : Bool :=
          AgentWorkspace.Contracts.Identifiers.lowerAscii scopeId)
 
 /-- `checkTokenScope`: `some d` denies with `token_out_of_scope`; `none` defers to §21's table. -/
-@[aw_spec (ts := "apps/web/server/rbac/decide.ts#checkTokenScope")
+@[aw_spec (ts := "apps/web/server/rbac/core/decide.ts#checkTokenScope")
   (doc := "docs/sdk/04-api-specification.md#311-browser-tokens-issue-236-sdk-04-s-1")]
 def checkTokenScope (scope : Scope) (resource : Resource) (op : Operation)
     (sub : Option String) (pathId : Option String) : Option ScopeDenial :=

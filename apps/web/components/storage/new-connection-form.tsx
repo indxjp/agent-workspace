@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import type { StorageConnectionResource } from '@indx-workspace/contracts/storage-connections';
 
 import { browserClient } from '../../lib/browser-client';
+import type { VersionsLocale } from '../agents/versions-messages';
 import {
   CredentialInputs,
   STORAGE_BUTTON as BUTTON,
@@ -13,19 +14,35 @@ import {
   STORAGE_HELP as HELP,
   STORAGE_LABEL as LABEL,
 } from './storage-form-parts';
+import { storageStrings, type StorageStrings } from './storage-messages';
 import {
   createConnectionInput,
+  connectionNameProblem,
   credentialProblem,
   EMPTY_CREDENTIALS,
   PROVIDER_OPTIONS,
+  savedTestFailure,
+  savedTestResult,
   storageProblemMessage,
   URL_HINTS,
   type CredentialFields,
+  type SavedTestResult,
   type StorageProvider,
 } from './storage-model';
 
-export function NewConnectionForm() {
-  const router = useRouter();
+/** A saved connection and its first test: `null` while the test runs (UX-07 in #2086). */
+interface SavedConnection {
+  readonly connection: StorageConnectionResource;
+  readonly result: SavedTestResult | null;
+}
+
+export function NewConnectionForm({
+  locale = 'en',
+}: {
+  /** The reader's language (UX-15 in #2086); English by default. */
+  readonly locale?: VersionsLocale;
+}) {
+  const strings = storageStrings(locale);
   const alertRef = useRef<HTMLDivElement>(null);
   const [name, setName] = useState('');
   const [provider, setProvider] = useState<StorageProvider>('s3');
@@ -35,6 +52,7 @@ export function NewConnectionForm() {
   const [credentials, setCredentials] = useState<CredentialFields>(EMPTY_CREDENTIALS);
   const [problem, setProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<SavedConnection | null>(null);
 
   useEffect(() => {
     if (problem !== null) alertRef.current?.focus();
@@ -46,7 +64,8 @@ export function NewConnectionForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving) return;
-    const refused = credentialProblem(provider, credentials);
+    const refused =
+      connectionNameProblem(name, strings) ?? credentialProblem(provider, credentials, strings);
     if (refused !== null) {
       setProblem(refused);
       setCredentials(EMPTY_CREDENTIALS);
@@ -55,12 +74,19 @@ export function NewConnectionForm() {
     setSaving(true);
     setProblem(null);
     try {
-      await browserClient().storage.connections.create(
+      const client = browserClient();
+      const connection = await client.storage.connections.create(
         createConnectionInput({ name, provider, url, folders, writeAllowed, credentials }),
       );
-      router.push('/admin/storage');
+      // Saved: test it now with the stored key, the same call as Storage's Test button, so the
+      // person learns at once whether it works. It stays saved whatever the test says.
+      setSaved({ connection, result: null });
+      void client.storage.connections.test(connection.id).then(
+        (outcome) => setSaved({ connection, result: savedTestResult(outcome, strings) }),
+        (error: unknown) => setSaved({ connection, result: savedTestFailure(error, strings) }),
+      );
     } catch (error) {
-      setProblem(storageProblemMessage(error, 'The storage connection could not be saved.'));
+      setProblem(storageProblemMessage(error, strings.couldNotSave, strings));
     } finally {
       // A credential is write-only: it leaves the page state whatever the outcome.
       setCredentials(EMPTY_CREDENTIALS);
@@ -68,14 +94,14 @@ export function NewConnectionForm() {
     }
   }
 
+  if (saved !== null)
+    return <SavedConnectionResult saved={saved} strings={strings} locale={locale} />;
+
   return (
-    <main className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
+    <main lang={locale} className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
       <div className="mb-[22px]">
-        <h1 className="text-[21px]">Connect storage</h1>
-        <p className="mt-[3px] text-[13px] text-muted">
-          Name a bucket or folder and the folders agents may be granted. Access is read-only unless
-          you allow writing.
-        </p>
+        <h1 className="text-[21px]">{strings.newTitle}</h1>
+        <p className="mt-[3px] text-[13px] text-muted">{strings.newIntro}</p>
       </div>
       <form
         method="post"
@@ -86,7 +112,7 @@ export function NewConnectionForm() {
         <div className={`${CARD} space-y-4 p-4`}>
           <div>
             <label className={LABEL} htmlFor="storage-name">
-              Name
+              {strings.name}
             </label>
             <input
               id="storage-name"
@@ -97,12 +123,12 @@ export function NewConnectionForm() {
               onChange={(event) => setName(event.target.value)}
             />
             <p id="storage-name-help" className={HELP}>
-              Lowercase letters, digits and hyphens. Grants use this name.
+              {strings.nameHelp}
             </p>
           </div>
           <div>
             <label className={LABEL} htmlFor="storage-provider">
-              Provider
+              {strings.provider}
             </label>
             <select
               id="storage-provider"
@@ -115,14 +141,14 @@ export function NewConnectionForm() {
             >
               {PROVIDER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {strings.providerLabel[option.value]}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label className={LABEL} htmlFor="storage-url">
-              URL
+              {strings.url}
             </label>
             <input
               id="storage-url"
@@ -133,12 +159,12 @@ export function NewConnectionForm() {
               onChange={(event) => setUrl(event.target.value)}
             />
             <p id="storage-url-help" className={HELP}>
-              For example {URL_HINTS[provider]}. No keys in the URL.
+              {strings.urlExample(URL_HINTS[provider])} {strings.noKeysInUrl}
             </p>
           </div>
           <div>
             <label className={LABEL} htmlFor="storage-folders">
-              Allowed folders
+              {strings.allowedFolders}
             </label>
             <textarea
               id="storage-folders"
@@ -150,7 +176,7 @@ export function NewConnectionForm() {
               onChange={(event) => setFolders(event.target.value)}
             />
             <p id="storage-folders-help" className={HELP}>
-              One folder per line, such as reports. Agents see only these.
+              {strings.foldersHelp}
             </p>
           </div>
           <label
@@ -163,26 +189,21 @@ export function NewConnectionForm() {
               checked={writeAllowed}
               onChange={(event) => setWriteAllowed(event.target.checked)}
             />
-            Allow writing
+            {strings.allowWriting}
           </label>
-          <p className="-mt-2 text-[11.5px] text-muted">
-            Off by default. With a read/write grant, a run&apos;s new and changed files are written
-            back; nothing is deleted.
-          </p>
+          <p className="-mt-2 text-[11.5px] text-muted">{strings.allowWritingHelp}</p>
         </div>
 
         {provider === 'file' ? null : (
           <div className={`${CARD} mt-4 space-y-4 p-4`}>
-            <h2 className="text-[15px] font-semibold">Credential</h2>
+            <h2 className="text-[15px] font-semibold">{strings.credential}</h2>
             <CredentialInputs
               provider={provider}
               credentials={credentials}
               onChange={setCredential}
+              strings={strings}
             />
-            <p className="text-[11.5px] text-muted">
-              Stored encrypted and never shown again. Leave empty to use the deployment’s own
-              identity.
-            </p>
+            <p className="text-[11.5px] text-muted">{strings.credentialNewHelp}</p>
           </div>
         )}
 
@@ -198,17 +219,77 @@ export function NewConnectionForm() {
         )}
         <div className="mt-6 flex justify-end gap-2">
           <Link href="/admin/storage" className={`${BUTTON} bg-surface no-underline`}>
-            Cancel
+            {strings.cancel}
           </Link>
           <button
             type="submit"
             disabled={saving}
             className={`${BUTTON} border-accent bg-accent text-white`}
           >
-            Save connection
+            {strings.saveAndTest}
           </button>
         </div>
       </form>
+    </main>
+  );
+}
+
+const MESSAGE_TONE: Record<SavedTestResult['level'], string | undefined> = {
+  ok: undefined,
+  warn: 'text-warn',
+  fail: 'text-danger',
+};
+
+function SavedConnectionResult({
+  saved,
+  strings,
+  locale,
+}: {
+  readonly saved: SavedConnection;
+  readonly strings: StorageStrings;
+  readonly locale: VersionsLocale;
+}) {
+  const { connection, result } = saved;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  // The form this replaces held focus; move it here so keyboard and screen-reader users land on
+  // the result instead of the top of the page.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, []);
+  const primary = `${BUTTON} border-accent bg-accent text-white no-underline`;
+  return (
+    <main lang={locale} className="w-full max-w-[760px] px-8 pt-[26px] pb-[90px]">
+      <div className="mb-[22px]">
+        <h1 className="text-[21px]">{strings.newTitle}</h1>
+      </div>
+      <div className={`${CARD} space-y-3 p-4`}>
+        <h2 ref={headingRef} tabIndex={-1} className="text-[15px] font-semibold break-words">
+          {strings.saved(connection.name)}
+        </h2>
+        <div role="status" className="text-[13px] break-words">
+          {result === null ? (
+            <p>{strings.testingConnection}</p>
+          ) : (
+            <>
+              <p className={MESSAGE_TONE[result.level]}>{result.message}</p>
+              {result.next === null ? null : <p className="mt-1 text-muted">{result.next}</p>}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="mt-6 flex flex-wrap justify-end gap-2">
+        {result !== null && result.level !== 'ok' ? (
+          <Link href={`/admin/storage/${connection.id}`} className={primary}>
+            {strings.editConnection}
+          </Link>
+        ) : null}
+        <Link
+          href="/admin/storage"
+          className={result?.level === 'ok' ? primary : `${BUTTON} bg-surface no-underline`}
+        >
+          {result?.level === 'ok' ? strings.done : strings.backToStorageList}
+        </Link>
+      </div>
     </main>
   );
 }

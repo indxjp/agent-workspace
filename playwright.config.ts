@@ -40,10 +40,15 @@ const loopback = (value: string) => `http://127.0.0.1:${value}`;
 
 // A project's `testIgnore` replaces the top-level one, so the live-deployment spec is repeated here.
 // The two-server spec runs only in its own project; ignoring it elsewhere keeps it from being
-// collected (and skipped) twice, which the no-skip gate would reject.
+// collected (and skipped) twice, which the no-skip gate would reject. The app kit's journeys run
+// against their own fixture app (`playwright.app-kit.config.mjs`): the platform never imports an
+// app, so nothing these servers serve could pass them.
 const projectIgnore = [
   /two-server\.spec\.mjs/u,
-  ...(process.env['CI'] ? ['**/azure-preview-live.spec.mjs'] : []),
+  '**/app-kit/**',
+  // The live-deployment specs have their own configs (playwright.azure-live.config.mjs,
+  // playwright.gcp-live.config.mjs); here they would only skip, which the no-skip gate rejects.
+  ...(process.env['CI'] ? ['**/azure-preview-live.spec.mjs', '**/gcp-cloudrun-live.spec.mjs'] : []),
 ];
 
 // The one folder a `file` storage connection may name. Set here, before the servers start, so the
