@@ -26,7 +26,7 @@
   "dependencies": {
     "@indx-workspace/contracts": "workspace:*",
     "@agent-workspace/engine": "workspace:*",
-    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.5.2",
     "zod": "4.6.7"
   },
   "devDependencies": {
