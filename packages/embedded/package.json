@@ -90,10 +90,10 @@
   },
   "devDependencies": {
     "@typescript/native": "npm:typescript@7.0.2",
-    "@vercel/nft": "1.11.0",
+    "@vercel/nft": "1.11.1",
     "esbuild": "0.28.2",
     "typescript": "npm:@typescript/typescript6@6.0.2",
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   },
   "nx": {
     "targets": {
